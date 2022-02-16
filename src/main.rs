@@ -1,4 +1,3 @@
-use wgpu::SurfaceError;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},

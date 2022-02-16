@@ -1,5 +1,9 @@
+use bytemuck::Zeroable;
+use wgpu::util::DeviceExt;
+use wgpu::VertexFormat;
 use winit::event::WindowEvent;
 use winit::window::Window;
+use crate::error::Error;
 
 pub struct State {
     pub surface: wgpu::Surface,
@@ -8,12 +12,16 @@ pub struct State {
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub render_pipeline: wgpu::RenderPipeline,
+    pub vertex_buffer: wgpu::Buffer,
+    pub num_vertices: u32,
 }
 
 impl State {
     // TODO: broadcast errors; replace unwraps
-    pub async fn new(window: &Window) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(window: &Window) -> Result<Self, Error> {
         let size = window.inner_size();
+
+        let num_vertices = VERTICES.len() as u32;
 
         // Create instance handle to GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
@@ -28,7 +36,7 @@ impl State {
                 compatible_surface: Some(&surface),
             })
             .await
-            .unwrap();
+            .unwrap_or_else(|| panic!("Failed to request physical device! {}", concat!(file!(), ":", line!())));
         // Logical device and command queue
         let (device, queue) = adapter
             .request_device(
@@ -40,7 +48,7 @@ impl State {
                 None,
             )
             .await
-            .unwrap();
+            .unwrap_or_else(|_| panic!("Failed to request logical device! {}", concat!(file!(), ":", line!())));
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_preferred_format(&adapter).unwrap(),
@@ -69,7 +77,9 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[
+                    Vertex::layout()
+                ],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -98,6 +108,12 @@ impl State {
             multiview: None,
         });
 
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex-buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         Ok(Self {
             surface,
             device,
@@ -105,6 +121,8 @@ impl State {
             config,
             size,
             render_pipeline,
+            vertex_buffer,
+            num_vertices
         })
     }
 
@@ -158,12 +176,52 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())
+    }
+}
+
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3]
+}
+
+unsafe impl Zeroable for Vertex {}
+
+unsafe impl bytemuck::Pod for Vertex { }
+
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
+    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+];
+
+impl Vertex {
+    const fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0
+                },
+                wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x3,
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1
+                }
+            ]
+        }
     }
 }
