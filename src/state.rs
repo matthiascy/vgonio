@@ -1,9 +1,9 @@
+use crate::error::Error;
 use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 use wgpu::VertexFormat;
 use winit::event::WindowEvent;
 use winit::window::Window;
-use crate::error::Error;
 
 pub struct State {
     pub surface: wgpu::Surface,
@@ -36,7 +36,12 @@ impl State {
                 compatible_surface: Some(&surface),
             })
             .await
-            .unwrap_or_else(|| panic!("Failed to request physical device! {}", concat!(file!(), ":", line!())));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Failed to request physical device! {}",
+                    concat!(file!(), ":", line!())
+                )
+            });
         // Logical device and command queue
         let (device, queue) = adapter
             .request_device(
@@ -48,7 +53,12 @@ impl State {
                 None,
             )
             .await
-            .unwrap_or_else(|_| panic!("Failed to request logical device! {}", concat!(file!(), ":", line!())));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to request logical device! {}",
+                    concat!(file!(), ":", line!())
+                )
+            });
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_preferred_format(&adapter).unwrap(),
@@ -77,9 +87,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[
-                    Vertex::layout()
-                ],
+                buffers: &[Vertex::layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -122,7 +130,7 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
-            num_vertices
+            num_vertices,
         })
     }
 
@@ -187,22 +195,30 @@ impl State {
     }
 }
 
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 struct Vertex {
     position: [f32; 3],
-    color: [f32; 3]
+    color: [f32; 3],
 }
 
 unsafe impl Zeroable for Vertex {}
 
-unsafe impl bytemuck::Pod for Vertex { }
+unsafe impl bytemuck::Pod for Vertex {}
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+    Vertex {
+        position: [0.0, 0.5, 0.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.0],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.0],
+        color: [0.0, 0.0, 1.0],
+    },
 ];
 
 impl Vertex {
@@ -214,14 +230,14 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     format: VertexFormat::Float32x3,
                     offset: 0,
-                    shader_location: 0
+                    shader_location: 0,
                 },
                 wgpu::VertexAttribute {
                     format: VertexFormat::Float32x3,
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1
-                }
-            ]
+                    shader_location: 1,
+                },
+            ],
         }
     }
 }

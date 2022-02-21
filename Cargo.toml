@@ -1,5 +1,5 @@
 [package]
-name = "erg"
+name = "vgonio"
 version = "0.1.0"
 edition = "2021"
 
@@ -14,3 +14,4 @@ log = "0.4"
 wgpu = "0.12"
 pollster = "0.2"
 bytemuck = "1.7"
+clap = { version = "3", features = ["derive"] }
