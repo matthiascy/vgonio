@@ -1,6 +1,6 @@
-use std::io::Write;
 use crate::error::Error;
-use clap::{AppSettings, Parser, Subcommand};
+use clap::{AppSettings, ArgEnum, Parser, Subcommand};
+use std::io::Write;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -52,13 +52,28 @@ pub struct VgonioArgs {
     pub command: Option<VgonioCommand>,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ArgEnum)]
+pub enum MeasurementType {
+    Brdf,
+    Ndf,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ArgEnum)]
+pub enum MicroSurfaceInfo {
+    VertexNormal,
+    SurfaceNormal,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum VgonioCommand {
     #[clap(
-        about = "Capture the BxDF from micro-surface profile file.",
+        about = "Measure different aspects of the micro-surface.",
         setting = AppSettings::DeriveDisplayOrder
     )]
-    Capture {
+    Measure {
+        #[clap(arg_enum, short, long, help = "Type of measurement.")]
+        kind: MeasurementType,
+
         #[clap(
             short,
             long,
@@ -91,16 +106,19 @@ pub enum VgonioCommand {
         #[clap(
             long,
             help = "Show detailed statistics about memory and time\n\
-                             usage during the capturing"
+                             usage during the measurement"
         )]
         print_stats: bool,
     },
 
     #[clap(
-        about = "Extract information from micro-surface profile file.",
+        about = "Extract information from micro-surface.",
         setting = AppSettings::DeriveDisplayOrder
     )]
     Extract {
+        #[clap(arg_enum, short, long, help = "Type of information to be extracted.")]
+        kind: MicroSurfaceInfo,
+
         #[clap(
             short,
             long,
@@ -120,56 +138,64 @@ pub enum VgonioCommand {
         )]
         output_path: Option<std::path::PathBuf>,
 
-        #[clap(long, help = "Use caches to minimize the processing time.")]
+        #[clap(long, help = "Use caches to minimize the processing time")]
         enable_cache: bool,
     },
 }
 
 pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
-    // Initialize logger settings.
-    let timestamp = args.log_timestamp;
-    env_logger::builder()
-        .format(move |buf, record| {
-            if timestamp {
-                let duration = launch_time.elapsed().unwrap();
-                let milis = duration.as_millis() % 1000;
-                let seconds = duration.as_secs() % 60;
-                let minutes = (duration.as_secs() / 60) % 60;
-                let hours = (duration.as_secs() / 60) / 60;
-                // Show log level only in Warn and Error level
-                if record.level() <= log::Level::Warn {
-                    writeln!(
-                        buf,
-                        "{} {}: {}",
-                        format!("{}:{}:{}.{:03}", hours, minutes, seconds, milis),
-                        record.level(),
-                        record.args()
-                    )
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // Initialize logger settings.
+        let timestamp = args.log_timestamp;
+        env_logger::builder()
+            .format(move |buf, record| {
+                if timestamp {
+                    let duration = launch_time.elapsed().unwrap();
+                    let milis = duration.as_millis() % 1000;
+                    let seconds = duration.as_secs() % 60;
+                    let minutes = (duration.as_secs() / 60) % 60;
+                    let hours = (duration.as_secs() / 60) / 60;
+                    // Show log level only in Warn and Error level
+                    if record.level() <= log::Level::Warn {
+                        writeln!(
+                            buf,
+                            "{} {}: {}",
+                            format!("{}:{}:{}.{:03}", hours, minutes, seconds, milis),
+                            record.level(),
+                            record.args()
+                        )
+                    } else {
+                        writeln!(
+                            buf,
+                            "{}: {}",
+                            format!("{}:{}:{}.{:03}", hours, minutes, seconds, milis),
+                            record.args()
+                        )
+                    }
                 } else {
-                    writeln!(
-                        buf,
-                        "{}: {}",
-                        format!("{}:{}:{}.{:03}", hours, minutes, seconds, milis),
-                        record.args()
-                    )
+                    if record.level() <= log::Level::Warn {
+                        writeln!(buf, "{}: {}", record.level(), record.args())
+                    } else {
+                        writeln!(buf, "{}", record.args())
+                    }
                 }
-            } else {
-                if record.level() <= log::Level::Warn {
-                    writeln!(buf, "{}: {}", record.level(), record.args())
-                } else {
-                    writeln!(buf, "{}", record.args())
-                }
-            }
-        })
-        .filter_level(match &args.log_level {
-            &0 => log::LevelFilter::Error,
-            &1 => log::LevelFilter::Warn,
-            &2 => log::LevelFilter::Info,
-            &3 => log::LevelFilter::Debug,
-            &4 => log::LevelFilter::Trace,
-            &_ => log::LevelFilter::Info,
-        })
-        .init();
+            })
+            .filter_level(match &args.log_level {
+                &0 => log::LevelFilter::Error,
+                &1 => log::LevelFilter::Warn,
+                &2 => log::LevelFilter::Info,
+                &3 => log::LevelFilter::Debug,
+                &4 => log::LevelFilter::Trace,
+                &_ => log::LevelFilter::Info,
+            })
+            .init();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        todo!()
+    }
 }
 
 pub fn launch_gui_client() -> Result<(), Error> {
@@ -234,12 +260,8 @@ pub fn launch_gui_client() -> Result<(), Error> {
 
 pub fn execute_command(cmd: VgonioCommand) -> Result<(), Error> {
     match cmd {
-        VgonioCommand::Capture { .. } => {
-            capture()
-        }
-        VgonioCommand::Extract { .. } => {
-            extract()
-        }
+        VgonioCommand::Measure { .. } => capture(),
+        VgonioCommand::Extract { .. } => extract(),
     }
 }
 

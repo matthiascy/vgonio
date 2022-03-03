@@ -1,10 +1,14 @@
 use std::fmt::{Display, Formatter};
+use std::str;
 
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
     Rhi(wgpu::Error),
-    Logger(log::SetLoggerError)
+    Logger(log::SetLoggerError),
+    BincodeError(bincode::Error),
+    UnrecognizedFile,
+    Utf8Error(str::Utf8Error),
 }
 
 impl Display for Error {
@@ -18,6 +22,15 @@ impl Display for Error {
             }
             Error::Logger(_) => {
                 write!(f, "Set logger error.")
+            }
+            Error::UnrecognizedFile => {
+                write!(f, "Open file failed:  unrecognized file type!")
+            }
+            Error::BincodeError(err) => {
+                write!(f, "Bincode error: {}", err.to_string())
+            }
+            Error::Utf8Error(err) => {
+                write!(f, "Utf8 error: {}", err)
             }
         }
     }
@@ -40,5 +53,11 @@ impl From<std::io::Error> for Error {
 impl From<log::SetLoggerError> for Error {
     fn from(err: log::SetLoggerError) -> Self {
         Error::Logger(err)
+    }
+}
+
+impl From<str::Utf8Error> for Error {
+    fn from(err: str::Utf8Error) -> Self {
+        Error::Utf8Error(err)
     }
 }

@@ -1,5 +1,5 @@
 //! Axis enum for indexing 3D structures.
-//!
+use crate::math::Vec3;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 
@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// # Examples
 /// ```
-/// use darc::isect::axis::Axis;
+/// use vgonio::isect::axis::Axis;
 ///
 /// let mut pos = [0.1, 0.4, 0.6];
 /// pos[Axis::X] -= 0.1;
@@ -53,19 +53,7 @@ impl Index<Axis> for [f32] {
     }
 }
 
-impl Index<Axis> for Vec3f {
-    type Output = f32;
-
-    fn index(&self, index: Axis) -> &Self::Output {
-        match index {
-            Axis::X => &self.x,
-            Axis::Y => &self.y,
-            Axis::Z => &self.z,
-        }
-    }
-}
-
-impl Index<Axis> for Point3f {
+impl Index<Axis> for Vec3 {
     type Output = f32;
 
     fn index(&self, index: Axis) -> &Self::Output {
@@ -83,7 +71,7 @@ impl IndexMut<Axis> for [f32] {
     }
 }
 
-impl IndexMut<Axis> for Vec3f {
+impl IndexMut<Axis> for Vec3 {
     fn index_mut(&mut self, index: Axis) -> &mut Self::Output {
         match index {
             Axis::X => &mut self.x,

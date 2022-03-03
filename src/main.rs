@@ -1,16 +1,13 @@
-use crate::error::Error;
-
-mod app;
-mod error;
-mod state;
+use vgonio::error::Error;
 
 fn run() -> Result<(), Error> {
-    // Parse the command line arguments
-    use crate::app::VgonioArgs;
     use clap::Parser;
+    use vgonio::app;
+    use vgonio::app::VgonioArgs;
 
     let launch_time = std::time::SystemTime::now();
 
+    // Parse the command line arguments
     let args: VgonioArgs = VgonioArgs::parse();
 
     // Initialize vgonio application
