@@ -1,11 +1,14 @@
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Parser, Subcommand};
+use serde_json::ser::State;
 use std::io::Write;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
+
+pub mod state;
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -199,7 +202,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
 }
 
 pub fn launch_gui_client() -> Result<(), Error> {
-    use crate::state::State;
+    use state::State;
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
