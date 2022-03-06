@@ -228,6 +228,18 @@ pub fn launch_gui_client() -> Result<(), Error> {
                         ..
                     } => *control_flow = ControlFlow::Exit,
 
+                    WindowEvent::KeyboardInput {
+                        input: KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Space),
+                            ..
+                        },
+                        ..
+                    } => {
+                        state.current_damascus_texture_index += 1;
+                        state.current_damascus_texture_index %= 2;
+                    }
+
                     WindowEvent::Resized(physical_size) => state.resize(*physical_size),
 
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {

@@ -1,5 +1,5 @@
 use crate::error::Error;
-use image::GenericImageView;
+use image::{GenericImageView, ImageFormat, RgbaImage};
 use wgpu::util::DeviceExt;
 use wgpu::VertexFormat;
 use winit::event::WindowEvent;
@@ -24,7 +24,8 @@ pub struct State {
     pub index_buffer: wgpu::Buffer,
     pub num_vertices: u32,
     pub num_indices: u32,
-    pub diffuse_texture_bind_group: wgpu::BindGroup,
+    pub damascus_texture_bind_groups: [wgpu::BindGroup; 2],
+    pub current_damascus_texture_index: usize,
 }
 
 impl State {
@@ -84,23 +85,38 @@ impl State {
         surface.configure(&device, &surface_config);
 
         // Create texture
-        // let diffuse_bytes = include_bytes!("assets/happy-tree.png");
-        let diffuse_bytes = include_bytes!("assets/damascus.jpg");
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        let diffuse_rgba = diffuse_image.to_rgba8();
+        let damascus_001 = image::load_from_memory_with_format(include_bytes!("assets/damascus001.jpg"), ImageFormat::Jpeg)
+            .unwrap().flipv().to_rgba8();
+        let damascus_002 = image::load_from_memory_with_format(include_bytes!("assets/damascus002.jpg"), ImageFormat::Jpeg)
+            .unwrap().flipv().to_rgba8();
+        let dims_001 = damascus_001.dimensions();
+        let dims_002 = damascus_002.dimensions();
 
-        use image::GenericImageView;
-        let dimensions = diffuse_image.dimensions();
-
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
+        let damascus_001_size = wgpu::Extent3d {
+            width: dims_001.0,
+            height: dims_001.1,
             depth_or_array_layers: 1,
         };
 
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse-texture"),
-            size: texture_size,
+        let damascus_002_size = wgpu::Extent3d {
+            width: dims_002.0,
+            height: dims_002.1,
+            depth_or_array_layers: 1,
+        };
+
+        let damascus_texture_001 = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("damascus-texture-001"),
+            size: damascus_001_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        });
+
+        let damascus_texture_002 = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("damascus-texture-002"),
+            size: damascus_002_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -111,24 +127,44 @@ impl State {
         // Load texture in
         queue.write_texture(
             wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
+                texture: &damascus_texture_001,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             // actual pixel data
-            &diffuse_rgba,
+            &damascus_001,
             // layout of the texture
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
-                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
+                bytes_per_row: std::num::NonZeroU32::new(4 * dims_001.0),
+                rows_per_image: std::num::NonZeroU32::new(dims_001.1),
             },
-            texture_size,
+            damascus_001_size,
         );
 
-        let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &damascus_texture_002,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            // actual pixel data
+            &damascus_002,
+            // layout of the texture
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(4 * dims_002.0),
+                rows_per_image: std::num::NonZeroU32::new(dims_002.1),
+            },
+            damascus_002_size,
+        );
+
+        let damascus_texture_view_001 = damascus_texture_001.create_view(&wgpu::TextureViewDescriptor::default());
+        let damascus_texture_view_002 = damascus_texture_002.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let damascus_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -170,22 +206,40 @@ impl State {
             }
         );
 
-        let diffuse_texture_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                label: Some("diffuse-texture-bind-group"),
-                layout: &diffuse_texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                         resource: wgpu::BindingResource::Sampler(&diffuse_texture_sampler),
-                    }
-                ]
-            }
-        );
+        let damascus_texture_bind_groups = [
+            device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                    label: Some("diffuse-texture-bind-group-001"),
+                    layout: &diffuse_texture_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&damascus_texture_view_001),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&damascus_texture_sampler),
+                        }
+                    ]
+                }
+            ),
+            device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                    label: Some("diffuse-texture-bind-group-002"),
+                    layout: &diffuse_texture_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&damascus_texture_view_002),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&damascus_texture_sampler),
+                        }
+                    ]
+                }
+            )
+        ];
 
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("default-shader"),
@@ -256,7 +310,9 @@ impl State {
             index_buffer,
             num_vertices,
             num_indices,
-            diffuse_texture_bind_group
+            // damascus_texture_bind_group: damascus_texture_bind_group_001
+            damascus_texture_bind_groups,
+            current_damascus_texture_index: 0,
         })
     }
 
@@ -310,7 +366,7 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_texture_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.damascus_texture_bind_groups[self.current_damascus_texture_index], &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             // render_pass.draw(0..self.num_vertices, 0..1);
