@@ -8,6 +8,7 @@ use winit::{
     window::WindowBuilder,
 };
 
+pub mod camera;
 pub mod state;
 
 #[derive(Parser, Debug)]
@@ -202,13 +203,13 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
 }
 
 pub fn launch_gui_client() -> Result<(), Error> {
-    use state::State;
+    use state::VgonioState;
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     window.set_title("vgonio");
 
-    let mut state = pollster::block_on(State::new(&window))?;
+    let mut state = pollster::block_on(VgonioState::new(&window))?;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -227,18 +228,6 @@ pub fn launch_gui_client() -> Result<(), Error> {
                             },
                         ..
                     } => *control_flow = ControlFlow::Exit,
-
-                    WindowEvent::KeyboardInput {
-                        input: KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Space),
-                            ..
-                        },
-                        ..
-                    } => {
-                        state.current_damascus_texture_index += 1;
-                        state.current_damascus_texture_index %= 2;
-                    }
 
                     WindowEvent::Resized(physical_size) => state.resize(*physical_size),
 

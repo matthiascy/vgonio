@@ -1,10 +1,13 @@
+use crate::app::camera::{Camera, CameraController, CameraUniform};
 use crate::error::Error;
+use glam::{Mat4, Vec3};
 use image::{GenericImageView, ImageFormat, RgbaImage};
+use std::default::Default;
 use wgpu::util::DeviceExt;
 use wgpu::VertexFormat;
-use winit::event::WindowEvent;
+use winit::event::KeyboardInput;
+use winit::event::{ElementState, VirtualKeyCode, WindowEvent};
 use winit::window::Window;
-use std::default::Default;
 
 pub struct UiState {
     pub pipeline: wgpu::RenderPipeline,
@@ -13,7 +16,7 @@ pub struct UiState {
     pub uniform_buffers: Vec<wgpu::Buffer>,
 }
 
-pub struct State {
+pub struct VgonioState {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -24,11 +27,17 @@ pub struct State {
     pub index_buffer: wgpu::Buffer,
     pub num_vertices: u32,
     pub num_indices: u32,
-    pub damascus_texture_bind_groups: [wgpu::BindGroup; 2],
-    pub current_damascus_texture_index: usize,
+    pub texture_bind_groups: [wgpu::BindGroup; 2],
+    pub current_texture_index: usize,
+    pub camera: Camera,
+    pub camera_uniform: CameraUniform,
+    pub camera_uniform_buffer: wgpu::Buffer,
+    pub camera_bind_group: wgpu::BindGroup,
+    pub camera_controller: CameraController,
+    pub object_model_matrix: glam::Mat4,
 }
 
-impl State {
+impl VgonioState {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(window: &Window) -> Result<Self, Error> {
         let size = window.inner_size();
@@ -85,99 +94,100 @@ impl State {
         surface.configure(&device, &surface_config);
 
         // Create texture
-        let damascus_001 = image::load_from_memory_with_format(include_bytes!("assets/damascus001.jpg"), ImageFormat::Jpeg)
-            .unwrap().flipv().to_rgba8();
-        let damascus_002 = image::load_from_memory_with_format(include_bytes!("assets/damascus002.jpg"), ImageFormat::Jpeg)
-            .unwrap().flipv().to_rgba8();
-        let dims_001 = damascus_001.dimensions();
-        let dims_002 = damascus_002.dimensions();
-
-        let damascus_001_size = wgpu::Extent3d {
-            width: dims_001.0,
-            height: dims_001.1,
-            depth_or_array_layers: 1,
-        };
-
-        let damascus_002_size = wgpu::Extent3d {
-            width: dims_002.0,
-            height: dims_002.1,
-            depth_or_array_layers: 1,
-        };
-
-        let damascus_texture_001 = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("damascus-texture-001"),
-            size: damascus_001_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        });
-
-        let damascus_texture_002 = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("damascus-texture-002"),
-            size: damascus_002_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        });
+        let texture_images = [
+            image::load_from_memory_with_format(
+                include_bytes!("assets/damascus001.jpg"),
+                ImageFormat::Jpeg,
+            )
+            .unwrap()
+            .flipv()
+            .to_rgba8(),
+            image::load_from_memory_with_format(
+                include_bytes!("assets/damascus002.jpg"),
+                ImageFormat::Jpeg,
+            )
+            .unwrap()
+            .flipv()
+            .to_rgba8(),
+        ];
+        let texture_dims = [
+            texture_images[0].dimensions(),
+            texture_images[1].dimensions(),
+        ];
+        let texture_extents = [
+            wgpu::Extent3d {
+                width: texture_dims[0].0,
+                height: texture_dims[0].1,
+                depth_or_array_layers: 1,
+            },
+            wgpu::Extent3d {
+                width: texture_dims[1].0,
+                height: texture_dims[1].1,
+                depth_or_array_layers: 1,
+            },
+        ];
+        let textures = [
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("damascus-texture-001"),
+                size: texture_extents[0],
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            }),
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("damascus-texture-002"),
+                size: texture_extents[1],
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            }),
+        ];
 
         // Load texture in
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &damascus_texture_001,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            // actual pixel data
-            &damascus_001,
-            // layout of the texture
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dims_001.0),
-                rows_per_image: std::num::NonZeroU32::new(dims_001.1),
-            },
-            damascus_001_size,
-        );
+        for i in 0..textures.len() {
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &textures[i],
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                // actual pixel data
+                &texture_images[i],
+                // layout of the texture
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: std::num::NonZeroU32::new(4 * texture_dims[i].0),
+                    rows_per_image: std::num::NonZeroU32::new(texture_dims[i].1),
+                },
+                texture_extents[i],
+            );
+        }
 
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &damascus_texture_002,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            // actual pixel data
-            &damascus_002,
-            // layout of the texture
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dims_002.0),
-                rows_per_image: std::num::NonZeroU32::new(dims_002.1),
-            },
-            damascus_002_size,
-        );
+        let texture_views = [
+            textures[0].create_view(&wgpu::TextureViewDescriptor::default()),
+            textures[1].create_view(&wgpu::TextureViewDescriptor::default()),
+        ];
 
-        let damascus_texture_view_001 = damascus_texture_001.create_view(&wgpu::TextureViewDescriptor::default());
-        let damascus_texture_view_002 = damascus_texture_002.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let damascus_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
-            .. Default::default()
+            ..Default::default()
         });
 
         // Descriptor Sets
-        // [`BindGroup`] describes a set of resources and how they can be accessed by a shader.
-        let diffuse_texture_bind_group_layout = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        // [`BindGroup`] describes a set of resources and how they can be accessed by a
+        // shader.
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture-bind-group-layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -186,9 +196,9 @@ impl State {
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
                             view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false
+                            multisampled: false,
                         },
-                        count: None
+                        count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
@@ -198,51 +208,91 @@ impl State {
                             // SamplerBindingType::Filtering if the sample_type of the texture is:
                             //     TextureSampleType::Float { filterable: true }
                             // Otherwise you'll get an error.
-                            wgpu::SamplerBindingType::Filtering
+                            wgpu::SamplerBindingType::Filtering,
                         ),
-                        count: None
-                    }
-                ]
-            }
-        );
+                        count: None,
+                    },
+                ],
+            });
 
-        let damascus_texture_bind_groups = [
-            device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    label: Some("diffuse-texture-bind-group-001"),
-                    layout: &diffuse_texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&damascus_texture_view_001),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&damascus_texture_sampler),
-                        }
-                    ]
-                }
-            ),
-            device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    label: Some("diffuse-texture-bind-group-002"),
-                    layout: &diffuse_texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&damascus_texture_view_002),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&damascus_texture_sampler),
-                        }
-                    ]
-                }
-            )
+        let texture_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("diffuse-texture-bind-group-001"),
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture_views[0]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&texture_sampler),
+                    },
+                ],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("diffuse-texture-bind-group-002"),
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&&texture_views[1]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&texture_sampler),
+                    },
+                ],
+            }),
         ];
 
+        // Camera
+        let object_model_matrix = glam::Mat4::IDENTITY;
+        let camera = Camera {
+            eye: (0.0, 1.0, 2.0).into(),
+            target: (0.0, 0.0, 0.0).into(),
+            up: Vec3::Y,
+            aspect: surface_config.width as f32 / surface_config.height as f32,
+            fov: 45.0f32.to_radians(),
+            near: 0.1,
+            far: 100.0,
+        };
+        let camera_uniform = camera.uniform();
+        let camera_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("camera-uniform-buffer"),
+            contents: bytemuck::cast_slice(&[
+                camera_uniform.view_matrix,
+                camera_uniform.proj_matrix,
+                object_model_matrix,
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("camera-uniform-bind-group-create_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("camera-uniform-bind-group"),
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let camera_controller = CameraController::new(0.2);
+
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("default-shader"),
+            label: Some("default-vertex-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("assets/shaders/shader.wgsl").into()),
         });
 
@@ -250,7 +300,7 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("default-pipeline-layout"),
-                bind_group_layouts: &[&diffuse_texture_bind_group_layout],
+                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -310,9 +360,14 @@ impl State {
             index_buffer,
             num_vertices,
             num_indices,
-            // damascus_texture_bind_group: damascus_texture_bind_group_001
-            damascus_texture_bind_groups,
-            current_damascus_texture_index: 0,
+            texture_bind_groups,
+            current_texture_index: 0,
+            camera,
+            camera_uniform,
+            camera_uniform_buffer,
+            camera_bind_group,
+            camera_controller,
+            object_model_matrix,
         })
     }
 
@@ -326,10 +381,53 @@ impl State {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+        let status_camera = self.camera_controller.process_event(event);
+        let status = match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Space),
+                        ..
+                    },
+                ..
+            } => {
+                self.current_texture_index += 1;
+                self.current_texture_index %= 2;
+                true
+            }
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::R),
+                        ..
+                    },
+                ..
+            } => {
+                self.object_model_matrix =
+                    Mat4::from_rotation_y(3.0f32.to_radians()) * self.object_model_matrix;
+                true
+            }
+            _ => false,
+        };
+
+        status && status_camera
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform = self.camera.uniform();
+        self.queue.write_buffer(
+            &self.camera_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[
+                self.camera_uniform.view_matrix,
+                self.camera_uniform.proj_matrix,
+                self.object_model_matrix,
+            ]),
+        );
+    }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -366,7 +464,12 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.damascus_texture_bind_groups[self.current_damascus_texture_index], &[]);
+            render_pass.set_bind_group(
+                0,
+                &self.texture_bind_groups[self.current_texture_index],
+                &[],
+            );
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             // render_pass.draw(0..self.num_vertices, 0..1);
@@ -388,24 +491,24 @@ struct Vertex {
     tex_coord: [f32; 2],
 }
 
-unsafe impl bytemuck::Zeroable for Vertex { }
-unsafe impl bytemuck::Pod for Vertex { }
+unsafe impl bytemuck::Zeroable for Vertex {}
+unsafe impl bytemuck::Pod for Vertex {}
 
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-0.0868241, 0.49240386, 0.0],
         // color: [0.5, 0.0, 0.5],
-        tex_coord: [0.4131759, 0.99240386]
+        tex_coord: [0.4131759, 0.99240386],
     }, // A
     Vertex {
         position: [-0.49513406, 0.06958647, 0.0],
         // color: [0.5, 0.0, 0.5],
-        tex_coord: [0.0048659444, 0.56958647]
+        tex_coord: [0.0048659444, 0.56958647],
     }, // B
     Vertex {
         position: [-0.21918549, -0.44939706, 0.0],
         // color: [0.5, 0.0, 0.5],
-        tex_coord: [0.28081453, 0.05060294]
+        tex_coord: [0.28081453, 0.05060294],
     }, // C
     Vertex {
         position: [0.35966998, -0.3473291, 0.0],
@@ -415,7 +518,7 @@ const VERTICES: &[Vertex] = &[
     Vertex {
         position: [0.44147372, 0.2347359, 0.0],
         // color: [0.5, 0.0, 0.5],
-        tex_coord: [0.9414737, 0.7347359]
+        tex_coord: [0.9414737, 0.7347359],
     }, // E
 ];
 
