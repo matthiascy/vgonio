@@ -10,6 +10,7 @@ use winit::{
 
 pub mod camera;
 pub mod state;
+pub mod texture;
 
 #[derive(Parser, Debug)]
 #[clap(

@@ -1,9 +1,11 @@
 use crate::app::camera::{Camera, CameraController, CameraUniform};
+use crate::app::texture::Texture;
 use crate::error::Error;
 use glam::{Mat4, Quat, Vec3};
 use image::{GenericImageView, ImageFormat, RgbaImage};
 use std::default::Default;
 use std::mem;
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::VertexFormat;
 use winit::event::KeyboardInput;
@@ -41,6 +43,7 @@ pub struct VgonioState {
     pub object_model_matrix: glam::Mat4,
     pub instancing_buffer: wgpu::Buffer,
     pub instancing_transforms: Vec<Mat4>,
+    pub depth_texture: Texture,
 }
 
 impl VgonioState {
@@ -100,86 +103,7 @@ impl VgonioState {
         surface.configure(&device, &surface_config);
 
         // Create texture
-        let texture_images = [
-            image::load_from_memory_with_format(
-                include_bytes!("assets/damascus001.jpg"),
-                ImageFormat::Jpeg,
-            )
-            .unwrap()
-            .flipv()
-            .to_rgba8(),
-            image::load_from_memory_with_format(
-                include_bytes!("assets/damascus002.jpg"),
-                ImageFormat::Jpeg,
-            )
-            .unwrap()
-            .flipv()
-            .to_rgba8(),
-        ];
-        let texture_dims = [
-            texture_images[0].dimensions(),
-            texture_images[1].dimensions(),
-        ];
-        let texture_extents = [
-            wgpu::Extent3d {
-                width: texture_dims[0].0,
-                height: texture_dims[0].1,
-                depth_or_array_layers: 1,
-            },
-            wgpu::Extent3d {
-                width: texture_dims[1].0,
-                height: texture_dims[1].1,
-                depth_or_array_layers: 1,
-            },
-        ];
-        let textures = [
-            device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("damascus-texture-001"),
-                size: texture_extents[0],
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            }),
-            device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("damascus-texture-002"),
-                size: texture_extents[1],
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            }),
-        ];
-
-        // Load texture in
-        for i in 0..textures.len() {
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &textures[i],
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                // actual pixel data
-                &texture_images[i],
-                // layout of the texture
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * texture_dims[i].0),
-                    rows_per_image: std::num::NonZeroU32::new(texture_dims[i].1),
-                },
-                texture_extents[i],
-            );
-        }
-
-        let texture_views = [
-            textures[0].create_view(&wgpu::TextureViewDescriptor::default()),
-            textures[1].create_view(&wgpu::TextureViewDescriptor::default()),
-        ];
-
-        let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = Arc::new(device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -187,7 +111,26 @@ impl VgonioState {
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
-        });
+        }));
+        let textures = [
+            Texture::create_from_bytes(
+                &device,
+                &queue,
+                include_bytes!("assets/damascus001.jpg"),
+                sampler.clone(),
+                Some("damascus-texture-001"),
+            ),
+            Texture::create_from_bytes(
+                &device,
+                &queue,
+                include_bytes!("assets/damascus002.jpg"),
+                sampler.clone(),
+                Some("damascus-texture-002"),
+            ),
+        ];
+
+        let depth_texture =
+            Texture::create_depth_texture(&device, &surface_config, "depth-texture");
 
         // Descriptor Sets
         // [`BindGroup`] describes a set of resources and how they can be accessed by a
@@ -228,11 +171,11 @@ impl VgonioState {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_views[0]),
+                        resource: wgpu::BindingResource::TextureView(&textures[0].view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&texture_sampler),
+                        resource: wgpu::BindingResource::Sampler(&textures[0].sampler),
                     },
                 ],
             }),
@@ -242,11 +185,11 @@ impl VgonioState {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&&texture_views[1]),
+                        resource: wgpu::BindingResource::TextureView(&textures[1].view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&texture_sampler),
+                        resource: wgpu::BindingResource::Sampler(&textures[1].sampler),
                     },
                 ],
             }),
@@ -382,7 +325,13 @@ impl VgonioState {
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less, // tells when to discard a new pixel
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -431,6 +380,7 @@ impl VgonioState {
             object_model_matrix,
             instancing_buffer,
             instancing_transforms,
+            depth_texture,
         })
     }
 
@@ -440,6 +390,8 @@ impl VgonioState {
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
             self.surface.configure(&self.device, &self.surface_config);
+            self.depth_texture =
+                Texture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
         }
     }
 
@@ -474,15 +426,13 @@ impl VgonioState {
             }
             WindowEvent::KeyboardInput {
                 input:
-                KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::I),
-                    ..
-                },
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::I),
+                        ..
+                    },
                 ..
-            } => {
-                true
-            }
+            } => true,
             _ => false,
         };
 
@@ -503,9 +453,13 @@ impl VgonioState {
         );
 
         for m in &mut self.instancing_transforms {
-            *m =  (*m) * Mat4::from_rotation_x(0.2f32.to_radians());
+            *m = (*m) * Mat4::from_rotation_x(0.2f32.to_radians());
         }
-        self.queue.write_buffer(&self.instancing_buffer, 0, bytemuck::cast_slice(&self.instancing_transforms));
+        self.queue.write_buffer(
+            &self.instancing_buffer,
+            0,
+            bytemuck::cast_slice(&self.instancing_transforms),
+        );
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -539,7 +493,14 @@ impl VgonioState {
                         },
                     },
                 ],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
