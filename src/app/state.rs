@@ -1,13 +1,17 @@
 use crate::app::camera::{Camera, CameraController, CameraUniform};
 use crate::error::Error;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use image::{GenericImageView, ImageFormat, RgbaImage};
 use std::default::Default;
+use std::mem;
 use wgpu::util::DeviceExt;
 use wgpu::VertexFormat;
 use winit::event::KeyboardInput;
 use winit::event::{ElementState, VirtualKeyCode, WindowEvent};
 use winit::window::Window;
+
+const NUM_INSTANCES_PER_ROW: u32 = 9;
+const NUM_INSTANCES_PER_COL: u32 = 9;
 
 pub struct UiState {
     pub pipeline: wgpu::RenderPipeline,
@@ -35,6 +39,8 @@ pub struct VgonioState {
     pub camera_bind_group: wgpu::BindGroup,
     pub camera_controller: CameraController,
     pub object_model_matrix: glam::Mat4,
+    pub instancing_buffer: wgpu::Buffer,
+    pub instancing_transforms: Vec<Mat4>,
 }
 
 impl VgonioState {
@@ -291,6 +297,31 @@ impl VgonioState {
         });
         let camera_controller = CameraController::new(0.2);
 
+        let instance_displacement = Vec3::new(
+            NUM_INSTANCES_PER_ROW as f32 * 0.5,
+            NUM_INSTANCES_PER_COL as f32 * 0.5,
+            0.0,
+        );
+        // Instancing
+        let instancing_transforms = (0..NUM_INSTANCES_PER_ROW)
+            .flat_map(|u| {
+                (0..NUM_INSTANCES_PER_COL).map(move |v| {
+                    let pos = Vec3::new(u as f32, v as f32, 0.0) - instance_displacement;
+                    let rot = if pos.abs_diff_eq(Vec3::ZERO, 0.0001f32) {
+                        Quat::from_axis_angle(Vec3::Z, 0.0)
+                    } else {
+                        Quat::from_axis_angle(pos.normalize(), 45.0f32.to_radians())
+                    };
+                    Mat4::from_translation(pos) * Mat4::from_quat(rot)
+                })
+            })
+            .collect::<Vec<_>>();
+        let instancing_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("object-instancing-buffer"),
+            contents: bytemuck::cast_slice(&instancing_transforms),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("default-vertex-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("assets/shaders/shader.wgsl").into()),
@@ -304,13 +335,43 @@ impl VgonioState {
                 push_constant_ranges: &[],
             });
 
+        let instancing_buffer_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+            // Switch from using as step mode of Vertex to Instance.
+            // It means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x4,
+                    offset: 0,
+                    shader_location: 5,
+                },
+                wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x4,
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                },
+                wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x4,
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                },
+                wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x4,
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                },
+            ],
+        };
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[Vertex::layout()],
+                buffers: &[Vertex::layout(), instancing_buffer_layout],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -368,6 +429,8 @@ impl VgonioState {
             camera_bind_group,
             camera_controller,
             object_model_matrix,
+            instancing_buffer,
+            instancing_transforms,
         })
     }
 
@@ -406,7 +469,18 @@ impl VgonioState {
                 ..
             } => {
                 self.object_model_matrix =
-                    Mat4::from_rotation_y(3.0f32.to_radians()) * self.object_model_matrix;
+                    Mat4::from_rotation_z(3.0f32.to_radians()) * self.object_model_matrix;
+                true
+            }
+            WindowEvent::KeyboardInput {
+                input:
+                KeyboardInput {
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::I),
+                    ..
+                },
+                ..
+            } => {
                 true
             }
             _ => false,
@@ -427,6 +501,11 @@ impl VgonioState {
                 self.object_model_matrix,
             ]),
         );
+
+        for m in &mut self.instancing_transforms {
+            *m =  (*m) * Mat4::from_rotation_x(0.2f32.to_radians());
+        }
+        self.queue.write_buffer(&self.instancing_buffer, 0, bytemuck::cast_slice(&self.instancing_transforms));
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -451,9 +530,9 @@ impl VgonioState {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.1,
-                                g: 0.2,
-                                b: 0.3,
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
                                 a: 1.0,
                             }),
                             store: true,
@@ -471,9 +550,14 @@ impl VgonioState {
             );
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instancing_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             // render_pass.draw(0..self.num_vertices, 0..1);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(
+                0..self.num_indices,
+                0,
+                0..self.instancing_transforms.len() as _,
+            );
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
