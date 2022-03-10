@@ -205,8 +205,8 @@ impl SurfaceMesh {
                 he_darts.extend_from_slice(&[
                     // 1st triangle
                     HEDart::new(v0, curr_face, curr_dart + 1, curr_dart + 2, lower_twin),  // curr_dart + 0
-                    HEDart::new(v1, curr_face, curr_dart + 2, curr_dart + 0, curr_dart + 5),  // curr_dart + 1
-                    HEDart::new(v2, curr_face, curr_dart + 0, curr_dart + 1, left_twin),  // curr_dart + 2
+                    HEDart::new(v1, curr_face, curr_dart + 2, curr_dart, curr_dart + 5),  // curr_dart + 1
+                    HEDart::new(v2, curr_face, curr_dart, curr_dart + 1, left_twin),  // curr_dart + 2
                     // 2nd triangle
                     HEDart::new(v1, curr_face + 1, curr_dart + 4, curr_dart + 5, right_twin),  // curr_dart + 3
                     HEDart::new(v3, curr_face + 1, curr_dart + 5, curr_dart + 3, top_twin),  // curr_dart + 4

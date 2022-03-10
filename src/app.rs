@@ -1,7 +1,6 @@
 use crate::app::state::{RepaintSignal, UserEvent};
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Parser, Subcommand};
-use serde_json::ser::State;
 use std::io::Write;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -12,9 +11,9 @@ use winit::{
 pub mod camera;
 pub mod state;
 pub mod texture;
+pub(crate) mod ui;
 pub(crate) mod ui_state;
 pub(crate) mod utils;
-pub(crate) mod ui;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
@@ -172,34 +171,38 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
                     if record.level() <= log::Level::Warn {
                         writeln!(
                             buf,
-                            "{} {}: {}",
-                            format!("{}:{}:{}.{:03}", hours, minutes, seconds, milis),
+                            "{}:{}:{}.{:03} {}: {}",
+                            hours,
+                            minutes,
+                            seconds,
+                            milis,
                             record.level(),
                             record.args()
                         )
                     } else {
                         writeln!(
                             buf,
-                            "{}: {}",
-                            format!("{}:{}:{}.{:03}", hours, minutes, seconds, milis),
+                            "{}:{}:{}.{:03}: {}",
+                            hours,
+                            minutes,
+                            seconds,
+                            milis,
                             record.args()
                         )
                     }
+                } else if record.level() <= log::Level::Warn {
+                    writeln!(buf, "{}: {}", record.level(), record.args())
                 } else {
-                    if record.level() <= log::Level::Warn {
-                        writeln!(buf, "{}: {}", record.level(), record.args())
-                    } else {
-                        writeln!(buf, "{}", record.args())
-                    }
+                    writeln!(buf, "{}", record.args())
                 }
             })
-            .filter_level(match &args.log_level {
-                &0 => log::LevelFilter::Error,
-                &1 => log::LevelFilter::Warn,
-                &2 => log::LevelFilter::Info,
-                &3 => log::LevelFilter::Debug,
-                &4 => log::LevelFilter::Trace,
-                &_ => log::LevelFilter::Info,
+            .filter_level(match args.log_level {
+                0 => log::LevelFilter::Error,
+                1 => log::LevelFilter::Warn,
+                2 => log::LevelFilter::Info,
+                3 => log::LevelFilter::Debug,
+                4 => log::LevelFilter::Trace,
+                _ => log::LevelFilter::Info,
             })
             .init();
     }
@@ -211,7 +214,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
 }
 
 pub fn launch_gui_client() -> Result<(), Error> {
-    use state::VgonioState;
+    use state::VgonioApp;
 
     let event_loop = EventLoop::<UserEvent>::with_user_event();
 
@@ -227,7 +230,7 @@ pub fn launch_gui_client() -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    let mut state = pollster::block_on(VgonioState::new(&window))?;
+    let mut state = pollster::block_on(VgonioApp::new(&window))?;
     let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
         event_loop.create_proxy(),
     )));

@@ -1,26 +1,23 @@
-use crate::app::camera::{Camera, CameraController, CameraUniform};
-use crate::app::texture::Texture;
+use crate::app::{
+    camera::{Camera, CameraController, CameraUniform},
+    texture::Texture,
+    ui_state::UiState,
+};
 use crate::error::Error;
-use glam::{Mat4, Quat, Vec3};
-use image::{GenericImageView, ImageFormat, RgbaImage};
-use std::default::Default;
-use std::mem;
-use std::time::Instant;
 use epi::App;
-use wgpu::util::DeviceExt;
-use wgpu::VertexFormat;
-use winit::dpi::PhysicalSize;
-use winit::event::KeyboardInput;
-use winit::event::{ElementState, VirtualKeyCode, WindowEvent};
-use winit::event_loop::EventLoop;
-use winit::window::Window;
-use crate::app::ui::ui;
-use crate::app::ui_state::UiState;
+use glam::{Mat4, Quat, Vec3};
+use std::default::Default;
+use std::time::Instant;
+use wgpu::{util::DeviceExt, VertexFormat};
+use winit::{
+    event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    window::Window,
+};
 
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
 
-pub struct VgonioState {
+pub struct VgonioApp {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -67,7 +64,7 @@ impl epi::backend::RepaintSignal for RepaintSignal {
     }
 }
 
-impl VgonioState {
+impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(window: &Window) -> Result<Self, Error> {
         let win_size = window.inner_size();
@@ -145,7 +142,7 @@ impl VgonioState {
                 &device,
                 &queue,
                 include_bytes!("assets/damascus002.jpg"),
-                sampler.clone(),
+                sampler,
                 Some("damascus-texture-002"),
             ),
         ];
@@ -313,17 +310,17 @@ impl VgonioState {
                 },
                 wgpu::VertexAttribute {
                     format: VertexFormat::Float32x4,
-                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
                     shader_location: 6,
                 },
                 wgpu::VertexAttribute {
                     format: VertexFormat::Float32x4,
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
                     shader_location: 7,
                 },
                 wgpu::VertexAttribute {
                     format: VertexFormat::Float32x4,
-                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                 },
             ],
@@ -430,11 +427,11 @@ impl VgonioState {
             let status = match event {
                 WindowEvent::KeyboardInput {
                     input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Space),
-                        ..
-                    },
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Space),
+                            ..
+                        },
                     ..
                 } => {
                     self.current_texture_index += 1;
@@ -443,11 +440,11 @@ impl VgonioState {
                 }
                 WindowEvent::KeyboardInput {
                     input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::R),
-                        ..
-                    },
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::R),
+                            ..
+                        },
                     ..
                 } => {
                     self.object_model_matrix =
@@ -456,11 +453,11 @@ impl VgonioState {
                 }
                 WindowEvent::KeyboardInput {
                     input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::I),
-                        ..
-                    },
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::I),
+                            ..
+                        },
                     ..
                 } => true,
                 _ => false,
@@ -487,7 +484,7 @@ impl VgonioState {
         );
 
         for m in &mut self.instancing_transforms {
-            *m = (*m) * Mat4::from_rotation_x(0.2f32.to_radians());
+            *m *= Mat4::from_rotation_x(0.2f32.to_radians());
         }
         self.queue.write_buffer(
             &self.instancing_buffer,
@@ -567,7 +564,7 @@ impl VgonioState {
         {
             // Record UI
             let ui_start_time = Instant::now();
-            let input = self.ui_state.egui_state_mut().take_egui_input(&window);
+            let input = self.ui_state.egui_state_mut().take_egui_input(window);
 
             // Example of using begin and end frame.
             self.ui_state.egui_context_mut().begin_frame(input);

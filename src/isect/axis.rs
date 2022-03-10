@@ -23,7 +23,7 @@ pub enum Axis {
 
 impl From<i32> for Axis {
     fn from(i: i32) -> Self {
-        assert!(i < 3 && i >= 0);
+        assert!((0..3).contains(&i));
         match i {
             0 => Axis::X,
             1 => Axis::Y,

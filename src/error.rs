@@ -28,7 +28,7 @@ impl Display for Error {
                 write!(f, "Open file failed:  unrecognized file type!")
             }
             Error::BincodeError(err) => {
-                write!(f, "Bincode error: {}", err.to_string())
+                write!(f, "Bincode error: {}", err)
             }
             Error::Utf8Error(err) => {
                 write!(f, "Utf8 error: {}", err)

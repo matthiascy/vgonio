@@ -1,5 +1,4 @@
 use image::GenericImageView;
-use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 

@@ -1,7 +1,6 @@
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap},
-    fmt::Formatter,
     num::NonZeroU32,
 };
 
@@ -90,7 +89,7 @@ impl UiState {
         msaa_samples: u32,
     ) -> Self {
         let egui_context = egui::Context::default();
-        let egui_state = egui_winit::State::new(4096, &window);
+        let egui_state = egui_winit::State::new(4096, window);
         let shader_module = {
             device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("ui_shader_module"),
@@ -260,8 +259,8 @@ impl UiState {
         self.egui_state.on_event(&self.egui_context, event)
     }
 
-    /// Recording the UI rendering command. When `clear_color` is set, the output
-    /// target will get cleared before writing to it.
+    /// Recording the UI rendering command. When `clear_color` is set, the
+    /// output target will get cleared before writing to it.
     pub fn render(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -286,7 +285,7 @@ impl UiState {
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None
+            depth_stencil_attachment: None,
         });
 
         render_pass.push_debug_group("ui_pass");
@@ -350,6 +349,7 @@ impl UiState {
                 continue;
             }
 
+            render_pass.set_scissor_rect(x, y, width, height);
             let bind_group = self.get_texture_bind_group(mesh.texture_id)?;
             render_pass.set_bind_group(1, bind_group, &[]);
             render_pass.set_index_buffer(index_buffer.raw.slice(..), wgpu::IndexFormat::Uint32);
@@ -427,7 +427,7 @@ impl UiState {
                 egui::TextureId::User(u) => format!("egui_user_image_{}", u),
             };
 
-            match self.textures.entry(texture_id.clone()) {
+            match self.textures.entry(*texture_id) {
                 Entry::Occupied(mut o) => match image_delta.pos {
                     None => {
                         let (texture, bind_group) = create_texture_and_bind_group(
@@ -829,7 +829,7 @@ fn create_texture_and_bind_group(
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some(format!("{}_texture_bind_group", label_base).as_str()),
-        layout: &texture_bind_group_layout,
+        layout: texture_bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,

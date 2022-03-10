@@ -129,10 +129,8 @@ fn read_ascii_usurf<R: BufRead>(
     let mut line = String::new();
     reader.read_line(&mut line)?;
 
-    if read_first_4_bytes {
-        if line.trim() != "DATA" {
-            return Err(Error::UnrecognizedFile);
-        }
+    if read_first_4_bytes && line.trim() != "DATA" {
+        return Err(Error::UnrecognizedFile);
     }
 
     // Read horizontal coordinates
@@ -190,12 +188,12 @@ fn read_line_ascii_usurf(line: &str) -> Vec<f32> {
                 *last_word_is_tab = true;
                 if *last_word_is_tab {
                     if curr != line.len() - 2 {
-                        Some(&"\t")
+                        Some("\t")
                     } else {
-                        Some(&"")
+                        Some("")
                     }
                 } else {
-                    Some(&"")
+                    Some("")
                 }
             }
         })

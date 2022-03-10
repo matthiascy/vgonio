@@ -113,8 +113,8 @@ pub(crate) fn egui_to_winit_cursor_icon(
 
 #[inline]
 pub(crate) fn is_character_printable(chr: char) -> bool {
-    let is_in_private_use_area = '\u{e000}' <= chr && chr <= '\u{f8ff}'
-        || '\u{f0000}' <= chr && chr <= '\u{ffffd}'
-        || '\u{100000}' <= chr && chr <= '\u{10fffd}';
+    let is_in_private_use_area = ('\u{e000}'..'\u{f8ff}').contains(&chr)
+        || ('\u{f0000}'..'\u{ffffd}').contains(&chr)
+        || ('\u{100000}'..'\u{10fffd}').contains(&chr);
     !is_in_private_use_area && !chr.is_ascii_control()
 }
