@@ -9,6 +9,7 @@ pub enum Error {
     BincodeError(bincode::Error),
     UnrecognizedFile,
     Utf8Error(str::Utf8Error),
+    Any(String),
 }
 
 impl Display for Error {
@@ -31,6 +32,9 @@ impl Display for Error {
             }
             Error::Utf8Error(err) => {
                 write!(f, "Utf8 error: {}", err)
+            }
+            Error::Any(err) => {
+                write!(f, "{}", err)
             }
         }
     }

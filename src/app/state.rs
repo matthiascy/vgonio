@@ -1,11 +1,13 @@
 use crate::app::camera::{Camera, CameraController, CameraUniform};
 use crate::app::texture::Texture;
+use crate::app::ui_state::{UiState, UiUniform, WindowSize};
 use crate::error::Error;
+use epi::App;
 use glam::{Mat4, Quat, Vec3};
 use image::{GenericImageView, ImageFormat, RgbaImage};
 use std::default::Default;
 use std::mem;
-use std::sync::Arc;
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 use wgpu::VertexFormat;
 use winit::event::KeyboardInput;
@@ -15,19 +17,12 @@ use winit::window::Window;
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
 
-pub struct UiState {
-    pub pipeline: wgpu::RenderPipeline,
-    pub index_buffers: Vec<wgpu::Buffer>,
-    pub vertex_buffers: Vec<wgpu::Buffer>,
-    pub uniform_buffers: Vec<wgpu::Buffer>,
-}
-
 pub struct VgonioState {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub surface_config: wgpu::SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
+    pub win_size: winit::dpi::PhysicalSize<u32>,
     pub render_pipeline: wgpu::RenderPipeline,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -44,12 +39,31 @@ pub struct VgonioState {
     pub instancing_buffer: wgpu::Buffer,
     pub instancing_transforms: Vec<Mat4>,
     pub depth_texture: Texture,
+    pub start_time: Instant,
+    pub prev_frame_time: Option<f32>,
+    pub ui_state: UiState,
+    pub ui: egui_demo_lib::WrapApp,
+}
+
+/// A custom event type for the winit app.
+enum CustomisedEvent {
+    RequestRedraw
+}
+
+/// Repaint signal type that egui needs for requesting a repaint from another thread.
+/// It sends the custom RequestRedraw event to the winit event loop.
+struct RepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<CustomisedEvent>>);
+
+impl epi::backend::RepaintSignal for RepaintSignal {
+    fn request_repaint(&self) {
+        self.0.lock().unwrap().send_event(CustomisedEvent::RequestRedraw).ok();
+    }
 }
 
 impl VgonioState {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(window: &Window) -> Result<Self, Error> {
-        let size = window.inner_size();
+        let win_size = window.inner_size();
 
         let num_vertices = VERTICES.len() as u32;
 
@@ -96,14 +110,14 @@ impl VgonioState {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: swapchain_format,
-            width: size.width,
-            height: size.height,
+            width: win_size.width,
+            height: win_size.height,
             present_mode: wgpu::PresentMode::Fifo,
         };
         surface.configure(&device, &surface_config);
 
         // Create texture
-        let sampler = Arc::new(device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = std::sync::Arc::new(device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -359,12 +373,26 @@ impl VgonioState {
 
         let num_indices = INDICES.len() as u32;
 
+        let ui_state = UiState::new(
+            &device,
+            swapchain_format,
+            1,
+            WindowSize {
+                physical_width: win_size.width,
+                physical_height: win_size.height,
+                scale_factor: window.scale_factor() as f32,
+            },
+            egui::FontDefinitions::default(),
+            Default::default(),
+        );
+        let ui = egui_demo_lib::WrapApp::default();
+
         Ok(Self {
             surface,
             device,
             queue,
             surface_config,
-            size,
+            win_size,
             render_pipeline,
             vertex_buffer,
             index_buffer,
@@ -381,12 +409,16 @@ impl VgonioState {
             instancing_buffer,
             instancing_transforms,
             depth_texture,
+            start_time: Instant::now(),
+            prev_frame_time: None,
+            ui_state,
+            ui,
         })
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
+            self.win_size = new_size;
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
             self.surface.configure(&self.device, &self.surface_config);
@@ -440,6 +472,12 @@ impl VgonioState {
     }
 
     pub fn update(&mut self) {
+        // Update time for egui.
+        self.ui_state
+            .context
+            .update_time(self.start_time.elapsed().as_secs_f64());
+
+        // Update camera uniform.
         self.camera_controller.update_camera(&mut self.camera);
         self.camera_uniform = self.camera.uniform();
         self.queue.write_buffer(
@@ -463,24 +501,23 @@ impl VgonioState {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        // Image view
-        let view = output
+        let output_frame = self.surface.get_current_texture()?;
+        let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
+                label: Some("vgonio_render_encoder"),
             });
-
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
                     // This is what [[location(0)]] in the fragment shader targets
                     wgpu::RenderPassColorAttachment {
-                        view: &view,
+                        view: &output_view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -521,8 +558,68 @@ impl VgonioState {
             );
         }
 
+        {
+            // Record UI
+            let ui_start_time = Instant::now();
+            self.ui_state.context.begin_frame();
+            let ui_output = epi::backend::AppOutput::default();
+            let ui_frame = epi::Frame::new(epi::backend::FrameData {
+                info: epi::IntegrationInfo {
+                    name: "vgonio-gui",
+                    web_info: None,
+                    prefer_dark_mode: None,
+                    cpu_usage: self.prev_frame_time,
+                    native_pixels_per_point: Some(self.ui_state.context.window_size.scale_factor),
+                },
+                output: ui_output,
+                repaint_signal: std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(event_loop.create_proxy()))),
+            });
+            self.ui.update(&self.ui_state.context.raw_context(), &ui_frame);
+            let ui_output_frame = self.ui_state.context.end_frame(None);
+            let meshes = self
+                .ui_state
+                .core
+                .context()
+                .tessellate(ui_output_frame.shapes);
+            let frame_time = (Instant::now() - ui_start_time).as_secs_f64() as f32;
+            self.prev_frame_time = Some(frame_time);
+
+            let mut ui_encoder =
+                self.device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vgonio_ui_render_encoder"),
+                    });
+
+            let ui_uniform = UiUniform {
+                screen_size: [
+                    self.surface_config.width as f32,
+                    self.surface_config.height as f32,
+                ],
+            };
+            self.ui_state.update_textures(
+                &self.device,
+                &self.queue,
+                &ui_output_frame.textures_delta,
+            );
+            self.ui_state
+                .clean_unused_textures(ui_output_frame.textures_delta);
+            self.ui_state
+                .render
+                .update_buffers(&self.device, &self.queue, &meshes);
+            self.ui_state
+                .render
+                .render(
+                    &mut ui_encoder,
+                    &output_view,
+                    &meshes,
+                    Some(wgpu::Color::BLUE),
+                )
+                .unwrap();
+            self.queue.submit(std::iter::once(ui_encoder.finish()));
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        output_frame.present();
 
         Ok(())
     }

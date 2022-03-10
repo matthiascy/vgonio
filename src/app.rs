@@ -11,6 +11,11 @@ use winit::{
 pub mod camera;
 pub mod state;
 pub mod texture;
+pub mod ui_state;
+pub mod utils;
+
+const WIN_INITIAL_WIDTH: u32 = 1280;
+const WIN_INITIAL_HEIGHT: u32 = 720;
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -207,59 +212,73 @@ pub fn launch_gui_client() -> Result<(), Error> {
     use state::VgonioState;
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-    window.set_title("vgonio");
+    let window = WindowBuilder::new()
+        .with_decorations(true)
+        .with_resizable(true)
+        .with_transparent(false)
+        .with_inner_size(winit::dpi::PhysicalSize {
+            width: WIN_INITIAL_WIDTH,
+            height: WIN_INITIAL_HEIGHT,
+        })
+        .with_title("vgonio")
+        .build(&event_loop)
+        .unwrap();
 
     let mut state = pollster::block_on(VgonioState::new(&window))?;
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            window_id,
-            ref event,
-        } if window_id == window.id() => {
-            if !state.input(event) {
-                match event {
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
+    event_loop.run(move |event, _, control_flow| {
+        // Pass the winit events to egui.
+        state.ui_state.core.process_event(&event);
 
-                    WindowEvent::Resized(physical_size) => state.resize(*physical_size),
+        match event {
+            Event::WindowEvent {
+                window_id,
+                ref event,
+            } if window_id == window.id() => {
+                if !state.input(event) {
+                    match event {
+                        WindowEvent::CloseRequested
+                        | WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                                    ..
+                                },
+                            ..
+                        } => *control_flow = ControlFlow::Exit,
 
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        state.resize(**new_inner_size);
+                        WindowEvent::Resized(physical_size) => state.resize(*physical_size),
+
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            state.resize(**new_inner_size);
+                        }
+
+                        _ => {}
                     }
-
-                    _ => {}
                 }
             }
-        }
 
-        Event::RedrawRequested(window_id) if window_id == window.id() => {
-            state.update();
-            match state.render() {
-                Ok(_) => {}
-                // Reconfigure the surface if lost
-                Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                // The system is out of memory, we should quit
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                // All other errors (Outdated, Timeout) should be resolved by the next frame
-                Err(e) => eprintln!("{:?}", e),
+            Event::RedrawRequested(window_id) if window_id == window.id() => {
+                state.update();
+                match state.render() {
+                    Ok(_) => {}
+                    // Reconfigure the surface if lost
+                    Err(wgpu::SurfaceError::Lost) => state.resize(state.win_size),
+                    // The system is out of memory, we should quit
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                    Err(e) => eprintln!("{:?}", e),
+                }
             }
-        }
 
-        Event::MainEventsCleared => {
-            // RedrawRequested will only trigger once, unless we manually request it.
-            window.request_redraw()
-        }
+            Event::MainEventsCleared => {
+                // RedrawRequested will only trigger once, unless we manually request it.
+                window.request_redraw()
+            }
 
-        _ => {}
+            _ => {}
+        }
     });
 }
 

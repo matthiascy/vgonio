@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 pub struct Texture {
-    pub inner: wgpu::Texture,
+    pub raw: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: Arc<wgpu::Sampler>,
 }
@@ -46,7 +46,7 @@ impl Texture {
             ..Default::default()
         }));
         Self {
-            inner: texture,
+            raw: texture,
             view,
             sampler,
         }
@@ -105,7 +105,7 @@ impl Texture {
         let view = inner.create_view(&wgpu::TextureViewDescriptor::default());
 
         Self {
-            inner,
+            raw: inner,
             view,
             sampler,
         }
