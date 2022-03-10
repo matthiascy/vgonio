@@ -1,3 +1,4 @@
+use crate::app::state::{RepaintSignal, UserEvent};
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Parser, Subcommand};
 use serde_json::ser::State;
@@ -11,8 +12,9 @@ use winit::{
 pub mod camera;
 pub mod state;
 pub mod texture;
-pub mod ui_state;
-pub mod utils;
+pub(crate) mod ui_state;
+pub(crate) mod utils;
+pub(crate) mod ui;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
@@ -211,7 +213,8 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
 pub fn launch_gui_client() -> Result<(), Error> {
     use state::VgonioState;
 
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::<UserEvent>::with_user_event();
+
     let window = WindowBuilder::new()
         .with_decorations(true)
         .with_resizable(true)
@@ -225,17 +228,17 @@ pub fn launch_gui_client() -> Result<(), Error> {
         .unwrap();
 
     let mut state = pollster::block_on(VgonioState::new(&window))?;
+    let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
+        event_loop.create_proxy(),
+    )));
 
     event_loop.run(move |event, _, control_flow| {
-        // Pass the winit events to egui.
-        state.ui_state.core.process_event(&event);
-
         match event {
             Event::WindowEvent {
                 window_id,
                 ref event,
             } if window_id == window.id() => {
-                if !state.input(event) {
+                if !state.process_input(event) {
                     match event {
                         WindowEvent::CloseRequested
                         | WindowEvent::KeyboardInput {
@@ -261,7 +264,7 @@ pub fn launch_gui_client() -> Result<(), Error> {
 
             Event::RedrawRequested(window_id) if window_id == window.id() => {
                 state.update();
-                match state.render() {
+                match state.render(&window, repaint_signal.clone()) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.win_size),

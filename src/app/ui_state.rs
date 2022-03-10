@@ -1,349 +1,110 @@
-// File partially ported from https://github.com/egui_wgpu_backend
+use std::{
+    borrow::Cow,
+    collections::{hash_map::Entry, HashMap},
+    fmt::Formatter,
+    num::NonZeroU32,
+};
 
-use crate::app::utils;
 use crate::error::Error;
-use copypasta::{ClipboardContext, ClipboardProvider};
-use egui::epaint::ClippedShape;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::num::NonZeroU32;
-use std::sync::Arc;
 use wgpu::util::DeviceExt;
-use wgpu::{BindGroup, Device, Texture};
-use winit::dpi::PhysicalSize;
-use winit::event::{Event, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 
-#[derive(Debug)]
-pub struct SizedBuffer {
-    raw: wgpu::Buffer,
-    size: usize,
-}
-
+/// Enum for selecting the right buffer type.
 #[derive(Debug)]
 enum BufferType {
-    Vertex,
-    Index,
     Uniform,
+    Index,
+    Vertex,
 }
 
-/// The size of the window on which the UI is presented.
-#[derive(Debug, Copy, Clone)]
+/// Information about the window on which the UI is presented.
 pub struct WindowSize {
-    /// Inner width of the window, in pixels.
+    /// Width of the window in physical pixel.
     pub physical_width: u32,
-    /// Inner height of the window, in pixels.
+    /// Height of the window in physical pixel.
     pub physical_height: u32,
     /// HiDPI scale factor.
     pub scale_factor: f32,
 }
 
-/// Uniforms uploaded to the shader.
-#[repr(C)]
+impl WindowSize {
+    fn logical_size(&self) -> (u32, u32) {
+        let logical_width = self.physical_width as f32 / self.scale_factor;
+        let logical_height = self.physical_height as f32 / self.scale_factor;
+        (logical_width as u32, logical_height as u32)
+    }
+}
+
+/// Uniform buffer used when rendering.
 #[derive(Clone, Copy, Debug)]
-pub struct UiUniform {
-    pub screen_size: [f32; 2],
+#[repr(C)]
+struct UiUniform {
+    window_size: [f32; 2],
 }
 
 unsafe impl bytemuck::Pod for UiUniform {}
+
 unsafe impl bytemuck::Zeroable for UiUniform {}
 
-pub struct UiContext {
-    raw_context: egui::Context,
-    raw_input: egui::RawInput,
-    pub window_size: WindowSize,
-    clipboard: ClipboardContext,
-    cursor_pos: Option<egui::Pos2>,
-    cursor_icon: egui::CursorIcon,
-    modifiers_state: winit::event::ModifiersState,
+/// Wraps the buffers and includes additional information.
+#[derive(Debug)]
+struct SizedBuffer {
+    raw: wgpu::Buffer,
+    size: usize,
 }
 
-impl UiContext {
-    pub fn new(
-        window_size: WindowSize,
-        font_config: egui::FontDefinitions,
-        style: egui::Style,
-    ) -> Self {
-        // Create egui context
-        let context = egui::Context::default();
-        context.set_fonts(font_config);
-        context.set_style(style);
-
-        // Create egui raw input
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::default(),
-                egui::vec2(window_size.physical_width as f32, window_size.height as f32)
-                    / window_size.scale_factor as f32,
-            )),
-            pixels_per_point: Some(window_size.scale_factor as f32),
-            ..Default::default()
-        };
-
-        // Create clipboard context
-        let clipboard = ClipboardContext::new().expect("Failed to initialise ClipboardContext.");
-
-        Self {
-            raw_context: context,
-            raw_input: input,
-            modifiers_state: winit::event::ModifiersState::empty(),
-            cursor_pos: Some(egui::Pos2::default()),
-            window_size,
-            clipboard,
-            cursor_icon: Default::default(),
-        }
-    }
-
-    pub fn raw_context(&self) -> &egui::Context {
-        &self.raw_context
-    }
-
-    pub fn process_event<T>(&mut self, winit_event: &winit::event::Event<T>) {
-        match winit_event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(PhysicalSize {
-                    width: 0,
-                    height: 0,
-                }) => {}
-                WindowEvent::Resized(physical_size) => {
-                    self.window_size.physical_width = physical_size.width;
-                    self.window_size.height = physical_size.height;
-
-                    self.raw_input.screen_rect = Some(egui::Rect::from_min_size(
-                        Default::default(),
-                        egui::vec2(
-                            self.window_size.physical_width as f32,
-                            self.window_size.height as f32,
-                        ) / self.window_size.scale_factor as f32,
-                    ));
-                }
-                WindowEvent::ReceivedCharacter(chr) => {
-                    if utils::is_character_printable(*chr)
-                        && !self.modifiers_state.ctrl()
-                        && !self.modifiers_state.logo()
-                    {
-                        self.raw_input
-                            .events
-                            .push(egui::Event::Text(chr.to_string()));
-                    }
-                }
-                WindowEvent::KeyboardInput { input, .. } => {
-                    if let Some(virtual_keycode) = input.virtual_keycode {
-                        let pressed = input.state == winit::event::ElementState::Pressed;
-                        let ctrl = self.modifiers_state.ctrl();
-
-                        match (pressed, ctrl, virtual_keycode) {
-                            (true, true, VirtualKeyCode::C) => {
-                                self.raw_input.events.push(egui::Event::Copy)
-                            }
-                            (true, true, VirtualKeyCode::X) => {
-                                self.raw_input.events.push(egui::Event::Cut)
-                            }
-                            (true, true, VirtualKeyCode::V) => {
-                                if let Ok(contents) = self.clipboard.get_contents() {
-                                    self.raw_input.events.push(egui::Event::Paste(contents))
-                                }
-                            }
-                            _ => {
-                                if let Some(key) = utils::winit_to_egui_key_code(virtual_keycode) {
-                                    self.raw_input.events.push(egui::Event::Key {
-                                        key,
-                                        pressed,
-                                        modifiers: utils::winit_to_egui_modifiers(
-                                            self.modifiers_state,
-                                        ),
-                                    })
-                                }
-                            }
-                        }
-                    }
-                }
-                WindowEvent::ModifiersChanged(input) => {
-                    self.modifiers_state = *input;
-                    self.raw_input.modifiers = utils::winit_to_egui_modifiers(*input);
-                }
-                WindowEvent::CursorMoved { position, .. } => {
-                    let cursor_pos = egui::pos2(
-                        position.x as f32 / self.window_size.scale_factor as f32,
-                        position.y as f32 / self.window_size.scale_factor as f32,
-                    );
-                    self.cursor_pos = Some(cursor_pos);
-                    self.raw_input
-                        .events
-                        .push(egui::Event::PointerMoved(cursor_pos));
-                }
-                WindowEvent::CursorLeft { .. } => {
-                    self.cursor_pos = None;
-                    self.raw_input.events.push(egui::Event::PointerGone)
-                }
-                WindowEvent::MouseWheel { delta, .. } => {
-                    let mut delta = match delta {
-                        MouseScrollDelta::LineDelta(x, y) => {
-                            let line_height = 8.0; // TODO
-                            egui::vec2(*x, *y) * line_height
-                        }
-                        MouseScrollDelta::PixelDelta(delta) => {
-                            egui::vec2(delta.x as f32, delta.y as f32)
-                        }
-                    };
-                    if cfg!(target_os = "macos") {
-                        // See https://github.com/rust-windowing/winit/issues/1695 for more info.
-                        delta.x *= -1.0;
-                    }
-
-                    // The ctrl (cmd on macos) key indicates a zoom is desired
-                    if self.raw_input.modifiers.ctrl || self.raw_input.modifiers.command {
-                        self.raw_input
-                            .events
-                            .push(egui::Event::Zoom((delta.y / 200.0).exp()));
-                    } else {
-                        self.raw_input.events.push(egui::Event::Scroll(delta));
-                    }
-                }
-                WindowEvent::MouseInput { state, button, .. } => {
-                    if let winit::event::MouseButton::Other(..) = button {
-                    } else {
-                        if let Some(cursor_pos) = self.cursor_pos {
-                            self.raw_input.events.push(egui::Event::PointerButton {
-                                pos: cursor_pos,
-                                button: match button {
-                                    MouseButton::Left => egui::PointerButton::Primary,
-                                    MouseButton::Right => egui::PointerButton::Secondary,
-                                    MouseButton::Middle => egui::PointerButton::Middle,
-                                    MouseButton::Other(_) => unreachable!(),
-                                },
-                                pressed: *state == winit::event::ElementState::Pressed,
-                                modifiers: Default::default(),
-                            })
-                        }
-                    }
-                }
-                WindowEvent::ScaleFactorChanged {
-                    scale_factor,
-                    new_inner_size,
-                } => {
-                    self.window_size.physical_width = new_inner_size.width;
-                    self.window_size.height = new_inner_size.height;
-                    self.window_size.scale_factor = *scale_factor as f32;
-
-                    self.raw_input.pixels_per_point = Some(self.window_size.scale_factor);
-                    self.raw_input.screen_rect = Some(egui::Rect::from_min_size(
-                        Default::default(),
-                        egui::vec2(new_inner_size.width as f32, new_inner_size.height as f32)
-                            / self.window_size.scale_factor as f32,
-                    ));
-                }
-                _ => {}
-            },
-            _ => {}
-        }
-    }
-
-    /// Updates the internal time for egui animations.
-    pub fn update_time(&mut self, elapsed_secs: f64) {
-        self.raw_input.time = Some(elapsed_secs);
-    }
-
-    /// Returns `true` if egui should handle the event exclusively.
-    pub fn capture_event<T>(&self, event: &Event<T>) -> bool {
-        match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::ReceivedCharacter(_)
-                | WindowEvent::KeyboardInput { .. }
-                | WindowEvent::ModifiersChanged(_) => self.raw_context.wants_keyboard_input(),
-                WindowEvent::CursorMoved { .. } => self.raw_context.is_using_pointer(),
-                WindowEvent::MouseWheel { .. } | WindowEvent::MouseInput { .. } => {
-                    self.raw_context.wants_pointer_input()
-                }
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
-    /// Starts a new frame by providing a new `Ui` instance to write into.
-    pub fn begin_frame(&mut self) {
-        self.raw_context.begin_frame(self.raw_input.take())
-    }
-
-    /// Ends the frame. Returns what has happened as `Output` and gives you
-    /// the draw instructions as `PaintJobs`. If the optional `window` is set,
-    /// it will set the cursor key based on egui's instructions.
-    pub fn end_frame(&mut self, window: Option<&winit::window::Window>) -> egui::FullOutput {
-        let output = self.raw_context.end_frame();
-
-        // Handle cursor icon
-        if let Some(window) = window {
-            if let Some(cursor_icon) =
-                utils::egui_to_winit_cursor_icon(output.platform_output.cursor_icon)
-            {
-                window.set_cursor_visible(true);
-
-                if self.cursor_pos.is_some() {
-                    window.set_cursor_icon(cursor_icon);
-                }
-            } else {
-                window.set_cursor_visible(false);
-            }
-        }
-
-        // Handle clipboard
-        if !output.platform_output.copied_text.is_empty() {
-            if let Err(err) = self
-                .clipboard
-                .set_contents(output.platform_output.copied_text.clone())
-            {
-                eprintln!("Copy/Cut error: {}", err);
-            }
-        }
-
-        output
-    }
-}
-
+/// RenderPass to render a egui based GUI.
 pub struct UiState {
-    /// UI context
-    pub context: UiContext,
-    /// UI rendering pipeline
-    pipeline: wgpu::RenderPipeline,
-    /// Index buffers for egui meshes
+    /// Context for UI generation
+    egui_context: egui::Context,
+    /// States managing the translation of input from winit to egui
+    egui_state: egui_winit::State,
+    /// Inputs translated from winit
+    egui_input: egui::RawInput,
+    /// Render pipline for UI
+    render_pipeline: wgpu::RenderPipeline,
+    /// Index buffers for meshes generated by egui
     index_buffers: Vec<SizedBuffer>,
-    /// Vertex buffers for egui meshes
+    /// Vertex buffers for meshes generated by egui
     vertex_buffers: Vec<SizedBuffer>,
-    /// Uniform buffer used during rendering
+    /// Uniform buffer storing the size
     uniform_buffer: SizedBuffer,
-    /// Bind group of uniforms
+    /// Bind group of uniform
     uniform_bind_group: wgpu::BindGroup,
-    /// Bing group layout of textures (texture view + sampler)
+    /// Bind group layout of textures (texture view + sampler)
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    next_user_texture_id: u64,
     /// The mapping from egui texture IDs to the associated bind group (texture
     /// view + sampler)
     textures: HashMap<egui::TextureId, (Option<wgpu::Texture>, wgpu::BindGroup)>,
+    next_user_texture_id: u64,
 }
 
 impl UiState {
     /// Creates related resources used for UI rendering.
+    ///
+    /// If the format passed is not a *Srgb format, the shader will
+    /// automatically convert to sRGB colors in the shader.
     pub fn new(
+        window: &winit::window::Window,
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
         msaa_samples: u32,
-        window_size: WindowSize,
-        font_config: egui::FontDefinitions,
-        style: egui::Style,
     ) -> Self {
-        let ui_context = UiContext::new(window_size, font_config, style);
-
+        let egui_context = egui::Context::default();
+        let egui_state = egui_winit::State::new(4096, &window);
         let shader_module = {
             device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("ui-shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("assets/shaders/ui.wgsl").into()),
+                label: Some("ui_shader_module"),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                    "assets/shaders/ui.wgsl"
+                ))),
             })
         };
+
         let uniform_buffer = {
             let raw = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("ui-uniforms-buffer"),
+                label: Some("ui_uniform_buffer"),
                 contents: bytemuck::cast_slice(&[UiUniform {
-                    screen_size: [0.0, 0.0],
+                    window_size: [0.0, 0.0],
                 }]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
@@ -352,22 +113,24 @@ impl UiState {
                 size: std::mem::size_of::<UiUniform>(),
             }
         };
+
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("ui-uniforms-bind-group-layout"),
+                label: Some("ui_uniform_bind_group_layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
+                        ty: wgpu::BufferBindingType::Uniform,
                     },
                     count: None,
                 }],
             });
+
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ui-uniforms-bind-group"),
+            label: Some("ui_uniform_bind_group"),
             layout: &uniform_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -378,9 +141,10 @@ impl UiState {
                 }),
             }],
         });
+
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("ui-textures-bind-group-layout"),
+                label: Some("ui_texture_bind_group_layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -400,24 +164,29 @@ impl UiState {
                     },
                 ],
             });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ui-pipeline-layout"),
+            label: Some("ui_pipeline_layout"),
             bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("ui-pipeline"),
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("ui_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader_module,
                 entry_point: if surface_format.describe().srgb {
                     "vs_main"
                 } else {
                     "vs_conv_main"
                 },
+                module: &shader_module,
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 20,
+                    array_stride: 5 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
+                    // 0: vec2 position
+                    // 1: vec2 texture coordinates
+                    // 2: uint color
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x2,
                         1 => Float32x2,
@@ -427,19 +196,20 @@ impl UiState {
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::default(),
-                cull_mode: None,
                 unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::default(),
                 conservative: false,
+                cull_mode: None,
+                front_face: wgpu::FrontFace::default(),
+                polygon_mode: wgpu::PolygonMode::default(),
+                strip_index_format: None,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
+                alpha_to_coverage_enabled: false,
                 count: msaa_samples,
                 mask: !0,
-                alpha_to_coverage_enabled: false,
             },
+
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
                 entry_point: "fs_main",
@@ -464,23 +234,40 @@ impl UiState {
         });
 
         Self {
-            context: ui_context,
-            pipeline,
-            index_buffers: Vec::with_capacity(64),
+            egui_context,
+            egui_state,
+            egui_input: Default::default(),
+            render_pipeline,
             vertex_buffers: Vec::with_capacity(64),
+            index_buffers: Vec::with_capacity(64),
             uniform_buffer,
             uniform_bind_group,
             texture_bind_group_layout,
-            next_user_texture_id: 0,
             textures: HashMap::new(),
+            next_user_texture_id: 0,
         }
     }
 
+    pub fn take_input(&mut self, window: &winit::window::Window) {
+        self.egui_input = self.egui_state.take_egui_input(window);
+    }
+
+    pub fn begin_frame(&mut self) {
+        self.egui_context.begin_frame(self.egui_input.take());
+    }
+
+    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        self.egui_state.on_event(&self.egui_context, event)
+    }
+
+    /// Recording the UI rendering command. When `clear_color` is set, the output
+    /// target will get cleared before writing to it.
     pub fn render(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
         meshes: &[egui::epaint::ClippedMesh],
+        screen_descriptor: &WindowSize,
         clear_color: Option<wgpu::Color>,
     ) -> Result<(), Error> {
         let load_op = if let Some(color) = clear_color {
@@ -490,53 +277,55 @@ impl UiState {
         };
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("ui-render-pass"),
+            label: Some("ui_main_render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &color_attachment,
+                view: color_attachment,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: load_op,
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: None
         });
-        // Starts recording commands.
-        render_pass.push_debug_group("ui-pass");
-        self.render_with_existing_render_pass(&mut render_pass, meshes)?;
+
+        render_pass.push_debug_group("ui_pass");
+
+        self.record_render_pass(&mut render_pass, meshes, screen_descriptor)?;
+
         render_pass.pop_debug_group();
 
         Ok(())
     }
 
-    pub fn render_with_existing_render_pass<'renderpass>(
-        &'renderpass self,
-        render_pass: &mut wgpu::RenderPass<'renderpass>,
+    /// Executes the egui render pass onto an existing wgpu renderpass.
+    fn record_render_pass<'rdrps>(
+        &'rdrps self,
+        render_pass: &mut wgpu::RenderPass<'rdrps>,
         meshes: &[egui::epaint::ClippedMesh],
+        screen_descriptor: &WindowSize,
     ) -> Result<(), Error> {
-        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-        let WindowSize {
-            physical_width: win_width,
-            physical_height: win_height,
-            scale_factor: win_scale_factor,
-        } = self.context.window_size;
+        let scale_factor = screen_descriptor.scale_factor;
+        let physical_width = screen_descriptor.physical_width;
+        let physical_height = screen_descriptor.physical_height;
 
         for ((egui::ClippedMesh(rect, mesh), vertex_buffer), index_buffer) in meshes
             .iter()
             .zip(self.vertex_buffers.iter())
             .zip(self.index_buffers.iter())
         {
-            let (scissor_x, scissor_y, scissor_width, scissor_height) = {
+            let (x, y, width, height) = {
                 // Transform clip rect to physical pixels position.
                 let (clip_min_x, clip_min_y, clip_max_x, clip_max_y) = {
-                    let clip_min_x = (win_scale_factor * rect.min.x).clamp(0.0, win_width as f32);
-                    let clip_min_y = (win_scale_factor * rect.min.y).clamp(0.0, win_height as f32);
+                    let clip_min_x = (scale_factor * rect.min.x).clamp(0.0, physical_width as f32);
+                    let clip_min_y = (scale_factor * rect.min.y).clamp(0.0, physical_height as f32);
                     let clip_max_x =
-                        (win_scale_factor * rect.max.x).clamp(clip_min_x, win_width as f32);
+                        (scale_factor * rect.max.x).clamp(clip_min_x, physical_width as f32);
                     let clip_max_y =
-                        (win_scale_factor * rect.max.y).clamp(clip_min_y, win_height as f32);
+                        (scale_factor * rect.max.y).clamp(clip_min_y, physical_height as f32);
                     (
                         clip_min_x.round() as u32,
                         clip_min_y.round() as u32,
@@ -548,48 +337,51 @@ impl UiState {
                 let height = (clip_max_y - clip_min_y).max(1);
 
                 // Clip scissor rectangle to target size.
-                let x = clip_min_x.min(win_width);
-                let y = clip_min_y.min(win_height);
-                let width = width.min(win_width - x);
-                let height = height.min(win_height - y);
+                let x = clip_min_x.min(physical_width);
+                let y = clip_min_y.min(physical_height);
+                let width = width.min(physical_width - x);
+                let height = height.min(physical_height - y);
 
                 (x, y, width, height)
             };
 
             // Skip rendering with zero-sized clip areas.
-            if scissor_width == 0 || scissor_height == 0 {
+            if width == 0 || height == 0 {
                 continue;
             }
 
-            render_pass.set_scissor_rect(scissor_x, scissor_y, scissor_width, scissor_height);
-            let texture_bind_group = self.texture_bind_group(mesh.texture_id)?;
-            render_pass.set_bind_group(1, texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.raw.slice(..));
+            let bind_group = self.get_texture_bind_group(mesh.texture_id)?;
+            render_pass.set_bind_group(1, bind_group, &[]);
             render_pass.set_index_buffer(index_buffer.raw.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.set_vertex_buffer(0, vertex_buffer.raw.slice(..));
             render_pass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
         }
 
         Ok(())
     }
 
-    fn texture_bind_group(&self, texture_id: egui::TextureId) -> Result<&wgpu::BindGroup, Error> {
+    fn get_texture_bind_group(
+        &self,
+        texture_id: egui::TextureId,
+    ) -> Result<&wgpu::BindGroup, Error> {
         self.textures
             .get(&texture_id)
-            .ok_or_else(|| Error::Any(format!("[UI] Texture {:?} used but not found", texture_id)))
+            .ok_or_else(|| Error::Any(format!("Texture {:?} used but not live", texture_id)))
             .map(|x| &x.1)
     }
 
-    /// Updates the textures used by egui for the fonts etc.
+    /// Updates the textures used by egui. Remove unused textures.
     ///
     /// WARNING: this function should be called before `render()`.
     pub fn update_textures(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        textures: &egui::TexturesDelta,
+        textures: egui::TexturesDelta,
     ) -> Result<(), Error> {
         for (texture_id, image_delta) in textures.set.iter() {
             let image_size = image_delta.image.size();
+
             let origin = match image_delta.pos {
                 Some([x, y]) => wgpu::Origin3d {
                     x: x as u32,
@@ -606,15 +398,19 @@ impl UiState {
 
             let image_data: &[u8] = match &image_delta.image {
                 egui::ImageData::Color(c) => bytemuck::cast_slice(c.pixels.as_slice()),
-                egui::ImageData::Alpha(_) => bytemuck::cast_slice(
-                    alpha_srgb_pixels
-                        .as_ref()
-                        .expect("[UI] Alpha texture should have been converted already!")
-                        .as_slice(),
-                ),
+                egui::ImageData::Alpha(_) => {
+                    // The unwrap here should never fail as alpha_srgb_pixels will have been set to
+                    // `Some` above.
+                    bytemuck::cast_slice(
+                        alpha_srgb_pixels
+                            .as_ref()
+                            .expect("Alpha texture should have been converted already")
+                            .as_slice(),
+                    )
+                }
             };
 
-            let image_extent = wgpu::Extent3d {
+            let image_size = wgpu::Extent3d {
                 width: image_size[0] as u32,
                 height: image_size[1] as u32,
                 depth_or_array_layers: 1,
@@ -622,17 +418,13 @@ impl UiState {
 
             let image_data_layout = wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(4 * image_extent.width),
+                bytes_per_row: NonZeroU32::new(4 * image_size.width),
                 rows_per_image: None,
             };
 
             let label_base = match texture_id {
-                egui::TextureId::Managed(m) => {
-                    format!("egui_image_{}", m)
-                }
-                egui::TextureId::User(u) => {
-                    format!("egui_user_image_{}", u)
-                }
+                egui::TextureId::Managed(m) => format!("egui_image_{}", m),
+                egui::TextureId::User(u) => format!("egui_user_image_{}", u),
             };
 
             match self.textures.entry(texture_id.clone()) {
@@ -645,10 +437,12 @@ impl UiState {
                             origin,
                             image_data,
                             image_data_layout,
-                            image_extent,
+                            image_size,
                             &self.texture_bind_group_layout,
                         );
+
                         let (texture, _) = o.insert((Some(texture), bind_group));
+
                         if let Some(texture) = texture {
                             texture.destroy();
                         }
@@ -664,11 +458,11 @@ impl UiState {
                                 },
                                 image_data,
                                 image_data_layout,
-                                image_extent,
+                                image_size,
                             );
                         } else {
                             return Err(Error::Any(format!(
-                                "Invalid texture ID, update of unmanaged texture {:?}",
+                                "InvalidTextureId - Update of unmanaged texture {:?}",
                                 texture_id
                             )));
                         }
@@ -682,27 +476,28 @@ impl UiState {
                         origin,
                         image_data,
                         image_data_layout,
-                        image_extent,
+                        image_size,
                         &self.texture_bind_group_layout,
                     );
+
                     v.insert((Some(texture), bind_group));
                 }
             }
         }
 
-        Ok(())
+        self.remove_unused_textures(textures)
     }
 
     /// Remove the textures egui no longer needs.
     ///
     /// WARNING: This function should be called after `render()`.
-    pub fn clean_unused_textures(&mut self, textures: egui::TexturesDelta) -> Result<(), Error> {
+    fn remove_unused_textures(&mut self, textures: egui::TexturesDelta) -> Result<(), Error> {
         for texture_id in textures.free {
-            let (texture, _) = self.textures.remove(&texture_id).ok_or_else(|| {
+            let (texture, _binding) = self.textures.remove(&texture_id).ok_or_else(|| {
                 // This can happen due to a bug in egui, or if the user doesn't call
-                // `update_textures` when required.
+                // `add_textures` when required.
                 Error::Any(format!(
-                    "Attempted to remove an unknown texture {:?}",
+                    "InvalidTextureId - Attempted to remove an unknown texture {:?}",
                     texture_id
                 ))
             })?;
@@ -711,71 +506,232 @@ impl UiState {
                 texture.destroy();
             }
         }
+
         Ok(())
     }
 
+    /// Registers a `wgpu::Texture` with a `egui::TextureId`.
+    ///
+    /// This enables the application to reference the texture inside an image ui
+    /// element. This effectively enables off-screen rendering inside the
+    /// egui UI. Texture must have the texture format
+    /// `TextureFormat::Rgba8UnormSrgb` and Texture usage
+    /// `TextureUsage::SAMPLED`.
+    pub fn egui_texture_from_wgpu_texture(
+        &mut self,
+        device: &wgpu::Device,
+        texture: &wgpu::TextureView,
+        texture_filter: wgpu::FilterMode,
+    ) -> egui::TextureId {
+        self.egui_texture_from_wgpu_texture_with_sampler_options(
+            device,
+            texture,
+            wgpu::SamplerDescriptor {
+                label: Some(
+                    format!(
+                        "egui_user_image_{}_texture_sampler",
+                        self.next_user_texture_id
+                    )
+                    .as_str(),
+                ),
+                mag_filter: texture_filter,
+                min_filter: texture_filter,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Registers a `wgpu::Texture` with an existing `egui::TextureId`.
+    ///
+    /// This enables applications to reuse `TextureId`s.
+    pub fn update_egui_texture_from_wgpu_texture(
+        &mut self,
+        device: &wgpu::Device,
+        texture: &wgpu::TextureView,
+        texture_filter: wgpu::FilterMode,
+        id: egui::TextureId,
+    ) -> Result<(), Error> {
+        self.update_egui_texture_from_wgpu_texture_with_sampler_options(
+            device,
+            texture,
+            wgpu::SamplerDescriptor {
+                label: Some(
+                    format!(
+                        "egui_user_image_{}_texture_sampler",
+                        self.next_user_texture_id
+                    )
+                    .as_str(),
+                ),
+                mag_filter: texture_filter,
+                min_filter: texture_filter,
+                ..Default::default()
+            },
+            id,
+        )
+    }
+
+    /// Registers a `wgpu::Texture` with a `egui::TextureId` while also
+    /// accepting custom `wgpu::SamplerDescriptor` options.
+    ///
+    /// This allows applications to specify individual
+    /// minification/magnification filters as well as custom mipmap and
+    /// tiling options.
+    ///
+    /// The `Texture` must have the format `TextureFormat::Rgba8UnormSrgb` and
+    /// usage `TextureUsage::SAMPLED`. Any compare function supplied in the
+    /// `SamplerDescriptor` will be ignored.
+    pub fn egui_texture_from_wgpu_texture_with_sampler_options(
+        &mut self,
+        device: &wgpu::Device,
+        texture: &wgpu::TextureView,
+        sampler_descriptor: wgpu::SamplerDescriptor,
+    ) -> egui::TextureId {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            compare: None,
+            ..sampler_descriptor
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(
+                format!(
+                    "egui_user_image_{}_texture_bind_group",
+                    self.next_user_texture_id
+                )
+                .as_str(),
+            ),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(texture),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        let id = egui::TextureId::User(self.next_user_texture_id);
+        self.textures.insert(id, (None, bind_group));
+        self.next_user_texture_id += 1;
+
+        id
+    }
+
+    /// Registers a `wgpu::Texture` with an existing `egui::TextureId` while
+    /// also accepting custom `wgpu::SamplerDescriptor` options.
+    ///
+    /// This allows applications to reuse `TextureId`s created with custom
+    /// sampler options.
+    pub fn update_egui_texture_from_wgpu_texture_with_sampler_options(
+        &mut self,
+        device: &wgpu::Device,
+        texture: &wgpu::TextureView,
+        sampler_descriptor: wgpu::SamplerDescriptor,
+        id: egui::TextureId,
+    ) -> Result<(), Error> {
+        if let egui::TextureId::Managed(_) = id {
+            return Err(Error::Any(
+                "Invalid texture ID - ID was not of type `TextureId::User`".to_string(),
+            ));
+        }
+
+        let (_user_texture, user_texture_binding) =
+            self.textures.get_mut(&id).ok_or_else(|| {
+                Error::Any(format!(
+                    "InvalidTextureId - user texture for TextureId {:?} could not be found",
+                    id
+                ))
+            })?;
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            compare: None,
+            ..sampler_descriptor
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(
+                format!("egui_user_{}_texture_bind_group", self.next_user_texture_id).as_str(),
+            ),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(texture),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        *user_texture_binding = bind_group;
+
+        Ok(())
+    }
+
+    /// Uploads the uniform, vertex and index data used by the render pass.
+    /// Should be called before `execute()`.
     pub fn update_buffers(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        meshes: &[egui::epaint::ClippedMesh],
+        paint_jobs: &[egui::epaint::ClippedMesh],
+        win_size: &WindowSize,
     ) {
-        let index_buffer_count = self.index_buffers.len();
-        let vertex_buffer_count = self.vertex_buffers.len();
-        let WindowSize {
-            physical_width: width,
-            physical_height: height,
-            ..
-        } = self.context.window_size;
-        // Update uniform buffer
+        let index_size = self.index_buffers.len();
+        let vertex_size = self.vertex_buffers.len();
+
+        let (logical_width, logical_height) = win_size.logical_size();
+
         self.update_buffer(
             device,
             queue,
             BufferType::Uniform,
             0,
             bytemuck::cast_slice(&[UiUniform {
-                screen_size: [width as f32, height as f32],
+                window_size: [logical_width as f32, logical_height as f32],
             }]),
         );
 
-        // Update vertex and index buffers
-        for (i, egui::ClippedMesh(_, mesh)) in meshes.iter().enumerate() {
-            {
-                let data: &[u8] = bytemuck::cast_slice(&mesh.vertices);
-                if i < vertex_buffer_count {
-                    self.update_buffer(device, queue, BufferType::Vertex, i, data)
-                } else {
-                    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("ui-vertex-buffer"),
-                        contents: data,
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    });
-                    self.vertex_buffers.push(SizedBuffer {
-                        raw: buffer,
-                        size: data.len(),
-                    });
-                }
+        for (i, egui::ClippedMesh(_, mesh)) in paint_jobs.iter().enumerate() {
+            let data: &[u8] = bytemuck::cast_slice(&mesh.indices);
+            if i < index_size {
+                self.update_buffer(device, queue, BufferType::Index, i, data)
+            } else {
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("ui_index_buffer"),
+                    contents: data,
+                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                });
+                self.index_buffers.push(SizedBuffer {
+                    raw: buffer,
+                    size: data.len(),
+                });
             }
 
-            {
-                let data: &[u8] = bytemuck::cast_slice(&mesh.indices);
-                if i < index_buffer_count {
-                    self.update_buffer(device, queue, BufferType::Index, i, data)
-                } else {
-                    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("ui-index-buffer"),
-                        contents: data,
-                        usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                    });
-                    self.vertex_buffers.push(SizedBuffer {
-                        raw: buffer,
-                        size: data.len(),
-                    });
-                }
+            let data: &[u8] = bytemuck::cast_slice(&mesh.vertices);
+            if i < vertex_size {
+                self.update_buffer(device, queue, BufferType::Vertex, i, data)
+            } else {
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("ui_vertex_buffer"),
+                    contents: data,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
+
+                self.vertex_buffers.push(SizedBuffer {
+                    raw: buffer,
+                    size: data.len(),
+                });
             }
         }
     }
 
+    /// Updates the buffers used by egui. Will properly re-size the buffers if
+    /// needed.
     fn update_buffer(
         &mut self,
         device: &wgpu::Device,
@@ -784,16 +740,16 @@ impl UiState {
         index: usize,
         data: &[u8],
     ) {
-        let (buffer, usage, name) = match buffer_type {
-            BufferType::Vertex => (
-                &mut self.vertex_buffers[index],
-                wgpu::BufferUsages::VERTEX,
-                "vertex",
-            ),
+        let (buffer, storage, name) = match buffer_type {
             BufferType::Index => (
                 &mut self.index_buffers[index],
                 wgpu::BufferUsages::INDEX,
                 "index",
+            ),
+            BufferType::Vertex => (
+                &mut self.vertex_buffers[index],
+                wgpu::BufferUsages::VERTEX,
+                "vertex",
             ),
             BufferType::Uniform => (
                 &mut self.uniform_buffer,
@@ -805,32 +761,33 @@ impl UiState {
         if data.len() > buffer.size {
             buffer.size = data.len();
             buffer.raw = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(format!("ui-{}-buffer", name).as_str()),
+                label: Some(format!("egui_{}_buffer", name).as_str()),
                 contents: bytemuck::cast_slice(data),
-                usage: usage | wgpu::BufferUsages::COPY_DST,
+                usage: storage | wgpu::BufferUsages::COPY_DST,
             });
         } else {
             queue.write_buffer(&buffer.raw, 0, data);
         }
     }
 
-    // pub fn begin_frame(&mut self) -> epi::Frame {
-    //     self.context.begin_frame();
-    //     epi::Frame::new(epi::backend::FrameData {
-    //         info: epi::IntegrationInfo {
-    //             name: "vgonio-gui",
-    //             web_info: None,
-    //             prefer_dark_mode: None,
-    //             cpu_usage: self.prev_frame_time,
-    //             native_pixels_per_point: Some(window.scale_factor() as _),
-    //         },
-    //         output: Default::default(),
-    //         repaint_signal: Arc::new(()),
-    //     })
-    // }
+    pub fn egui_context(&self) -> &egui::Context {
+        &self.egui_context
+    }
+
+    pub fn egui_context_mut(&mut self) -> &mut egui::Context {
+        &mut self.egui_context
+    }
+
+    pub fn egui_state(&self) -> &egui_winit::State {
+        &self.egui_state
+    }
+
+    pub fn egui_state_mut(&mut self) -> &mut egui_winit::State {
+        &mut self.egui_state
+    }
 }
 
-/// Create a texture and bind group from image data.
+/// Create a texture and bind group from existing data
 fn create_texture_and_bind_group(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -838,12 +795,12 @@ fn create_texture_and_bind_group(
     origin: wgpu::Origin3d,
     image_data: &[u8],
     image_data_layout: wgpu::ImageDataLayout,
-    image_extent: wgpu::Extent3d,
+    image_size: wgpu::Extent3d,
     texture_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> (wgpu::Texture, wgpu::BindGroup) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(format!("{}_texture", label_base).as_str()),
-        size: image_extent,
+        size: image_size,
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -860,7 +817,7 @@ fn create_texture_and_bind_group(
         },
         image_data,
         image_data_layout,
-        image_extent,
+        image_size,
     );
 
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
