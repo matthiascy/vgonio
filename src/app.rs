@@ -9,9 +9,9 @@ use winit::{
 };
 
 pub mod camera;
+pub(crate) mod mods;
 pub mod state;
 pub mod texture;
-pub(crate) mod ui;
 pub(crate) mod ui_state;
 pub(crate) mod utils;
 

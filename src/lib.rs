@@ -9,8 +9,8 @@ use crate::error::Error;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> Result<(), Error> {
-    use clap::Parser;
     use app::VgonioArgs;
+    use clap::Parser;
 
     let launch_time = std::time::SystemTime::now();
 

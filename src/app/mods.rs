@@ -1,0 +1,264 @@
+mod sim;
+
+use crate::app::mods::sim::{Analysis, Simulation};
+use crate::app::state::VgonioApp;
+use egui::{Context, Vec2};
+use epi::{Frame, Storage};
+use std::time::Duration;
+
+pub struct Workspaces {
+    simulation: Simulation,
+    analysis: Analysis,
+}
+
+impl Workspaces {
+    pub fn new() -> Self {
+        Self {
+            simulation: Simulation {},
+            analysis: Analysis {},
+        }
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut dyn epi::App)> {
+        vec![
+            ("Simulation", &mut self.simulation as &mut dyn epi::App),
+            ("Analysis", &mut self.analysis as &mut dyn epi::App),
+        ]
+        .into_iter()
+    }
+}
+
+pub struct VgonioGui {
+    workspaces: Workspaces,
+    dropped_files: Vec<egui::DroppedFile>,
+    // recent_files: Vec<std::path::PathBuf>,
+    selected_workspace: String,
+    selected: usize,
+}
+
+impl VgonioGui {
+    pub fn new() -> Self {
+        Self {
+            workspaces: Workspaces::new(),
+            dropped_files: vec![],
+            selected_workspace: "".to_string(),
+            selected: 0,
+        }
+    }
+}
+
+impl epi::App for VgonioGui {
+    fn update(&mut self, ctx: &Context, frame: &Frame) {
+        if self.selected_workspace.is_empty() {
+            self.selected_workspace = self.workspaces.iter_mut().next().unwrap().0.to_owned();
+        }
+
+        egui::TopBottomPanel::top("vgonio_menu_bar").show(ctx, |ui| {
+            egui::trace!(ui);
+            self.menu_bar_contents(ui, frame);
+        });
+
+        egui::SidePanel::right("vgonio_right_panel").show(ctx, |ui| {
+            ui.add(egui::Label::new("Hello World!"));
+            ui.label("A shorter and more convenient way to add a label.");
+            if ui.button("Click me").clicked() {
+                println!("Bla");
+            }
+        });
+
+        for (ws_name, ws) in self.workspaces.iter_mut() {
+            if ws_name == self.selected_workspace || ctx.memory().everything_is_visible() {
+                ws.update(ctx, frame);
+            }
+        }
+
+        self.file_drag_and_drop(ctx);
+
+        egui::Window::new("Window").show(ctx, |ui| {
+            ui.label("Hello World!");
+        });
+
+        egui::Area::new("Area").show(ctx, |ui| {
+            ui.label("Hello World!");
+
+            egui::Frame::default().show(ui, |ui| {
+                ui.label("Frame!");
+            });
+        });
+    }
+
+    fn name(&self) -> &str {
+        "vgonio"
+    }
+
+    fn clear_color(&self) -> egui::Rgba {
+        egui::Rgba::TRANSPARENT
+    }
+}
+
+impl VgonioGui {
+    fn file_drag_and_drop(&mut self, ctx: &egui::Context) {
+        use egui::*;
+
+        // Preview hovering files:
+        if !ctx.input().raw.hovered_files.is_empty() {
+            let mut text = "Dropping files:\n".to_owned();
+            for file in &ctx.input().raw.hovered_files {
+                if let Some(path) = &file.path {
+                    text += &format!("\n{}", path.display());
+                } else if !file.mime.is_empty() {
+                    text += &format!("\n{}", file.mime);
+                } else {
+                    text += "\n???";
+                }
+            }
+
+            let painter =
+                ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
+
+            let screen_rect = ctx.input().screen_rect();
+            painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
+            painter.text(
+                screen_rect.center(),
+                Align2::CENTER_CENTER,
+                text,
+                TextStyle::Heading.resolve(&ctx.style()),
+                Color32::WHITE,
+            );
+        }
+
+        // Collect dropped files:
+        if !ctx.input().raw.dropped_files.is_empty() {
+            self.dropped_files = ctx.input().raw.dropped_files.clone();
+        }
+
+        // Show dropped files (if any):
+        if !self.dropped_files.is_empty() {
+            let mut open = true;
+            egui::Window::new("Dropped files")
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    for file in &self.dropped_files {
+                        let mut info = if let Some(path) = &file.path {
+                            path.display().to_string()
+                        } else if !file.name.is_empty() {
+                            file.name.clone()
+                        } else {
+                            "???".to_owned()
+                        };
+                        if let Some(bytes) = &file.bytes {
+                            info += &format!(" ({} bytes)", bytes.len());
+                        }
+                        ui.label(info);
+                    }
+                });
+            if !open {
+                self.dropped_files.clear();
+            }
+        }
+    }
+
+    fn menu_bar_contents(&mut self, ui: &mut egui::Ui, frame: &epi::Frame) {
+        egui::menu::bar(ui, |ui| {
+            ui.menu_button("File", |ui| {
+                {
+                    ui.menu_button("\u{1F4C4} New", |ui| {
+                        if ui.button("General").clicked() {
+                            println!("TODO: new general file")
+                        }
+                        if ui.button("Height field").clicked() {
+                            println!("TODO: new height field");
+                        }
+                    });
+                    if ui.button("\u{1F4C2} Open").clicked() {
+                        ui.set_min_width(200.0);
+                        println!("TODO: open");
+                    }
+                    ui.menu_button("\u{1F4DC} Open Recent", |ui| {
+                        for i in 0..10 {
+                            if ui.button(format!("item {}", i)).clicked() {
+                                println!("TODO: open item {}", i);
+                            }
+                        }
+                    });
+                }
+
+                ui.separator();
+
+                {
+                    if ui.button("\u{1F4E9} Save").clicked() {
+                        println!("TODO: save");
+                    }
+                    if ui.button("     Save As").clicked() {
+                        println!("TODO: save as");
+                    }
+                    if ui.button("     Save Copy").clicked() {
+                        println!("TODO: save copy");
+                    }
+                }
+
+                ui.separator();
+
+                {
+                    ui.menu_button("     Clean up", |ui| {
+                        if ui.button("Cache").clicked() {
+                            println!("TODO: clear cache");
+                        }
+                    });
+                }
+
+                ui.separator();
+
+                if ui.button("     Quit").clicked() {
+                    frame.quit()
+                }
+            });
+            ui.menu_button("Edit", |ui| {
+                {
+                    if ui.button("     Undo").clicked() {
+                        println!("TODO: undo");
+                    }
+                    if ui.button("     Redo").clicked() {
+                        println!("TODO: file");
+                    }
+                }
+
+                ui.separator();
+
+                if ui.button("\u{2699} Preferences").clicked() {
+                    println!("TODO: open preferences window");
+                }
+            });
+            ui.menu_button("View", |ui| {
+                ui.menu_button("     Tool Windows", |ui| {
+                    if ui.button("Height Field Editor").clicked() {
+                        println!("TODO: height field editor");
+                    }
+                    if ui.button("BxDF Viewer").clicked() {
+                        println!("TODO: bxdf viewer");
+                    }
+                });
+            });
+            ui.menu_button("Help", |ui| {
+                if ui.button("\u{1F4DA} Docs").clicked() {
+                    println!("TODO: docs");
+                }
+                if ui.button("     About").clicked() {
+                    println!("TODO: about");
+                }
+            });
+            ui.separator();
+
+            for (ws_name, ws) in self.workspaces.iter_mut() {
+                if ui
+                    .selectable_label(self.selected_workspace == ws_name, ws.name())
+                    .clicked()
+                {
+                    self.selected_workspace = ws_name.to_owned();
+                    if frame.is_web() {
+                        ui.output().open_url(format!("#{}", ws_name));
+                    }
+                }
+            }
+        });
+    }
+}

@@ -1,5 +1,7 @@
+use crate::app::mods::VgonioGui;
 use crate::app::{
     camera::{Camera, CameraController, CameraUniform},
+    mods,
     texture::Texture,
     ui_state::UiState,
 };
@@ -16,6 +18,10 @@ use winit::{
 
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
+
+pub struct GfxState {
+    // TODO
+}
 
 pub struct VgonioApp {
     pub surface: wgpu::Surface,
@@ -43,6 +49,7 @@ pub struct VgonioApp {
     pub prev_frame_time: Option<f32>,
     pub ui_state: UiState,
     pub ui: egui_demo_lib::WrapApp,
+    pub gui: VgonioGui,
 }
 
 /// User event handling.
@@ -407,6 +414,7 @@ impl VgonioApp {
             prev_frame_time: None,
             ui_state,
             ui,
+            gui: VgonioGui::new(),
         })
     }
 
@@ -580,12 +588,9 @@ impl VgonioApp {
                 output: egui_output,
                 repaint_signal,
             });
-            self.ui.update(self.ui_state.egui_context(), &ui_frame);
+            // self.ui.update(self.ui_state.egui_context(), &ui_frame);
+            self.gui.update(self.ui_state.egui_context(), &ui_frame);
             let ui_output_frame = self.ui_state.egui_context().end_frame();
-
-            // let ui_output_frame = self.ui_state.egui_context_mut().run(input, |ctx| {
-            //     ui(ctx)
-            // });
 
             let meshes = self
                 .ui_state
