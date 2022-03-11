@@ -94,7 +94,7 @@ impl UiState {
             device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("ui_shader_module"),
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                    "assets/shaders/ui.wgsl"
+                    "../assets/shaders/ui.wgsl"
                 ))),
             })
         };

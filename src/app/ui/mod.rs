@@ -1,21 +1,23 @@
-mod sim;
+mod simulation;
+mod analysis;
 
-use crate::app::mods::sim::{Analysis, Simulation};
 use crate::app::state::VgonioApp;
+use simulation::SimulationWorkspace;
+use analysis::AnalysisWorkspace;
 use egui::{Context, Vec2};
 use epi::{Frame, Storage};
 use std::time::Duration;
 
 pub struct Workspaces {
-    simulation: Simulation,
-    analysis: Analysis,
+    simulation: SimulationWorkspace,
+    analysis: AnalysisWorkspace,
 }
 
 impl Workspaces {
     pub fn new() -> Self {
         Self {
-            simulation: Simulation {},
-            analysis: Analysis {},
+            simulation: SimulationWorkspace::default(),
+            analysis: AnalysisWorkspace {},
         }
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut dyn epi::App)> {
@@ -27,7 +29,7 @@ impl Workspaces {
     }
 }
 
-pub struct VgonioGui {
+pub struct VgonioUi {
     workspaces: Workspaces,
     dropped_files: Vec<egui::DroppedFile>,
     // recent_files: Vec<std::path::PathBuf>,
@@ -35,7 +37,7 @@ pub struct VgonioGui {
     selected: usize,
 }
 
-impl VgonioGui {
+impl VgonioUi {
     pub fn new() -> Self {
         Self {
             workspaces: Workspaces::new(),
@@ -46,7 +48,7 @@ impl VgonioGui {
     }
 }
 
-impl epi::App for VgonioGui {
+impl epi::App for VgonioUi {
     fn update(&mut self, ctx: &Context, frame: &Frame) {
         if self.selected_workspace.is_empty() {
             self.selected_workspace = self.workspaces.iter_mut().next().unwrap().0.to_owned();
@@ -95,7 +97,7 @@ impl epi::App for VgonioGui {
     }
 }
 
-impl VgonioGui {
+impl VgonioUi {
     fn file_drag_and_drop(&mut self, ctx: &egui::Context) {
         use egui::*;
 
@@ -170,8 +172,9 @@ impl VgonioGui {
                         }
                     });
                     if ui.button("\u{1F4C2} Open").clicked() {
-                        ui.set_min_width(200.0);
-                        println!("TODO: open");
+                        if let Some(file) = rfd::FileDialog::new().set_directory("~/").pick_file() {
+                            println!("file path: {:?}", file);
+                        }
                     }
                     ui.menu_button("\u{1F4DC} Open Recent", |ui| {
                         for i in 0..10 {
@@ -200,6 +203,7 @@ impl VgonioGui {
 
                 {
                     ui.menu_button("     Clean up", |ui| {
+                        ui.spacing();
                         if ui.button("Cache").clicked() {
                             println!("TODO: clear cache");
                         }

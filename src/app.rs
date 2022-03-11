@@ -2,6 +2,7 @@ use crate::app::state::{RepaintSignal, UserEvent};
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Parser, Subcommand};
 use std::io::Write;
+use winit::dpi::PhysicalSize;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -9,11 +10,10 @@ use winit::{
 };
 
 pub mod camera;
-pub(crate) mod mods;
 pub mod state;
 pub mod texture;
-pub(crate) mod ui_state;
-pub(crate) mod utils;
+pub(crate) mod ui;
+pub(crate) mod vertex;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
@@ -270,7 +270,10 @@ pub fn launch_gui_client() -> Result<(), Error> {
                 match state.render(&window, repaint_signal.clone()) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => state.resize(state.win_size),
+                    Err(wgpu::SurfaceError::Lost) => state.resize(PhysicalSize {
+                        width: state.gpu.surface_config.width,
+                        height: state.gpu.surface_config.height,
+                    }),
                     // The system is out of memory, we should quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
