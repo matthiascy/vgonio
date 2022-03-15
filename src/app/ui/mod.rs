@@ -2,12 +2,10 @@ mod analysis;
 mod gizmo;
 mod simulation;
 
-use crate::app::state::VgonioApp;
 use analysis::AnalysisWorkspace;
-use egui::{Context, Vec2};
-use epi::{Frame, Storage};
+use egui::Context;
+use epi::Frame;
 use simulation::SimulationWorkspace;
-use std::time::Duration;
 
 pub struct Workspaces {
     pub(crate) simulation: SimulationWorkspace,
@@ -35,7 +33,6 @@ pub struct VgonioUi {
     pub(crate) dropped_files: Vec<egui::DroppedFile>,
     // recent_files: Vec<std::path::PathBuf>,
     pub(crate) selected_workspace: String,
-    pub(crate) selected: usize,
 }
 
 impl VgonioUi {
@@ -44,7 +41,6 @@ impl VgonioUi {
             workspaces: Workspaces::new(),
             dropped_files: vec![],
             selected_workspace: "".to_string(),
-            selected: 0,
         }
     }
 }

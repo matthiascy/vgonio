@@ -1,9 +1,9 @@
 pub struct AnalysisWorkspace {}
 
 impl epi::App for AnalysisWorkspace {
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
         egui::SidePanel::right("Extraction panel").show(ctx, |ui| {
-            egui::Label::new("extraction panel");
+            ui.add(egui::Label::new("extraction panel"));
         });
     }
 

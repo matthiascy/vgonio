@@ -1,8 +1,5 @@
-use egui::{Align2, Color32, LayerId};
-use egui_gizmo::{
-    Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals, DEFAULT_SNAP_ANGLE,
-    DEFAULT_SNAP_DISTANCE,
-};
+use egui::{Align2, Color32};
+use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 use glam::Mat4;
 
 pub struct VgonioGizmo {
@@ -49,7 +46,7 @@ impl VgonioGizmo {
         &"Gizmo"
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
+    pub fn show(&mut self, ctx: &egui::Context, _open: &mut bool) {
         egui::Area::new("Viewport")
             // .fixed_pos((0.0, 0.0))
             .anchor(Align2::RIGHT_BOTTOM, (-150.0, -150.0))

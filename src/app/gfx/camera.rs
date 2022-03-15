@@ -1,9 +1,6 @@
 use crate::app::state::input::InputState;
-use egui::Key;
 use glam::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles};
-use winit::event::{
-    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
-};
+use winit::event::{MouseButton, VirtualKeyCode};
 
 pub struct OrthonormalBasis {
     axis_x: Vec3,
@@ -253,7 +250,7 @@ impl OrbitControls {
         let up = camera.up();
         let right = camera.right();
 
-        let cos = camera.forward().dot(camera.up);
+        let cos = forward.dot(camera.up);
 
         if cos > 0.99 {
             camera.up = Mat3::from_axis_angle(right, 45.0f32.to_radians()) * up;

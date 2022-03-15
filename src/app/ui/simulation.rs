@@ -1,6 +1,4 @@
 use crate::app::ui::gizmo::VgonioGizmo;
-use egui::epaint::CircleShape;
-use egui_gizmo::GizmoMode;
 use glam::Mat4;
 
 pub struct SimulationWorkspace {
@@ -22,7 +20,7 @@ impl Default for SimulationWorkspace {
 }
 
 impl epi::App for SimulationWorkspace {
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
         // egui::SidePanel::left("Left Panel").show(ctx, |ui| {
         //     egui::Label::new("Simulation panel");
         // });

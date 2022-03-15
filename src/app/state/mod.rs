@@ -1,15 +1,13 @@
+use crate::app::texture::Texture;
 use crate::app::ui::VgonioUi;
-use crate::app::{texture::Texture, ui};
 use crate::error::Error;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
-use std::collections::HashMap;
 use std::default::Default;
 use std::time::Instant;
 use wgpu::{util::DeviceExt, VertexFormat};
-use winit::event::{DeviceEvent, ModifiersState, MouseButton, MouseScrollDelta};
 use winit::{
-    event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{KeyboardInput, WindowEvent},
     window::Window,
 };
 
@@ -81,7 +79,7 @@ impl epi::backend::RepaintSignal for RepaintSignal {
 impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(window: &Window) -> Result<Self, Error> {
-        let mut gpu_ctx = GpuContext::new(window).await;
+        let gpu_ctx = GpuContext::new(window).await;
         let num_vertices = VERTICES.len() as u32;
         // Create texture
         let sampler =
@@ -525,10 +523,6 @@ impl VgonioApp {
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
                     self.input.update_mouse_map(*button, *state);
-                    println!(
-                        "mouse middle button {:?}",
-                        self.input.is_mouse_button_pressed(MouseButton::Middle)
-                    );
                     true
                 }
                 WindowEvent::CursorMoved { position, .. } => {

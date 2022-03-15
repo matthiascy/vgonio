@@ -4,7 +4,7 @@ use clap::{AppSettings, ArgEnum, Parser, Subcommand};
 use std::io::Write;
 use winit::dpi::PhysicalSize;
 use winit::{
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
