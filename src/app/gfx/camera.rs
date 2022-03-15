@@ -177,7 +177,7 @@ impl CameraUniform {
 }
 
 pub trait CameraController {
-    fn update_camera(&mut self, input: &InputState, camera: &mut Camera, dt: std::time::Duration);
+    fn update(&mut self, input: &InputState, camera: &mut Camera, dt: std::time::Duration);
 }
 
 pub struct OrbitControls {
@@ -278,7 +278,7 @@ impl OrbitControls {
 }
 
 impl CameraController for OrbitControls {
-    fn update_camera(&mut self, input: &InputState, camera: &mut Camera, dt: std::time::Duration) {
+    fn update(&mut self, input: &InputState, camera: &mut Camera, dt: std::time::Duration) {
         let is_middle_button_pressed = *input.mouse_map.get(&MouseButton::Middle).unwrap_or(&false);
         let is_shift_pressed = input.is_key_pressed(VirtualKeyCode::LShift)
             || input.is_key_pressed(VirtualKeyCode::RShift);

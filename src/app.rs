@@ -247,7 +247,7 @@ pub fn launch_gui_client() -> Result<(), Error> {
                 window_id,
                 ref event,
             } if window_id == window.id() => {
-                if !state.process_input(event) {
+                if !state.collect_input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 
@@ -268,8 +268,8 @@ pub fn launch_gui_client() -> Result<(), Error> {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(PhysicalSize {
-                        width: state.gpu.surface_config.width,
-                        height: state.gpu.surface_config.height,
+                        width: state.surface_width(),
+                        height: state.surface_height(),
                     }),
                     // The system is out of memory, we should quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,

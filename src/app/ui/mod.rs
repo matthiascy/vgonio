@@ -52,6 +52,10 @@ impl VgonioUi {
                 .update_gizmo_matrices(model, view, proj);
         }
     }
+
+    pub fn current_workspace_name(&self) -> &str {
+        &self.selected_workspace
+    }
 }
 
 impl epi::App for VgonioUi {

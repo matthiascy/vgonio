@@ -10,6 +10,7 @@ use winit::{
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
+use winit::event::VirtualKeyCode;
 
 pub(crate) mod gfx_state;
 pub(crate) mod input;
@@ -23,8 +24,25 @@ use ui_state::UiState;
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
 
+struct CameraState {
+    camera: Camera,
+    uniform: CameraUniform,
+    uniform_buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
+    controller: OrbitControls,
+    projection: Projection,
+}
+
+impl CameraState {
+    pub fn update(&mut self, input: &InputState, dt: std::time::Duration) {
+        self.controller.update(input, &mut self.camera, dt);
+        self.uniform.update(&self.camera, &self.projection);
+    }
+}
+
 pub struct VgonioApp {
-    pub gpu: GpuContext,
+    gpu: GpuContext,
     pub ui_state: UiState,
     pub gui: VgonioUi,
 
@@ -36,12 +54,7 @@ pub struct VgonioApp {
     pub texture_bind_groups: [wgpu::BindGroup; 2],
     pub current_texture_index: usize,
 
-    pub camera: Camera,
-    pub camera_uniform: CameraUniform,
-    pub camera_uniform_buffer: wgpu::Buffer,
-    pub camera_bind_group: wgpu::BindGroup,
-    pub camera_controller: OrbitControls,
-    pub projection: Projection,
+    camera_state: CameraState,
 
     pub object_model_matrix: glam::Mat4,
     pub instancing_buffer: wgpu::Buffer,
@@ -50,7 +63,7 @@ pub struct VgonioApp {
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
-    pub input: InputState,
+    input: InputState,
 
     pub ui: egui_demo_lib::WrapApp,
     // pub graphics_pipeline_single_vertex_attribute: wgpu::RenderPipeline,
@@ -187,56 +200,69 @@ impl VgonioApp {
         ];
 
         // Camera
-        let projection = Projection::new(
-            0.1,
-            100.0,
-            45.0f32.to_radians(),
-            gpu_ctx.surface_config.width,
-            gpu_ctx.surface_config.height,
-        );
         let object_model_matrix = glam::Mat4::IDENTITY;
-        let camera = Camera::new(Vec3::new(0.0, 5.0, 10.0), Vec3::ZERO, Vec3::Y);
-        let camera_uniform = CameraUniform::new(&camera, &projection);
-        let camera_uniform_buffer =
-            gpu_ctx
+        let cam_state = {
+            let camera = Camera::new(Vec3::new(0.0, 5.0, 10.0), Vec3::ZERO, Vec3::Y);
+            let projection = Projection::new(
+                0.1,
+                100.0,
+                45.0f32.to_radians(),
+                gpu_ctx.surface_config.width,
+                gpu_ctx.surface_config.height,
+            );
+            let uniform = CameraUniform::new(&camera, &projection);
+            let uniform_buffer =
+                gpu_ctx
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("camera-uniform-buffer"),
+                        contents: bytemuck::cast_slice(&[
+                            uniform.view_matrix,
+                            uniform.proj_matrix,
+                            Mat4::IDENTITY,
+                        ]),
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    });
+            let bind_group_layout =
+                gpu_ctx
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("camera-uniform-bind-group-create_bind_group_layout"),
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                    });
+            let bind_group = gpu_ctx
                 .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("camera-uniform-buffer"),
-                    contents: bytemuck::cast_slice(&[
-                        camera_uniform.view_matrix,
-                        camera_uniform.proj_matrix,
-                        object_model_matrix,
-                    ]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-        let camera_bind_group_layout =
-            gpu_ctx
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("camera-uniform-bind-group-create_bind_group_layout"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("camera-uniform-bind-group"),
+                    layout: &bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+                        resource: uniform_buffer.as_entire_binding(),
                     }],
                 });
-        let camera_bind_group = gpu_ctx
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("camera-uniform-bind-group"),
-                layout: &camera_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_uniform_buffer.as_entire_binding(),
-                }],
-            });
-        let camera_controller =
-            OrbitControls::new(0.3, f32::INFINITY, true, true, true, 200.0, 400.0, 100.0);
+
+            let controller =
+                OrbitControls::new(0.3, f32::INFINITY, true, true, true, 200.0, 400.0, 100.0);
+
+            CameraState {
+                camera,
+                uniform,
+                uniform_buffer,
+                bind_group,
+                bind_group_layout,
+                controller,
+                projection
+            }
+        };
 
         let instance_displacement = Vec3::new(
             NUM_INSTANCES_PER_ROW as f32 * 0.5,
@@ -288,7 +314,7 @@ impl VgonioApp {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("default-pipeline-layout"),
-                    bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
+                    bind_group_layouts: &[&texture_bind_group_layout, &cam_state.bind_group_layout],
                     push_constant_ranges: &[],
                 });
         // let graphics_pipeline_layout = gfx_state.device.create_pipeline_layout(
@@ -432,12 +458,7 @@ impl VgonioApp {
             num_indices,
             texture_bind_groups,
             current_texture_index: 0,
-            camera,
-            camera_uniform,
-            camera_uniform_buffer,
-            camera_bind_group,
-            camera_controller,
-            projection,
+            camera_state: cam_state,
             object_model_matrix,
             instancing_buffer,
             instancing_transforms,
@@ -449,6 +470,16 @@ impl VgonioApp {
             gui: VgonioUi::new(),
             input,
         })
+    }
+
+    #[inline]
+    pub fn surface_width(&self) -> u32 {
+        self.gpu.surface_config.width
+    }
+
+    #[inline]
+    pub fn surface_height(&self) -> u32 {
+        self.gpu.surface_config.height
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -463,11 +494,11 @@ impl VgonioApp {
                 &self.gpu.surface_config,
                 "depth_texture",
             );
-            self.projection.resize(new_size.width, new_size.height);
+            self.camera_state.projection.resize(new_size.width, new_size.height);
         }
     }
 
-    pub fn process_input(&mut self, event: &WindowEvent) -> bool {
+    pub fn collect_input(&mut self, event: &WindowEvent) -> bool {
         if !self.ui_state.handle_event(event) {
             match event {
                 WindowEvent::KeyboardInput {
@@ -482,41 +513,6 @@ impl VgonioApp {
                     self.input.update_key_map(*keycode, *state);
                     true
                 }
-                // WindowEvent::KeyboardInput {
-                //     input:
-                //         KeyboardInput {
-                //             state: ElementState::Pressed,
-                //             virtual_keycode: Some(VirtualKeyCode::Space),
-                //             ..
-                //         },
-                //     ..
-                // } => {
-                //     self.current_texture_index += 1;
-                //     self.current_texture_index %= 2;
-                //     true
-                // }
-                // WindowEvent::KeyboardInput {
-                //     input:
-                //         KeyboardInput {
-                //             state: ElementState::Pressed,
-                //             virtual_keycode: Some(VirtualKeyCode::R),
-                //             ..
-                //         },
-                //     ..
-                // } => {
-                //     self.object_model_matrix =
-                //         Mat4::from_rotation_y(3.0f32.to_radians()) * self.object_model_matrix;
-                //     true
-                // }
-                // WindowEvent::KeyboardInput {
-                //     input:
-                //         KeyboardInput {
-                //             state: ElementState::Pressed,
-                //             virtual_keycode: Some(VirtualKeyCode::I),
-                //             ..
-                //         },
-                //     ..
-                // } => true,
                 WindowEvent::MouseWheel { delta, .. } => {
                     self.input.update_scroll_delta(*delta);
                     true
@@ -538,28 +534,35 @@ impl VgonioApp {
 
     pub fn update(&mut self, dt: std::time::Duration) {
         // Update camera uniform.
-        self.camera_controller
-            .update_camera(&self.input, &mut self.camera, dt);
-        self.camera_uniform.update(&self.camera, &self.projection);
+        self.camera_state.update(&self.input, dt);
         self.gui.update_gizmo_matrices(
             Mat4::IDENTITY,
-            Mat4::look_at_rh(self.camera.eye, Vec3::ZERO, self.camera.up),
+            Mat4::look_at_rh(self.camera_state.camera.eye, Vec3::ZERO, self.camera_state.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
+
+        if self.input.is_key_pressed(VirtualKeyCode::Space) {
+            self.current_texture_index += 1;
+            self.current_texture_index %= 2;
+        }
+
         self.gpu.queue.write_buffer(
-            &self.camera_uniform_buffer,
+            &self.camera_state.uniform_buffer,
             0,
             bytemuck::cast_slice(&[
-                self.camera_uniform.view_matrix,
-                self.camera_uniform.proj_matrix,
+                self.camera_state.uniform.view_matrix,
+                self.camera_state.uniform.proj_matrix,
                 self.object_model_matrix,
             ]),
         );
+
+        // Reset mouse movement
         self.input.scroll_delta = 0.0;
         self.input.cursor_delta = [0.0, 0.0];
         for m in &mut self.instancing_transforms {
             *m *= Mat4::from_rotation_x(0.2f32.to_radians());
         }
+
         self.gpu.queue.write_buffer(
             &self.instancing_buffer,
             0,
@@ -590,7 +593,7 @@ impl VgonioApp {
                 }),
         ];
 
-        {
+        if self.gui.current_workspace_name() == "Simulation" {
             let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
@@ -625,7 +628,7 @@ impl VgonioApp {
                 &self.texture_bind_groups[self.current_texture_index],
                 &[],
             );
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_state.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instancing_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
