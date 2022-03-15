@@ -1,29 +1,43 @@
+use crate::app::ui::gizmo::VgonioGizmo;
 use egui::epaint::CircleShape;
+use egui_gizmo::GizmoMode;
+use glam::Mat4;
 
 pub struct SimulationWorkspace {
     is_sim_win_open: bool,
+    is_view_gizmo_open: bool,
     sim_win: SimulationWindow,
+    view_gizmo: VgonioGizmo,
 }
 
 impl Default for SimulationWorkspace {
     fn default() -> Self {
         Self {
             is_sim_win_open: true,
-            sim_win: Default::default()
+            is_view_gizmo_open: true,
+            sim_win: Default::default(),
+            view_gizmo: Default::default(),
         }
     }
 }
 
 impl epi::App for SimulationWorkspace {
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
-        egui::SidePanel::left("Left Panel").show(ctx, |ui| {
-            egui::Label::new("Simulation panel");
-        });
+        // egui::SidePanel::left("Left Panel").show(ctx, |ui| {
+        //     egui::Label::new("Simulation panel");
+        // });
         self.sim_win.show(ctx, &mut self.is_sim_win_open);
+        self.view_gizmo.show(ctx, &mut self.is_view_gizmo_open);
     }
 
     fn name(&self) -> &str {
         "Simulation"
+    }
+}
+
+impl SimulationWorkspace {
+    pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
+        self.view_gizmo.update_matrices(model, view, proj)
     }
 }
 
@@ -47,7 +61,7 @@ impl Default for SimulationWindow {
 
 impl SimulationWindow {
     pub fn name(&self) -> &'static str {
-        &"simulation_window"
+        &"Simulation"
     }
 
     pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
@@ -63,7 +77,11 @@ impl SimulationWindow {
                 .selected_text(format!("{:?}", self.sensor_shape))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.sensor_shape, SensorShape::Circle, "Circle");
-                    ui.selectable_value(&mut self.sensor_shape, SensorShape::Rectangle, "Rectangle");
+                    ui.selectable_value(
+                        &mut self.sensor_shape,
+                        SensorShape::Rectangle,
+                        "Rectangle",
+                    );
                 });
             ui.end_row();
         });

@@ -9,11 +9,11 @@ use winit::{
     window::WindowBuilder,
 };
 
-pub mod camera;
+pub(crate) mod gfx;
+pub(crate) mod grid;
 pub mod state;
 pub mod texture;
 pub(crate) mod ui;
-pub(crate) mod vertex;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
@@ -235,7 +235,13 @@ pub fn launch_gui_client() -> Result<(), Error> {
         event_loop.create_proxy(),
     )));
 
+    let mut last_frame_time = std::time::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
+        let now = std::time::Instant::now();
+        let dt = now - last_frame_time;
+        last_frame_time = now;
+
         match event {
             Event::WindowEvent {
                 window_id,
@@ -243,18 +249,9 @@ pub fn launch_gui_client() -> Result<(), Error> {
             } if window_id == window.id() => {
                 if !state.process_input(event) {
                     match event {
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            input:
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                                    ..
-                                },
-                            ..
-                        } => *control_flow = ControlFlow::Exit,
+                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 
-                        WindowEvent::Resized(physical_size) => state.resize(*physical_size),
+                        WindowEvent::Resized(new_size) => state.resize(*new_size),
 
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                             state.resize(**new_inner_size);
@@ -266,7 +263,7 @@ pub fn launch_gui_client() -> Result<(), Error> {
             }
 
             Event::RedrawRequested(window_id) if window_id == window.id() => {
-                state.update();
+                state.update(dt);
                 match state.render(&window, repaint_signal.clone()) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost

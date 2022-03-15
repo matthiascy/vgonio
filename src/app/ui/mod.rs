@@ -1,16 +1,17 @@
-mod simulation;
 mod analysis;
+mod gizmo;
+mod simulation;
 
 use crate::app::state::VgonioApp;
-use simulation::SimulationWorkspace;
 use analysis::AnalysisWorkspace;
 use egui::{Context, Vec2};
 use epi::{Frame, Storage};
+use simulation::SimulationWorkspace;
 use std::time::Duration;
 
 pub struct Workspaces {
-    simulation: SimulationWorkspace,
-    analysis: AnalysisWorkspace,
+    pub(crate) simulation: SimulationWorkspace,
+    pub(crate) analysis: AnalysisWorkspace,
 }
 
 impl Workspaces {
@@ -30,11 +31,11 @@ impl Workspaces {
 }
 
 pub struct VgonioUi {
-    workspaces: Workspaces,
-    dropped_files: Vec<egui::DroppedFile>,
+    pub(crate) workspaces: Workspaces,
+    pub(crate) dropped_files: Vec<egui::DroppedFile>,
     // recent_files: Vec<std::path::PathBuf>,
-    selected_workspace: String,
-    selected: usize,
+    pub(crate) selected_workspace: String,
+    pub(crate) selected: usize,
 }
 
 impl VgonioUi {
@@ -59,13 +60,13 @@ impl epi::App for VgonioUi {
             self.menu_bar_contents(ui, frame);
         });
 
-        egui::SidePanel::right("vgonio_right_panel").show(ctx, |ui| {
-            ui.add(egui::Label::new("Hello World!"));
-            ui.label("A shorter and more convenient way to add a label.");
-            if ui.button("Click me").clicked() {
-                println!("Bla");
-            }
-        });
+        // egui::SidePanel::right("vgonio_right_panel").show(ctx, |ui| {
+        //     ui.add(egui::Label::new("Hello World!"));
+        //     ui.label("A shorter and more convenient way to add a label.");
+        //     if ui.button("Click me").clicked() {
+        //         println!("Bla");
+        //     }
+        // });
 
         for (ws_name, ws) in self.workspaces.iter_mut() {
             if ws_name == self.selected_workspace || ctx.memory().everything_is_visible() {
@@ -75,17 +76,17 @@ impl epi::App for VgonioUi {
 
         self.file_drag_and_drop(ctx);
 
-        egui::Window::new("Window").show(ctx, |ui| {
-            ui.label("Hello World!");
-        });
+        // egui::Window::new("Window").show(ctx, |ui| {
+        //     ui.label("Hello World!");
+        // });
 
-        egui::Area::new("Area").show(ctx, |ui| {
-            ui.label("Hello World!");
-
-            egui::Frame::default().show(ui, |ui| {
-                ui.label("Frame!");
-            });
-        });
+        // egui::Area::new("Area").show(ctx, |ui| {
+        //     ui.label("Hello World!");
+        //
+        //     egui::Frame::default().show(ui, |ui| {
+        //         ui.label("Frame!");
+        //     });
+        // });
     }
 
     fn name(&self) -> &str {
