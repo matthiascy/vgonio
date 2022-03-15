@@ -5,6 +5,7 @@ mod simulation;
 use analysis::AnalysisWorkspace;
 use egui::Context;
 use epi::Frame;
+use glam::Mat4;
 use simulation::SimulationWorkspace;
 
 pub struct Workspaces {
@@ -29,10 +30,10 @@ impl Workspaces {
 }
 
 pub struct VgonioUi {
-    pub(crate) workspaces: Workspaces,
-    pub(crate) dropped_files: Vec<egui::DroppedFile>,
+    workspaces: Workspaces,
+    dropped_files: Vec<egui::DroppedFile>,
     // recent_files: Vec<std::path::PathBuf>,
-    pub(crate) selected_workspace: String,
+    selected_workspace: String,
 }
 
 impl VgonioUi {
@@ -41,6 +42,14 @@ impl VgonioUi {
             workspaces: Workspaces::new(),
             dropped_files: vec![],
             selected_workspace: "".to_string(),
+        }
+    }
+
+    pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
+        if self.selected_workspace == "Simulation" {
+            self.workspaces
+                .simulation
+                .update_gizmo_matrices(model, view, proj);
         }
     }
 }

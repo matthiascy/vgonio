@@ -541,13 +541,11 @@ impl VgonioApp {
         self.camera_controller
             .update_camera(&self.input, &mut self.camera, dt);
         self.camera_uniform.update(&self.camera, &self.projection);
-        if self.gui.selected_workspace == "Simulation" {
-            self.gui.workspaces.simulation.update_gizmo_matrices(
-                Mat4::IDENTITY,
-                self.camera_uniform.view_matrix,
-                Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
-            );
-        }
+        self.gui.update_gizmo_matrices(
+            Mat4::IDENTITY,
+            Mat4::look_at_rh(self.camera.eye, Vec3::ZERO, self.camera.up),
+            Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
+        );
         self.gpu.queue.write_buffer(
             &self.camera_uniform_buffer,
             0,

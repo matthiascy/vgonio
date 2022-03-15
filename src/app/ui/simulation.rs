@@ -70,10 +70,16 @@ impl SimulationWindow {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.collapsing("Sensor", |ui| {
-            egui::ComboBox::from_label("Take your pick")
-                .selected_text(format!("{:?}", self.sensor_shape))
-                .show_ui(ui, |ui| {
+        // Grid of two columns.
+        egui::Grid::new("sim_grid")
+            .num_columns(2)
+            .spacing([40.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                ui.add(egui::Label::new(
+                    "Sensor Shape:",
+                ));
+                ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.sensor_shape, SensorShape::Circle, "Circle");
                     ui.selectable_value(
                         &mut self.sensor_shape,
@@ -81,7 +87,7 @@ impl SimulationWindow {
                         "Rectangle",
                     );
                 });
-            ui.end_row();
-        });
+                ui.end_row();
+            });
     }
 }
