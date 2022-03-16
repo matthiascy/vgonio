@@ -10,7 +10,7 @@ pub struct VertexLayout{
 }
 
 impl VertexLayout {
-    pub fn new(attrib_formats: &[VertexFormat]) -> Self {
+    pub fn new(attrib_formats: &[VertexFormat], location_offset: Option<u32>) -> Self {
         assert!(attrib_formats.len() > 1, "VertexLayout must have at least one attribute!");
         let len = attrib_formats.len();
         let offsets_and_stride = {
@@ -22,6 +22,7 @@ impl VertexLayout {
         };
 
         let stride = offsets_and_stride[len];
+        let location_offset = location_offset.unwrap_or(0);
 
         let attributes = attrib_formats.iter()
             .zip(offsets_and_stride.iter())
@@ -30,7 +31,7 @@ impl VertexLayout {
             VertexAttribute {
                 format: *format,
                 offset: *offset,
-                shader_location: i as _
+                shader_location: location_offset + i as u32
             }
         }).collect();
 
@@ -64,6 +65,6 @@ unsafe impl bytemuck::Pod for Vertex {}
 
 impl Vertex {
     pub fn layout() -> VertexLayout {
-        VertexLayout::new(&[VertexFormat::Float32x3, VertexFormat::Float32x2])
+        VertexLayout::new(&[VertexFormat::Float32x3, VertexFormat::Float32x2], None)
     }
 }

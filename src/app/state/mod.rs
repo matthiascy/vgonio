@@ -1,4 +1,5 @@
-use crate::app::gfx::vertex::Vertex;
+use std::collections::HashMap;
+use crate::app::gfx::vertex::{Vertex, VertexLayout};
 use crate::app::texture::Texture;
 use crate::app::ui::VgonioUi;
 use crate::error::Error;
@@ -13,14 +14,14 @@ use winit::{
     window::Window,
 };
 
-pub(crate) mod gfx_state;
+pub(crate) mod gpu_context;
 pub(crate) mod input;
-pub(crate) mod ui_state;
+pub(crate) mod gui_context;
 
 use crate::app::gfx::camera::{Camera, CameraController, CameraUniform, OrbitControls, Projection};
 use crate::app::state::input::InputState;
-use gfx_state::GpuContext;
-use ui_state::UiState;
+use gpu_context::GpuContext;
+use gui_context::GuiContext;
 
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
@@ -44,18 +45,19 @@ impl CameraState {
 
 pub struct VgonioApp {
     gpu: GpuContext,
-    pub ui_state: UiState,
-    pub gui: VgonioUi,
+    gui_ctx: GuiContext,
+    gui: VgonioUi,
+    input: InputState,
+    camera: CameraState,
 
-    pub render_pipeline: wgpu::RenderPipeline,
+    graphics_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
+
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_vertices: u32,
     pub num_indices: u32,
     pub texture_bind_groups: [wgpu::BindGroup; 2],
     pub current_texture_index: usize,
-
-    camera_state: CameraState,
 
     pub object_model_matrix: glam::Mat4,
     pub instancing_buffer: wgpu::Buffer,
@@ -64,9 +66,7 @@ pub struct VgonioApp {
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
-    input: InputState,
-
-    pub ui: egui_demo_lib::WrapApp,
+    pub demo_ui: egui_demo_lib::WrapApp,
     // pub graphics_pipeline_single_vertex_attribute: wgpu::RenderPipeline,
     // pub grid_vertex_buffer: wgpu::Buffer,
 }
@@ -202,7 +202,7 @@ impl VgonioApp {
 
         // Camera
         let object_model_matrix = glam::Mat4::IDENTITY;
-        let cam_state = {
+        let camera = {
             let camera = Camera::new(Vec3::new(0.0, 5.0, 10.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
@@ -220,6 +220,8 @@ impl VgonioApp {
                         contents: bytemuck::cast_slice(&[
                             uniform.view_matrix,
                             uniform.proj_matrix,
+                            uniform.view_inv_matrix,
+                            uniform.proj_inv_matrix,
                             Mat4::IDENTITY,
                         ]),
                         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -302,70 +304,47 @@ impl VgonioApp {
                 ),
             });
 
-        // let grid_shader_module = gfx_state.device.create_shader_module(
-        //     &wgpu::ShaderModuleDescriptor {
-        //         label: Some("grid_vertex_shader"),
-        //         source: ()
-        //     }
-        // );
+        let grid_shader_module = gpu_ctx.device.create_shader_module(
+            &wgpu::ShaderModuleDescriptor {
+                label: Some("grid_vertex_shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../assets/shaders/grid.wgsl").into())
+            }
+        );
 
         // Pipeline layout
-        let render_pipeline_layout =
+        let default_render_pipeline_layout =
             gpu_ctx
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("default-pipeline-layout"),
-                    bind_group_layouts: &[&texture_bind_group_layout, &cam_state.bind_group_layout],
+                    bind_group_layouts: &[&texture_bind_group_layout, &camera.bind_group_layout],
                     push_constant_ranges: &[],
                 });
-        // let graphics_pipeline_layout = gfx_state.device.create_pipeline_layout(
-        //     &wgpu::PipelineLayoutDescriptor {
-        //         label: Some("single_vertex_attribute_graphics_pipeline_layout"),
-        //         bind_group_layouts: &[&camera_bind_group_layout],
-        //         push_constant_ranges: &[]
-        //     }
-        // );
 
-        let instancing_buffer_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
-            // Switch from using as step mode of Vertex to Instance.
-            // It means that our shaders will only change to use the next
-            // instance when the shader starts processing a new instance
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 5,
-                },
-                wgpu::VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                },
-                wgpu::VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                },
-                wgpu::VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                },
-            ],
-        };
+        let grid_graphics_pipeline_layout = gpu_ctx.device.create_pipeline_layout(
+            &wgpu::PipelineLayoutDescriptor {
+                label: Some("grid_graphics_pipeline_layout"),
+                bind_group_layouts: &[&camera.bind_group_layout],
+                push_constant_ranges: &[]
+            }
+        );
 
-        let render_pipeline =
+        let instancing_vertex_layout = VertexLayout::new(&[VertexFormat::Float32x4,
+            VertexFormat::Float32x4, VertexFormat::Float32x4, VertexFormat::Float32x4], Some(5));
+
+        let default_render_pipeline =
             gpu_ctx
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("Render Pipeline"),
-                    layout: Some(&render_pipeline_layout),
+                    layout: Some(&default_render_pipeline_layout),
                     vertex: wgpu::VertexState {
                         module: &shader,
                         entry_point: "vs_main",
-                        buffers: &[Vertex::layout().buffer_layout(wgpu::VertexStepMode::Vertex), instancing_buffer_layout],
+                        buffers: &[
+                            Vertex::layout().buffer_layout(wgpu::VertexStepMode::Vertex),
+                            instancing_vertex_layout.buffer_layout(wgpu::VertexStepMode::Instance)
+                        ],
                     },
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -397,22 +376,65 @@ impl VgonioApp {
                     multiview: None,
                 });
 
-        // let graphics_pipeline_single_vertex_attribute =
-        // gfx_state.device.create_render_pipeline(     &wgpu::
-        // RenderPipelineDescriptor {         label:
-        // Some("single_vertex_attribute_graphics_pipeline"),         layout:
-        // Some(&graphics_pipeline_layout),         vertex: wgpu::VertexState {
-        //             module: &(),
-        //             entry_point: "",
-        //             buffers: &[]
-        //         },
-        //         primitive: Default::default(),
-        //         depth_stencil: None,
-        //         multisample: Default::default(),
-        //         fragment: None,
-        //         multiview: None
-        //     }
-        // )
+        let grid_render_pipeline =
+            gpu_ctx
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Grid Render Pipeline"),
+                    layout: Some(&grid_graphics_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &grid_shader_module,
+                        entry_point: "vs_main",
+                        buffers: &[],
+                    },
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: None,
+                        unclipped_depth: false,
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        conservative: false,
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: Texture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
+                                                                     * new pixel */
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &grid_shader_module,
+                        entry_point: "fs_main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: gpu_ctx.surface_config.format,
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::One,
+                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                                alpha: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+                                    dst_factor: wgpu::BlendFactor::One,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                            }),
+                            write_mask: wgpu::ColorWrites::ALL
+                        }],
+                    }),
+                    multiview: None,
+                });
+
+        let mut graphics_pipelines = HashMap::new();
+        graphics_pipelines.insert("default", default_render_pipeline);
+        graphics_pipelines.insert("grid", grid_render_pipeline);
 
         let vertex_buffer = gpu_ctx
             .device
@@ -432,15 +454,8 @@ impl VgonioApp {
 
         let num_indices = INDICES.len() as u32;
 
-        let ui_state = UiState::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
+        let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
         let ui = egui_demo_lib::WrapApp::default();
-
-        // let grid_vertex_buffer =
-        // gfx_state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //     label: Some("grid_vertex_buffer"),
-        //     contents: &[],
-        //     usage: wgpu::BufferUsages::VERTEX
-        // });
 
         let input = InputState {
             key_map: Default::default(),
@@ -452,22 +467,22 @@ impl VgonioApp {
 
         Ok(Self {
             gpu: gpu_ctx,
-            render_pipeline,
+            graphics_pipelines,
             vertex_buffer,
             index_buffer,
             num_vertices,
             num_indices,
             texture_bind_groups,
             current_texture_index: 0,
-            camera_state: cam_state,
+            camera,
             object_model_matrix,
             instancing_buffer,
             instancing_transforms,
             depth_texture,
             start_time: Instant::now(),
             prev_frame_time: None,
-            ui_state,
-            ui,
+            gui_ctx,
+            demo_ui: ui,
             gui: VgonioUi::new(),
             input,
         })
@@ -495,14 +510,14 @@ impl VgonioApp {
                 &self.gpu.surface_config,
                 "depth_texture",
             );
-            self.camera_state
+            self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
         }
     }
 
     pub fn collect_input(&mut self, event: &WindowEvent) -> bool {
-        if !self.ui_state.handle_event(event) {
+        if !self.gui_ctx.handle_event(event) {
             match event {
                 WindowEvent::KeyboardInput {
                     input:
@@ -537,13 +552,13 @@ impl VgonioApp {
 
     pub fn update(&mut self, dt: std::time::Duration) {
         // Update camera uniform.
-        self.camera_state.update(&self.input, dt);
+        self.camera.update(&self.input, dt);
         self.gui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(
-                self.camera_state.camera.eye,
+                self.camera.camera.eye,
                 Vec3::ZERO,
-                self.camera_state.camera.up,
+                self.camera.camera.up,
             ),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
@@ -554,18 +569,17 @@ impl VgonioApp {
         }
 
         self.gpu.queue.write_buffer(
-            &self.camera_state.uniform_buffer,
+            &self.camera.uniform_buffer,
             0,
             bytemuck::cast_slice(&[
-                self.camera_state.uniform.view_matrix,
-                self.camera_state.uniform.proj_matrix,
+                self.camera.uniform.view_matrix,
+                self.camera.uniform.proj_matrix,
+                self.camera.uniform.view_inv_matrix,
+                self.camera.uniform.proj_inv_matrix,
                 self.object_model_matrix,
             ]),
         );
 
-        // Reset mouse movement
-        self.input.scroll_delta = 0.0;
-        self.input.cursor_delta = [0.0, 0.0];
         for m in &mut self.instancing_transforms {
             *m *= Mat4::from_rotation_x(0.2f32.to_radians());
         }
@@ -575,6 +589,10 @@ impl VgonioApp {
             0,
             bytemuck::cast_slice(&self.instancing_transforms),
         );
+
+        // Reset mouse movement
+        self.input.scroll_delta = 0.0;
+        self.input.cursor_delta = [0.0, 0.0];
     }
 
     pub fn render(
@@ -629,13 +647,13 @@ impl VgonioApp {
                 }),
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(&self.graphics_pipelines.get("default").unwrap());
             render_pass.set_bind_group(
                 0,
                 &self.texture_bind_groups[self.current_texture_index],
                 &[],
             );
-            render_pass.set_bind_group(1, &self.camera_state.bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instancing_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -644,14 +662,18 @@ impl VgonioApp {
                 0,
                 0..self.instancing_transforms.len() as _,
             );
+
+            render_pass.set_pipeline(&self.graphics_pipelines.get("grid").unwrap());
+            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
         }
 
         {
             // Record UI
             let ui_start_time = Instant::now();
-            let input = self.ui_state.egui_state_mut().take_egui_input(window);
+            let input = self.gui_ctx.egui_state_mut().take_egui_input(window);
 
-            self.ui_state.egui_context_mut().begin_frame(input);
+            self.gui_ctx.egui_context_mut().begin_frame(input);
             let egui_output = epi::backend::AppOutput::default();
             let ui_frame = epi::Frame::new(epi::backend::FrameData {
                 info: epi::IntegrationInfo {
@@ -665,32 +687,32 @@ impl VgonioApp {
                 repaint_signal,
             });
             // self.ui.update(self.ui_state.egui_context(), &ui_frame);
-            self.gui.update(self.ui_state.egui_context(), &ui_frame);
-            let ui_output_frame = self.ui_state.egui_context().end_frame();
+            self.gui.update(self.gui_ctx.egui_context(), &ui_frame);
+            let ui_output_frame = self.gui_ctx.egui_context().end_frame();
 
             let meshes = self
-                .ui_state
+                .gui_ctx
                 .egui_context()
                 .tessellate(ui_output_frame.shapes);
             let frame_time = (Instant::now() - ui_start_time).as_secs_f64() as f32;
             self.prev_frame_time = Some(frame_time);
 
-            let win_size = ui_state::WindowSize {
+            let win_size = gui_context::WindowSize {
                 physical_width: self.gpu.surface_config.width,
                 physical_height: self.gpu.surface_config.height,
                 scale_factor: window.scale_factor() as f32,
             };
 
-            self.ui_state
+            self.gui_ctx
                 .update_textures(
                     &self.gpu.device,
                     &self.gpu.queue,
                     ui_output_frame.textures_delta,
                 )
                 .unwrap();
-            self.ui_state
+            self.gui_ctx
                 .update_buffers(&self.gpu.device, &self.gpu.queue, &meshes, &win_size);
-            self.ui_state
+            self.gui_ctx
                 .render(&mut encoders[1], &output_view, &meshes, &win_size, None)
                 .unwrap();
         }

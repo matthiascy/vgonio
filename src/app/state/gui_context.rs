@@ -52,7 +52,7 @@ struct SizedBuffer {
 }
 
 /// RenderPass to render a egui based GUI.
-pub struct UiState {
+pub struct GuiContext {
     /// Context for UI generation
     egui_context: egui::Context,
     /// States managing the translation of input from winit to egui
@@ -77,7 +77,7 @@ pub struct UiState {
     next_user_texture_id: u64,
 }
 
-impl UiState {
+impl GuiContext {
     /// Creates related resources used for UI rendering.
     ///
     /// If the format passed is not a *Srgb format, the shader will

@@ -157,6 +157,8 @@ impl Camera {
 pub struct CameraUniform {
     pub view_matrix: Mat4,
     pub proj_matrix: Mat4,
+    pub view_inv_matrix: Mat4,
+    pub proj_inv_matrix: Mat4,
 }
 
 unsafe impl bytemuck::Zeroable for CameraUniform {}
@@ -168,6 +170,8 @@ impl CameraUniform {
         Self {
             view_matrix: camera.matrix(),
             proj_matrix: projection.matrix(),
+            view_inv_matrix: camera.matrix().inverse(),
+            proj_inv_matrix: projection.matrix().inverse()
         }
     }
 
