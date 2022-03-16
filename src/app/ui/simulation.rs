@@ -76,9 +76,7 @@ impl SimulationWindow {
             .spacing([40.0, 4.0])
             .striped(true)
             .show(ui, |ui| {
-                ui.add(egui::Label::new(
-                    "Sensor Shape:",
-                ));
+                ui.add(egui::Label::new("Sensor Shape:"));
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.sensor_shape, SensorShape::Circle, "Circle");
                     ui.selectable_value(

@@ -1,3 +1,4 @@
+use crate::app::gfx::vertex::Vertex;
 use crate::app::texture::Texture;
 use crate::app::ui::VgonioUi;
 use crate::error::Error;
@@ -6,11 +7,11 @@ use glam::{Mat4, Quat, Vec3};
 use std::default::Default;
 use std::time::Instant;
 use wgpu::{util::DeviceExt, VertexFormat};
+use winit::event::VirtualKeyCode;
 use winit::{
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
-use winit::event::VirtualKeyCode;
 
 pub(crate) mod gfx_state;
 pub(crate) mod input;
@@ -260,7 +261,7 @@ impl VgonioApp {
                 bind_group,
                 bind_group_layout,
                 controller,
-                projection
+                projection,
             }
         };
 
@@ -364,7 +365,7 @@ impl VgonioApp {
                     vertex: wgpu::VertexState {
                         module: &shader,
                         entry_point: "vs_main",
-                        buffers: &[Vertex::layout(), instancing_buffer_layout],
+                        buffers: &[Vertex::layout().buffer_layout(wgpu::VertexStepMode::Vertex), instancing_buffer_layout],
                     },
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -494,7 +495,9 @@ impl VgonioApp {
                 &self.gpu.surface_config,
                 "depth_texture",
             );
-            self.camera_state.projection.resize(new_size.width, new_size.height);
+            self.camera_state
+                .projection
+                .resize(new_size.width, new_size.height);
         }
     }
 
@@ -537,7 +540,11 @@ impl VgonioApp {
         self.camera_state.update(&self.input, dt);
         self.gui.update_gizmo_matrices(
             Mat4::IDENTITY,
-            Mat4::look_at_rh(self.camera_state.camera.eye, Vec3::ZERO, self.camera_state.camera.up),
+            Mat4::look_at_rh(
+                self.camera_state.camera.eye,
+                Vec3::ZERO,
+                self.camera_state.camera.up,
+            ),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
 
@@ -696,17 +703,6 @@ impl VgonioApp {
     }
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-struct Vertex {
-    position: [f32; 3],
-    // color: [f32; 3],
-    tex_coord: [f32; 2],
-}
-
-unsafe impl bytemuck::Zeroable for Vertex {}
-unsafe impl bytemuck::Pod for Vertex {}
-
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-0.0868241, 0.49240386, 0.0],
@@ -736,24 +732,3 @@ const VERTICES: &[Vertex] = &[
 ];
 
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
-
-impl Vertex {
-    const fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: VertexFormat::Float32x3,
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                },
-            ],
-        }
-    }
-}
