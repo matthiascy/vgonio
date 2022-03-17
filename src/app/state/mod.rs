@@ -1,52 +1,34 @@
-use crate::app::gfx::vertex::{Vertex, VertexLayout};
-use crate::app::texture::Texture;
-use crate::app::ui::VgonioUi;
+mod camera;
+mod input;
+
+pub use input::InputState;
+
+use crate::app::gfx::{GpuContext, Texture, Vertex, VertexLayout};
+use crate::app::gui::{GuiContext, UserEvent, VgonioGui, WindowSize};
+use camera::CameraState;
+
+use crate::app::gfx::camera::{Camera, Projection};
 use crate::error::Error;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
 use std::time::Instant;
-use wgpu::{include_spirv, util::DeviceExt, VertexFormat};
-use winit::event::VirtualKeyCode;
-use winit::{
-    event::{KeyboardInput, WindowEvent},
-    window::Window,
-};
-
-pub(crate) mod gpu_context;
-pub(crate) mod gui_context;
-pub(crate) mod input;
-
-use crate::app::gfx::camera::{Camera, CameraController, CameraUniform, OrbitControls, Projection};
-use crate::app::state::input::InputState;
-use gpu_context::GpuContext;
-use gui_context::GuiContext;
+use wgpu::util::DeviceExt;
+use wgpu::{include_spirv, VertexFormat};
+use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event_loop::EventLoopProxy;
+use winit::window::Window;
 
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
 
-struct CameraState {
-    camera: Camera,
-    uniform: CameraUniform,
-    uniform_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    bind_group_layout: wgpu::BindGroupLayout,
-    controller: OrbitControls,
-    projection: Projection,
-}
-
-impl CameraState {
-    pub fn update(&mut self, input: &InputState, dt: std::time::Duration) {
-        self.controller.update(input, &mut self.camera, dt);
-        self.uniform.update(&self.camera, &self.projection);
-    }
-}
+// TODO: fix blending.
 
 pub struct VgonioApp {
-    gpu: GpuContext,
+    gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
-    gui: VgonioUi,
+    gui: VgonioGui,
     input: InputState,
     camera: CameraState,
 
@@ -67,13 +49,6 @@ pub struct VgonioApp {
     pub prev_frame_time: Option<f32>,
 
     pub demo_ui: egui_demo_lib::WrapApp,
-    // pub graphics_pipeline_single_vertex_attribute: wgpu::RenderPipeline,
-    // pub grid_vertex_buffer: wgpu::Buffer,
-}
-
-/// User event handling.
-pub enum UserEvent {
-    RequestRedraw,
 }
 
 /// Repaint signal type that egui needs for requesting a repaint from another
@@ -92,7 +67,10 @@ impl epi::backend::RepaintSignal for RepaintSignal {
 
 impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
-    pub async fn new(window: &Window) -> Result<Self, Error> {
+    pub async fn new(
+        window: &Window,
+        event_loop: EventLoopProxy<UserEvent>,
+    ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
         let num_vertices = VERTICES.len() as u32;
         // Create texture
@@ -203,7 +181,7 @@ impl VgonioApp {
         // Camera
         let object_model_matrix = glam::Mat4::IDENTITY;
         let camera = {
-            let camera = Camera::new(Vec3::new(0.0, 2.0, 10.0), Vec3::ZERO, Vec3::Y);
+            let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
                 100.0,
@@ -211,59 +189,7 @@ impl VgonioApp {
                 gpu_ctx.surface_config.width,
                 gpu_ctx.surface_config.height,
             );
-            let uniform = CameraUniform::new(&camera, &projection);
-            let uniform_buffer =
-                gpu_ctx
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("camera-uniform-buffer"),
-                        contents: bytemuck::cast_slice(&[
-                            Mat4::IDENTITY,
-                            uniform.view_matrix,
-                            uniform.proj_matrix,
-                            uniform.view_inv_matrix,
-                            uniform.proj_inv_matrix,
-                        ]),
-                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                    });
-            let bind_group_layout =
-                gpu_ctx
-                    .device
-                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: Some("camera-uniform-bind-group-create_bind_group_layout"),
-                        entries: &[wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        }],
-                    });
-            let bind_group = gpu_ctx
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("camera-uniform-bind-group"),
-                    layout: &bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
-                    }],
-                });
-
-            let controller = OrbitControls::new(0.3, f32::INFINITY, 200.0, 400.0, 100.0);
-
-            CameraState {
-                camera,
-                uniform,
-                uniform_buffer,
-                bind_group,
-                bind_group_layout,
-                controller,
-                projection,
-            }
+            CameraState::new(&gpu_ctx.device, camera, projection)
         };
 
         let instance_displacement = Vec3::new(
@@ -470,6 +396,7 @@ impl VgonioApp {
 
         let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
         let ui = egui_demo_lib::WrapApp::default();
+        let gui = VgonioGui::new(event_loop);
 
         let input = InputState {
             key_map: Default::default(),
@@ -480,7 +407,8 @@ impl VgonioApp {
         };
 
         Ok(Self {
-            gpu: gpu_ctx,
+            gpu_ctx,
+            gui_ctx,
             graphics_pipelines,
             vertex_buffer,
             index_buffer,
@@ -495,33 +423,33 @@ impl VgonioApp {
             depth_texture,
             start_time: Instant::now(),
             prev_frame_time: None,
-            gui_ctx,
+            // gui_ctx,
             demo_ui: ui,
-            gui: VgonioUi::new(),
+            gui,
             input,
         })
     }
 
     #[inline]
     pub fn surface_width(&self) -> u32 {
-        self.gpu.surface_config.width
+        self.gpu_ctx.surface_config.width
     }
 
     #[inline]
     pub fn surface_height(&self) -> u32 {
-        self.gpu.surface_config.height
+        self.gpu_ctx.surface_config.height
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            self.gpu.surface_config.width = new_size.width;
-            self.gpu.surface_config.height = new_size.height;
-            self.gpu
+            self.gpu_ctx.surface_config.width = new_size.width;
+            self.gpu_ctx.surface_config.height = new_size.height;
+            self.gpu_ctx
                 .surface
-                .configure(&self.gpu.device, &self.gpu.surface_config);
+                .configure(&self.gpu_ctx.device, &self.gpu_ctx.surface_config);
             self.depth_texture = Texture::create_depth_texture(
-                &self.gpu.device,
-                &self.gpu.surface_config,
+                &self.gpu_ctx.device,
+                &self.gpu_ctx.surface_config,
                 "depth_texture",
             );
             self.camera
@@ -578,7 +506,7 @@ impl VgonioApp {
             self.current_texture_index %= 2;
         }
 
-        self.gpu.queue.write_buffer(
+        self.gpu_ctx.queue.write_buffer(
             &self.camera.uniform_buffer,
             0,
             bytemuck::cast_slice(&[
@@ -594,7 +522,7 @@ impl VgonioApp {
             *m *= Mat4::from_rotation_x(0.2f32.to_radians());
         }
 
-        self.gpu.queue.write_buffer(
+        self.gpu_ctx.queue.write_buffer(
             &self.instancing_buffer,
             0,
             bytemuck::cast_slice(&self.instancing_transforms),
@@ -610,18 +538,18 @@ impl VgonioApp {
         window: &winit::window::Window,
         repaint_signal: std::sync::Arc<RepaintSignal>,
     ) -> Result<(), wgpu::SurfaceError> {
-        let output_frame = self.gpu.surface.get_current_texture()?;
+        let output_frame = self.gpu_ctx.surface.get_current_texture()?;
         let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoders = [
-            self.gpu
+            self.gpu_ctx
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_encoder"),
                 }),
-            self.gpu
+            self.gpu_ctx
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_ui_render_encoder"),
@@ -707,31 +635,44 @@ impl VgonioApp {
             let frame_time = (Instant::now() - ui_start_time).as_secs_f64() as f32;
             self.prev_frame_time = Some(frame_time);
 
-            let win_size = gui_context::WindowSize {
-                physical_width: self.gpu.surface_config.width,
-                physical_height: self.gpu.surface_config.height,
+            let win_size = WindowSize {
+                physical_width: self.gpu_ctx.surface_config.width,
+                physical_height: self.gpu_ctx.surface_config.height,
                 scale_factor: window.scale_factor() as f32,
             };
 
             self.gui_ctx
                 .update_textures(
-                    &self.gpu.device,
-                    &self.gpu.queue,
+                    &self.gpu_ctx.device,
+                    &self.gpu_ctx.queue,
                     ui_output_frame.textures_delta,
                 )
                 .unwrap();
-            self.gui_ctx
-                .update_buffers(&self.gpu.device, &self.gpu.queue, &meshes, &win_size);
+            self.gui_ctx.update_buffers(
+                &self.gpu_ctx.device,
+                &self.gpu_ctx.queue,
+                &meshes,
+                &win_size,
+            );
             self.gui_ctx
                 .render(&mut encoders[1], &output_view, &meshes, &win_size, None)
                 .unwrap();
         }
 
-        self.gpu.queue.submit(encoders.map(|enc| enc.finish()));
+        self.gpu_ctx.queue.submit(encoders.map(|enc| enc.finish()));
 
         output_frame.present();
 
         Ok(())
+    }
+
+    pub fn handle_event(&mut self, event: UserEvent) {
+        match event {
+            UserEvent::RequestRedraw => {}
+            UserEvent::OpenFile(filepath) => {
+                println!("____________________________________{:?}", filepath);
+            }
+        }
     }
 }
 

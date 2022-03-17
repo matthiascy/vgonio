@@ -1,19 +1,15 @@
-use crate::app::state::{RepaintSignal, UserEvent};
+use crate::app::state::RepaintSignal;
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Parser, Subcommand};
 use std::io::Write;
 use winit::dpi::PhysicalSize;
-use winit::{
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
-};
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::WindowBuilder;
 
 pub(crate) mod gfx;
-pub(crate) mod grid;
+pub(crate) mod gui;
 pub mod state;
-pub mod texture;
-pub(crate) mod ui;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
@@ -214,6 +210,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
 }
 
 pub fn launch_gui_client() -> Result<(), Error> {
+    use crate::app::gui::UserEvent;
     use state::VgonioApp;
 
     let event_loop = EventLoop::<UserEvent>::with_user_event();
@@ -230,7 +227,7 @@ pub fn launch_gui_client() -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    let mut state = pollster::block_on(VgonioApp::new(&window))?;
+    let mut vgonio = pollster::block_on(VgonioApp::new(&window, event_loop.create_proxy()))?;
     let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
         event_loop.create_proxy(),
     )));
@@ -243,18 +240,19 @@ pub fn launch_gui_client() -> Result<(), Error> {
         last_frame_time = now;
 
         match event {
+            Event::UserEvent(event) => vgonio.handle_event(event),
             Event::WindowEvent {
                 window_id,
                 ref event,
             } if window_id == window.id() => {
-                if !state.collect_input(event) {
+                if !vgonio.collect_input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 
-                        WindowEvent::Resized(new_size) => state.resize(*new_size),
+                        WindowEvent::Resized(new_size) => vgonio.resize(*new_size),
 
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            state.resize(**new_inner_size);
+                            vgonio.resize(**new_inner_size);
                         }
 
                         _ => {}
@@ -263,13 +261,13 @@ pub fn launch_gui_client() -> Result<(), Error> {
             }
 
             Event::RedrawRequested(window_id) if window_id == window.id() => {
-                state.update(dt);
-                match state.render(&window, repaint_signal.clone()) {
+                vgonio.update(dt);
+                match vgonio.render(&window, repaint_signal.clone()) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => state.resize(PhysicalSize {
-                        width: state.surface_width(),
-                        height: state.surface_height(),
+                    Err(wgpu::SurfaceError::Lost) => vgonio.resize(PhysicalSize {
+                        width: vgonio.surface_width(),
+                        height: vgonio.surface_height(),
                     }),
                     // The system is out of memory, we should quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,

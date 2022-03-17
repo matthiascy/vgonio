@@ -1,16 +1,22 @@
+/// Aggregation of necessary resources for using GPU.
 pub struct GpuContext {
+    /// Surface (image texture/framebuffer) to draw on.
     pub surface: wgpu::Surface,
+
+    /// GPU logical device.
     pub device: wgpu::Device,
+
+    /// GPU command queue to execute drawing or computing commands.
     pub queue: wgpu::Queue,
+
+    /// Information about the window surface (texture format, present mode,
+    /// etc.).
     pub surface_config: wgpu::SurfaceConfiguration,
 }
-
-pub struct GfxState {}
 
 impl GpuContext {
     pub async fn new(window: &winit::window::Window) -> Self {
         let win_size = window.inner_size();
-
         // Create instance handle to GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::Backends::all());

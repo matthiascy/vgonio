@@ -18,10 +18,9 @@ vec4 checker_board(vec2 p, float scale) {
 
 vec4 grid(vec3 frag_pos, float scale) {
     vec2 coord = frag_pos.xz * scale; // use the scale variable to set the distance between the lines
-    vec2 derivative = fwidth(coord);
 
-    vec2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
-
+    // Compute anti-aliased world-space grid lines
+    vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
     float line = min(grid.x, grid.y);
     float min_x = min(derivative.x, 1.0);
     float min_z = min(derivative.y, 1.0);

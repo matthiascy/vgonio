@@ -1,4 +1,4 @@
-use crate::app::ui::gizmo::VgonioGizmo;
+use crate::app::gui::gizmo::VgonioGizmo;
 use glam::Mat4;
 
 pub struct SimulationWorkspace {

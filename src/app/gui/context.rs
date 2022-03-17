@@ -1,8 +1,7 @@
-use std::{
-    borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
-    num::NonZeroU32,
-};
+use std::borrow::Cow;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::num::NonZeroU32;
 
 use crate::error::Error;
 use wgpu::util::DeviceExt;

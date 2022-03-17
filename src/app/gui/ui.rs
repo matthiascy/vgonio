@@ -1,12 +1,8 @@
-mod analysis;
-mod gizmo;
-mod simulation;
-
-use analysis::AnalysisWorkspace;
-use egui::Context;
-use epi::Frame;
+use super::analysis::AnalysisWorkspace;
+use super::simulation::SimulationWorkspace;
+use super::UserEvent;
 use glam::Mat4;
-use simulation::SimulationWorkspace;
+use winit::event_loop::EventLoopProxy;
 
 pub struct Workspaces {
     pub(crate) simulation: SimulationWorkspace,
@@ -29,16 +25,25 @@ impl Workspaces {
     }
 }
 
-pub struct VgonioUi {
+/// Implementation of the GUI for vgonio application.
+pub struct VgonioGui {
+    /// Workspaces are essentially predefined window layouts for certain usage.
     workspaces: Workspaces,
+
+    /// Files dropped in the window area.
     dropped_files: Vec<egui::DroppedFile>,
-    // recent_files: Vec<std::path::PathBuf>,
+
+    /// Current activated workspace.
     selected_workspace: String,
+
+    /// Event loop proxy for sending user defined events.
+    event_loop_proxy: EventLoopProxy<UserEvent>,
 }
 
-impl VgonioUi {
-    pub fn new() -> Self {
+impl VgonioGui {
+    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
+            event_loop_proxy,
             workspaces: Workspaces::new(),
             dropped_files: vec![],
             selected_workspace: "".to_string(),
@@ -58,8 +63,8 @@ impl VgonioUi {
     }
 }
 
-impl epi::App for VgonioUi {
-    fn update(&mut self, ctx: &Context, frame: &Frame) {
+impl epi::App for VgonioGui {
+    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
         if self.selected_workspace.is_empty() {
             self.selected_workspace = self.workspaces.iter_mut().next().unwrap().0.to_owned();
         }
@@ -107,7 +112,7 @@ impl epi::App for VgonioUi {
     }
 }
 
-impl VgonioUi {
+impl VgonioGui {
     fn file_drag_and_drop(&mut self, ctx: &egui::Context) {
         use egui::*;
 
@@ -182,8 +187,11 @@ impl VgonioUi {
                         }
                     });
                     if ui.button("\u{1F4C2} Open").clicked() {
-                        if let Some(file) = rfd::FileDialog::new().set_directory("~/").pick_file() {
-                            println!("file path: {:?}", file);
+                        if let Some(filepath) =
+                            rfd::FileDialog::new().set_directory("~/").pick_file()
+                        {
+                            self.event_loop_proxy
+                                .send_event(UserEvent::OpenFile(filepath));
                         }
                     }
                     ui.menu_button("\u{1F4DC} Open Recent", |ui| {
