@@ -2,6 +2,7 @@
 name = "vgonio"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,7 +12,7 @@ winit = "0.26"
 glam = { version = "0.20", features = ["serde", "bytemuck"] }
 env_logger = "0.9"
 log = "0.4"
-wgpu = { version = "0.12" }
+wgpu = { version = "0.12", features = ["spirv"] }
 pollster = "0.2"
 bytemuck = "1.7"
 clap = { version = "3", features = ["derive"] }
@@ -27,6 +28,18 @@ egui_demo_lib = "0.17"
 egui-winit = "0.17"
 egui-gizmo = "0.6"
 rfd = "0.8"
+
+[build-dependencies]
+shaderc = "0.7"
+
+# Compile build-dependencies in release mode with
+# the same settings as regular dependencies.
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16
+
+[profile.dev.build-override]
+opt-level = 3
 
 [dev-dependencies]
 quickcheck = "1"

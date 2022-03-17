@@ -171,7 +171,7 @@ impl CameraUniform {
             view_matrix: camera.matrix(),
             proj_matrix: projection.matrix(),
             view_inv_matrix: camera.matrix().inverse(),
-            proj_inv_matrix: projection.matrix().inverse()
+            proj_inv_matrix: projection.matrix().inverse(),
         }
     }
 

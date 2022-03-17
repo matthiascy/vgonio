@@ -43,7 +43,7 @@ impl VgonioGizmo {
     }
 
     pub fn name(&self) -> &'static str {
-        &"Gizmo"
+        "Gizmo"
     }
 
     pub fn show(&mut self, ctx: &egui::Context, _open: &mut bool) {

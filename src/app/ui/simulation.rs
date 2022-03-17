@@ -59,7 +59,7 @@ impl Default for SimulationWindow {
 
 impl SimulationWindow {
     pub fn name(&self) -> &'static str {
-        &"Simulation"
+        "Simulation"
     }
 
     pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {

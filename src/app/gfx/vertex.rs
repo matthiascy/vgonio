@@ -1,8 +1,8 @@
-use wgpu::{BufferAddress, ShaderLocation, VertexAttribute};
 pub use wgpu::VertexFormat;
+use wgpu::{BufferAddress, VertexAttribute};
 
 #[derive(Debug)]
-pub struct VertexLayout{
+pub struct VertexLayout {
     /// Vertex attributes (attribute format: size, type, location).
     attributes: Vec<VertexAttribute>,
     /// The stride of the vertex (size in bytes of all vertex attributes).
@@ -11,7 +11,10 @@ pub struct VertexLayout{
 
 impl VertexLayout {
     pub fn new(attrib_formats: &[VertexFormat], location_offset: Option<u32>) -> Self {
-        assert!(attrib_formats.len() > 1, "VertexLayout must have at least one attribute!");
+        assert!(
+            attrib_formats.len() > 1,
+            "VertexLayout must have at least one attribute!"
+        );
         let len = attrib_formats.len();
         let offsets_and_stride = {
             let mut offsets = vec![0; len + 1];
@@ -24,27 +27,21 @@ impl VertexLayout {
         let stride = offsets_and_stride[len];
         let location_offset = location_offset.unwrap_or(0);
 
-        let attributes = attrib_formats.iter()
+        let attributes = attrib_formats
+            .iter()
             .zip(offsets_and_stride.iter())
             .enumerate()
-            .map(|(i, (format, offset))| {
-            VertexAttribute {
+            .map(|(i, (format, offset))| VertexAttribute {
                 format: *format,
                 offset: *offset,
-                shader_location: location_offset + i as u32
-            }
-        }).collect();
+                shader_location: location_offset + i as u32,
+            })
+            .collect();
 
-        Self {
-            attributes,
-            stride
-        }
+        Self { attributes, stride }
     }
 
-    pub fn buffer_layout(
-        &self,
-        step_mode: wgpu::VertexStepMode,
-    ) -> wgpu::VertexBufferLayout {
+    pub fn buffer_layout(&self, step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout {
         wgpu::VertexBufferLayout {
             array_stride: self.stride,
             step_mode,

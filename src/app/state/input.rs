@@ -28,19 +28,11 @@ impl InputState {
     }
 
     pub fn update_key_map(&mut self, key_code: VirtualKeyCode, state: ElementState) {
-        *self.key_map.entry(key_code).or_insert(false) = if state == ElementState::Pressed {
-            true
-        } else {
-            false
-        }
+        *self.key_map.entry(key_code).or_insert(false) = state == ElementState::Pressed;
     }
 
     pub fn update_mouse_map(&mut self, button: MouseButton, state: ElementState) {
-        *self.mouse_map.entry(button).or_insert(false) = if state == ElementState::Pressed {
-            true
-        } else {
-            false
-        }
+        *self.mouse_map.entry(button).or_insert(false) = state == ElementState::Pressed;
     }
 
     pub fn update_cursor_delta(&mut self, new_pos: PhysicalPosition<f32>) {

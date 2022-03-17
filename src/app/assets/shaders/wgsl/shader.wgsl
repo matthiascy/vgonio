@@ -1,13 +1,13 @@
 // Vertex shader
-struct CameraUniform {
+struct Uniforms {
+    model_matrix: mat4x4<f32>;
     view_matrix: mat4x4<f32>;
     proj_matrix: mat4x4<f32>;
     view_inv: mat4x4<f32>;
     proj_inv: mat4x4<f32>;
-    model_matrix: mat4x4<f32>;
 };
 
-[[group(1), binding(0)]] var<uniform> camera: CameraUniform;
+[[group(1), binding(0)]] var<uniform> uniforms: Uniforms;
 
 struct VInput {
     [[location(0)]] position: vec3<f32>;
@@ -30,7 +30,7 @@ struct VOutput {
 fn vs_main(vertex: VInput, instance: InstacingInput) -> VOutput {
     let model_matrix = mat4x4<f32>(instance.col_0, instance.col_1, instance.col_2, instance.col_3);
     var out: VOutput;
-    out.clip_position = camera.proj_matrix * camera.view_matrix * camera.model_matrix * model_matrix * vec4<f32>(vertex.position, 1.0);
+    out.clip_position = uniforms.proj_matrix * uniforms.view_matrix * uniforms.model_matrix * model_matrix * vec4<f32>(vertex.position, 1.0);
     out.tex_coord = vertex.tex_coord;
     return out;
 }

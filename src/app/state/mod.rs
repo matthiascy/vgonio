@@ -1,13 +1,13 @@
-use std::collections::HashMap;
 use crate::app::gfx::vertex::{Vertex, VertexLayout};
 use crate::app::texture::Texture;
 use crate::app::ui::VgonioUi;
 use crate::error::Error;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
+use std::collections::HashMap;
 use std::default::Default;
 use std::time::Instant;
-use wgpu::{util::DeviceExt, VertexFormat};
+use wgpu::{include_spirv, util::DeviceExt, VertexFormat};
 use winit::event::VirtualKeyCode;
 use winit::{
     event::{KeyboardInput, WindowEvent},
@@ -15,8 +15,8 @@ use winit::{
 };
 
 pub(crate) mod gpu_context;
-pub(crate) mod input;
 pub(crate) mod gui_context;
+pub(crate) mod input;
 
 use crate::app::gfx::camera::{Camera, CameraController, CameraUniform, OrbitControls, Projection};
 use crate::app::state::input::InputState;
@@ -218,11 +218,11 @@ impl VgonioApp {
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("camera-uniform-buffer"),
                         contents: bytemuck::cast_slice(&[
+                            Mat4::IDENTITY,
                             uniform.view_matrix,
                             uniform.proj_matrix,
                             uniform.view_inv_matrix,
                             uniform.proj_inv_matrix,
-                            Mat4::IDENTITY,
                         ]),
                         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                     });
@@ -300,16 +300,19 @@ impl VgonioApp {
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("default-vertex-shader"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/shader.wgsl").into(),
+                    include_str!("../assets/shaders/wgsl/shader.wgsl").into(),
                 ),
             });
 
-        let grid_shader_module = gpu_ctx.device.create_shader_module(
-            &wgpu::ShaderModuleDescriptor {
-                label: Some("grid_vertex_shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("../assets/shaders/grid.wgsl").into())
-            }
-        );
+        let grid_vert_shader =
+            gpu_ctx
+                .device
+                .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.vert.spv"));
+
+        let grid_frag_shader =
+            gpu_ctx
+                .device
+                .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.frag.spv"));
 
         // Pipeline layout
         let default_render_pipeline_layout =
@@ -321,16 +324,24 @@ impl VgonioApp {
                     push_constant_ranges: &[],
                 });
 
-        let grid_graphics_pipeline_layout = gpu_ctx.device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: Some("grid_graphics_pipeline_layout"),
-                bind_group_layouts: &[&camera.bind_group_layout],
-                push_constant_ranges: &[]
-            }
-        );
+        let grid_graphics_pipeline_layout =
+            gpu_ctx
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("grid_graphics_pipeline_layout"),
+                    bind_group_layouts: &[&camera.bind_group_layout],
+                    push_constant_ranges: &[],
+                });
 
-        let instancing_vertex_layout = VertexLayout::new(&[VertexFormat::Float32x4,
-            VertexFormat::Float32x4, VertexFormat::Float32x4, VertexFormat::Float32x4], Some(5));
+        let instancing_vertex_layout = VertexLayout::new(
+            &[
+                VertexFormat::Float32x4,
+                VertexFormat::Float32x4,
+                VertexFormat::Float32x4,
+                VertexFormat::Float32x4,
+            ],
+            Some(5),
+        );
 
         let default_render_pipeline =
             gpu_ctx
@@ -343,7 +354,7 @@ impl VgonioApp {
                         entry_point: "vs_main",
                         buffers: &[
                             Vertex::layout().buffer_layout(wgpu::VertexStepMode::Vertex),
-                            instancing_vertex_layout.buffer_layout(wgpu::VertexStepMode::Instance)
+                            instancing_vertex_layout.buffer_layout(wgpu::VertexStepMode::Instance),
                         ],
                     },
                     primitive: wgpu::PrimitiveState {
@@ -383,8 +394,8 @@ impl VgonioApp {
                     label: Some("Grid Render Pipeline"),
                     layout: Some(&grid_graphics_pipeline_layout),
                     vertex: wgpu::VertexState {
-                        module: &grid_shader_module,
-                        entry_point: "vs_main",
+                        module: &grid_vert_shader,
+                        entry_point: "main",
                         buffers: &[],
                     },
                     primitive: wgpu::PrimitiveState {
@@ -410,8 +421,8 @@ impl VgonioApp {
                         alpha_to_coverage_enabled: false,
                     },
                     fragment: Some(wgpu::FragmentState {
-                        module: &grid_shader_module,
-                        entry_point: "fs_main",
+                        module: &grid_frag_shader,
+                        entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: gpu_ctx.surface_config.format,
                             blend: Some(wgpu::BlendState {
@@ -426,7 +437,7 @@ impl VgonioApp {
                                     operation: wgpu::BlendOperation::Add,
                                 },
                             }),
-                            write_mask: wgpu::ColorWrites::ALL
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     multiview: None,
@@ -555,11 +566,7 @@ impl VgonioApp {
         self.camera.update(&self.input, dt);
         self.gui.update_gizmo_matrices(
             Mat4::IDENTITY,
-            Mat4::look_at_rh(
-                self.camera.camera.eye,
-                Vec3::ZERO,
-                self.camera.camera.up,
-            ),
+            Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
 
@@ -572,11 +579,11 @@ impl VgonioApp {
             &self.camera.uniform_buffer,
             0,
             bytemuck::cast_slice(&[
+                self.object_model_matrix,
                 self.camera.uniform.view_matrix,
                 self.camera.uniform.proj_matrix,
                 self.camera.uniform.view_inv_matrix,
                 self.camera.uniform.proj_inv_matrix,
-                self.object_model_matrix,
             ]),
         );
 
@@ -647,7 +654,7 @@ impl VgonioApp {
                 }),
             });
 
-            render_pass.set_pipeline(&self.graphics_pipelines.get("default").unwrap());
+            render_pass.set_pipeline(self.graphics_pipelines.get("default").unwrap());
             render_pass.set_bind_group(
                 0,
                 &self.texture_bind_groups[self.current_texture_index],
@@ -663,7 +670,7 @@ impl VgonioApp {
                 0..self.instancing_transforms.len() as _,
             );
 
-            render_pass.set_pipeline(&self.graphics_pipelines.get("grid").unwrap());
+            render_pass.set_pipeline(self.graphics_pipelines.get("grid").unwrap());
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
             render_pass.draw(0..6, 0..1);
         }
