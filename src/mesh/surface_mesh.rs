@@ -1,3 +1,4 @@
+use crate::app::gfx::MeshView;
 use crate::error::Error;
 use crate::height_field::{AxisAlignment, HeightField};
 use crate::isect::Aabb;
@@ -119,9 +120,9 @@ impl SurfaceMesh {
     /// # Examples
     ///
     /// ```
-    /// # use darc::mesh::surface_mesh::SurfaceMesh;
-    /// # use darc::shape::HeightField;
-    /// let hf = HeightField::new_by(6, 6, 0.1, 0.1, |x, y| (x * y) as f32 * 0.5);
+    /// use vgonio::height_field::{AxisAlignment, HeightField};
+    /// use vgonio::mesh::SurfaceMesh;
+    /// let hf = HeightField::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| (x * y) as f32 * 0.5);
     /// let mesh = SurfaceMesh::from_height_field(&hf);
     /// ```
     pub fn from_height_field(hf: &HeightField) -> Self {
@@ -316,5 +317,9 @@ impl SurfaceMesh {
 
     pub fn dump_face_normals(&self) -> Result<(), Error> {
         Ok(())
+    }
+
+    pub fn view(&self) -> MeshView {
+        todo!()
     }
 }

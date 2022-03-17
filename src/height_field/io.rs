@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::height_field::{AxisAlignment, HeightField};
+use crate::io::{CacheHeader, CacheKind, MsHeader};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
@@ -41,42 +42,43 @@ impl HeightField {
             match std::str::from_utf8(&buf)? {
                 "Asci" => read_ascii_dong2015(reader, false),
                 "DATA" => read_ascii_usurf(reader, false),
-                // "DCCC" => {
-                //     let header = {
-                //         let mut buf = [0_u8; 6];
-                //         reader.read_exact(&mut buf)?;
-                //         CacheHeader::new(buf)
-                //     };
-                //
-                //     if header.kind != CacheKind::HeightField {
-                //         Err(DarcError::FileError("Not a valid height field cache!"))
-                //     } else if header.binary {
-                //         Ok(bincode::deserialize_from(reader)?)
-                //     } else {
-                //         Ok(serde_yaml::from_reader(reader)?)
-                //     }
-                // }
-                // "DCMS" => {
-                //     let header = {
-                //         let mut buf = [0_u8; 23];
-                //         reader.read_exact(&mut buf)?;
-                //         MsHeader::new(buf)
-                //     };
-                //
-                //     let samples = if header.binary {
-                //         read_binary_samples(reader, (header.size / 4) as usize)
-                //     } else {
-                //         read_ascii_samples(reader)
-                //     };
-                //
-                //     Ok(HeightField::from_samples(
-                //         header.extent[0] as usize,
-                //         header.extent[1] as usize,
-                //         header.spacing[0],
-                //         header.spacing[1],
-                //         samples,
-                //     ))
-                // }
+                "DCCC" => {
+                    let header = {
+                        let mut buf = [0_u8; 6];
+                        reader.read_exact(&mut buf)?;
+                        CacheHeader::new(buf)
+                    };
+
+                    if header.kind != CacheKind::HeightField {
+                        Err(Error::FileError("Not a valid height field cache!"))
+                    } else if header.binary {
+                        Ok(bincode::deserialize_from(reader)?)
+                    } else {
+                        Ok(serde_yaml::from_reader(reader)?)
+                    }
+                }
+                "DCMS" => {
+                    let header = {
+                        let mut buf = [0_u8; 23];
+                        reader.read_exact(&mut buf)?;
+                        MsHeader::new(buf)
+                    };
+
+                    let samples = if header.binary {
+                        read_binary_samples(reader, (header.size / 4) as usize)
+                    } else {
+                        read_ascii_samples(reader)
+                    };
+
+                    Ok(HeightField::from_samples(
+                        header.extent[0] as usize,
+                        header.extent[1] as usize,
+                        header.spacing[0],
+                        header.spacing[1],
+                        samples,
+                        AxisAlignment::default(),
+                    ))
+                }
                 _ => Err(Error::UnrecognizedFile),
             }
         }

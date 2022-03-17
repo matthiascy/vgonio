@@ -9,7 +9,9 @@ pub enum Error {
     BincodeError(bincode::Error),
     UnrecognizedFile,
     Utf8Error(str::Utf8Error),
+    YamlError(serde_yaml::Error),
     Any(String),
+    FileError(&'static str),
 }
 
 impl Display for Error {
@@ -34,7 +36,13 @@ impl Display for Error {
                 write!(f, "Utf8 error: {}", err)
             }
             Error::Any(err) => {
-                write!(f, "{}", err)
+                write!(f, "Error: {}", err)
+            }
+            Error::FileError(err) => {
+                write!(f, "File error: {}", err)
+            }
+            Error::YamlError(err) => {
+                write!(f, "YAML error: {}", err)
             }
         }
     }
@@ -63,5 +71,17 @@ impl From<log::SetLoggerError> for Error {
 impl From<str::Utf8Error> for Error {
     fn from(err: str::Utf8Error) -> Self {
         Error::Utf8Error(err)
+    }
+}
+
+impl From<bincode::Error> for Error {
+    fn from(err: bincode::Error) -> Self {
+        Error::BincodeError(err)
+    }
+}
+
+impl From<serde_yaml::Error> for Error {
+    fn from(err: serde_yaml::Error) -> Self {
+        Error::YamlError(err)
     }
 }

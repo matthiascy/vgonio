@@ -9,13 +9,15 @@ use camera::CameraState;
 
 use crate::app::gfx::camera::{Camera, Projection};
 use crate::error::Error;
+use crate::height_field::HeightField;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
+use std::ffi::OsStr;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
-use wgpu::{include_spirv, VertexFormat};
+use wgpu::VertexFormat;
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
@@ -31,8 +33,9 @@ pub struct VgonioApp {
     gui: VgonioGui,
     input: InputState,
     camera: CameraState,
-
-    graphics_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
+    render_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
+    height_field: Option<Box<HeightField>>,
+    height_field_buffer: Option<wgpu::Buffer>,
 
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -229,13 +232,13 @@ impl VgonioApp {
                 ),
             });
 
-        let grid_vert_shader = gpu_ctx
-            .device
-            .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.vert.spv"));
+        let grid_vert_shader = gpu_ctx.device.create_shader_module(&wgpu::include_spirv!(
+            "../assets/shaders/spirv/grid.vert.spv"
+        ));
 
-        let grid_frag_shader = gpu_ctx
-            .device
-            .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.frag.spv"));
+        let grid_frag_shader = gpu_ctx.device.create_shader_module(&wgpu::include_spirv!(
+            "../assets/shaders/spirv/grid.frag.spv"
+        ));
 
         // Pipeline layout
         let default_render_pipeline_layout =
@@ -409,7 +412,9 @@ impl VgonioApp {
         Ok(Self {
             gpu_ctx,
             gui_ctx,
-            graphics_pipelines,
+            render_pipelines: graphics_pipelines,
+            height_field: None,
+            height_field_buffer: None,
             vertex_buffer,
             index_buffer,
             num_vertices,
@@ -585,7 +590,7 @@ impl VgonioApp {
                 }),
             });
 
-            render_pass.set_pipeline(self.graphics_pipelines.get("default").unwrap());
+            render_pass.set_pipeline(self.render_pipelines.get("default").unwrap());
             render_pass.set_bind_group(
                 0,
                 &self.texture_bind_groups[self.current_texture_index],
@@ -601,7 +606,7 @@ impl VgonioApp {
                 0..self.instancing_transforms.len() as _,
             );
 
-            render_pass.set_pipeline(self.graphics_pipelines.get("grid").unwrap());
+            render_pass.set_pipeline(self.render_pipelines.get("grid").unwrap());
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
             render_pass.draw(0..6, 0..1);
         }
@@ -669,8 +674,20 @@ impl VgonioApp {
     pub fn handle_event(&mut self, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {}
-            UserEvent::OpenFile(filepath) => {
-                println!("____________________________________{:?}", filepath);
+            UserEvent::OpenFile(path) => self.load_height_field(path.as_path()),
+        }
+    }
+
+    fn load_height_field(&mut self, path: &std::path::Path) {
+        match HeightField::read_from_file(path, None) {
+            Ok(hf) => {
+                let mut hf = hf;
+                hf.fill_holes();
+
+                self.height_field = Some(Box::new(hf));
+            }
+            Err(err) => {
+                log::error!("HeightField loading error: {}", err);
             }
         }
     }

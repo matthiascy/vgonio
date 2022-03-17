@@ -1,4 +1,6 @@
+use crate::app::gfx::MeshView;
 use serde::{Deserialize, Serialize};
+
 mod io;
 
 /// Static variable used to generate height field name.
@@ -27,7 +29,7 @@ pub enum AxisAlignment {
 
 impl Default for AxisAlignment {
     fn default() -> Self {
-        AxisAlignment::XY
+        AxisAlignment::XZ
     }
 }
 
@@ -298,5 +300,111 @@ impl HeightField {
         assert!(col < self.cols);
         assert!(row < self.rows);
         self.samples[col * self.rows + row]
+    }
+
+    /// Fill holes on the height field.
+    pub fn fill_holes(&mut self) {
+        let mut idx = 0;
+        for i in 0..self.cols * self.rows {
+            if !self.samples[i].is_nan() {
+                idx = i;
+                break;
+            }
+        }
+
+        for j in 0..self.rows {
+            for i in 0..self.cols {
+                if self.samples[j * self.cols + i].is_nan() {
+                    // bilinear interpolation
+                    // direction x
+                    let mut prev_idx_x = i;
+                    let mut next_idx_x = i;
+                    for n in i..self.cols {
+                        if !self.samples[j * self.cols + n].is_nan() {
+                            next_idx_x = n;
+                            break;
+                        }
+                    }
+
+                    for n in 0..=i {
+                        if !self.samples[j * self.cols + i - n].is_nan() {
+                            prev_idx_x = i - n;
+                            break;
+                        }
+                    }
+
+                    let mut prev_x = self.samples[idx];
+                    let mut next_x = self.samples[idx];
+
+                    // prev not found
+                    if prev_idx_x == i {
+                        if i == 0 {
+                            if j == 0 {
+                                prev_x = self.samples[idx];
+                            } else {
+                                prev_x = self.samples[(j - 1) * self.cols + i];
+                            }
+                        }
+                    } else {
+                        prev_x = self.samples[j * self.cols + prev_idx_x];
+                    }
+
+                    // next not found
+                    if next_idx_x == i {
+                        if i == self.cols - 1 {
+                            if j == 0 {
+                                next_x = self.samples[idx]
+                            } else {
+                                next_x = self.samples[(j - 1) * self.cols + i];
+                            }
+                        }
+                    } else {
+                        next_x = self.samples[j * self.cols + next_idx_x]
+                    }
+
+                    let x = (next_x - prev_x) / (next_idx_x - prev_idx_x) as f32 + prev_x;
+
+                    // direction y
+                    let mut prev_idx_y = j;
+                    let mut next_idx_y = j;
+                    let prev_y: f32;
+                    let next_y: f32;
+
+                    for n in j..self.rows {
+                        if !self.samples[n * self.cols + i].is_nan() {
+                            next_idx_y = n;
+                            break;
+                        }
+                    }
+
+                    for n in 0..=j {
+                        if !self.samples[(j - n) * self.cols + i].is_nan() {
+                            prev_idx_y = j - n;
+                            break;
+                        }
+                    }
+
+                    // prev not found
+                    if prev_idx_y == j {
+                        prev_idx_y = 0;
+                        prev_y = self.samples[idx];
+                    } else {
+                        prev_y = self.samples[prev_idx_y * self.cols + i];
+                    }
+
+                    // next not found
+                    if next_idx_y == j {
+                        next_idx_y = self.rows - 1;
+                        next_y = self.samples[idx];
+                    } else {
+                        next_y = self.samples[next_idx_y * self.cols + i];
+                    }
+
+                    let y = (next_y - prev_y) / (next_idx_y - prev_idx_y + 1) as f32 + prev_y;
+
+                    self.samples[j * self.cols + i] = (y + x) / 2.0;
+                }
+            }
+        }
     }
 }
