@@ -430,15 +430,21 @@ impl GuiContext {
             match self.textures.entry(*texture_id) {
                 Entry::Occupied(mut o) => match image_delta.pos {
                     None => {
-                        let (texture, bind_group) = create_texture_and_bind_group(
+                        let texture = create_texture(
                             device,
                             queue,
-                            &label_base,
                             origin,
                             image_data,
                             image_data_layout,
                             image_size,
+                            &label_base,
+                        );
+
+                        let bind_group = create_texture_bind_group(
+                            device,
+                            &texture,
                             &self.texture_bind_group_layout,
+                            &label_base,
                         );
 
                         let (texture, _) = o.insert((Some(texture), bind_group));
@@ -469,15 +475,21 @@ impl GuiContext {
                     }
                 },
                 Entry::Vacant(v) => {
-                    let (texture, bind_group) = create_texture_and_bind_group(
+                    let texture = create_texture(
                         device,
                         queue,
-                        &label_base,
                         origin,
                         image_data,
                         image_data_layout,
                         image_size,
+                        &label_base,
+                    );
+
+                    let bind_group = create_texture_bind_group(
+                        device,
+                        &texture,
                         &self.texture_bind_group_layout,
+                        &label_base,
                     );
 
                     v.insert((Some(texture), bind_group));
@@ -788,16 +800,15 @@ impl GuiContext {
 }
 
 /// Create a texture and bind group from existing data
-fn create_texture_and_bind_group(
+fn create_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    label_base: &str,
     origin: wgpu::Origin3d,
     image_data: &[u8],
     image_data_layout: wgpu::ImageDataLayout,
     image_size: wgpu::Extent3d,
-    texture_bind_group_layout: &wgpu::BindGroupLayout,
-) -> (wgpu::Texture, wgpu::BindGroup) {
+    label_base: &str,
+) -> wgpu::Texture {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(format!("{}_texture", label_base).as_str()),
         size: image_size,
@@ -820,6 +831,15 @@ fn create_texture_and_bind_group(
         image_size,
     );
 
+    texture
+}
+
+fn create_texture_bind_group(
+    device: &wgpu::Device,
+    texture: &wgpu::Texture,
+    layout: &wgpu::BindGroupLayout,
+    label_base: &str,
+) -> wgpu::BindGroup {
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some(format!("{}_sampler", label_base).as_str()),
         mag_filter: wgpu::FilterMode::Linear,
@@ -827,9 +847,9 @@ fn create_texture_and_bind_group(
         ..Default::default()
     });
 
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some(format!("{}_texture_bind_group", label_base).as_str()),
-        layout: texture_bind_group_layout,
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(format!("{}_bind_group", label_base).as_str()),
+        layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -842,7 +862,5 @@ fn create_texture_and_bind_group(
                 resource: wgpu::BindingResource::Sampler(&sampler),
             },
         ],
-    });
-
-    (texture, bind_group)
+    })
 }

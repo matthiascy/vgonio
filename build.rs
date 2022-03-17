@@ -28,9 +28,9 @@ fn main() {
 
                 if let Some(kind) = kind {
                     let spirv = {
-                        let source = std::fs::read_to_string(path.as_path())
-                            .unwrap_or_else(|_|
-                                panic!("Couldn't read source file {:?}", path.as_os_str()));
+                        let source = std::fs::read_to_string(path.as_path()).unwrap_or_else(|_| {
+                            panic!("Couldn't read source file {:?}", path.as_os_str())
+                        });
                         compiler.compile_into_spirv(&source, kind, &filename, "main", None)
                     };
 

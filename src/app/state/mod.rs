@@ -203,7 +203,7 @@ impl VgonioApp {
         // Camera
         let object_model_matrix = glam::Mat4::IDENTITY;
         let camera = {
-            let camera = Camera::new(Vec3::new(0.0, 5.0, 10.0), Vec3::ZERO, Vec3::Y);
+            let camera = Camera::new(Vec3::new(0.0, 2.0, 10.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
                 100.0,
@@ -253,8 +253,7 @@ impl VgonioApp {
                     }],
                 });
 
-            let controller =
-                OrbitControls::new(0.3, f32::INFINITY, true, true, true, 200.0, 400.0, 100.0);
+            let controller = OrbitControls::new(0.3, f32::INFINITY, 200.0, 400.0, 100.0);
 
             CameraState {
                 camera,
@@ -304,15 +303,13 @@ impl VgonioApp {
                 ),
             });
 
-        let grid_vert_shader =
-            gpu_ctx
-                .device
-                .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.vert.spv"));
+        let grid_vert_shader = gpu_ctx
+            .device
+            .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.vert.spv"));
 
-        let grid_frag_shader =
-            gpu_ctx
-                .device
-                .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.frag.spv"));
+        let grid_frag_shader = gpu_ctx
+            .device
+            .create_shader_module(&include_spirv!("../assets/shaders/spirv/grid.frag.spv"));
 
         // Pipeline layout
         let default_render_pipeline_layout =
@@ -382,7 +379,12 @@ impl VgonioApp {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader,
                         entry_point: "fs_main",
-                        targets: &[gpu_ctx.surface_config.format.into()],
+                        // targets: &[gpu_ctx.surface_config.format.into()],
+                        targets: &[wgpu::ColorTargetState {
+                            format: gpu_ctx.surface_config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
                     }),
                     multiview: None,
                 });
@@ -425,18 +427,19 @@ impl VgonioApp {
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: gpu_ctx.surface_config.format,
-                            blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::One,
-                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                                alpha: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
-                                    dst_factor: wgpu::BlendFactor::One,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                            }),
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            // blend: Some(wgpu::BlendState {
+                            //     color: wgpu::BlendComponent {
+                            //         src_factor: wgpu::BlendFactor::One,
+                            //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            //         operation: wgpu::BlendOperation::Add,
+                            //     },
+                            //     alpha: wgpu::BlendComponent {
+                            //         src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+                            //         dst_factor: wgpu::BlendFactor::One,
+                            //         operation: wgpu::BlendOperation::Add,
+                            //     },
+                            // }),
                             write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
@@ -635,9 +638,9 @@ impl VgonioApp {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
+                                r: 0.046,
+                                g: 0.046,
+                                b: 0.046,
                                 a: 1.0,
                             }),
                             store: true,

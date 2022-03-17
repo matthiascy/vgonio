@@ -222,9 +222,6 @@ impl OrbitControls {
     pub fn new(
         min_zoom_dist: f32,
         max_zoom_dist: f32,
-        enable_panning: bool,
-        enable_rotation: bool,
-        enable_zooming: bool,
         pan_speed: f32,
         rotate_speed: f32,
         zoom_speed: f32,
@@ -232,13 +229,25 @@ impl OrbitControls {
         Self {
             max_zoom_dist,
             min_zoom_dist,
-            is_panning_enabled: enable_panning,
-            is_rotation_enabled: enable_rotation,
-            is_zooming_enabled: enable_zooming,
+            is_panning_enabled: true,
+            is_rotation_enabled: true,
+            is_zooming_enabled: true,
             pan_speed,
             rotate_speed,
             zoom_speed,
         }
+    }
+
+    pub fn toggle_panning(&mut self) {
+        self.is_panning_enabled = !self.is_panning_enabled;
+    }
+
+    pub fn toggle_rotation(&mut self) {
+        self.is_rotation_enabled = !self.is_rotation_enabled;
+    }
+
+    pub fn toggle_zooming(&mut self) {
+        self.is_zooming_enabled = !self.is_zooming_enabled;
     }
 
     fn pan(&self, dx: f32, dy: f32, camera: &mut Camera) {
@@ -313,7 +322,7 @@ impl CameraController for OrbitControls {
 
         if self.is_zooming_enabled && scroll_delta != 0.0 {
             // Wheel --> zooming
-            self.zoom(scroll_delta * dt, camera);
+            self.zoom(-scroll_delta * dt, camera);
         }
 
         if self.is_rotation_enabled
