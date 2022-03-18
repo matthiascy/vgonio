@@ -1,5 +1,5 @@
-use crate::app::gfx::VertexLayout;
-use crate::height_field::HeightField;
+use crate::gfx::VertexLayout;
+use crate::htfld::HeightField;
 use wgpu::util::DeviceExt;
 use wgpu::{PrimitiveTopology, VertexFormat};
 

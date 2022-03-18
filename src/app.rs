@@ -1,4 +1,4 @@
-use crate::app::state::RepaintSignal;
+use crate::app::gui::RepaintSignal;
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Parser, Subcommand};
 use std::io::Write;
@@ -7,7 +7,6 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
-pub(crate) mod gfx;
 pub(crate) mod gui;
 pub mod state;
 

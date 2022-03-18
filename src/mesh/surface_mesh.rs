@@ -1,6 +1,6 @@
-use crate::app::gfx::MeshView;
 use crate::error::Error;
-use crate::height_field::HeightField;
+use crate::gfx::MeshView;
+use crate::htfld::HeightField;
 use crate::isect::Aabb;
 use crate::math::Vec3;
 use crate::mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert};

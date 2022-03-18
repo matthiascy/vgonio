@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::height_field::{AxisAlignment, HeightField};
+use crate::htfld::{AxisAlignment, HeightField};
 use crate::io::{CacheHeader, CacheKind, MsHeader};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};

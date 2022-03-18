@@ -161,17 +161,13 @@ impl Camera {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct CameraUniform {
     pub view_matrix: Mat4,
     pub proj_matrix: Mat4,
     pub view_inv_matrix: Mat4,
     pub proj_inv_matrix: Mat4,
 }
-
-unsafe impl bytemuck::Zeroable for CameraUniform {}
-
-unsafe impl bytemuck::Pod for CameraUniform {}
 
 impl CameraUniform {
     pub fn new(camera: &Camera, projection: &Projection) -> Self {

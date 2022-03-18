@@ -3,8 +3,6 @@ struct Uniforms {
     model_matrix: mat4x4<f32>;
     view_matrix: mat4x4<f32>;
     proj_matrix: mat4x4<f32>;
-    view_inv: mat4x4<f32>;
-    proj_inv: mat4x4<f32>;
 };
 
 [[group(1), binding(0)]] var<uniform> uniforms: Uniforms;

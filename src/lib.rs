@@ -1,6 +1,8 @@
+pub mod acq;
 pub mod app;
 pub mod error;
-pub mod height_field;
+pub mod gfx;
+pub mod htfld;
 mod io;
 pub mod isect;
 mod math;

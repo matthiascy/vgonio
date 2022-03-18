@@ -1,5 +1,6 @@
 use crate::app::gui::gizmo::VgonioGizmo;
 use crate::app::gui::UserEvent;
+use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
 use winit::event_loop::EventLoopProxy;
 
@@ -30,7 +31,7 @@ impl SimulationWorkspace {
             is_sim_win_open: false,
             is_view_gizmo_open: false,
             sim_win: SimulationWindow::new(event_loop_proxy),
-            view_gizmo: Default::default(),
+            view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
         }
     }
 

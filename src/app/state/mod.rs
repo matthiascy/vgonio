@@ -3,13 +3,16 @@ mod input;
 
 pub use input::InputState;
 
-use crate::app::gfx::{GpuContext, MeshView, Texture, Vertex, VertexLayout};
-use crate::app::gui::{GuiContext, UserEvent, VgonioGui, WindowSize};
+use crate::app::gui::{GuiContext, RepaintSignal, UserEvent, VgonioGui, WindowSize};
+use crate::gfx::{
+    GpuContext, MeshView, RdrPass, Texture, Vertex, VertexLayout, DEFAULT_BIND_GROUP_LAYOUT_DESC,
+};
 use camera::CameraState;
 
-use crate::app::gfx::camera::{Camera, Projection};
 use crate::error::Error;
-use crate::height_field::HeightField;
+use crate::gfx::camera::{Camera, Projection};
+use crate::htfld::HeightField;
+use crate::math::IDENTITY_MAT4;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
@@ -26,48 +29,37 @@ const NUM_INSTANCES_PER_COL: u32 = 9;
 
 // TODO: fix blending.
 
+pub struct InstancingDemo {
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_vertices: u32,
+    pub num_indices: u32,
+    pub current_texture_index: usize,
+    pub pass: RdrPass,
+    pub object_model_matrix: glam::Mat4,
+    pub instancing_buffer: wgpu::Buffer,
+    pub instancing_transforms: Vec<Mat4>,
+}
+
 pub struct VgonioApp {
     gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
     gui: VgonioGui,
     input: InputState,
     camera: CameraState,
-    render_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
-    height_field: Option<Box<HeightField>>,
-    height_field_mesh_view: Option<MeshView>,
-    height_field_uniform_buffer: wgpu::Buffer,
-    height_field_bind_group: wgpu::BindGroup,
+    passes: HashMap<&'static str, RdrPass>,
 
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_vertices: u32,
-    pub num_indices: u32,
-    pub texture_bind_groups: [wgpu::BindGroup; 2],
-    pub current_texture_index: usize,
+    instancing_demo: InstancingDemo,
 
-    pub object_model_matrix: glam::Mat4,
-    pub instancing_buffer: wgpu::Buffer,
-    pub instancing_transforms: Vec<Mat4>,
+    heightfield: Option<Box<HeightField>>,
+    heightfield_mesh_view: Option<MeshView>,
+
     pub depth_texture: Texture,
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
     pub demo_ui: egui_demo_lib::WrapApp,
     pub is_grid_enabled: bool,
-}
-
-/// Repaint signal type that egui needs for requesting a repaint from another
-/// thread. It sends the custom RequestRedraw event to the winit event loop.
-pub struct RepaintSignal(pub(crate) std::sync::Mutex<winit::event_loop::EventLoopProxy<UserEvent>>);
-
-impl epi::backend::RepaintSignal for RepaintSignal {
-    fn request_repaint(&self) {
-        self.0
-            .lock()
-            .unwrap()
-            .send_event(UserEvent::RequestRedraw)
-            .ok();
-    }
 }
 
 impl VgonioApp {
@@ -77,34 +69,6 @@ impl VgonioApp {
         event_loop: EventLoopProxy<UserEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
-        let num_vertices = VERTICES.len() as u32;
-        // Create texture
-        let sampler =
-            std::sync::Arc::new(gpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Nearest,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                ..Default::default()
-            }));
-        let textures = [
-            Texture::create_from_bytes(
-                &gpu_ctx.device,
-                &gpu_ctx.queue,
-                include_bytes!("../assets/damascus001.jpg"),
-                sampler.clone(),
-                Some("damascus-texture-001"),
-            ),
-            Texture::create_from_bytes(
-                &gpu_ctx.device,
-                &gpu_ctx.queue,
-                include_bytes!("../assets/damascus002.jpg"),
-                sampler,
-                Some("damascus-texture-002"),
-            ),
-        ];
 
         let depth_texture = Texture::create_depth_texture(
             &gpu_ctx.device,
@@ -112,79 +76,7 @@ impl VgonioApp {
             "depth-texture",
         );
 
-        // Descriptor Sets
-        // [`BindGroup`] describes a set of resources and how they can be accessed by a
-        // shader.
-        let texture_bind_group_layout =
-            gpu_ctx
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("texture-bind-group-layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(
-                                // SamplerBindingType::Comparison is only for
-                                // TextureSampleType::Depth
-                                // SamplerBindingType::Filtering if the sample_type of the texture
-                                // is:     TextureSampleType::Float
-                                // { filterable: true }
-                                // Otherwise you'll get an error.
-                                wgpu::SamplerBindingType::Filtering,
-                            ),
-                            count: None,
-                        },
-                    ],
-                });
-
-        let texture_bind_groups = [
-            gpu_ctx
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("diffuse-texture-bind-group-001"),
-                    layout: &texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&textures[0].view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&textures[0].sampler),
-                        },
-                    ],
-                }),
-            gpu_ctx
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("diffuse-texture-bind-group-002"),
-                    layout: &texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&textures[1].view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&textures[1].sampler),
-                        },
-                    ],
-                }),
-        ];
-
         // Camera
-        let object_model_matrix = glam::Mat4::IDENTITY;
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
@@ -194,237 +86,22 @@ impl VgonioApp {
                 gpu_ctx.surface_config.width,
                 gpu_ctx.surface_config.height,
             );
-            CameraState::new(&gpu_ctx.device, camera, projection)
+            CameraState::new(camera, projection)
         };
 
-        let instance_displacement = Vec3::new(
-            NUM_INSTANCES_PER_ROW as f32 * 0.5,
-            NUM_INSTANCES_PER_COL as f32 * 0.5,
-            0.0,
-        );
-        // Instancing
-        let instancing_transforms = (0..NUM_INSTANCES_PER_ROW)
-            .flat_map(|u| {
-                (0..NUM_INSTANCES_PER_COL).map(move |v| {
-                    let pos = Vec3::new(u as f32, v as f32, 0.0) - instance_displacement;
-                    let rot = if pos.abs_diff_eq(Vec3::ZERO, 0.0001f32) {
-                        Quat::from_axis_angle(Vec3::Z, 0.0)
-                    } else {
-                        Quat::from_axis_angle(pos.normalize(), 45.0f32.to_radians())
-                    };
-                    Mat4::from_translation(pos) * Mat4::from_quat(rot)
-                })
-            })
-            .collect::<Vec<_>>();
-        let instancing_buffer =
-            gpu_ctx
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("object-instancing-buffer"),
-                    contents: bytemuck::cast_slice(&instancing_transforms),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                });
+        let heightfield_pass = create_height_field_pass(&gpu_ctx);
+        let visual_grid_pass = create_visual_grid_pass(&gpu_ctx);
 
-        let shader = gpu_ctx
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("default-vertex-shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/wgsl/shader.wgsl").into(),
-                ),
-            });
+        let mut passes = HashMap::new();
+        passes.insert("visual_grid", visual_grid_pass);
+        passes.insert("heightfield", heightfield_pass);
 
-        let grid_vert_shader = gpu_ctx.device.create_shader_module(&wgpu::include_spirv!(
-            "../assets/shaders/spirv/grid.vert.spv"
-        ));
+        let instancing_demo = create_instancing_demo(&gpu_ctx);
 
-        let grid_frag_shader = gpu_ctx.device.create_shader_module(&wgpu::include_spirv!(
-            "../assets/shaders/spirv/grid.frag.spv"
-        ));
-
-        // Pipeline layout
-        let default_render_pipeline_layout =
-            gpu_ctx
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("default-pipeline-layout"),
-                    bind_group_layouts: &[&texture_bind_group_layout, &camera.bind_group_layout],
-                    push_constant_ranges: &[],
-                });
-
-        let grid_graphics_pipeline_layout =
-            gpu_ctx
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("grid_graphics_pipeline_layout"),
-                    bind_group_layouts: &[&camera.bind_group_layout],
-                    push_constant_ranges: &[],
-                });
-
-        let instancing_vertex_layout = VertexLayout::new(
-            &[
-                VertexFormat::Float32x4,
-                VertexFormat::Float32x4,
-                VertexFormat::Float32x4,
-                VertexFormat::Float32x4,
-            ],
-            Some(5),
-        );
-
-        let default_render_pipeline =
-            gpu_ctx
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Render Pipeline"),
-                    layout: Some(&default_render_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: "vs_main",
-                        buffers: &[
-                            Vertex::layout().buffer_layout(wgpu::VertexStepMode::Vertex),
-                            instancing_vertex_layout.buffer_layout(wgpu::VertexStepMode::Instance),
-                        ],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,
-                        unclipped_depth: false,
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: Texture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
-                                                                     * new pixel */
-                        stencil: wgpu::StencilState::default(),
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: "fs_main",
-                        targets: &[wgpu::ColorTargetState {
-                            format: gpu_ctx.surface_config.format,
-                            // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::SrcAlpha,
-                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                                alpha: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::One,
-                                    dst_factor: wgpu::BlendFactor::Zero,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                            }),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }],
-                    }),
-                    multiview: None,
-                });
-
-        let (height_field_render_pipeline, height_field_bind_group, height_field_uniform_buffer) =
-            create_height_field_pipeline(&gpu_ctx);
-
-        let grid_render_pipeline =
-            gpu_ctx
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Grid Render Pipeline"),
-                    layout: Some(&grid_graphics_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &grid_vert_shader,
-                        entry_point: "main",
-                        buffers: &[],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,
-                        unclipped_depth: false,
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: Texture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
-                                                                     * new pixel */
-                        stencil: wgpu::StencilState::default(),
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &grid_frag_shader,
-                        entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
-                            format: gpu_ctx.surface_config.format,
-                            // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::SrcAlpha,
-                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                                alpha: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::One,
-                                    dst_factor: wgpu::BlendFactor::Zero,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                            }),
-                            // blend: Some(wgpu::BlendState {
-                            //     color: wgpu::BlendComponent {
-                            //         src_factor: wgpu::BlendFactor::One,
-                            //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            //         operation: wgpu::BlendOperation::Add,
-                            //     },
-                            //     alpha: wgpu::BlendComponent {
-                            //         src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
-                            //         dst_factor: wgpu::BlendFactor::One,
-                            //         operation: wgpu::BlendOperation::Add,
-                            //     },
-                            // }),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }],
-                    }),
-                    multiview: None,
-                });
-
-        let mut render_pipelines = HashMap::new();
-        render_pipelines.insert("default", default_render_pipeline);
-        render_pipelines.insert("grid", grid_render_pipeline);
-        render_pipelines.insert("height_field", height_field_render_pipeline);
-
-        let vertex_buffer = gpu_ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("vertex-buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-        let index_buffer = gpu_ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("index-buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-        let num_indices = INDICES.len() as u32;
+        // let mut render_pipelines = HashMap::new();
+        // render_pipelines.insert("default", default_render_pipeline);
+        // render_pipelines.insert("grid", grid_render_pipeline);
+        // render_pipelines.insert("heightfield", height_field_render_pipeline);
 
         let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
         let ui = egui_demo_lib::WrapApp::default();
@@ -441,28 +118,30 @@ impl VgonioApp {
         Ok(Self {
             gpu_ctx,
             gui_ctx,
-            render_pipelines,
-            height_field: None,
-            height_field_mesh_view: None,
-            height_field_uniform_buffer,
-            height_field_bind_group,
-            vertex_buffer,
-            index_buffer,
-            num_vertices,
-            num_indices,
-            texture_bind_groups,
-            current_texture_index: 0,
+            gui,
+            input,
+            passes,
+            instancing_demo,
+            heightfield: None,
+            heightfield_mesh_view: None,
+            // height_field_uniform_buffer,
+            // height_field_bind_group,
+
+            // vertex_buffer,
+            // index_buffer,
+            // num_vertices,
+            // num_indices,
+            // texture_bind_groups,
+            // current_texture_index: 0,
             camera,
-            object_model_matrix,
-            instancing_buffer,
-            instancing_transforms,
+            // object_model_matrix,
+            // instancing_buffer,
+            // instancing_transforms,
             depth_texture,
             start_time: Instant::now(),
             prev_frame_time: None,
             // gui_ctx,
             demo_ui: ui,
-            gui,
-            input,
             is_grid_enabled: true,
         })
     }
@@ -539,15 +218,29 @@ impl VgonioApp {
         );
 
         if self.input.is_key_pressed(VirtualKeyCode::Space) {
-            self.current_texture_index += 1;
-            self.current_texture_index %= 2;
+            self.instancing_demo.current_texture_index += 1;
+            self.instancing_demo.current_texture_index %= 2;
         }
 
         self.gpu_ctx.queue.write_buffer(
-            &self.camera.uniform_buffer,
+            self.instancing_demo.pass.uniform_buffer.as_ref().unwrap(),
             0,
             bytemuck::cast_slice(&[
-                self.object_model_matrix,
+                self.instancing_demo.object_model_matrix,
+                self.camera.uniform.view_matrix,
+                self.camera.uniform.proj_matrix,
+            ]),
+        );
+
+        self.gpu_ctx.queue.write_buffer(
+            self.passes
+                .get("visual_grid")
+                .unwrap()
+                .uniform_buffer
+                .as_ref()
+                .unwrap(),
+            0,
+            bytemuck::cast_slice(&[
                 self.camera.uniform.view_matrix,
                 self.camera.uniform.proj_matrix,
                 self.camera.uniform.view_inv_matrix,
@@ -555,27 +248,32 @@ impl VgonioApp {
             ]),
         );
 
-        if let Some(hf) = &self.height_field {
+        if let Some(hf) = &self.heightfield {
             let mut uniform = [0.0f32; 16 * 3 + 4];
             uniform[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
             uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
             uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
             uniform[48..52].copy_from_slice(&[hf.min, hf.max, hf.max - hf.min, 0.5]);
             self.gpu_ctx.queue.write_buffer(
-                &self.height_field_uniform_buffer,
+                self.passes
+                    .get("heightfield")
+                    .unwrap()
+                    .uniform_buffer
+                    .as_ref()
+                    .unwrap(),
                 0,
                 bytemuck::cast_slice(&uniform),
             );
         }
 
-        for m in &mut self.instancing_transforms {
+        for m in &mut self.instancing_demo.instancing_transforms {
             *m *= Mat4::from_rotation_x(0.2f32.to_radians());
         }
 
         self.gpu_ctx.queue.write_buffer(
-            &self.instancing_buffer,
+            &self.instancing_demo.instancing_buffer,
             0,
-            bytemuck::cast_slice(&self.instancing_transforms),
+            bytemuck::cast_slice(&self.instancing_demo.instancing_transforms),
         );
 
         // Reset mouse movement
@@ -636,33 +334,38 @@ impl VgonioApp {
             });
 
             {
-                render_pass.set_pipeline(self.render_pipelines.get("default").unwrap());
+                render_pass.set_pipeline(&self.instancing_demo.pass.pipeline);
                 render_pass.set_bind_group(
                     0,
-                    &self.texture_bind_groups[self.current_texture_index],
+                    &self.instancing_demo.pass.bind_groups
+                        [self.instancing_demo.current_texture_index + 1],
                     &[],
                 );
-                render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, self.instancing_buffer.slice(..));
-                render_pass
-                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.set_bind_group(1, &self.instancing_demo.pass.bind_groups[0], &[]);
+                render_pass.set_vertex_buffer(0, self.instancing_demo.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, self.instancing_demo.instancing_buffer.slice(..));
+                render_pass.set_index_buffer(
+                    self.instancing_demo.index_buffer.slice(..),
+                    wgpu::IndexFormat::Uint16,
+                );
                 render_pass.draw_indexed(
-                    0..self.num_indices,
+                    0..self.instancing_demo.num_indices,
                     0,
-                    0..self.instancing_transforms.len() as _,
+                    0..self.instancing_demo.instancing_transforms.len() as _,
                 );
             }
 
             if self.is_grid_enabled {
-                render_pass.set_pipeline(self.render_pipelines.get("grid").unwrap());
-                render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+                let pass = self.passes.get("visual_grid").unwrap();
+                render_pass.set_pipeline(&pass.pipeline);
+                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
                 render_pass.draw(0..6, 0..1);
             }
 
-            if let Some(mesh) = &self.height_field_mesh_view {
-                render_pass.set_pipeline(self.render_pipelines.get("height_field").unwrap());
-                render_pass.set_bind_group(0, &self.height_field_bind_group, &[]);
+            if let Some(mesh) = &self.heightfield_mesh_view {
+                let pass = self.passes.get("heightfield").unwrap();
+                render_pass.set_pipeline(&pass.pipeline);
+                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
                 render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
@@ -745,8 +448,8 @@ impl VgonioApp {
                 let mut hf = hf;
                 hf.fill_holes();
                 let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf, 0.5);
-                self.height_field = Some(Box::new(hf));
-                self.height_field_mesh_view = Some(mesh_view);
+                self.heightfield = Some(Box::new(hf));
+                self.heightfield_mesh_view = Some(mesh_view);
             }
             Err(err) => {
                 log::error!("HeightField loading error: {}", err);
@@ -755,9 +458,7 @@ impl VgonioApp {
     }
 }
 
-fn create_height_field_pipeline(
-    ctx: &GpuContext,
-) -> (wgpu::RenderPipeline, wgpu::BindGroup, wgpu::Buffer) {
+fn create_height_field_pass(ctx: &GpuContext) -> RdrPass {
     // Load shader
     let shader_module = ctx
         .device
@@ -811,7 +512,7 @@ fn create_height_field_pipeline(
                 push_constant_ranges: &[],
             });
 
-    let render_pipeline = ctx
+    let pipeline = ctx
         .device
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("height_field_render_pipeline"),
@@ -875,7 +576,388 @@ fn create_height_field_pipeline(
             multiview: None,
         });
 
-    (render_pipeline, bind_group, uniform_buffer)
+    RdrPass {
+        pipeline,
+        bind_groups: vec![bind_group],
+        uniform_buffer: Some(uniform_buffer),
+    }
+}
+
+fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
+    let grid_vert_shader = ctx.device.create_shader_module(&wgpu::include_spirv!(
+        "../assets/shaders/spirv/grid.vert.spv"
+    ));
+    let grid_frag_shader = ctx.device.create_shader_module(&wgpu::include_spirv!(
+        "../assets/shaders/spirv/grid.frag.spv"
+    ));
+    let bind_group_layout = ctx
+        .device
+        .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
+    let pipeline_layout = ctx
+        .device
+        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("grid_render_pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+    let uniform_buffer = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("grid_uniform_buffer"),
+            contents: bytemuck::bytes_of(&crate::gfx::VisualGridUniforms::default()),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+    let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("grid_bind_group"),
+        layout: &bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+    });
+    let pipeline = ctx
+        .device
+        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("grid_render_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &grid_vert_shader,
+                entry_point: "main",
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
+                                                             * new pixel */
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &grid_frag_shader,
+                entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: ctx.surface_config.format,
+                    // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::Zero,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    // blend: Some(wgpu::BlendState {
+                    //     color: wgpu::BlendComponent {
+                    //         src_factor: wgpu::BlendFactor::One,
+                    //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    //         operation: wgpu::BlendOperation::Add,
+                    //     },
+                    //     alpha: wgpu::BlendComponent {
+                    //         src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+                    //         dst_factor: wgpu::BlendFactor::One,
+                    //         operation: wgpu::BlendOperation::Add,
+                    //     },
+                    // }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                }],
+            }),
+            multiview: None,
+        });
+
+    RdrPass {
+        pipeline,
+        bind_groups: vec![bind_group],
+        uniform_buffer: Some(uniform_buffer),
+    }
+}
+
+fn create_instancing_demo(ctx: &GpuContext) -> InstancingDemo {
+    // Create texture: texture and its sampler
+    let sampler = std::sync::Arc::new(ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    }));
+    let textures = [
+        Texture::create_from_bytes(
+            &ctx.device,
+            &ctx.queue,
+            include_bytes!("../assets/damascus001.jpg"),
+            sampler.clone(),
+            Some("damascus-texture-001"),
+        ),
+        Texture::create_from_bytes(
+            &ctx.device,
+            &ctx.queue,
+            include_bytes!("../assets/damascus002.jpg"),
+            sampler,
+            Some("damascus-texture-002"),
+        ),
+    ];
+
+    // Descriptor Sets
+    // [`BindGroup`] describes a set of resources and how they can be accessed by a
+    // shader.
+    let texture_bind_group_layout =
+        ctx.device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("texture-bind-group-layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(
+                            // SamplerBindingType::Comparison is only for
+                            // TextureSampleType::Depth
+                            // SamplerBindingType::Filtering if the sample_type of the texture
+                            // is:     TextureSampleType::Float
+                            // { filterable: true }
+                            // Otherwise you'll get an error.
+                            wgpu::SamplerBindingType::Filtering,
+                        ),
+                        count: None,
+                    },
+                ],
+            });
+
+    let texture_bind_group_0 = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("diffuse-texture-bind-group-001"),
+        layout: &texture_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&textures[0].view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&textures[0].sampler),
+            },
+        ],
+    });
+
+    let texture_bind_group_1 = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("diffuse-texture-bind-group-002"),
+        layout: &texture_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&textures[1].view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&textures[1].sampler),
+            },
+        ],
+    });
+
+    let uniform_buffer = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("camera_uniform_buffer"),
+            contents: bytemuck::cast_slice(&[IDENTITY_MAT4, IDENTITY_MAT4, IDENTITY_MAT4]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+    let camera_bind_group_layout = ctx
+        .device
+        .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
+
+    let camera_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("camera-uniform-bind-group"),
+        layout: &camera_bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+    });
+
+    let shader = ctx
+        .device
+        .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("instancing_vertex_shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("../assets/shaders/wgsl/shader.wgsl").into(),
+            ),
+        });
+
+    // Pipeline layout
+    let pipeline_layout = ctx
+        .device
+        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("instancing_pipeline_layout"),
+            bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+    let instancing_vertex_layout = VertexLayout::new(
+        &[
+            VertexFormat::Float32x4,
+            VertexFormat::Float32x4,
+            VertexFormat::Float32x4,
+            VertexFormat::Float32x4,
+        ],
+        Some(5),
+    );
+
+    let instance_displacement = Vec3::new(
+        NUM_INSTANCES_PER_ROW as f32 * 0.5,
+        NUM_INSTANCES_PER_COL as f32 * 0.5,
+        0.0,
+    );
+
+    // Instancing
+    let instancing_transforms = (0..NUM_INSTANCES_PER_ROW)
+        .flat_map(|u| {
+            (0..NUM_INSTANCES_PER_COL).map(move |v| {
+                let pos = Vec3::new(u as f32, v as f32, 0.0) - instance_displacement;
+                let rot = if pos.abs_diff_eq(Vec3::ZERO, 0.0001f32) {
+                    Quat::from_axis_angle(Vec3::Z, 0.0)
+                } else {
+                    Quat::from_axis_angle(pos.normalize(), 45.0f32.to_radians())
+                };
+                Mat4::from_translation(pos) * Mat4::from_quat(rot)
+            })
+        })
+        .collect::<Vec<_>>();
+    let instancing_buffer = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("object-instancing-buffer"),
+            contents: bytemuck::cast_slice(&instancing_transforms),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+    let pipeline = ctx
+        .device
+        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[
+                    Vertex::layout().buffer_layout(wgpu::VertexStepMode::Vertex),
+                    instancing_vertex_layout.buffer_layout(wgpu::VertexStepMode::Instance),
+                ],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
+                                                             * new pixel */
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[wgpu::ColorTargetState {
+                    format: ctx.surface_config.format,
+                    // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::Zero,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                }],
+            }),
+            multiview: None,
+        });
+
+    let vertex_buffer = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex-buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+    let index_buffer = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("index-buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+    let num_indices = INDICES.len() as u32;
+    let num_vertices = VERTICES.len() as u32;
+
+    InstancingDemo {
+        vertex_buffer,
+        index_buffer,
+        num_vertices,
+        num_indices,
+        // texture_bind_groups,
+        current_texture_index: 0,
+        pass: RdrPass {
+            pipeline,
+            bind_groups: vec![
+                camera_bind_group,
+                texture_bind_group_0,
+                texture_bind_group_1,
+            ],
+            uniform_buffer: Some(uniform_buffer),
+        },
+        object_model_matrix: Default::default(),
+        instancing_buffer,
+        instancing_transforms,
+    }
 }
 
 const VERTICES: &[Vertex] = &[
