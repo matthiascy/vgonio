@@ -12,7 +12,7 @@ pub struct VertexLayout {
 impl VertexLayout {
     pub fn new(attrib_formats: &[VertexFormat], location_offset: Option<u32>) -> Self {
         assert!(
-            attrib_formats.len() > 1,
+            !attrib_formats.is_empty(),
             "VertexLayout must have at least one attribute!"
         );
         let len = attrib_formats.len();

@@ -1,6 +1,6 @@
 use crate::app::gfx::MeshView;
 use crate::error::Error;
-use crate::height_field::{AxisAlignment, HeightField};
+use crate::height_field::HeightField;
 use crate::isect::Aabb;
 use crate::math::Vec3;
 use crate::mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert};
@@ -86,7 +86,7 @@ impl SurfaceMesh {
     pub fn new() -> Self {
         let mut vert_attribs = VertAttribs::new();
         let mut face_attribs = FaceAttribs::new();
-        let mut edge_attribs = EdgeAttribs::new();
+        let edge_attribs = EdgeAttribs::new();
 
         // Where stores position of each vertex.
         vert_attribs.insert("positions".into(), Box::new(AttribArray::<Vec3>::new()));
@@ -127,38 +127,8 @@ impl SurfaceMesh {
     /// ```
     pub fn from_height_field(hf: &HeightField) -> Self {
         // todo: orientation
-        let (rows, cols, half_rows, half_cols, du, dv) =
-            (hf.rows, hf.cols, hf.rows / 2, hf.cols / 2, hf.du, hf.dv);
-        let mut vert_positions: Vec<Vec3> = vec![];
-        let mut extent = Aabb::default();
-        // Construct the height field vertices from the height values.
-        // Compute the bounding box at the same time.
-        let avg = (hf.min + hf.max) / 2.0;
-        for r in 0..rows {
-            for c in 0..cols {
-                let u = (c as i32 - half_cols as i32) as f32 * du;
-                let v = (r as i32 - half_rows as i32) as f32 * dv;
-                let h = hf.samples[r * cols + c] - avg;
-                let point = match hf.orientation {
-                    AxisAlignment::XY => Vec3::new(u, v, h),
-                    AxisAlignment::XZ => Vec3::new(u, h, v),
-                    AxisAlignment::YX => Vec3::new(v, u, h),
-                    AxisAlignment::YZ => Vec3::new(h, u, v),
-                    AxisAlignment::ZX => Vec3::new(v, h, u),
-                    AxisAlignment::ZY => Vec3::new(h, v, u),
-                };
-                for k in 0..3 {
-                    if point[k] > extent.max[k] {
-                        extent.max[k] = point[k];
-                    }
-                    if point[k] < extent.min[k] {
-                        extent.min[k] = point[k];
-                    }
-                }
-                vert_positions.push(point);
-            }
-        }
-
+        let (rows, cols) = (hf.rows, hf.cols);
+        let (vert_positions, extent) = hf.generate_vertices();
         // Regular triangulation, compute indices for each triangle (counter clock-wise)
         let faces_count = (rows - 1) * (cols - 1);
         let darts_count = 6 * (rows - 1) * (cols - 1);
@@ -310,6 +280,9 @@ impl SurfaceMesh {
             }
         }
     }
+
+    // TODO: add_vertex
+    // TODO: add_triangle
 
     pub fn dump_vertex_normals(&self) -> Result<(), Error> {
         Ok(())

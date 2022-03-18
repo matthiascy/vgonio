@@ -24,6 +24,7 @@ impl HeightField {
     pub fn read_from_file(
         path: &Path,
         origin: Option<HeightFieldOrigin>,
+        alignment: Option<AxisAlignment>,
     ) -> Result<HeightField, Error> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
@@ -31,8 +32,8 @@ impl HeightField {
         if let Some(origin) = origin {
             // If origin is specified, call directly corresponding loading function.
             match origin {
-                HeightFieldOrigin::Dong2015 => read_ascii_dong2015(reader, true),
-                HeightFieldOrigin::Usurf => read_ascii_usurf(reader, true),
+                HeightFieldOrigin::Dong2015 => read_ascii_dong2015(reader, true, alignment),
+                HeightFieldOrigin::Usurf => read_ascii_usurf(reader, true, alignment),
             }
         } else {
             // Otherwise, try to figure out the file format by reading first several bytes.
@@ -40,8 +41,8 @@ impl HeightField {
             reader.read_exact(&mut buf)?;
 
             match std::str::from_utf8(&buf)? {
-                "Asci" => read_ascii_dong2015(reader, false),
-                "DATA" => read_ascii_usurf(reader, false),
+                "Asci" => read_ascii_dong2015(reader, false, alignment),
+                "DATA" => read_ascii_usurf(reader, false, alignment),
                 "DCCC" => {
                     let header = {
                         let mut buf = [0_u8; 6];
@@ -76,7 +77,7 @@ impl HeightField {
                         header.spacing[0],
                         header.spacing[1],
                         samples,
-                        AxisAlignment::default(),
+                        alignment.unwrap_or_default(),
                     ))
                 }
                 _ => Err(Error::UnrecognizedFile),
@@ -93,6 +94,7 @@ impl HeightField {
 fn read_ascii_dong2015<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
+    orientation: Option<AxisAlignment>,
 ) -> Result<HeightField, Error> {
     if read_first_4_bytes {
         let mut buf = [0_u8; 4];
@@ -119,7 +121,7 @@ fn read_ascii_dong2015<R: BufRead>(
         0.11,
         0.11,
         samples,
-        AxisAlignment::XY,
+        orientation.unwrap_or_default(),
     ))
 }
 
@@ -127,6 +129,7 @@ fn read_ascii_dong2015<R: BufRead>(
 fn read_ascii_usurf<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
+    orientation: Option<AxisAlignment>,
 ) -> Result<HeightField, Error> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
@@ -163,7 +166,7 @@ fn read_ascii_usurf<R: BufRead>(
         du,
         dv,
         samples,
-        AxisAlignment::XY,
+        orientation.unwrap_or_default(),
     ))
 }
 

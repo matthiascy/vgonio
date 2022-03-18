@@ -2,40 +2,31 @@ use crate::app::state::InputState;
 use glam::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles};
 use winit::event::{MouseButton, VirtualKeyCode};
 
-pub struct OrthonormalBasis {
-    axis_x: Vec3,
-    axis_y: Vec3,
-    axis_z: Vec3,
-}
+// pub struct OrthonormalBasis {
+//     axis_x: Vec3,
+//     axis_y: Vec3,
+//     axis_z: Vec3,
+// }
+//
+// impl OrthonormalBasis {
+//     pub fn update(&mut self, eye: Vec3, target: Vec3, up: Vec3) {
+//         self.axis_y = (target - eye).normalize();
+//         self.axis_x = self.axis_y.cross(up).normalize();
+//         self.axis_z = self.axis_x.cross(self.axis_y).normalize();
+//     }
+// }
 
-impl OrthonormalBasis {
-    pub fn update(&mut self, eye: Vec3, target: Vec3, up: Vec3) {
-        self.axis_y = (target - eye).normalize();
-        self.axis_x = self.axis_y.cross(up).normalize();
-        self.axis_z = self.axis_x.cross(self.axis_y).normalize();
-    }
-}
-
-#[repr(u32)]
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
-enum ReferenceFrame {
-    RightHandedZUp, // 3ds Max, Maya Z up, Blender
-    RightHandedYUp, // Maya Y up
-    LeftHandedZUp,  // Unreal 4
-    LeftHandedYUp,  // Unity, D3D, PBRT, OpenGL NDC, DX12 NDC
-}
-
-/// Conversion from `RightHandedZUp` to `LeftHandedYUp`:
-/// rotate around X-axis 90 degrees then negate Z-axis
-const RH_Z_UP_TO_LH_Y_UP: [[f32; 4]; 4] = [
-    [1.0, 0.0, 0.0, 0.0],
-    [0.0, 0.0, -1.0, 0.0],
-    [0.0, 1.0, 0.0, 0.0],
-    [0.0, 0.0, 0.0, 1.0],
-];
+// #[repr(u32)]
+// #[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
+// enum ReferenceFrame {
+//     RightHandedZUp, // 3ds Max, Maya Z up, Blender
+//     RightHandedYUp, // Maya Y up
+//     LeftHandedZUp,  // Unreal 4
+//     LeftHandedYUp,  // Unity, D3D, PBRT, OpenGL NDC, DX12 NDC
+// }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum ProjectionType {
+pub enum ProjectionKind {
     Perspective,
     Orthographic,
 }
@@ -48,7 +39,7 @@ pub struct Projection {
     pub far: f32,
     /// Vertical field of view
     pub fov: f32,
-    /// Aspect ratio amera image
+    /// Aspect ratio of camera image
     pub aspect: f32,
 }
 
@@ -73,7 +64,7 @@ impl Projection {
         }
     }
 
-    pub fn matrix(&self) -> Mat4 {
+    pub fn matrix(&self, kind: ProjectionKind) -> Mat4 {
         // Mat4::from_rotation_x(-90.0f32.to_radians()) *
         let scale_depth = Mat4::from_cols(
             Vec4::new(1.0, 0.0, 0.0, 0.0),
@@ -81,7 +72,24 @@ impl Projection {
             Vec4::new(0.0, 0.0, 0.5, 0.0),
             Vec4::new(0.0, 0.0, 0.5, 1.0),
         );
-        scale_depth * Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
+        scale_depth
+            * match kind {
+                ProjectionKind::Perspective => {
+                    Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
+                }
+                ProjectionKind::Orthographic => {
+                    let height = 1.0;
+                    let width = self.aspect;
+                    Mat4::orthographic_rh(
+                        -width / 2.0,
+                        width / 2.0,
+                        -height / 2.0,
+                        height / 2.0,
+                        self.near,
+                        self.far,
+                    )
+                }
+            }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -167,11 +175,12 @@ unsafe impl bytemuck::Pod for CameraUniform {}
 
 impl CameraUniform {
     pub fn new(camera: &Camera, projection: &Projection) -> Self {
+        let proj_matrix = projection.matrix(ProjectionKind::Perspective);
         Self {
             view_matrix: camera.matrix(),
-            proj_matrix: projection.matrix(),
+            proj_matrix,
             view_inv_matrix: camera.matrix().inverse(),
-            proj_inv_matrix: projection.matrix().inverse(),
+            proj_inv_matrix: proj_matrix.inverse(),
         }
     }
 
@@ -317,7 +326,7 @@ impl CameraController for OrbitControls {
             && is_ctrl_pressed
         {
             // Ctrl + Middle --> zooming
-            self.zoom(dy * dt * 5.0, camera);
+            self.zoom(-dy * dt * 5.0, camera);
         }
 
         if self.is_zooming_enabled && scroll_delta != 0.0 {

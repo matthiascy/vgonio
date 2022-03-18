@@ -10,12 +10,13 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new() -> Self {
+    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
-            simulation: SimulationWorkspace::default(),
+            simulation: SimulationWorkspace::new(event_loop_proxy),
             analysis: AnalysisWorkspace {},
         }
     }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut dyn epi::App)> {
         vec![
             ("Simulation", &mut self.simulation as &mut dyn epi::App),
@@ -42,9 +43,10 @@ pub struct VgonioGui {
 
 impl VgonioGui {
     pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+        let workspaces = Workspaces::new(event_loop_proxy.clone());
         Self {
             event_loop_proxy,
-            workspaces: Workspaces::new(),
+            workspaces,
             dropped_files: vec![],
             selected_workspace: "".to_string(),
         }
@@ -190,8 +192,13 @@ impl VgonioGui {
                         if let Some(filepath) =
                             rfd::FileDialog::new().set_directory("~/").pick_file()
                         {
-                            self.event_loop_proxy
-                                .send_event(UserEvent::OpenFile(filepath));
+                            if self
+                                .event_loop_proxy
+                                .send_event(UserEvent::OpenFile(filepath))
+                                .is_err()
+                            {
+                                log::warn!("[EVENT] Failed to send OpenFile event");
+                            }
                         }
                     }
                     ui.menu_button("\u{1F4DC} Open Recent", |ui| {

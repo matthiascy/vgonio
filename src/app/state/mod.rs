@@ -3,7 +3,7 @@ mod input;
 
 pub use input::InputState;
 
-use crate::app::gfx::{GpuContext, Texture, Vertex, VertexLayout};
+use crate::app::gfx::{GpuContext, MeshView, Texture, Vertex, VertexLayout};
 use crate::app::gui::{GuiContext, UserEvent, VgonioGui, WindowSize};
 use camera::CameraState;
 
@@ -14,10 +14,9 @@ use epi::App;
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
-use std::ffi::OsStr;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
-use wgpu::VertexFormat;
+use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
@@ -35,7 +34,9 @@ pub struct VgonioApp {
     camera: CameraState,
     render_pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
     height_field: Option<Box<HeightField>>,
-    height_field_buffer: Option<wgpu::Buffer>,
+    height_field_mesh_view: Option<MeshView>,
+    height_field_uniform_buffer: wgpu::Buffer,
+    height_field_bind_group: wgpu::BindGroup,
 
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -52,6 +53,7 @@ pub struct VgonioApp {
     pub prev_frame_time: Option<f32>,
 
     pub demo_ui: egui_demo_lib::WrapApp,
+    pub is_grid_enabled: bool,
 }
 
 /// Repaint signal type that egui needs for requesting a repaint from another
@@ -187,8 +189,8 @@ impl VgonioApp {
             let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
-                100.0,
-                45.0f32.to_radians(),
+                1000.0,
+                60.0f32.to_radians(),
                 gpu_ctx.surface_config.width,
                 gpu_ctx.surface_config.height,
             );
@@ -308,15 +310,29 @@ impl VgonioApp {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader,
                         entry_point: "fs_main",
-                        // targets: &[gpu_ctx.surface_config.format.into()],
                         targets: &[wgpu::ColorTargetState {
                             format: gpu_ctx.surface_config.format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                                alpha: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::One,
+                                    dst_factor: wgpu::BlendFactor::Zero,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                            }),
                             write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     multiview: None,
                 });
+
+        let (height_field_render_pipeline, height_field_bind_group, height_field_uniform_buffer) =
+            create_height_field_pipeline(&gpu_ctx);
 
         let grid_render_pipeline =
             gpu_ctx
@@ -356,7 +372,19 @@ impl VgonioApp {
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: gpu_ctx.surface_config.format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                                alpha: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::One,
+                                    dst_factor: wgpu::BlendFactor::Zero,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                            }),
                             // blend: Some(wgpu::BlendState {
                             //     color: wgpu::BlendComponent {
                             //         src_factor: wgpu::BlendFactor::One,
@@ -375,9 +403,10 @@ impl VgonioApp {
                     multiview: None,
                 });
 
-        let mut graphics_pipelines = HashMap::new();
-        graphics_pipelines.insert("default", default_render_pipeline);
-        graphics_pipelines.insert("grid", grid_render_pipeline);
+        let mut render_pipelines = HashMap::new();
+        render_pipelines.insert("default", default_render_pipeline);
+        render_pipelines.insert("grid", grid_render_pipeline);
+        render_pipelines.insert("height_field", height_field_render_pipeline);
 
         let vertex_buffer = gpu_ctx
             .device
@@ -412,9 +441,11 @@ impl VgonioApp {
         Ok(Self {
             gpu_ctx,
             gui_ctx,
-            render_pipelines: graphics_pipelines,
+            render_pipelines,
             height_field: None,
-            height_field_buffer: None,
+            height_field_mesh_view: None,
+            height_field_uniform_buffer,
+            height_field_bind_group,
             vertex_buffer,
             index_buffer,
             num_vertices,
@@ -432,6 +463,7 @@ impl VgonioApp {
             demo_ui: ui,
             gui,
             input,
+            is_grid_enabled: true,
         })
     }
 
@@ -523,6 +555,19 @@ impl VgonioApp {
             ]),
         );
 
+        if let Some(hf) = &self.height_field {
+            let mut uniform = [0.0f32; 16 * 3 + 4];
+            uniform[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+            uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
+            uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
+            uniform[48..52].copy_from_slice(&[hf.min, hf.max, hf.max - hf.min, 0.5]);
+            self.gpu_ctx.queue.write_buffer(
+                &self.height_field_uniform_buffer,
+                0,
+                bytemuck::cast_slice(&uniform),
+            );
+        }
+
         for m in &mut self.instancing_transforms {
             *m *= Mat4::from_rotation_x(0.2f32.to_radians());
         }
@@ -590,25 +635,38 @@ impl VgonioApp {
                 }),
             });
 
-            render_pass.set_pipeline(self.render_pipelines.get("default").unwrap());
-            render_pass.set_bind_group(
-                0,
-                &self.texture_bind_groups[self.current_texture_index],
-                &[],
-            );
-            render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instancing_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(
-                0..self.num_indices,
-                0,
-                0..self.instancing_transforms.len() as _,
-            );
+            {
+                render_pass.set_pipeline(self.render_pipelines.get("default").unwrap());
+                render_pass.set_bind_group(
+                    0,
+                    &self.texture_bind_groups[self.current_texture_index],
+                    &[],
+                );
+                render_pass.set_bind_group(1, &self.camera.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, self.instancing_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.draw_indexed(
+                    0..self.num_indices,
+                    0,
+                    0..self.instancing_transforms.len() as _,
+                );
+            }
 
-            render_pass.set_pipeline(self.render_pipelines.get("grid").unwrap());
-            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
-            render_pass.draw(0..6, 0..1);
+            if self.is_grid_enabled {
+                render_pass.set_pipeline(self.render_pipelines.get("grid").unwrap());
+                render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+                render_pass.draw(0..6, 0..1);
+            }
+
+            if let Some(mesh) = &self.height_field_mesh_view {
+                render_pass.set_pipeline(self.render_pipelines.get("height_field").unwrap());
+                render_pass.set_bind_group(0, &self.height_field_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
+                render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
+            }
         }
 
         {
@@ -629,7 +687,7 @@ impl VgonioApp {
                 output: egui_output,
                 repaint_signal,
             });
-            // self.ui.update(self.ui_state.egui_context(), &ui_frame);
+            // self.demo_ui.update(self.gui_ctx.egui_context(), &ui_frame);
             self.gui.update(self.gui_ctx.egui_context(), &ui_frame);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
 
@@ -675,22 +733,149 @@ impl VgonioApp {
         match event {
             UserEvent::RequestRedraw => {}
             UserEvent::OpenFile(path) => self.load_height_field(path.as_path()),
+            UserEvent::ToggleGrid => {
+                self.is_grid_enabled = !self.is_grid_enabled;
+            }
         }
     }
 
     fn load_height_field(&mut self, path: &std::path::Path) {
-        match HeightField::read_from_file(path, None) {
+        match HeightField::read_from_file(path, None, None) {
             Ok(hf) => {
                 let mut hf = hf;
                 hf.fill_holes();
-
+                let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf, 0.5);
                 self.height_field = Some(Box::new(hf));
+                self.height_field_mesh_view = Some(mesh_view);
             }
             Err(err) => {
                 log::error!("HeightField loading error: {}", err);
             }
         }
     }
+}
+
+fn create_height_field_pipeline(
+    ctx: &GpuContext,
+) -> (wgpu::RenderPipeline, wgpu::BindGroup, wgpu::Buffer) {
+    // Load shader
+    let shader_module = ctx
+        .device
+        .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("height_field_shader_module"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("../assets/shaders/wgsl/height_field.wgsl").into(),
+            ),
+        });
+
+    // Create uniform buffer for rendering height field
+    let uniform_buffer = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("camera-uniform-buffer"),
+            contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+    let bind_group_layout = ctx
+        .device
+        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("height_field_bind_group_layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+    let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("height_field_bind_group"),
+        layout: &bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+    });
+
+    // Create height field render pipeline
+    let render_pipeline_layout =
+        ctx.device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("height_field_render_pipeline_layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+    let render_pipeline = ctx
+        .device
+        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("height_field_render_pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: "vs_main",
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 12,
+                    step_mode: VertexStepMode::Vertex,
+                    attributes: &[wgpu::VertexAttribute {
+                        format: VertexFormat::Float32x3,
+                        offset: 0,
+                        shader_location: 0,
+                    }],
+                }],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Line,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
+                                                             * new pixel */
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: "fs_main",
+                targets: &[wgpu::ColorTargetState {
+                    format: ctx.surface_config.format,
+                    // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::Zero,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                }],
+            }),
+            multiview: None,
+        });
+
+    (render_pipeline, bind_group, uniform_buffer)
 }
 
 const VERTICES: &[Vertex] = &[

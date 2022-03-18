@@ -1,4 +1,5 @@
-use crate::app::gfx::MeshView;
+use crate::isect::Aabb;
+use glam::Vec3;
 use serde::{Deserialize, Serialize};
 
 mod io;
@@ -42,12 +43,12 @@ pub struct HeightField {
     pub name: String,
     /// The initial axis alignment in world space. The default is XY, aligned
     /// with the "ground" plane.
-    pub orientation: AxisAlignment,
+    pub alignment: AxisAlignment,
     /// Number of sample points in horizontal direction (first axis of
-    /// orientation).
+    /// alignment).
     pub rows: usize,
     /// Number of sample points in vertical direction (second axis of
-    /// orientation).
+    /// alignment).
     pub cols: usize,
     /// The space between sample points in horizontal direction.
     pub du: f32,
@@ -74,7 +75,7 @@ impl HeightField {
     /// * `du` - spacing between samples points in dimension x
     /// * `dv` - spacing between samples points in dimension y
     /// * `height` - the initial value of the height
-    /// * `orientation` - axis alignment of height field
+    /// * `alignment` - axis alignment of height field
     ///
     /// # Examples
     ///
@@ -90,7 +91,7 @@ impl HeightField {
         du: f32,
         dv: f32,
         height: f32,
-        orientation: AxisAlignment,
+        alignment: AxisAlignment,
     ) -> Self {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
@@ -98,7 +99,7 @@ impl HeightField {
         HeightField {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
-            orientation,
+            alignment,
             rows,
             cols,
             du,
@@ -118,7 +119,7 @@ impl HeightField {
     /// * `rows` - the number of sample points in dimension y
     /// * `du` - horizontal spacing
     /// * `dv` - vertical spacing
-    /// * `orientation` - axis alignment of height field
+    /// * `alignment` - axis alignment of height field
     /// * `setter` - the setting function, this function will be invoked with
     ///   the row number and column number as parameters.
     ///
@@ -139,7 +140,7 @@ impl HeightField {
         rows: usize,
         du: f32,
         dv: f32,
-        orientation: AxisAlignment,
+        alignment: AxisAlignment,
         setter: F,
     ) -> HeightField
     where
@@ -164,7 +165,7 @@ impl HeightField {
         HeightField {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
-            orientation,
+            alignment,
             cols,
             rows,
             du,
@@ -187,7 +188,7 @@ impl HeightField {
     /// * `du` - horizontal spacing between two samples
     /// * `dv` - vertical spacing between two samples
     /// * `samples` - array of elevation values of the height field.
-    /// * `orientation` - axis alignment of height field
+    /// * `alignment` - axis alignment of height field
     ///
     /// # Examples
     ///
@@ -206,19 +207,15 @@ impl HeightField {
         du: f32,
         dv: f32,
         samples: Vec<f32>,
-        orientation: AxisAlignment,
+        alignment: AxisAlignment,
     ) -> HeightField {
         assert!(cols > 0 && rows > 0 && samples.len() >= cols * rows);
-        let max = samples
-            .iter()
-            .fold(f32::MIN, |acc, x| if *x > acc { *x } else { acc });
-        let min = samples
-            .iter()
-            .fold(f32::MAX, |acc, x| if *x < acc { *x } else { acc });
+        let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x));
+        let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x));
         HeightField {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
-            orientation,
+            alignment,
             rows,
             cols,
             du,
@@ -406,5 +403,50 @@ impl HeightField {
                 }
             }
         }
+    }
+
+    /// Generate vertices from the height values.
+    pub fn generate_vertices(&self) -> (Vec<Vec3>, Aabb) {
+        log::info!(
+            "Generating height field vertices with {:?} alignment",
+            self.alignment
+        );
+        let (rows, cols, half_rows, half_cols, du, dv) = (
+            self.rows,
+            self.cols,
+            self.rows / 2,
+            self.cols / 2,
+            self.du,
+            self.dv,
+        );
+        let mut positions: Vec<Vec3> = vec![];
+        let median = (self.min + self.max) / 2.0;
+        let mut extent = Aabb::default();
+        for r in 0..rows {
+            for c in 0..cols {
+                let u = (c as f32 - half_cols as f32) * du;
+                let v = (r as f32 - half_rows as f32) * dv;
+                let h = self.samples[r * cols + c] - median;
+                let p = match self.alignment {
+                    AxisAlignment::XY => Vec3::new(u, v, h),
+                    AxisAlignment::XZ => Vec3::new(u, h, v),
+                    AxisAlignment::YX => Vec3::new(v, u, h),
+                    AxisAlignment::YZ => Vec3::new(h, u, v),
+                    AxisAlignment::ZX => Vec3::new(v, h, u),
+                    AxisAlignment::ZY => Vec3::new(h, v, u),
+                };
+                for k in 0..3 {
+                    if p[k] > extent.max[k] {
+                        extent.max[k] = p[k];
+                    }
+                    if p[k] < extent.min[k] {
+                        extent.min[k] = p[k];
+                    }
+                }
+                positions.push(p);
+            }
+        }
+
+        (positions, extent)
     }
 }

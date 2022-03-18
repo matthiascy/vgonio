@@ -1,22 +1,13 @@
 use crate::app::gui::gizmo::VgonioGizmo;
+use crate::app::gui::UserEvent;
 use glam::Mat4;
+use winit::event_loop::EventLoopProxy;
 
 pub struct SimulationWorkspace {
     is_sim_win_open: bool,
     is_view_gizmo_open: bool,
     sim_win: SimulationWindow,
     view_gizmo: VgonioGizmo,
-}
-
-impl Default for SimulationWorkspace {
-    fn default() -> Self {
-        Self {
-            is_sim_win_open: true,
-            is_view_gizmo_open: true,
-            sim_win: Default::default(),
-            view_gizmo: Default::default(),
-        }
-    }
 }
 
 impl epi::App for SimulationWorkspace {
@@ -34,6 +25,15 @@ impl epi::App for SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
+    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+        Self {
+            is_sim_win_open: false,
+            is_view_gizmo_open: false,
+            sim_win: SimulationWindow::new(event_loop_proxy),
+            view_gizmo: Default::default(),
+        }
+    }
+
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
         self.view_gizmo.update_matrices(model, view, proj)
     }
@@ -46,18 +46,20 @@ enum SensorShape {
 }
 
 pub struct SimulationWindow {
+    is_grid_enabled: bool,
     sensor_shape: SensorShape,
-}
-
-impl Default for SimulationWindow {
-    fn default() -> Self {
-        Self {
-            sensor_shape: SensorShape::Circle,
-        }
-    }
+    event_loop_proxy: EventLoopProxy<UserEvent>,
 }
 
 impl SimulationWindow {
+    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+        Self {
+            is_grid_enabled: true,
+            sensor_shape: SensorShape::Rectangle,
+            event_loop_proxy,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         "Simulation"
     }
@@ -67,6 +69,28 @@ impl SimulationWindow {
             .open(open)
             .default_height(500.0)
             .show(ctx, |ui| self.ui(ui));
+
+        egui::Area::new("controls")
+            .anchor(egui::Align2::RIGHT_TOP, [-10.0, 10.0])
+            .show(ctx, |ui| {
+                egui::Grid::new("controls_grid")
+                    .num_columns(2)
+                    .spacing([40.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.add(egui::Label::new("Visual Grid:"));
+                        let res = ui.add(super::widgets::toggle(&mut self.is_grid_enabled));
+                        if res.changed()
+                            && self
+                                .event_loop_proxy
+                                .send_event(UserEvent::ToggleGrid)
+                                .is_err()
+                        {
+                            log::warn!("[EVENT] Failed to send ToggleGrid event");
+                        }
+                        ui.end_row();
+                    });
+            });
     }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
