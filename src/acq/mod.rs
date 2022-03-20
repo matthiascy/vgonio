@@ -8,13 +8,10 @@ pub struct LightSource {
     pub proj_kind: ProjectionKind,
 }
 
+/// Light space matrix used for generation of depth map.
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct LightSourceRaw {
-    view: [f32; 16],
-    proj: [f32; 16],
-    pos: [f32; 4],
-}
+pub struct LightSourceRaw([f32; 16]);
 
 impl LightSource {
     pub fn to_raw(&self) -> LightSourceRaw {
@@ -26,10 +23,6 @@ impl LightSource {
         };
         let view = glam::Mat4::look_at_rh(self.pos, Vec3::ZERO, up);
         let proj = self.proj.matrix(self.proj_kind);
-        LightSourceRaw {
-            view: bytemuck::cast(view),
-            proj: bytemuck::cast(proj),
-            pos: [self.pos.x, self.pos.y, self.pos.z, 1.0],
-        }
+        LightSourceRaw((proj * view).to_cols_array())
     }
 }

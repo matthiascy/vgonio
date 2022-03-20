@@ -3,8 +3,21 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 pub struct Texture {
+    /// Image (data) allocated on GPU. It holds the pixels and main
+    /// memory of the texture, but doesn't contain a lot information
+    /// on how to interpret the data.
     pub raw: wgpu::Texture,
+
+    /// Reference to the allocated image data. Besides, it holds information
+    /// about how to interpret the data of the texture.
     pub view: wgpu::TextureView,
+
+    /// Holds the data for the specific shader access to the texture, i.e. the
+    /// way to blend the pixels, mip-mapping, etc..
+    ///
+    /// Note: Creation of `wgpu::Sampler` is a completely separate path from
+    /// creation of `wgpu::Texture` or `wgpu::TextureView` objects. The same
+    /// sampler can be shared between different textures.
     pub sampler: Arc<wgpu::Sampler>,
 }
 
@@ -13,12 +26,13 @@ impl Texture {
 
     pub fn create_depth_texture(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        width: u32,
+        height: u32,
         label: &str,
     ) -> Self {
         let size = wgpu::Extent3d {
-            width: config.width,
-            height: config.height,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
         let desc = wgpu::TextureDescriptor {
@@ -28,7 +42,9 @@ impl Texture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         };
         let texture = device.create_texture(&desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());

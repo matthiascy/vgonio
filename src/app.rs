@@ -21,7 +21,6 @@ const WIN_INITIAL_HEIGHT: u32 = 720;
     setting = AppSettings::DeriveDisplayOrder,
 )]
 pub struct VgonioArgs {
-    /// Silent the output.
     #[clap(short, long, help = "Silent output printed to stdout")]
     pub quite: bool,
 
@@ -239,12 +238,12 @@ pub fn launch_gui_client() -> Result<(), Error> {
         last_frame_time = now;
 
         match event {
-            Event::UserEvent(event) => vgonio.handle_event(event),
+            Event::UserEvent(event) => vgonio.handle_user_event(event),
             Event::WindowEvent {
                 window_id,
                 ref event,
             } if window_id == window.id() => {
-                if !vgonio.collect_input(event) {
+                if !vgonio.handle_input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 

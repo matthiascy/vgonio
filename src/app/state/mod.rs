@@ -5,7 +5,8 @@ pub use input::InputState;
 
 use crate::app::gui::{GuiContext, RepaintSignal, UserEvent, VgonioGui, WindowSize};
 use crate::gfx::{
-    GpuContext, MeshView, RdrPass, Texture, Vertex, VertexLayout, DEFAULT_BIND_GROUP_LAYOUT_DESC,
+    DepthPass, GpuContext, MeshView, RdrPass, Texture, Vertex, VertexLayout,
+    DEFAULT_BIND_GROUP_LAYOUT_DESC,
 };
 use camera::CameraState;
 
@@ -17,6 +18,7 @@ use epi::App;
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
+use std::num::NonZeroU32;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
 use wgpu::{VertexFormat, VertexStepMode};
@@ -48,6 +50,8 @@ pub struct VgonioApp {
     input: InputState,
     camera: CameraState,
     passes: HashMap<&'static str, RdrPass>,
+    // depth_pass: DepthPass,
+    depth_map_buffer: wgpu::Buffer,
 
     instancing_demo: InstancingDemo,
 
@@ -70,11 +74,39 @@ impl VgonioApp {
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
 
+        // let depth_pass = {
+        //     let depth_texture = Texture::create_depth_texture(
+        //         &gpu_ctx.device,
+        //         &gpu_ctx.surface_config,
+        //         "depth_texture",
+        //     );
+        //     DepthPass {
+        //         pass: RdrPass {
+        //             pipeline: ,
+        //             bind_groups: vec![],
+        //             uniform_buffer: None
+        //         },
+        //         depth_texture: Texture {}
+        //     }
+        // };
+        //
         let depth_texture = Texture::create_depth_texture(
             &gpu_ctx.device,
-            &gpu_ctx.surface_config,
+            gpu_ctx.surface_config.width,
+            gpu_ctx.surface_config.height,
             "depth-texture",
         );
+
+        let depth_map_buffer_size = (std::mem::size_of::<f32>()
+            * (gpu_ctx.surface_config.width * gpu_ctx.surface_config.height) as usize)
+            as wgpu::BufferAddress;
+        let depth_map_buffer_desc = wgpu::BufferDescriptor {
+            label: None,
+            size: depth_map_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        };
+        let depth_map_buffer = gpu_ctx.device.create_buffer(&depth_map_buffer_desc);
 
         // Camera
         let camera = {
@@ -121,6 +153,8 @@ impl VgonioApp {
             gui,
             input,
             passes,
+            // depth_pass: DepthPass {},
+            depth_map_buffer,
             instancing_demo,
             heightfield: None,
             heightfield_mesh_view: None,
@@ -165,16 +199,29 @@ impl VgonioApp {
                 .configure(&self.gpu_ctx.device, &self.gpu_ctx.surface_config);
             self.depth_texture = Texture::create_depth_texture(
                 &self.gpu_ctx.device,
-                &self.gpu_ctx.surface_config,
+                self.gpu_ctx.surface_config.width,
+                self.gpu_ctx.surface_config.height,
                 "depth_texture",
             );
+
+            let depth_map_buffer_size = (std::mem::size_of::<f32>()
+                * (self.gpu_ctx.surface_config.width * self.gpu_ctx.surface_config.height) as usize)
+                as wgpu::BufferAddress;
+            let depth_map_buffer_desc = wgpu::BufferDescriptor {
+                label: None,
+                size: depth_map_buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            };
+            self.depth_map_buffer = self.gpu_ctx.device.create_buffer(&depth_map_buffer_desc);
+
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
         }
     }
 
-    pub fn collect_input(&mut self, event: &WindowEvent) -> bool {
+    pub fn handle_input(&mut self, event: &WindowEvent) -> bool {
         if !self.gui_ctx.handle_event(event) {
             match event {
                 WindowEvent::KeyboardInput {
@@ -187,6 +234,14 @@ impl VgonioApp {
                     ..
                 } => {
                     self.input.update_key_map(*keycode, *state);
+                    if self.input.is_key_pressed(VirtualKeyCode::Space) {
+                        self.instancing_demo.current_texture_index += 1;
+                        self.instancing_demo.current_texture_index %= 2;
+                    }
+                    if self.input.is_key_pressed(VirtualKeyCode::C) {
+                        println!("C pressed");
+                        self.save_depth_map();
+                    }
                     true
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
@@ -432,7 +487,7 @@ impl VgonioApp {
         Ok(())
     }
 
-    pub fn handle_event(&mut self, event: UserEvent) {
+    pub fn handle_user_event(&mut self, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {}
             UserEvent::OpenFile(path) => self.load_height_field(path.as_path()),
@@ -455,6 +510,66 @@ impl VgonioApp {
                 log::error!("HeightField loading error: {}", err);
             }
         }
+    }
+
+    fn save_depth_map(&self) {
+        log::info!("Saving depth map...");
+        let mut encoder = self
+            .gpu_ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &self.depth_texture.raw,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &self.depth_map_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: NonZeroU32::new(
+                        std::mem::size_of::<f32>() as u32 * self.gpu_ctx.surface_config.width,
+                    ),
+                    rows_per_image: NonZeroU32::new(self.gpu_ctx.surface_config.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: self.gpu_ctx.surface_config.width,
+                height: self.gpu_ctx.surface_config.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.gpu_ctx.queue.submit(Some(encoder.finish()));
+
+        {
+            let buffer_slice = self.depth_map_buffer.slice(..);
+
+            let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
+            self.gpu_ctx.device.poll(wgpu::Maintain::Wait);
+            let mapping = async {
+                mapping.await.unwrap();
+            };
+
+            let buffer_view_f32 = buffer_slice.get_mapped_range();
+            let data_u8 = unsafe {
+                let (prefix, data, suffix) = buffer_view_f32.align_to::<f32>();
+                data.iter()
+                    .map(|val| ((1.0 - val) * 255.0) as u8)
+                    .collect::<Vec<u8>>()
+            };
+
+            use image::{GrayImage, ImageBuffer, Luma};
+            let image_buffer = ImageBuffer::<Luma<u8>, _>::from_raw(
+                self.gpu_ctx.surface_config.width,
+                self.gpu_ctx.surface_config.height,
+                data_u8,
+            )
+            .unwrap();
+            image_buffer.save("depth_map.png").unwrap();
+        }
+        self.depth_map_buffer.unmap();
     }
 }
 
