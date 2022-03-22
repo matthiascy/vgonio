@@ -266,10 +266,8 @@ impl VgonioGui {
                     if ui.button("BxDF Viewer").clicked() {
                         println!("TODO: bxdf viewer");
                     }
-                    if ui.button("Visual Debugger").clicked() {
-                        if self.selected_workspace == self.workspaces.simulation.name() {
-                            self.workspaces.simulation.open_visual_debugger();
-                        }
+                    if ui.button("Visual Debugger").clicked() && self.selected_workspace == self.workspaces.simulation.name() {
+                        self.workspaces.simulation.open_visual_debugger();
                     }
                 });
             });

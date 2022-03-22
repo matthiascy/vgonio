@@ -36,7 +36,7 @@ impl Default for AxisAlignment {
 
 /// Representation of the micro-surface.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HeightField {
+pub struct Heightfield {
     /// Generated unique identifier.
     pub uuid: uuid::Uuid,
     /// User defined name for the height field.
@@ -65,7 +65,7 @@ pub struct HeightField {
     pub samples: Vec<f32>,
 }
 
-impl HeightField {
+impl Heightfield {
     /// Creates a flat height field with specified height value.
     ///
     /// # Arguments
@@ -80,8 +80,8 @@ impl HeightField {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::{AxisAlignment, HeightField};
-    /// let height_field = HeightField::new(10, 10, 0.11, 0.11, 0.12, Default::default());
+    /// # use vgonio::htfld::{AxisAlignment, Heightfield};
+    /// let height_field = Heightfield::new(10, 10, 0.11, 0.11, 0.12, Default::default());
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
@@ -96,7 +96,7 @@ impl HeightField {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
         samples.resize(cols * rows, height);
-        HeightField {
+        Heightfield {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
             alignment,
@@ -126,8 +126,8 @@ impl HeightField {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::{AxisAlignment, HeightField};
-    /// let height_field = HeightField::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| (row + col) as f32);
+    /// # use vgonio::htfld::{AxisAlignment, Heightfield};
+    /// let height_field = Heightfield::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| (row + col) as f32);
     /// assert_eq!(height_field.samples_count(), 16);
     /// assert_eq!(height_field.max, 6.0);
     /// assert_eq!(height_field.min, 0.0);
@@ -142,7 +142,7 @@ impl HeightField {
         dv: f32,
         alignment: AxisAlignment,
         setter: F,
-    ) -> HeightField
+    ) -> Heightfield
     where
         F: Fn(usize, usize) -> f32,
     {
@@ -162,7 +162,7 @@ impl HeightField {
             .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap();
 
-        HeightField {
+        Heightfield {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
             alignment,
@@ -193,9 +193,9 @@ impl HeightField {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::HeightField;
+    /// # use vgonio::htfld::Heightfield;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = HeightField::from_samples(3, 3, 0.5, 0.5, samples, Default::default());
+    /// let height_field = Heightfield::from_samples(3, 3, 0.5, 0.5, samples, Default::default());
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
@@ -208,11 +208,11 @@ impl HeightField {
         dv: f32,
         samples: Vec<f32>,
         alignment: AxisAlignment,
-    ) -> HeightField {
+    ) -> Heightfield {
         assert!(cols > 0 && rows > 0 && samples.len() >= cols * rows);
         let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x));
         let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x));
-        HeightField {
+        Heightfield {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
             alignment,

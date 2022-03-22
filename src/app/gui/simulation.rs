@@ -1,8 +1,7 @@
 use crate::app::gui::gizmo::VgonioGizmo;
-use crate::app::gui::{DebuggerPanel, UserEvent, VisualDebugger};
+use crate::app::gui::{UserEvent, VisualDebugger};
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
-use image::GrayImage;
 use winit::event_loop::EventLoopProxy;
 
 pub struct SimulationWorkspace {

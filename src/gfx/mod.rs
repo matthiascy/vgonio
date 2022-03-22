@@ -6,17 +6,12 @@ mod shadow_pass;
 mod texture;
 mod vertex;
 
-use crate::Error;
 pub use context::GpuContext;
-use glam::Mat4;
 pub use grid::*;
 pub use mesh::MeshView;
 pub use shadow_pass::ShadowPass;
-use std::num::NonZeroU32;
 pub use texture::Texture;
 pub use vertex::*;
-use wgpu::util::DeviceExt;
-use wgpu::{BufferSize, ShaderSource};
 
 /// Represents a rendering pipeline and its associated bind group (shader
 /// input).

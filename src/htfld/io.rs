@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::htfld::{AxisAlignment, HeightField};
+use crate::htfld::{AxisAlignment, Heightfield};
 use crate::io::{CacheHeader, CacheKind, MsHeader};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -11,7 +11,7 @@ pub enum HeightFieldOrigin {
     Usurf,
 }
 
-impl HeightField {
+impl Heightfield {
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
     ///
@@ -25,7 +25,7 @@ impl HeightField {
         path: &Path,
         origin: Option<HeightFieldOrigin>,
         alignment: Option<AxisAlignment>,
-    ) -> Result<HeightField, Error> {
+    ) -> Result<Heightfield, Error> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
 
@@ -71,7 +71,7 @@ impl HeightField {
                         read_ascii_samples(reader)
                     };
 
-                    Ok(HeightField::from_samples(
+                    Ok(Heightfield::from_samples(
                         header.extent[0] as usize,
                         header.extent[1] as usize,
                         header.spacing[0],
@@ -95,7 +95,7 @@ fn read_ascii_dong2015<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
     orientation: Option<AxisAlignment>,
-) -> Result<HeightField, Error> {
+) -> Result<Heightfield, Error> {
     if read_first_4_bytes {
         let mut buf = [0_u8; 4];
         reader.read_exact(&mut buf)?;
@@ -115,7 +115,7 @@ fn read_ascii_dong2015<R: BufRead>(
         .map(|dim| -> u32 { dim.parse().unwrap() })
         .collect();
     let samples = read_ascii_samples(reader);
-    Ok(HeightField::from_samples(
+    Ok(Heightfield::from_samples(
         extent[1] as usize,
         extent[0] as usize,
         0.11,
@@ -130,7 +130,7 @@ fn read_ascii_usurf<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
     orientation: Option<AxisAlignment>,
-) -> Result<HeightField, Error> {
+) -> Result<Heightfield, Error> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
 
@@ -160,7 +160,7 @@ fn read_ascii_usurf<R: BufRead>(
     let dv = y_coords[1] - y_coords[0];
     let samples: Vec<f32> = values.into_iter().flatten().collect();
 
-    Ok(HeightField::from_samples(
+    Ok(Heightfield::from_samples(
         x_coords.len(),
         y_coords.len(),
         du,

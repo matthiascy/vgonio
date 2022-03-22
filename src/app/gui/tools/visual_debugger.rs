@@ -1,5 +1,4 @@
 use egui::{Response, Ui};
-use image::{GrayImage, ImageBuffer};
 
 const IMG_WIDTH: usize = 360;
 const IMG_HEIGHT: usize = 203;

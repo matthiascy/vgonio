@@ -31,7 +31,7 @@ impl Texture {
         desc: &wgpu::TextureDescriptor,
         sampler: Option<Arc<wgpu::Sampler>>,
     ) -> Self {
-        let texture = device.create_texture(&desc);
+        let texture = device.create_texture(desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = sampler.unwrap_or_else(|| {
             Arc::new(device.create_sampler(&wgpu::SamplerDescriptor {

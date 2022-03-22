@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::gfx::MeshView;
-use crate::htfld::HeightField;
+use crate::htfld::Heightfield;
 use crate::isect::Aabb;
 use crate::math::Vec3;
 use crate::mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert};
@@ -125,7 +125,7 @@ impl SurfaceMesh {
     /// let hf = HeightField::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| (x * y) as f32 * 0.5);
     /// let mesh = SurfaceMesh::from_height_field(&hf);
     /// ```
-    pub fn from_height_field(hf: &HeightField) -> Self {
+    pub fn from_height_field(hf: &Heightfield) -> Self {
         // todo: orientation
         let (rows, cols) = (hf.rows, hf.cols);
         let (vert_positions, extent) = hf.generate_vertices();

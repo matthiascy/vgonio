@@ -1,5 +1,5 @@
 use crate::gfx::VertexLayout;
-use crate::htfld::HeightField;
+use crate::htfld::Heightfield;
 use crate::isect::Aabb;
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
@@ -64,8 +64,10 @@ impl MeshView {
     }
 }
 
+// TODO: create a separate method to extract face normals of an heightfield
+
 impl MeshView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &HeightField) -> Self {
+    pub fn from_height_field(device: &wgpu::Device, hf: &Heightfield) -> Self {
         // Number of triangles = 2 * rows * cols
         let (rows, cols) = (hf.cols, hf.rows);
         let (positions, extent) = hf.generate_vertices();

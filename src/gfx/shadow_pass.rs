@@ -1,11 +1,9 @@
 use crate::app::state::remap_depth;
-use crate::gfx::{GpuContext, MeshView, RdrPass, Texture};
+use crate::gfx::{GpuContext, RdrPass, Texture};
 use crate::Error;
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
-use image::Rgba;
 use std::num::NonZeroU32;
-use wgpu::{Extent3d, Face};
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.
@@ -206,7 +204,7 @@ impl ShadowPass {
         queue.write_buffer(
             self.inner.uniform_buffer.as_ref().unwrap(),
             0,
-            &bytemuck::cast_slice(&[model, proj * view]),
+            bytemuck::cast_slice(&[model, proj * view]),
         );
     }
 
@@ -292,8 +290,8 @@ impl ShadowPass {
 
                 use image::{ImageBuffer, Luma};
                 ImageBuffer::<Luma<u8>, _>::from_raw(self.width, self.height, data)
-                    .ok_or(Error::Any("Failed to create image from depth map buffer, please check if the data have been transferred to the buffer!".into()))
-                    .and_then(|img| img.save(path).map_err(|e| Error::from(e)))?;
+                    .ok_or_else(||Error::Any("Failed to create image from depth map buffer, please check if the data have been transferred to the buffer!".into()))
+                    .and_then(|img| img.save(path).map_err(Error::from))?;
             }
             buffer.unmap();
 

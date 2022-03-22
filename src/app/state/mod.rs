@@ -12,13 +12,13 @@ use camera::CameraState;
 
 use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
-use crate::htfld::HeightField;
+use crate::htfld::Heightfield;
 use crate::math::IDENTITY_MAT4;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
-use image::{GrayImage, Luma};
 use std::collections::HashMap;
 use std::default::Default;
+use std::io::{BufWriter, Write};
 use std::num::NonZeroU32;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
@@ -59,7 +59,7 @@ pub struct VgonioApp {
 
     instancing_demo: InstancingDemo,
 
-    heightfield: Option<Box<HeightField>>,
+    heightfield: Option<Box<Heightfield>>,
     heightfield_mesh_view: Option<MeshView>,
 
     pub start_time: Instant,
@@ -94,7 +94,7 @@ impl VgonioApp {
             mapped_at_creation: false,
         });
         let depth_attachment_image =
-            GrayImage::new(gpu_ctx.surface_config.width, gpu_ctx.surface_config.height);
+            image::GrayImage::new(gpu_ctx.surface_config.width, gpu_ctx.surface_config.height);
 
         // Camera
         let camera = {
@@ -558,7 +558,7 @@ impl VgonioApp {
     }
 
     fn load_height_field(&mut self, path: &std::path::Path) {
-        match HeightField::read_from_file(path, None, None) {
+        match Heightfield::read_from_file(path, None, None) {
             Ok(hf) => {
                 let mut hf = hf;
                 hf.fill_holes();
@@ -608,19 +608,18 @@ impl VgonioApp {
 
             let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
             self.gpu_ctx.device.poll(wgpu::Maintain::Wait);
-            let mapping = async {
-                mapping.await.unwrap();
-            };
+            pollster::block_on(async {
+                mapping.await.unwrap()
+            });
 
             let buffer_view_f32 = buffer_slice.get_mapped_range();
             let data_u8 = unsafe {
-                let (prefix, data, suffix) = buffer_view_f32.align_to::<f32>();
+                let (_, data, _) = buffer_view_f32.align_to::<f32>();
                 data.iter()
                     .map(|d| (remap_depth(*d, 0.1, 100.0) * 255.0) as u8)
                     .collect::<Vec<u8>>()
             };
 
-            use image::{GrayImage, ImageBuffer, Luma};
             self.depth_attachment_image.copy_from_slice(&data_u8);
             self.depth_attachment_image.save("depth_map.png").unwrap();
         }
@@ -632,7 +631,6 @@ impl VgonioApp {
             let radius = (mesh.extent.max - mesh.extent.min).max_element();
             let near = 0.1f32;
             let far = radius * 2.0;
-            println!("radius: {}", radius);
 
             let proj = {
                 let projection = Projection::new(
@@ -644,6 +642,8 @@ impl VgonioApp {
                 );
                 projection.matrix(ProjectionKind::Orthographic)
             };
+
+            let mut results = [0.0f32; 360 * 91];
 
             for i in (0..360).step_by(1) {
                 for j in (0..91).step_by(1) {
@@ -680,8 +680,13 @@ impl VgonioApp {
                     //         format!("shadow_pass_{i}_{j}.png").as_ref(),
                     //     )
                     //     .unwrap();
-                    println!("<{i},{j}>: {}", self.shadow_pass.compute_pixels_count(&self.gpu_ctx.device));
+                    results[i * 91 + j] = self.shadow_pass.compute_pixels_count(&self.gpu_ctx.device) as _;
                 }
+            }
+            let file = std::fs::File::create("measured_geometric_term.txt").unwrap();
+            let writer = &mut BufWriter::new(file);
+            for i in results.iter() {
+                writer.write_all(format!("{} ", i).as_bytes()).unwrap();
             }
         }
     }
@@ -1180,7 +1185,6 @@ fn create_instancing_demo(ctx: &GpuContext) -> InstancingDemo {
         index_buffer,
         num_vertices,
         num_indices,
-        // texture_bind_groups,
         current_texture_index: 0,
         pass: RdrPass {
             pipeline,
