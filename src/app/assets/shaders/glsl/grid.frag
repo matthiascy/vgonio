@@ -1,7 +1,7 @@
 #version 450
 
 const float camera_near = 0.1;
-const float camera_far = 1000.0;
+const float camera_far = 100.0;
 
 layout(location = 0) in vec3 v_position;
 layout(location = 1) in vec3 near;

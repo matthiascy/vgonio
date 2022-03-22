@@ -26,6 +26,7 @@ egui_demo_lib = "0.17"
 egui-winit = "0.17"
 egui-gizmo = "0.6"
 rfd = "0.8"
+rayon = "0.9"
 
 [build-dependencies]
 shaderc = "0.7"
@@ -35,6 +36,9 @@ shaderc = "0.7"
 [profile.release.build-override]
 opt-level = 3
 codegen-units = 16
+
+[profile.release]
+strip = "debuginfo"
 
 [profile.dev.build-override]
 opt-level = 3

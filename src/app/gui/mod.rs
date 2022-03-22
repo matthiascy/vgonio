@@ -2,10 +2,12 @@ mod analysis;
 mod context;
 mod gizmo;
 mod simulation;
+mod tools;
 mod ui;
 mod widgets;
 
 pub use context::*;
+pub use tools::*;
 pub use ui::VgonioGui;
 
 /// User defined event.

@@ -2,6 +2,8 @@ use image::GenericImageView;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+// TODO: a texture may don't have a sampler (in case used as render pass
+// attachments)
 pub struct Texture {
     /// Image (data) allocated on GPU. It holds the pixels and main
     /// memory of the texture, but doesn't contain a lot information
@@ -24,11 +26,40 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+    pub fn new(
+        device: &wgpu::Device,
+        desc: &wgpu::TextureDescriptor,
+        sampler: Option<Arc<wgpu::Sampler>>,
+    ) -> Self {
+        let texture = device.create_texture(&desc);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = sampler.unwrap_or_else(|| {
+            Arc::new(device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                lod_min_clamp: -100.0,
+                lod_max_clamp: 100.0,
+                ..Default::default()
+            }))
+        });
+
+        Self {
+            raw: texture,
+            view,
+            sampler,
+        }
+    }
+
     pub fn create_depth_texture(
         device: &wgpu::Device,
         width: u32,
         height: u32,
-        label: &str,
+        label: Option<&str>,
     ) -> Self {
         let size = wgpu::Extent3d {
             width,
@@ -36,7 +67,7 @@ impl Texture {
             depth_or_array_layers: 1,
         };
         let desc = wgpu::TextureDescriptor {
-            label: Some(label),
+            label,
             size,
             mip_level_count: 1,
             sample_count: 1,

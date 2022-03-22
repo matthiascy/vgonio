@@ -1,5 +1,6 @@
 use crate::app::state::InputState;
 use glam::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles};
+use std::cmp::Ordering::Equal;
 use winit::event::{MouseButton, VirtualKeyCode};
 
 // pub struct OrthonormalBasis {
@@ -39,6 +40,10 @@ pub struct Projection {
     pub far: f32,
     /// Vertical field of view
     pub fov: f32,
+    /// Image width
+    pub width: f32,
+    /// Image height
+    pub height: f32,
     /// Aspect ratio of camera image
     pub aspect: f32,
 }
@@ -49,6 +54,8 @@ impl Default for Projection {
             near: 0.1,
             far: 100.0,
             fov: 45.0f32.to_radians(),
+            width: 512.0,
+            height: 288.0,
             aspect: 16.0 / 9.0,
         }
     }
@@ -60,12 +67,13 @@ impl Projection {
             near,
             far,
             fov,
+            width: width as _,
+            height: height as _,
             aspect: width as f32 / height as f32,
         }
     }
 
     pub fn matrix(&self, kind: ProjectionKind) -> Mat4 {
-        // Mat4::from_rotation_x(-90.0f32.to_radians()) *
         let scale_depth = Mat4::from_cols(
             Vec4::new(1.0, 0.0, 0.0, 0.0),
             Vec4::new(0.0, 1.0, 0.0, 0.0),
@@ -77,22 +85,20 @@ impl Projection {
                 ProjectionKind::Perspective => {
                     Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
                 }
-                ProjectionKind::Orthographic => {
-                    let height = 1.0;
-                    let width = self.aspect;
-                    Mat4::orthographic_rh(
-                        -width / 2.0,
-                        width / 2.0,
-                        -height / 2.0,
-                        height / 2.0,
-                        self.near,
-                        self.far,
-                    )
-                }
+                ProjectionKind::Orthographic => Mat4::orthographic_rh(
+                    -self.width / 2.0,
+                    self.width / 2.0,
+                    -self.height / 2.0,
+                    self.height / 2.0,
+                    self.near,
+                    self.far,
+                ),
             }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width as _;
+        self.height = height as _;
         self.aspect = width as f32 / height as f32;
     }
 }
@@ -109,7 +115,17 @@ pub struct Camera {
 impl Camera {
     pub fn new(position: Vec3, target: Vec3, up: Vec3) -> Self {
         let forward = (target - position).normalize();
-        let right = forward.cross(up).normalize();
+        let right = {
+            let cos = forward.dot(up.normalize());
+            let up = if cos.partial_cmp(&1.0) == Some(Equal) {
+                -Vec3::X
+            } else if cos.partial_cmp(&-1.0) == Some(Equal) {
+                Vec3::X
+            } else {
+                up
+            };
+            forward.cross(up).normalize()
+        };
         let up = right.cross(forward).normalize();
         Self {
             eye: position,
@@ -170,8 +186,8 @@ pub struct CameraUniform {
 }
 
 impl CameraUniform {
-    pub fn new(camera: &Camera, projection: &Projection) -> Self {
-        let proj_matrix = projection.matrix(ProjectionKind::Perspective);
+    pub fn new(camera: &Camera, projection: &Projection, kind: ProjectionKind) -> Self {
+        let proj_matrix = projection.matrix(kind);
         Self {
             view_matrix: camera.matrix(),
             proj_matrix,
@@ -180,8 +196,8 @@ impl CameraUniform {
         }
     }
 
-    pub fn update(&mut self, camera: &Camera, projection: &Projection) {
-        *self = Self::new(camera, projection);
+    pub fn update(&mut self, camera: &Camera, projection: &Projection, kind: ProjectionKind) {
+        *self = Self::new(camera, projection, kind);
     }
 }
 

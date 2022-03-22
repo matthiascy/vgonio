@@ -5,17 +5,18 @@ pub use input::InputState;
 
 use crate::app::gui::{GuiContext, RepaintSignal, UserEvent, VgonioGui, WindowSize};
 use crate::gfx::{
-    DepthPass, GpuContext, MeshView, RdrPass, Texture, Vertex, VertexLayout,
+    GpuContext, MeshView, RdrPass, ShadowPass, Texture, Vertex, VertexLayout,
     DEFAULT_BIND_GROUP_LAYOUT_DESC,
 };
 use camera::CameraState;
 
 use crate::error::Error;
-use crate::gfx::camera::{Camera, Projection};
+use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::HeightField;
 use crate::math::IDENTITY_MAT4;
 use epi::App;
 use glam::{Mat4, Quat, Vec3};
+use image::{GrayImage, Luma};
 use std::collections::HashMap;
 use std::default::Default;
 use std::num::NonZeroU32;
@@ -50,15 +51,17 @@ pub struct VgonioApp {
     input: InputState,
     camera: CameraState,
     passes: HashMap<&'static str, RdrPass>,
-    // depth_pass: DepthPass,
-    depth_map_buffer: wgpu::Buffer,
+    depth_attachment: Texture,
+    depth_attachment_storage: wgpu::Buffer, // used to store depth attachment
+    depth_attachment_image: image::GrayImage,
+
+    shadow_pass: ShadowPass,
 
     instancing_demo: InstancingDemo,
 
     heightfield: Option<Box<HeightField>>,
     heightfield_mesh_view: Option<MeshView>,
 
-    pub depth_texture: Texture,
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
@@ -74,51 +77,36 @@ impl VgonioApp {
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
 
-        // let depth_pass = {
-        //     let depth_texture = Texture::create_depth_texture(
-        //         &gpu_ctx.device,
-        //         &gpu_ctx.surface_config,
-        //         "depth_texture",
-        //     );
-        //     DepthPass {
-        //         pass: RdrPass {
-        //             pipeline: ,
-        //             bind_groups: vec![],
-        //             uniform_buffer: None
-        //         },
-        //         depth_texture: Texture {}
-        //     }
-        // };
-        //
-        let depth_texture = Texture::create_depth_texture(
+        let depth_attachment = Texture::create_depth_texture(
             &gpu_ctx.device,
             gpu_ctx.surface_config.width,
             gpu_ctx.surface_config.height,
-            "depth-texture",
+            Some("depth-texture"),
         );
 
-        let depth_map_buffer_size = (std::mem::size_of::<f32>()
+        let depth_attachment_storage_size = (std::mem::size_of::<f32>()
             * (gpu_ctx.surface_config.width * gpu_ctx.surface_config.height) as usize)
             as wgpu::BufferAddress;
-        let depth_map_buffer_desc = wgpu::BufferDescriptor {
+        let depth_attachment_storage = gpu_ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: depth_map_buffer_size,
+            size: depth_attachment_storage_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
-        };
-        let depth_map_buffer = gpu_ctx.device.create_buffer(&depth_map_buffer_desc);
+        });
+        let depth_attachment_image =
+            GrayImage::new(gpu_ctx.surface_config.width, gpu_ctx.surface_config.height);
 
         // Camera
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
-                1000.0,
+                100.0,
                 60.0f32.to_radians(),
                 gpu_ctx.surface_config.width,
                 gpu_ctx.surface_config.height,
             );
-            CameraState::new(camera, projection)
+            CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
 
         let heightfield_pass = create_height_field_pass(&gpu_ctx);
@@ -128,12 +116,14 @@ impl VgonioApp {
         passes.insert("visual_grid", visual_grid_pass);
         passes.insert("heightfield", heightfield_pass);
 
-        let instancing_demo = create_instancing_demo(&gpu_ctx);
+        let depth_pass = ShadowPass::new(
+            &gpu_ctx,
+            gpu_ctx.surface_config.width,
+            gpu_ctx.surface_config.height,
+            true,
+        );
 
-        // let mut render_pipelines = HashMap::new();
-        // render_pipelines.insert("default", default_render_pipeline);
-        // render_pipelines.insert("grid", grid_render_pipeline);
-        // render_pipelines.insert("heightfield", height_field_render_pipeline);
+        let instancing_demo = create_instancing_demo(&gpu_ctx);
 
         let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
         let ui = egui_demo_lib::WrapApp::default();
@@ -153,28 +143,16 @@ impl VgonioApp {
             gui,
             input,
             passes,
-            // depth_pass: DepthPass {},
-            depth_map_buffer,
+            depth_attachment,
+            depth_attachment_storage,
+            depth_attachment_image,
+            shadow_pass: depth_pass,
             instancing_demo,
             heightfield: None,
             heightfield_mesh_view: None,
-            // height_field_uniform_buffer,
-            // height_field_bind_group,
-
-            // vertex_buffer,
-            // index_buffer,
-            // num_vertices,
-            // num_indices,
-            // texture_bind_groups,
-            // current_texture_index: 0,
             camera,
-            // object_model_matrix,
-            // instancing_buffer,
-            // instancing_transforms,
-            depth_texture,
             start_time: Instant::now(),
             prev_frame_time: None,
-            // gui_ctx,
             demo_ui: ui,
             is_grid_enabled: true,
         })
@@ -197,11 +175,11 @@ impl VgonioApp {
             self.gpu_ctx
                 .surface
                 .configure(&self.gpu_ctx.device, &self.gpu_ctx.surface_config);
-            self.depth_texture = Texture::create_depth_texture(
+            self.depth_attachment = Texture::create_depth_texture(
                 &self.gpu_ctx.device,
                 self.gpu_ctx.surface_config.width,
                 self.gpu_ctx.surface_config.height,
-                "depth_texture",
+                Some("depth_texture"),
             );
 
             let depth_map_buffer_size = (std::mem::size_of::<f32>()
@@ -213,11 +191,15 @@ impl VgonioApp {
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             };
-            self.depth_map_buffer = self.gpu_ctx.device.create_buffer(&depth_map_buffer_desc);
+            self.depth_attachment_storage =
+                self.gpu_ctx.device.create_buffer(&depth_map_buffer_desc);
 
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
+
+            self.shadow_pass
+                .resize(&self.gpu_ctx.device, new_size.width, new_size.height);
         }
     }
 
@@ -242,6 +224,40 @@ impl VgonioApp {
                         println!("C pressed");
                         self.save_depth_map();
                     }
+                    if self.input.is_key_pressed(VirtualKeyCode::B) {
+                        println!("L pressed");
+                        if let Some(mesh) = &self.heightfield_mesh_view {
+                            println!("Bake");
+                            self.shadow_pass.bake(
+                                &self.gpu_ctx.device,
+                                &self.gpu_ctx.queue,
+                                &mesh.vertex_buffer,
+                                &mesh.index_buffer,
+                                mesh.indices_count,
+                                mesh.index_format,
+                            );
+                        }
+                    }
+                    if self.input.is_key_pressed(VirtualKeyCode::S) {
+                        println!("save depth");
+                        self.shadow_pass
+                            .save_to_image(
+                                &self.gpu_ctx.device,
+                                0.1,
+                                100.0,
+                                "depth_pass_depth.png".as_ref(),
+                            )
+                            .unwrap();
+                    }
+                    if self.input.is_key_pressed(VirtualKeyCode::K) {
+                        println!("measure");
+                        let now = std::time::Instant::now();
+                        self.measure_microfacet_geometric_term();
+                        println!(
+                            "elapsed time: {}",
+                            (std::time::Instant::now() - now).as_millis()
+                        );
+                    }
                     true
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
@@ -265,7 +281,8 @@ impl VgonioApp {
 
     pub fn update(&mut self, dt: std::time::Duration) {
         // Update camera uniform.
-        self.camera.update(&self.input, dt);
+        self.camera
+            .update(&self.input, dt, ProjectionKind::Perspective);
         self.gui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
@@ -277,14 +294,15 @@ impl VgonioApp {
             self.instancing_demo.current_texture_index %= 2;
         }
 
+        let (view, proj) = (
+            self.camera.uniform.view_matrix,
+            self.camera.uniform.proj_matrix,
+        );
+
         self.gpu_ctx.queue.write_buffer(
             self.instancing_demo.pass.uniform_buffer.as_ref().unwrap(),
             0,
-            bytemuck::cast_slice(&[
-                self.instancing_demo.object_model_matrix,
-                self.camera.uniform.view_matrix,
-                self.camera.uniform.proj_matrix,
-            ]),
+            bytemuck::cast_slice(&[self.instancing_demo.object_model_matrix, view, proj]),
         );
 
         self.gpu_ctx.queue.write_buffer(
@@ -296,12 +314,15 @@ impl VgonioApp {
                 .unwrap(),
             0,
             bytemuck::cast_slice(&[
-                self.camera.uniform.view_matrix,
-                self.camera.uniform.proj_matrix,
+                view,
+                proj,
                 self.camera.uniform.view_inv_matrix,
                 self.camera.uniform.proj_inv_matrix,
             ]),
         );
+
+        self.shadow_pass
+            .update_uniforms(&self.gpu_ctx.queue, Mat4::IDENTITY, view, proj);
 
         if let Some(hf) = &self.heightfield {
             let mut uniform = [0.0f32; 16 * 3 + 4];
@@ -379,7 +400,7 @@ impl VgonioApp {
                     },
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
+                    view: &self.depth_attachment.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,
@@ -420,12 +441,51 @@ impl VgonioApp {
             if let Some(mesh) = &self.heightfield_mesh_view {
                 let pass = self.passes.get("heightfield").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
+                // render_pass.set_pipeline(self.shadow_pass.pipeline());
+                // render_pass.set_bind_group(0, &self.shadow_pass.bind_groups()[0], &[]);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
                 render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
             }
         }
+
+        // {
+        //     if let Some(mesh) = &self.heightfield_mesh_view {
+        //         let mut pass =
+        // encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
+        //             label: None,
+        //             color_attachments: &[
+        //                 wgpu::RenderPassColorAttachment {
+        //                     view: &self.shadow_pass.color_attachment.view,
+        //                     resolve_target: None,
+        //                     ops: wgpu::Operations {
+        //                         load: wgpu::LoadOp::Clear(wgpu::Color {
+        //                             r: 0.1,
+        //                             g: 0.2,
+        //                             b: 0.3,
+        //                             a: 1.0
+        //                         }),
+        //                         store: true
+        //                     }
+        //                 }
+        //             ],
+        //             depth_stencil_attachment:
+        // Some(wgpu::RenderPassDepthStencilAttachment {                 view:
+        // &self.shadow_pass.depth_attachment.view,                 depth_ops:
+        // Some(wgpu::Operations {                     load:
+        // wgpu::LoadOp::Clear(1.0),                     store: true
+        //                 }),
+        //                 stencil_ops: None
+        //             })
+        //         });
+        //         pass.set_pipeline(self.shadow_pass.pipeline());
+        //         pass.set_bind_group(0, &self.shadow_pass.bind_groups()[0], &[]);
+        //         pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        //         pass.set_index_buffer(mesh.index_buffer.slice(..),
+        // mesh.index_format);         pass.draw_indexed(0..mesh.indices_count,
+        // 0, 0..1);     }
+        // }
 
         {
             // Record UI
@@ -502,7 +562,7 @@ impl VgonioApp {
             Ok(hf) => {
                 let mut hf = hf;
                 hf.fill_holes();
-                let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf, 0.5);
+                let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf);
                 self.heightfield = Some(Box::new(hf));
                 self.heightfield_mesh_view = Some(mesh_view);
             }
@@ -512,7 +572,7 @@ impl VgonioApp {
         }
     }
 
-    fn save_depth_map(&self) {
+    fn save_depth_map(&mut self) {
         log::info!("Saving depth map...");
         let mut encoder = self
             .gpu_ctx
@@ -520,13 +580,13 @@ impl VgonioApp {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
-                texture: &self.depth_texture.raw,
+                texture: &self.depth_attachment.raw,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::ImageCopyBuffer {
-                buffer: &self.depth_map_buffer,
+                buffer: &self.depth_attachment_storage,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: NonZeroU32::new(
@@ -544,7 +604,7 @@ impl VgonioApp {
         self.gpu_ctx.queue.submit(Some(encoder.finish()));
 
         {
-            let buffer_slice = self.depth_map_buffer.slice(..);
+            let buffer_slice = self.depth_attachment_storage.slice(..);
 
             let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
             self.gpu_ctx.device.poll(wgpu::Maintain::Wait);
@@ -556,21 +616,83 @@ impl VgonioApp {
             let data_u8 = unsafe {
                 let (prefix, data, suffix) = buffer_view_f32.align_to::<f32>();
                 data.iter()
-                    .map(|val| ((1.0 - val) * 255.0) as u8)
+                    .map(|d| (remap_depth(*d, 0.1, 100.0) * 255.0) as u8)
                     .collect::<Vec<u8>>()
             };
 
             use image::{GrayImage, ImageBuffer, Luma};
-            let image_buffer = ImageBuffer::<Luma<u8>, _>::from_raw(
-                self.gpu_ctx.surface_config.width,
-                self.gpu_ctx.surface_config.height,
-                data_u8,
-            )
-            .unwrap();
-            image_buffer.save("depth_map.png").unwrap();
+            self.depth_attachment_image.copy_from_slice(&data_u8);
+            self.depth_attachment_image.save("depth_map.png").unwrap();
         }
-        self.depth_map_buffer.unmap();
+        self.depth_attachment_storage.unmap();
     }
+
+    fn measure_microfacet_geometric_term(&mut self) {
+        if let Some(mesh) = &self.heightfield_mesh_view {
+            let radius = (mesh.extent.max - mesh.extent.min).max_element();
+            let near = 0.1f32;
+            let far = radius * 2.0;
+            println!("radius: {}", radius);
+
+            let proj = {
+                let projection = Projection::new(
+                    near,
+                    far,
+                    70.0f32.to_radians(),
+                    (radius * 1.414) as u32,
+                    (radius * 1.414) as u32,
+                );
+                projection.matrix(ProjectionKind::Orthographic)
+            };
+
+            for i in (0..360).step_by(1) {
+                for j in (0..91).step_by(1) {
+                    let phi = (i as f32).to_radians(); // azimuth
+                    let theta = (j as f32).to_radians(); // inclination
+                    let (sin_theta, cos_theta) = theta.sin_cos();
+                    let (sin_phi, cos_phi) = phi.sin_cos();
+                    let pos = Vec3::new(
+                        radius * sin_theta * cos_phi,
+                        radius * cos_theta,
+                        radius * sin_theta * sin_phi,
+                    );
+                    let camera = Camera::new(pos, Vec3::ZERO, Vec3::Y);
+                    self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
+                    self.shadow_pass.update_uniforms(
+                        &self.gpu_ctx.queue,
+                        Mat4::IDENTITY,
+                        camera.matrix(),
+                        proj,
+                    );
+                    self.shadow_pass.bake(
+                        &self.gpu_ctx.device,
+                        &self.gpu_ctx.queue,
+                        &mesh.vertex_buffer,
+                        &mesh.index_buffer,
+                        mesh.indices_count,
+                        mesh.index_format,
+                    );
+                    // self.shadow_pass
+                    //     .save_to_image(
+                    //         &self.gpu_ctx.device,
+                    //         near,
+                    //         far,
+                    //         format!("shadow_pass_{i}_{j}.png").as_ref(),
+                    //     )
+                    //     .unwrap();
+                    println!("<{i},{j}>: {}", self.shadow_pass.compute_pixels_count(&self.gpu_ctx.device));
+                }
+            }
+        }
+    }
+}
+
+fn linearize_depth(depth: f32, near: f32, far: f32) -> f32 {
+    (2.0 * near * far) / (far + near - depth * (far - near))
+}
+
+pub fn remap_depth(depth: f32, near: f32, far: f32) -> f32 {
+    linearize_depth(depth, near, far) / (far - near)
 }
 
 fn create_height_field_pass(ctx: &GpuContext) -> RdrPass {

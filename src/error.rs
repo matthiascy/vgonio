@@ -1,3 +1,4 @@
+use image::ImageError;
 use std::fmt::{Display, Formatter};
 use std::str;
 
@@ -12,6 +13,7 @@ pub enum Error {
     YamlError(serde_yaml::Error),
     Any(String),
     FileError(&'static str),
+    ImageError(image::ImageError),
 }
 
 impl Display for Error {
@@ -43,6 +45,9 @@ impl Display for Error {
             }
             Error::YamlError(err) => {
                 write!(f, "YAML error: {}", err)
+            }
+            Error::ImageError(err) => {
+                write!(f, "Image error: {}", err)
             }
         }
     }
@@ -83,5 +88,11 @@ impl From<bincode::Error> for Error {
 impl From<serde_yaml::Error> for Error {
     fn from(err: serde_yaml::Error) -> Self {
         Error::YamlError(err)
+    }
+}
+
+impl From<image::ImageError> for Error {
+    fn from(err: ImageError) -> Self {
+        Error::ImageError(err)
     }
 }

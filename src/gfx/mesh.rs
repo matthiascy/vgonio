@@ -1,5 +1,8 @@
 use crate::gfx::VertexLayout;
 use crate::htfld::HeightField;
+use crate::isect::Aabb;
+use bytemuck::{Pod, Zeroable};
+use std::ops::Index;
 use wgpu::util::DeviceExt;
 use wgpu::{PrimitiveTopology, VertexFormat};
 
@@ -8,27 +11,34 @@ use wgpu::{PrimitiveTopology, VertexFormat};
 pub struct MeshView {
     pub vertices_count: u32,
     pub indices_count: u32,
+    pub extent: Aabb,
     pub vertex_layout: VertexLayout,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub index_format: wgpu::IndexFormat,
     pub topology: wgpu::PrimitiveTopology,
-    pub scale: f32,
 }
 
 impl MeshView {
-    pub fn new<
-        Vertex: bytemuck::Pod + bytemuck::Zeroable,
-        Index: bytemuck::Pod + bytemuck::Zeroable,
-    >(
+    pub fn new<V: Pod + Zeroable + Index<usize, Output = f32>, I: Pod + Zeroable>(
         device: &wgpu::Device,
         layout: VertexLayout,
-        vertices: &[Vertex],
-        indices: &[Index],
+        vertices: &[V],
+        indices: &[I],
         topology: wgpu::PrimitiveTopology,
         index_format: wgpu::IndexFormat,
-        scale: f32,
     ) -> Self {
+        let mut extent = Aabb::default();
+        for v in vertices.iter() {
+            for k in 0..3 {
+                if v[k] > extent.max[k] {
+                    extent.max[k] = v[k];
+                }
+                if v[k] < extent.min[k] {
+                    extent.min[k] = v[k];
+                }
+            }
+        }
         let vb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("mesh_view_index_buffer"),
             contents: bytemuck::cast_slice(vertices),
@@ -44,21 +54,21 @@ impl MeshView {
         Self {
             vertices_count: vertices.len() as _,
             indices_count: indices.len() as _,
+            extent,
             vertex_layout: layout,
             vertex_buffer: vb,
             index_buffer: ib,
             index_format,
             topology,
-            scale,
         }
     }
 }
 
 impl MeshView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &HeightField, scale: f32) -> Self {
+    pub fn from_height_field(device: &wgpu::Device, hf: &HeightField) -> Self {
         // Number of triangles = 2 * rows * cols
         let (rows, cols) = (hf.cols, hf.rows);
-        let (positions, _) = hf.generate_vertices();
+        let (positions, extent) = hf.generate_vertices();
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
 
@@ -112,12 +122,12 @@ impl MeshView {
         Self {
             vertices_count: vertices_count as u32,
             indices_count: indices_count as u32,
+            extent,
             vertex_layout,
             vertex_buffer,
             index_buffer,
             index_format: wgpu::IndexFormat::Uint32,
             topology: PrimitiveTopology::TriangleList,
-            scale,
         }
     }
 }

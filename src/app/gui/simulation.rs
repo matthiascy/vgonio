@@ -1,14 +1,17 @@
 use crate::app::gui::gizmo::VgonioGizmo;
-use crate::app::gui::UserEvent;
+use crate::app::gui::{DebuggerPanel, UserEvent, VisualDebugger};
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
+use image::GrayImage;
 use winit::event_loop::EventLoopProxy;
 
 pub struct SimulationWorkspace {
     is_sim_win_open: bool,
     is_view_gizmo_open: bool,
+    is_visual_debugger_open: bool,
     sim_win: SimulationWindow,
     view_gizmo: VgonioGizmo,
+    visual_debugger: VisualDebugger,
 }
 
 impl epi::App for SimulationWorkspace {
@@ -18,6 +21,8 @@ impl epi::App for SimulationWorkspace {
         // });
         self.sim_win.show(ctx, &mut self.is_sim_win_open);
         self.view_gizmo.show(ctx, &mut self.is_view_gizmo_open);
+        self.visual_debugger
+            .show(ctx, &mut self.is_visual_debugger_open);
     }
 
     fn name(&self) -> &str {
@@ -30,13 +35,19 @@ impl SimulationWorkspace {
         Self {
             is_sim_win_open: false,
             is_view_gizmo_open: false,
+            is_visual_debugger_open: false,
             sim_win: SimulationWindow::new(event_loop_proxy),
             view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
+            visual_debugger: VisualDebugger::new(),
         }
     }
 
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
         self.view_gizmo.update_matrices(model, view, proj)
+    }
+
+    pub fn open_visual_debugger(&mut self) {
+        self.is_visual_debugger_open = true;
     }
 }
 
