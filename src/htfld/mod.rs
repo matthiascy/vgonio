@@ -406,6 +406,7 @@ impl Heightfield {
     }
 
     /// Generate vertices from the height values.
+    /// The vertices are generated following the order from left to right, top to bottom.
     pub fn generate_vertices(&self) -> (Vec<Vec3>, Aabb) {
         log::info!(
             "Generating height field vertices with {:?} alignment",
@@ -449,4 +450,46 @@ impl Heightfield {
 
         (positions, extent)
     }
+}
+
+/// Generate a triangle mesh from heightfield. Triangle winding is counter-clockwise.
+pub(crate) fn regular_triangulation(positions: &[Vec3], rows: usize, cols: usize) -> Vec<u32> {
+    assert_eq!(
+        positions.len(),
+        (rows * cols) as usize,
+        "triangulation: positions.len() != rows * cols"
+    );
+    let mut indices: Vec<u32> = vec![0; 2 * (rows - 1) * (cols - 1) * 3];
+    let mut tri = 0;
+    for i in 0..rows * cols {
+        let row = i / rows;
+        let col = i % rows;
+
+        // last row
+        if row == cols - 1 {
+            continue;
+        }
+
+        if col == 0 {
+            indices[tri] = i as u32;
+            indices[tri + 1] = (i + rows) as u32;
+            indices[tri + 2] = (i + 1) as u32;
+            tri += 3;
+        } else if col == rows - 1 {
+            indices[tri] = i as u32;
+            indices[tri + 1] = (i + rows - 1) as u32;
+            indices[tri + 2] = (i + rows) as u32;
+            tri += 3;
+        } else {
+            indices[tri] = i as u32;
+            indices[tri + 1] = (i + rows - 1) as u32;
+            indices[tri + 2] = (i + rows) as u32;
+            indices[tri + 3] = i as u32;
+            indices[tri + 4] = (i + rows) as u32;
+            indices[tri + 5] = (i + 1) as u32;
+            tri += 6;
+        }
+    }
+
+    indices
 }

@@ -1,7 +1,8 @@
 use crate::gfx::VertexLayout;
-use crate::htfld::Heightfield;
+use crate::htfld::{Heightfield, regular_triangulation};
 use crate::isect::Aabb;
 use bytemuck::{Pod, Zeroable};
+use glam::Vec3;
 use std::ops::Index;
 use wgpu::util::DeviceExt;
 use wgpu::{PrimitiveTopology, VertexFormat};
@@ -17,6 +18,44 @@ pub struct MeshView {
     pub index_buffer: wgpu::Buffer,
     pub index_format: wgpu::IndexFormat,
     pub topology: wgpu::PrimitiveTopology,
+}
+
+// TODO: create a separate method to extract face normals of an heightfield
+impl MeshView {
+    pub fn from_height_field(device: &wgpu::Device, hf: &Heightfield) -> Self {
+        // Number of triangles = 2 * rows * cols
+        let (rows, cols) = (hf.cols, hf.rows);
+        let (positions, extent) = hf.generate_vertices();
+        let vertices_count = positions.len();
+        let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
+
+        let indices: Vec<u32> = regular_triangulation(&positions, rows, cols);
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("mesh_view_vertex_buffer"),
+            contents: bytemuck::cast_slice(&positions),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("mesh_view_index_buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let vertex_layout = VertexLayout::new(&[VertexFormat::Float32x3], None);
+
+        Self {
+            vertices_count: vertices_count as u32,
+            indices_count: indices_count as u32,
+            extent,
+            vertex_layout,
+            vertex_buffer,
+            index_buffer,
+            index_format: wgpu::IndexFormat::Uint32,
+            topology: PrimitiveTopology::TriangleList,
+        }
+    }
 }
 
 impl MeshView {
@@ -60,76 +99,6 @@ impl MeshView {
             index_buffer: ib,
             index_format,
             topology,
-        }
-    }
-}
-
-// TODO: create a separate method to extract face normals of an heightfield
-
-impl MeshView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &Heightfield) -> Self {
-        // Number of triangles = 2 * rows * cols
-        let (rows, cols) = (hf.cols, hf.rows);
-        let (positions, extent) = hf.generate_vertices();
-        let vertices_count = positions.len();
-        let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-
-        let mut indices: Vec<u32> = vec![];
-        indices.resize(indices_count, 0);
-        let mut tri = 0;
-        for i in 0..rows * cols {
-            let row = i / rows;
-            let col = i % rows;
-
-            // last row
-            if row == cols - 1 {
-                continue;
-            }
-
-            if col == 0 {
-                indices[tri] = i as u32;
-                indices[tri + 1] = (i + 1) as u32;
-                indices[tri + 2] = (i + rows) as u32;
-                tri += 3;
-            } else if col == rows - 1 {
-                indices[tri] = i as u32;
-                indices[tri + 1] = (i + rows) as u32;
-                indices[tri + 2] = (i + rows - 1) as u32;
-                tri += 3;
-            } else {
-                indices[tri] = i as u32;
-                indices[tri + 1] = (i + rows) as u32;
-                indices[tri + 2] = (i + rows - 1) as u32;
-                indices[tri + 3] = i as u32;
-                indices[tri + 4] = (i + 1) as u32;
-                indices[tri + 5] = (i + rows) as u32;
-                tri += 6;
-            }
-        }
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_vertex_buffer"),
-            contents: bytemuck::cast_slice(&positions),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_index_buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let vertex_layout = VertexLayout::new(&[VertexFormat::Float32x3], None);
-
-        Self {
-            vertices_count: vertices_count as u32,
-            indices_count: indices_count as u32,
-            extent,
-            vertex_layout,
-            vertex_buffer,
-            index_buffer,
-            index_format: wgpu::IndexFormat::Uint32,
-            topology: PrimitiveTopology::TriangleList,
         }
     }
 }

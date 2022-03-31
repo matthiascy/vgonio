@@ -2,6 +2,7 @@ use crate::app::gui::gizmo::VgonioGizmo;
 use crate::app::gui::{UserEvent, VisualDebugger};
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
+use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 pub struct SimulationWorkspace {
@@ -30,14 +31,14 @@ impl epi::App for SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
-    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
         Self {
             is_sim_win_open: false,
             is_view_gizmo_open: false,
             is_visual_debugger_open: false,
-            sim_win: SimulationWindow::new(event_loop_proxy),
+            sim_win: SimulationWindow::new(evlp.clone()),
             view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
-            visual_debugger: VisualDebugger::new(),
+            visual_debugger: VisualDebugger::new(evlp),
         }
     }
 
@@ -59,15 +60,15 @@ enum SensorShape {
 pub struct SimulationWindow {
     is_grid_enabled: bool,
     sensor_shape: SensorShape,
-    event_loop_proxy: EventLoopProxy<UserEvent>,
+    evlp: Arc<EventLoopProxy<UserEvent>>,
 }
 
 impl SimulationWindow {
-    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
         Self {
             is_grid_enabled: true,
             sensor_shape: SensorShape::Rectangle,
-            event_loop_proxy,
+            evlp,
         }
     }
 
@@ -91,12 +92,7 @@ impl SimulationWindow {
                     .show(ui, |ui| {
                         ui.add(egui::Label::new("Visual Grid:"));
                         let res = ui.add(super::widgets::toggle(&mut self.is_grid_enabled));
-                        if res.changed()
-                            && self
-                                .event_loop_proxy
-                                .send_event(UserEvent::ToggleGrid)
-                                .is_err()
-                        {
+                        if res.changed() && self.evlp.send_event(UserEvent::ToggleGrid).is_err() {
                             log::warn!("[EVENT] Failed to send ToggleGrid event");
                         }
                         ui.end_row();

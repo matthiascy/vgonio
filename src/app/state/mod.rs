@@ -26,6 +26,7 @@ use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
+use crate::acq::MicroSurfaceView;
 
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
@@ -61,6 +62,7 @@ pub struct VgonioApp {
 
     heightfield: Option<Box<Heightfield>>,
     heightfield_mesh_view: Option<MeshView>,
+    heightfield_micro_view: Option<MicroSurfaceView>,
 
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
@@ -109,7 +111,7 @@ impl VgonioApp {
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
 
-        let heightfield_pass = create_height_field_pass(&gpu_ctx);
+        let heightfield_pass = create_heightfield_pass(&gpu_ctx);
         let visual_grid_pass = create_visual_grid_pass(&gpu_ctx);
 
         let mut passes = HashMap::new();
@@ -150,6 +152,7 @@ impl VgonioApp {
             instancing_demo,
             heightfield: None,
             heightfield_mesh_view: None,
+            heightfield_micro_view: None,
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
@@ -219,10 +222,6 @@ impl VgonioApp {
                     if self.input.is_key_pressed(VirtualKeyCode::Space) {
                         self.instancing_demo.current_texture_index += 1;
                         self.instancing_demo.current_texture_index %= 2;
-                    }
-                    if self.input.is_key_pressed(VirtualKeyCode::C) {
-                        println!("C pressed");
-                        self.save_depth_map();
                     }
                     if self.input.is_key_pressed(VirtualKeyCode::B) {
                         println!("L pressed");
@@ -439,14 +438,21 @@ impl VgonioApp {
             }
 
             if let Some(mesh) = &self.heightfield_mesh_view {
+            // if let Some(mesh) = &self.heightfield_micro_view {
                 let pass = self.passes.get("heightfield").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
-                // render_pass.set_pipeline(self.shadow_pass.pipeline());
-                // render_pass.set_bind_group(0, &self.shadow_pass.bind_groups()[0], &[]);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
                 render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
+
+                // render_pass.set_index_buffer(mesh.index_buffer.slice(..), MicroSurfaceView::INDEX_FORMAT);
+                // for i in 0..mesh.index_ranges.len() {
+                //     let (start, end) = mesh.index_ranges[i];
+                //     if end - start > 0 {
+                //         render_pass.draw_indexed(start..end, 0, 0..1);
+                //     }
+                // }
             }
         }
 
@@ -554,6 +560,10 @@ impl VgonioApp {
             UserEvent::ToggleGrid => {
                 self.is_grid_enabled = !self.is_grid_enabled;
             }
+            UserEvent::SaveDepthMap => {
+                log::info!("Saving depth map!");
+                self.save_depth_map();
+            }
         }
     }
 
@@ -563,8 +573,10 @@ impl VgonioApp {
                 let mut hf = hf;
                 hf.fill_holes();
                 let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf);
+                let micro_view = MicroSurfaceView::from_height_field(&self.gpu_ctx.device, &hf, 1.0f32.to_radians(), 1.0f32.to_radians());
                 self.heightfield = Some(Box::new(hf));
                 self.heightfield_mesh_view = Some(mesh_view);
+                self.heightfield_micro_view = Some(micro_view);
             }
             Err(err) => {
                 log::error!("HeightField loading error: {}", err);
@@ -572,8 +584,8 @@ impl VgonioApp {
         }
     }
 
+    /// Save current depth buffer content to a PNG file.
     fn save_depth_map(&mut self) {
-        log::info!("Saving depth map...");
         let mut encoder = self
             .gpu_ctx
             .device
@@ -608,9 +620,7 @@ impl VgonioApp {
 
             let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
             self.gpu_ctx.device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async {
-                mapping.await.unwrap()
-            });
+            pollster::block_on(async { mapping.await.unwrap() });
 
             let buffer_view_f32 = buffer_slice.get_mapped_range();
             let data_u8 = unsafe {
@@ -626,8 +636,10 @@ impl VgonioApp {
         self.depth_attachment_storage.unmap();
     }
 
+    /// Measure the geometric masking/shadowing function of a micro-surface
+    /// (heightfield).
     fn measure_microfacet_geometric_term(&mut self) {
-        if let Some(mesh) = &self.heightfield_mesh_view {
+        if let Some(mesh) = &self.heightfield_micro_view {
             let radius = (mesh.extent.max - mesh.extent.min).max_element();
             let near = 0.1f32;
             let far = radius * 2.0;
@@ -669,6 +681,7 @@ impl VgonioApp {
                         &self.gpu_ctx.queue,
                         &mesh.vertex_buffer,
                         &mesh.index_buffer,
+                        0,
                         mesh.indices_count,
                         mesh.index_format,
                     );
@@ -680,7 +693,8 @@ impl VgonioApp {
                     //         format!("shadow_pass_{i}_{j}.png").as_ref(),
                     //     )
                     //     .unwrap();
-                    results[i * 91 + j] = self.shadow_pass.compute_pixels_count(&self.gpu_ctx.device) as _;
+                    results[i * 91 + j] =
+                        self.shadow_pass.compute_pixels_count(&self.gpu_ctx.device) as _;
                 }
             }
             let file = std::fs::File::create("measured_geometric_term.txt").unwrap();
@@ -700,14 +714,14 @@ pub fn remap_depth(depth: f32, near: f32, far: f32) -> f32 {
     linearize_depth(depth, near, far) / (far - near)
 }
 
-fn create_height_field_pass(ctx: &GpuContext) -> RdrPass {
+fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
     // Load shader
     let shader_module = ctx
         .device
         .create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("height_field_shader_module"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("../assets/shaders/wgsl/height_field.wgsl").into(),
+                include_str!("../assets/shaders/wgsl/heightfield.wgsl").into(),
             ),
         });
 

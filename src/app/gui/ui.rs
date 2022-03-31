@@ -3,6 +3,7 @@ use super::simulation::SimulationWorkspace;
 use super::UserEvent;
 use epi::App;
 use glam::Mat4;
+use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 pub struct Workspaces {
@@ -11,9 +12,9 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
         Self {
-            simulation: SimulationWorkspace::new(event_loop_proxy),
+            simulation: SimulationWorkspace::new(evlp),
             analysis: AnalysisWorkspace {},
         }
     }
@@ -39,14 +40,15 @@ pub struct VgonioGui {
     selected_workspace: String,
 
     /// Event loop proxy for sending user defined events.
-    event_loop_proxy: EventLoopProxy<UserEvent>,
+    evlp: Arc<EventLoopProxy<UserEvent>>,
 }
 
 impl VgonioGui {
-    pub fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
-        let workspaces = Workspaces::new(event_loop_proxy.clone());
+    pub fn new(evlp: EventLoopProxy<UserEvent>) -> Self {
+        let evlp = Arc::new(evlp);
+        let workspaces = Workspaces::new(evlp.clone());
         Self {
-            event_loop_proxy,
+            evlp,
             workspaces,
             dropped_files: vec![],
             selected_workspace: "".to_string(),
@@ -193,11 +195,7 @@ impl VgonioGui {
                         if let Some(filepath) =
                             rfd::FileDialog::new().set_directory("~/").pick_file()
                         {
-                            if self
-                                .event_loop_proxy
-                                .send_event(UserEvent::OpenFile(filepath))
-                                .is_err()
-                            {
+                            if self.evlp.send_event(UserEvent::OpenFile(filepath)).is_err() {
                                 log::warn!("[EVENT] Failed to send OpenFile event");
                             }
                         }
@@ -260,13 +258,15 @@ impl VgonioGui {
             });
             ui.menu_button("View", |ui| {
                 ui.menu_button("     Tool Windows", |ui| {
-                    if ui.button("Height Field Editor").clicked() {
+                    if ui.button("Heightfield Editor").clicked() {
                         println!("TODO: height field editor");
                     }
                     if ui.button("BxDF Viewer").clicked() {
                         println!("TODO: bxdf viewer");
                     }
-                    if ui.button("Visual Debugger").clicked() && self.selected_workspace == self.workspaces.simulation.name() {
+                    if ui.button("Visual Debugger").clicked()
+                        && self.selected_workspace == self.workspaces.simulation.name()
+                    {
                         self.workspaces.simulation.open_visual_debugger();
                     }
                 });

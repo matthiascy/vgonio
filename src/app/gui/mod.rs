@@ -11,10 +11,12 @@ pub use tools::*;
 pub use ui::VgonioGui;
 
 /// User defined event.
+#[derive(Debug)]
 pub enum UserEvent {
     RequestRedraw,
     OpenFile(std::path::PathBuf),
     ToggleGrid,
+    SaveDepthMap,
 }
 
 /// Repaint signal type that egui needs for requesting a repaint from another

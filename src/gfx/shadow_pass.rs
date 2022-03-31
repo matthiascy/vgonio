@@ -214,7 +214,8 @@ impl ShadowPass {
         queue: &wgpu::Queue,
         v_buf: &wgpu::Buffer,
         i_buf: &wgpu::Buffer,
-        i_count: u32,
+        i_start: u32,
+        i_end: u32,
         i_format: wgpu::IndexFormat,
     ) {
         let mut encoder =
@@ -238,7 +239,7 @@ impl ShadowPass {
             render_pass.set_bind_group(0, &self.inner.bind_groups[0], &[]);
             render_pass.set_vertex_buffer(0, v_buf.slice(..));
             render_pass.set_index_buffer(i_buf.slice(..), i_format);
-            render_pass.draw_indexed(0..i_count, 0, 0..1);
+            render_pass.draw_indexed(i_start..i_end, 0, 0..1);
         }
 
         // Copy depth buffer values to depth attachment storage
@@ -314,13 +315,17 @@ impl ShadowPass {
                 unsafe {
                     let (_, data, _) = buffer_view.align_to::<f32>();
                     data.par_iter()
-                        .fold(|| 0, |count, val| {
-                            if (*val - 1.0).abs() < f32::EPSILON {
-                                count
-                            } else {
-                                count + 1
-                            }
-                        }).sum()
+                        .fold(
+                            || 0,
+                            |count, val| {
+                                if (*val - 1.0).abs() < f32::EPSILON {
+                                    count
+                                } else {
+                                    count + 1
+                                }
+                            },
+                        )
+                        .sum()
                 }
             };
             buffer.unmap();

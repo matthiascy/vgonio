@@ -8,7 +8,7 @@ mod vertex;
 
 pub use context::GpuContext;
 pub use grid::*;
-pub use mesh::MeshView;
+pub use mesh::*;
 pub use shadow_pass::ShadowPass;
 pub use texture::Texture;
 pub use vertex::*;

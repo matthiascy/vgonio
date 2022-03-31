@@ -1,3 +1,17 @@
+//! # Attributes
+//!
+//! + Vertex attributes:
+//!   - Position (mandatory)
+//!   - Normal
+//!   - Color
+//!   - Texture Coordinates
+//! + Face attributes
+//!   - Normal
+//!   - Color
+//!   - Texture
+//! + Edge attributes (rarely used)
+//!   - Visible line
+
 use crate::error::Error;
 use crate::gfx::MeshView;
 use crate::htfld::Heightfield;
@@ -8,6 +22,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
+/// Vertex attributes container.
 trait AttribContainer {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -82,6 +97,12 @@ pub struct SurfaceMesh {
 // SurfaceSmoothing -- surface subdivision algorithm
 // SurfaceTriangulation -- triangulate polygons to get a pure triangle mesh.
 
+impl Default for SurfaceMesh {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SurfaceMesh {
     pub fn new() -> Self {
         let mut vert_attribs = VertAttribs::new();
@@ -90,14 +111,7 @@ impl SurfaceMesh {
 
         // Where stores position of each vertex.
         vert_attribs.insert("positions".into(), Box::new(AttribArray::<Vec3>::new()));
-        // Where stores normal of each vertex.
         vert_attribs.insert("normals".into(), Box::new(AttribArray::<Vec3>::new()));
-        // // Where stores vertices indices of all faces.
-        // face_attribs.insert("indices".into(), Box::new(AttribArray::<usize>::new()));
-        // // Where stores the real face (the range of vertex indices inside of
-        // `faces_raw`. face_attribs.insert("faces".into(),
-        // Box::new(AttribArray::<Face>::new())); Where stores the normal of
-        // each face.
         face_attribs.insert("normals".into(), Box::new(AttribArray::<Vec3>::new()));
 
         Self {
@@ -120,9 +134,9 @@ impl SurfaceMesh {
     /// # Examples
     ///
     /// ```
-    /// use vgonio::height_field::{AxisAlignment, HeightField};
+    /// use vgonio::htfld::{AxisAlignment, Heightfield};
     /// use vgonio::mesh::SurfaceMesh;
-    /// let hf = HeightField::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| (x * y) as f32 * 0.5);
+    /// let hf = Heightfield::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| (x * y) as f32 * 0.5);
     /// let mesh = SurfaceMesh::from_height_field(&hf);
     /// ```
     pub fn from_height_field(hf: &Heightfield) -> Self {
