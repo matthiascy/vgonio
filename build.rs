@@ -1,9 +1,19 @@
 const SPIRV_DST_PATH: &str = "src/app/assets/shaders/spirv";
 const GLSL_SRC_PATH: &str = "src/app/assets/shaders/glsl";
+const GLSL_SRC_FILES: [&str; 6] = [
+    "src/app/assets/shaders/glsl/grid.vert",
+    "src/app/assets/shaders/glsl/grid.frag",
+    "src/app/assets/shaders/glsl/shadow_pass.vert",
+    "src/app/assets/shaders/glsl/shadow_pass.frag",
+    "src/app/assets/shaders/glsl/geom_term.vert",
+    "src/app/assets/shaders/glsl/geom_term.frag",
+];
 
 fn main() {
     // Rerun the build if GLSL shaders have changed.
-    println!("cargo:rerun-if-changed={}", GLSL_SRC_PATH);
+    for entry in GLSL_SRC_FILES {
+        println!("cargo:rerun-if-changed={}", entry);
+    }
 
     // Create destination directory if it doesn't exist.
     std::fs::create_dir_all(SPIRV_DST_PATH).expect("Couldn't create destination directory.");
@@ -29,7 +39,10 @@ fn main() {
                 if let Some(kind) = kind {
                     let spirv = {
                         let source = std::fs::read_to_string(path.as_path()).unwrap_or_else(|_| {
-                            panic!("Couldn't read source file {:?}", path.as_os_str())
+                            panic!(
+                                "cargo:warning=couldn't read source file {:?}",
+                                path.as_os_str()
+                            )
                         });
                         compiler.compile_into_spirv(&source, kind, &filename, "main", None)
                     };
@@ -41,12 +54,12 @@ fn main() {
                             match std::fs::write(&output_filepath, compiled.as_binary_u8()) {
                                 Ok(_) => {}
                                 Err(err) => {
-                                    eprintln!("Failed to write to {:?}\n{}", output_filepath, err);
+                                    panic!("failed to write to {:?}\n{}", output_filepath, err);
                                 }
                             }
                         }
                         Err(err) => {
-                            eprintln!("Failed to compile shader: {:?}\n{}", path.as_os_str(), err);
+                            panic!("failed to compile shader: {}\n{}", path.display(), err);
                         }
                     }
                 }

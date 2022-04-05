@@ -10,6 +10,7 @@ use crate::gfx::{
 };
 use camera::CameraState;
 
+use crate::acq::{MicroSurfaceView, OcclusionEstimationPass};
 use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::Heightfield;
@@ -26,10 +27,15 @@ use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
-use crate::acq::MicroSurfaceView;
 
 const NUM_INSTANCES_PER_ROW: u32 = 9;
 const NUM_INSTANCES_PER_COL: u32 = 9;
+const AZIMUTH_BIN_SIZE_DEG: usize = 180;
+const ZENITH_BIN_SIZE_DEG: usize = 2;
+const AZIMUTH_BIN_SIZE_RAD: f32 = (AZIMUTH_BIN_SIZE_DEG as f32 * std::f32::consts::PI) / 180.0;
+const ZENITH_BIN_SIZE_RAD: f32 = (ZENITH_BIN_SIZE_DEG as f32 * std::f32::consts::PI) / 180.0;
+const NUM_AZIMUTH_BINS: usize = ((2.0 * std::f32::consts::PI) / AZIMUTH_BIN_SIZE_RAD) as _;
+const NUM_ZENITH_BINS: usize = ((0.5 * std::f32::consts::PI) / ZENITH_BIN_SIZE_RAD) as _;
 
 // TODO: fix blending.
 
@@ -57,6 +63,7 @@ pub struct VgonioApp {
     depth_attachment_image: image::GrayImage,
 
     shadow_pass: ShadowPass,
+    occlusion_estimation_pass: OcclusionEstimationPass,
 
     instancing_demo: InstancingDemo,
 
@@ -83,6 +90,7 @@ impl VgonioApp {
             &gpu_ctx.device,
             gpu_ctx.surface_config.width,
             gpu_ctx.surface_config.height,
+            None,
             Some("depth-texture"),
         );
 
@@ -123,6 +131,7 @@ impl VgonioApp {
             gpu_ctx.surface_config.width,
             gpu_ctx.surface_config.height,
             true,
+            true,
         );
 
         let instancing_demo = create_instancing_demo(&gpu_ctx);
@@ -139,6 +148,8 @@ impl VgonioApp {
             cursor_pos: [0.0, 0.0],
         };
 
+        let occlusion_estimation_pass = OcclusionEstimationPass::new(&gpu_ctx, 512, 512);
+
         Ok(Self {
             gpu_ctx,
             gui_ctx,
@@ -149,6 +160,7 @@ impl VgonioApp {
             depth_attachment_storage,
             depth_attachment_image,
             shadow_pass: depth_pass,
+            occlusion_estimation_pass,
             instancing_demo,
             heightfield: None,
             heightfield_mesh_view: None,
@@ -182,6 +194,7 @@ impl VgonioApp {
                 &self.gpu_ctx.device,
                 self.gpu_ctx.surface_config.width,
                 self.gpu_ctx.surface_config.height,
+                None,
                 Some("depth_texture"),
             );
 
@@ -223,38 +236,13 @@ impl VgonioApp {
                         self.instancing_demo.current_texture_index += 1;
                         self.instancing_demo.current_texture_index %= 2;
                     }
-                    if self.input.is_key_pressed(VirtualKeyCode::B) {
-                        println!("L pressed");
-                        if let Some(mesh) = &self.heightfield_mesh_view {
-                            println!("Bake");
-                            self.shadow_pass.bake(
-                                &self.gpu_ctx.device,
-                                &self.gpu_ctx.queue,
-                                &mesh.vertex_buffer,
-                                &mesh.index_buffer,
-                                mesh.indices_count,
-                                mesh.index_format,
-                            );
-                        }
-                    }
-                    if self.input.is_key_pressed(VirtualKeyCode::S) {
-                        println!("save depth");
-                        self.shadow_pass
-                            .save_to_image(
-                                &self.gpu_ctx.device,
-                                0.1,
-                                100.0,
-                                "depth_pass_depth.png".as_ref(),
-                            )
-                            .unwrap();
-                    }
                     if self.input.is_key_pressed(VirtualKeyCode::K) {
-                        println!("measure");
+                        println!("Measuring geometric term ...");
                         let now = std::time::Instant::now();
-                        self.measure_microfacet_geometric_term();
+                        self.measure_micro_surface_geometric_term();
                         println!(
-                            "elapsed time: {}",
-                            (std::time::Instant::now() - now).as_millis()
+                            "Geometric term measurement finished in {} secs",
+                            (std::time::Instant::now() - now).as_secs_f32()
                         );
                     }
                     true
@@ -430,69 +418,22 @@ impl VgonioApp {
                 );
             }
 
-            if self.is_grid_enabled {
-                let pass = self.passes.get("visual_grid").unwrap();
-                render_pass.set_pipeline(&pass.pipeline);
-                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
-                render_pass.draw(0..6, 0..1);
-            }
-
             if let Some(mesh) = &self.heightfield_mesh_view {
-            // if let Some(mesh) = &self.heightfield_micro_view {
                 let pass = self.passes.get("heightfield").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
                 render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
+            }
 
-                // render_pass.set_index_buffer(mesh.index_buffer.slice(..), MicroSurfaceView::INDEX_FORMAT);
-                // for i in 0..mesh.index_ranges.len() {
-                //     let (start, end) = mesh.index_ranges[i];
-                //     if end - start > 0 {
-                //         render_pass.draw_indexed(start..end, 0, 0..1);
-                //     }
-                // }
+            if self.is_grid_enabled {
+                let pass = self.passes.get("visual_grid").unwrap();
+                render_pass.set_pipeline(&pass.pipeline);
+                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
+                render_pass.draw(0..6, 0..1);
             }
         }
-
-        // {
-        //     if let Some(mesh) = &self.heightfield_mesh_view {
-        //         let mut pass =
-        // encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
-        //             label: None,
-        //             color_attachments: &[
-        //                 wgpu::RenderPassColorAttachment {
-        //                     view: &self.shadow_pass.color_attachment.view,
-        //                     resolve_target: None,
-        //                     ops: wgpu::Operations {
-        //                         load: wgpu::LoadOp::Clear(wgpu::Color {
-        //                             r: 0.1,
-        //                             g: 0.2,
-        //                             b: 0.3,
-        //                             a: 1.0
-        //                         }),
-        //                         store: true
-        //                     }
-        //                 }
-        //             ],
-        //             depth_stencil_attachment:
-        // Some(wgpu::RenderPassDepthStencilAttachment {                 view:
-        // &self.shadow_pass.depth_attachment.view,                 depth_ops:
-        // Some(wgpu::Operations {                     load:
-        // wgpu::LoadOp::Clear(1.0),                     store: true
-        //                 }),
-        //                 stencil_ops: None
-        //             })
-        //         });
-        //         pass.set_pipeline(self.shadow_pass.pipeline());
-        //         pass.set_bind_group(0, &self.shadow_pass.bind_groups()[0], &[]);
-        //         pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        //         pass.set_index_buffer(mesh.index_buffer.slice(..),
-        // mesh.index_format);         pass.draw_indexed(0..mesh.indices_count,
-        // 0, 0..1);     }
-        // }
-
         {
             // Record UI
             let ui_start_time = Instant::now();
@@ -569,11 +510,16 @@ impl VgonioApp {
 
     fn load_height_field(&mut self, path: &std::path::Path) {
         match Heightfield::read_from_file(path, None, None) {
-            Ok(hf) => {
-                let mut hf = hf;
+            Ok(mut hf) => {
+                log::info!(
+                    "Heightfield loaded: {}, rows = {}, cols = {}",
+                    path.display(),
+                    hf.rows,
+                    hf.cols
+                );
                 hf.fill_holes();
                 let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf);
-                let micro_view = MicroSurfaceView::from_height_field(&self.gpu_ctx.device, &hf, 1.0f32.to_radians(), 1.0f32.to_radians());
+                let micro_view = MicroSurfaceView::from_height_field(&self.gpu_ctx.device, &hf);
                 self.heightfield = Some(Box::new(hf));
                 self.heightfield_mesh_view = Some(mesh_view);
                 self.heightfield_micro_view = Some(micro_view);
@@ -636,9 +582,8 @@ impl VgonioApp {
         self.depth_attachment_storage.unmap();
     }
 
-    /// Measure the geometric masking/shadowing function of a micro-surface
-    /// (heightfield).
-    fn measure_microfacet_geometric_term(&mut self) {
+    /// Measure the geometric masking/shadowing function of a micro-surface.
+    fn measure_micro_surface_geometric_term(&mut self) {
         if let Some(mesh) = &self.heightfield_micro_view {
             let radius = (mesh.extent.max - mesh.extent.min).max_element();
             let near = 0.1f32;
@@ -655,52 +600,109 @@ impl VgonioApp {
                 projection.matrix(ProjectionKind::Orthographic)
             };
 
-            let mut results = [0.0f32; 360 * 91];
+            let file = std::fs::File::create("measured_geometric_term_v2.txt").unwrap();
+            let writer = &mut BufWriter::new(file);
+            writer.write_all("phi theta ratio\n".as_bytes()).unwrap();
 
-            for i in (0..360).step_by(1) {
-                for j in (0..91).step_by(1) {
-                    let phi = (i as f32).to_radians(); // azimuth
-                    let theta = (j as f32).to_radians(); // inclination
+            self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
+
+            for i in 0..NUM_AZIMUTH_BINS {
+                for j in 0..NUM_ZENITH_BINS {
+                    // Camera is located at the center of each bin.
+                    let phi = ((2 * i + 1) as f32) * AZIMUTH_BIN_SIZE_RAD * 0.5; // azimuth
+                    let theta = ((2 * j + 1) as f32) * ZENITH_BIN_SIZE_RAD * 0.5; // zenith
                     let (sin_theta, cos_theta) = theta.sin_cos();
                     let (sin_phi, cos_phi) = phi.sin_cos();
-                    let pos = Vec3::new(
+                    let view_pos = Vec3::new(
                         radius * sin_theta * cos_phi,
                         radius * cos_theta,
                         radius * sin_theta * sin_phi,
                     );
-                    let camera = Camera::new(pos, Vec3::ZERO, Vec3::Y);
-                    self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
-                    self.shadow_pass.update_uniforms(
-                        &self.gpu_ctx.queue,
-                        Mat4::IDENTITY,
-                        camera.matrix(),
-                        proj,
-                    );
-                    self.shadow_pass.bake(
-                        &self.gpu_ctx.device,
-                        &self.gpu_ctx.queue,
-                        &mesh.vertex_buffer,
-                        &mesh.index_buffer,
-                        0,
-                        mesh.indices_count,
-                        mesh.index_format,
-                    );
-                    // self.shadow_pass
-                    //     .save_to_image(
-                    //         &self.gpu_ctx.device,
-                    //         near,
-                    //         far,
-                    //         format!("shadow_pass_{i}_{j}.png").as_ref(),
-                    //     )
-                    //     .unwrap();
-                    results[i * 91 + j] =
-                        self.shadow_pass.compute_pixels_count(&self.gpu_ctx.device) as _;
+                    let view_dir = view_pos.normalize();
+                    let camera = Camera::new(view_pos, Vec3::ZERO, Vec3::Y);
+                    let visible_facets = mesh
+                        .facets
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, f)| {
+                            if mesh.facet_normals[i].dot(view_dir) > 0.0 {
+                                Some(*f)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    let ratio = if visible_facets.is_empty() {
+                        0.0
+                    } else {
+                        self.occlusion_estimation_pass.update_uniforms(
+                            &self.gpu_ctx.queue,
+                            Mat4::IDENTITY,
+                            proj * camera.matrix(),
+                        );
+
+                        let index_buffer = &self.gpu_ctx.device.create_buffer_init(
+                            &wgpu::util::BufferInitDescriptor {
+                                label: Some("measurement_vertex_buffer"),
+                                contents: bytemuck::cast_slice(&visible_facets),
+                                usage: wgpu::BufferUsages::INDEX,
+                            },
+                        );
+
+                        let indices_count = visible_facets.len() as u32 * 3;
+
+                        self.occlusion_estimation_pass.run_once(
+                            &self.gpu_ctx.device,
+                            &self.gpu_ctx.queue,
+                            &mesh.vertex_buffer,
+                            index_buffer,
+                            indices_count,
+                            MicroSurfaceView::INDEX_FORMAT,
+                        );
+
+                        // self.occlusion_estimation_pass
+                        //     .save_depth_attachment(
+                        //         &self.gpu_ctx.device,
+                        //         near,
+                        //         far,
+                        //         format!(
+                        //             "occ_pass_depth_{:.2}_{:.2}.png",
+                        //             phi.to_degrees(),
+                        //             theta.to_degrees()
+                        //         )
+                        //         .as_ref(),
+                        //     )
+                        //     .unwrap();
+                        //
+                        // self.occlusion_estimation_pass
+                        //     .save_color_attachment(
+                        //         &self.gpu_ctx.device,
+                        //         format!(
+                        //             "occ_pass_color_{:.2}_{:.2}.png",
+                        //             phi.to_degrees(),
+                        //             theta.to_degrees()
+                        //         )
+                        //         .as_ref(),
+                        //     )
+                        //     .unwrap();
+
+                        self.occlusion_estimation_pass
+                            .calculate_ratio(&self.gpu_ctx.device)
+                    };
+
+                    writer
+                        .write_all(
+                            format!(
+                                "{:<6.2} {:<5.2} {:.6}\n",
+                                phi.to_degrees(),
+                                theta.to_degrees(),
+                                ratio
+                            )
+                            .as_bytes(),
+                        )
+                        .unwrap();
                 }
-            }
-            let file = std::fs::File::create("measured_geometric_term.txt").unwrap();
-            let writer = &mut BufWriter::new(file);
-            for i in results.iter() {
-                writer.write_all(format!("{} ", i).as_bytes()).unwrap();
             }
         }
     }
@@ -790,7 +792,7 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
+                cull_mode: Some(wgpu::Face::Back),
                 unclipped_depth: false,
                 polygon_mode: wgpu::PolygonMode::Line,
                 conservative: false,
@@ -813,19 +815,7 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
                 entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: ctx.surface_config.format,
-                    // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::Zero,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
@@ -908,28 +898,16 @@ fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
                     format: ctx.surface_config.format,
-                    // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::Zero,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     // blend: Some(wgpu::BlendState {
                     //     color: wgpu::BlendComponent {
-                    //         src_factor: wgpu::BlendFactor::One,
+                    //         src_factor: wgpu::BlendFactor::SrcAlpha,
                     //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                     //         operation: wgpu::BlendOperation::Add,
                     //     },
                     //     alpha: wgpu::BlendComponent {
-                    //         src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
-                    //         dst_factor: wgpu::BlendFactor::One,
+                    //         src_factor: wgpu::BlendFactor::One,
+                    //         dst_factor: wgpu::BlendFactor::Zero,
                     //         operation: wgpu::BlendOperation::Add,
                     //     },
                     // }),
@@ -1156,19 +1134,7 @@ fn create_instancing_demo(ctx: &GpuContext) -> InstancingDemo {
                 entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: ctx.surface_config.format,
-                    // blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::Zero,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),

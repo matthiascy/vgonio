@@ -18,23 +18,25 @@ vec4 checker_board(vec2 p, float scale) {
 
 vec4 grid(vec3 frag_pos, float scale) {
     vec2 coord = frag_pos.xz * scale; // use the scale variable to set the distance between the lines
-
+    vec2 derivative = fwidth(coord);
     // Compute anti-aliased world-space grid lines
-    vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
+    vec2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
     float line = min(grid.x, grid.y);
     float min_x = min(derivative.x, 1.0);
     float min_z = min(derivative.y, 1.0);
 
-    vec4 color = vec4(0.4, 0.4, 0.4, 1.0 - min(line, 1.0));
+    vec4 color = vec4(0.6, 0.6, 0.6, 1.0 - min(line, 1.0));
 
     // z axis
-    if (frag_pos.x > -0.2 * min_x && frag_pos.x < 0.2 * min_x) {
-        color.z = 0.8;
+    if (frag_pos.x > -0.1 * min_x && frag_pos.x < 0.1 * min_x) {
+        color.z = 1.0;
+        color.w = 1.0;
     }
 
     // x axis
-    if(frag_pos.z > -0.2 * min_z && frag_pos.z < 0.2 * min_z) {
-        color.x = 0.8;
+    if(frag_pos.z > -0.1 * min_z && frag_pos.z < 0.1 * min_z) {
+        color.x = 1.0;
+        color.w = 1.0;
     }
 
     return color;
@@ -59,10 +61,10 @@ void main() {
     vec3 frag_pos = near + t * (far - near);
     vec4 clip_space_pos = proj * view * vec4(frag_pos, 1.0);
     float linear_depth = compute_linear_depth(clip_space_pos);
-    float fading = max(0.0, (0.2 - linear_depth));
+    float fading = max(0.0, (0.4 - linear_depth));
 
 //    color = checker_board(frag_pos.xz, 1.0) * float(t > 0.0);
-    color = grid(frag_pos, 10.0) * float(t > 0.0);
+    color = grid(frag_pos, 2.0) * float(t > 0.0);
     color.a *= fading;
 
     gl_FragDepth = compute_depth(clip_space_pos);

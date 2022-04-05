@@ -4,6 +4,7 @@ use crate::Error;
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.
@@ -40,7 +41,13 @@ pub struct DepthPassUniforms {
 }
 
 impl ShadowPass {
-    pub fn new(ctx: &GpuContext, width: u32, height: u32, alloc_buf: bool) -> Self {
+    pub fn new(
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        alloc_buf: bool,
+        shader_accessible: bool,
+    ) -> Self {
         use wgpu::util::DeviceExt;
         let uniform_buffer_size = std::mem::size_of::<DepthPassUniforms>() as wgpu::BufferAddress;
         let uniform_buffer = ctx
@@ -88,10 +95,25 @@ impl ShadowPass {
                     include_str!("../app/assets/shaders/wgsl/shadow_pass.wgsl").into(),
                 ),
             });
+        let sampler = shader_accessible.then(|| {
+            Arc::new(ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                lod_min_clamp: -100.0,
+                lod_max_clamp: 100.0,
+                ..Default::default()
+            }))
+        });
         let depth_attachment = Texture::create_depth_texture(
             &ctx.device,
             width,
             height,
+            sampler,
             Some("shadow_pass_depth_attachment"),
         );
         let pipeline = ctx
@@ -116,7 +138,7 @@ impl ShadowPass {
                     topology: wgpu::PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Front),
+                    cull_mode: None,
                     unclipped_depth: false,
                     polygon_mode: wgpu::PolygonMode::Fill,
                     conservative: false,
@@ -187,7 +209,7 @@ impl ShadowPass {
         self.width = width;
         self.height = height;
         self.size = (std::mem::size_of::<f32>() * (width * height) as usize) as u64;
-        self.depth_attachment = Texture::create_depth_texture(device, width, height, None);
+        self.depth_attachment = Texture::create_depth_texture(device, width, height, None, None);
         self.depth_attachment_storage = if self.depth_attachment_storage.is_some() {
             Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("shadow_pass_depth_attachment_storage"),
@@ -214,8 +236,7 @@ impl ShadowPass {
         queue: &wgpu::Queue,
         v_buf: &wgpu::Buffer,
         i_buf: &wgpu::Buffer,
-        i_start: u32,
-        i_end: u32,
+        index_ranges: &[(u32, u32)],
         i_format: wgpu::IndexFormat,
     ) {
         let mut encoder =
@@ -239,7 +260,9 @@ impl ShadowPass {
             render_pass.set_bind_group(0, &self.inner.bind_groups[0], &[]);
             render_pass.set_vertex_buffer(0, v_buf.slice(..));
             render_pass.set_index_buffer(i_buf.slice(..), i_format);
-            render_pass.draw_indexed(i_start..i_end, 0, 0..1);
+            for (start, end) in index_ranges {
+                render_pass.draw_indexed(*start..*end, 0, 0..1);
+            }
         }
 
         // Copy depth buffer values to depth attachment storage

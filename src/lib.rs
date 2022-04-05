@@ -5,7 +5,7 @@ pub mod app;
 pub mod error;
 pub mod gfx;
 pub mod htfld;
-mod io;
+pub mod io;
 pub mod isect;
 mod math;
 pub mod mesh;

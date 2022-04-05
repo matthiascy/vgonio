@@ -406,7 +406,8 @@ impl Heightfield {
     }
 
     /// Generate vertices from the height values.
-    /// The vertices are generated following the order from left to right, top to bottom.
+    /// The vertices are generated following the order from left to right, top
+    /// to bottom.
     pub fn generate_vertices(&self) -> (Vec<Vec3>, Aabb) {
         log::info!(
             "Generating height field vertices with {:?} alignment",
@@ -452,7 +453,8 @@ impl Heightfield {
     }
 }
 
-/// Generate a triangle mesh from heightfield. Triangle winding is counter-clockwise.
+/// Generate a triangle mesh from heightfield. Triangle winding is
+/// counter-clockwise.
 pub(crate) fn regular_triangulation(positions: &[Vec3], rows: usize, cols: usize) -> Vec<u32> {
     assert_eq!(
         positions.len(),

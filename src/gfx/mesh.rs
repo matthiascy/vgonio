@@ -1,8 +1,7 @@
 use crate::gfx::VertexLayout;
-use crate::htfld::{Heightfield, regular_triangulation};
+use crate::htfld::{regular_triangulation, Heightfield};
 use crate::isect::Aabb;
 use bytemuck::{Pod, Zeroable};
-use glam::Vec3;
 use std::ops::Index;
 use wgpu::util::DeviceExt;
 use wgpu::{PrimitiveTopology, VertexFormat};

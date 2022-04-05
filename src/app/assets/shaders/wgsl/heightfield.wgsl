@@ -18,8 +18,8 @@ fn vs_main([[location(0)]] position: vec3<f32>) ->  VOut {
     var out: VOut;
     let scaled = position * uniforms.info.w;
     out.position = uniforms.proj * uniforms.view * uniforms.model * vec4<f32>(scaled, 1.0);
-    let c: f32 = scaled.y / (uniforms.info.z * uniforms.info.w) + 0.5;
-    out.color = vec3<f32>(c, 1.0 - c, 0.025);
+    let c: f32 = (scaled.y / (uniforms.info.z * uniforms.info.w) + 0.5) * 0.8;
+    out.color = vec3<f32>(c, 0.8 - c, 0.025);
     return out;
 }
 
