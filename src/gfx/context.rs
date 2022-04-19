@@ -9,6 +9,9 @@ pub struct GpuContext {
     /// GPU command queue to execute drawing or computing commands.
     pub queue: wgpu::Queue,
 
+    /// Query pool to retrieve information from the GPU.
+    pub query_set: Option<wgpu::QuerySet>,
+
     /// Information about the window surface (texture format, present mode,
     /// etc.).
     pub surface_config: wgpu::SurfaceConfiguration,
@@ -36,12 +39,13 @@ impl GpuContext {
                     concat!(file!(), ":", line!())
                 )
             });
+        let features = adapter.features();
         // Logical device and command queue
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::POLYGON_MODE_LINE,
+                    features: features | wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
                     limits: wgpu::Limits::default(),
                 },
                 None,
@@ -53,6 +57,16 @@ impl GpuContext {
                     concat!(file!(), ":", line!())
                 )
             });
+
+        let query_set = if features.contains(wgpu::Features::TIMESTAMP_QUERY) {
+            Some(device.create_query_set(&wgpu::QuerySetDescriptor {
+                count: 2,
+                ty: wgpu::QueryType::Timestamp,
+                label: None,
+            }))
+        } else {
+            None
+        };
 
         // Swapchain format
         let swapchain_format = surface.get_preferred_format(&adapter).unwrap();
@@ -70,6 +84,7 @@ impl GpuContext {
             surface,
             device,
             queue,
+            query_set,
             surface_config,
         }
     }

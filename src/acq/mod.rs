@@ -111,3 +111,7 @@ impl MicroSurfaceView {
         }
     }
 }
+
+fn measure_micro_surface_geometric_term(view: &MicroSurfaceView) {
+    unimplemented!()
+}

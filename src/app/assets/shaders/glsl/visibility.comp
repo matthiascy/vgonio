@@ -1,0 +1,30 @@
+#version 460
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform Uniforms {
+    vec4 view_dir_and_faces_count;
+};
+
+layout (std430, set = 0, binding = 0) readonly buffer Normals {
+    vec3 normals[];
+};
+
+layout (std430, set = 0, binding = 1) readonly buffer TriFaces {
+    uvec3 faces[];
+};
+
+layout (std430, set = 0, binding = 2) buffer TriangleVisibility {
+    uint visibility[];
+};
+
+void main() {
+    vec3 view_dir = view_dir_and_faces_count.xyz;
+    uint count = uint(view_dir_and_faces_count.w);
+
+    uint index = gl_WorkGroupID.x * gl_NumWorkGroups.x + gl_LocalInvocationID.x;
+
+    if (index < faces_count) {
+        visibility[index] = dot(normals[index], view_dir) > 0 ? 1 : 0;
+    }
+}
