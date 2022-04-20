@@ -1,7 +1,9 @@
 use crate::app::gui::RepaintSignal;
 use crate::error::Error;
-use clap::{AppSettings, ArgEnum, Parser, Subcommand};
+use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
+use egui::Shape::Path;
 use std::io::Write;
+use std::path::PathBuf;
 use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -12,6 +14,85 @@ pub mod state;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
+
+/// Vgonio configuration.
+pub struct VgonioConfig {
+    pub config_dir: std::path::PathBuf,
+    pub cache_dir: std::path::PathBuf,
+    pub data_files_dir: std::path::PathBuf,
+    pub user_config: VgonioUserConfig,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct VgonioUserConfig {
+    pub output_dir: std::path::PathBuf,
+    pub data_files_dir: std::path::PathBuf,
+}
+
+impl VgonioConfig {
+    /// Load the configuration from the config directory.
+    fn load_config() -> Result<Self, Error> {
+        // MacOS: ~/Library/Application Support/vgonio
+        // Windows: %APPDATA%\vgonio
+        // Unix-like: ~/.config/vgonio
+        let config_dir = {
+            let mut config_dir = dirs::config_dir().ok_or(Error::ConfigDirNotFound)?;
+            config_dir.push("vgonio");
+            config_dir
+        };
+
+        let cache_dir = config_dir.join("cache");
+        let data_files_dir = config_dir.join("datafiles");
+
+        // Create the config directory if it doesn't exist.
+        if !config_dir.exists() {
+            std::fs::create_dir_all(&config_dir)?;
+        }
+
+        if !cache_dir.exists() {
+            std::fs::create_dir_all(&cache_dir)?;
+        }
+
+        if !data_files_dir.exists() {
+            std::fs::create_dir_all(&data_files_dir)?;
+        }
+
+        // Try to load user config file.
+        let user_config_file = {
+            let current_dir_user_config = std::env::current_dir().unwrap().join("vgonio.toml");
+            let default_user_config = config_dir.join("vgonio.toml");
+            if current_dir_user_config.exists() {
+                std::fs::read_to_string(&current_dir_user_config).ok()
+            } else if default_user_config.exists() {
+                std::fs::read_to_string(&default_user_config).ok()
+            } else {
+                None
+            }
+        };
+
+        // If the user config file exists, parse it.
+        let user_config = if let Some(user_config_file) = user_config_file {
+            toml::from_str(&user_config_file)?
+        } else {
+            // If the user config file doesn't exist, create it.
+            let user_config = VgonioUserConfig {
+                output_dir: config_dir.join("output"),
+                data_files_dir: config_dir.join("datafiles"),
+            };
+            let user_config_file = config_dir.join("vgonio.toml");
+            std::fs::write(&user_config_file, toml::to_string(&user_config)?)?;
+
+            user_config
+        };
+
+        Ok(VgonioConfig {
+            config_dir,
+            cache_dir,
+            data_files_dir,
+            user_config,
+        })
+    }
+}
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -24,7 +105,7 @@ pub struct VgonioArgs {
     #[clap(short, long, help = "Silent output printed to stdout")]
     pub quite: bool,
 
-    #[clap(short, long, help = "Use verbose output")]
+    #[clap(short, long, help = "Use verbose output (log level = 4)")]
     pub verbose: bool,
 
     #[clap(long, help = "Set a file to output the log to")]
@@ -71,84 +152,98 @@ pub enum MicroSurfaceInfo {
 
 #[derive(Subcommand, Debug)]
 pub enum VgonioCommand {
-    #[clap(
-        about = "Measure different aspects of the micro-surface.",
-        setting = AppSettings::DeriveDisplayOrder
-    )]
-    Measure {
-        #[clap(arg_enum, short, long, help = "Type of measurement.")]
-        kind: MeasurementType,
-
-        #[clap(
-            short,
-            long,
-            help = "The input micro-surface profile, it can be either\n\
-                    micro-surface height field or micro-surface mesh\n\
-                    cache"
-        )]
-        input_path: std::path::PathBuf,
-
-        #[clap(
-            short,
-            long,
-            help = "The path where stores the simulation data. Use //\n\
-                    at the start of the path to set the output path\n\
-                    relative to the input file location. If not \n\
-                    specified, current working directory will be used"
-        )]
-        output_path: Option<std::path::PathBuf>,
-
-        #[clap(
-            short,
-            long = "num-threads",
-            help = "The number of threads in the thread pool"
-        )]
-        nthreads: Option<u32>,
-
-        #[clap(long, help = "Use caches to minimize the processing time")]
-        enable_cache: bool,
-
-        #[clap(
-            long,
-            help = "Show detailed statistics about memory and time\n\
-                             usage during the measurement"
-        )]
-        print_stats: bool,
-    },
-
-    #[clap(
-        about = "Extract information from micro-surface.",
-        setting = AppSettings::DeriveDisplayOrder
-    )]
-    Extract {
-        #[clap(arg_enum, short, long, help = "Type of information to be extracted.")]
-        kind: MicroSurfaceInfo,
-
-        #[clap(
-            short,
-            long,
-            help = "The input micro-surface profile, it can be either\n\
-                    micro-surface height field or micro-surface mesh\n\
-                    cache"
-        )]
-        input_path: std::path::PathBuf,
-
-        #[clap(
-            short,
-            long,
-            help = "The path where stores the simulation data. Use //\n\
-                    at the start of the path to set the output path\n\
-                    relative to the input file location. If not \n\
-                    specified, current working directory will be used"
-        )]
-        output_path: Option<std::path::PathBuf>,
-
-        #[clap(long, help = "Use caches to minimize the processing time")]
-        enable_cache: bool,
-    },
+    Measure(MeasureOptions),
+    Extract(ExtractOptions),
 }
 
-pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
+#[clap(
+about = "Measure different aspects of the micro-surface.",
+setting = AppSettings::DeriveDisplayOrder
+)]
+#[derive(Args, Debug)]
+pub struct MeasureOptions {
+    #[clap(arg_enum, short, long, help = "Type of measurement.")]
+    kind: MeasurementType,
+
+    #[clap(
+        short,
+        long,
+        help = "The input micro-surface profile, it can be either\n\
+                    micro-surface height field or micro-surface mesh\n\
+                    cache"
+    )]
+    input_path: std::path::PathBuf,
+
+    #[clap(
+        short,
+        long,
+        help = "The path where stores the simulation data. Use //\n\
+                    at the start of the path to set the output path\n\
+                    relative to the input file location. If not \n\
+                    specified, current working directory will be used"
+    )]
+    output_path: Option<std::path::PathBuf>,
+
+    #[clap(
+        short,
+        long = "num-threads",
+        help = "The number of threads in the thread pool"
+    )]
+    nthreads: Option<u32>,
+
+    #[clap(long, help = "Use caches to minimize the processing time")]
+    enable_cache: bool,
+
+    #[clap(
+        long,
+        help = "Show detailed statistics about memory and time\n\
+                             usage during the measurement"
+    )]
+    print_stats: bool,
+}
+
+#[clap(
+about = "Extract information from micro-surface.",
+setting = AppSettings::DeriveDisplayOrder
+)]
+#[derive(Args, Debug)]
+pub struct ExtractOptions {
+    #[clap(arg_enum, short, long, help = "Type of information to be extracted.")]
+    kind: MicroSurfaceInfo,
+
+    #[clap(
+        short,
+        long,
+        help = "The input micro-surface profile, it can be either\n\
+                    micro-surface height field or micro-surface mesh\n\
+                    cache"
+    )]
+    input_path: std::path::PathBuf,
+
+    #[clap(
+        short,
+        long,
+        help = "The path where stores the simulation data. Use //\n\
+                    at the start of the path to set the output path\n\
+                    relative to the input file location. If not \n\
+                    specified, current working directory will be used"
+    )]
+    output_path: Option<std::path::PathBuf>,
+
+    #[clap(long, help = "Use caches to minimize the processing time")]
+    enable_cache: bool,
+}
+
+pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<VgonioConfig, Error> {
+    let log_level = if args.verbose { 4 } else { args.log_level };
+
+    // Only enable info logging for wgpu only if the log level is greater than 2.
+    let wgpu_log_level = if log_level > 2 {
+        log::LevelFilter::Info
+    } else {
+        log::LevelFilter::Error
+    };
+
     #[cfg(not(target_arch = "wasm32"))]
     {
         // Initialize logger settings.
@@ -190,7 +285,8 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
                     writeln!(buf, "{}", record.args())
                 }
             })
-            .filter_level(match args.log_level {
+            .filter(Some("wgpu"), wgpu_log_level)
+            .filter_level(match log_level {
                 0 => log::LevelFilter::Error,
                 1 => log::LevelFilter::Warn,
                 2 => log::LevelFilter::Info,
@@ -199,6 +295,9 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
                 _ => log::LevelFilter::Info,
             })
             .init();
+
+        // Load the configuration file.
+        VgonioConfig::load_config()
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -207,7 +306,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) {
     }
 }
 
-pub fn launch_gui_client() -> Result<(), Error> {
+pub fn launch_gui_client(config: VgonioConfig) -> Result<(), Error> {
     use crate::app::gui::UserEvent;
     use state::VgonioApp;
 
@@ -284,17 +383,32 @@ pub fn launch_gui_client() -> Result<(), Error> {
     });
 }
 
-pub fn execute_command(cmd: VgonioCommand) -> Result<(), Error> {
+pub fn execute_command(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
     match cmd {
-        VgonioCommand::Measure { .. } => capture(),
-        VgonioCommand::Extract { .. } => extract(),
+        VgonioCommand::Measure(opts) => measure(opts, config),
+        VgonioCommand::Extract(opts) => extract(opts, config),
     }
 }
 
-fn capture() -> Result<(), Error> {
+fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
+    // Configure thread pool for parallelism.
+    if let Some(nthreads) = opts.nthreads {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(nthreads as usize)
+            .build_global()
+            .unwrap();
+    }
+    log::info!(
+        "> Executing 'vgonio measure' with a thread pool of size: {}",
+        rayon::current_num_threads()
+    );
+
+    // Load data files: refractive indices, spd etc.
+    log::info!("  > Loading data files (refractive indices, spd etc.)...");
+
     Ok(())
 }
 
-fn extract() -> Result<(), Error> {
+fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
     Ok(())
 }

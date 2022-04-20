@@ -1,3 +1,8 @@
+"""
+The shadowing-masking term G depends on the distribution function D
+and the details of the micro-surface.
+"""
+
 import sys
 import os
 import numpy as np
@@ -5,10 +10,6 @@ import seaborn as sb
 import pandas as pd
 from scipy.special import erf
 from matplotlib import pyplot as plt
-
-
-# The shadowing-masking term G depends on the distribution function D
-# and the details of the micro-surface.
 
 
 def chi_plus(a):

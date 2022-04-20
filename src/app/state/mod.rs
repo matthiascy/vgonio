@@ -16,7 +16,7 @@ use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::Heightfield;
 use crate::math::IDENTITY_MAT4;
 use epi::App;
-use glam::{Mat4, Quat, Vec3};
+use glam::{Mat4, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
 use std::io::{BufWriter, Write};
@@ -28,8 +28,6 @@ use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
 
-const NUM_INSTANCES_PER_ROW: u32 = 9;
-const NUM_INSTANCES_PER_COL: u32 = 9;
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
 const AZIMUTH_BIN_SIZE_RAD: f32 = (AZIMUTH_BIN_SIZE_DEG as f32 * std::f32::consts::PI) / 180.0;
@@ -548,7 +546,8 @@ impl VgonioApp {
             //         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             //     });
             //
-            // let uniform_buffer = self.gpu_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            // let uniform_buffer =
+            // self.gpu_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             //     label: None,
             //     contents: bytemuck::cast_slice(&[0.0f32; 4]),
             //     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
@@ -585,7 +584,6 @@ impl VgonioApp {
                     );
                     let view_dir = view_pos.normalize();
                     let camera = Camera::new(view_pos, Vec3::ZERO, Vec3::Y);
-                    let now = Instant::now();
                     let visible_facets = mesh
                         .facets
                         .iter()

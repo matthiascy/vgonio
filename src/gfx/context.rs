@@ -45,7 +45,9 @@ impl GpuContext {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: features | wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
+                    features: features
+                        | wgpu::Features::POLYGON_MODE_LINE
+                        | wgpu::Features::TIMESTAMP_QUERY,
                     limits: wgpu::Limits::default(),
                 },
                 None,

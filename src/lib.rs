@@ -19,15 +19,21 @@ pub fn run() -> Result<(), Error> {
 
     let launch_time = std::time::SystemTime::now();
 
+    println!(
+        "Vgonio launched at {} on {}",
+        chrono::DateTime::<chrono::Utc>::from(launch_time),
+        std::env::consts::OS
+    );
+
     // Parse the command line arguments
     let args: VgonioArgs = VgonioArgs::parse();
 
     // Initialize vgonio application
-    app::init(&args, launch_time);
+    let config = app::init(&args, launch_time)?;
 
     // Dispatch subcommands
     match args.command {
-        None => app::launch_gui_client(),
-        Some(cmd) => app::execute_command(cmd),
+        None => app::launch_gui_client(config),
+        Some(cmd) => app::execute_command(cmd, config),
     }
 }

@@ -7,13 +7,21 @@ pub enum Error {
     Io(std::io::Error),
     Rhi(wgpu::Error),
     Logger(log::SetLoggerError),
-    BincodeError(bincode::Error),
     UnrecognizedFile,
     Utf8Error(str::Utf8Error),
-    YamlError(serde_yaml::Error),
     Any(String),
     FileError(&'static str),
     ImageError(image::ImageError),
+    SerialisationError(SerialisationError),
+    ConfigDirNotFound,
+}
+
+#[derive(Debug)]
+pub enum SerialisationError {
+    TomlSe(toml::ser::Error),
+    TomlDe(toml::de::Error),
+    Yaml(serde_yaml::Error),
+    Bincode(bincode::Error),
 }
 
 impl Display for Error {
@@ -31,9 +39,6 @@ impl Display for Error {
             Error::UnrecognizedFile => {
                 write!(f, "Open file failed:  unrecognized file type!")
             }
-            Error::BincodeError(err) => {
-                write!(f, "Bincode error: {}", err)
-            }
             Error::Utf8Error(err) => {
                 write!(f, "Utf8 error: {}", err)
             }
@@ -43,12 +48,26 @@ impl Display for Error {
             Error::FileError(err) => {
                 write!(f, "File error: {}", err)
             }
-            Error::YamlError(err) => {
-                write!(f, "YAML error: {}", err)
-            }
             Error::ImageError(err) => {
                 write!(f, "Image error: {}", err)
             }
+            Error::ConfigDirNotFound => {
+                write!(f, "Config dir not found!")
+            }
+            Error::SerialisationError(err) => match err {
+                SerialisationError::TomlSe(err) => {
+                    write!(f, "Toml serialisation error: {}", err)
+                }
+                SerialisationError::TomlDe(err) => {
+                    write!(f, "Toml deserialisation error: {}", err)
+                }
+                SerialisationError::Yaml(err) => {
+                    write!(f, "Yaml de/serialisation error: {}", err)
+                }
+                SerialisationError::Bincode(err) => {
+                    write!(f, "Bincode de/serialisation error: {}", err)
+                }
+            },
         }
     }
 }
@@ -81,18 +100,30 @@ impl From<str::Utf8Error> for Error {
 
 impl From<bincode::Error> for Error {
     fn from(err: bincode::Error) -> Self {
-        Error::BincodeError(err)
+        Error::SerialisationError(SerialisationError::Bincode(err))
     }
 }
 
 impl From<serde_yaml::Error> for Error {
     fn from(err: serde_yaml::Error) -> Self {
-        Error::YamlError(err)
+        Error::SerialisationError(SerialisationError::Yaml(err))
     }
 }
 
 impl From<image::ImageError> for Error {
     fn from(err: ImageError) -> Self {
         Error::ImageError(err)
+    }
+}
+
+impl From<toml::ser::Error> for Error {
+    fn from(err: toml::ser::Error) -> Self {
+        Error::SerialisationError(SerialisationError::TomlSe(err))
+    }
+}
+
+impl From<toml::de::Error> for Error {
+    fn from(err: toml::de::Error) -> Self {
+        Error::SerialisationError(SerialisationError::TomlDe(err))
     }
 }
