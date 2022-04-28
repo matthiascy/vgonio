@@ -5,8 +5,7 @@ pub use input::InputState;
 
 use crate::app::gui::{GuiContext, RepaintSignal, UserEvent, VgonioGui, WindowSize};
 use crate::gfx::{
-    GpuContext, MeshView, RdrPass, ShadowPass, Texture, Vertex, VertexLayout,
-    DEFAULT_BIND_GROUP_LAYOUT_DESC,
+    GpuContext, MeshView, RdrPass, ShadowPass, Texture, DEFAULT_BIND_GROUP_LAYOUT_DESC,
 };
 use camera::CameraState;
 

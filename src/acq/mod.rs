@@ -1,12 +1,40 @@
+pub mod desc;
+pub mod ior;
 mod occlusion;
 
 pub use occlusion::*;
+use std::str::FromStr;
 
 use crate::gfx::camera::{Projection, ProjectionKind};
 use crate::htfld::{regular_triangulation, Heightfield};
 use crate::isect::Aabb;
+use crate::Error;
 use glam::Vec3;
 use wgpu::util::DeviceExt;
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
+pub enum Medium {
+    Air,
+    Vacuum,
+    Aluminium,
+    Copper,
+}
+
+impl FromStr for Medium {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "air" => Ok(Self::Air),
+            "vacuum" => Ok(Self::Vacuum),
+            "al" => Ok(Self::Aluminium),
+            "cu" => Ok(Self::Copper),
+            &_ => Err(Error::Any("unknown medium".to_string())),
+        }
+    }
+}
 
 /// Light source used for acquisition of shadowing and masking function.
 pub struct LightSource {

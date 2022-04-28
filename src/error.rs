@@ -28,10 +28,10 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Io(err) => {
-                write!(f, "IO error: {}", err)
+                write!(f, "IO error - {}", err)
             }
             Error::Rhi(err) => {
-                write!(f, "RHI error: {}", err)
+                write!(f, "RHI error - {}", err)
             }
             Error::Logger(_) => {
                 write!(f, "Set logger error.")
@@ -40,16 +40,16 @@ impl Display for Error {
                 write!(f, "Open file failed:  unrecognized file type!")
             }
             Error::Utf8Error(err) => {
-                write!(f, "Utf8 error: {}", err)
+                write!(f, "Utf8 error - {}", err)
             }
             Error::Any(err) => {
-                write!(f, "Error: {}", err)
+                write!(f, "Error - {}", err)
             }
             Error::FileError(err) => {
-                write!(f, "File error: {}", err)
+                write!(f, "File error - {}", err)
             }
             Error::ImageError(err) => {
-                write!(f, "Image error: {}", err)
+                write!(f, "Image error - {}", err)
             }
             Error::ConfigDirNotFound => {
                 write!(f, "Config dir not found!")

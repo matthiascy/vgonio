@@ -248,7 +248,7 @@ fn read_binary_samples<R: Read>(mut reader: R, count: usize) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::height_field::io::read_line_ascii_usurf;
+    use crate::htfld::io::read_line_ascii_usurf;
 
     #[test]
     fn test_read_line_ascii_surf0() {

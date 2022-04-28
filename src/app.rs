@@ -1,9 +1,9 @@
+use crate::acq::desc::{MeasurementDesc, MeasurementKind};
+use crate::acq::ior::RefractiveIndexDatabase;
 use crate::app::gui::RepaintSignal;
 use crate::error::Error;
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
-use egui::Shape::Path;
 use std::io::Write;
-use std::path::PathBuf;
 use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -16,6 +16,7 @@ const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
 
 /// Vgonio configuration.
+#[derive(Debug)]
 pub struct VgonioConfig {
     pub config_dir: std::path::PathBuf,
     pub cache_dir: std::path::PathBuf,
@@ -23,7 +24,7 @@ pub struct VgonioConfig {
     pub user_config: VgonioUserConfig,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct VgonioUserConfig {
     pub output_dir: std::path::PathBuf,
     pub data_files_dir: std::path::PathBuf,
@@ -57,22 +58,64 @@ impl VgonioConfig {
             std::fs::create_dir_all(&data_files_dir)?;
         }
 
+        let current_dir = std::env::current_dir()?;
+
         // Try to load user config file.
-        let user_config_file = {
-            let current_dir_user_config = std::env::current_dir().unwrap().join("vgonio.toml");
+        let (user_config_file, relative_to) = {
+            let current_dir_user_config = current_dir.join("vgonio.toml");
             let default_user_config = config_dir.join("vgonio.toml");
             if current_dir_user_config.exists() {
-                std::fs::read_to_string(&current_dir_user_config).ok()
+                // Try to load the user config file under the current directory.
+                (
+                    std::fs::read_to_string(&current_dir_user_config).ok(),
+                    &current_dir,
+                )
             } else if default_user_config.exists() {
-                std::fs::read_to_string(&default_user_config).ok()
+                // Otherwise, try to load the user config file under the config directory.
+                (
+                    std::fs::read_to_string(&default_user_config).ok(),
+                    &config_dir,
+                )
             } else {
-                None
+                (None, &current_dir)
             }
         };
 
         // If the user config file exists, parse it.
         let user_config = if let Some(user_config_file) = user_config_file {
-            toml::from_str(&user_config_file)?
+            let mut config: VgonioUserConfig = toml::from_str(&user_config_file)?;
+            // Convert relative paths to absolute paths.
+            if config.data_files_dir.is_relative() {
+                let data_files_dir = relative_to.join(&config.data_files_dir);
+                config.data_files_dir = data_files_dir.canonicalize().map_err(|err| {
+                    std::io::Error::new(
+                        err.kind(),
+                        format!(
+                            "failed to convert relative path '{}' to absolute path: {}",
+                            data_files_dir.display(),
+                            err
+                        ),
+                    )
+                })?;
+            }
+            if config.output_dir.is_relative() {
+                let output_dir = relative_to.join(&config.output_dir);
+                config.output_dir =
+                    output_dir
+                        .join(config.output_dir)
+                        .canonicalize()
+                        .map_err(|err| {
+                            std::io::Error::new(
+                                err.kind(),
+                                format!(
+                                    "failed to convert relative path '{}' to absolute path: {}",
+                                    output_dir.display(),
+                                    err
+                                ),
+                            )
+                        })?;
+            }
+            config
         } else {
             // If the user config file doesn't exist, create it.
             let user_config = VgonioUserConfig {
@@ -139,12 +182,6 @@ pub struct VgonioArgs {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ArgEnum)]
-pub enum MeasurementType {
-    Brdf,
-    Ndf,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ArgEnum)]
 pub enum MicroSurfaceInfo {
     VertexNormal,
     SurfaceNormal,
@@ -156,22 +193,13 @@ pub enum VgonioCommand {
     Extract(ExtractOptions),
 }
 
+#[derive(Args, Debug)]
 #[clap(
 about = "Measure different aspects of the micro-surface.",
 setting = AppSettings::DeriveDisplayOrder
 )]
-#[derive(Args, Debug)]
 pub struct MeasureOptions {
-    #[clap(arg_enum, short, long, help = "Type of measurement.")]
-    kind: MeasurementType,
-
-    #[clap(
-        short,
-        long,
-        help = "The input micro-surface profile, it can be either\n\
-                    micro-surface height field or micro-surface mesh\n\
-                    cache"
-    )]
+    #[clap(short, long, help = "The input measurement description file.")]
     input_path: std::path::PathBuf,
 
     #[clap(
@@ -202,11 +230,11 @@ pub struct MeasureOptions {
     print_stats: bool,
 }
 
+#[derive(Args, Debug)]
 #[clap(
 about = "Extract information from micro-surface.",
 setting = AppSettings::DeriveDisplayOrder
 )]
-#[derive(Args, Debug)]
 pub struct ExtractOptions {
     #[clap(arg_enum, short, long, help = "Type of information to be extracted.")]
     kind: MicroSurfaceInfo,
@@ -406,9 +434,25 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     // Load data files: refractive indices, spd etc.
     log::info!("  > Loading data files (refractive indices, spd etc.)...");
 
+    let ior_db = RefractiveIndexDatabase::load_from_config_dirs(&config);
+
+    log::info!("  > Reading measurement description file...");
+    let desc = MeasurementDesc::load_from_file(&opts.input_path)?;
+
+    println!("{:#?}", desc);
+
+    match desc.measurement_kind {
+        MeasurementKind::Bxdf { .. } => {
+            // todo: measure bxdf
+        }
+        MeasurementKind::Ndf => {
+            // todo: measure ndf
+        }
+    }
+
     Ok(())
 }
 
-fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
+fn extract(_opts: ExtractOptions, _config: VgonioConfig) -> Result<(), Error> {
     Ok(())
 }

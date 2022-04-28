@@ -1,0 +1,27 @@
+---
+angle_unit: deg
+length_unit: m
+measurement_kind:
+  bxdf:
+    kind: inplane
+rays_count: 100
+max_bounces: 10
+incident_medium: air
+transmitted_medium: air
+surfaces:
+  - /tmp/scene.obj
+spectrum:
+  - 380.0
+  - 780.0
+  - 10.0
+collector:
+  radius: 0.1
+  shape: whole_sphere
+  partition:
+    equal_area: 0.1
+light_source:
+  position:
+    spherical:
+      - 1.0
+      - 0.0
+      - 0.0
