@@ -1,24 +1,10 @@
+use crate::acq::bxdf::BxdfKind;
+use crate::acq::collector::CollectorDesc;
 use crate::acq::Medium;
 use crate::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-
-#[non_exhaustive]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
-pub enum BxdfKind {
-    InPlane,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum AngleUnit {
-    #[serde(rename = "deg")]
-    Degrees,
-
-    #[serde(rename = "rad")]
-    Radians,
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LengthUnit {
@@ -67,43 +53,6 @@ impl From<Spectrum> for [f32; 3] {
     }
 }
 
-/// Description of the BRDF collector.
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Collector {
-    pub radius: f32,
-    pub shape: CollectorShape,
-    pub partition: CollectorPartition,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CollectorShape {
-    /// Only capture the upper part of the sphere.
-    UpperHemisphere,
-
-    /// Only capture the lower part of the sphere.
-    LowerHemisphere,
-
-    /// Capture the whole sphere.
-    WholeSphere,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CollectorPartition {
-    /// The collector is partitioned into a number of regions with the same
-    /// angular interval.
-    EqualAngle(f32),
-
-    /// The collector is partitioned into a number of regions with the same
-    /// area (solid angle).
-    EqualArea(f32),
-
-    /// The collector is partitioned into a number of regions with the same
-    /// projected area (projected solid angle).
-    EqualProjectedArea(f32),
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
 pub enum Position {
@@ -117,10 +66,11 @@ pub enum Position {
 
 /// Description of the light source.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct LightSource {
+pub struct EmitterDesc {
     /// The light source's position in either spherical coordinates or cartesian
     /// coordinates.
     pub position: Position,
+    pub spectrum: Spectrum,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -130,9 +80,11 @@ pub enum MeasurementKind {
     Ndf,
 }
 
+/// Description of the measurement.
+///
+/// Note: angle in the description file is always in degrees.
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MeasurementDesc {
-    pub angle_unit: AngleUnit,
     pub length_unit: LengthUnit,
     pub measurement_kind: MeasurementKind,
     pub rays_count: u32,
@@ -140,9 +92,8 @@ pub struct MeasurementDesc {
     pub incident_medium: Medium,
     pub transmitted_medium: Medium,
     pub surfaces: Vec<PathBuf>,
-    pub spectrum: Spectrum,
-    pub collector: Collector,
-    pub light_source: LightSource,
+    pub emitter: EmitterDesc,
+    pub collector: CollectorDesc,
 }
 
 impl MeasurementDesc {
@@ -157,7 +108,6 @@ impl MeasurementDesc {
 fn scene_desc_serialization() {
     use std::io::Write;
     let desc_0 = MeasurementDesc {
-        angle_unit: AngleUnit::Degrees,
         length_unit: LengthUnit::Meters,
         measurement_kind: MeasurementKind::Bxdf {
             kind: BxdfKind::InPlane,
@@ -167,18 +117,18 @@ fn scene_desc_serialization() {
         incident_medium: Medium::Air,
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
-        spectrum: Spectrum {
-            start: 380.0,
-            stop: 780.0,
-            step: 10.0,
-        },
-        collector: Collector {
+        collector: CollectorDesc {
             radius: 0.1,
             shape: CollectorShape::WholeSphere,
             partition: CollectorPartition::EqualArea(0.1),
         },
-        light_source: LightSource {
+        emitter: EmitterDesc {
             position: Position::Spherical(1.0, 0.0, 0.0),
+            spectrum: Spectrum {
+                start: 380.0,
+                stop: 780.0,
+                step: 10.0,
+            },
         },
     };
     let desc_1 = desc_0.clone();

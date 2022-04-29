@@ -1,5 +1,8 @@
+pub mod bxdf;
+mod collector;
 pub mod desc;
 pub mod ior;
+pub mod ndf;
 mod occlusion;
 
 pub use occlusion::*;

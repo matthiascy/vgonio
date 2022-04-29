@@ -1,3 +1,4 @@
+use crate::acq::bxdf::BxdfKind;
 use crate::acq::desc::{MeasurementDesc, MeasurementKind};
 use crate::acq::ior::RefractiveIndexDatabase;
 use crate::app::gui::RepaintSignal;
@@ -442,9 +443,12 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     println!("{:#?}", desc);
 
     match desc.measurement_kind {
-        MeasurementKind::Bxdf { .. } => {
-            // todo: measure bxdf
-        }
+        MeasurementKind::Bxdf { kind } => match kind {
+            BxdfKind::InPlane => {
+                let measured = crate::acq::bxdf::measure_in_plane_brdf(&desc, &ior_db);
+                // todo: save to file
+            }
+        },
         MeasurementKind::Ndf => {
             // todo: measure ndf
         }
