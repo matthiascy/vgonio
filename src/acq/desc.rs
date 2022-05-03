@@ -25,20 +25,20 @@ pub enum LengthUnit {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(into = "[f32; 3]", from = "[f32; 3]")]
-pub struct Spectrum {
+#[serde(into = "[T; 3]", from = "[T; 3]")]
+pub struct Range<T: Copy> {
     /// Initial wavelength of the spectrum.
-    pub start: f32,
+    pub start: T,
 
     /// Final wavelength of the spectrum.
-    pub stop: f32,
+    pub stop: T,
 
     /// Increment between wavelength samples.
-    pub step: f32,
+    pub step: T,
 }
 
-impl From<[f32; 3]> for Spectrum {
-    fn from(vals: [f32; 3]) -> Self {
+impl<T: Copy> From<[T; 3]> for Range<T> {
+    fn from(vals: [T; 3]) -> Self {
         Self {
             start: vals[0],
             stop: vals[1],
@@ -47,30 +47,57 @@ impl From<[f32; 3]> for Spectrum {
     }
 }
 
-impl From<Spectrum> for [f32; 3] {
-    fn from(spec: Spectrum) -> Self {
-        [spec.start, spec.stop, spec.step]
+impl<T: Copy> From<Range<T>> for [T; 3] {
+    fn from(range: Range<T>) -> Self {
+        [range.start, range.stop, range.step]
     }
 }
 
+impl<T: Copy> From<(T, T, T)> for Range<T> {
+    fn from(vals: (T, T, T)) -> Self {
+        Self {
+            start: vals.0,
+            stop: vals.1,
+            step: vals.2,
+        }
+    }
+}
+
+impl<T: Copy> From<Range<T>> for (T, T, T) {
+    fn from(range: Range<T>) -> Self {
+        (range.start, range.stop, range.step)
+    }
+}
+
+impl<T: Default + Copy> Default for Range<T> {
+    fn default() -> Self {
+        Self {
+            start: T::default(),
+            stop: T::default(),
+            step: T::default(),
+        }
+    }
+}
+
+/// The position defined by spherical coordinates: radius (r), zenith (θ)
+/// and azimuth (φ).
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
-pub enum Position {
-    /// The position defined by spherical coordinates: radius (r), zenith (θ)
-    /// and azimuth (φ).
-    Spherical(f32, f32, f32),
-
-    /// The position defined by cartesian coordinates: x, y and z.
-    Cartesian(f32, f32, f32),
+pub struct Position {
+    pub radius: Range<f32>,
+    pub theta: Range<f32>,
+    pub phi: Range<f32>,
 }
 
 /// Description of the light source.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EmitterDesc {
+    pub num_rays: u32,
+    pub max_bounces: u32,
     /// The light source's position in either spherical coordinates or cartesian
     /// coordinates.
     pub position: Position,
-    pub spectrum: Spectrum,
+    pub spectrum: Range<f32>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -85,12 +112,18 @@ pub enum MeasurementKind {
 /// Note: angle in the description file is always in degrees.
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MeasurementDesc {
+    /// Length unit of the measurement.
     pub length_unit: LengthUnit,
+
+    /// The measurement kind.
     pub measurement_kind: MeasurementKind,
-    pub rays_count: u32,
-    pub max_bounces: u32,
+
     pub incident_medium: Medium,
     pub transmitted_medium: Medium,
+
+    /// Surfaces to be measured. surface's path can be prefixed with either
+    /// `user://` or `local://` to indicate the user-defined data file path or
+    /// system-defined data file path.
     pub surfaces: Vec<PathBuf>,
     pub emitter: EmitterDesc,
     pub collector: CollectorDesc,
@@ -106,25 +139,34 @@ impl MeasurementDesc {
 
 #[test]
 fn scene_desc_serialization() {
+    use crate::acq::collector::{Partition, Shape};
     use std::io::Write;
+
     let desc_0 = MeasurementDesc {
         length_unit: LengthUnit::Meters,
         measurement_kind: MeasurementKind::Bxdf {
             kind: BxdfKind::InPlane,
         },
-        rays_count: 100,
-        max_bounces: 10,
         incident_medium: Medium::Air,
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: CollectorDesc {
             radius: 0.1,
-            shape: CollectorShape::WholeSphere,
-            partition: CollectorPartition::EqualArea(0.1),
+            shape: Shape::WholeSphere,
+            partition: Partition::EqualArea {
+                theta: (0.0, 90.0, 45),
+                phi: (0.0, 360.0, 0.0),
+            },
         },
         emitter: EmitterDesc {
-            position: Position::Spherical(1.0, 0.0, 0.0),
-            spectrum: Spectrum {
+            num_rays: 0,
+            max_bounces: 0,
+            position: Position {
+                radius: (0.0, 0.0, 0.0).into(),
+                theta: (0.0, 0.0, 0.0).into(),
+                phi: (0.0, 0.0, 0.0).into(),
+            },
+            spectrum: Range {
                 start: 380.0,
                 stop: 780.0,
                 step: 10.0,

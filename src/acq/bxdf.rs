@@ -1,5 +1,6 @@
 use crate::acq::desc::MeasurementDesc;
 use crate::acq::ior::RefractiveIndexDatabase;
+use crate::htfld::Heightfield;
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -13,6 +14,7 @@ pub enum BxdfKind {
 pub fn measure_in_plane_brdf(
     _desc: &MeasurementDesc,
     _ior_db: &RefractiveIndexDatabase,
+    _surfaces: &[Heightfield],
 ) -> Vec<f32> {
     // TODO: Implement
     vec![]

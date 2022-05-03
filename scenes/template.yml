@@ -1,0 +1,32 @@
+---
+length_unit: m
+measurement_kind:
+  bxdf:
+    kind: inplane
+incident_medium: air
+transmitted_medium: air
+surfaces:
+  - user://surfaces/Aluminium65bar100.txt
+  # - local://surfaces/AluminiumMirror.txt
+  # - //surfaces/AluminiumMirror.txt
+emitter:
+  num_rays: 100
+  max_bounces: 10
+  position:
+    radius: [0.0, 0.0, 0.0]
+    theta: [0.0, 0.0, 0.0]
+    phi: [0.0, 0.0, 0.0]
+  spectrum: [380.0, 780.0, 1.0]
+collector:
+  radius: 0.1
+  shape: whole_sphere
+  partition:
+    equal_area:
+      theta: [0.0, 90.0, 45]
+      phi: [0.0, 360.0, 10.0]
+    #equal_projected_area:
+    #  theta: [0.0, 90.0, 45]
+    #  phi: [0.0, 360.0, 10.0]
+    #equal_angle:
+    #  theta: [0.0, 0.0, 0.0]
+    #  phi: [0.0, 0.0, 0.0]

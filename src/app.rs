@@ -1,10 +1,13 @@
 use crate::acq::bxdf::BxdfKind;
 use crate::acq::desc::{MeasurementDesc, MeasurementKind};
 use crate::acq::ior::RefractiveIndexDatabase;
+use crate::acq::resolve_file_path;
 use crate::app::gui::RepaintSignal;
 use crate::error::Error;
+use crate::htfld::{AxisAlignment, Heightfield};
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
 use std::io::Write;
+use std::path::PathBuf;
 use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -15,6 +18,10 @@ pub mod state;
 
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
+
+const BRIGHT_CYAN: &'static str = "\u{001b}[36m";
+const BRIGHT_YELLOW: &'static str = "\u{001b}[33m";
+const RESET: &'static str = "\u{001b}[0m";
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -427,36 +434,113 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
             .build_global()
             .unwrap();
     }
-    log::info!(
-        "> Executing 'vgonio measure' with a thread pool of size: {}",
+    println!(
+        "{BRIGHT_YELLOW}>{RESET} Executing 'vgonio measure' with a thread pool of size: {}",
         rayon::current_num_threads()
     );
 
     // Load data files: refractive indices, spd etc.
-    log::info!("  > Loading data files (refractive indices, spd etc.)...");
+    println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
 
     let ior_db = RefractiveIndexDatabase::load_from_config_dirs(&config);
 
-    log::info!("  > Reading measurement description file...");
+    println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description file...");
     let desc = MeasurementDesc::load_from_file(&opts.input_path)?;
+    println!("    - Resolving surfaces' file path...");
+    let surface_paths: Vec<PathBuf> = desc
+        .surfaces
+        .iter()
+        .map(|s| {
+            if let Ok(stripped) = s.strip_prefix("user://") {
+                config.user_config.data_files_dir.join(stripped)
+            } else if let Ok(stripped) = s.strip_prefix("local://") {
+                config.data_files_dir.join(stripped)
+            } else {
+                resolve_file_path(&opts.input_path, Some(s))
+            }
+        })
+        .collect();
+    println!("    - Loading surfaces...");
+    let surfaces = load_surfaces_from_files(&surface_paths)?;
+    println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
 
-    println!("{:#?}", desc);
-
-    match desc.measurement_kind {
+    let start = std::time::SystemTime::now();
+    let measurement = match desc.measurement_kind {
         MeasurementKind::Bxdf { kind } => match kind {
             BxdfKind::InPlane => {
-                let measured = crate::acq::bxdf::measure_in_plane_brdf(&desc, &ior_db);
-                // todo: save to file
+                println!(
+                    "  {BRIGHT_YELLOW}>{RESET} Launch in-plane BRDF measurement at {}
+    • parameters:
+      + incident medium: {:?}
+      + transmitted medium: {:?}
+      + surfaces: {:?}
+      + emitter:
+        - num rays: {},
+        - max bounces: {},
+        - spectrum: {} - {}, step size {}
+        - position:
+          - radius: {} - {}, step size {}
+          - polar angle: {}° - {}°, step size {}°
+          - azimuthal angle: {}° - {}°, step size {}°
+      + collector:
+        - radius: {}
+        - shape: {:?}
+        - partition:
+          - type: {}
+          - polar angle: {}
+          - azimuthal angle: {}",
+                    chrono::DateTime::<chrono::Utc>::from(start),
+                    desc.incident_medium,
+                    desc.transmitted_medium,
+                    surface_paths,
+                    desc.emitter.num_rays,
+                    desc.emitter.max_bounces,
+                    desc.emitter.spectrum.start,
+                    desc.emitter.spectrum.stop,
+                    desc.emitter.spectrum.step,
+                    desc.emitter.position.radius.start,
+                    desc.emitter.position.radius.stop,
+                    desc.emitter.position.radius.step,
+                    desc.emitter.position.theta.start,
+                    desc.emitter.position.theta.stop,
+                    desc.emitter.position.theta.step,
+                    desc.emitter.position.phi.start,
+                    desc.emitter.position.phi.stop,
+                    desc.emitter.position.phi.step,
+                    desc.collector.radius,
+                    desc.collector.shape,
+                    desc.collector.partition.kind_str(),
+                    desc.collector.partition.theta_range_str(),
+                    desc.collector.partition.phi_range_str()
+                );
+                println!("    {BRIGHT_YELLOW}>{RESET} Measuring in-plane BRDF...");
+                crate::acq::bxdf::measure_in_plane_brdf(&desc, &ior_db, &surfaces)
             }
         },
         MeasurementKind::Ndf => {
             // todo: measure ndf
+            vec![]
         }
-    }
+    };
+
+    println!("    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s", start.elapsed().unwrap().as_secs_f32());
+
+    println!("  {BRIGHT_YELLOW}>{RESET} Saving results...");
+    // todo: save to file
+    println!("    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"", config.user_config.output_dir.display());
 
     Ok(())
 }
 
 fn extract(_opts: ExtractOptions, _config: VgonioConfig) -> Result<(), Error> {
     Ok(())
+}
+
+fn load_surfaces_from_files(surfaces_paths: &[PathBuf]) -> Result<Vec<Heightfield>, Error> {
+    let mut surfaces = Vec::new();
+    for path in surfaces_paths {
+        let surface = Heightfield::read_from_file(path, None, Some(AxisAlignment::XZ))?;
+        surfaces.push(surface);
+    }
+    Ok(surfaces)
 }
