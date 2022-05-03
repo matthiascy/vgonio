@@ -1,7 +1,7 @@
-use egui::Shape::Vec;
-
 /// The virtual goniophotometer's detectors represented by the patches
 /// of a sphere (or an hemisphere) positioned around the specimen.
+/// The detectors are positioned on the center of each patch; the patches
+/// are partitioned using 1.0 as radius.
 pub struct Collector {
     pub radius: f32,
     pub shape: Shape,
@@ -76,11 +76,19 @@ pub enum Partition {
 
     /// The collector is partitioned into a number of regions with the same
     /// projected area (projected solid angle).
-    EqualProjectedArea(f32),
+    EqualProjectedArea {
+        /// Range of interest of the polar angle θ (start, stop, count).
+        theta: (f32, f32, u32),
+
+        /// Range of interest interval of the azimuthal angle φ (start, stop,
+        /// step) in degrees.
+        phi: (f32, f32, f32),
+    },
 }
 
 impl From<CollectorDesc> for Collector {
     fn from(desc: CollectorDesc) -> Self {
+        // todo: differentiate collector shape
         let detectors = match desc.partition {
             Partition::EqualAngle {
                 theta: (theta_start, theta_stop, theta_step),
@@ -128,7 +136,7 @@ impl From<CollectorDesc> for Collector {
                 for theta in 0..n_theta {
                     for phi in 0..n_phi {
                         detectors.push(Detector {
-                            zenith: (1.0 - h_step * (theta as f32 + 0.5)).acos(),
+                            zenith: (1.0 - h_step * (theta as f32 + 0.5)).acos(),  // use the median angle (+ 0.5) as zenith
                             azimuth: (phi_start + phi as f32 * phi_step) as f32,
                             measured: 0.0,
                         });
@@ -136,14 +144,49 @@ impl From<CollectorDesc> for Collector {
                 }
                 detectors
             }
-            Partition::EqualProjectedArea(_) => {
-                // todo: implement
-                vec![]
+            Partition::EqualProjectedArea{
+                theta: (start, stop, count),
+                phi: (phi_start, phi_stop, phi_step) } => {
+                // Non-uniformly divide the radius of the disk after the projection.
+                // Disk area is linearly proportional to squared radius.
+                let theta_start = start.to_radians();
+                let theta_stop = stop.to_radians();
+                let phi_start = phi_start.to_radians();
+                let phi_stop = phi_stop.to_radians();
+                let phi_step = phi_step.to_radians();
+                // Calculate radius range.
+                let r_start = theta_start.sin();
+                let r_stop = theta_stop.sin();
+                let r_start_sqr = r_start * r_start;
+                let r_stop_sqr = r_stop * r_stop;
+                let factor = 1.0 / count as f32;
+                let n_theta = count as usize;
+                let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
+
+                let mut detectors = Vec::with_capacity(n_theta * n_phi);
+                for i in 0..n_theta {
+                    // Linearly interpolate squared radius range.
+                    // Projected area is proportional to squared radius.
+                    //                 1st           2nd           3rd
+                    // O- - - - | - - - I - - - | - - - I - - - | - - - I - - -|
+                    //     r_start_sqr                               r_stop_sqr
+                    let r_sqr = r_start_sqr + (r_stop_sqr - r_start_sqr) * factor * (i as f32 + 0.5);
+                    let r = r_sqr.sqrt();
+                    let theta = r.asin();
+                    for phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
+                        detectors.push(Detector {
+                            zenith: theta,
+                            azimuth: (phi_start + phi as f32 * phi_step) as f32,
+                            measured: 0.0,
+                        });
+                    }
+                }
+                detectors
             }
         };
 
         Self {
-            radius: desc.ra,
+            radius: desc.radius,
             shape: desc.shape,
             partition: desc.partition,
             detectors,
