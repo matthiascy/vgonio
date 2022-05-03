@@ -523,11 +523,17 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
         }
     };
 
-    println!("    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s", start.elapsed().unwrap().as_secs_f32());
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s",
+        start.elapsed().unwrap().as_secs_f32()
+    );
 
     println!("  {BRIGHT_YELLOW}>{RESET} Saving results...");
     // todo: save to file
-    println!("    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"", config.user_config.output_dir.display());
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
+        config.user_config.output_dir.display()
+    );
 
     Ok(())
 }

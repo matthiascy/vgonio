@@ -4,23 +4,22 @@ use crate::acq::desc::Range;
 /// of a sphere (or an hemisphere) positioned around the specimen.
 /// The detectors are positioned on the center of each patch; the patches
 /// are partitioned using 1.0 as radius.
+#[derive(Clone, Debug)]
 pub struct Collector {
     pub radius: f32,
     pub shape: Shape,
     pub partition: Partition,
-    pub detectors: Vec<Detector>,
+    pub patches: Vec<Patch>,
 }
 
 /// Represents a patch on the spherical [`Collector`].
-pub struct Detector {
-    /// Polar angle of the center of the patch.
+#[derive(Copy, Clone, Debug)]
+pub struct Patch {
+    /// Polar angle of the center of the patch in radians.
     pub zenith: f32,
 
-    /// Azimuthal angle of the center of the patch.
+    /// Azimuthal angle of the center of the patch in radians.
     pub azimuth: f32,
-
-    /// Measured value of the patch.
-    pub measured: f32,
 }
 
 /// Description of the BRDF collector.
@@ -123,7 +122,7 @@ impl Partition {
 impl From<CollectorDesc> for Collector {
     fn from(desc: CollectorDesc) -> Self {
         // todo: differentiate collector shape
-        let detectors = match desc.partition {
+        let patches = match desc.partition {
             Partition::EqualAngle {
                 theta:
                     Range {
@@ -148,17 +147,16 @@ impl From<CollectorDesc> for Collector {
                 let n_theta = ((theta_stop - theta_start) / theta_step).ceil() as usize;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
-                let mut detectors = Vec::with_capacity(n_theta * n_phi);
+                let mut patches = Vec::with_capacity(n_theta * n_phi);
                 for theta in 0..n_theta {
                     for phi in 0..n_phi {
-                        detectors.push(Detector {
+                        patches.push(Patch {
                             zenith: (theta as f32 + 0.5) * theta_step,
                             azimuth: (phi as f32 + 0.5) * phi_step,
-                            measured: 0.0,
                         });
                     }
                 }
-                detectors
+                patches
             }
             Partition::EqualArea {
                 theta: (theta_start, theta_stop, count),
@@ -186,17 +184,16 @@ impl From<CollectorDesc> for Collector {
                 let n_theta = count as usize;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
-                let mut detectors = Vec::with_capacity(n_theta * n_phi);
+                let mut patches = Vec::with_capacity(n_theta * n_phi);
                 for theta in 0..n_theta {
                     for phi in 0..n_phi {
-                        detectors.push(Detector {
+                        patches.push(Patch {
                             zenith: (1.0 - (h_step * (theta as f32 + 0.5) + h_start)).acos(),  // use the median angle (+ 0.5) as zenith
                             azimuth: (phi_start + phi as f32 * phi_step) as f32,
-                            measured: 0.0,
                         });
                     }
                 }
-                detectors
+                patches
             }
             Partition::EqualProjectedArea {
                 theta: (start, stop, count),
@@ -223,7 +220,7 @@ impl From<CollectorDesc> for Collector {
                 let n_theta = count as usize;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
-                let mut detectors = Vec::with_capacity(n_theta * n_phi);
+                let mut patches = Vec::with_capacity(n_theta * n_phi);
                 for i in 0..n_theta {
                     // Linearly interpolate squared radius range.
                     // Projected area is proportional to squared radius.
@@ -235,14 +232,13 @@ impl From<CollectorDesc> for Collector {
                     let r = r_sqr.sqrt();
                     let theta = r.asin();
                     for phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
-                        detectors.push(Detector {
+                        patches.push(Patch {
                             zenith: theta,
                             azimuth: (phi_start + phi as f32 * phi_step) as f32,
-                            measured: 0.0,
                         });
                     }
                 }
-                detectors
+                patches
             }
         };
 
@@ -250,7 +246,7 @@ impl From<CollectorDesc> for Collector {
             radius: desc.radius,
             shape: desc.shape,
             partition: desc.partition,
-            detectors,
+            patches,
         }
     }
 }
