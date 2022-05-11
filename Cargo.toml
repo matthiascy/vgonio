@@ -31,6 +31,8 @@ chrono = "0.4"
 dirs = "4.0"
 toml = "0.5"
 csv = "1"
+embree = "0.3"
+cgmath = "0.17"
 
 [build-dependencies]
 shaderc = "0.7"

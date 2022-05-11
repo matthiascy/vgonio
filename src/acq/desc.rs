@@ -4,6 +4,7 @@ use crate::acq::Medium;
 use crate::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::ops::{Div, Sub};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -79,25 +80,47 @@ impl<T: Default + Copy> Default for Range<T> {
     }
 }
 
-/// The position defined by spherical coordinates: radius (r), zenith (θ)
-/// and azimuth (φ).
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
-pub struct Position {
-    pub radius: Range<f32>,
-    pub theta: Range<f32>,
-    pub phi: Range<f32>,
+impl Range<f32> {
+    pub fn samples_count(&self) -> usize {
+        ((self.stop - self.start) / self.step).floor() as usize
+    }
 }
 
 /// Description of the light source.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EmitterDesc {
+    /// Number of emitted rays.
     pub num_rays: u32,
+
+    /// Max bounces allowed for the emitted rays.
     pub max_bounces: u32,
-    /// The light source's position in either spherical coordinates or cartesian
-    /// coordinates.
-    pub position: Position,
+
+    /// Radius (r) specifying the spherical coordinates of the light source.
+    pub radius: f32,
+
+    /// Polar angle (θ) specifying the spherical coordinates of the light
+    /// source.
+    pub theta: Range<f32>,
+
+    /// Azimuthal angle (φ) specifying the spherical coordinates of the light
+    /// source.
+    pub phi: Range<f32>,
+
+    /// Light source's spectrum.
     pub spectrum: Range<f32>,
+}
+
+/// Description of the BRDF collector.
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CollectorDesc {
+    /// Radius of the underlying shape of the collector.
+    pub radius: f32,
+
+    /// Exact spherical shape of the collector.
+    pub shape: Shape,
+
+    /// Partition of the collector patches.
+    pub partition: Partition,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -155,7 +178,11 @@ fn scene_desc_serialization() {
             shape: Shape::WholeSphere,
             partition: Partition::EqualArea {
                 theta: (0.0, 90.0, 45),
-                phi: (0.0, 360.0, 0.0),
+                phi: Range {
+                    start: 0.0,
+                    stop: 360.0,
+                    step: 0.0,
+                },
             },
         },
         emitter: EmitterDesc {

@@ -1,9 +1,13 @@
 pub mod bxdf;
-mod collector;
+pub mod collector;
 pub mod desc;
+pub mod emitter;
+pub mod fresnel;
 pub mod ior;
 pub mod ndf;
 mod occlusion;
+pub mod ray;
+pub mod util;
 
 pub use occlusion::*;
 use std::path::{Path, PathBuf};

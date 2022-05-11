@@ -455,6 +455,10 @@ impl Heightfield {
 
 /// Generate a triangle mesh from heightfield. Triangle winding is
 /// counter-clockwise.
+///
+/// # Returns
+///
+/// Vec<u32>: An array of vertex indices forming triangles.
 pub(crate) fn regular_triangulation(positions: &[Vec3], rows: usize, cols: usize) -> Vec<u32> {
     assert_eq!(
         positions.len(),
