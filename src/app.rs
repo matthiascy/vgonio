@@ -475,13 +475,13 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
       + transmitted medium: {:?}
       + surfaces: {:?}
       + emitter:
-        - num rays: {},
-        - max bounces: {},
+        - radius: {}
+        - num rays: {}
+        - max bounces: {}
         - spectrum: {} - {}, step size {}
-        - position:
-          - radius: {} - {}, step size {}
-          - polar angle: {}° - {}°, step size {}°
-          - azimuthal angle: {}° - {}°, step size {}°
+        - partition:
+          - polar angle: {}
+          - azimuthal angle: {}
       + collector:
         - radius: {}
         - shape: {:?}
@@ -493,20 +493,14 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     desc.incident_medium,
                     desc.transmitted_medium,
                     surface_paths,
+                    desc.emitter.radius,
                     desc.emitter.num_rays,
                     desc.emitter.max_bounces,
                     desc.emitter.spectrum.start,
                     desc.emitter.spectrum.stop,
                     desc.emitter.spectrum.step,
-                    desc.emitter.position.radius.start,
-                    desc.emitter.position.radius.stop,
-                    desc.emitter.position.radius.step,
-                    desc.emitter.position.theta.start,
-                    desc.emitter.position.theta.stop,
-                    desc.emitter.position.theta.step,
-                    desc.emitter.position.phi.start,
-                    desc.emitter.position.phi.stop,
-                    desc.emitter.position.phi.step,
+                    desc.emitter.partition.theta_range_str(),
+                    desc.emitter.partition.phi_range_str(),
                     desc.collector.radius,
                     desc.collector.shape,
                     desc.collector.partition.kind_str(),

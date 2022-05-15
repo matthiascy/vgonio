@@ -1,10 +1,10 @@
 use crate::acq::bxdf::BxdfKind;
-use crate::acq::collector::CollectorDesc;
+use crate::acq::util::{SphericalPartition, SphericalShape};
 use crate::acq::Medium;
 use crate::Error;
 use std::fs::File;
 use std::io::BufReader;
-use std::ops::{Div, Sub};
+use std::ops::Sub;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -98,13 +98,8 @@ pub struct EmitterDesc {
     /// Radius (r) specifying the spherical coordinates of the light source.
     pub radius: f32,
 
-    /// Polar angle (θ) specifying the spherical coordinates of the light
-    /// source.
-    pub theta: Range<f32>,
-
-    /// Azimuthal angle (φ) specifying the spherical coordinates of the light
-    /// source.
-    pub phi: Range<f32>,
+    /// Partition of the emitter sphere.
+    pub partition: SphericalPartition,
 
     /// Light source's spectrum.
     pub spectrum: Range<f32>,
@@ -117,10 +112,10 @@ pub struct CollectorDesc {
     pub radius: f32,
 
     /// Exact spherical shape of the collector.
-    pub shape: Shape,
+    pub shape: SphericalShape,
 
     /// Partition of the collector patches.
-    pub partition: Partition,
+    pub partition: SphericalPartition,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -141,14 +136,21 @@ pub struct MeasurementDesc {
     /// The measurement kind.
     pub measurement_kind: MeasurementKind,
 
+    /// Incident medium of the measurement.
     pub incident_medium: Medium,
+
+    /// Transmitted medium of the measurement (medium of the surface).
     pub transmitted_medium: Medium,
 
     /// Surfaces to be measured. surface's path can be prefixed with either
     /// `user://` or `local://` to indicate the user-defined data file path or
     /// system-defined data file path.
     pub surfaces: Vec<PathBuf>,
+
+    /// Description of the emitter.
     pub emitter: EmitterDesc,
+
+    /// Description of the collector.
     pub collector: CollectorDesc,
 }
 
@@ -162,7 +164,6 @@ impl MeasurementDesc {
 
 #[test]
 fn scene_desc_serialization() {
-    use crate::acq::collector::{Partition, Shape};
     use std::io::Write;
 
     let desc_0 = MeasurementDesc {
@@ -175,8 +176,8 @@ fn scene_desc_serialization() {
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: CollectorDesc {
             radius: 0.1,
-            shape: Shape::WholeSphere,
-            partition: Partition::EqualArea {
+            shape: SphericalShape::WholeSphere,
+            partition: SphericalPartition::EqualArea {
                 theta: (0.0, 90.0, 45),
                 phi: Range {
                     start: 0.0,
@@ -188,15 +189,19 @@ fn scene_desc_serialization() {
         emitter: EmitterDesc {
             num_rays: 0,
             max_bounces: 0,
-            position: Position {
-                radius: (0.0, 0.0, 0.0).into(),
-                theta: (0.0, 0.0, 0.0).into(),
-                phi: (0.0, 0.0, 0.0).into(),
-            },
+            radius: 0.0,
             spectrum: Range {
                 start: 380.0,
                 stop: 780.0,
                 step: 10.0,
+            },
+            partition: SphericalPartition::EqualArea {
+                theta: (0.0, 90.0, 45),
+                phi: Range {
+                    start: 0.0,
+                    stop: 360.0,
+                    step: 0.0,
+                },
             },
         },
     };

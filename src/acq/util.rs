@@ -15,11 +15,31 @@ pub enum SphericalShape {
 }
 
 impl SphericalShape {
+    const MIN_AZIMUTH: f32 = 0.0;
+    const MAX_AZIMUTH: f32 = std::f32::consts::PI * 2.0;
+
     /// Clamps the given azimuthal and zenith angle to shape's boundaries.
+    ///
+    /// # Arguments
+    ///
+    /// `zenith` - zenith angle in radians.
+    /// `azimuth` - azimuthal angle in radians.
+    ///
+    /// # Returns
+    ///
+    /// `(zenith, azimuth)` - clamped zenith and azimuth angles in radians.
+    #[inline]
     pub fn clamp(&self, zenith: f32, azimuth: f32) -> (f32, f32) {
-        match self {
-            SphericalShape
-        }
+        let (zenith_min, zenith_max) = match self {
+            SphericalShape::UpperHemisphere => (0.0, std::f32::consts::FRAC_PI_2),
+            SphericalShape::LowerHemisphere => (std::f32::consts::FRAC_PI_2, std::f32::consts::PI),
+            SphericalShape::WholeSphere => (0.0, std::f32::consts::PI),
+        };
+
+        (
+            zenith.clamp(zenith_min, zenith_max),
+            azimuth.clamp(Self::MIN_AZIMUTH, Self::MAX_AZIMUTH),
+        )
     }
 }
 
@@ -100,6 +120,7 @@ impl SphericalPartition {
 impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
     /// partition is limited by `SphericalShape`.
+    /// TODO: limit the angle range by `SphericalShape`
     pub fn generate_patches(&self, shape: SphericalShape) -> Vec<Patch> {
         match self {
             SphericalPartition::EqualAngle {

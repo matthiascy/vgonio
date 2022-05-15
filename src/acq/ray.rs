@@ -1,6 +1,7 @@
 use crate::acq::fresnel;
 use glam::Vec3;
 
+#[derive(Debug, Copy, Clone)]
 pub struct Ray {
     /// The origin of the ray.
     pub o: Vec3,
@@ -16,6 +17,18 @@ impl Ray {
     /// Create a new ray.
     pub fn new(o: Vec3, d: Vec3) -> Self {
         Self { o, d, e: 1.0 }
+    }
+
+    pub fn from_embree_ray(ray: &embree::Ray, energy: f32) -> Self {
+        Self {
+            o: Vec3::new(ray.org_x, ray.org_y, ray.org_z),
+            d: Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z),
+            e: energy,
+        }
+    }
+
+    pub fn into_embree_ray(self) -> embree::Ray {
+        embree::Ray::new(self.o.into(), self.d.into())
     }
 }
 
@@ -88,4 +101,14 @@ pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 {
 pub fn refract(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> Vec3 {
     // TODO: implement
     Vec3::ZERO
+}
+
+pub struct RayTraceRecord {
+    pub ray: Ray,
+    pub bounces: u32,
+}
+
+pub struct RayTraceRecordDbg {
+    pub rays: Vec<Ray>,
+    pub bounces: u32,
 }

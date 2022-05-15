@@ -1,7 +1,8 @@
-use crate::acq::collector::{Collector, Patch};
 use crate::acq::desc::{MeasurementDesc, Range};
-use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
+use crate::acq::ior::RefractiveIndexDatabase;
+use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
+use crate::acq::ray::{Ray, RayTraceRecord};
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -72,32 +73,34 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
     surfaces: &[Heightfield],
 ) -> Vec<Stats<PatchData, N_PATCH, N_BOUNCE>> {
     let collector: Collector = desc.collector.into();
-    let device = embree::Device::new(); // TODO: device configuration
-    let mut scene = embree::Scene::new(&device);
+    let emitter: Emitter = desc.emitter.into();
+
+    let device = embree::Device::with_config(embree::Config::default());
+    let mut scene = embree::Scene::new(device.clone());
 
     for surface in surfaces {
         let (vertices, _) = surface.generate_vertices();
         let indices = regular_triangulation(&vertices, surface.rows, surface.cols);
         let num_triangles = indices.len() / 3;
         let num_vertices = vertices.len();
-        let mut tri_mesh = embree::TriangleMesh::unanimated(&device, num_triangles, num_vertices);
+        let mut tri_mesh =
+            embree::TriangleMesh::unanimated(device.clone(), num_triangles, num_vertices);
         {
             let mut v_buffer = tri_mesh.vertex_buffer.map();
             let mut i_buffer = tri_mesh.index_buffer.map();
             // TODO: customise embree to use compatible format to fill the buffer
             // Fill vertex buffer with height field vertices.
             for (i, vertex) in vertices.iter().enumerate() {
-                v_buffer[i] = cgmath::Vector4::new(vertex.x, vertex.y, vertex.z, 1.0);
+                v_buffer[i] = [vertex.x, vertex.y, vertex.z, 1.0];
             }
             // Fill index buffer with height field triangles.
             (0..num_triangles).for_each(|i| {
-                i_buffer[i] =
-                    cgmath::Vector3::new(indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]);
+                i_buffer[i] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
             });
         }
-        let mut geom = embree::Geometry::Triangle(tri_mesh);
-        geom.commit();
-        scene.attach_geometry(geom);
+
+        scene.attach_geometry(tri_mesh);
+        scene.commit();
 
         let spectrum_sampler = SpectrumSampler::from(desc.emitter.spectrum);
 
@@ -112,11 +115,31 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
                 wavelength, ior_t.eta, ior_t.k
             );
 
-            // Generate rays from the collector to the surface. Uniform sampling
-            // on the collector sphere.
-            let mut rays = collector.generate_rays()
+            // For all incident angles; generate samples on each patch
+            for patch in emitter.patches {
+                // Emit rays from the patch of the emitter. Uniform sampling over the patch.
+                let rays = emitter.emit_from_patch(&patch);
 
-            // Trace rays and collect statistics.
+                // Populate Embree ray stream with generated rays.
+                let mut ray_stream = embree::RayN::new(rays.len());
+                for (i, mut ray) in ray_stream.iter_mut().enumerate() {
+                    ray.set_origin(rays[i].o.into());
+                    ray.set_dir(rays[i].d.into());
+                }
+
+                // Trace primary rays with coherent context.
+                let mut isect_ctx = embree::IntersectContext::coherent();
+                let mut ray_hit = embree::RayHitN::new(ray_stream);
+                scene.intersect_stream_soa(&mut isect_ctx, &mut ray_hit);
+
+                // Filter out primary rays that hit the surface.
+
+                // Approach 1: sort filtered rays to continue take advantage of coherent tracing
+
+                // Approach 2: trace each filtered ray with incoherent context
+
+                // Approach 3: using heightfield tracing method to trace rays
+            }
         }
     }
 
@@ -146,4 +169,25 @@ impl SpectrumSampler {
     pub fn samples(&self) -> Vec<f32> {
         (0..self.num_samples).map(|i| self.nth_sample(i)).collect()
     }
+}
+
+// rtcIntersect/rtcOccluded calls can be invoked from multiple threads.
+// embree api calls to the same object are not thread safe in general.
+fn trace_one_ray_embree(
+    scene: &mut embree::Scene,
+    ray: &mut embree::Ray,
+    isect_ctx: &mut embree::IntersectContext,
+    ray_hit: &mut embree::RayHit,
+) -> RayTraceRecord {
+    let mut record = RayTraceRecord {
+        ray: Ray::from_embree_ray(ray, 1.0),
+        bounces: 0
+    };
+}
+
+fn trace_one_ray_htfld_rt() -> RayTraceRecord {
+    let mut record = RayTraceRecord {
+        ray: Ray {},
+        bounces: 0
+    };
 }
