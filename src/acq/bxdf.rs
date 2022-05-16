@@ -1,6 +1,6 @@
 use crate::acq::desc::{MeasurementDesc, Range};
-use crate::acq::ior::RefractiveIndexDatabase;
-use crate::acq::ray::{fresnel_scattering_air_conductor, Ray, RayTraceRecord};
+use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
+use crate::acq::ray::{fresnel_scattering_air_conductor, fresnel_scattering_air_conductor_spectrum, Ray, RayTraceRecord};
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
 use std::sync::Arc;
@@ -187,14 +187,29 @@ impl SpectrumSampler {
 /// Used to rewind self intersections.
 #[derive(Debug)]
 struct IntersectRecord {
+    /// The ray that hit the surface.
     ray: Ray,
+
+    /// The surface that was hit.
     geom_id: u32,
+
+    /// The primitive of the surface that was hit.
     prim_id: u32,
+
+    /// The hit point.
     hit_point: Vec3,
+
+    /// The normal at the hit point.
     normal: Vec3,
+
+    /// Should the ray be rewound?
     should_rewind: bool,
+
+    /// How many times the ray has been rewound.
     rewind_times: u32,
 }
+
+const NUDGE_AMOUNT: f32 = f32::EPSILON * 10.0;
 
 // rtcIntersect/rtcOccluded calls can be invoked from multiple threads.
 // embree api calls to the same object are not thread safe in general.
@@ -202,24 +217,40 @@ fn trace_one_ray_embree(
     ray: Ray,
     scene: &mut embree::Scene,
     context: &mut embree::IntersectContext,
+    ior_t: RefractiveIndex,
     prev_isect: Option<IntersectRecord>,
     prev_record: Option<RayTraceRecord>,
 ) -> Option<RayTraceRecord> {
     let mut ray_hit = RayHit::new(ray.into_embree_ray());
     scene.intersect(context, &mut ray_hit);
 
-    let intersected = ray_hit.hit() && ray_hit.ray.tfar > f32::EPSILON && ray_hit.ray.tfar < f32::INFINITY;
-
-    if intersected {
-        match prev_isect {
-            None => {
-                // First intersection test.
+    // Is the ray hit something?
+    if ray_hit.hit.hit() && ray_hit.ray.tfar > f32::EPSILON && ray_hit.ray.tfar < f32::INFINITY {
+        // Check with previous intersection record to see if we are self-intersecting.
+        if let Some(prev_isect) = prev_isect {
+            // The ray is hitting the same primitive of the same geometry.
+            if prev_isect.geom_id == ray_hit.hit.geomID && prev_isect.prim_id == ray_hit.hit.geomID {
+                // Nudge the ray a bit more to avoid self-intersection.
+                let amount = NUDGE_AMOUNT * (prev_isect.rewind_times * prev_isect.rewind_times) as f32 * 0.5;
+                let hit_point = nudge_hit_point(prev_isect.hit_point, prev_isect.normal, amount);
+                // Record the current intersection information with rewinding information.
+                let curr_isect = Some(IntersectRecord {
+                    ray,
+                    geom_id: ray_hit.hit.geomID,
+                    prim_id: ray_hit.hit.primID,
+                    hit_point,
+                    normal: prev_isect.normal,
+                    should_rewind: true,
+                    rewind_times: prev_isect.rewind_times + 1,
+                });
+                None
+            } else {
+                // The ray is hitting a different primitive of the same geometry.
                 let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
-                let hit_point = {
-                    let point = compute_hit_point(&scene, &ray_hit.hit);
-                    nudge_hit_point(point, normal)
-                };
-                let isect_record = IntersectRecord {
+                let hit_point =
+                    nudge_hit_point(compute_hit_point(scene, &ray_hit.hit), normal, NUDGE_AMOUNT);
+                // Record the current intersection information.
+                let curr_isect = Some(IntersectRecord {
                     ray,
                     geom_id: ray_hit.hit.geomID,
                     prim_id: ray_hit.hit.primID,
@@ -227,40 +258,66 @@ fn trace_one_ray_embree(
                     normal,
                     should_rewind: false,
                     rewind_times: 0
-                };
-                if let Some(scattered) = fresnel_scattering_air_conductor() {
+                });
+                // Compute the reflected ray.
+                if let Some(scattered) = fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k) {
+                    // The ray is not being aborted: continue tracing.
                     if scattered.reflected.e >= 0.0 {
-
+                        // Record the current tracing information.
+                        let curr_record = Some(RayTraceRecord {
+                            initial: if prev_record.is_some() { prev_record.unwrap().initial } else { ray },
+                            current: scattered.reflected,
+                            bounces: if prev_record.is_some() { prev_record.unwrap().bounces + 1 } else { 1 },
+                        });
+                        // Trace the reflected ray.
+                        trace_one_ray_embree(curr_record.unwrap().current, scene, context, ior_t, curr_isect, curr_record)
+                    } else {
+                        // The ray is being aborted: abort.
+                        prev_record
                     }
-                }
-
-            }
-            Some(prev_isect) => {
-                if prev_isect.geom_id == ray_hit.hit.geomID && prev_isect.prim_id == ray_hit.hit.geomID {
-                    // Self intersection detected
-                    let nudge = (prev_isect.rewind_times * prev_isect.rewind_times) as f32 * 0.5;
-                    // Update hit point
-                    let prev_isect = IntersectRecord {
-                        should_rewind: true,
-                        geom_id: u32::MAX,
-                        prim_id: u32::MAX,
-                        hit_point: prev_isect.hit_point + prev_isect.normal * f32::EPSILON * 10.0 * nudge;
-                        ..prev_isect
-                    }
-
-                    let prev_record = Some(RayTraceRecord {
-                        energy: prev_record.unwrap().energy,
-                        hit_point: prev_isect.hit_point,
-                        normal: prev_isect.normal,
-                        ..prev_record.unwrap()
-                    });
-                    trace_one_ray_embree(prev_isect.ray, scene, context, Some(prev_isect), prev_record)
                 } else {
-
+                    //
+                    prev_record
                 }
+            }
+        } else {
+            // No previous intersection record: it's the first time the ray hit something.
+            let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
+            let hit_point =
+                nudge_hit_point(compute_hit_point(scene, &ray_hit.hit), normal, NUDGE_AMOUNT);
+            // Record the current intersection information.
+            let curr_isect = Some(IntersectRecord {
+                ray,
+                geom_id: ray_hit.hit.geomID,
+                prim_id: ray_hit.hit.primID,
+                hit_point,
+                normal,
+                should_rewind: false,
+                rewind_times: 0,
+            });
+            // Compute the reflected ray.
+            if let Some(scattered) = fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k) {
+                // The ray is not being aborted: continue tracing.
+                if scattered.reflected.e >= 0.0 {
+                    // Record the current tracing information.
+                    let curr_record = Some(RayTraceRecord {
+                        initial: if prev_record.is_some() { prev_record.unwrap().initial } else { ray },
+                        current: scattered.reflected,
+                        bounces: if prev_record.is_some() { prev_record.unwrap().bounces + 1 } else { 1 },
+                    });
+                    // Trace the reflected ray.
+                    trace_one_ray_embree(curr_record.unwrap().current, scene, context, ior_t, curr_isect, curr_record)
+                } else {
+                    // The ray is being aborted: abort.
+                    prev_record
+                }
+            } else {
+                //
+                prev_record
             }
         }
     } else {
+        // No intersection: return previous record, may be None if it's the first intersection.
         prev_record
     }
 }

@@ -1,5 +1,6 @@
 use crate::acq::fresnel;
 use glam::Vec3;
+use crate::acq::ior::RefractiveIndex;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Ray {
@@ -32,13 +33,14 @@ impl Ray {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Scattering {
     pub reflected: Ray,
     pub refracted: Ray,
 }
 
 pub fn fresnel_scattering_air_conductor(
-    ray: &Ray,
+    ray: Ray,
     p: Vec3,
     n: Vec3,
     eta_t: f32,
@@ -48,7 +50,7 @@ pub fn fresnel_scattering_air_conductor(
         None
     } else {
         let reflected_dir = reflect(ray.d, n);
-        let refracted_dir = refract(ray.d, n, 1.0, eta_t);
+        let refracted_dir = refract();
         let reflectance = fresnel::reflectance_dielectric_conductor(ray.d.dot(n).abs(), eta_t, k_t);
 
         Some(Scattering {
@@ -63,6 +65,29 @@ pub fn fresnel_scattering_air_conductor(
                 e: ray.e * (1.0 - reflectance),
             },
         })
+    }
+}
+
+pub fn fresnel_scattering_air_conductor_spectrum(ray: Ray, point: Vec3, normal: Vec3, iors: &[RefractiveIndex]) -> Vec<Option<Scattering>> {
+    if ray.e < 0.0 {
+        vec![None; iors.len()]
+    } else {
+        let reflected_dir = reflect(ray.d, normal);
+        let refracted_dir = refract();
+        let reflectance = fresnel::reflectance_dielectric_conductor_spectrum(ray.d.dot(normal).abs(), iors);
+
+        reflectance.iter().map(|r| Some(Scattering {
+            reflected: Ray {
+                o: point,
+                d: reflected_dir,
+                e: ray.e * r,
+            },
+            refracted: Ray {
+                o: point,
+                d: refracted_dir,
+                e: ray.e * (1.0 - r),
+            },
+        })).collect()
     }
 }
 
@@ -98,13 +123,19 @@ pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 {
     }
 }
 
-pub fn refract(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> Vec3 {
+pub fn refract() -> Vec3 {
     // TODO: implement
     Vec3::ZERO
 }
 
 pub struct RayTraceRecord {
-    pub ray: Ray,
+    /// The initial ray being traced.
+    pub initial: Ray,
+
+    /// The current ray being traced.
+    pub current: Ray,
+
+    /// The number of bounces.
     pub bounces: u32,
 }
 

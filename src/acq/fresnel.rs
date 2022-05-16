@@ -90,6 +90,7 @@
 // TODO: unify fresnel calculation (using complex refractive index).
 
 use glam::Vec3;
+use crate::acq::ior::RefractiveIndex;
 
 /// Compute the Schlick's approximation of the Fresnel specular (reflection)
 /// factor.
@@ -172,14 +173,8 @@ pub fn reflectance_dielectric_conductor(cos_theta: f32, eta_t: f32, k_t: f32) ->
 
 pub fn reflectance_dielectric_conductor_spectrum(
     cos_theta: f32,
-    eta_t: &[f32],
-    k_t: &[f32],
+    iors_t: &[RefractiveIndex]
 ) -> Vec<f32> {
-    assert_eq!(
-        eta_t.len(),
-        k_t.len(),
-        "eta_t and k_t must have the same length"
-    );
     todo!()
 }
 
