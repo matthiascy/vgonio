@@ -179,9 +179,9 @@ impl SphericalPartition {
 
                 let h_start = 1.0 - theta_start.cos();
                 let h_stop = 1.0 - theta_stop.cos();
-                let h_step = (h_stop - h_start) / count as f32;
+                let h_step = (h_stop - h_start) / *count as f32;
 
-                let n_theta = count as usize;
+                let n_theta = *count as usize;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
@@ -216,8 +216,8 @@ impl SphericalPartition {
                 let r_stop = theta_stop.sin();
                 let r_start_sqr = r_start * r_start;
                 let r_stop_sqr = r_stop * r_stop;
-                let factor = 1.0 / count as f32;
-                let n_theta = count as usize;
+                let factor = 1.0 / *count as f32;
+                let n_theta = *count as usize;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);

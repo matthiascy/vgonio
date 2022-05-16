@@ -1,4 +1,4 @@
-use crate::acq::desc::{CollectorDesc, Range};
+use crate::acq::desc::CollectorDesc;
 use crate::acq::util::{SphericalPartition, SphericalShape};
 
 /// The virtual goniophotometer's detectors represented by the patches

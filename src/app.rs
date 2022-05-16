@@ -465,7 +465,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
 
     let start = std::time::SystemTime::now();
-    let measurement = match desc.measurement_kind {
+    let measurement: Vec<u32> = match desc.measurement_kind {
         MeasurementKind::Bxdf { kind } => match kind {
             BxdfKind::InPlane => {
                 println!(
@@ -508,7 +508,8 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     desc.collector.partition.phi_range_str()
                 );
                 println!("    {BRIGHT_YELLOW}>{RESET} Measuring in-plane BRDF...");
-                crate::acq::bxdf::measure_in_plane_brdf(&desc, &ior_db, &surfaces)
+                //crate::acq::bxdf::measure_in_plane_brdf(&desc, &ior_db, &surfaces)
+                vec![]
             }
         },
         MeasurementKind::Ndf => {

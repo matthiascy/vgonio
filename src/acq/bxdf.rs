@@ -1,8 +1,11 @@
 use crate::acq::desc::{MeasurementDesc, Range};
 use crate::acq::ior::RefractiveIndexDatabase;
+use crate::acq::ray::{fresnel_scattering_air_conductor, Ray, RayTraceRecord};
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
-use crate::acq::ray::{Ray, RayTraceRecord};
+use std::sync::Arc;
+use embree::{Geometry, RayHit};
+use glam::Vec3;
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -76,70 +79,79 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
     let emitter: Emitter = desc.emitter.into();
 
     let device = embree::Device::with_config(embree::Config::default());
-    let mut scene = embree::Scene::new(device.clone());
 
     for surface in surfaces {
         let (vertices, _) = surface.generate_vertices();
         let indices = regular_triangulation(&vertices, surface.rows, surface.cols);
-        let num_triangles = indices.len() / 3;
-        let num_vertices = vertices.len();
-        let mut tri_mesh =
-            embree::TriangleMesh::unanimated(device.clone(), num_triangles, num_vertices);
+        let mut surface_mesh =
+            embree::TriangleMesh::unanimated(device.clone(), indices.len() / 3, vertices.len());
         {
-            let mut v_buffer = tri_mesh.vertex_buffer.map();
-            let mut i_buffer = tri_mesh.index_buffer.map();
-            // TODO: customise embree to use compatible format to fill the buffer
-            // Fill vertex buffer with height field vertices.
-            for (i, vertex) in vertices.iter().enumerate() {
-                v_buffer[i] = [vertex.x, vertex.y, vertex.z, 1.0];
+            let surface_mesh_mut = Arc::get_mut(&mut surface_mesh).unwrap();
+            {
+                let mut v_buffer = surface_mesh_mut.vertex_buffer.map();
+                let mut i_buffer = surface_mesh_mut.index_buffer.map();
+                // TODO: customise embree to use compatible format to fill the buffer
+                // Fill vertex buffer with height field vertices.
+                for (i, vertex) in vertices.iter().enumerate() {
+                    v_buffer[i] = [vertex.x, vertex.y, vertex.z, 1.0];
+                }
+                // Fill index buffer with height field triangles.
+                (0..num_triangles).for_each(|i| {
+                    i_buffer[i] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
+                });
             }
-            // Fill index buffer with height field triangles.
-            (0..num_triangles).for_each(|i| {
-                i_buffer[i] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
-            });
+            surface_mesh_mut.commit()
         }
 
-        scene.attach_geometry(tri_mesh);
-        scene.commit();
+        let mut scene = embree::Scene::new(device.clone());
+        let scene_mut = Arc::get_mut(&mut scene).unwrap();
+        let surface_geom_id = {
+            let id = scene_mut.attach_geometry(surface_mesh);
+            scene_mut.commit();
+            id
+        };
 
-        let spectrum_sampler = SpectrumSampler::from(desc.emitter.spectrum);
+        let spectrum_samples = SpectrumSampler::from(desc.emitter.spectrum).samples();
+        let ior_i = ior_db
+            .ior_of_spectrum(desc.incident_medium, &spectrum_samples)
+            .unwrap();
+        let ior_t = ior_db
+            .ior_of_spectrum(desc.transmitted_medium, &spectrum_samples)
+            .unwrap();
 
-        // For all wavelengths
-        for wavelength in spectrum_sampler.samples() {
-            let ior_i = ior_db.ior_of(desc.incident_medium, wavelength).unwrap();
-            let ior_t = ior_db.ior_of(desc.transmitted_medium, wavelength).unwrap();
+        // For all incident angles; generate samples on each patch
+        for patch in &emitter.patches {
+            // Emit rays from the patch of the emitter. Uniform sampling over the patch.
+            let rays = emitter.emit_from_patch(&patch);
 
-            println!(
-                "    > Tracing rays of {}, refractive index of transmitted medium is: \
-            η = {:.3}, k = {:.3}",
-                wavelength, ior_t.eta, ior_t.k
-            );
-
-            // For all incident angles; generate samples on each patch
-            for patch in emitter.patches {
-                // Emit rays from the patch of the emitter. Uniform sampling over the patch.
-                let rays = emitter.emit_from_patch(&patch);
-
-                // Populate Embree ray stream with generated rays.
-                let mut ray_stream = embree::RayN::new(rays.len());
-                for (i, mut ray) in ray_stream.iter_mut().enumerate() {
-                    ray.set_origin(rays[i].o.into());
-                    ray.set_dir(rays[i].d.into());
-                }
-
-                // Trace primary rays with coherent context.
-                let mut isect_ctx = embree::IntersectContext::coherent();
-                let mut ray_hit = embree::RayHitN::new(ray_stream);
-                scene.intersect_stream_soa(&mut isect_ctx, &mut ray_hit);
-
-                // Filter out primary rays that hit the surface.
-
-                // Approach 1: sort filtered rays to continue take advantage of coherent tracing
-
-                // Approach 2: trace each filtered ray with incoherent context
-
-                // Approach 3: using heightfield tracing method to trace rays
+            // Populate Embree ray stream with generated rays.
+            let mut ray_stream = embree::RayN::new(rays.len());
+            for (i, mut ray) in ray_stream.iter_mut().enumerate() {
+                ray.set_origin(rays[i].o.into());
+                ray.set_dir(rays[i].d.into());
             }
+
+            // Trace primary rays with coherent context.
+            let mut context = embree::IntersectContext::coherent();
+            let mut ray_hit = embree::RayHitN::new(ray_stream);
+            scene.intersect_stream_soa(&mut context, &mut ray_hit);
+
+            // Filter out primary rays that hit the surface.
+            let filtered = ray_hit
+                .iter()
+                .enumerate()
+                .filter_map(|(i, (_, h))| h.hit().then(i as u32))
+                .collect::<Vec<u32>>();
+
+            // Approach 1: sort filtered rays to continue take advantage of
+            // coherent tracing
+
+            // Approach 2: trace each filtered ray with incoherent context
+            for ray_id in filtered {
+
+            }
+
+            // Approach 3: using heightfield tracing method to trace rays
         }
     }
 
@@ -148,8 +160,8 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
 
 /// Structure to sample over a spectrum.
 pub(crate) struct SpectrumSampler {
-    pub range: Range<f32>,
-    pub num_samples: usize,
+    range: Range<f32>,
+    num_samples: usize,
 }
 
 impl From<Range<f32>> for SpectrumSampler {
@@ -171,23 +183,118 @@ impl SpectrumSampler {
     }
 }
 
+/// Intermediate structure used to store the results of a ray intersection.
+/// Used to rewind self intersections.
+#[derive(Debug)]
+struct IntersectRecord {
+    ray: Ray,
+    geom_id: u32,
+    prim_id: u32,
+    hit_point: Vec3,
+    normal: Vec3,
+    should_rewind: bool,
+    rewind_times: u32,
+}
+
 // rtcIntersect/rtcOccluded calls can be invoked from multiple threads.
 // embree api calls to the same object are not thread safe in general.
 fn trace_one_ray_embree(
+    ray: Ray,
     scene: &mut embree::Scene,
-    ray: &mut embree::Ray,
-    isect_ctx: &mut embree::IntersectContext,
-    ray_hit: &mut embree::RayHit,
-) -> RayTraceRecord {
-    let mut record = RayTraceRecord {
-        ray: Ray::from_embree_ray(ray, 1.0),
-        bounces: 0
-    };
+    context: &mut embree::IntersectContext,
+    prev_isect: Option<IntersectRecord>,
+    prev_record: Option<RayTraceRecord>,
+) -> Option<RayTraceRecord> {
+    let mut ray_hit = RayHit::new(ray.into_embree_ray());
+    scene.intersect(context, &mut ray_hit);
+
+    let intersected = ray_hit.hit() && ray_hit.ray.tfar > f32::EPSILON && ray_hit.ray.tfar < f32::INFINITY;
+
+    if intersected {
+        match prev_isect {
+            None => {
+                // First intersection test.
+                let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
+                let hit_point = {
+                    let point = compute_hit_point(&scene, &ray_hit.hit);
+                    nudge_hit_point(point, normal)
+                };
+                let isect_record = IntersectRecord {
+                    ray,
+                    geom_id: ray_hit.hit.geomID,
+                    prim_id: ray_hit.hit.primID,
+                    hit_point,
+                    normal,
+                    should_rewind: false,
+                    rewind_times: 0
+                };
+                if let Some(scattered) = fresnel_scattering_air_conductor() {
+                    if scattered.reflected.e >= 0.0 {
+
+                    }
+                }
+
+            }
+            Some(prev_isect) => {
+                if prev_isect.geom_id == ray_hit.hit.geomID && prev_isect.prim_id == ray_hit.hit.geomID {
+                    // Self intersection detected
+                    let nudge = (prev_isect.rewind_times * prev_isect.rewind_times) as f32 * 0.5;
+                    // Update hit point
+                    let prev_isect = IntersectRecord {
+                        should_rewind: true,
+                        geom_id: u32::MAX,
+                        prim_id: u32::MAX,
+                        hit_point: prev_isect.hit_point + prev_isect.normal * f32::EPSILON * 10.0 * nudge;
+                        ..prev_isect
+                    }
+
+                    let prev_record = Some(RayTraceRecord {
+                        energy: prev_record.unwrap().energy,
+                        hit_point: prev_isect.hit_point,
+                        normal: prev_isect.normal,
+                        ..prev_record.unwrap()
+                    });
+                    trace_one_ray_embree(prev_isect.ray, scene, context, Some(prev_isect), prev_record)
+                } else {
+
+                }
+            }
+        }
+    } else {
+        prev_record
+    }
 }
 
 fn trace_one_ray_htfld_rt() -> RayTraceRecord {
-    let mut record = RayTraceRecord {
-        ray: Ray {},
-        bounces: 0
-    };
+    todo!()
 }
+
+/// Compute intersection point.
+fn compute_hit_point(scene: &embree::Scene, record: &embree::Hit) -> Vec3 {
+    let geom = scene.geometry(record.geomID).unwrap().handle();
+    let prim_id = record.primID as isize;
+    let points = unsafe {
+        let vertices: *const f32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
+        let indices: *const u32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
+        let mut points = [Vec3::ZERO; 3];
+        for i in 0..3 {
+            let idx = *indices.offset(prim_id * 3 + i as isize) as isize;
+            points[i] = Vec3::new(*vertices.offset(idx * 4), *vertices.offset(idx * 4 + 1), *vertices.offset(idx * 4 + 2))
+        }
+        points
+    };
+    log::debug!("geom_id: {}, prim_id: {}, u: {}, v: {}, p0: {}, p1: {}, p2: {}", record.geomID, record.primID, record.u, record.v, points[0], points[1], points[2]);
+    (1.0 - record.u - record.v) * points[0] + record.u * points[1] + record.v * points[2]
+}
+
+/// Nudge the hit point along the normal to avoid self-intersection.
+fn nudge_hit_point(hit_point: Vec3, normal: Vec3, amount: f32) -> Vec3 {
+    hit_point + normal * amount
+}
+
+fn inplane_brdf_measurement_embree() {}
+
+/// Embree + Heightfield ray tracing.
+fn inplane_brdf_measurement_hybrid() {}
+
+fn inplane_brdf_measurement_htfld_rt() {}

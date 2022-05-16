@@ -111,8 +111,39 @@ pub fn schlick_reflectance(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
     r0 + (1.0 - r0) * a * a * a * a * a
 }
 
+pub fn schlick_reflectance_spectrum(w_i: Vec3, n: Vec3, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
+    assert_eq!(
+        eta_i.len(),
+        eta_t.len(),
+        "eta_i and eta_t must have the same length"
+    );
+
+    let cos = w_i.dot(n);
+
+    let mut output = Vec::with_capacity(eta_i.len());
+
+    for (i, r) in output.iter_mut().enumerate() {
+        let r0 = (eta_i[i] - eta_t[i]) / (eta_i[i] + eta_t[i]);
+
+        let a = 1.0 - cos;
+
+        *r = r0 + (1.0 - r0) * a * a * a * a * a;
+    }
+
+    output
+}
+
 pub fn fresnel_schlick_approx(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
     schlick_reflectance(w_i, n, eta_i, eta_t)
+}
+
+pub fn fresnel_schlick_approx_spectrum(
+    w_i: Vec3,
+    n: Vec3,
+    eta_i: &[f32],
+    eta_t: &[f32],
+) -> Vec<f32> {
+    schlick_reflectance_spectrum(w_i, n, eta_i, eta_t)
 }
 
 /// Fresnel reflectance of unpolarised light between dielectric and conductor.
@@ -137,6 +168,19 @@ pub fn reflectance_dielectric_conductor(cos_theta: f32, eta_t: f32, k_t: f32) ->
     let rp2 = rs2 * (term3 - term4) / (term3 + term4);
 
     0.5 * (rp2 + rs2)
+}
+
+pub fn reflectance_dielectric_conductor_spectrum(
+    cos_theta: f32,
+    eta_t: &[f32],
+    k_t: &[f32],
+) -> Vec<f32> {
+    assert_eq!(
+        eta_t.len(),
+        k_t.len(),
+        "eta_t and k_t must have the same length"
+    );
+    todo!()
 }
 
 // pub fn fresnel_schlick_approx2(w_i: &Vec3f, n: &Vec3f, eta_i: f32, eta_t:

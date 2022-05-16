@@ -10,7 +10,7 @@ use std::str::FromStr;
 /// is constant over all the wavelengths.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct RefractiveIndex {
-    /// corresponding wavelength.
+    /// corresponding wavelength in nanometres.
     pub wavelength: f32,
 
     /// Index of refraction.
@@ -51,6 +51,17 @@ impl RefractiveIndexDatabase {
             }
         }
         ior
+    }
+
+    pub fn ior_of_spectrum(
+        &self,
+        medium: Medium,
+        wavelengths: &[f32],
+    ) -> Option<Vec<RefractiveIndex>> {
+        wavelengths
+            .iter()
+            .map(|wavelength| self.ior_of(medium, *wavelength))
+            .collect()
     }
 
     /// Load the refractive index database from the paths specified in the
