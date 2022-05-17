@@ -7,7 +7,7 @@ use crate::acq::ray::{
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
 use embree::{Geometry, RayHit, SoARay};
-use glam::Vec3;
+use glam::{Vec2, Vec3};
 use std::sync::Arc;
 
 #[non_exhaustive]
@@ -403,7 +403,23 @@ fn trace_one_ray_embree(
     }
 }
 
-fn trace_one_ray_htfld_rt(ray: Ray) -> RayTraceRecord {
+fn trace_one_ray_grid_tracing(ray: Ray, hf: Heightfield) -> RayTraceRecord {
+    // 1. Calculate the x, y, z coordinates of the intersection of the ray with
+    // the global bounding box of the height field.
+
+    // 2. Implement a standard DDA to traverse the grid in x, y coordinates
+    // until the ray exits the bounding box. 3. Modify the DDA to identify
+    // all cells traversed by the ray. 4. Modify the DDA to track the z
+    // (altitude) values of the endpoints of the ray within each cell.
+    // 5. Test the z values of the ray at each cell against the altitudes at the
+    // four corners of the cell.    If this test indicates that the ray
+    // passes between those altitudes at that cell, proceed with the steps
+    // below;    otherwise, go to the next cell.
+    // 6. Create two triangles (only the plane description is needed) from the
+    // four altitudes at the corners of the cell. 7. Intersect the ray with
+    // the two triangles which tessellate the surface within the cell.
+    // 8. Include an inverse skewing and scaling transformation for the ray, so
+    // the triangles may be equilateral rather than right triangles.
     todo!()
 }
 
@@ -444,10 +460,3 @@ fn compute_hit_point(scene: &embree::Scene, record: &embree::Hit) -> Vec3 {
 fn nudge_hit_point(hit_point: Vec3, normal: Vec3, amount: f32) -> Vec3 {
     hit_point + normal * amount
 }
-
-fn inplane_brdf_measurement_embree() {}
-
-/// Embree + Heightfield ray tracing.
-fn inplane_brdf_measurement_hybrid() {}
-
-fn inplane_brdf_measurement_htfld_rt() {}

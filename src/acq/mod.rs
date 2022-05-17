@@ -1,5 +1,6 @@
 pub mod bxdf;
 mod collector;
+mod dda;
 pub mod desc;
 mod emitter;
 pub mod fresnel;
