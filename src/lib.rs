@@ -1,3 +1,4 @@
+#![feature(is_some_with)]
 extern crate core;
 
 pub mod acq;

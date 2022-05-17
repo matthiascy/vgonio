@@ -1,6 +1,6 @@
 use crate::acq::fresnel;
-use glam::Vec3;
 use crate::acq::ior::RefractiveIndex;
+use glam::Vec3;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Ray {
@@ -68,26 +68,37 @@ pub fn fresnel_scattering_air_conductor(
     }
 }
 
-pub fn fresnel_scattering_air_conductor_spectrum(ray: Ray, point: Vec3, normal: Vec3, iors: &[RefractiveIndex]) -> Vec<Option<Scattering>> {
+pub fn fresnel_scattering_air_conductor_spectrum(
+    ray: Ray,
+    point: Vec3,
+    normal: Vec3,
+    iors: &[RefractiveIndex],
+) -> Vec<Option<Scattering>> {
     if ray.e < 0.0 {
         vec![None; iors.len()]
     } else {
         let reflected_dir = reflect(ray.d, normal);
         let refracted_dir = refract();
-        let reflectance = fresnel::reflectance_dielectric_conductor_spectrum(ray.d.dot(normal).abs(), iors);
+        let reflectance =
+            fresnel::reflectance_dielectric_conductor_spectrum(ray.d.dot(normal).abs(), iors);
 
-        reflectance.iter().map(|r| Some(Scattering {
-            reflected: Ray {
-                o: point,
-                d: reflected_dir,
-                e: ray.e * r,
-            },
-            refracted: Ray {
-                o: point,
-                d: refracted_dir,
-                e: ray.e * (1.0 - r),
-            },
-        })).collect()
+        reflectance
+            .iter()
+            .map(|r| {
+                Some(Scattering {
+                    reflected: Ray {
+                        o: point,
+                        d: reflected_dir,
+                        e: ray.e * r,
+                    },
+                    refracted: Ray {
+                        o: point,
+                        d: refracted_dir,
+                        e: ray.e * (1.0 - r),
+                    },
+                })
+            })
+            .collect()
     }
 }
 

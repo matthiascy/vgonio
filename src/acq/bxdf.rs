@@ -1,11 +1,14 @@
 use crate::acq::desc::{MeasurementDesc, Range};
 use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
-use crate::acq::ray::{fresnel_scattering_air_conductor, fresnel_scattering_air_conductor_spectrum, Ray, RayTraceRecord};
+use crate::acq::ray::{
+    fresnel_scattering_air_conductor, fresnel_scattering_air_conductor_spectrum, Ray,
+    RayTraceRecord, Scattering,
+};
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
-use std::sync::Arc;
-use embree::{Geometry, RayHit};
+use embree::{Geometry, RayHit, SoARay};
 use glam::Vec3;
+use std::sync::Arc;
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -83,8 +86,9 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
     for surface in surfaces {
         let (vertices, _) = surface.generate_vertices();
         let indices = regular_triangulation(&vertices, surface.rows, surface.cols);
+        let num_tris = indices.len() / 3;
         let mut surface_mesh =
-            embree::TriangleMesh::unanimated(device.clone(), indices.len() / 3, vertices.len());
+            embree::TriangleMesh::unanimated(device.clone(), num_tris, vertices.len());
         {
             let surface_mesh_mut = Arc::get_mut(&mut surface_mesh).unwrap();
             {
@@ -96,7 +100,7 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
                     v_buffer[i] = [vertex.x, vertex.y, vertex.z, 1.0];
                 }
                 // Fill index buffer with height field triangles.
-                (0..num_triangles).for_each(|i| {
+                (0..num_tris).for_each(|i| {
                     i_buffer[i] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
                 });
             }
@@ -112,46 +116,66 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
         };
 
         let spectrum_samples = SpectrumSampler::from(desc.emitter.spectrum).samples();
-        let ior_i = ior_db
-            .ior_of_spectrum(desc.incident_medium, &spectrum_samples)
-            .unwrap();
-        let ior_t = ior_db
-            .ior_of_spectrum(desc.transmitted_medium, &spectrum_samples)
-            .unwrap();
+        // let ior_i = ior_db
+        //     .ior_of_spectrum(desc.incident_medium, &spectrum_samples)
+        //     .unwrap();
+        // let ior_t = ior_db
+        //     .ior_of_spectrum(desc.transmitted_medium, &spectrum_samples)
+        //     .unwrap();
 
-        // For all incident angles; generate samples on each patch
-        for patch in &emitter.patches {
-            // Emit rays from the patch of the emitter. Uniform sampling over the patch.
-            let rays = emitter.emit_from_patch(&patch);
+        for wavelength in spectrum_samples {
+            let ior_t = ior_db.ior_of(desc.transmitted_medium, wavelength).unwrap();
 
-            // Populate Embree ray stream with generated rays.
-            let mut ray_stream = embree::RayN::new(rays.len());
-            for (i, mut ray) in ray_stream.iter_mut().enumerate() {
-                ray.set_origin(rays[i].o.into());
-                ray.set_dir(rays[i].d.into());
+            // For all incident angles; generate samples on each patch
+            for patch in &emitter.patches {
+                // Emit rays from the patch of the emitter. Uniform sampling over the patch.
+                let rays = emitter.emit_from_patch(patch);
+
+                // Populate Embree ray stream with generated rays.
+                let mut ray_stream = embree::RayN::new(rays.len());
+                for (i, mut ray) in ray_stream.iter_mut().enumerate() {
+                    ray.set_origin(rays[i].o.into());
+                    ray.set_dir(rays[i].d.into());
+                }
+
+                // Trace primary rays with coherent context.
+                let mut context = embree::IntersectContext::coherent();
+                let mut ray_hit = embree::RayHitN::new(ray_stream);
+                scene.intersect_stream_soa(&mut context, &mut ray_hit);
+
+                // Filter out primary rays that hit the surface.
+                let filtered = ray_hit
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, (_, h))| h.hit().then(|| i));
+
+                // Approach 1: sort filtered rays to continue take advantage of
+                // coherent tracing
+
+                // Approach 2: trace each filtered ray with incoherent context
+                let mut incoherent_context = embree::IntersectContext::incoherent();
+                let records = filtered
+                    .into_iter()
+                    .map(|i| {
+                        let ray = Ray {
+                            o: ray_hit.ray.org(i).into(),
+                            d: ray_hit.ray.dir(i).into(),
+                            e: 1.0,
+                        };
+                        trace_one_ray_embree(
+                            ray,
+                            Arc::get_mut(&mut scene).unwrap(),
+                            &mut incoherent_context,
+                            ior_t,
+                            desc.emitter.max_bounces,
+                            None,
+                            None,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
+                // Approach 3: using heightfield tracing method to trace rays
             }
-
-            // Trace primary rays with coherent context.
-            let mut context = embree::IntersectContext::coherent();
-            let mut ray_hit = embree::RayHitN::new(ray_stream);
-            scene.intersect_stream_soa(&mut context, &mut ray_hit);
-
-            // Filter out primary rays that hit the surface.
-            let filtered = ray_hit
-                .iter()
-                .enumerate()
-                .filter_map(|(i, (_, h))| h.hit().then(i as u32))
-                .collect::<Vec<u32>>();
-
-            // Approach 1: sort filtered rays to continue take advantage of
-            // coherent tracing
-
-            // Approach 2: trace each filtered ray with incoherent context
-            for ray_id in filtered {
-
-            }
-
-            // Approach 3: using heightfield tracing method to trace rays
         }
     }
 
@@ -202,11 +226,8 @@ struct IntersectRecord {
     /// The normal at the hit point.
     normal: Vec3,
 
-    /// Should the ray be rewound?
-    should_rewind: bool,
-
     /// How many times the ray has been rewound.
-    rewind_times: u32,
+    nudged_times: u32,
 }
 
 const NUDGE_AMOUNT: f32 = f32::EPSILON * 10.0;
@@ -218,111 +239,171 @@ fn trace_one_ray_embree(
     scene: &mut embree::Scene,
     context: &mut embree::IntersectContext,
     ior_t: RefractiveIndex,
+    max_bounces: u32,
     prev_isect: Option<IntersectRecord>,
     prev_record: Option<RayTraceRecord>,
 ) -> Option<RayTraceRecord> {
-    let mut ray_hit = RayHit::new(ray.into_embree_ray());
-    scene.intersect(context, &mut ray_hit);
+    // Either the ray hasn't reach the bounce limit or it hasn't hit the surface.
+    if prev_record.is_some_and(|record| record.bounces < max_bounces) || prev_record.is_none() {
+        let mut ray_hit = RayHit::new(ray.into_embree_ray());
+        scene.intersect(context, &mut ray_hit);
 
-    // Is the ray hit something?
-    if ray_hit.hit.hit() && ray_hit.ray.tfar > f32::EPSILON && ray_hit.ray.tfar < f32::INFINITY {
-        // Check with previous intersection record to see if we are self-intersecting.
-        if let Some(prev_isect) = prev_isect {
-            // The ray is hitting the same primitive of the same geometry.
-            if prev_isect.geom_id == ray_hit.hit.geomID && prev_isect.prim_id == ray_hit.hit.geomID {
-                // Nudge the ray a bit more to avoid self-intersection.
-                let amount = NUDGE_AMOUNT * (prev_isect.rewind_times * prev_isect.rewind_times) as f32 * 0.5;
-                let hit_point = nudge_hit_point(prev_isect.hit_point, prev_isect.normal, amount);
-                // Record the current intersection information with rewinding information.
-                let curr_isect = Some(IntersectRecord {
-                    ray,
-                    geom_id: ray_hit.hit.geomID,
-                    prim_id: ray_hit.hit.primID,
-                    hit_point,
-                    normal: prev_isect.normal,
-                    should_rewind: true,
-                    rewind_times: prev_isect.rewind_times + 1,
-                });
-                None
+        // Does the hit something?
+        if ray_hit.hit.hit() && (f32::EPSILON..f32::INFINITY).contains(&ray_hit.ray.tfar) {
+            // It's not the first time that the ray has hit the surface.
+            // Is it the first time that the ray hit some geometry?
+            if let Some(prev_isect) = prev_isect {
+                // Is the ray repeat hitting the same primitive of the same geometry?
+                if prev_isect.geom_id == ray_hit.hit.geomID
+                    && prev_isect.prim_id == ray_hit.hit.geomID
+                {
+                    // Self intersection happens, recalculate the hit point.
+                    let nudged_times = prev_isect.nudged_times + 1;
+                    let amount = NUDGE_AMOUNT * (nudged_times * nudged_times) as f32 * 0.5;
+                    let hit_point =
+                        nudge_hit_point(prev_isect.hit_point, prev_isect.normal, amount);
+                    // Update the intersection record.
+                    let curr_isect = IntersectRecord {
+                        hit_point,
+                        nudged_times,
+                        ..prev_isect
+                    };
+                    // Recalculate the reflected ray.
+                    if let Some(Scattering { reflected, .. }) = fresnel_scattering_air_conductor(
+                        prev_isect.ray,
+                        hit_point,
+                        prev_isect.normal,
+                        ior_t.eta,
+                        ior_t.k,
+                    ) {
+                        if reflected.e >= 0.0 {
+                            // Update ray tracing information.
+                            let curr_record = RayTraceRecord {
+                                initial: prev_record.as_ref().unwrap().initial,
+                                current: reflected,
+                                bounces: prev_record.as_ref().unwrap().bounces,
+                            };
+                            trace_one_ray_embree(
+                                reflected,
+                                scene,
+                                context,
+                                ior_t,
+                                max_bounces,
+                                Some(curr_isect),
+                                Some(curr_record),
+                            )
+                        } else {
+                            // The ray is absorbed by the surface.
+                            prev_record
+                        }
+                    } else {
+                        // The ray is absorbed by the surface.
+                        prev_record
+                    }
+                } else {
+                    // Not hitting the same primitive of the same geometry, trace the reflected ray.
+                    let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
+                    let hit_point = nudge_hit_point(
+                        compute_hit_point(scene, &ray_hit.hit),
+                        normal,
+                        NUDGE_AMOUNT,
+                    );
+                    // Record the current intersection information.
+                    let curr_isect = IntersectRecord {
+                        ray,
+                        geom_id: ray_hit.hit.geomID,
+                        prim_id: ray_hit.hit.primID,
+                        hit_point,
+                        normal,
+                        nudged_times: 1, // Initially the ray has been nudged once.
+                    };
+                    // Compute the new reflected ray.
+                    if let Some(Scattering { reflected, .. }) =
+                        fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k)
+                    {
+                        // The ray is not absorbed by the surface.
+                        if reflected.e >= 0.0 {
+                            // Record the current ray tracing information and trace the reflected
+                            // ray.
+                            let curr_record = RayTraceRecord {
+                                initial: prev_record.as_ref().unwrap().initial,
+                                current: ray,
+                                bounces: prev_record.as_ref().unwrap().bounces + 1,
+                            };
+                            trace_one_ray_embree(
+                                reflected,
+                                scene,
+                                context,
+                                ior_t,
+                                max_bounces,
+                                Some(curr_isect),
+                                Some(curr_record),
+                            )
+                        } else {
+                            // The ray is absorbed by the surface.
+                            prev_record
+                        }
+                    } else {
+                        // The ray is absorbed by the surface.
+                        prev_record
+                    }
+                }
             } else {
-                // The ray is hitting a different primitive of the same geometry.
+                // Not previously hit, so we can continue tracing reflected ray if the ray is
+                // not absorbed.
                 let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
                 let hit_point =
                     nudge_hit_point(compute_hit_point(scene, &ray_hit.hit), normal, NUDGE_AMOUNT);
                 // Record the current intersection information.
-                let curr_isect = Some(IntersectRecord {
+                let curr_isect = IntersectRecord {
                     ray,
                     geom_id: ray_hit.hit.geomID,
                     prim_id: ray_hit.hit.primID,
                     hit_point,
                     normal,
-                    should_rewind: false,
-                    rewind_times: 0
-                });
-                // Compute the reflected ray.
-                if let Some(scattered) = fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k) {
-                    // The ray is not being aborted: continue tracing.
-                    if scattered.reflected.e >= 0.0 {
-                        // Record the current tracing information.
-                        let curr_record = Some(RayTraceRecord {
-                            initial: if prev_record.is_some() { prev_record.unwrap().initial } else { ray },
-                            current: scattered.reflected,
-                            bounces: if prev_record.is_some() { prev_record.unwrap().bounces + 1 } else { 1 },
-                        });
-                        // Trace the reflected ray.
-                        trace_one_ray_embree(curr_record.unwrap().current, scene, context, ior_t, curr_isect, curr_record)
+                    nudged_times: 1, // Initially the ray has been nudged once.
+                };
+                // Compute the new reflected ray.
+                if let Some(Scattering { reflected, .. }) =
+                    fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k)
+                {
+                    // The ray is not absorbed by the surface.
+                    if reflected.e >= 0.0 {
+                        // Record the current ray tracing information and trace the reflected ray.
+                        let curr_record = RayTraceRecord {
+                            initial: ray,
+                            current: ray,
+                            bounces: 1,
+                        };
+                        trace_one_ray_embree(
+                            reflected,
+                            scene,
+                            context,
+                            ior_t,
+                            max_bounces,
+                            Some(curr_isect),
+                            Some(curr_record),
+                        )
                     } else {
-                        // The ray is being aborted: abort.
+                        // The ray is absorbed by the surface.
                         prev_record
                     }
                 } else {
-                    //
+                    // The ray is absorbed by the surface.
                     prev_record
                 }
             }
         } else {
-            // No previous intersection record: it's the first time the ray hit something.
-            let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
-            let hit_point =
-                nudge_hit_point(compute_hit_point(scene, &ray_hit.hit), normal, NUDGE_AMOUNT);
-            // Record the current intersection information.
-            let curr_isect = Some(IntersectRecord {
-                ray,
-                geom_id: ray_hit.hit.geomID,
-                prim_id: ray_hit.hit.primID,
-                hit_point,
-                normal,
-                should_rewind: false,
-                rewind_times: 0,
-            });
-            // Compute the reflected ray.
-            if let Some(scattered) = fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k) {
-                // The ray is not being aborted: continue tracing.
-                if scattered.reflected.e >= 0.0 {
-                    // Record the current tracing information.
-                    let curr_record = Some(RayTraceRecord {
-                        initial: if prev_record.is_some() { prev_record.unwrap().initial } else { ray },
-                        current: scattered.reflected,
-                        bounces: if prev_record.is_some() { prev_record.unwrap().bounces + 1 } else { 1 },
-                    });
-                    // Trace the reflected ray.
-                    trace_one_ray_embree(curr_record.unwrap().current, scene, context, ior_t, curr_isect, curr_record)
-                } else {
-                    // The ray is being aborted: abort.
-                    prev_record
-                }
-            } else {
-                //
-                prev_record
-            }
+            // The ray didn't hit the surface.
+            prev_record
         }
     } else {
-        // No intersection: return previous record, may be None if it's the first intersection.
+        // The ray has reached the bounce limit.
         prev_record
     }
 }
 
-fn trace_one_ray_htfld_rt() -> RayTraceRecord {
+fn trace_one_ray_htfld_rt(ray: Ray) -> RayTraceRecord {
     todo!()
 }
 
@@ -331,16 +412,31 @@ fn compute_hit_point(scene: &embree::Scene, record: &embree::Hit) -> Vec3 {
     let geom = scene.geometry(record.geomID).unwrap().handle();
     let prim_id = record.primID as isize;
     let points = unsafe {
-        let vertices: *const f32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
-        let indices: *const u32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
+        let vertices: *const f32 =
+            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
+        let indices: *const u32 =
+            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
         let mut points = [Vec3::ZERO; 3];
         for i in 0..3 {
             let idx = *indices.offset(prim_id * 3 + i as isize) as isize;
-            points[i] = Vec3::new(*vertices.offset(idx * 4), *vertices.offset(idx * 4 + 1), *vertices.offset(idx * 4 + 2))
+            points[i] = Vec3::new(
+                *vertices.offset(idx * 4),
+                *vertices.offset(idx * 4 + 1),
+                *vertices.offset(idx * 4 + 2),
+            )
         }
         points
     };
-    log::debug!("geom_id: {}, prim_id: {}, u: {}, v: {}, p0: {}, p1: {}, p2: {}", record.geomID, record.primID, record.u, record.v, points[0], points[1], points[2]);
+    log::debug!(
+        "geom_id: {}, prim_id: {}, u: {}, v: {}, p0: {}, p1: {}, p2: {}",
+        record.geomID,
+        record.primID,
+        record.u,
+        record.v,
+        points[0],
+        points[1],
+        points[2]
+    );
     (1.0 - record.u - record.v) * points[0] + record.u * points[1] + record.v * points[2]
 }
 

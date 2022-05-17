@@ -43,7 +43,7 @@ opt-level = 3
 codegen-units = 16
 
 [profile.release]
-strip = "debuginfo"
+strip = "debuginfo"  # Remove unnecessary debug info from release builds.
 
 [profile.dev.build-override]
 opt-level = 3
