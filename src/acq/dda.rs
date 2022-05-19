@@ -1,4 +1,4 @@
-use glam::{IVec2, UVec2, Vec2};
+use glam::{IVec2, Vec2};
 
 /// Digital Differential Analyzer (DDA) Algorithm
 pub fn dda(ray_start: Vec2, ray_dir: Vec2, min_cell_x: i32, min_cell_y: i32, max_cell_x: i32, max_cell_y: i32) -> (Vec<IVec2>, Vec<Vec2>) {
@@ -14,11 +14,11 @@ pub fn dda(ray_start: Vec2, ray_dir: Vec2, min_cell_x: i32, min_cell_y: i32, max
         (1.0 + m_recip * m_recip).sqrt(),
     );
 
-    // Truncate the floating point values to integers.
-    let mut curr_cell = ray_start.as_ivec2();
+    // Current cell position.
+    let mut curr = ray_start.as_ivec2();
 
     // Accumulated line length when moving along the x-axis and y-axis.
-    let mut line_length = Vec2::ZERO;
+    let mut walk_dist = Vec2::ZERO;
 
     // Determine the direction that we are going to walk along the line.
     let step_dir = IVec2::new(
@@ -27,48 +27,48 @@ pub fn dda(ray_start: Vec2, ray_dir: Vec2, min_cell_x: i32, min_cell_y: i32, max
     );
 
     // Initialise the accumulated line length.
-    line_length.x = if ray_dir.x < 0.0 {
-        (ray_start.x - curr_cell.x as f32) * unit_step_size.x
+    walk_dist.x = if ray_dir.x < 0.0 {
+        (ray_start.x - curr.x as f32) * unit_step_size.x
     } else {
-        ((curr_cell.x + 1) as f32 - ray_start.x) * unit_step_size.x
+        ((curr.x + 1) as f32 - ray_start.x) * unit_step_size.x
     };
 
-    line_length.y = if ray_dir.y < 0.0 {
-        (ray_start.y - curr_cell.y as f32) * unit_step_size.y
+    walk_dist.y = if ray_dir.y < 0.0 {
+        (ray_start.y - curr.y as f32) * unit_step_size.y
     } else {
-        ((curr_cell.y + 1) as f32 - ray_start.y) * unit_step_size.y
+        ((curr.y + 1) as f32 - ray_start.y) * unit_step_size.y
     };
 
-    let mut intersections = if line_length.x > line_length.y { vec![ray_start + ray_dir * line_length.y] } else { vec![ray_start + ray_dir * line_length.x] };
-    let mut grid_cells = vec![curr_cell];
+    let mut isects = if walk_dist.x > walk_dist.y { vec![ray_start + ray_dir * walk_dist.y] } else { vec![ray_start + ray_dir * walk_dist.x] };
+    let mut visited = vec![curr];
 
-    while (curr_cell.x >= min_cell_x && curr_cell.x < max_cell_x) && (curr_cell.y >= min_cell_y && curr_cell.y < max_cell_y) {
-        let length = if line_length.x < line_length.y {
-            curr_cell.x += step_dir.x;
-            line_length.x += unit_step_size.x;
-            line_length.x
+    while (curr.x >= min_cell_x && curr.x <= max_cell_x) && (curr.y >= min_cell_y && curr.y <= max_cell_y) {
+        let length = if walk_dist.x < walk_dist.y {
+            curr.x += step_dir.x;
+            walk_dist.x += unit_step_size.x;
+            walk_dist.x
         } else {
-            curr_cell.y += step_dir.y;
-            line_length.y += unit_step_size.y;
-            line_length.y
+            curr.y += step_dir.y;
+            walk_dist.y += unit_step_size.y;
+            walk_dist.y
         };
 
-        intersections.push(ray_start + ray_dir * length);
-        grid_cells.push(IVec2::new(curr_cell.x, curr_cell.y));
+        isects.push(ray_start + ray_dir * length);
+        visited.push(IVec2::new(curr.x, curr.y));
     }
 
-    (grid_cells, intersections)
+    (visited, isects)
 }
 
 #[test]
 fn test_dda() {
     let (cells, intersections) = dda(
-        Vec2::new(0.25, 0.5),
-        Vec2::new(1.0, 2.0),
+        Vec2::new(0.0, 3.0),
+        Vec2::new(10.0, -2.0),
         0,
         0,
-        4,
-        4,
+        10,
+        10,
     );
 
     println!("cells: {:?}", cells);

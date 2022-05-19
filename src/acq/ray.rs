@@ -15,9 +15,9 @@ pub struct Ray {
 }
 
 impl Ray {
-    /// Create a new ray.
+    /// Create a new ray (direction will be normalised).
     pub fn new(o: Vec3, d: Vec3) -> Self {
-        Self { o, d, e: 1.0 }
+        Self { o, d: d.normalize(), e: 1.0 }
     }
 
     pub fn from_embree_ray(ray: &embree::Ray, energy: f32) -> Self {

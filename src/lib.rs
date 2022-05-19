@@ -1,4 +1,5 @@
 #![feature(is_some_with)]
+#![feature(const_fn_floating_point_arithmetic)]
 extern crate core;
 
 pub mod acq;

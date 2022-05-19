@@ -243,3 +243,9 @@ impl SphericalPartition {
         }
     }
 }
+
+pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
+
+pub const fn gamma_f32(n: f32) -> f32 {
+    (n as f32 * MACHINE_EPSILON) / (1.0 - n as f32 * MACHINE_EPSILON)
+}

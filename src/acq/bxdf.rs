@@ -9,6 +9,8 @@ use crate::htfld::{regular_triangulation, Heightfield};
 use embree::{Geometry, RayHit, SoARay};
 use glam::{Vec2, Vec3};
 use std::sync::Arc;
+use crate::acq::dda::dda;
+use crate::isect::Aabb;
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -84,7 +86,7 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
     let device = embree::Device::with_config(embree::Config::default());
 
     for surface in surfaces {
-        let (vertices, _) = surface.generate_vertices();
+        let (vertices, aabb) = surface.generate_vertices();
         let indices = regular_triangulation(&vertices, surface.rows, surface.cols);
         let num_tris = indices.len() / 3;
         let mut surface_mesh =
@@ -255,7 +257,7 @@ fn trace_one_ray_embree(
             if let Some(prev_isect) = prev_isect {
                 // Is the ray repeat hitting the same primitive of the same geometry?
                 if prev_isect.geom_id == ray_hit.hit.geomID
-                    && prev_isect.prim_id == ray_hit.hit.geomID
+                    && prev_isect.prim_id == ray_hit.hit.primID
                 {
                     // Self intersection happens, recalculate the hit point.
                     let nudged_times = prev_isect.nudged_times + 1;
@@ -403,13 +405,16 @@ fn trace_one_ray_embree(
     }
 }
 
-fn trace_one_ray_grid_tracing(ray: Ray, hf: Heightfield) -> RayTraceRecord {
-    // 1. Calculate the x, y, z coordinates of the intersection of the ray with
+fn trace_one_ray_grid_tracing(ray: Ray, hf: Heightfield, aabb: Aabb, prev_record: Option<RayTraceRecord>) -> RayTraceRecord {
+    // Calculate the x, y, z coordinates of the intersection of the ray with
     // the global bounding box of the height field.
+    let entering_point = aabb.intersect(ray, f32::NEG_INFINITY, f32::INFINITY);
 
-    // 2. Implement a standard DDA to traverse the grid in x, y coordinates
-    // until the ray exits the bounding box. 3. Modify the DDA to identify
-    // all cells traversed by the ray. 4. Modify the DDA to track the z
+    // 2. Use standard DDA to traverse the grid in x, y coordinates
+    // until the ray exits the bounding box. Identify all cells traversed by the ray.
+    let (cells, isects) = dda(entering_point.)
+
+    // 4. Modify the DDA to track the z
     // (altitude) values of the endpoints of the ray within each cell.
     // 5. Test the z values of the ray at each cell against the altitudes at the
     // four corners of the cell.    If this test indicates that the ray
