@@ -9,9 +9,9 @@ use core::arch::x86::*;
 
 mod axis;
 
-pub use axis::Axis;
 use crate::acq::ray::Ray;
 use crate::acq::util::gamma_f32;
+pub use axis::Axis;
 
 /// Axis-aligned bounding box.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -64,7 +64,7 @@ impl Aabb {
     /// parallel planes. The ray is clipped by each pair of parallel planes,
     /// and if any portion of the ray remains, it intersects the box.
     ///         // TODO: math library, component wise multiplication
-    pub fn intersect_p(&self, ray: Ray, t_min: f32, t_max: f32) -> bool {
+    pub fn intersect_with_ray_p(&self, ray: Ray, t_min: f32, t_max: f32) -> bool {
         let mut t_enter = t_min;
         let mut t_exit = t_max;
 
@@ -86,7 +86,7 @@ impl Aabb {
         t_exit > t_enter && t_exit >= 0.0
     }
 
-    pub fn intersect(&self, ray: Ray, t_min: f32, t_max: f32) -> Option<Vec3> {
+    pub fn intersect_with_ray(&self, ray: Ray, t_min: f32, t_max: f32) -> Option<Vec3> {
         let mut t_enter = t_min;
         let mut t_exit = t_max;
 
@@ -105,11 +105,13 @@ impl Aabb {
             t_exit = t_far.min(t_exit);
         }
 
-        (t_exit > t_enter && t_exit >= 0.0).then(|| if t_enter < 0.0 {
-            // ray origin is inside the box
-            ray.o + ray.d * t_exit
-        } else {
-            ray.o + ray.d * t_enter
+        (t_exit > t_enter && t_exit >= 0.0).then(|| {
+            if t_enter < 0.0 {
+                // ray origin is inside the box
+                ray.o + ray.d * t_exit
+            } else {
+                ray.o + ray.d * t_enter
+            }
         })
     }
 
@@ -272,6 +274,12 @@ fn test_ray_aabb_intersection() {
     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
 
-    println!("{:?}", aabb.intersects_p(ray, f32::NEG_INFINITY, f32::INFINITY));
-    println!("{:?}", aabb.intersects(ray, f32::NEG_INFINITY, f32::INFINITY));
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
 }

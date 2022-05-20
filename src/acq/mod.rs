@@ -1,9 +1,10 @@
 pub mod bxdf;
 mod collector;
-mod dda;
 pub mod desc;
+mod embree_rt;
 mod emitter;
 pub mod fresnel;
+mod grid_rt;
 pub mod ior;
 pub mod ndf;
 mod occlusion;

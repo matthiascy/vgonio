@@ -1,7 +1,7 @@
 use crate::isect::Aabb;
+use crate::mesh::{TriangleMesh, TriangulationMethod};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
-use crate::mesh::{TriangleMesh, TriangulationMethod};
 
 mod io;
 

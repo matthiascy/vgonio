@@ -1,4 +1,6 @@
 pub mod half_edge;
-mod surface_mesh;
+mod surface;
+mod triangle;
 
-pub use surface_mesh::SurfaceMesh;
+pub use surface::SurfaceMesh;
+pub use triangle::{TriangleMesh, TriangulationMethod};

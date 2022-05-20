@@ -1,4 +1,5 @@
 use crate::acq::desc::{MeasurementDesc, Range};
+use crate::acq::grid_rt::{dda, RayTracingGrid};
 use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
 use crate::acq::ray::{
     fresnel_scattering_air_conductor, fresnel_scattering_air_conductor_spectrum, Ray,
@@ -6,11 +7,11 @@ use crate::acq::ray::{
 };
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
+use crate::isect::Aabb;
+use crate::mesh::TriangulationMethod;
 use embree::{Geometry, RayHit, SoARay};
 use glam::{Vec2, Vec3};
 use std::sync::Arc;
-use crate::acq::dda::dda;
-use crate::isect::Aabb;
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -86,29 +87,8 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
     let device = embree::Device::with_config(embree::Config::default());
 
     for surface in surfaces {
-        let (vertices, aabb) = surface.generate_vertices();
-        let indices = regular_triangulation(&vertices, surface.rows, surface.cols);
-        let num_tris = indices.len() / 3;
-        let mut surface_mesh =
-            embree::TriangleMesh::unanimated(device.clone(), num_tris, vertices.len());
-        {
-            let surface_mesh_mut = Arc::get_mut(&mut surface_mesh).unwrap();
-            {
-                let mut v_buffer = surface_mesh_mut.vertex_buffer.map();
-                let mut i_buffer = surface_mesh_mut.index_buffer.map();
-                // TODO: customise embree to use compatible format to fill the buffer
-                // Fill vertex buffer with height field vertices.
-                for (i, vertex) in vertices.iter().enumerate() {
-                    v_buffer[i] = [vertex.x, vertex.y, vertex.z, 1.0];
-                }
-                // Fill index buffer with height field triangles.
-                (0..num_tris).for_each(|i| {
-                    i_buffer[i] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
-                });
-            }
-            surface_mesh_mut.commit()
-        }
-
+        let triangulated = surface.triangulate(TriangulationMethod::Regular);
+        let surface_mesh = triangulated.to_embree_mesh(device.clone());
         let mut scene = embree::Scene::new(device.clone());
         let scene_mut = Arc::get_mut(&mut scene).unwrap();
         let surface_geom_id = {
@@ -405,14 +385,21 @@ fn trace_one_ray_embree(
     }
 }
 
-fn trace_one_ray_grid_tracing(ray: Ray, hf: Heightfield, aabb: Aabb, prev_record: Option<RayTraceRecord>) -> RayTraceRecord {
+fn trace_one_ray_grid_tracing(
+    ray: Ray,
+    hf: &Heightfield,
+    mesh: &TriangleMesh,
+    prev_record: Option<RayTraceRecord>,
+) -> RayTraceRecord {
     // Calculate the x, y, z coordinates of the intersection of the ray with
     // the global bounding box of the height field.
     let entering_point = aabb.intersect(ray, f32::NEG_INFINITY, f32::INFINITY);
 
+    let grid = RayTracingGrid::new(hf, mesh);
+
     // 2. Use standard DDA to traverse the grid in x, y coordinates
-    // until the ray exits the bounding box. Identify all cells traversed by the ray.
-    let (cells, isects) = dda(entering_point.)
+    // until the ray exits the bounding box. Identify all cells traversed by the
+    // ray. let (cells, isects) = dda(entering_point.)
 
     // 4. Modify the DDA to track the z
     // (altitude) values of the endpoints of the ray within each cell.
