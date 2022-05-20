@@ -1,6 +1,7 @@
 use crate::isect::Aabb;
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
+use crate::mesh::{TriangleMesh, TriangulationMethod};
 
 mod io;
 
@@ -39,27 +40,40 @@ impl Default for AxisAlignment {
 pub struct Heightfield {
     /// Generated unique identifier.
     pub uuid: uuid::Uuid,
+
     /// User defined name for the height field.
     pub name: String,
+
     /// The initial axis alignment in world space. The default is XY, aligned
     /// with the "ground" plane.
     pub alignment: AxisAlignment,
+
     /// Number of sample points in horizontal direction (first axis of
     /// alignment).
     pub rows: usize,
+
     /// Number of sample points in vertical direction (second axis of
     /// alignment).
     pub cols: usize,
+
     /// The space between sample points in horizontal direction.
     pub du: f32,
+
     /// The space between sample points in vertical direction.
     pub dv: f32,
+
     /// Height field's center position in world space.
     pub center: [f32; 3],
+
     /// Minimum height of the height field.
     pub min: f32,
+
     /// Maximum height of the height field.
     pub max: f32,
+
+    /// The median height of the height field.
+    pub median: f32,
+
     /// Height values of sample points on the height field (values are stored in
     /// row major order).
     pub samples: Vec<f32>,
@@ -70,10 +84,10 @@ impl Heightfield {
     ///
     /// # Arguments
     ///
-    /// * `cols` - the number of sample points in dimension x
-    /// * `rows` - the number of sample points in dimension y
-    /// * `du` - spacing between samples points in dimension x
-    /// * `dv` - spacing between samples points in dimension y
+    /// * `cols` - the number of sample points in horizontal dimension
+    /// * `rows` - the number of sample points in vertical dimension
+    /// * `du` - horizontal spacing between samples points
+    /// * `dv` - vertical spacing between samples points
     /// * `height` - the initial value of the height
     /// * `alignment` - axis alignment of height field
     ///
@@ -107,6 +121,7 @@ impl Heightfield {
             center: [0.0, 0.0, 0.0],
             min: height,
             max: height,
+            median: height,
             samples,
         }
     }
@@ -174,6 +189,7 @@ impl Heightfield {
             max,
             min,
             samples,
+            median: (min + max) / 2.0,
         }
     }
 
@@ -224,6 +240,7 @@ impl Heightfield {
             max,
             min,
             samples,
+            median: (min + max) / 2.0,
         }
     }
 
@@ -422,13 +439,12 @@ impl Heightfield {
             self.dv,
         );
         let mut positions: Vec<Vec3> = vec![];
-        let median = (self.min + self.max) / 2.0;
         let mut extent = Aabb::default();
         for r in 0..rows {
             for c in 0..cols {
                 let u = (c as f32 - half_cols as f32) * du;
                 let v = (r as f32 - half_rows as f32) * dv;
-                let h = self.samples[r * cols + c] - median;
+                let h = self.samples[r * cols + c];
                 let p = match self.alignment {
                     AxisAlignment::XY => Vec3::new(u, v, h),
                     AxisAlignment::XZ => Vec3::new(u, h, v),
@@ -450,6 +466,25 @@ impl Heightfield {
         }
 
         (positions, extent)
+    }
+
+    pub fn triangulate(&self, method: TriangulationMethod) -> TriangleMesh {
+        match method {
+            TriangulationMethod::Regular => {
+                let (verts, extent) = self.generate_vertices();
+                let faces = regular_triangulation(&verts, self.rows, self.cols);
+                TriangleMesh {
+                    num_tris: faces.len() / 3,
+                    num_verts: verts.len(),
+                    extent,
+                    verts,
+                    faces,
+                }
+            }
+            TriangulationMethod::Delaunay => {
+                todo!()
+            }
+        }
     }
 }
 

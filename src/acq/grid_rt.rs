@@ -1,4 +1,33 @@
-use glam::{IVec2, Vec2};
+use embree::sys::RTCGrid;
+use glam::{UVec2, Vec2};
+use crate::htfld::Heightfield;
+use crate::mesh::TriangleMesh;
+
+/// Helper structure for grid ray tracing.
+pub struct GridRayTracing<'a> {
+    /// The heightfield where the grid is defined.
+    pub surface: &'a Heightfield,
+
+    /// Corresponding `TriangleMesh` of the surface.
+    pub mesh: &'a TriangleMesh,
+
+    /// Minimum coordinates of the grid.
+    pub min: UVec2,
+
+    /// Maximum coordinates of the grid.
+    pub max: UVec2,
+}
+
+impl GridRayTracing {
+    pub fn new(surface: &Heightfield, mesh: &TriangleMesh) -> Self {
+        GridRayTracing {
+            surface,
+            mesh,
+            min: UVec2::zero(),
+            max: UVec2::new(surface.cols as u32 - 1, surface.rows as u32 - 1),
+        }
+    }
+}
 
 /// Digital Differential Analyzer (DDA) Algorithm
 pub fn dda(ray_start: Vec2, ray_dir: Vec2, min_cell_x: i32, min_cell_y: i32, max_cell_x: i32, max_cell_y: i32) -> (Vec<IVec2>, Vec<Vec2>) {
@@ -63,12 +92,12 @@ pub fn dda(ray_start: Vec2, ray_dir: Vec2, min_cell_x: i32, min_cell_y: i32, max
 #[test]
 fn test_dda() {
     let (cells, intersections) = dda(
-        Vec2::new(0.0, 3.0),
-        Vec2::new(10.0, -2.0),
+        Vec2::new(0.0, 0.0),
+        Vec2::new(2.0, 1.0),
         0,
         0,
-        10,
-        10,
+        7,
+        7,
     );
 
     println!("cells: {:?}", cells);
