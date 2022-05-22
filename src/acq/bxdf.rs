@@ -8,7 +8,7 @@ use crate::acq::ray::{
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::{regular_triangulation, Heightfield};
 use crate::isect::Aabb;
-use crate::mesh::TriangulationMethod;
+use crate::mesh::{TriangleMesh, TriangulationMethod};
 use embree::{Geometry, RayHit, SoARay};
 use glam::{Vec2, Vec3};
 use std::sync::Arc;
@@ -393,9 +393,9 @@ fn trace_one_ray_grid_tracing(
 ) -> RayTraceRecord {
     // Calculate the x, y, z coordinates of the intersection of the ray with
     // the global bounding box of the height field.
-    let entering_point = aabb.intersect(ray, f32::NEG_INFINITY, f32::INFINITY);
+    //let entering_point = aabb.intersect(ray, f32::NEG_INFINITY, f32::INFINITY);
 
-    let grid = RayTracingGrid::new(hf, mesh);
+    //let grid = RayTracingGrid::new(hf, mesh);
 
     // 2. Use standard DDA to traverse the grid in x, y coordinates
     // until the ray exits the bounding box. Identify all cells traversed by the

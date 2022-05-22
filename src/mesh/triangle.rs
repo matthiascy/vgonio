@@ -16,6 +16,7 @@ pub enum TriangulationMethod {
 }
 
 /// Triangle representation of the surface mesh.
+#[derive(Debug)]
 pub struct TriangleMesh {
     pub extent: Aabb,
     pub num_tris: usize,
@@ -34,7 +35,7 @@ impl TriangleMesh {
                 let mut verts_buffer = mesh_ref_mut.vertex_buffer.map();
                 let mut indxs_buffer = mesh_ref_mut.index_buffer.map();
                 for (i, vert) in self.verts.iter().enumerate() {
-                    verts_buffer[i] = [*vert.x, *vert.y, *vert.z, 1.0];
+                    verts_buffer[i] = [vert.x, vert.y, vert.z, 1.0];
                 }
                 // TODO: replace with slice::as_chunks when it's stable.
                 (0..self.num_tris).for_each(|tri| {

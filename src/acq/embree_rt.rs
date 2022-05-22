@@ -1,3 +1,3 @@
 use crate::htfld::Heightfield;
 
-pub struct EmbreeRayTracing<'a> {}
+pub struct EmbreeRayTracing {}

@@ -1,8 +1,7 @@
 use crate::acq::ray::{Ray, RayTraceRecord};
 use crate::htfld::{AxisAlignment, Heightfield};
 use crate::mesh::TriangleMesh;
-use embree::sys::RTCGrid;
-use glam::{IVec2, Mat4, UVec2, Vec2, Vec3};
+use glam::{IVec2, Mat4, UVec2, Vec2, Vec3, Vec3Swizzles};
 
 /// Helper structure for grid ray tracing.
 ///
@@ -31,14 +30,14 @@ pub struct RayTracingGrid<'a> {
     origin: Vec2,
 }
 
-impl RayTracingGrid {
-    pub fn new(surface: &Heightfield, mesh: &TriangleMesh) -> Self {
+impl<'a> RayTracingGrid<'a> {
+    pub fn new(surface: &'a Heightfield, mesh: &'a TriangleMesh) -> Self {
         RayTracingGrid {
             surface,
             mesh,
-            min: IVec2::zero(),
+            min: IVec2::ZERO,
             max: IVec2::new(surface.cols as i32 - 1, surface.rows as i32 - 1),
-            origin: Vec2::new(-(surface.cols / 2) as f32 * du, -(surface.rows / 2) as f32 * dv)
+            origin: Vec2::new(-surface.du * (surface.cols / 2) as f32, -surface.dv * (surface.rows / 2) as f32)
         }
     }
 
@@ -49,14 +48,13 @@ impl RayTracingGrid {
             .extent
             .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY).map(|isect_point| {
             // Displace the intersection backwards along the ray direction.
-            let isect_point = isect_point - ray.d * 0.001;
-
-            // Calculate the coordinates of the grid cell that the ray enters.
-            let enter_point = self.world_to_grid(isect_point);
+            let isect_point = isect_point - ray.d * 0.01;
 
             // Traverse the grid in x, y coordinates, until the ray exits the grid and identify
             // all traversed cells.
-            let
+            let GridTraversal {
+                traversed, distances
+            } = self.traverse(isect_point.xy(), ray.d.xy());
 
             RayTraceRecord {
                 initial: ray,
@@ -92,12 +90,83 @@ impl RayTracingGrid {
         };
 
         IVec2::new(
-            (x - self.origin.x) / du,
-            (y - self.origin.y) / dv,
+            ((x - self.origin.x) / self.surface.du) as i32,
+            ((y - self.origin.y) / self.surface.dv) as i32,
         )
     }
 
-    pub fn traverse(&self, start: IVec2, dir: Vec2, ) ->
+    /// Traverse the grid to identify all cells and corresponding intersection that are traversed by the ray.
+    /// Based on the DDA algorithm.
+    pub fn traverse(&self, ray_org: Vec2, ray_dir: Vec2) -> GridTraversal {
+        let ray_dir = ray_dir.normalize();
+        // Calculate dy/dx -- slope of the ray on the grid.
+        let m = ray_dir.y / ray_dir.x;
+        let m_recip = m.recip();
+
+        // Calculate the distance along the direction of the ray when moving
+        // a unit distance (1) along the x-axis and y-axis.
+        let unit_dist = Vec2::new((1.0 + m * m).sqrt(), (1.0 + m_recip * m_recip).sqrt());
+
+        let mut current = ray_org.as_ivec2();
+
+        let step_dir = IVec2::new(
+            if ray_dir.x >= 0.0 { 1 } else { -1 },
+            if ray_dir.y >= 0.0 { 1 } else { -1 },
+        );
+
+        // Accumulated line length when moving along the x-axis and y-axis.
+        let mut accumulated = Vec2::new(
+            if ray_dir.x < 0.0 {
+                (ray_org.x - current.x as f32) * unit_dist.x
+            } else {
+                ((current.x + 1) as f32 - ray_org.x) * unit_dist.x
+            },
+            if ray_dir.y < 0.0 {
+                (ray_org.y - current.y as f32) * unit_dist.y
+            } else {
+                ((current.y + 1) as f32 - ray_org.y) * unit_dist.y
+            }
+        );
+
+        let mut distances = if accumulated.x > accumulated.y {
+            vec![accumulated.y]
+        } else {
+            vec![accumulated.x]
+        };
+
+        let mut traversed = vec![current];
+
+        while (current.x >= self.min.x && current.x <= self.max.x)
+            && (current.y >= self.min.y && current.y <= self.max.y)
+        {
+            let distance = if accumulated.x < accumulated.y {
+                current.x += step_dir.x;
+                accumulated.x += unit_dist.x;
+                accumulated.x
+            } else {
+                current.y += step_dir.y;
+                accumulated.y += unit_dist.y;
+                accumulated.y
+            };
+
+            distances.push(distance);
+            traversed.push(IVec2::new(current.x, current.y));
+        }
+
+        GridTraversal {
+            traversed,
+            distances
+        }
+    }
+}
+
+/// Grid traversal outcome.
+pub struct GridTraversal {
+    /// Cells traversed by the ray.
+    pub traversed: Vec<IVec2>,
+
+    /// Distances from the origin of the ray (entering cell of the ray) to each intersection point between the ray and cells.
+    pub distances: Vec<f32>,
 }
 
 /// Digital Differential Analyzer (DDA) Algorithm
@@ -172,8 +241,12 @@ pub fn dda(
 
 #[test]
 fn test_dda() {
-    let (cells, intersections) = dda(Vec2::new(0.0, 0.0), Vec2::new(2.0, 1.0), 0, 0, 7, 7);
+    let (cells, intersections) = dda(Vec2::new(-0.5, -0.5), Vec2::new(7.0, 2.0), -1, -1, 7, 7);
 
     println!("cells: {:?}", cells);
     println!("intersections: {:?}", intersections);
+}
+
+fn test_grid_traversal() {
+    let grid = RayTracingGrid::new(&)
 }
