@@ -269,6 +269,70 @@ impl Aabb {
     }
 }
 
+/// Implementation of Möller-Trumbore fast ray-triangle intersection algorithm.
+///
+/// P is the point of intersection.
+///   + expressed by barycentric coordinates (u, v, w): P = wA + uB + vC = A +
+/// u(B - A) + v(C - A)   + expressed by ray parameter t: P = O + tD
+///
+/// O - A = [t, u, v] [-D, B-A, C-A]
+///
+/// E0 = B - A, E1 = C - A, O - A = T
+///
+/// T = [t, u, v] [-D, E0, E1]
+///
+/// Apply Cramer's rule, |A, B, C| = -(A x C) . B = -(C x B) . A:
+///
+/// det = |-D, E0, E1| = -(-D x E1) . E0 = (D x E1) . E0
+/// det_t = |T, E0, E1| = -(T x E1) . E0 = -(T x E1) . E0 = (T x E0) . E1
+/// det_u = |-D, T, E1| = -(-D x E1) . T = (D x E1) . T
+/// det_v = |-D, E0, T| = -(T x E0) . -D = (T x E0) . D
+///
+/// t = det_t / det, u = det_u / det, v = det_v / det
+///
+/// Solve the system of linear equations to find the barycentric coordinates.
+///
+/// # Arguments
+///
+/// # Returns
+///
+/// Tuple of (t, u, v). The t parameter of the ray and the barycentric
+/// coordinates of intersection point on the triangle.
+pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<(f32, f32, f32)> {
+    let e0 = triangle[1] - triangle[0];
+    let e1 = triangle[2] - triangle[0];
+
+    let d_cross_e1 = ray.d.cross(e1); // D x E1
+
+    let det = d_cross_e1.dot(e0);
+
+    // If the determinant is zero, the ray misses the triangle.
+    if det.abs() < f32::EPSILON {
+        return None;
+    }
+
+    let inv_det = 1.0 / det;
+    let tvec = ray.o - triangle[0]; // O - A
+
+    let u = d_cross_e1.dot(tvec) * inv_det; // (D x E1) . T / det
+    if !(0.0..=1.0).contains(&u) {
+        return None;
+    }
+
+    let tvec_cross_e0 = tvec.cross(e0); // (T x E0)
+    let v = tvec_cross_e0.dot(ray.d) * inv_det; // (T x E0) . D / det
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+
+    let t = tvec_cross_e0.dot(e1) * inv_det; // (T x E0) . E1 / det
+    if t > f32::EPSILON {
+        Some((t, u, v))
+    } else {
+        None
+    }
+}
+
 #[test]
 fn test_ray_aabb_intersection() {
     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));

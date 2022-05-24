@@ -9,6 +9,7 @@ pub mod ior;
 pub mod ndf;
 mod occlusion;
 pub mod ray;
+pub mod scattering;
 pub mod util;
 
 pub use collector::{Collector, Patch};
@@ -182,7 +183,7 @@ impl MicroSurfaceView {
 ///   3. `path` is not `None` but is not prefixed with `//`
 ///
 ///      Returns the `path` as is.
-pub(crate) fn resolve_file_path(base_path: &PathBuf, path: Option<&Path>) -> PathBuf {
+pub(crate) fn resolve_file_path(base_path: &Path, path: Option<&Path>) -> PathBuf {
     path.map_or_else(
         || std::env::current_dir().unwrap(),
         |path| {

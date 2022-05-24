@@ -134,16 +134,11 @@ pub fn schlick_reflectance_spectrum(w_i: Vec3, n: Vec3, eta_i: &[f32], eta_t: &[
     output
 }
 
-pub fn fresnel_schlick_approx(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
+pub fn schlick_approx(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
     schlick_reflectance(w_i, n, eta_i, eta_t)
 }
 
-pub fn fresnel_schlick_approx_spectrum(
-    w_i: Vec3,
-    n: Vec3,
-    eta_i: &[f32],
-    eta_t: &[f32],
-) -> Vec<f32> {
+pub fn schlick_approx_spectrum(w_i: Vec3, n: Vec3, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
     schlick_reflectance_spectrum(w_i, n, eta_i, eta_t)
 }
 

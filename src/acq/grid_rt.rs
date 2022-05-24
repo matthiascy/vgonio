@@ -1,7 +1,10 @@
-use crate::acq::ray::{Ray, RayTraceRecord};
+use crate::acq::bxdf::IntersectRecord;
+use crate::acq::ior::RefractiveIndex;
+use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
 use crate::htfld::{AxisAlignment, Heightfield};
+use crate::isect::isect_ray_tri;
 use crate::mesh::{TriangleMesh, TriangulationMethod};
-use glam::{IVec2, Mat4, UVec2, Vec2, Vec3, Vec3Swizzles};
+use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
 /// Helper structure for grid ray tracing.
 ///
@@ -13,7 +16,7 @@ use glam::{IVec2, Mat4, UVec2, Vec2, Vec3, Vec3Swizzles};
 /// TODO: deal with axis alignment of the heightfield, currently XY alignment is
 /// assumed. (with its own transformation matrix).
 #[derive(Debug)]
-pub struct RayTracingGrid<'a> {
+pub struct GridRayTracing<'a> {
     /// The heightfield where the grid is defined.
     surface: &'a Heightfield,
 
@@ -30,9 +33,9 @@ pub struct RayTracingGrid<'a> {
     origin: Vec2,
 }
 
-impl<'a> RayTracingGrid<'a> {
+impl<'a> GridRayTracing<'a> {
     pub fn new(surface: &'a Heightfield, mesh: &'a TriangleMesh) -> Self {
-        RayTracingGrid {
+        GridRayTracing {
             surface,
             mesh,
             min: IVec2::ZERO,
@@ -44,58 +47,98 @@ impl<'a> RayTracingGrid<'a> {
         }
     }
 
-    pub fn trace_one_ray(&self, ray: Ray) -> Option<RayTraceRecord> {
+    pub fn trace_ray(&self, ray: Ray) -> Option<IntersectRecord> {
         // Calculate the intersection point of the ray with the bounding box of the
         // surface.
-        self.mesh
-            .extent
-            .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
-            .map(|isect_point| {
-                // Displace the intersection backwards along the ray direction.
-                let isect_point = isect_point - ray.d * 0.01;
+        if let Some(isect_point) =
+            self.mesh
+                .extent
+                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+        {
+            // Displace the intersection backwards along the ray direction.
+            let isect_point = isect_point - ray.d * 0.01;
 
-                // Traverse the grid in x, y coordinates, until the ray exits the grid and
-                // identify all traversed cells.
-                let GridTraversal {
-                    traversed,
-                    distances,
-                } = self.traverse(isect_point.xy(), ray.d.xy());
+            // Traverse the grid in x, y coordinates, until the ray exits the grid and
+            // identify all traversed cells.
+            let GridTraversal {
+                traversed,
+                distances,
+            } = self.traverse(isect_point.xy(), ray.d.xy());
 
-                // Iterate over the traversed cells and find the closest intersection.
-                for (i, cell) in traversed.iter().enumerate().filter(|(_, cell)| {
-                    cell.x >= 0 && cell.y >= 0 && cell.x <= self.max.x && cell.y <= self.max.y
-                }) {
-                    // Retrieve heights of the 4 samples in the cell.
-                    let heights = self.samples_at(*cell);
+            let mut record = None;
 
-                    // Calculate the height at the intersection point of the ray with the cell.
+            // Iterate over the traversed cells and find the closest intersection.
+            for (i, cell) in traversed.iter().enumerate().filter(|(_, cell)| {
+                cell.x >= 0 && cell.y >= 0 && cell.x <= self.max.x && cell.y <= self.max.y
+            }) {
+                // Calculate the two ray endpoints at the cell boundaries.
+                let entering = ray.o + distances[i] * ray.d;
+                let exiting = ray.o + distances[i + 1] * ray.d;
 
-                    let cell_isect_point = isect_point + distances[i] * ray.d;
+                if self.intersected_with_cell(*cell, entering.z, exiting.z) {
+                    // Calculate the intersection point of the ray with the
+                    // two triangles inside of the cell.
+                    let tris = self.triangles_at(*cell);
+                    let isect0 = isect_ray_tri(ray, &tris[0]);
+                    let isect1 = isect_ray_tri(ray, &tris[1]);
 
-                    // Calculate the intersection point of the ray with the triangle mesh.
-                    let mesh_isect_point = self.mesh.intersect_with_ray(
-                        Ray::new(cell_isect_point, ray.d),
-                        f32::NEG_INFINITY,
-                        f32::INFINITY,
-                    );
-
-                    // If the intersection point is found, return the ray trace record.
-                    if let Some(mesh_isect_point) = mesh_isect_point {
-                        return Some(RayTraceRecord {
-                            surface: self.surface,
-                            mesh: self.mesh,
-                            cell,
-                            mesh_isect_point,
-                        });
+                    match (isect0, isect1) {
+                        (None, None) => {
+                            continue;
+                        }
+                        (Some((_, u, v)), None) => {
+                            record = Some(IntersectRecord {
+                                ray,
+                                geom_id: 0,
+                                prim_id: 0,
+                                hit_point: (1.0 - u - v) * tris[0][0]
+                                    + u * tris[0][1]
+                                    + v * tris[0][2],
+                                normal: compute_normal(&tris[0]),
+                                nudged_times: 0,
+                            });
+                            break;
+                        }
+                        (None, Some((_, u, v))) => {
+                            record = Some(IntersectRecord {
+                                ray,
+                                geom_id: 0,
+                                prim_id: 0,
+                                hit_point: (1.0 - u - v) * tris[1][0]
+                                    + u * tris[1][1]
+                                    + v * tris[1][2],
+                                normal: compute_normal(&tris[1]),
+                                nudged_times: 0,
+                            });
+                            break;
+                        }
+                        (Some((t0, u, v)), Some((t1, _, _))) => {
+                            // The ray hit the shared edge of two triangles.
+                            if (t0.abs() - t1.abs()).abs() < f32::EPSILON {
+                                record = Some(IntersectRecord {
+                                    ray,
+                                    geom_id: 0,
+                                    prim_id: 0,
+                                    hit_point: (1.0 - u - v) * tris[0][0]
+                                        + u * tris[0][1]
+                                        + v * tris[0][2],
+                                    normal: compute_normal(&tris[0]),
+                                    nudged_times: 0,
+                                });
+                                break;
+                            } else {
+                                log::error!("The ray hit two triangles at the same time.");
+                                continue;
+                            }
+                        }
                     }
                 }
+            }
 
-                RayTraceRecord {
-                    initial: ray,
-                    current: ray,
-                    bounces: 0,
-                }
-            })
+            record
+        } else {
+            None
+        }
     }
 
     /// Convert a world space position into a grid space position (coordinates
@@ -117,45 +160,70 @@ impl<'a> RayTracingGrid<'a> {
         )
     }
 
-    /// Get the heights of the 4 samples in the cell located at the given coordinates.
-    fn samples_at(&self, pos: IVec2) -> Option<[f32; 4]> {
-        if pos.x < self.min.x || pos.y < self.min.y || pos.x > self.max.x || pos.y > self.max.y {
-            return None;
-        } else {
-            let x = pos.x as usize;
-            let y = pos.y as usize;
-            Some([
-                self.surface.sample_at(x, y),
-                self.surface.sample_at(x, y + 1),
-                self.surface.sample_at(x + 1, y + 1),
-                self.surface.sample_at(x + 1, y),
-            ])
-        }
+    /// Obtain the two triangles contained within the cell.
+    fn triangles_at(&self, pos: IVec2) -> [[Vec3; 3]; 2] {
+        assert!(
+            pos.x < self.min.x || pos.y < self.min.y || pos.x > self.max.x || pos.y > self.max.y,
+            "The position is out of the grid."
+        );
+        let idx = (self.surface.cols * pos.y as usize + pos.x as usize) * 2 * 3;
+        [
+            [
+                self.mesh.verts[idx],
+                self.mesh.verts[idx + 1],
+                self.mesh.verts[idx + 2],
+            ],
+            [
+                self.mesh.verts[idx + 3],
+                self.mesh.verts[idx + 4],
+                self.mesh.verts[idx + 5],
+            ],
+        ]
     }
 
-    /// Test if the ray intersects the cell of the height field at the given position.
-    fn intersect_cell(&self, cell: IVec2, entering: f32, exiting: f32) -> bool {
-        if let Some(heights) = self.samples_at(cell) {
-            let (min, max) = {
-                let (min, max) = (f32::MAX, f32::MIN);
-                heights.iter().fold((min, max), |(min, max), height| {
-                    (min.min(*height), max.max(*height))
-                })
-            };
+    /// Get the four altitudes associated with the cell at the given
+    /// coordinates.
+    fn samples_at(&self, pos: IVec2) -> [f32; 4] {
+        assert!(
+            pos.x < self.min.x || pos.y < self.min.y || pos.x > self.max.x || pos.y > self.max.y,
+            "The position is out of the grid."
+        );
 
-            if (entering > max && exiting > max) ||  // above the height field
-                (entering < min || exiting < min) ||  // below the height field
-                ()
-                {
-                false
-            }
-        } else {
-            false
-        }
+        let x = pos.x as usize;
+        let y = pos.y as usize;
+        [
+            self.surface.sample_at(x, y),
+            self.surface.sample_at(x, y + 1),
+            self.surface.sample_at(x + 1, y + 1),
+            self.surface.sample_at(x + 1, y),
+        ]
     }
 
+    /// Given the entering and exiting altitude of a ray, test if the ray
+    /// intersects the cell of the height field at the given position.
+    fn intersected_with_cell(&self, cell: IVec2, entering: f32, exiting: f32) -> bool {
+        let altitudes = self.samples_at(cell);
+        let (min, max) = {
+            let (min, max) = (f32::MAX, f32::MIN);
+            altitudes.iter().fold((min, max), |(min, max), height| {
+                (min.min(*height), max.max(*height))
+            })
+        };
+
+        // The ray is either entering the cell beneath the surface or
+        // entering and exiting the cell above the surface.
+        //            a > max             b > max
+        // max - - - - - - - - - - - - - - - - - -
+        //      min < a < max       min < b < max
+        // min - - - - - - - - - - - - - - - - - -
+        //            a < min             b < min
+        !(entering < min || (entering > max && exiting > max))
+    }
+
+    /// Modified version of Digital Differential Analyzer (DDA) Algorithm.
+    ///
     /// Traverse the grid to identify all cells and corresponding intersection
-    /// that are traversed by the ray. Based on the DDA algorithm.
+    /// that are traversed by the ray.
     ///
     /// # Arguments
     ///
@@ -232,6 +300,10 @@ impl<'a> RayTracingGrid<'a> {
     }
 }
 
+fn compute_normal(pts: &[Vec3; 3]) -> Vec3 {
+    (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalize()
+}
+
 /// Grid traversal outcome.
 #[derive(Debug)]
 pub struct GridTraversal {
@@ -241,76 +313,6 @@ pub struct GridTraversal {
     /// Distances from the origin of the ray (entering cell of the ray) to each
     /// intersection point between the ray and cells.
     pub distances: Vec<f32>,
-}
-
-/// Digital Differential Analyzer (DDA) Algorithm
-pub fn dda(
-    ray_start: Vec2,
-    ray_dir: Vec2,
-    min_cell_x: i32,
-    min_cell_y: i32,
-    max_cell_x: i32,
-    max_cell_y: i32,
-) -> (Vec<IVec2>, Vec<Vec2>) {
-    let ray_dir = ray_dir.normalize();
-    // Calculate dy/dx, slope the line
-    let m = ray_dir.y / ray_dir.x;
-    let m_recip = 1.0 / m;
-
-    // Calculate the unit step size along the direction of the line when moving
-    // a unit distance along the x-axis and y-axis.
-    let unit_step_size = Vec2::new((1.0 + m * m).sqrt(), (1.0 + m_recip * m_recip).sqrt());
-
-    // Current cell position.
-    let mut curr = ray_start.as_ivec2();
-
-    // Accumulated line length when moving along the x-axis and y-axis.
-    let mut walk_dist = Vec2::ZERO;
-
-    // Determine the direction that we are going to walk along the line.
-    let step_dir = IVec2::new(
-        if ray_dir.x < 0.0 { -1 } else { 1 },
-        if ray_dir.y < 0.0 { -1 } else { 1 },
-    );
-
-    // Initialise the accumulated line length.
-    walk_dist.x = if ray_dir.x < 0.0 {
-        (ray_start.x - curr.x as f32) * unit_step_size.x
-    } else {
-        ((curr.x + 1) as f32 - ray_start.x) * unit_step_size.x
-    };
-
-    walk_dist.y = if ray_dir.y < 0.0 {
-        (ray_start.y - curr.y as f32) * unit_step_size.y
-    } else {
-        ((curr.y + 1) as f32 - ray_start.y) * unit_step_size.y
-    };
-
-    let mut isects = if walk_dist.x > walk_dist.y {
-        vec![ray_start + ray_dir * walk_dist.y]
-    } else {
-        vec![ray_start + ray_dir * walk_dist.x]
-    };
-    let mut visited = vec![curr];
-
-    while (curr.x >= min_cell_x && curr.x <= max_cell_x)
-        && (curr.y >= min_cell_y && curr.y <= max_cell_y)
-    {
-        let length = if walk_dist.x < walk_dist.y {
-            curr.x += step_dir.x;
-            walk_dist.x += unit_step_size.x;
-            walk_dist.x
-        } else {
-            curr.y += step_dir.y;
-            walk_dist.y += unit_step_size.y;
-            walk_dist.y
-        };
-
-        isects.push(ray_start + ray_dir * length);
-        visited.push(IVec2::new(curr.x, curr.y));
-    }
-
-    (visited, isects)
 }
 
 #[test]
@@ -325,7 +327,7 @@ fn test_dda() {
 fn test_grid_traversal() {
     let heightfield = Heightfield::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
     let triangle_mesh = heightfield.triangulate(TriangulationMethod::Regular);
-    let grid = RayTracingGrid::new(&heightfield, &triangle_mesh);
+    let grid = GridRayTracing::new(&heightfield, &triangle_mesh);
     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
     println!("{:?}", result);
 }

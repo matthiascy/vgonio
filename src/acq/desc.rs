@@ -4,7 +4,6 @@ use crate::acq::Medium;
 use crate::Error;
 use std::fs::File;
 use std::io::BufReader;
-use std::ops::Sub;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

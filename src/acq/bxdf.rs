@@ -1,16 +1,13 @@
 use crate::acq::desc::{MeasurementDesc, Range};
-use crate::acq::grid_rt::{dda, RayTracingGrid};
+use crate::acq::embree_rt::EmbreeRayTracing;
+use crate::acq::grid_rt::GridRayTracing;
 use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
-use crate::acq::ray::{
-    fresnel_scattering_air_conductor, fresnel_scattering_air_conductor_spectrum, Ray,
-    RayTraceRecord, Scattering,
-};
+use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
 use crate::acq::{Collector, Emitter, Patch};
-use crate::htfld::{regular_triangulation, Heightfield};
-use crate::isect::Aabb;
+use crate::htfld::Heightfield;
 use crate::mesh::{TriangleMesh, TriangulationMethod};
-use embree::{Geometry, RayHit, SoARay};
-use glam::{Vec2, Vec3};
+use embree::{RayHit, SoARay};
+use glam::Vec3;
 use std::sync::Arc;
 
 #[non_exhaustive]
@@ -76,7 +73,11 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 
 /// Measurement of the in-plane BRDF (incident angle and outgoing angle are on
 /// the same plane).
-pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize>(
+pub fn measure_in_plane_brdf_embree<
+    PatchData: Copy,
+    const N_PATCH: usize,
+    const N_BOUNCE: usize,
+>(
     desc: &MeasurementDesc,
     ior_db: &RefractiveIndexDatabase,
     surfaces: &[Heightfield],
@@ -84,19 +85,13 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
     let collector: Collector = desc.collector.into();
     let emitter: Emitter = desc.emitter.into();
 
-    let device = embree::Device::with_config(embree::Config::default());
+    let mut embree_rt = EmbreeRayTracing::default();
 
     for surface in surfaces {
+        let scene_id = embree_rt.create_scene();
         let triangulated = surface.triangulate(TriangulationMethod::Regular);
-        let surface_mesh = triangulated.to_embree_mesh(device.clone());
-        let mut scene = embree::Scene::new(device.clone());
-        let scene_mut = Arc::get_mut(&mut scene).unwrap();
-        let surface_geom_id = {
-            let id = scene_mut.attach_geometry(surface_mesh);
-            scene_mut.commit();
-            id
-        };
-
+        let surface_mesh = embree_rt.create_triangle_mesh(&triangulated);
+        let surface_id = embree_rt.attach_geometry(scene_id, surface_mesh);
         let spectrum_samples = SpectrumSampler::from(desc.emitter.spectrum).samples();
         // let ior_i = ior_db
         //     .ior_of_spectrum(desc.incident_medium, &spectrum_samples)
@@ -122,8 +117,7 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
 
                 // Trace primary rays with coherent context.
                 let mut context = embree::IntersectContext::coherent();
-                let mut ray_hit = embree::RayHitN::new(ray_stream);
-                scene.intersect_stream_soa(&mut context, &mut ray_hit);
+                let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut context);
 
                 // Filter out primary rays that hit the surface.
                 let filtered = ray_hit
@@ -131,10 +125,6 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
                     .enumerate()
                     .filter_map(|(i, (_, h))| h.hit().then(|| i));
 
-                // Approach 1: sort filtered rays to continue take advantage of
-                // coherent tracing
-
-                // Approach 2: trace each filtered ray with incoherent context
                 let mut incoherent_context = embree::IntersectContext::incoherent();
                 let records = filtered
                     .into_iter()
@@ -155,14 +145,17 @@ pub fn measure_in_plane_brdf<PatchData: Copy, const N_PATCH: usize, const N_BOUN
                         )
                     })
                     .collect::<Vec<_>>();
-
-                // Approach 3: using heightfield tracing method to trace rays
             }
         }
     }
 
     vec![]
 }
+
+// Approach 1: sort filtered rays to continue take advantage of
+// coherent tracing
+// Approach 2: trace each filtered ray with incoherent context
+// Approach 3: using heightfield tracing method to trace rays
 
 /// Structure to sample over a spectrum.
 pub(crate) struct SpectrumSampler {
@@ -192,24 +185,24 @@ impl SpectrumSampler {
 /// Intermediate structure used to store the results of a ray intersection.
 /// Used to rewind self intersections.
 #[derive(Debug)]
-struct IntersectRecord {
+pub struct IntersectRecord {
     /// The ray that hit the surface.
-    ray: Ray,
+    pub ray: Ray,
 
     /// The surface that was hit.
-    geom_id: u32,
+    pub geom_id: u32,
 
     /// The primitive of the surface that was hit.
-    prim_id: u32,
+    pub prim_id: u32,
 
     /// The hit point.
-    hit_point: Vec3,
+    pub hit_point: Vec3,
 
     /// The normal at the hit point.
-    normal: Vec3,
+    pub normal: Vec3,
 
     /// How many times the ray has been rewound.
-    nudged_times: u32,
+    pub nudged_times: u32,
 }
 
 const NUDGE_AMOUNT: f32 = f32::EPSILON * 10.0;
@@ -251,7 +244,7 @@ fn trace_one_ray_embree(
                         ..prev_isect
                     };
                     // Recalculate the reflected ray.
-                    if let Some(Scattering { reflected, .. }) = fresnel_scattering_air_conductor(
+                    if let Some(Scattering { reflected, .. }) = scattering_air_conductor(
                         prev_isect.ray,
                         hit_point,
                         prev_isect.normal,
@@ -301,7 +294,7 @@ fn trace_one_ray_embree(
                     };
                     // Compute the new reflected ray.
                     if let Some(Scattering { reflected, .. }) =
-                        fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k)
+                        scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k)
                     {
                         // The ray is not absorbed by the surface.
                         if reflected.e >= 0.0 {
@@ -347,7 +340,7 @@ fn trace_one_ray_embree(
                 };
                 // Compute the new reflected ray.
                 if let Some(Scattering { reflected, .. }) =
-                    fresnel_scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k)
+                    scattering_air_conductor(ray, hit_point, normal, ior_t.eta, ior_t.k)
                 {
                     // The ray is not absorbed by the surface.
                     if reflected.e >= 0.0 {
@@ -389,30 +382,38 @@ fn trace_one_ray_grid_tracing(
     ray: Ray,
     hf: &Heightfield,
     mesh: &TriangleMesh,
-    prev_record: Option<RayTraceRecord>,
-) -> RayTraceRecord {
-    // Calculate the x, y, z coordinates of the intersection of the ray with
-    // the global bounding box of the height field.
-    //let entering_point = aabb.intersect(ray, f32::NEG_INFINITY, f32::INFINITY);
+    ior_t: RefractiveIndex,
+) -> Option<RayTraceRecord> {
+    let rt_grid = GridRayTracing::new(hf, mesh);
+    trace_one_ray_grid_tracing_inner(ray, &rt_grid, ior_t, None)
+}
 
-    //let grid = RayTracingGrid::new(hf, mesh);
-
-    // 2. Use standard DDA to traverse the grid in x, y coordinates
-    // until the ray exits the bounding box. Identify all cells traversed by the
-    // ray. let (cells, isects) = dda(entering_point.)
-
-    // 4. Modify the DDA to track the z
-    // (altitude) values of the endpoints of the ray within each cell.
-    // 5. Test the z values of the ray at each cell against the altitudes at the
-    // four corners of the cell.    If this test indicates that the ray
-    // passes between those altitudes at that cell, proceed with the steps
-    // below;    otherwise, go to the next cell.
-    // 6. Create two triangles (only the plane description is needed) from the
-    // four altitudes at the corners of the cell. 7. Intersect the ray with
-    // the two triangles which tessellate the surface within the cell.
-    // 8. Include an inverse skewing and scaling transformation for the ray, so
-    // the triangles may be equilateral rather than right triangles.
-    todo!()
+fn trace_one_ray_grid_tracing_inner(
+    ray: Ray,
+    rt_grid: &GridRayTracing,
+    ior_t: RefractiveIndex,
+    record: Option<RayTraceRecord>,
+) -> Option<RayTraceRecord> {
+    if let Some(isect) = rt_grid.trace_ray(ray) {
+        if let Some(Scattering { reflected, .. }) =
+            scattering_air_conductor(ray, isect.hit_point, isect.normal, ior_t.eta, ior_t.k)
+        {
+            if reflected.e >= 0.0 {
+                let curr_record = RayTraceRecord {
+                    initial: record.as_ref().unwrap().initial,
+                    current: ray,
+                    bounces: record.as_ref().unwrap().bounces + 1,
+                };
+                trace_one_ray_grid_tracing_inner(reflected, rt_grid, ior_t, Some(curr_record))
+            } else {
+                record
+            }
+        } else {
+            record
+        }
+    } else {
+        record
+    }
 }
 
 /// Compute intersection point.
@@ -424,15 +425,15 @@ fn compute_hit_point(scene: &embree::Scene, record: &embree::Hit) -> Vec3 {
             embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
         let indices: *const u32 =
             embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
+
         let mut points = [Vec3::ZERO; 3];
-        for i in 0..3 {
+        for (i, p) in points.iter_mut().enumerate() {
             let idx = *indices.offset(prim_id * 3 + i as isize) as isize;
-            points[i] = Vec3::new(
-                *vertices.offset(idx * 4),
-                *vertices.offset(idx * 4 + 1),
-                *vertices.offset(idx * 4 + 2),
-            )
+            p.x = *vertices.offset(idx * 4);
+            p.y = *vertices.offset(idx * 4 + 1);
+            p.z = *vertices.offset(idx * 4 + 2);
         }
+
         points
     };
     log::debug!(

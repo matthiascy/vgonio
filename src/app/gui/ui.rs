@@ -3,6 +3,7 @@ use super::simulation::SimulationWorkspace;
 use super::UserEvent;
 use epi::App;
 use glam::Mat4;
+use std::fmt::Write;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
@@ -126,9 +127,9 @@ impl VgonioGui {
             let mut text = "Dropping files:\n".to_owned();
             for file in &ctx.input().raw.hovered_files {
                 if let Some(path) = &file.path {
-                    text += &format!("\n{}", path.display());
+                    write!(text, "\n{}", path.display()).unwrap();
                 } else if !file.mime.is_empty() {
-                    text += &format!("\n{}", file.mime);
+                    write!(text, " \n{}", file.mime).unwrap();
                 } else {
                     text += "\n???";
                 }
@@ -168,7 +169,7 @@ impl VgonioGui {
                             "???".to_owned()
                         };
                         if let Some(bytes) = &file.bytes {
-                            info += &format!(" ({} bytes)", bytes.len());
+                            write!(info, " ({} bytes)", bytes.len()).unwrap();
                         }
                         ui.label(info);
                     }

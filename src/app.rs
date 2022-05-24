@@ -19,9 +19,9 @@ pub mod state;
 const WIN_INITIAL_WIDTH: u32 = 1280;
 const WIN_INITIAL_HEIGHT: u32 = 720;
 
-const BRIGHT_CYAN: &'static str = "\u{001b}[36m";
-const BRIGHT_YELLOW: &'static str = "\u{001b}[33m";
-const RESET: &'static str = "\u{001b}[0m";
+const BRIGHT_CYAN: &str = "\u{001b}[36m";
+const BRIGHT_YELLOW: &str = "\u{001b}[33m";
+const RESET: &str = "\u{001b}[0m";
 
 /// Vgonio configuration.
 #[derive(Debug)]

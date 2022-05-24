@@ -43,7 +43,7 @@ pub struct Scattering {
     pub refracted: Ray,
 }
 
-pub fn fresnel_scattering_air_conductor(
+pub fn scattering_air_conductor(
     ray: Ray,
     p: Vec3,
     n: Vec3,
@@ -72,7 +72,7 @@ pub fn fresnel_scattering_air_conductor(
     }
 }
 
-pub fn fresnel_scattering_air_conductor_spectrum(
+pub fn scattering_air_conductor_spectrum(
     ray: Ray,
     point: Vec3,
     normal: Vec3,
