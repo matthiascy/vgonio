@@ -35,7 +35,7 @@ pub fn run() -> Result<(), Error> {
 
     // Dispatch subcommands
     match args.command {
-        None => app::launch_gui_client(config),
+        None => app::launch_gui(config),
         Some(cmd) => app::execute_command(cmd, config),
     }
 }

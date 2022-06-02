@@ -26,6 +26,7 @@ use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
+use crate::app::VgonioConfig;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -53,6 +54,7 @@ pub struct VgonioApp {
     heightfield: Option<Box<Heightfield>>,
     heightfield_mesh_view: Option<MeshView>,
     heightfield_micro_view: Option<MicroSurfaceView>,
+    heightfield_scale_factor: f32,
 
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
@@ -64,11 +66,11 @@ pub struct VgonioApp {
 impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
+        config: VgonioConfig,
         window: &Window,
         event_loop: EventLoopProxy<UserEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
-
         let depth_attachment = Texture::create_depth_texture(
             &gpu_ctx.device,
             gpu_ctx.surface_config.width,
@@ -76,7 +78,6 @@ impl VgonioApp {
             None,
             Some("depth-texture"),
         );
-
         let depth_attachment_storage_size = (std::mem::size_of::<f32>()
             * (gpu_ctx.surface_config.width * gpu_ctx.surface_config.height) as usize)
             as wgpu::BufferAddress;
@@ -119,7 +120,7 @@ impl VgonioApp {
 
         let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
         let ui = egui_demo_lib::WrapApp::default();
-        let gui = VgonioGui::new(event_loop);
+        let gui = VgonioGui::new(event_loop, config);
 
         let input = InputState {
             key_map: Default::default(),
@@ -150,6 +151,7 @@ impl VgonioApp {
             prev_frame_time: None,
             demo_ui: ui,
             is_grid_enabled: true,
+            heightfield_scale_factor: 1.0
         })
     }
 
@@ -278,10 +280,15 @@ impl VgonioApp {
 
         if let Some(hf) = &self.heightfield {
             let mut uniform = [0.0f32; 16 * 3 + 4];
-            uniform[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+            // Displace visually the heightfield.
+            uniform[0..16].copy_from_slice(&Mat4::from_translation(Vec3::new(
+                0.0,
+                -(hf.max + hf.min) * 0.5 * self.heightfield_scale_factor,
+                0.0,
+            )).to_cols_array());
             uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
             uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
-            uniform[48..52].copy_from_slice(&[hf.min, hf.max, hf.max - hf.min, 0.5]);
+            uniform[48..52].copy_from_slice(&[hf.min, hf.max, hf.max - hf.min, self.heightfield_scale_factor]);
             self.gpu_ctx.queue.write_buffer(
                 self.passes
                     .get("heightfield")
@@ -385,7 +392,7 @@ impl VgonioApp {
                 output: egui_output,
                 repaint_signal,
             });
-            // self.demo_ui.update(self.gui_ctx.egui_context(), &ui_frame);
+            self.demo_ui.update(self.gui_ctx.egui_context(), &ui_frame);
             self.gui.update(self.gui_ctx.egui_context(), &ui_frame);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
 
@@ -437,6 +444,9 @@ impl VgonioApp {
             UserEvent::SaveDepthMap => {
                 log::info!("Saving depth map!");
                 self.save_depth_map();
+            }
+            UserEvent::UpdateScaleFactor(factor) => {
+                self.heightfield_scale_factor = factor;
             }
         }
     }

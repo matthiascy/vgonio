@@ -342,7 +342,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
     }
 }
 
-pub fn launch_gui_client(config: VgonioConfig) -> Result<(), Error> {
+pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
     use crate::app::gui::UserEvent;
     use state::VgonioApp;
 
@@ -360,7 +360,7 @@ pub fn launch_gui_client(config: VgonioConfig) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    let mut vgonio = pollster::block_on(VgonioApp::new(&window, event_loop.create_proxy()))?;
+    let mut vgonio = pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
     let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
         event_loop.create_proxy(),
     )));
@@ -419,6 +419,7 @@ pub fn launch_gui_client(config: VgonioConfig) -> Result<(), Error> {
     });
 }
 
+/// Execute a vgonio subcommand.
 pub fn execute_command(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
     match cmd {
         VgonioCommand::Measure(opts) => measure(opts, config),
@@ -465,7 +466,8 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
 
     let start = std::time::SystemTime::now();
-    let measurement: Vec<u32> = match desc.measurement_kind {
+    // let measurement: Vec<u32> =
+    match desc.measurement_kind {
         MeasurementKind::Bxdf { kind } => match kind {
             BxdfKind::InPlane => {
                 println!(
@@ -475,7 +477,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
       + transmitted medium: {:?}
       + surfaces: {:?}
       + emitter:
-        - radius: {}
+        - radius: {:?}
         - num rays: {}
         - max bounces: {}
         - spectrum: {} - {}, step size {}
@@ -483,7 +485,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
           - polar angle: {}
           - azimuthal angle: {}
       + collector:
-        - radius: {}
+        - radius: {:?}
         - shape: {:?}
         - partition:
           - type: {}
@@ -508,13 +510,12 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     desc.collector.partition.phi_range_str()
                 );
                 println!("    {BRIGHT_YELLOW}>{RESET} Measuring in-plane BRDF...");
-                //crate::acq::bxdf::measure_in_plane_brdf(&desc, &ior_db, &surfaces)
-                vec![]
+                crate::acq::bxdf::measure_in_plane_brdf_grid(&desc, &ior_db, &surfaces);
             }
         },
         MeasurementKind::Ndf => {
             // todo: measure ndf
-            vec![]
+            todo!()
         }
     };
 

@@ -41,16 +41,28 @@ impl RefractiveIndexDatabase {
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
-    pub fn ior_of(&self, medium: Medium, wavelength: f32) -> Option<RefractiveIndex> {
-        let refractive_indices = self.0.get(&medium)?;
-        let mut ior = None;
-        for refractive_index_ in refractive_indices {
-            if refractive_index_.wavelength == wavelength {
-                ior = Some(*refractive_index_);
-                break;
-            }
+    pub fn refractive_index_of(&self, medium: Medium, wavelength: f32) -> Option<RefractiveIndex> {
+        let refractive_indices = self.0.get(&medium).expect("unknown medium");
+        // Search for the position of the first wavelength equal or greater than the given one in refractive indices.
+        let i = refractive_indices.iter().position(|ior| ior.wavelength >= wavelength)
+            .unwrap();
+        let ior_after = refractive_indices[i];
+
+        // If the first wavelength is equal to the given one, return it.
+        if (ior_after.wavelength - wavelength).abs() < f32::EPSILON {
+            Some(ior_after)
+        } else {
+            // Otherwise, interpolate between the two closest refractive indices.
+            let ior_before = if i == 0 { refractive_indices[0] } else { refractive_indices[i - 1] };
+            let diff_eta = ior_after.eta - ior_before.eta;
+            let diff_k = ior_after.k - ior_before.k;
+            let t = (wavelength - ior_before.wavelength) / (ior_after.wavelength - ior_before.wavelength);
+            Some(RefractiveIndex {
+                wavelength,
+                eta: ior_before.eta + t * diff_eta,
+                k: ior_before.k + t * diff_k,
+            })
         }
-        ior
     }
 
     pub fn ior_of_spectrum(
@@ -60,7 +72,7 @@ impl RefractiveIndexDatabase {
     ) -> Option<Vec<RefractiveIndex>> {
         wavelengths
             .iter()
-            .map(|wavelength| self.ior_of(medium, *wavelength))
+            .map(|wavelength| self.refractive_index_of(medium, *wavelength))
             .collect()
     }
 

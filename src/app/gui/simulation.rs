@@ -59,6 +59,7 @@ enum SensorShape {
 
 pub struct SimulationWindow {
     is_grid_enabled: bool,
+    surface_scale_factor: f32,
     sensor_shape: SensorShape,
     evlp: Arc<EventLoopProxy<UserEvent>>,
 }
@@ -67,6 +68,7 @@ impl SimulationWindow {
     pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
         Self {
             is_grid_enabled: true,
+            surface_scale_factor: 1.0,
             sensor_shape: SensorShape::Rectangle,
             evlp,
         }
@@ -91,11 +93,21 @@ impl SimulationWindow {
                     .striped(true)
                     .show(ui, |ui| {
                         ui.add(egui::Label::new("Visual Grid:"));
-                        let res = ui.add(super::widgets::toggle(&mut self.is_grid_enabled));
-                        if res.changed() && self.evlp.send_event(UserEvent::ToggleGrid).is_err() {
-                            log::warn!("[EVENT] Failed to send ToggleGrid event");
+                        {
+                            let res = ui.add(super::widgets::toggle(&mut self.is_grid_enabled));
+                            if res.changed() && self.evlp.send_event(UserEvent::ToggleGrid).is_err() {
+                                log::warn!("[EVENT] Failed to send ToggleGrid event");
+                            }
                         }
                         ui.end_row();
+
+                        ui.add(egui::Label::new("Scale factor:"));
+                        {
+                            let res = ui.add(egui::Slider::new(&mut self.surface_scale_factor, 0.05..=1.2));
+                            if res.changed() && self.evlp.send_event(UserEvent::UpdateScaleFactor(self.surface_scale_factor)).is_err() {
+                                log::warn!("[EVENT] Failed to send SetScaleFactor event");
+                            }
+                        }
                     });
             });
     }

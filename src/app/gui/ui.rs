@@ -6,6 +6,7 @@ use glam::Mat4;
 use std::fmt::Write;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
+use crate::app::VgonioConfig;
 
 pub struct Workspaces {
     pub(crate) simulation: SimulationWorkspace,
@@ -31,6 +32,8 @@ impl Workspaces {
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
+    config: VgonioConfig,
+
     /// Workspaces are essentially predefined window layouts for certain usage.
     workspaces: Workspaces,
 
@@ -45,10 +48,11 @@ pub struct VgonioGui {
 }
 
 impl VgonioGui {
-    pub fn new(evlp: EventLoopProxy<UserEvent>) -> Self {
+    pub fn new(evlp: EventLoopProxy<UserEvent>, config: VgonioConfig) -> Self {
         let evlp = Arc::new(evlp);
         let workspaces = Workspaces::new(evlp.clone());
         Self {
+            config,
             evlp,
             workspaces,
             dropped_files: vec![],
@@ -194,7 +198,7 @@ impl VgonioGui {
                     });
                     if ui.button("\u{1F4C2} Open").clicked() {
                         if let Some(filepath) =
-                            rfd::FileDialog::new().set_directory("~/").pick_file()
+                            rfd::FileDialog::new().set_directory(&self.config.user_config.data_files_dir).pick_file()
                         {
                             if self.evlp.send_event(UserEvent::OpenFile(filepath)).is_err() {
                                 log::warn!("[EVENT] Failed to send OpenFile event");

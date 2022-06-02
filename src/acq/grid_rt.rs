@@ -1,9 +1,8 @@
 use crate::acq::bxdf::IntersectRecord;
-use crate::acq::ior::RefractiveIndex;
-use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
+use crate::acq::ray::{Ray, RayTraceRecord, Scattering};
 use crate::htfld::{AxisAlignment, Heightfield};
 use crate::isect::isect_ray_tri;
-use crate::mesh::{TriangleMesh, TriangulationMethod};
+use crate::mesh::{TriangleMesh};
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
 /// Helper structure for grid ray tracing.
@@ -24,13 +23,13 @@ pub struct GridRayTracing<'a> {
     mesh: &'a TriangleMesh,
 
     /// Minimum coordinates of the grid.
-    min: IVec2,
+    pub min: IVec2,
 
     /// Maximum coordinates of the grid.
-    max: IVec2,
+    pub max: IVec2,
 
     /// The origin x and y coordinates of the grid in the world space.
-    origin: Vec2,
+    pub origin: Vec2,
 }
 
 impl<'a> GridRayTracing<'a> {
@@ -47,30 +46,49 @@ impl<'a> GridRayTracing<'a> {
         }
     }
 
+    /// Check if the given point is inside the grid.
+    fn inside(&self, pos: IVec2) -> bool {
+        pos.x >= self.min.x && pos.x <= self.max.x && pos.y >= self.min.y && pos.y <= self.max.y
+    }
+
     pub fn trace_ray(&self, ray: Ray) -> Option<IntersectRecord> {
-        // Calculate the intersection point of the ray with the bounding box of the
-        // surface.
-        if let Some(isect_point) =
+        let starting_point =
+        if !self.inside(self.world_to_grid(ray.o)) {
+            // If the ray origin is outside the grid, first check if it intersects
+            // with the surface bounding box.
             self.mesh
                 .extent
-                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
-        {
-            // Displace the intersection backwards along the ray direction.
-            let isect_point = isect_point - ray.d * 0.01;
+                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY).map(|isect_point| {
+                log::debug!("Ray origin outside the grid, intersecting with the bounding box.");
+                isect_point - ray.d * 0.01
+            })
+        } else {
+            // If the ray origin is inside the grid, use the ray origin.
+            Some(ray.o)
+        };
+        log::debug!("Starting point: {:?}", starting_point);
 
+        if let Some(starting_point) = starting_point {
             // Traverse the grid in x, y coordinates, until the ray exits the grid and
             // identify all traversed cells.
             let GridTraversal {
                 traversed,
                 distances,
-            } = self.traverse(isect_point.xy(), ray.d.xy());
+            } = self.traverse(starting_point.xz(), ray.d.xz());
 
             let mut record = None;
 
+            log::debug!("traversed: {:?}", traversed);
+
             // Iterate over the traversed cells and find the closest intersection.
             for (i, cell) in traversed.iter().enumerate().filter(|(_, cell)| {
-                cell.x >= 0 && cell.y >= 0 && cell.x <= self.max.x && cell.y <= self.max.y
+                cell.x >= self.min.x - 1 && cell.y >= self.min.y - 1 && cell.x <= self.max.x && cell.y <= self.max.y
             }) {
+                if cell.x == self.min.x - 1 || cell.y == self.min.y - 1 || cell.x == self.max.x || cell.y == self.max.y {
+                    // Skip the cell outside the grid, since it is the starting point.
+                    continue;
+                }
+
                 // Calculate the two ray endpoints at the cell boundaries.
                 let entering = ray.o + distances[i] * ray.d;
                 let exiting = ray.o + distances[i + 1] * ray.d;
@@ -134,7 +152,6 @@ impl<'a> GridRayTracing<'a> {
                     }
                 }
             }
-
             record
         } else {
             None
@@ -233,7 +250,7 @@ impl<'a> GridRayTracing<'a> {
         let ray_dir = ray_dir.normalize();
         // Relocate the ray origin to the position relative to the origin of the grid.
         let ray_org = ray_org - self.origin;
-        println!("ray org {:?}", ray_org);
+        log::debug!("Grid traversal - ray orig: {:?}", ray_org);
 
         // Calculate dy/dx -- slope of the ray on the grid.
         let m = ray_dir.y / ray_dir.x;
@@ -244,6 +261,7 @@ impl<'a> GridRayTracing<'a> {
         let unit_dist = Vec2::new((1.0 + m * m).sqrt(), (1.0 + m_recip * m_recip).sqrt());
 
         let mut current = ray_org.floor().as_ivec2();
+        log::debug!("  - starting position: {:?}", current);
 
         let step_dir = IVec2::new(
             if ray_dir.x >= 0.0 { 1 } else { -1 },
@@ -264,15 +282,11 @@ impl<'a> GridRayTracing<'a> {
             },
         );
 
-        println!("accumulated {:?}", accumulated);
-
         let mut distances = if accumulated.x > accumulated.y {
             vec![accumulated.y]
         } else {
             vec![accumulated.x]
         };
-
-        println!("distances {:?}", distances);
 
         let mut traversed = vec![current];
 
@@ -316,15 +330,8 @@ pub struct GridTraversal {
 }
 
 #[test]
-fn test_dda() {
-    let (cells, intersections) = dda(Vec2::new(-0.5, -0.5), Vec2::new(7.0, 2.0), -1, -1, 7, 7);
-
-    println!("cells: {:?}", cells);
-    println!("intersections: {:?}", intersections);
-}
-
-#[test]
 fn test_grid_traversal() {
+    use crate::mesh::TriangulationMethod;
     let heightfield = Heightfield::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
     let triangle_mesh = heightfield.triangulate(TriangulationMethod::Regular);
     let grid = GridRayTracing::new(&heightfield, &triangle_mesh);

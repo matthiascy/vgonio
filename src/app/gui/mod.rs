@@ -16,6 +16,7 @@ pub enum UserEvent {
     RequestRedraw,
     OpenFile(std::path::PathBuf),
     ToggleGrid,
+    UpdateScaleFactor(f32),
     SaveDepthMap,
 }
 

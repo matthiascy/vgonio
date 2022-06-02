@@ -143,6 +143,7 @@ pub fn refract() -> Vec3 {
     Vec3::ZERO
 }
 
+#[derive(Debug)]
 pub struct RayTraceRecord {
     /// The initial ray being traced.
     pub initial: Ray,

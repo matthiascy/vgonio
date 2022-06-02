@@ -40,32 +40,32 @@ impl EmbreeRayTracing {
     }
 
     pub fn create_triangle_mesh(&self, mesh: &mesh::TriangleMesh) -> Arc<TriangleMesh> {
-        let mut mesh = TriangleMesh::unanimated(device, mesh.num_tris, mesh.num_verts);
+        let mut embree_mesh = TriangleMesh::unanimated(self.device.clone(), mesh.num_tris, mesh.num_verts);
         {
-            let mesh_ref_mut = Arc::get_mut(&mut mesh).unwrap();
+            let mesh_ref_mut = Arc::get_mut(&mut embree_mesh).unwrap();
             {
                 let mut verts_buffer = mesh_ref_mut.vertex_buffer.map();
                 let mut indxs_buffer = mesh_ref_mut.index_buffer.map();
-                for (i, vert) in self.verts.iter().enumerate() {
+                for (i, vert) in mesh.verts.iter().enumerate() {
                     verts_buffer[i] = [vert.x, vert.y, vert.z, 1.0];
                 }
                 // TODO: replace with slice::as_chunks when it's stable.
-                (0..self.num_tris).for_each(|tri| {
+                (0..mesh.num_tris).for_each(|tri| {
                     indxs_buffer[tri] = [
-                        self.faces[tri * 3],
-                        self.faces[tri * 3 + 1],
-                        self.faces[tri * 3 + 2],
+                        mesh.faces[tri * 3],
+                        mesh.faces[tri * 3 + 1],
+                        mesh.faces[tri * 3 + 2],
                     ];
                 })
             }
             mesh_ref_mut.commit()
         }
-        mesh
+        embree_mesh
     }
 
     pub fn attach_geometry(&mut self, scene_id: usize, geometry: Arc<dyn Geometry>) -> u32 {
         let scene_mut = self.scene_mut(scene_id);
-        let id = scene.attach_geometry(geometry);
+        let id = scene_mut.attach_geometry(geometry);
         scene_mut.commit();
         id
     }

@@ -140,6 +140,10 @@ impl Aabb {
         self.max = Vec3::new(max[0], max[1], max[2]);
     }
 
+    pub fn max_edge(&self) -> f32 {
+        self.max.x.max(self.max.y).max(self.max.z)
+    }
+
     // /// Union of two bounding boxes.
     // pub fn union(lhs: &Aabb, rhs: &Aabb) -> Aabb {
     //     let mut min = [0.0_f32; 4];

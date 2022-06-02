@@ -319,7 +319,7 @@ impl CameraController for OrbitControls {
         let is_ctrl_pressed = input.is_key_pressed(VirtualKeyCode::LControl)
             || input.is_key_pressed(VirtualKeyCode::RControl);
         let [dx, dy] = input.cursor_delta;
-        let scroll_delta = input.scroll_delta;
+        let scroll_delta = input.scroll_delta * 5.0;
 
         let dt = dt.as_secs_f32();
 

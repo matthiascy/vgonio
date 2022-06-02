@@ -4,22 +4,22 @@ measurement_kind:
   bxdf:
     kind: inplane
 incident_medium: air
-transmitted_medium: air
+transmitted_medium: aluminium
 surfaces:
   - user://surfaces/Aluminium65bar100.txt
   # - local://surfaces/AluminiumMirror.txt
   # - //surfaces/AluminiumMirror.txt
 emitter:
-  num_rays: 100
+  num_rays: 1
   max_bounces: 10
-  radius: 0.1
+  radius: auto
   partition:
     equal_area:
-      theta: [0.0, 90.0, 45]
-      phi: [0.0, 360.0, 10.0]
-  spectrum: [380.0, 780.0, 1.0]
+      theta: [0.0, 90.0, 1] # [start, stop, count]
+      phi: [0.0, 360.0, 120.0] # [start, stop, step]
+  spectrum: [380.0, 780.0, 400.0] # [start, stop, step]
 collector:
-  radius: 0.1
+  radius: auto
   shape: upper_hemisphere
   partition:
     equal_area:

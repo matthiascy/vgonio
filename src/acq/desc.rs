@@ -85,6 +85,17 @@ impl Range<f32> {
     }
 }
 
+
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
+pub enum RadiusDesc {
+    /// Radius is deduced from the dimension of the surface.
+    Auto,
+
+    /// Radius is given explicitly.
+    Fixed(f32),
+}
+
 /// Description of the light source.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EmitterDesc {
@@ -95,7 +106,7 @@ pub struct EmitterDesc {
     pub max_bounces: u32,
 
     /// Radius (r) specifying the spherical coordinates of the light source.
-    pub radius: f32,
+    pub radius: RadiusDesc,
 
     /// Partition of the emitter sphere.
     pub partition: SphericalPartition,
@@ -108,7 +119,7 @@ pub struct EmitterDesc {
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CollectorDesc {
     /// Radius of the underlying shape of the collector.
-    pub radius: f32,
+    pub radius: RadiusDesc,
 
     /// Exact spherical shape of the collector.
     pub shape: SphericalShape,

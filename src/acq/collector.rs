@@ -1,4 +1,6 @@
-use crate::acq::desc::CollectorDesc;
+use glam::Vec3;
+use crate::acq::desc::{CollectorDesc, RadiusDesc};
+use crate::acq::ray::Ray;
 use crate::acq::util::{SphericalPartition, SphericalShape};
 
 /// The virtual goniophotometer's detectors represented by the patches
@@ -7,7 +9,7 @@ use crate::acq::util::{SphericalPartition, SphericalShape};
 /// are partitioned using 1.0 as radius.
 #[derive(Clone, Debug)]
 pub struct Collector {
-    pub radius: f32,
+    pub radius: RadiusDesc,
     pub shape: SphericalShape,
     pub partition: SphericalPartition,
     pub patches: Vec<Patch>,
@@ -21,6 +23,20 @@ pub struct Patch {
 
     /// Azimuthal angle of the center of the patch in radians.
     pub azimuth: f32,
+}
+
+impl Patch {
+    pub fn emit_rays(&self, n: u32, radius: f32) -> Vec<Ray> {
+        let origin = Vec3::new(
+            self.zenith.sin() * radius * self.azimuth.cos(),
+            self.zenith.sin() * radius * self.azimuth.sin(),
+            self.zenith.cos() * radius,
+        );
+        let dir = (-origin).normalize();
+        let mut rays = Vec::with_capacity(n as usize);
+        rays.resize(n as usize, Ray::new(origin, dir));
+        rays
+    }
 }
 
 impl From<CollectorDesc> for Collector {
