@@ -19,9 +19,9 @@ enum RadiusMode {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum PartitionMode {
-    EArea,
-    EProjectedArea,
-    EAngle,
+    Area,
+    ProjectedArea,
+    Angle,
 }
 
 impl Display for PartitionMode {
@@ -30,9 +30,9 @@ impl Display for PartitionMode {
             f,
             "{}",
             match self {
-                PartitionMode::EArea => "Equal Area",
-                PartitionMode::EProjectedArea => "Equal Projected Area",
-                PartitionMode::EAngle => "Equal Angle",
+                PartitionMode::Area => "Equal Area",
+                PartitionMode::ProjectedArea => "Equal Projected Area",
+                PartitionMode::Angle => "Equal Angle",
             }
         )
     }
@@ -79,14 +79,14 @@ impl SimulationPane {
             emitter_radius_mode: RadiusMode::Auto,
             emitter_radius: 0.0,
             emitter_partition: Partition {
-                mode: PartitionMode::EArea,
+                mode: PartitionMode::Area,
                 zenith: (0.0, 0.0, 0.0),
                 azimuth: (0.0, 0.0, 0.0),
             },
             collector_radius_mode: RadiusMode::Auto,
             collector_radius: 0.0,
             collector_partition: Partition {
-                mode: PartitionMode::EArea,
+                mode: PartitionMode::Area,
                 zenith: (0.0, 0.0, 0.0),
                 azimuth: (0.0, 0.0, 0.0),
             },
@@ -188,7 +188,9 @@ impl SimulationPane {
                     egui::ComboBox::from_id_source("surface_choice")
                         .selected_text(format!(
                             "{:?}",
-                            self.measurement_desc.surfaces[self.selected_surface_index].file_name().unwrap()
+                            self.measurement_desc.surfaces[self.selected_surface_index]
+                                .file_name()
+                                .unwrap()
                         ))
                         .show_ui(ui, |ui| {
                             for (i, surface) in self.measurement_desc.surfaces.iter().enumerate() {
@@ -260,17 +262,17 @@ impl SimulationPane {
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.emitter_partition.mode,
-                                    PartitionMode::EAngle,
+                                    PartitionMode::Angle,
                                     "Equal Angle",
                                 );
                                 ui.selectable_value(
                                     &mut self.emitter_partition.mode,
-                                    PartitionMode::EArea,
+                                    PartitionMode::Area,
                                     "Equal Area",
                                 );
                                 ui.selectable_value(
                                     &mut self.emitter_partition.mode,
-                                    PartitionMode::EProjectedArea,
+                                    PartitionMode::ProjectedArea,
                                     "Equal Projected Area",
                                 );
                             });
@@ -283,7 +285,7 @@ impl SimulationPane {
                             ui.label("stop");
                             ui.add(egui::DragValue::new(&mut self.emitter_partition.zenith.1));
 
-                            if self.emitter_partition.mode == PartitionMode::EAngle {
+                            if self.emitter_partition.mode == PartitionMode::Angle {
                                 ui.label("step");
                                 ui.add(egui::DragValue::new(&mut self.emitter_partition.zenith.2));
                             } else {
@@ -356,17 +358,17 @@ impl SimulationPane {
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.collector_partition.mode,
-                                    PartitionMode::EAngle,
+                                    PartitionMode::Angle,
                                     "Equal Angle",
                                 );
                                 ui.selectable_value(
                                     &mut self.collector_partition.mode,
-                                    PartitionMode::EArea,
+                                    PartitionMode::Area,
                                     "Equal Area",
                                 );
                                 ui.selectable_value(
                                     &mut self.collector_partition.mode,
-                                    PartitionMode::EProjectedArea,
+                                    PartitionMode::ProjectedArea,
                                     "Equal Projected Area",
                                 );
                             });
@@ -379,7 +381,7 @@ impl SimulationPane {
                             ui.label("stop");
                             ui.add(egui::DragValue::new(&mut self.collector_partition.zenith.1));
 
-                            if self.collector_partition.mode == PartitionMode::EAngle {
+                            if self.collector_partition.mode == PartitionMode::Angle {
                                 ui.label("step");
                                 ui.add(egui::DragValue::new(
                                     &mut self.collector_partition.zenith.2,
@@ -480,8 +482,16 @@ impl SimulationWorkspace {
     pub fn update_surface_list(&mut self, list: &Vec<PathBuf>) {
         if !list.is_empty() {
             for surface in list {
-                if !self.simulation_pane.measurement_desc.surfaces.contains(surface) {
-                    self.simulation_pane.measurement_desc.surfaces.push(surface.clone());
+                if !self
+                    .simulation_pane
+                    .measurement_desc
+                    .surfaces
+                    .contains(surface)
+                {
+                    self.simulation_pane
+                        .measurement_desc
+                        .surfaces
+                        .push(surface.clone());
                 }
             }
         }
@@ -535,10 +545,10 @@ impl SimulationWorkspace {
             egui::trace!(ui);
             egui::menu::bar(ui, |ui| {
                 if ui.button("Simulation Pane").clicked() {
-                    self.simulation_pane_opened = true;
+                    self.simulation_pane_opened = !self.simulation_pane_opened;
                 }
                 if ui.button("Visual Debugger").clicked() {
-                    self.visual_debugger_opened = true;
+                    self.visual_debugger_opened = !self.visual_debugger_opened;
                 }
             });
         });

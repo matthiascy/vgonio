@@ -100,5 +100,6 @@ impl egui::Widget for &mut ShadowMapPanel {
         // Show the image
         ui.add(egui::Image::new(texture, texture.size_vec2()))
         // ui.image(texture, texture.size_vec2()); // shorter
+        //ui.image(self.depth_map_id, [IMG_WIDTH as f32, IMG_HEIGHT as f32])
     }
 }

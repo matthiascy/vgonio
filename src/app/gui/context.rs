@@ -539,7 +539,7 @@ impl GuiContext {
     /// egui UI. Texture must have the texture format
     /// `TextureFormat::Rgba8UnormSrgb` and Texture usage
     /// `TextureUsage::SAMPLED`.
-    pub fn egui_texture_from_wgpu_texture(
+    pub fn register_egui_texture_from_wgpu_texture(
         &mut self,
         device: &wgpu::Device,
         texture: &wgpu::TextureView,
@@ -602,7 +602,7 @@ impl GuiContext {
     /// The `Texture` must have the format `TextureFormat::Rgba8UnormSrgb` and
     /// usage `TextureUsage::SAMPLED`. Any compare function supplied in the
     /// `SamplerDescriptor` will be ignored.
-    pub fn create_egui_texture_from_wgpu_texture_with_sampler_options(
+    fn create_egui_texture_from_wgpu_texture_with_sampler_options(
         &mut self,
         device: &wgpu::Device,
         texture: &wgpu::TextureView,
@@ -646,7 +646,7 @@ impl GuiContext {
     ///
     /// This allows applications to reuse `TextureId`s created with custom
     /// sampler options.
-    pub fn update_egui_texture_from_wgpu_texture_with_sampler_options(
+    fn update_egui_texture_from_wgpu_texture_with_sampler_options(
         &mut self,
         device: &wgpu::Device,
         texture: &wgpu::TextureView,

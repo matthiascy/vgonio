@@ -20,10 +20,10 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroU32;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use wgpu::util::DeviceExt;
-use wgpu::{VertexFormat, VertexStepMode};
+use wgpu::{TextureFormat, VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
@@ -37,6 +37,130 @@ const NUM_ZENITH_BINS: usize = ((0.5 * std::f32::consts::PI) / ZENITH_BIN_SIZE_R
 
 // TODO: fix blending.
 
+/// Stores the content of depth buffer.
+struct DepthMap {
+    depth_attachment: Texture,
+    depth_attachment_storage: wgpu::Buffer, // used to store depth attachment
+}
+
+impl DepthMap {
+    pub fn new(ctx: &GpuContext) -> Self {
+        let depth_attachment = Texture::create_depth_texture(
+            &ctx.device,
+            ctx.surface_config.width,
+            ctx.surface_config.height,
+            None,
+            Some("depth-texture"),
+        );
+        let depth_attachment_storage_size = (std::mem::size_of::<f32>()
+            * (ctx.surface_config.width * ctx.surface_config.height) as usize)
+            as wgpu::BufferAddress;
+        let depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: depth_attachment_storage_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let depth_texture = Texture::new(
+            &ctx.device,
+            &wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: ctx.surface_config.width,
+                    height: ctx.surface_config.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::COPY_DST,
+            },
+            None,
+        );
+
+        Self {
+            depth_attachment,
+            depth_attachment_storage,
+        }
+    }
+
+    pub fn resize(&mut self, ctx: &GpuContext) {
+        self.depth_attachment = Texture::create_depth_texture(
+            &ctx.device,
+            ctx.surface_config.width,
+            ctx.surface_config.height,
+            None,
+            Some("depth_texture"),
+        );
+        let depth_map_buffer_size = (std::mem::size_of::<f32>()
+            * (ctx.surface_config.width * ctx.surface_config.height) as usize)
+            as wgpu::BufferAddress;
+        let depth_map_buffer_desc = wgpu::BufferDescriptor {
+            label: None,
+            size: depth_map_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        };
+        self.depth_attachment_storage = ctx.device.create_buffer(&depth_map_buffer_desc);
+    }
+
+    /// Save current depth buffer content to a PNG file.
+    pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path) {
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                // texture: &self.depth_attachment.raw,
+                texture: &self.depth_attachment.raw,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                // buffer: &self.depth_attachment_storage,
+                buffer: &self.depth_attachment_storage,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: NonZeroU32::new(
+                        std::mem::size_of::<f32>() as u32 * ctx.surface_config.width,
+                    ),
+                    rows_per_image: NonZeroU32::new(ctx.surface_config.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: ctx.surface_config.width,
+                height: ctx.surface_config.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        ctx.queue.submit(Some(encoder.finish()));
+
+        let mut image = image::GrayImage::new(ctx.surface_config.width, ctx.surface_config.height);
+        {
+            let buffer_slice = self.depth_attachment_storage.slice(..);
+
+            let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
+            ctx.device.poll(wgpu::Maintain::Wait);
+            pollster::block_on(async { mapping.await.unwrap() });
+
+            let buffer_view_f32 = buffer_slice.get_mapped_range();
+            let data_u8 = unsafe {
+                let (_, data, _) = buffer_view_f32.align_to::<f32>();
+                data.iter()
+                    .map(|d| (remap_depth(*d, 0.1, 100.0) * 255.0) as u8)
+                    .collect::<Vec<u8>>()
+            };
+
+            image.copy_from_slice(&data_u8);
+            image.save(path).unwrap();
+        }
+        self.depth_attachment_storage.unmap();
+    }
+}
+
 pub struct VgonioApp {
     gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
@@ -44,11 +168,10 @@ pub struct VgonioApp {
     input: InputState,
     camera: CameraState,
     passes: HashMap<&'static str, RdrPass>,
-    depth_attachment: Texture,
-    depth_attachment_storage: wgpu::Buffer, // used to store depth attachment
-    depth_attachment_image: image::GrayImage,
+    depth_map: DepthMap,
 
-    shadow_pass: ShadowPass,
+    // Shadow pass used for measurement of shadowing and masking function.
+    //shadow_pass: ShadowPass,
     occlusion_estimation_pass: OcclusionEstimationPass,
 
     heightfield: Option<Box<Heightfield>>,
@@ -73,25 +196,7 @@ impl VgonioApp {
         event_loop: EventLoopProxy<UserEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
-        let depth_attachment = Texture::create_depth_texture(
-            &gpu_ctx.device,
-            gpu_ctx.surface_config.width,
-            gpu_ctx.surface_config.height,
-            None,
-            Some("depth-texture"),
-        );
-        let depth_attachment_storage_size = (std::mem::size_of::<f32>()
-            * (gpu_ctx.surface_config.width * gpu_ctx.surface_config.height) as usize)
-            as wgpu::BufferAddress;
-        let depth_attachment_storage = gpu_ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: depth_attachment_storage_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let depth_attachment_image =
-            image::GrayImage::new(gpu_ctx.surface_config.width, gpu_ctx.surface_config.height);
-
+        let depth_map = DepthMap::new(&gpu_ctx);
         // Camera
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
@@ -112,15 +217,17 @@ impl VgonioApp {
         passes.insert("visual_grid", visual_grid_pass);
         passes.insert("heightfield", heightfield_pass);
 
-        let depth_pass = ShadowPass::new(
-            &gpu_ctx,
-            gpu_ctx.surface_config.width,
-            gpu_ctx.surface_config.height,
-            true,
-            true,
-        );
+        // let shadow_pass = ShadowPass::new(
+        //     &gpu_ctx,
+        //     gpu_ctx.surface_config.width,
+        //     gpu_ctx.surface_config.height,
+        //     true,
+        //     true,
+        // );
 
-        let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
+        let mut gui_ctx =
+            GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
+
         //let ui = egui_demo_lib::WrapApp::default();
         let gui = VgonioGui::new(event_loop, config);
 
@@ -140,10 +247,11 @@ impl VgonioApp {
             gui,
             input,
             passes,
-            depth_attachment,
-            depth_attachment_storage,
-            depth_attachment_image,
-            shadow_pass: depth_pass,
+            depth_map,
+            // depth_attachment,
+            // depth_attachment_storage,
+            // depth_attachment_image,
+            // shadow_pass,
             occlusion_estimation_pass,
             heightfield: None,
             heightfield_mesh_view: None,
@@ -154,7 +262,7 @@ impl VgonioApp {
             // demo_ui: ui,
             is_grid_enabled: true,
             surface_scale_factor: 1.0,
-            opened_surfaces: vec![]
+            opened_surfaces: vec![],
         })
     }
 
@@ -175,32 +283,14 @@ impl VgonioApp {
             self.gpu_ctx
                 .surface
                 .configure(&self.gpu_ctx.device, &self.gpu_ctx.surface_config);
-            self.depth_attachment = Texture::create_depth_texture(
-                &self.gpu_ctx.device,
-                self.gpu_ctx.surface_config.width,
-                self.gpu_ctx.surface_config.height,
-                None,
-                Some("depth_texture"),
-            );
-
-            let depth_map_buffer_size = (std::mem::size_of::<f32>()
-                * (self.gpu_ctx.surface_config.width * self.gpu_ctx.surface_config.height) as usize)
-                as wgpu::BufferAddress;
-            let depth_map_buffer_desc = wgpu::BufferDescriptor {
-                label: None,
-                size: depth_map_buffer_size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            };
-            self.depth_attachment_storage =
-                self.gpu_ctx.device.create_buffer(&depth_map_buffer_desc);
-
+            self.depth_map.resize(&self.gpu_ctx);
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
 
-            self.shadow_pass
-                .resize(&self.gpu_ctx.device, new_size.width, new_size.height);
+            // self.shadow_pass
+            //     .resize(&self.gpu_ctx.device, new_size.width,
+            // new_size.height);
         }
     }
 
@@ -278,8 +368,8 @@ impl VgonioApp {
             ]),
         );
 
-        self.shadow_pass
-            .update_uniforms(&self.gpu_ctx.queue, Mat4::IDENTITY, view, proj);
+        // self.shadow_pass
+        //     .update_uniforms(&self.gpu_ctx.queue, Mat4::IDENTITY, view, proj);
 
         if let Some(hf) = &self.heightfield {
             let mut uniform = [0.0f32; 16 * 3 + 4];
@@ -360,7 +450,8 @@ impl VgonioApp {
                     },
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_attachment.view,
+                    // view: &self.depth_attachment.view,
+                    view: &self.depth_map.depth_attachment.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,
@@ -453,14 +544,18 @@ impl VgonioApp {
                 if !self.opened_surfaces.contains(&path) {
                     self.opened_surfaces.push(path);
                 }
-                self.gui.workspaces.simulation.update_surface_list(&self.opened_surfaces);
-            },
+                self.gui
+                    .workspaces
+                    .simulation
+                    .update_surface_list(&self.opened_surfaces);
+            }
             UserEvent::ToggleGrid => {
                 self.is_grid_enabled = !self.is_grid_enabled;
             }
             UserEvent::SaveDepthMap => {
                 log::info!("Saving depth map!");
-                self.save_depth_map();
+                self.depth_map
+                    .save_to_image(&self.gpu_ctx, Path::new(&"depth_map.png"));
             }
             UserEvent::UpdateScaleFactor(factor) => {
                 self.surface_scale_factor = factor;
@@ -488,58 +583,6 @@ impl VgonioApp {
                 log::error!("HeightField loading error: {}", err);
             }
         }
-    }
-
-    /// Save current depth buffer content to a PNG file.
-    fn save_depth_map(&mut self) {
-        let mut encoder = self
-            .gpu_ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture: &self.depth_attachment.raw,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &self.depth_attachment_storage,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: NonZeroU32::new(
-                        std::mem::size_of::<f32>() as u32 * self.gpu_ctx.surface_config.width,
-                    ),
-                    rows_per_image: NonZeroU32::new(self.gpu_ctx.surface_config.height),
-                },
-            },
-            wgpu::Extent3d {
-                width: self.gpu_ctx.surface_config.width,
-                height: self.gpu_ctx.surface_config.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.gpu_ctx.queue.submit(Some(encoder.finish()));
-
-        {
-            let buffer_slice = self.depth_attachment_storage.slice(..);
-
-            let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
-            self.gpu_ctx.device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async { mapping.await.unwrap() });
-
-            let buffer_view_f32 = buffer_slice.get_mapped_range();
-            let data_u8 = unsafe {
-                let (_, data, _) = buffer_view_f32.align_to::<f32>();
-                data.iter()
-                    .map(|d| (remap_depth(*d, 0.1, 100.0) * 255.0) as u8)
-                    .collect::<Vec<u8>>()
-            };
-
-            self.depth_attachment_image.copy_from_slice(&data_u8);
-            self.depth_attachment_image.save("depth_map.png").unwrap();
-        }
-        self.depth_attachment_storage.unmap();
     }
 
     /// Measure the geometric masking/shadowing function of a micro-surface.
@@ -594,7 +637,7 @@ impl VgonioApp {
             let writer = &mut BufWriter::new(file);
             writer.write_all("phi theta ratio\n".as_bytes()).unwrap();
 
-            self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
+            // self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
 
             for i in 0..NUM_AZIMUTH_BINS {
                 for j in 0..NUM_ZENITH_BINS {
