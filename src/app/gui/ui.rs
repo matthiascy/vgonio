@@ -1,12 +1,12 @@
 use super::analysis::AnalysisWorkspace;
 use super::simulation::SimulationWorkspace;
 use super::UserEvent;
+use crate::app::VgonioConfig;
 use epi::App;
 use glam::Mat4;
 use std::fmt::Write;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
-use crate::app::VgonioConfig;
 
 pub struct Workspaces {
     pub(crate) simulation: SimulationWorkspace,
@@ -14,9 +14,9 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
+    pub fn new(event_loop: Arc<EventLoopProxy<UserEvent>>) -> Self {
         Self {
-            simulation: SimulationWorkspace::new(evlp),
+            simulation: SimulationWorkspace::new(event_loop),
             analysis: AnalysisWorkspace {},
         }
     }
@@ -32,10 +32,11 @@ impl Workspaces {
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
+    /// The configuration of the application. See [`VgonioConfig`].
     config: VgonioConfig,
 
     /// Workspaces are essentially predefined window layouts for certain usage.
-    workspaces: Workspaces,
+    pub(crate) workspaces: Workspaces,
 
     /// Files dropped in the window area.
     dropped_files: Vec<egui::DroppedFile>,
@@ -44,16 +45,16 @@ pub struct VgonioGui {
     selected_workspace: String,
 
     /// Event loop proxy for sending user defined events.
-    evlp: Arc<EventLoopProxy<UserEvent>>,
+    event_loop: Arc<EventLoopProxy<UserEvent>>,
 }
 
 impl VgonioGui {
-    pub fn new(evlp: EventLoopProxy<UserEvent>, config: VgonioConfig) -> Self {
-        let evlp = Arc::new(evlp);
-        let workspaces = Workspaces::new(evlp.clone());
+    pub fn new(event_loop: EventLoopProxy<UserEvent>, config: VgonioConfig) -> Self {
+        let event_loop = Arc::new(event_loop);
+        let workspaces = Workspaces::new(event_loop.clone());
         Self {
             config,
-            evlp,
+            event_loop,
             workspaces,
             dropped_files: vec![],
             selected_workspace: "".to_string(),
@@ -197,10 +198,15 @@ impl VgonioGui {
                         }
                     });
                     if ui.button("\u{1F4C2} Open").clicked() {
-                        if let Some(filepath) =
-                            rfd::FileDialog::new().set_directory(&self.config.user_config.data_files_dir).pick_file()
+                        if let Some(filepath) = rfd::FileDialog::new()
+                            .set_directory(&self.config.user_config.data_files_dir)
+                            .pick_file()
                         {
-                            if self.evlp.send_event(UserEvent::OpenFile(filepath)).is_err() {
+                            if self
+                                .event_loop
+                                .send_event(UserEvent::OpenFile(filepath))
+                                .is_err()
+                            {
                                 log::warn!("[EVENT] Failed to send OpenFile event");
                             }
                         }
@@ -260,21 +266,6 @@ impl VgonioGui {
                 if ui.button("\u{2699} Preferences").clicked() {
                     println!("TODO: open preferences window");
                 }
-            });
-            ui.menu_button("View", |ui| {
-                ui.menu_button("     Tool Windows", |ui| {
-                    if ui.button("Heightfield Editor").clicked() {
-                        println!("TODO: height field editor");
-                    }
-                    if ui.button("BxDF Viewer").clicked() {
-                        println!("TODO: bxdf viewer");
-                    }
-                    if ui.button("Visual Debugger").clicked()
-                        && self.selected_workspace == self.workspaces.simulation.name()
-                    {
-                        self.workspaces.simulation.open_visual_debugger();
-                    }
-                });
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("\u{1F4DA} Docs").clicked() {

@@ -85,7 +85,6 @@ impl Range<f32> {
     }
 }
 
-
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
 pub enum RadiusDesc {
@@ -169,6 +168,44 @@ impl MeasurementDesc {
         let file = File::open(filepath)?;
         let reader = BufReader::new(file);
         serde_yaml::from_reader(reader).map_err(Error::from)
+    }
+}
+
+impl Default for MeasurementDesc {
+    fn default() -> Self {
+        Self {
+            length_unit: LengthUnit::Nanometres,
+            measurement_kind: MeasurementKind::Ndf,
+            incident_medium: Medium::Air,
+            transmitted_medium: Medium::Air,
+            surfaces: vec![],
+            emitter: EmitterDesc {
+                num_rays: 0,
+                max_bounces: 0,
+                radius: RadiusDesc::Auto,
+                partition: SphericalPartition::EqualArea {
+                    theta: (0.0, 0.0, 0),
+                    phi: Range::<f32> {
+                        start: 0.0,
+                        stop: 0.0,
+                        step: 0.0,
+                    },
+                },
+                spectrum: Default::default(),
+            },
+            collector: CollectorDesc {
+                radius: RadiusDesc::Auto,
+                shape: SphericalShape::UpperHemisphere,
+                partition: SphericalPartition::EqualArea {
+                    theta: (0.0, 0.0, 0),
+                    phi: Range::<f32> {
+                        start: 0.0,
+                        stop: 0.0,
+                        step: 0.0,
+                    },
+                },
+            },
+        }
     }
 }
 

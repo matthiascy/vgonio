@@ -10,23 +10,23 @@ use crate::gfx::{
 use camera::CameraState;
 
 use crate::acq::{MicroSurfaceView, OcclusionEstimationPass};
+use crate::app::VgonioConfig;
 use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::Heightfield;
-use crate::math::IDENTITY_MAT4;
 use epi::App;
 use glam::{Mat4, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroU32;
+use std::path::PathBuf;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
 use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
-use crate::app::VgonioConfig;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -54,12 +54,14 @@ pub struct VgonioApp {
     heightfield: Option<Box<Heightfield>>,
     heightfield_mesh_view: Option<MeshView>,
     heightfield_micro_view: Option<MicroSurfaceView>,
-    heightfield_scale_factor: f32,
+    surface_scale_factor: f32,
+
+    opened_surfaces: Vec<PathBuf>,
 
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
-    pub demo_ui: egui_demo_lib::WrapApp,
+    //pub demo_ui: egui_demo_lib::WrapApp,
     pub is_grid_enabled: bool,
 }
 
@@ -119,7 +121,7 @@ impl VgonioApp {
         );
 
         let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
-        let ui = egui_demo_lib::WrapApp::default();
+        //let ui = egui_demo_lib::WrapApp::default();
         let gui = VgonioGui::new(event_loop, config);
 
         let input = InputState {
@@ -149,9 +151,10 @@ impl VgonioApp {
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
-            demo_ui: ui,
+            // demo_ui: ui,
             is_grid_enabled: true,
-            heightfield_scale_factor: 1.0
+            surface_scale_factor: 1.0,
+            opened_surfaces: vec![]
         })
     }
 
@@ -281,14 +284,22 @@ impl VgonioApp {
         if let Some(hf) = &self.heightfield {
             let mut uniform = [0.0f32; 16 * 3 + 4];
             // Displace visually the heightfield.
-            uniform[0..16].copy_from_slice(&Mat4::from_translation(Vec3::new(
-                0.0,
-                -(hf.max + hf.min) * 0.5 * self.heightfield_scale_factor,
-                0.0,
-            )).to_cols_array());
+            uniform[0..16].copy_from_slice(
+                &Mat4::from_translation(Vec3::new(
+                    0.0,
+                    -(hf.max + hf.min) * 0.5 * self.surface_scale_factor,
+                    0.0,
+                ))
+                .to_cols_array(),
+            );
             uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
             uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
-            uniform[48..52].copy_from_slice(&[hf.min, hf.max, hf.max - hf.min, self.heightfield_scale_factor]);
+            uniform[48..52].copy_from_slice(&[
+                hf.min,
+                hf.max,
+                hf.max - hf.min,
+                self.surface_scale_factor,
+            ]);
             self.gpu_ctx.queue.write_buffer(
                 self.passes
                     .get("heightfield")
@@ -392,7 +403,7 @@ impl VgonioApp {
                 output: egui_output,
                 repaint_signal,
             });
-            self.demo_ui.update(self.gui_ctx.egui_context(), &ui_frame);
+            //self.demo_ui.update(self.gui_ctx.egui_context(), &ui_frame);
             self.gui.update(self.gui_ctx.egui_context(), &ui_frame);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
 
@@ -437,7 +448,13 @@ impl VgonioApp {
     pub fn handle_user_event(&mut self, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {}
-            UserEvent::OpenFile(path) => self.load_height_field(path.as_path()),
+            UserEvent::OpenFile(path) => {
+                self.load_height_field(path.as_path());
+                if !self.opened_surfaces.contains(&path) {
+                    self.opened_surfaces.push(path);
+                }
+                self.gui.workspaces.simulation.update_surface_list(&self.opened_surfaces);
+            },
             UserEvent::ToggleGrid => {
                 self.is_grid_enabled = !self.is_grid_enabled;
             }
@@ -446,7 +463,7 @@ impl VgonioApp {
                 self.save_depth_map();
             }
             UserEvent::UpdateScaleFactor(factor) => {
-                self.heightfield_scale_factor = factor;
+                self.surface_scale_factor = factor;
             }
         }
     }

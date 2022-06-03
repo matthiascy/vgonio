@@ -360,7 +360,8 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    let mut vgonio = pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
+    let mut vgonio =
+        pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
     let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
         event_loop.create_proxy(),
     )));

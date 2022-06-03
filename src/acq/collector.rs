@@ -1,7 +1,7 @@
-use glam::Vec3;
 use crate::acq::desc::{CollectorDesc, RadiusDesc};
 use crate::acq::ray::Ray;
 use crate::acq::util::{SphericalPartition, SphericalShape};
+use glam::Vec3;
 
 /// The virtual goniophotometer's detectors represented by the patches
 /// of a sphere (or an hemisphere) positioned around the specimen.

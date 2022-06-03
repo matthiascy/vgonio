@@ -78,9 +78,11 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 // //     const N_BOUNCE: usize,
 // // >
 // // Vec<Stats<PatchData, N_PATCH, N_BOUNCE>>
-pub fn measure_in_plane_brdf_embree(desc: &MeasurementDesc, ior_db: &RefractiveIndexDatabase,
-                                    surfaces: &[Heightfield])
-{
+pub fn measure_in_plane_brdf_embree(
+    desc: &MeasurementDesc,
+    ior_db: &RefractiveIndexDatabase,
+    surfaces: &[Heightfield],
+) {
     let collector: Collector = desc.collector.into();
     let emitter: Emitter = desc.emitter.into();
     log::debug!("Emitter generated {} patches.", emitter.patches.len());
@@ -104,13 +106,21 @@ pub fn measure_in_plane_brdf_embree(desc: &MeasurementDesc, ior_db: &RefractiveI
 
         for wavelength in spectrum_samples {
             println!("Capturing with wavelength = {}", wavelength);
-            let ior_t = ior_db.refractive_index_of(desc.transmitted_medium, wavelength).unwrap();
+            let ior_t = ior_db
+                .refractive_index_of(desc.transmitted_medium, wavelength)
+                .unwrap();
 
             // For all incident angles; generate samples on each patch
             for (i, patch) in emitter.patches.iter().enumerate() {
                 // Emit rays from the patch of the emitter. Uniform sampling over the patch.
                 let rays = patch.emit_rays(desc.emitter.num_rays, radius);
-                log::debug!("Emitted {} rays from patch {} - {:?}: {:?}", rays.len(), i, patch, rays);
+                log::debug!(
+                    "Emitted {} rays from patch {} - {:?}: {:?}",
+                    rays.len(),
+                    i,
+                    patch,
+                    rays
+                );
 
                 // Populate Embree ray stream with generated rays.
                 let mut ray_stream = embree::RayN::new(rays.len());
@@ -121,7 +131,8 @@ pub fn measure_in_plane_brdf_embree(desc: &MeasurementDesc, ior_db: &RefractiveI
 
                 // Trace primary rays with coherent context.
                 let mut coherent_ctx = embree::IntersectContext::coherent();
-                let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
+                let ray_hit =
+                    embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
 
                 // Filter out primary rays that hit the surface.
                 let filtered = ray_hit
@@ -155,9 +166,11 @@ pub fn measure_in_plane_brdf_embree(desc: &MeasurementDesc, ior_db: &RefractiveI
     }
 }
 
-pub fn measure_in_plane_brdf_grid(desc: &MeasurementDesc, ior_db: &RefractiveIndexDatabase,
-                                  surfaces: &[Heightfield])
-{
+pub fn measure_in_plane_brdf_grid(
+    desc: &MeasurementDesc,
+    ior_db: &RefractiveIndexDatabase,
+    surfaces: &[Heightfield],
+) {
     let collector: Collector = desc.collector.into();
     let emitter: Emitter = desc.emitter.into();
     log::debug!("Emitter generated {} patches.", emitter.patches.len());
@@ -172,7 +185,12 @@ pub fn measure_in_plane_brdf_grid(desc: &MeasurementDesc, ior_db: &RefractiveInd
         let surface_id = embree_rt.attach_geometry(scene_id, surface_mesh);
         let spectrum_samples = SpectrumSampler::from(desc.emitter.spectrum).samples();
         let grid_rt = GridRayTracing::new(surface, &triangulated);
-        log::debug!("Grid - min: {}, max: {} | origin: {:?}", grid_rt.min, grid_rt.max, grid_rt.origin);
+        log::debug!(
+            "Grid - min: {}, max: {} | origin: {:?}",
+            grid_rt.min,
+            grid_rt.max,
+            grid_rt.origin
+        );
         // let ior_i = ior_db
         //     .ior_of_spectrum(desc.incident_medium, &spectrum_samples)
         //     .unwrap();
@@ -182,13 +200,21 @@ pub fn measure_in_plane_brdf_grid(desc: &MeasurementDesc, ior_db: &RefractiveInd
 
         for wavelength in spectrum_samples {
             println!("Capturing with wavelength = {}", wavelength);
-            let ior_t = ior_db.refractive_index_of(desc.transmitted_medium, wavelength).unwrap();
+            let ior_t = ior_db
+                .refractive_index_of(desc.transmitted_medium, wavelength)
+                .unwrap();
 
             // For all incident angles; generate samples on each patch
             for (i, patch) in emitter.patches.iter().enumerate() {
                 // Emit rays from the patch of the emitter. Uniform sampling over the patch.
                 let rays = patch.emit_rays(desc.emitter.num_rays, radius);
-                log::debug!("Emitted {} rays from patch {} - {:?}: {:?}", rays.len(), i, patch, rays);
+                log::debug!(
+                    "Emitted {} rays from patch {} - {:?}: {:?}",
+                    rays.len(),
+                    i,
+                    patch,
+                    rays
+                );
 
                 // Populate Embree ray stream with generated rays.
                 let mut ray_stream = embree::RayN::new(rays.len());
@@ -199,7 +225,8 @@ pub fn measure_in_plane_brdf_grid(desc: &MeasurementDesc, ior_db: &RefractiveInd
 
                 // Trace primary rays with coherent context.
                 let mut coherent_ctx = embree::IntersectContext::coherent();
-                let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
+                let ray_hit =
+                    embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
 
                 // Filter out primary rays that hit the surface.
                 let filtered = ray_hit

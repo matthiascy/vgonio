@@ -1,8 +1,6 @@
-use crate::htfld::Heightfield;
+use crate::mesh;
 use embree::{Config, Device, Geometry, IntersectContext, RayHitN, RayN, Scene, TriangleMesh};
 use std::sync::Arc;
-use crate::acq::ray::Ray;
-use crate::mesh;
 
 pub struct EmbreeRayTracing {
     device: Arc<Device>,
@@ -40,7 +38,8 @@ impl EmbreeRayTracing {
     }
 
     pub fn create_triangle_mesh(&self, mesh: &mesh::TriangleMesh) -> Arc<TriangleMesh> {
-        let mut embree_mesh = TriangleMesh::unanimated(self.device.clone(), mesh.num_tris, mesh.num_verts);
+        let mut embree_mesh =
+            TriangleMesh::unanimated(self.device.clone(), mesh.num_tris, mesh.num_verts);
         {
             let mesh_ref_mut = Arc::get_mut(&mut embree_mesh).unwrap();
             {

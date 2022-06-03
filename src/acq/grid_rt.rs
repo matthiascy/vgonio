@@ -2,7 +2,7 @@ use crate::acq::bxdf::IntersectRecord;
 use crate::acq::ray::{Ray, RayTraceRecord, Scattering};
 use crate::htfld::{AxisAlignment, Heightfield};
 use crate::isect::isect_ray_tri;
-use crate::mesh::{TriangleMesh};
+use crate::mesh::TriangleMesh;
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
 /// Helper structure for grid ray tracing.
@@ -52,16 +52,16 @@ impl<'a> GridRayTracing<'a> {
     }
 
     pub fn trace_ray(&self, ray: Ray) -> Option<IntersectRecord> {
-        let starting_point =
-        if !self.inside(self.world_to_grid(ray.o)) {
+        let starting_point = if !self.inside(self.world_to_grid(ray.o)) {
             // If the ray origin is outside the grid, first check if it intersects
             // with the surface bounding box.
             self.mesh
                 .extent
-                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY).map(|isect_point| {
-                log::debug!("Ray origin outside the grid, intersecting with the bounding box.");
-                isect_point - ray.d * 0.01
-            })
+                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+                .map(|isect_point| {
+                    log::debug!("Ray origin outside the grid, intersecting with the bounding box.");
+                    isect_point - ray.d * 0.01
+                })
         } else {
             // If the ray origin is inside the grid, use the ray origin.
             Some(ray.o)
@@ -82,9 +82,16 @@ impl<'a> GridRayTracing<'a> {
 
             // Iterate over the traversed cells and find the closest intersection.
             for (i, cell) in traversed.iter().enumerate().filter(|(_, cell)| {
-                cell.x >= self.min.x - 1 && cell.y >= self.min.y - 1 && cell.x <= self.max.x && cell.y <= self.max.y
+                cell.x >= self.min.x - 1
+                    && cell.y >= self.min.y - 1
+                    && cell.x <= self.max.x
+                    && cell.y <= self.max.y
             }) {
-                if cell.x == self.min.x - 1 || cell.y == self.min.y - 1 || cell.x == self.max.x || cell.y == self.max.y {
+                if cell.x == self.min.x - 1
+                    || cell.y == self.min.y - 1
+                    || cell.x == self.max.x
+                    || cell.y == self.max.y
+                {
                     // Skip the cell outside the grid, since it is the starting point.
                     continue;
                 }

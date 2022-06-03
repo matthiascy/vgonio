@@ -43,8 +43,11 @@ impl RefractiveIndexDatabase {
     /// (in nanometres).
     pub fn refractive_index_of(&self, medium: Medium, wavelength: f32) -> Option<RefractiveIndex> {
         let refractive_indices = self.0.get(&medium).expect("unknown medium");
-        // Search for the position of the first wavelength equal or greater than the given one in refractive indices.
-        let i = refractive_indices.iter().position(|ior| ior.wavelength >= wavelength)
+        // Search for the position of the first wavelength equal or greater than the
+        // given one in refractive indices.
+        let i = refractive_indices
+            .iter()
+            .position(|ior| ior.wavelength >= wavelength)
             .unwrap();
         let ior_after = refractive_indices[i];
 
@@ -53,10 +56,15 @@ impl RefractiveIndexDatabase {
             Some(ior_after)
         } else {
             // Otherwise, interpolate between the two closest refractive indices.
-            let ior_before = if i == 0 { refractive_indices[0] } else { refractive_indices[i - 1] };
+            let ior_before = if i == 0 {
+                refractive_indices[0]
+            } else {
+                refractive_indices[i - 1]
+            };
             let diff_eta = ior_after.eta - ior_before.eta;
             let diff_k = ior_after.k - ior_before.k;
-            let t = (wavelength - ior_before.wavelength) / (ior_after.wavelength - ior_before.wavelength);
+            let t = (wavelength - ior_before.wavelength)
+                / (ior_after.wavelength - ior_before.wavelength);
             Some(RefractiveIndex {
                 wavelength,
                 eta: ior_before.eta + t * diff_eta,
