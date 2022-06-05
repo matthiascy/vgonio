@@ -1,12 +1,18 @@
 use super::analysis::AnalysisWorkspace;
 use super::simulation::SimulationWorkspace;
 use super::UserEvent;
+use crate::app::gui::GuiContext;
 use crate::app::VgonioConfig;
-use epi::App;
 use glam::Mat4;
 use std::fmt::Write;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
+
+pub trait Workspace {
+    fn name(&self) -> &str;
+
+    fn show(&mut self, ctx: &egui::Context);
+}
 
 pub struct Workspaces {
     pub(crate) simulation: SimulationWorkspace,
@@ -21,10 +27,10 @@ impl Workspaces {
         }
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut dyn epi::App)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut dyn Workspace)> {
         vec![
-            ("Simulation", &mut self.simulation as &mut dyn epi::App),
-            ("Analysis", &mut self.analysis as &mut dyn epi::App),
+            ("Simulation", &mut self.simulation as &mut dyn Workspace),
+            ("Analysis", &mut self.analysis as &mut dyn Workspace),
         ]
         .into_iter()
     }
@@ -72,17 +78,16 @@ impl VgonioGui {
     pub fn current_workspace_name(&self) -> &str {
         &self.selected_workspace
     }
-}
 
-impl epi::App for VgonioGui {
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    pub fn show(&mut self, ctx: &GuiContext) {
+        let ctx = &ctx.egui_context();
         if self.selected_workspace.is_empty() {
             self.selected_workspace = self.workspaces.iter_mut().next().unwrap().0.to_owned();
         }
 
         egui::TopBottomPanel::top("vgonio_menu_bar").show(ctx, |ui| {
             egui::trace!(ui);
-            self.menu_bar_contents(ui, frame);
+            self.menu_bar_contents(ui);
         });
 
         // egui::SidePanel::right("vgonio_right_panel").show(ctx, |ui| {
@@ -95,7 +100,7 @@ impl epi::App for VgonioGui {
 
         for (ws_name, ws) in self.workspaces.iter_mut() {
             if ws_name == self.selected_workspace || ctx.memory().everything_is_visible() {
-                ws.update(ctx, frame);
+                ws.show(ctx);
             }
         }
 
@@ -112,14 +117,6 @@ impl epi::App for VgonioGui {
         //         ui.label("Frame!");
         //     });
         // });
-    }
-
-    fn name(&self) -> &str {
-        "vgonio"
-    }
-
-    fn clear_color(&self) -> egui::Rgba {
-        egui::Rgba::TRANSPARENT
     }
 }
 
@@ -185,7 +182,7 @@ impl VgonioGui {
         }
     }
 
-    fn menu_bar_contents(&mut self, ui: &mut egui::Ui, frame: &epi::Frame) {
+    fn menu_bar_contents(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("File", |ui| {
                 {
@@ -247,8 +244,10 @@ impl VgonioGui {
 
                 ui.separator();
 
-                if ui.button("     Quit").clicked() {
-                    frame.quit()
+                if ui.button("     Quit").clicked()
+                    && self.event_loop.send_event(UserEvent::Quit).is_err()
+                {
+                    log::warn!("[EVENT] Failed to send Quit event.");
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -283,9 +282,7 @@ impl VgonioGui {
                     .clicked()
                 {
                     self.selected_workspace = ws_name.to_owned();
-                    if frame.is_web() {
-                        ui.output().open_url(format!("#{}", ws_name));
-                    }
+                    ui.output().open_url(format!("#{}", ws_name));
                 }
             }
         });

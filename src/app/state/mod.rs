@@ -3,7 +3,7 @@ mod input;
 
 pub use input::InputState;
 
-use crate::app::gui::{GuiContext, RepaintSignal, UserEvent, VgonioGui, WindowSize};
+use crate::app::gui::{GuiContext, UserEvent, VgonioGui, WindowSize};
 use crate::gfx::{
     GpuContext, MeshView, RdrPass, ShadowPass, Texture, DEFAULT_BIND_GROUP_LAYOUT_DESC,
 };
@@ -14,7 +14,6 @@ use crate::app::VgonioConfig;
 use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::Heightfield;
-use epi::App;
 use glam::{Mat4, Vec3};
 use std::collections::HashMap;
 use std::default::Default;
@@ -23,7 +22,7 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use wgpu::util::DeviceExt;
-use wgpu::{TextureFormat, VertexFormat, VertexStepMode};
+use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
@@ -62,24 +61,6 @@ impl DepthMap {
             mapped_at_creation: false,
         });
 
-        let depth_texture = Texture::new(
-            &ctx.device,
-            &wgpu::TextureDescriptor {
-                label: None,
-                size: wgpu::Extent3d {
-                    width: ctx.surface_config.width,
-                    height: ctx.surface_config.height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::COPY_DST,
-            },
-            None,
-        );
-
         Self {
             depth_attachment,
             depth_attachment_storage,
@@ -106,8 +87,7 @@ impl DepthMap {
         self.depth_attachment_storage = ctx.device.create_buffer(&depth_map_buffer_desc);
     }
 
-    /// Save current depth buffer content to a PNG file.
-    pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path) {
+    pub fn copy_to_buffer(&mut self, ctx: &GpuContext) {
         let mut encoder = ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -137,7 +117,10 @@ impl DepthMap {
             },
         );
         ctx.queue.submit(Some(encoder.finish()));
+    }
 
+    /// Save current depth buffer content to a PNG file.
+    pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path) {
         let mut image = image::GrayImage::new(ctx.surface_config.width, ctx.surface_config.height);
         {
             let buffer_slice = self.depth_attachment_storage.slice(..);
@@ -184,7 +167,7 @@ pub struct VgonioApp {
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
-    //pub demo_ui: egui_demo_lib::WrapApp,
+    // pub demo_ui: egui_demo_lib::DemoWindows,
     pub is_grid_enabled: bool,
 }
 
@@ -225,8 +208,7 @@ impl VgonioApp {
         //     true,
         // );
 
-        let mut gui_ctx =
-            GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
+        let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
 
         //let ui = egui_demo_lib::WrapApp::default();
         let gui = VgonioGui::new(event_loop, config);
@@ -407,11 +389,7 @@ impl VgonioApp {
         self.input.cursor_delta = [0.0, 0.0];
     }
 
-    pub fn render(
-        &mut self,
-        window: &winit::window::Window,
-        repaint_signal: std::sync::Arc<RepaintSignal>,
-    ) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, window: &winit::window::Window) -> Result<(), wgpu::SurfaceError> {
         let output_frame = self.gpu_ctx.surface.get_current_texture()?;
         let output_view = output_frame
             .texture
@@ -479,38 +457,22 @@ impl VgonioApp {
         {
             // Record UI
             let ui_start_time = Instant::now();
-            let input = self.gui_ctx.egui_state_mut().take_egui_input(window);
-
-            self.gui_ctx.egui_context_mut().begin_frame(input);
-            let egui_output = epi::backend::AppOutput::default();
-            let ui_frame = epi::Frame::new(epi::backend::FrameData {
-                info: epi::IntegrationInfo {
-                    name: "vgonio-gui",
-                    web_info: None,
-                    prefer_dark_mode: None,
-                    cpu_usage: self.prev_frame_time,
-                    native_pixels_per_point: Some(window.scale_factor() as f32),
-                },
-                output: egui_output,
-                repaint_signal,
-            });
-            //self.demo_ui.update(self.gui_ctx.egui_context(), &ui_frame);
-            self.gui.update(self.gui_ctx.egui_context(), &ui_frame);
+            self.gui_ctx.take_input(window);
+            self.gui_ctx.begin_frame();
+            // self.demo_ui.ui(self.gui_ctx.egui_context());
+            self.gui.show(&self.gui_ctx);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
-
             let meshes = self
                 .gui_ctx
                 .egui_context()
                 .tessellate(ui_output_frame.shapes);
             let frame_time = (Instant::now() - ui_start_time).as_secs_f64() as f32;
             self.prev_frame_time = Some(frame_time);
-
             let win_size = WindowSize {
                 physical_width: self.gpu_ctx.surface_config.width,
                 physical_height: self.gpu_ctx.surface_config.height,
                 scale_factor: window.scale_factor() as f32,
             };
-
             self.gui_ctx
                 .update_textures(
                     &self.gpu_ctx.device,
@@ -530,6 +492,8 @@ impl VgonioApp {
         }
 
         self.gpu_ctx.queue.submit(encoders.map(|enc| enc.finish()));
+
+        self.depth_map.copy_to_buffer(&self.gpu_ctx);
 
         output_frame.present();
 
@@ -552,14 +516,19 @@ impl VgonioApp {
             UserEvent::ToggleGrid => {
                 self.is_grid_enabled = !self.is_grid_enabled;
             }
-            UserEvent::SaveDepthMap => {
-                log::info!("Saving depth map!");
-                self.depth_map
-                    .save_to_image(&self.gpu_ctx, Path::new(&"depth_map.png"));
+            UserEvent::UpdateDepthMap => {
+                self.depth_map.copy_to_buffer(&self.gpu_ctx);
+                self.gui
+                    .workspaces
+                    .simulation
+                    .visual_debug_tool
+                    .shadow_map_pane
+                    .update_depth_map(&self.gpu_ctx, &self.depth_map.depth_attachment_storage);
             }
-            UserEvent::UpdateScaleFactor(factor) => {
+            UserEvent::UpdateSurfaceScaleFactor(factor) => {
                 self.surface_scale_factor = factor;
             }
+            _ => {}
         }
     }
 

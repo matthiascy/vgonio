@@ -20,11 +20,10 @@ byteorder = "1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.8"
 serde_json = "1.0"
-egui = { version = "0.17", features = ["convert_bytemuck"]}
-epi = "0.17"
-egui_demo_lib = "0.17"
-egui-winit = "0.17"
-egui-gizmo = "0.6"
+egui = { version = "0.18", features = ["bytemuck"] }
+egui_demo_lib = "0.18"
+egui-winit = "0.18"
+egui-gizmo = "0.7"
 rfd = "0.8"
 rayon = "1.5"
 chrono = "0.4"

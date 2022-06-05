@@ -2,7 +2,6 @@ use crate::acq::bxdf::BxdfKind;
 use crate::acq::desc::{MeasurementDesc, MeasurementKind};
 use crate::acq::ior::RefractiveIndexDatabase;
 use crate::acq::resolve_file_path;
-use crate::app::gui::RepaintSignal;
 use crate::error::Error;
 use crate::htfld::{AxisAlignment, Heightfield};
 use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
@@ -362,9 +361,6 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
 
     let mut vgonio =
         pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
-    let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
-        event_loop.create_proxy(),
-    )));
 
     let mut last_frame_time = std::time::Instant::now();
 
@@ -374,6 +370,9 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         last_frame_time = now;
 
         match event {
+            Event::UserEvent(UserEvent::Quit) => {
+                *control_flow = ControlFlow::Exit;
+            }
             Event::UserEvent(event) => vgonio.handle_user_event(event),
             Event::WindowEvent {
                 window_id,
@@ -396,7 +395,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
 
             Event::RedrawRequested(window_id) if window_id == window.id() => {
                 vgonio.update(dt);
-                match vgonio.render(&window, repaint_signal.clone()) {
+                match vgonio.render(&window) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => vgonio.resize(PhysicalSize {

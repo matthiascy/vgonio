@@ -3,20 +3,24 @@ use crate::acq::desc::{MeasurementDesc, MeasurementKind};
 use crate::acq::util::SphericalShape;
 use crate::acq::Medium;
 use crate::app::gui::gizmo::VgonioGizmo;
-use crate::app::gui::{UserEvent, VisualDebugger};
+use crate::app::gui::ui::Workspace;
+use crate::app::gui::{UserEvent, VisualDebugTool};
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
-use std::fmt::{write, Display, Formatter};
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
+/// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum RadiusMode {
     Fixed,
     Auto,
 }
 
+/// Helper enum used in GUI to specify the spherical partition mode of the
+/// emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum PartitionMode {
     Area,
@@ -38,6 +42,8 @@ impl Display for PartitionMode {
     }
 }
 
+/// Helper struct used in GUI to specify the spherical partition parameters of
+/// the emitter/detector.
 #[derive(Debug, Copy, Clone)]
 struct Partition {
     mode: PartitionMode,
@@ -45,7 +51,8 @@ struct Partition {
     azimuth: (f32, f32, f32),
 }
 
-struct SimulationPane {
+/// A panel for configuration of the simulation parameters.
+struct SimulationPanel {
     /// Measurement description.
     measurement_desc: MeasurementDesc,
 
@@ -69,9 +76,13 @@ struct SimulationPane {
 
     /// Collector partition.
     collector_partition: Partition,
+
+    simulation_started: bool,
+
+    simulation_progress: f32,
 }
 
-impl SimulationPane {
+impl SimulationPanel {
     pub fn new() -> Self {
         Self {
             measurement_desc: MeasurementDesc::default(),
@@ -90,11 +101,13 @@ impl SimulationPane {
                 zenith: (0.0, 0.0, 0.0),
                 azimuth: (0.0, 0.0, 0.0),
             },
+            simulation_started: false,
+            simulation_progress: 0.0,
         }
     }
 
     pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
-        egui::Window::new("Simulation Pane")
+        egui::Window::new("Simulation Panel")
             .open(open)
             .title_bar(true)
             .collapsible(true)
@@ -415,14 +428,22 @@ impl SimulationPane {
             });
 
         ui.separator();
-        ui.centered_and_justified(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("Simulate").clicked() {
+                self.simulation_started = true;
                 println!("TODO: Simulating");
             }
+
+            ui.add(
+                egui::ProgressBar::new(self.simulation_progress)
+                    .show_percentage()
+                    .animate(self.simulation_started),
+            );
         });
     }
 }
 
+/// Workspace for the measurement.
 pub struct SimulationWorkspace {
     view_gizmo_opened: bool,
 
@@ -437,10 +458,10 @@ pub struct SimulationWorkspace {
     view_gizmo: VgonioGizmo,
 
     /// The visual debugger.
-    visual_debugger: VisualDebugger,
+    pub(crate) visual_debug_tool: VisualDebugTool,
 
     /// The simulation parameters.
-    simulation_pane: SimulationPane,
+    pub(crate) simulation_panel: SimulationPanel,
 
     /// The scale factor of loaded micro-surface in the scene.
     surface_scale_factor: f32,
@@ -449,18 +470,18 @@ pub struct SimulationWorkspace {
     event_loop: Arc<EventLoopProxy<UserEvent>>,
 }
 
-impl epi::App for SimulationWorkspace {
-    fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
-        self.ui(ctx);
-        self.view_gizmo.show(ctx, &mut self.view_gizmo_opened);
-        self.visual_debugger
-            .show(ctx, &mut self.visual_debugger_opened);
-        self.simulation_pane
-            .show(ctx, &mut self.simulation_pane_opened);
-    }
-
+impl Workspace for SimulationWorkspace {
     fn name(&self) -> &str {
         "Simulation"
+    }
+
+    fn show(&mut self, ctx: &egui::Context) {
+        self.ui(ctx);
+        self.view_gizmo.show(ctx, &mut self.view_gizmo_opened);
+        self.visual_debug_tool
+            .show(ctx, &mut self.visual_debugger_opened);
+        self.simulation_panel
+            .show(ctx, &mut self.simulation_pane_opened);
     }
 }
 
@@ -471,8 +492,8 @@ impl SimulationWorkspace {
             visual_debugger_opened: false,
             simulation_pane_opened: false,
             view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
-            visual_debugger: VisualDebugger::new(event_loop.clone()),
-            simulation_pane: SimulationPane::new(),
+            visual_debug_tool: VisualDebugTool::new(event_loop.clone()),
+            simulation_panel: SimulationPanel::new(),
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             event_loop,
@@ -483,12 +504,12 @@ impl SimulationWorkspace {
         if !list.is_empty() {
             for surface in list {
                 if !self
-                    .simulation_pane
+                    .simulation_panel
                     .measurement_desc
                     .surfaces
                     .contains(surface)
                 {
-                    self.simulation_pane
+                    self.simulation_panel
                         .measurement_desc
                         .surfaces
                         .push(surface.clone());
@@ -519,7 +540,7 @@ impl SimulationWorkspace {
                             if res.changed()
                                 && self
                                     .event_loop
-                                    .send_event(UserEvent::UpdateScaleFactor(
+                                    .send_event(UserEvent::UpdateSurfaceScaleFactor(
                                         self.surface_scale_factor,
                                     ))
                                     .is_err()

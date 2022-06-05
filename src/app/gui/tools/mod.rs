@@ -1,3 +1,3 @@
-mod visual_debugger;
+mod visual_debug;
 
-pub use visual_debugger::*;
+pub use visual_debug::*;
