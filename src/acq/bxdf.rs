@@ -5,7 +5,7 @@ use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
 use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
 use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::Heightfield;
-use crate::mesh::{TriangulationMethod};
+use crate::mesh::TriangulationMethod;
 use embree::{Config, RayHit, SoARay};
 use glam::Vec3;
 

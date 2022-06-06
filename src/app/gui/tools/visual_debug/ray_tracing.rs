@@ -1,28 +1,23 @@
 use crate::acq::ray::Ray;
-use glam::Vec3;
+use crate::acq::tracing::RayTracingMethod;
 use crate::app::gui::widgets::input3;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RayTracingMethod {
-    Standard,
-    Grid,
-    Hybrid,
-}
+use crate::app::gui::VgonioEvent;
+use glam::Vec3;
+use std::sync::Arc;
+use winit::event_loop::EventLoopProxy;
 
 pub(crate) struct RayTracingPane {
     ray: Ray,
     method: RayTracingMethod,
+    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
 }
 
-impl Default for RayTracingPane {
-    fn default() -> Self {
+impl RayTracingPane {
+    pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
-            ray: Ray {
-                o: Vec3::ZERO,
-                d: Vec3::ZERO,
-                e: 1.0,
-            },
+            ray: Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0)),
             method: RayTracingMethod::Standard,
+            event_loop,
         }
     }
 }
@@ -58,7 +53,17 @@ impl egui::Widget for &mut RayTracingPane {
 
         ui.horizontal(|ui| {
             if ui.button("Trace").clicked() {
-                println!("Tracing ray");
+                let event = VgonioEvent::TraceRayDbg {
+                    ray: Ray {
+                        o: self.ray.o,
+                        d: self.ray.d.normalize(),
+                        e: self.ray.e,
+                    },
+                    method: self.method,
+                };
+                if self.event_loop.send_event(event).is_err() {
+                    log::warn!("Failed to send VgonioEvent::TraceRayDbg");
+                }
             }
 
             if ui.button("Step").clicked() {

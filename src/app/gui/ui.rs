@@ -1,6 +1,6 @@
 use super::analysis::AnalysisWorkspace;
 use super::simulation::SimulationWorkspace;
-use super::UserEvent;
+use super::VgonioEvent;
 use crate::app::gui::GuiContext;
 use crate::app::VgonioConfig;
 use glam::Mat4;
@@ -20,7 +20,7 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(event_loop: Arc<EventLoopProxy<UserEvent>>) -> Self {
+    pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
             simulation: SimulationWorkspace::new(event_loop),
             analysis: AnalysisWorkspace {},
@@ -51,11 +51,11 @@ pub struct VgonioGui {
     selected_workspace: String,
 
     /// Event loop proxy for sending user defined events.
-    event_loop: Arc<EventLoopProxy<UserEvent>>,
+    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
 }
 
 impl VgonioGui {
-    pub fn new(event_loop: EventLoopProxy<UserEvent>, config: VgonioConfig) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, config: VgonioConfig) -> Self {
         let event_loop = Arc::new(event_loop);
         let workspaces = Workspaces::new(event_loop.clone());
         Self {
@@ -201,7 +201,7 @@ impl VgonioGui {
                         {
                             if self
                                 .event_loop
-                                .send_event(UserEvent::OpenFile(filepath))
+                                .send_event(VgonioEvent::OpenFile(filepath))
                                 .is_err()
                             {
                                 log::warn!("[EVENT] Failed to send OpenFile event");
@@ -245,7 +245,7 @@ impl VgonioGui {
                 ui.separator();
 
                 if ui.button("     Quit").clicked()
-                    && self.event_loop.send_event(UserEvent::Quit).is_err()
+                    && self.event_loop.send_event(VgonioEvent::Quit).is_err()
                 {
                     log::warn!("[EVENT] Failed to send Quit event.");
                 }

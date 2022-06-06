@@ -1,4 +1,4 @@
-use crate::app::gui::UserEvent;
+use crate::app::gui::VgonioEvent;
 use crate::app::state::remap_depth;
 use crate::gfx::GpuContext;
 use std::sync::Arc;
@@ -9,14 +9,14 @@ const IMG_HEIGHT: usize = 270;
 
 pub(crate) struct ShadowMapPane {
     /// The event loop proxy used to send events to the main event loop.
-    evlp: Arc<EventLoopProxy<UserEvent>>,
+    evlp: Arc<EventLoopProxy<VgonioEvent>>,
     depth_map_image: image::RgbaImage,
     depth_map_handle: Option<egui::TextureHandle>,
     depth_map_updated: bool,
 }
 
 impl ShadowMapPane {
-    pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
+    pub fn new(evlp: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
             evlp,
             depth_map_handle: None,
@@ -61,7 +61,7 @@ impl ShadowMapPane {
 impl egui::Widget for &mut ShadowMapPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         if ui.button("Update").clicked() {
-            self.evlp.send_event(UserEvent::UpdateDepthMap).unwrap();
+            self.evlp.send_event(VgonioEvent::UpdateDepthMap).unwrap();
         }
 
         if self.depth_map_updated {

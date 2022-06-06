@@ -1,10 +1,11 @@
-use crate::app::gui::UserEvent;
+use crate::app::gui::VgonioEvent;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 mod ray_tracing;
 mod shadow_map;
 
+use crate::app::gui::widgets::{toggle, toggle_ui};
 use ray_tracing::RayTracingPane;
 use shadow_map::ShadowMapPane;
 
@@ -24,21 +25,25 @@ impl Default for PaneKind {
 // TODO: adaptive image size
 pub(crate) struct VisualDebugTool {
     opened: PaneKind,
+    debug_drawing_enabled: bool,
+    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
     pub(crate) shadow_map_pane: ShadowMapPane,
     pub(crate) ray_tracing_pane: RayTracingPane,
 }
 
 impl VisualDebugTool {
-    pub fn new(evlp: Arc<EventLoopProxy<UserEvent>>) -> Self {
+    pub fn new(evlp: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
             opened: Default::default(),
-            shadow_map_pane: ShadowMapPane::new(evlp),
-            ray_tracing_pane: RayTracingPane::default(),
+            debug_drawing_enabled: true,
+            event_loop: evlp.clone(),
+            shadow_map_pane: ShadowMapPane::new(evlp.clone()),
+            ray_tracing_pane: RayTracingPane::new(evlp),
         }
     }
 
     pub const fn name(&self) -> &'static str {
-        "Visual Debugger"
+        "Visual Debug"
     }
 
     pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
@@ -49,6 +54,18 @@ impl VisualDebugTool {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Debug Draw");
+            if toggle_ui(ui, &mut self.debug_drawing_enabled).changed()
+                && self
+                    .event_loop
+                    .send_event(VgonioEvent::ToggleDebugDrawing)
+                    .is_err()
+            {
+                log::warn!("Failed to send VgonioEvent::ToggleDebugDrawing");
+            }
+        });
+
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.opened, PaneKind::ShadowMap, "Shadow Map");
             ui.selectable_value(&mut self.opened, PaneKind::RayTracing, "Ray Tracing");

@@ -48,6 +48,10 @@ impl VertexLayout {
             attributes: &self.attributes,
         }
     }
+
+    pub fn stride(&self) -> BufferAddress {
+        self.stride
+    }
 }
 
 #[repr(C)]

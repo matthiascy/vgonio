@@ -6,17 +6,21 @@ mod tools;
 mod ui;
 mod widgets;
 
+use crate::acq::ray::Ray;
+use crate::acq::tracing::RayTracingMethod;
 pub use context::*;
 pub(crate) use tools::VisualDebugTool;
 pub use ui::VgonioGui;
 
-/// User defined event.
+/// Events used by Vgonio application.
 #[derive(Debug)]
-pub enum UserEvent {
+pub enum VgonioEvent {
     Quit,
     RequestRedraw,
     OpenFile(std::path::PathBuf),
     ToggleGrid,
     UpdateSurfaceScaleFactor(f32),
     UpdateDepthMap,
+    TraceRayDbg { ray: Ray, method: RayTracingMethod },
+    ToggleDebugDrawing,
 }

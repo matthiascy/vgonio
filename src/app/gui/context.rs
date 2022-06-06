@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 
 use crate::error::Error;
+use crate::gfx::SizedBuffer;
 use wgpu::util::DeviceExt;
 
 /// Enum for selecting the right buffer type.
@@ -43,13 +44,6 @@ struct UiUniform {
 unsafe impl bytemuck::Pod for UiUniform {}
 
 unsafe impl bytemuck::Zeroable for UiUniform {}
-
-/// Wraps the buffers and includes additional information.
-#[derive(Debug)]
-struct SizedBuffer {
-    raw: wgpu::Buffer,
-    size: usize,
-}
 
 /// Render pass set up for rendering the UI (wgpu).
 pub struct GuiContext {

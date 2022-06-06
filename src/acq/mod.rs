@@ -10,6 +10,7 @@ pub mod ndf;
 mod occlusion;
 pub mod ray;
 pub mod scattering;
+pub mod tracing;
 pub mod util;
 
 pub use collector::{Collector, Patch};

@@ -1,5 +1,7 @@
 use crate::mesh;
-use embree::{Config, Device, Geometry, IntersectContext, RayHitN, RayN, Scene, TriangleMesh};
+use embree::{
+    Config, Device, Geometry, IntersectContext, RayHit, RayHitN, RayN, Scene, TriangleMesh,
+};
 use std::sync::Arc;
 
 pub struct EmbreeRayTracing {
@@ -78,6 +80,18 @@ impl EmbreeRayTracing {
         let mut ray_hit = RayHitN::new(stream);
         let scene = self.scene(scene_id);
         scene.intersect_stream_soa(context, &mut ray_hit);
+        ray_hit
+    }
+
+    pub fn intersect(
+        &self,
+        scene_id: usize,
+        ray: embree::Ray,
+        context: &mut IntersectContext,
+    ) -> RayHit {
+        let mut ray_hit = RayHit::new(ray);
+        let scene = self.scene(scene_id);
+        scene.intersect(context, &mut ray_hit);
         ray_hit
     }
 }

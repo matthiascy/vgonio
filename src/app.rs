@@ -342,10 +342,10 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
 }
 
 pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
-    use crate::app::gui::UserEvent;
+    use crate::app::gui::VgonioEvent;
     use state::VgonioApp;
 
-    let event_loop = EventLoop::<UserEvent>::with_user_event();
+    let event_loop = EventLoop::<VgonioEvent>::with_user_event();
 
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -370,7 +370,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         last_frame_time = now;
 
         match event {
-            Event::UserEvent(UserEvent::Quit) => {
+            Event::UserEvent(VgonioEvent::Quit) => {
                 *control_flow = ControlFlow::Exit;
             }
             Event::UserEvent(event) => vgonio.handle_user_event(event),

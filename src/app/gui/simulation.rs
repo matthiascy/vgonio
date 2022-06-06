@@ -4,14 +4,14 @@ use crate::acq::util::SphericalShape;
 use crate::acq::Medium;
 use crate::app::gui::gizmo::VgonioGizmo;
 use crate::app::gui::ui::Workspace;
-use crate::app::gui::{UserEvent, VisualDebugTool};
+use crate::app::gui::widgets::{input, range};
+use crate::app::gui::{VgonioEvent, VisualDebugTool};
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
-use crate::app::gui::widgets::{input, range};
 
 /// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -256,16 +256,25 @@ impl SimulationPanel {
                         ui.label("spectrum (nm)");
                         ui.horizontal(|ui| {
                             ui.add(
-                                egui::DragValue::new(&mut self.measurement_desc.emitter.spectrum.start)
-                                    .prefix("start: ")
-                                    .clamp_range(380.0..=780.0)
+                                egui::DragValue::new(
+                                    &mut self.measurement_desc.emitter.spectrum.start,
+                                )
+                                .prefix("start: ")
+                                .clamp_range(380.0..=780.0),
                             );
-                            ui.add(egui::DragValue::new(&mut self.measurement_desc.emitter.spectrum.stop)
+                            ui.add(
+                                egui::DragValue::new(
+                                    &mut self.measurement_desc.emitter.spectrum.stop,
+                                )
                                 .prefix("stop: ")
-                                .clamp_range(self.measurement_desc.emitter.spectrum.start..=780.0));
-                            ui.add(egui::DragValue::new(&mut self.measurement_desc.emitter.spectrum.step)
+                                .clamp_range(self.measurement_desc.emitter.spectrum.start..=780.0),
+                            );
+                            ui.add(
+                                egui::DragValue::new(
+                                    &mut self.measurement_desc.emitter.spectrum.step,
+                                )
                                 .prefix("step: ")
-                                .clamp_range(0.1..=400.0)
+                                .clamp_range(0.1..=400.0),
                             );
                         });
                         ui.end_row();
@@ -294,22 +303,50 @@ impl SimulationPanel {
 
                         ui.label("        zenith (θ)");
                         ui.horizontal(|ui| {
-                            ui.add(input(&mut self.emitter_partition.zenith.0, "start: ", Some(0.0..=360.0)));
-                            ui.add(input(&mut self.emitter_partition.zenith.1, "stop: ", Some(self.emitter_partition.zenith.0..=360.0)));
+                            ui.add(input(
+                                &mut self.emitter_partition.zenith.0,
+                                "start: ",
+                                Some(0.0..=360.0),
+                            ));
+                            ui.add(input(
+                                &mut self.emitter_partition.zenith.1,
+                                "stop: ",
+                                Some(self.emitter_partition.zenith.0..=360.0),
+                            ));
 
                             if self.emitter_partition.mode == PartitionMode::Angle {
-                                ui.add(input(&mut self.emitter_partition.zenith.2, "step: ", Some(0.0..=360.0)));
+                                ui.add(input(
+                                    &mut self.emitter_partition.zenith.2,
+                                    "step: ",
+                                    Some(0.0..=360.0),
+                                ));
                             } else {
-                                ui.add(input(&mut self.emitter_partition.zenith.2, "count: ", None));
+                                ui.add(input(
+                                    &mut self.emitter_partition.zenith.2,
+                                    "count: ",
+                                    None,
+                                ));
                             }
                         });
                         ui.end_row();
 
                         ui.label("        azimuth (φ)");
                         ui.horizontal(|ui| {
-                            ui.add(input(&mut self.emitter_partition.azimuth.0, "start: ", Some(0.0..=360.0)));
-                            ui.add(input(&mut self.emitter_partition.azimuth.1, "stop: ", Some(self.emitter_partition.azimuth.0..=360.0)));
-                            ui.add(input(&mut self.emitter_partition.azimuth.2, "step: ", Some(0.0..=360.0)));
+                            ui.add(input(
+                                &mut self.emitter_partition.azimuth.0,
+                                "start: ",
+                                Some(0.0..=360.0),
+                            ));
+                            ui.add(input(
+                                &mut self.emitter_partition.azimuth.1,
+                                "stop: ",
+                                Some(self.emitter_partition.azimuth.0..=360.0),
+                            ));
+                            ui.add(input(
+                                &mut self.emitter_partition.azimuth.2,
+                                "step: ",
+                                Some(0.0..=360.0),
+                            ));
                         });
                         ui.end_row();
                     });
@@ -383,22 +420,50 @@ impl SimulationPanel {
 
                         ui.label("        zenith (θ)");
                         ui.horizontal(|ui| {
-                            ui.add(input(&mut self.collector_partition.zenith.0, "start: ", Some(0.0..=360.0)));
-                            ui.add(input(&mut self.collector_partition.zenith.1, "stop: ", Some(self.collector_partition.zenith.0..=360.0)));
+                            ui.add(input(
+                                &mut self.collector_partition.zenith.0,
+                                "start: ",
+                                Some(0.0..=360.0),
+                            ));
+                            ui.add(input(
+                                &mut self.collector_partition.zenith.1,
+                                "stop: ",
+                                Some(self.collector_partition.zenith.0..=360.0),
+                            ));
 
                             if self.collector_partition.mode == PartitionMode::Angle {
-                                ui.add(input(&mut self.collector_partition.zenith.2, "step: ", Some(0.0..=360.0)));
+                                ui.add(input(
+                                    &mut self.collector_partition.zenith.2,
+                                    "step: ",
+                                    Some(0.0..=360.0),
+                                ));
                             } else {
-                                ui.add(input(&mut self.collector_partition.zenith.2, "count: ", None));
+                                ui.add(input(
+                                    &mut self.collector_partition.zenith.2,
+                                    "count: ",
+                                    None,
+                                ));
                             }
                         });
                         ui.end_row();
 
                         ui.label("        azimuth (φ)");
                         ui.horizontal(|ui| {
-                            ui.add(input(&mut self.collector_partition.azimuth.0, "start: ", Some(0.0..=360.0)));
-                            ui.add(input(&mut self.collector_partition.azimuth.1, "stop: ", Some(self.collector_partition.azimuth.0..=360.0)));
-                            ui.add(input(&mut self.collector_partition.azimuth.2, "step: ", Some(0.0..=360.0)));
+                            ui.add(input(
+                                &mut self.collector_partition.azimuth.0,
+                                "start: ",
+                                Some(0.0..=360.0),
+                            ));
+                            ui.add(input(
+                                &mut self.collector_partition.azimuth.1,
+                                "stop: ",
+                                Some(self.collector_partition.azimuth.0..=360.0),
+                            ));
+                            ui.add(input(
+                                &mut self.collector_partition.azimuth.2,
+                                "step: ",
+                                Some(0.0..=360.0),
+                            ));
                         });
                         ui.end_row();
                     })
@@ -444,7 +509,7 @@ pub struct SimulationWorkspace {
     surface_scale_factor: f32,
 
     /// Event loop proxy of user defined events. See [`UserEvent`].
-    event_loop: Arc<EventLoopProxy<UserEvent>>,
+    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
 }
 
 impl Workspace for SimulationWorkspace {
@@ -463,7 +528,7 @@ impl Workspace for SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
-    pub fn new(event_loop: Arc<EventLoopProxy<UserEvent>>) -> Self {
+    pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
             view_gizmo_opened: false,
             visual_debugger_opened: false,
@@ -517,7 +582,7 @@ impl SimulationWorkspace {
                             if res.changed()
                                 && self
                                     .event_loop
-                                    .send_event(UserEvent::UpdateSurfaceScaleFactor(
+                                    .send_event(VgonioEvent::UpdateSurfaceScaleFactor(
                                         self.surface_scale_factor,
                                     ))
                                     .is_err()
@@ -530,7 +595,7 @@ impl SimulationWorkspace {
                         {
                             let res = ui.add(super::widgets::toggle(&mut self.visual_grid_enabled));
                             if res.changed()
-                                && self.event_loop.send_event(UserEvent::ToggleGrid).is_err()
+                                && self.event_loop.send_event(VgonioEvent::ToggleGrid).is_err()
                             {
                                 log::warn!("[EVENT] Failed to send ToggleGrid event");
                             }

@@ -3,10 +3,14 @@ mod input;
 
 pub use input::InputState;
 
-use crate::app::gui::{GuiContext, UserEvent, VgonioGui, WindowSize};
-use crate::gfx::{GpuContext, MeshView, RdrPass, Texture, DEFAULT_BIND_GROUP_LAYOUT_DESC};
+use crate::app::gui::{GuiContext, VgonioEvent, VgonioGui, WindowSize};
+use crate::gfx::{
+    GpuContext, MeshView, RdrPass, SizedBuffer, Texture, VertexLayout,
+    DEFAULT_BIND_GROUP_LAYOUT_DESC,
+};
 use camera::CameraState;
 
+use crate::acq::tracing::RayTracingMethod;
 use crate::acq::{MicroSurfaceView, OcclusionEstimationPass};
 use crate::app::VgonioConfig;
 use crate::error::Error;
@@ -141,6 +145,122 @@ impl DepthMap {
     }
 }
 
+struct DebugDrawing {
+    /// Vertex buffer storing all vertices.
+    pub vert_buffer: SizedBuffer,
+
+    pub vert_count: u32,
+
+    /// Render pass for rays drawing.
+    pub render_pass_rd: RdrPass,
+}
+
+impl DebugDrawing {
+    pub fn new(ctx: &GpuContext) -> Self {
+        let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
+        let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
+        let shader_module = ctx
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("debug-drawing-rays-shader"),
+                source: wgpu::ShaderSource::Wgsl(
+                    include_str!("../assets/shaders/wgsl/rays.wgsl").into(),
+                ),
+            });
+        let bind_group_layout =
+            ctx.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("debug-drawing-rays-bind-group-layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
+        let uniform_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("debug-drawing-rays-uniform-buffer"),
+                contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        Self {
+            vert_buffer: SizedBuffer::new(
+                &ctx.device,
+                std::mem::size_of::<f32>() * 1024, // initial capacity of 1024 rays
+                wgpu::BufferUsages::VERTEX
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+                Some("debug-rays-vert-buf"),
+            ),
+            vert_count: 0,
+            render_pass_rd: RdrPass {
+                pipeline: ctx
+                    .device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("debug-rays-pipeline"),
+                        layout: Some(&ctx.device.create_pipeline_layout(
+                            &wgpu::PipelineLayoutDescriptor {
+                                label: Some("debug-rays-pipeline-layout"),
+                                bind_group_layouts: &[&bind_group_layout],
+                                push_constant_ranges: &[],
+                            },
+                        )),
+                        vertex: wgpu::VertexState {
+                            module: &shader_module,
+                            entry_point: "vs_main",
+                            buffers: &[vert_buffer_layout],
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::LineList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: Some(wgpu::Face::Back),
+                            unclipped_depth: false,
+                            polygon_mode: wgpu::PolygonMode::Line,
+                            conservative: false,
+                        },
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &shader_module,
+                            entry_point: "fs_main",
+                            targets: &[wgpu::ColorTargetState {
+                                format: ctx.surface_config.format,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            }],
+                        }),
+                        multiview: None,
+                    }),
+                bind_groups: vec![ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("debug-rays-bind-group"),
+                    layout: &bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffer.as_entire_binding(),
+                    }],
+                })],
+                uniform_buffer: Some(uniform_buffer),
+            },
+        }
+    }
+
+    pub fn update_uniform_buffer(&mut self, ctx: &GpuContext, uniform: &[f32; 16 * 3 + 4]) {
+        ctx.queue.write_buffer(
+            self.render_pass_rd.uniform_buffer.as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(uniform),
+        );
+    }
+}
+
 pub struct VgonioApp {
     gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
@@ -149,6 +269,8 @@ pub struct VgonioApp {
     camera: CameraState,
     passes: HashMap<&'static str, RdrPass>,
     depth_map: DepthMap,
+    debug_drawing: DebugDrawing,
+    debug_drawing_enabled: bool,
 
     // Shadow pass used for measurement of shadowing and masking function.
     //shadow_pass: ShadowPass,
@@ -165,7 +287,7 @@ pub struct VgonioApp {
     pub prev_frame_time: Option<f32>,
 
     //pub demo_ui: egui_demo_lib::DemoWindows,
-    pub is_grid_enabled: bool,
+    pub visual_grid_enabled: bool,
 }
 
 impl VgonioApp {
@@ -173,7 +295,7 @@ impl VgonioApp {
     pub async fn new(
         config: VgonioConfig,
         window: &winit::window::Window,
-        event_loop: EventLoopProxy<UserEvent>,
+        event_loop: EventLoopProxy<VgonioEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
         let depth_map = DepthMap::new(&gpu_ctx);
@@ -219,6 +341,7 @@ impl VgonioApp {
         };
 
         let occlusion_estimation_pass = OcclusionEstimationPass::new(&gpu_ctx, 512, 512);
+        let debug_drawing = DebugDrawing::new(&gpu_ctx);
 
         Ok(Self {
             gpu_ctx,
@@ -227,10 +350,9 @@ impl VgonioApp {
             input,
             passes,
             depth_map,
-            // depth_attachment,
-            // depth_attachment_storage,
-            // depth_attachment_image,
             // shadow_pass,
+            debug_drawing,
+            debug_drawing_enabled: true,
             occlusion_estimation_pass,
             heightfield: None,
             heightfield_mesh_view: None,
@@ -239,7 +361,7 @@ impl VgonioApp {
             start_time: Instant::now(),
             prev_frame_time: None,
             // demo_ui: ui,
-            is_grid_enabled: true,
+            visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             opened_surfaces: vec![],
         })
@@ -379,6 +501,12 @@ impl VgonioApp {
                 0,
                 bytemuck::cast_slice(&uniform),
             );
+
+            // Update the uniform buffer for debug drawing.
+            if self.debug_drawing_enabled {
+                self.debug_drawing
+                    .update_uniform_buffer(&self.gpu_ctx, &uniform);
+            }
         }
 
         // Reset mouse movement
@@ -397,6 +525,11 @@ impl VgonioApp {
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_encoder"),
+                }),
+            self.gpu_ctx
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vgonio_render_debug_encoder"),
                 }),
             self.gpu_ctx
                 .device
@@ -444,12 +577,30 @@ impl VgonioApp {
                 render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
             }
 
-            if self.is_grid_enabled {
+            if self.visual_grid_enabled {
                 let pass = self.passes.get("visual_grid").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
                 render_pass.draw(0..6, 0..1);
             }
+        }
+        if self.debug_drawing_enabled {
+            let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view: &output_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+            render_pass.set_pipeline(&self.debug_drawing.render_pass_rd.pipeline);
+            render_pass.set_bind_group(0, &self.debug_drawing.render_pass_rd.bind_groups[0], &[]);
+            render_pass.set_vertex_buffer(0, self.debug_drawing.vert_buffer.raw.slice(..));
+            render_pass.draw(0..self.debug_drawing.vert_count, 0..1);
         }
         {
             // Record UI
@@ -484,7 +635,7 @@ impl VgonioApp {
                 &win_size,
             );
             self.gui_ctx
-                .render(&mut encoders[1], &output_view, &meshes, &win_size, None)
+                .render(&mut encoders[2], &output_view, &meshes, &win_size, None)
                 .unwrap();
         }
 
@@ -497,10 +648,10 @@ impl VgonioApp {
         Ok(())
     }
 
-    pub fn handle_user_event(&mut self, event: UserEvent) {
+    pub fn handle_user_event(&mut self, event: VgonioEvent) {
         match event {
-            UserEvent::RequestRedraw => {}
-            UserEvent::OpenFile(path) => {
+            VgonioEvent::RequestRedraw => {}
+            VgonioEvent::OpenFile(path) => {
                 self.load_height_field(path.as_path());
                 if !self.opened_surfaces.contains(&path) {
                     self.opened_surfaces.push(path);
@@ -510,10 +661,10 @@ impl VgonioApp {
                     .simulation
                     .update_surface_list(&self.opened_surfaces);
             }
-            UserEvent::ToggleGrid => {
-                self.is_grid_enabled = !self.is_grid_enabled;
+            VgonioEvent::ToggleGrid => {
+                self.visual_grid_enabled = !self.visual_grid_enabled;
             }
-            UserEvent::UpdateDepthMap => {
+            VgonioEvent::UpdateDepthMap => {
                 self.depth_map.copy_to_buffer(&self.gpu_ctx);
                 self.gui
                     .workspaces
@@ -522,8 +673,47 @@ impl VgonioApp {
                     .shadow_map_pane
                     .update_depth_map(&self.gpu_ctx, &self.depth_map.depth_attachment_storage);
             }
-            UserEvent::UpdateSurfaceScaleFactor(factor) => {
+            VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
                 self.surface_scale_factor = factor;
+            }
+            VgonioEvent::TraceRayDbg { ray, method } => {
+                if self.heightfield.is_none() {
+                    log::warn!("No heightfield loaded, can't trace ray!");
+                } else {
+                    match method {
+                        RayTracingMethod::Standard => {
+                            crate::acq::tracing::trace_ray_standard(
+                                ray,
+                                self.heightfield.as_ref().unwrap(),
+                            );
+                            if self.debug_drawing_enabled {
+                                let rays = [ray.o, ray.o + ray.d * 100.0];
+                                self.debug_drawing.vert_count = 2;
+                                self.gpu_ctx.queue.write_buffer(
+                                    &self.debug_drawing.vert_buffer.raw,
+                                    0,
+                                    bytemuck::cast_slice(&rays),
+                                );
+                            }
+                        }
+                        RayTracingMethod::Grid => {
+                            crate::acq::tracing::trace_ray_grid(
+                                ray,
+                                self.heightfield.as_ref().unwrap(),
+                            );
+                        }
+                        RayTracingMethod::Hybrid => {
+                            crate::acq::tracing::trace_ray_hybrid(
+                                ray,
+                                self.heightfield.as_ref().unwrap(),
+                            );
+                        }
+                    }
+                }
+            }
+            VgonioEvent::ToggleDebugDrawing => {
+                self.debug_drawing_enabled = !self.debug_drawing_enabled;
+                println!("Debug drawing: {}", self.debug_drawing_enabled);
             }
             _ => {}
         }
