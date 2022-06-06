@@ -1,5 +1,6 @@
 use crate::acq::ray::Ray;
 use glam::Vec3;
+use crate::app::gui::widgets::input3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RayTracingMethod {
@@ -33,25 +34,11 @@ impl egui::Widget for &mut RayTracingPane {
             .show(ui, |ui| {
                 egui::Grid::new("ray_grid").num_columns(2).show(ui, |ui| {
                     ui.label("origin");
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.ray.o.x));
-                        ui.label("x");
-                        ui.add(egui::DragValue::new(&mut self.ray.o.y));
-                        ui.label("y");
-                        ui.add(egui::DragValue::new(&mut self.ray.o.z));
-                        ui.label("z");
-                    });
+                    ui.add(input3(&mut self.ray.o));
                     ui.end_row();
 
                     ui.label("direction");
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.ray.d.x));
-                        ui.label("x");
-                        ui.add(egui::DragValue::new(&mut self.ray.d.y));
-                        ui.label("y");
-                        ui.add(egui::DragValue::new(&mut self.ray.d.z));
-                        ui.label("z");
-                    });
+                    ui.add(input3(&mut self.ray.d));
                     ui.end_row();
 
                     ui.label("energy");
@@ -81,6 +68,7 @@ impl egui::Widget for &mut RayTracingPane {
             if ui.button("Reset").clicked() {
                 println!("Resetting ray");
             }
-        }).response
+        })
+        .response
     }
 }

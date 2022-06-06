@@ -11,6 +11,7 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
+use crate::app::gui::widgets::{input, range};
 
 /// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -252,20 +253,20 @@ impl SimulationPanel {
                         });
                         ui.end_row();
 
-                        ui.label("spectrum");
+                        ui.label("spectrum (nm)");
                         ui.horizontal(|ui| {
-                            ui.label("start");
-                            ui.add(egui::DragValue::new(
-                                &mut self.measurement_desc.emitter.spectrum.start,
-                            ));
-                            ui.label("stop");
-                            ui.add(egui::DragValue::new(
-                                &mut self.measurement_desc.emitter.spectrum.stop,
-                            ));
-                            ui.label("step");
-                            ui.add(egui::DragValue::new(
-                                &mut self.measurement_desc.emitter.spectrum.step,
-                            ));
+                            ui.add(
+                                egui::DragValue::new(&mut self.measurement_desc.emitter.spectrum.start)
+                                    .prefix("start: ")
+                                    .clamp_range(380.0..=780.0)
+                            );
+                            ui.add(egui::DragValue::new(&mut self.measurement_desc.emitter.spectrum.stop)
+                                .prefix("stop: ")
+                                .clamp_range(self.measurement_desc.emitter.spectrum.start..=780.0));
+                            ui.add(egui::DragValue::new(&mut self.measurement_desc.emitter.spectrum.step)
+                                .prefix("step: ")
+                                .clamp_range(0.1..=400.0)
+                            );
                         });
                         ui.end_row();
 
@@ -293,29 +294,22 @@ impl SimulationPanel {
 
                         ui.label("        zenith (θ)");
                         ui.horizontal(|ui| {
-                            ui.label("start");
-                            ui.add(egui::DragValue::new(&mut self.emitter_partition.zenith.0));
-                            ui.label("stop");
-                            ui.add(egui::DragValue::new(&mut self.emitter_partition.zenith.1));
+                            ui.add(input(&mut self.emitter_partition.zenith.0, "start: ", Some(0.0..=360.0)));
+                            ui.add(input(&mut self.emitter_partition.zenith.1, "stop: ", Some(self.emitter_partition.zenith.0..=360.0)));
 
                             if self.emitter_partition.mode == PartitionMode::Angle {
-                                ui.label("step");
-                                ui.add(egui::DragValue::new(&mut self.emitter_partition.zenith.2));
+                                ui.add(input(&mut self.emitter_partition.zenith.2, "step: ", Some(0.0..=360.0)));
                             } else {
-                                ui.label("count");
-                                ui.add(egui::DragValue::new(&mut self.emitter_partition.zenith.2));
+                                ui.add(input(&mut self.emitter_partition.zenith.2, "count: ", None));
                             }
                         });
                         ui.end_row();
 
                         ui.label("        azimuth (φ)");
                         ui.horizontal(|ui| {
-                            ui.label("start");
-                            ui.add(egui::DragValue::new(&mut self.emitter_partition.azimuth.0));
-                            ui.label("stop");
-                            ui.add(egui::DragValue::new(&mut self.emitter_partition.azimuth.1));
-                            ui.label("step");
-                            ui.add(egui::DragValue::new(&mut self.emitter_partition.azimuth.2));
+                            ui.add(input(&mut self.emitter_partition.azimuth.0, "start: ", Some(0.0..=360.0)));
+                            ui.add(input(&mut self.emitter_partition.azimuth.1, "stop: ", Some(self.emitter_partition.azimuth.0..=360.0)));
+                            ui.add(input(&mut self.emitter_partition.azimuth.2, "step: ", Some(0.0..=360.0)));
                         });
                         ui.end_row();
                     });
@@ -389,39 +383,22 @@ impl SimulationPanel {
 
                         ui.label("        zenith (θ)");
                         ui.horizontal(|ui| {
-                            ui.label("start");
-                            ui.add(egui::DragValue::new(&mut self.collector_partition.zenith.0));
-                            ui.label("stop");
-                            ui.add(egui::DragValue::new(&mut self.collector_partition.zenith.1));
+                            ui.add(input(&mut self.collector_partition.zenith.0, "start: ", Some(0.0..=360.0)));
+                            ui.add(input(&mut self.collector_partition.zenith.1, "stop: ", Some(self.collector_partition.zenith.0..=360.0)));
 
                             if self.collector_partition.mode == PartitionMode::Angle {
-                                ui.label("step");
-                                ui.add(egui::DragValue::new(
-                                    &mut self.collector_partition.zenith.2,
-                                ));
+                                ui.add(input(&mut self.collector_partition.zenith.2, "step: ", Some(0.0..=360.0)));
                             } else {
-                                ui.label("count");
-                                ui.add(egui::DragValue::new(
-                                    &mut self.collector_partition.zenith.2,
-                                ));
+                                ui.add(input(&mut self.collector_partition.zenith.2, "count: ", None));
                             }
                         });
                         ui.end_row();
 
                         ui.label("        azimuth (φ)");
                         ui.horizontal(|ui| {
-                            ui.label("start");
-                            ui.add(egui::DragValue::new(
-                                &mut self.collector_partition.azimuth.0,
-                            ));
-                            ui.label("stop");
-                            ui.add(egui::DragValue::new(
-                                &mut self.collector_partition.azimuth.1,
-                            ));
-                            ui.label("step");
-                            ui.add(egui::DragValue::new(
-                                &mut self.collector_partition.azimuth.2,
-                            ));
+                            ui.add(input(&mut self.collector_partition.azimuth.0, "start: ", Some(0.0..=360.0)));
+                            ui.add(input(&mut self.collector_partition.azimuth.1, "stop: ", Some(self.collector_partition.azimuth.0..=360.0)));
+                            ui.add(input(&mut self.collector_partition.azimuth.2, "step: ", Some(0.0..=360.0)));
                         });
                         ui.end_row();
                     })

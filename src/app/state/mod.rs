@@ -4,9 +4,7 @@ mod input;
 pub use input::InputState;
 
 use crate::app::gui::{GuiContext, UserEvent, VgonioGui, WindowSize};
-use crate::gfx::{
-    GpuContext, MeshView, RdrPass, ShadowPass, Texture, DEFAULT_BIND_GROUP_LAYOUT_DESC,
-};
+use crate::gfx::{GpuContext, MeshView, RdrPass, Texture, DEFAULT_BIND_GROUP_LAYOUT_DESC};
 use camera::CameraState;
 
 use crate::acq::{MicroSurfaceView, OcclusionEstimationPass};
@@ -25,7 +23,6 @@ use wgpu::util::DeviceExt;
 use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
-use winit::window::Window;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -167,7 +164,7 @@ pub struct VgonioApp {
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
-    // pub demo_ui: egui_demo_lib::DemoWindows,
+    //pub demo_ui: egui_demo_lib::DemoWindows,
     pub is_grid_enabled: bool,
 }
 
@@ -175,7 +172,7 @@ impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
         config: VgonioConfig,
-        window: &Window,
+        window: &winit::window::Window,
         event_loop: EventLoopProxy<UserEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
@@ -291,11 +288,11 @@ impl VgonioApp {
                     self.input.update_key_map(*keycode, *state);
                     if self.input.is_key_pressed(VirtualKeyCode::K) {
                         println!("Measuring geometric term ...");
-                        let now = std::time::Instant::now();
+                        let now = Instant::now();
                         self.measure_micro_surface_geometric_term();
                         println!(
                             "Geometric term measurement finished in {} secs",
-                            (std::time::Instant::now() - now).as_secs_f32()
+                            (Instant::now() - now).as_secs_f32()
                         );
                     }
                     true
@@ -532,7 +529,7 @@ impl VgonioApp {
         }
     }
 
-    fn load_height_field(&mut self, path: &std::path::Path) {
+    fn load_height_field(&mut self, path: &Path) {
         match Heightfield::read_from_file(path, None, None) {
             Ok(mut hf) => {
                 log::info!(

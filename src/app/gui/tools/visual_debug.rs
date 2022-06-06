@@ -1,5 +1,4 @@
 use crate::app::gui::UserEvent;
-use egui::Ui;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 

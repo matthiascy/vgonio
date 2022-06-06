@@ -1,5 +1,5 @@
 use crate::acq::bxdf::IntersectRecord;
-use crate::acq::ray::{Ray, RayTraceRecord, Scattering};
+use crate::acq::ray::{Ray};
 use crate::htfld::{AxisAlignment, Heightfield};
 use crate::isect::isect_ray_tri;
 use crate::mesh::TriangleMesh;

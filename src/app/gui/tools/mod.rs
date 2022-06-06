@@ -1,3 +1,3 @@
 mod visual_debug;
 
-pub use visual_debug::*;
+pub(crate) use visual_debug::VisualDebugTool;

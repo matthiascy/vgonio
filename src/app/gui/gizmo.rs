@@ -47,7 +47,7 @@ impl VgonioGizmo {
     }
 
     pub fn show(&mut self, ctx: &egui::Context, _open: &mut bool) {
-        egui::Area::new("Viewport")
+        egui::Area::new(self.name())
             // .fixed_pos((0.0, 0.0))
             .anchor(Align2::RIGHT_BOTTOM, (-150.0, -150.0))
             .interactable(false)

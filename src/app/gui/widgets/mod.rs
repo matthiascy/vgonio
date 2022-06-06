@@ -1,5 +1,13 @@
 //! Source code based on the official example of custom widget.
 
+mod input3;
+mod range;
+mod input;
+
+pub use input3::{input3, input3_ui};
+pub use range::{range, range_ui};
+pub use input::{input, input_ui};
+
 /// iOS-style toggle switch:
 ///
 /// ``` text

@@ -205,10 +205,10 @@ pub(crate) fn resolve_file_path(base_path: &Path, path: Option<&Path>) -> PathBu
     )
 }
 
-fn measure_micro_surface_geometric_term(
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    view: &MicroSurfaceView,
-) {
-    unimplemented!()
-}
+// fn measure_micro_surface_geometric_term(
+//     device: wgpu::Device,
+//     queue: wgpu::Queue,
+//     view: &MicroSurfaceView,
+// ) {
+//     unimplemented!()
+// }

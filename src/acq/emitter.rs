@@ -1,8 +1,6 @@
 use crate::acq::collector::Patch;
 use crate::acq::desc::{EmitterDesc, RadiusDesc};
-use crate::acq::ray::Ray;
 use crate::acq::util::SphericalShape;
-use glam::Vec3;
 
 pub struct Emitter {
     pub num_rays: u32,
