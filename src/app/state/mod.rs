@@ -17,12 +17,14 @@ use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::Heightfield;
 use glam::{Mat4, Vec3};
-use std::collections::HashMap;
-use std::default::Default;
-use std::io::{BufWriter, Write};
-use std::num::NonZeroU32;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    default::Default,
+    io::{BufWriter, Write},
+    num::NonZeroU32,
+    path::{Path, PathBuf},
+    time::Instant
+};
 use wgpu::util::DeviceExt;
 use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -74,18 +76,17 @@ impl DepthMap {
             ctx.surface_config.width,
             ctx.surface_config.height,
             None,
-            Some("depth_texture"),
+            Some("depth-texture"),
         );
         let depth_map_buffer_size = (std::mem::size_of::<f32>()
             * (ctx.surface_config.width * ctx.surface_config.height) as usize)
             as wgpu::BufferAddress;
-        let depth_map_buffer_desc = wgpu::BufferDescriptor {
+        self.depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: depth_map_buffer_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
-        };
-        self.depth_attachment_storage = ctx.device.create_buffer(&depth_map_buffer_desc);
+        });
     }
 
     pub fn copy_to_buffer(&mut self, ctx: &GpuContext) {
@@ -151,8 +152,12 @@ struct DebugDrawing {
 
     pub vert_count: u32,
 
+    pub rays: Vec<embree::Ray>,
+
     /// Render pass for rays drawing.
     pub render_pass_rd: RdrPass,
+
+    pub ray_t: f32,
 }
 
 impl DebugDrawing {
@@ -200,6 +205,7 @@ impl DebugDrawing {
                 Some("debug-rays-vert-buf"),
             ),
             vert_count: 0,
+            rays: vec![],
             render_pass_rd: RdrPass {
                 pipeline: ctx
                     .device
@@ -218,7 +224,7 @@ impl DebugDrawing {
                             buffers: &[vert_buffer_layout],
                         },
                         primitive: wgpu::PrimitiveState {
-                            topology: wgpu::PrimitiveTopology::LineList,
+                            topology: wgpu::PrimitiveTopology::LineStrip,
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: Some(wgpu::Face::Back),
@@ -249,6 +255,7 @@ impl DebugDrawing {
                 })],
                 uniform_buffer: Some(uniform_buffer),
             },
+            ray_t: 10.0
         }
     }
 
@@ -288,6 +295,7 @@ pub struct VgonioApp {
 
     //pub demo_ui: egui_demo_lib::DemoWindows,
     pub visual_grid_enabled: bool,
+    pub surface_visible: bool,
 }
 
 impl VgonioApp {
@@ -364,6 +372,7 @@ impl VgonioApp {
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             opened_surfaces: vec![],
+            surface_visible: true
         })
     }
 
@@ -568,13 +577,15 @@ impl VgonioApp {
                 }),
             });
 
-            if let Some(mesh) = &self.heightfield_mesh_view {
-                let pass = self.passes.get("heightfield").unwrap();
-                render_pass.set_pipeline(&pass.pipeline);
-                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
-                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
-                render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
+            if self.surface_visible {
+                if let Some(mesh) = &self.heightfield_mesh_view {
+                    let pass = self.passes.get("heightfield").unwrap();
+                    render_pass.set_pipeline(&pass.pipeline);
+                    render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
+                    render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
+                    render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
+                }
             }
 
             if self.visual_grid_enabled {
@@ -676,23 +687,54 @@ impl VgonioApp {
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
                 self.surface_scale_factor = factor;
             }
-            VgonioEvent::TraceRayDbg { ray, method } => {
+            VgonioEvent::UpdateDebugT(t) => {
+                self.debug_drawing.ray_t = t;
+                // let content = self.debug_drawing.rays.iter().flat_map(|r| {
+                //     [r.org_x, r.org_y, r.org_z,
+                //         r.org_x + self.debug_drawing.ray_t * r.dir_x,
+                //         r.org_y + self.debug_drawing.ray_t * r.dir_y,
+                //         r.org_z + self.debug_drawing.ray_t * r.dir_z]
+                // }).collect::<Vec<_>>();
+                // self.debug_drawing.vert_count = (self.debug_drawing.rays.len() * 2) as u32;
+                // self.gpu_ctx.queue.write_buffer(
+                //     &self.debug_drawing.vert_buffer.raw,
+                //     0,
+                //     bytemuck::cast_slice(&content),
+                // );
+            }
+            VgonioEvent::TraceRayDbg {
+                ray,
+                method,
+                max_bounces,
+            } => {
                 if self.heightfield.is_none() {
                     log::warn!("No heightfield loaded, can't trace ray!");
                 } else {
                     match method {
                         RayTracingMethod::Standard => {
-                            crate::acq::tracing::trace_ray_standard(
+                            self.debug_drawing.rays = crate::acq::tracing::trace_ray_standard(
                                 ray,
+                                max_bounces,
                                 self.heightfield.as_ref().unwrap(),
                             );
                             if self.debug_drawing_enabled {
-                                let rays = [ray.o, ray.o + ray.d * 100.0];
-                                self.debug_drawing.vert_count = 2;
+                                let mut content = vec![0.0f32; (self.debug_drawing.rays.len() + 1) * 3];
+                                for (i, r) in self.debug_drawing.rays.iter().enumerate() {
+                                    content[i * 3 + 0] = r.org_x;
+                                    content[i * 3 + 1] = r.org_y;
+                                    content[i * 3 + 2] = r.org_z;
+                                    if i == self.debug_drawing.rays.len() - 1 {
+                                        content[i * 3 + 3] = r.org_x + self.debug_drawing.ray_t * r.dir_x;
+                                        content[i * 3 + 4] = r.org_y + self.debug_drawing.ray_t * r.dir_y;
+                                        content[i * 3 + 5] = r.org_z + self.debug_drawing.ray_t * r.dir_z;
+                                    }
+                                }
+                                println!("rays: {:?}", content);
+                                self.debug_drawing.vert_count = self.debug_drawing.rays.len() as u32 + 1;
                                 self.gpu_ctx.queue.write_buffer(
                                     &self.debug_drawing.vert_buffer.raw,
                                     0,
-                                    bytemuck::cast_slice(&rays),
+                                    bytemuck::cast_slice(&content),
                                 );
                             }
                         }
@@ -714,6 +756,9 @@ impl VgonioApp {
             VgonioEvent::ToggleDebugDrawing => {
                 self.debug_drawing_enabled = !self.debug_drawing_enabled;
                 println!("Debug drawing: {}", self.debug_drawing_enabled);
+            }
+            VgonioEvent::ToggleSurfaceVisibility => {
+                self.surface_visible = !self.surface_visible;
             }
             _ => {}
         }

@@ -496,6 +496,8 @@ pub struct SimulationWorkspace {
     /// Whether the visual grid (ground) is visible.
     visual_grid_enabled: bool,
 
+    surface_visible: bool,
+
     /// The gizmo used to indicate the camera's orientation.
     view_gizmo: VgonioGizmo,
 
@@ -539,6 +541,7 @@ impl SimulationWorkspace {
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             event_loop,
+            surface_visible: true
         }
     }
 
@@ -598,6 +601,16 @@ impl SimulationWorkspace {
                                 && self.event_loop.send_event(VgonioEvent::ToggleGrid).is_err()
                             {
                                 log::warn!("[EVENT] Failed to send ToggleGrid event");
+                            }
+                        }
+
+                        ui.label("Surface Visibility");
+                        {
+                            let res = ui.add(super::widgets::toggle(&mut self.surface_visible));
+                            if res.changed()
+                                && self.event_loop.send_event(VgonioEvent::ToggleSurfaceVisibility).is_err()
+                            {
+                                log::warn!("[EVENT] Failed to send ToggleSurfaceVisibility event");
                             }
                         }
                         ui.end_row();

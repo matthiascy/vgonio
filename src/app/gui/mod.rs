@@ -21,6 +21,12 @@ pub enum VgonioEvent {
     ToggleGrid,
     UpdateSurfaceScaleFactor(f32),
     UpdateDepthMap,
-    TraceRayDbg { ray: Ray, method: RayTracingMethod },
+    TraceRayDbg {
+        ray: Ray,
+        max_bounces: u32,
+        method: RayTracingMethod,
+    },
     ToggleDebugDrawing,
+    ToggleSurfaceVisibility,
+    UpdateDebugT(f32),
 }
