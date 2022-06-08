@@ -2,7 +2,7 @@ use crate::acq::embree_rt::EmbreeRayTracing;
 use crate::acq::ior::RefractiveIndex;
 use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
 use crate::htfld::Heightfield;
-use crate::mesh::TriangulationMethod;
+use crate::mesh::{TriangleMesh, TriangulationMethod};
 use embree::{Config, RayHit};
 use glam::Vec3;
 
@@ -13,35 +13,30 @@ pub enum RayTracingMethod {
     Hybrid,
 }
 
-pub fn trace_ray_grid(ray: Ray, surface: &Heightfield) {
+pub fn trace_ray_grid(ray: Ray, surface: &TriangleMesh) {
     println!("grid");
 }
 
-pub fn trace_ray_standard(ray: Ray, max_bounces: u32, surface: &Heightfield) -> Vec<embree::Ray> {
+pub fn trace_ray_standard(ray: Ray, max_bounces: u32, surface: &TriangleMesh) -> Vec<embree::Ray> {
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
-    let scene_id = embree_rt.create_scene();
-    let triangulated_surface = surface.triangulate(TriangulationMethod::Regular);
-    let surface_mesh = embree_rt.create_triangle_mesh(&triangulated_surface);
-    let surface_id = embree_rt.attach_geometry(scene_id, surface_mesh);
-
-    let mut coherent_ctx = embree::IntersectContext::coherent();
-    let ray_hit = embree_rt.intersect(scene_id, ray.into_embree_ray(), &mut coherent_ctx);
-
-    if ray_hit.hit.hit() {
-        println!("hit");
-    } else {
-        println!("miss");
-    }
-
+    let scn_id = embree_rt.create_scene();
+    let mesh = embree_rt.create_triangle_mesh(surface);
+    let geom_id = embree_rt.attach_geometry(scn_id, mesh);
     let mut rays: Vec<embree::Ray> = vec![];
 
-    embree_rt.trace_one_ray_dbg_auto_adjust(scene_id, ray.into_embree_ray(), max_bounces, 0, None, &mut rays);
+    embree_rt.trace_one_ray_dbg_auto_adjust(
+        scn_id,
+        ray.into_embree_ray(),
+        max_bounces,
+        0,
+        None,
+        &mut rays,
+    );
 
-    println!("final result {:?}", rays);
     rays
 }
 
-pub fn trace_ray_hybrid(ray: Ray, surface: &Heightfield) {
+pub fn trace_ray_hybrid(ray: Ray, surface: &TriangleMesh) {
     println!("hybrid");
 }
 

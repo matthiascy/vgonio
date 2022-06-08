@@ -541,7 +541,7 @@ impl SimulationWorkspace {
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             event_loop,
-            surface_visible: true
+            surface_visible: true,
         }
     }
 
@@ -608,7 +608,10 @@ impl SimulationWorkspace {
                         {
                             let res = ui.add(super::widgets::toggle(&mut self.surface_visible));
                             if res.changed()
-                                && self.event_loop.send_event(VgonioEvent::ToggleSurfaceVisibility).is_err()
+                                && self
+                                    .event_loop
+                                    .send_event(VgonioEvent::ToggleSurfaceVisibility)
+                                    .is_err()
                             {
                                 log::warn!("[EVENT] Failed to send ToggleSurfaceVisibility event");
                             }

@@ -1,6 +1,7 @@
 use crate::gfx::VertexLayout;
 use crate::htfld::{regular_triangulation, Heightfield};
 use crate::isect::Aabb;
+use crate::mesh::TriangleMesh;
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
 use wgpu::util::DeviceExt;
@@ -23,12 +24,21 @@ pub struct MeshView {
 impl MeshView {
     pub fn from_height_field(device: &wgpu::Device, hf: &Heightfield) -> Self {
         // Number of triangles = 2 * rows * cols
-        let (rows, cols) = (hf.cols, hf.rows);
+        let (cols, rows) = (hf.cols, hf.rows);
         let (positions, extent) = hf.generate_vertices();
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
 
-        let indices: Vec<u32> = regular_triangulation(&positions, rows, cols);
+        let indices: Vec<u32> = regular_triangulation(&positions, cols, rows);
+
+        assert_eq!(indices.len(), indices_count as usize);
+
+        log::debug!(
+            "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",
+            vertices_count,
+            indices_count / 3,
+            indices.len()
+        );
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("mesh_view_vertex_buffer"),
@@ -48,6 +58,40 @@ impl MeshView {
             vertices_count: vertices_count as u32,
             indices_count: indices_count as u32,
             extent,
+            vertex_layout,
+            vertex_buffer,
+            index_buffer,
+            index_format: wgpu::IndexFormat::Uint32,
+            topology: PrimitiveTopology::TriangleList,
+        }
+    }
+
+    pub fn from_triangle_mesh(device: &wgpu::Device, mesh: &TriangleMesh) -> Self {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("mesh_view_vertex_buffer"),
+            contents: bytemuck::cast_slice(&mesh.verts),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("mesh_view_index_buffer"),
+            contents: bytemuck::cast_slice(&mesh.faces),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let vertex_layout = VertexLayout::new(&[VertexFormat::Float32x3], None);
+
+        log::debug!(
+            "TriangleMesh --> MeshView, num verts: {}, num faces: {}, num indices: {}",
+            mesh.num_verts,
+            mesh.num_tris,
+            mesh.faces.len()
+        );
+
+        Self {
+            vertices_count: mesh.num_verts as u32,
+            indices_count: mesh.faces.len() as u32,
+            extent: mesh.extent,
             vertex_layout,
             vertex_buffer,
             index_buffer,

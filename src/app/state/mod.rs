@@ -16,15 +16,14 @@ use crate::app::VgonioConfig;
 use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
 use crate::htfld::Heightfield;
+use crate::mesh::{TriangleMesh, TriangulationMethod};
 use glam::{Mat4, Vec3};
-use std::{
-    collections::HashMap,
-    default::Default,
-    io::{BufWriter, Write},
-    num::NonZeroU32,
-    path::{Path, PathBuf},
-    time::Instant
-};
+use std::collections::HashMap;
+use std::default::Default;
+use std::io::{BufWriter, Write};
+use std::num::NonZeroU32;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 use wgpu::{VertexFormat, VertexStepMode};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -157,6 +156,11 @@ struct DebugDrawing {
     /// Render pass for rays drawing.
     pub render_pass_rd: RdrPass,
 
+    pub prim_pipeline: wgpu::RenderPipeline,
+    pub prim_bind_group: wgpu::BindGroup,
+    pub prim_uniform_buffer: wgpu::Buffer,
+    pub prim_vert_buffer: wgpu::Buffer,
+
     pub ray_t: f32,
 }
 
@@ -170,6 +174,14 @@ impl DebugDrawing {
                 label: Some("debug-drawing-rays-shader"),
                 source: wgpu::ShaderSource::Wgsl(
                     include_str!("../assets/shaders/wgsl/rays.wgsl").into(),
+                ),
+            });
+        let prim_shader_module = ctx
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("debug-drawing-prim-shader"),
+                source: wgpu::ShaderSource::Wgsl(
+                    include_str!("../assets/shaders/wgsl/prim.wgsl").into(),
                 ),
             });
         let bind_group_layout =
@@ -194,6 +206,13 @@ impl DebugDrawing {
                 contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
+        let prim_uniform_buffer =
+            ctx.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("debug-drawing-prim-uniform-buffer"),
+                    contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
         Self {
             vert_buffer: SizedBuffer::new(
@@ -255,7 +274,78 @@ impl DebugDrawing {
                 })],
                 uniform_buffer: Some(uniform_buffer),
             },
-            ray_t: 10.0
+            prim_pipeline: ctx
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("debug-prim-pipeline"),
+                    layout: Some(&ctx.device.create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("debug-prim-pipeline-layout"),
+                            bind_group_layouts: &[&bind_group_layout],
+                            push_constant_ranges: &[],
+                        },
+                    )),
+                    vertex: wgpu::VertexState {
+                        module: &prim_shader_module,
+                        entry_point: "vs_main",
+                        buffers: &[VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None)
+                            .buffer_layout(VertexStepMode::Vertex)],
+                    },
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: None,
+                        unclipped_depth: false,
+                        polygon_mode: wgpu::PolygonMode::Line,
+                        conservative: false,
+                    },
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &prim_shader_module,
+                        entry_point: "fs_main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: ctx.surface_config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
+                    }),
+                    multiview: None,
+                }),
+            prim_bind_group: ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("debug-prim-bind-group"),
+                layout: &ctx
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("debug-drawing-prim-bind-group-layout"),
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                    }),
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: prim_uniform_buffer.as_entire_binding(),
+                }],
+            }),
+            prim_uniform_buffer,
+            prim_vert_buffer: ctx
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("debug-drawing-prim-vert-buffer"),
+                    contents: bytemuck::cast_slice(&[0.0f32; std::mem::size_of::<f32>() * 3 * 3]),
+                    usage: wgpu::BufferUsages::VERTEX
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                }),
+            ray_t: 10.0,
         }
     }
 
@@ -283,9 +373,10 @@ pub struct VgonioApp {
     //shadow_pass: ShadowPass,
     occlusion_estimation_pass: OcclusionEstimationPass,
 
-    heightfield: Option<Box<Heightfield>>,
-    heightfield_mesh_view: Option<MeshView>,
-    heightfield_micro_view: Option<MicroSurfaceView>,
+    surface: Option<Box<Heightfield>>,
+    surface_mesh: Option<TriangleMesh>,
+    surface_mesh_view: Option<MeshView>,
+    surface_mesh_micro_view: Option<MicroSurfaceView>,
     surface_scale_factor: f32,
 
     opened_surfaces: Vec<PathBuf>,
@@ -362,9 +453,10 @@ impl VgonioApp {
             debug_drawing,
             debug_drawing_enabled: true,
             occlusion_estimation_pass,
-            heightfield: None,
-            heightfield_mesh_view: None,
-            heightfield_micro_view: None,
+            surface: None,
+            surface_mesh: None,
+            surface_mesh_view: None,
+            surface_mesh_micro_view: None,
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
@@ -372,7 +464,7 @@ impl VgonioApp {
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             opened_surfaces: vec![],
-            surface_visible: true
+            surface_visible: true,
         })
     }
 
@@ -481,7 +573,7 @@ impl VgonioApp {
         // self.shadow_pass
         //     .update_uniforms(&self.gpu_ctx.queue, Mat4::IDENTITY, view, proj);
 
-        if let Some(hf) = &self.heightfield {
+        if let Some(hf) = &self.surface {
             let mut uniform = [0.0f32; 16 * 3 + 4];
             // Displace visually the heightfield.
             uniform[0..16].copy_from_slice(
@@ -507,6 +599,12 @@ impl VgonioApp {
                     .uniform_buffer
                     .as_ref()
                     .unwrap(),
+                0,
+                bytemuck::cast_slice(&uniform),
+            );
+
+            self.gpu_ctx.queue.write_buffer(
+                &self.debug_drawing.prim_uniform_buffer,
                 0,
                 bytemuck::cast_slice(&uniform),
             );
@@ -578,7 +676,7 @@ impl VgonioApp {
             });
 
             if self.surface_visible {
-                if let Some(mesh) = &self.heightfield_mesh_view {
+                if let Some(mesh) = &self.surface_mesh_view {
                     let pass = self.passes.get("heightfield").unwrap();
                     render_pass.set_pipeline(&pass.pipeline);
                     render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
@@ -612,6 +710,11 @@ impl VgonioApp {
             render_pass.set_bind_group(0, &self.debug_drawing.render_pass_rd.bind_groups[0], &[]);
             render_pass.set_vertex_buffer(0, self.debug_drawing.vert_buffer.raw.slice(..));
             render_pass.draw(0..self.debug_drawing.vert_count, 0..1);
+
+            render_pass.set_pipeline(&self.debug_drawing.prim_pipeline);
+            render_pass.set_bind_group(0, &self.debug_drawing.prim_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.debug_drawing.prim_vert_buffer.slice(..));
+            render_pass.draw(0..3, 0..1)
         }
         {
             // Record UI
@@ -695,19 +798,55 @@ impl VgonioApp {
                 //         r.org_y + self.debug_drawing.ray_t * r.dir_y,
                 //         r.org_z + self.debug_drawing.ray_t * r.dir_z]
                 // }).collect::<Vec<_>>();
-                // self.debug_drawing.vert_count = (self.debug_drawing.rays.len() * 2) as u32;
+                // self.debug_drawing.vert_count =
+                // (self.debug_drawing.rays.len() * 2) as u32;
                 // self.gpu_ctx.queue.write_buffer(
                 //     &self.debug_drawing.vert_buffer.raw,
                 //     0,
                 //     bytemuck::cast_slice(&content),
                 // );
             }
+            VgonioEvent::UpdatePrimId(prim_id) => {
+                if let Some(mesh) = &self.surface_mesh {
+                    let id = prim_id as usize;
+                    if id < mesh.faces.len() {
+                        let indices = [
+                            mesh.faces[id * 3],
+                            mesh.faces[id * 3 + 1],
+                            mesh.faces[id * 3 + 2],
+                        ];
+                        //let indices = mesh.faces[id];
+                        let vertices = [
+                            mesh.verts[indices[0] as usize],
+                            mesh.verts[indices[1] as usize],
+                            mesh.verts[indices[2] as usize],
+                        ];
+                        log::debug!(
+                            "query prim {}: {:?}\
+                    \n    p0: {:?}\
+                    \n    p1: {:?}\
+                    \n    p2: {:?}",
+                            prim_id,
+                            indices,
+                            vertices[0],
+                            vertices[1],
+                            vertices[2]
+                        );
+                        self.gpu_ctx.queue.write_buffer(
+                            &self.debug_drawing.prim_vert_buffer,
+                            0,
+                            bytemuck::cast_slice(&vertices),
+                        );
+                    }
+                }
+            }
             VgonioEvent::TraceRayDbg {
                 ray,
                 method,
                 max_bounces,
             } => {
-                if self.heightfield.is_none() {
+                log::warn!("trace ray: {:?}", ray);
+                if self.surface.is_none() {
                     log::warn!("No heightfield loaded, can't trace ray!");
                 } else {
                     match method {
@@ -715,22 +854,30 @@ impl VgonioApp {
                             self.debug_drawing.rays = crate::acq::tracing::trace_ray_standard(
                                 ray,
                                 max_bounces,
-                                self.heightfield.as_ref().unwrap(),
+                                self.surface_mesh.as_ref().unwrap(),
                             );
+                            println!(">> {:?}", self.debug_drawing.rays.len() - 1);
                             if self.debug_drawing_enabled {
-                                let mut content = vec![0.0f32; (self.debug_drawing.rays.len() + 1) * 3];
+                                let mut content =
+                                    vec![0.0f32; (self.debug_drawing.rays.len() + 1) * 3];
                                 for (i, r) in self.debug_drawing.rays.iter().enumerate() {
-                                    content[i * 3 + 0] = r.org_x;
+                                    content[i * 3] = r.org_x;
                                     content[i * 3 + 1] = r.org_y;
                                     content[i * 3 + 2] = r.org_z;
-                                    if i == self.debug_drawing.rays.len() - 1 {
-                                        content[i * 3 + 3] = r.org_x + self.debug_drawing.ray_t * r.dir_x;
-                                        content[i * 3 + 4] = r.org_y + self.debug_drawing.ray_t * r.dir_y;
-                                        content[i * 3 + 5] = r.org_z + self.debug_drawing.ray_t * r.dir_z;
-                                    }
                                 }
+
+                                let last_i = self.debug_drawing.rays.len() - 1;
+                                let last = self.debug_drawing.rays[last_i];
+                                content[last_i * 3 + 3] =
+                                    last.org_x + self.debug_drawing.ray_t * last.dir_x;
+                                content[last_i * 3 + 4] =
+                                    last.org_y + self.debug_drawing.ray_t * last.dir_y;
+                                content[last_i * 3 + 5] =
+                                    last.org_z + self.debug_drawing.ray_t * last.dir_z;
+
                                 println!("rays: {:?}", content);
-                                self.debug_drawing.vert_count = self.debug_drawing.rays.len() as u32 + 1;
+                                self.debug_drawing.vert_count =
+                                    self.debug_drawing.rays.len() as u32 + 1;
                                 self.gpu_ctx.queue.write_buffer(
                                     &self.debug_drawing.vert_buffer.raw,
                                     0,
@@ -741,13 +888,13 @@ impl VgonioApp {
                         RayTracingMethod::Grid => {
                             crate::acq::tracing::trace_ray_grid(
                                 ray,
-                                self.heightfield.as_ref().unwrap(),
+                                self.surface_mesh.as_ref().unwrap(),
                             );
                         }
                         RayTracingMethod::Hybrid => {
                             crate::acq::tracing::trace_ray_hybrid(
                                 ray,
-                                self.heightfield.as_ref().unwrap(),
+                                self.surface_mesh.as_ref().unwrap(),
                             );
                         }
                     }
@@ -768,17 +915,21 @@ impl VgonioApp {
         match Heightfield::read_from_file(path, None, None) {
             Ok(mut hf) => {
                 log::info!(
-                    "Heightfield loaded: {}, rows = {}, cols = {}",
+                    "Heightfield loaded: {}, rows = {}, cols = {}, du = {}, dv = {}",
                     path.display(),
                     hf.rows,
-                    hf.cols
+                    hf.cols,
+                    hf.du,
+                    hf.dv
                 );
                 hf.fill_holes();
-                let mesh_view = MeshView::from_height_field(&self.gpu_ctx.device, &hf);
+                let mesh = hf.triangulate(TriangulationMethod::Regular);
+                let mesh_view = MeshView::from_triangle_mesh(&self.gpu_ctx.device, &mesh);
                 let micro_view = MicroSurfaceView::from_height_field(&self.gpu_ctx.device, &hf);
-                self.heightfield = Some(Box::new(hf));
-                self.heightfield_mesh_view = Some(mesh_view);
-                self.heightfield_micro_view = Some(micro_view);
+                self.surface = Some(Box::new(hf));
+                self.surface_mesh = Some(mesh);
+                self.surface_mesh_view = Some(mesh_view);
+                self.surface_mesh_micro_view = Some(micro_view);
             }
             Err(err) => {
                 log::error!("HeightField loading error: {}", err);
@@ -788,7 +939,7 @@ impl VgonioApp {
 
     /// Measure the geometric masking/shadowing function of a micro-surface.
     fn measure_micro_surface_geometric_term(&mut self) {
-        if let Some(mesh) = &self.heightfield_micro_view {
+        if let Some(mesh) = &self.surface_mesh_micro_view {
             let radius = (mesh.extent.max - mesh.extent.min).max_element();
             let near = 0.1f32;
             let far = radius * 2.0;

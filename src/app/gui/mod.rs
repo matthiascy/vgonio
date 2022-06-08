@@ -29,4 +29,5 @@ pub enum VgonioEvent {
     ToggleDebugDrawing,
     ToggleSurfaceVisibility,
     UpdateDebugT(f32),
+    UpdatePrimId(u32),
 }

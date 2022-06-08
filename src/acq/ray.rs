@@ -128,13 +128,13 @@ pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 {
     //             out.as_mut_ptr(),
     //             _mm_sub_ps(
     //                 w_i,
-    //                 _mm_mul_ps(_mm_mul_ps(_mm_set1_ps(2.0), _mm_set1_ps(w_i_dot_n)), n),
-    //             ),
+    //                 _mm_mul_ps(_mm_mul_ps(_mm_set1_ps(2.0),
+    // _mm_set1_ps(w_i_dot_n)), n),             ),
     //         )
     //     }
     //     Vec3::from_slice(&out[..3]).normalize()
     // } else {
-        (w_i - 2.0 * w_i.dot(n) * n).normalize()
+    (w_i - 2.0 * w_i.dot(n) * n).normalize()
     // }
 }
 

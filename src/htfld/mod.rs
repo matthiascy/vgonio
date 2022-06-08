@@ -472,7 +472,7 @@ impl Heightfield {
         match method {
             TriangulationMethod::Regular => {
                 let (verts, extent) = self.generate_vertices();
-                let faces = regular_triangulation(&verts, self.rows, self.cols);
+                let faces = regular_triangulation(&verts, self.cols, self.rows);
                 TriangleMesh {
                     num_tris: faces.len() / 3,
                     num_verts: verts.len(),
@@ -490,47 +490,88 @@ impl Heightfield {
 
 /// Generate a triangle mesh from heightfield. Triangle winding is
 /// counter-clockwise.
+/// 0  <-- 1
+/// |   /  |
+/// |  /   |
+/// 2  --> 3
 ///
 /// # Returns
 ///
 /// Vec<u32>: An array of vertex indices forming triangles.
-pub(crate) fn regular_triangulation(positions: &[Vec3], rows: usize, cols: usize) -> Vec<u32> {
+pub(crate) fn regular_triangulation(positions: &[Vec3], cols: usize, rows: usize) -> Vec<u32> {
     assert_eq!(
         positions.len(),
-        (rows * cols) as usize,
+        (cols * rows) as usize,
         "triangulation: positions.len() != rows * cols"
     );
-    let mut indices: Vec<u32> = vec![0; 2 * (rows - 1) * (cols - 1) * 3];
+    let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
     let mut tri = 0;
-    for i in 0..rows * cols {
-        let row = i / rows;
-        let col = i % rows;
+    for i in 0..cols * rows {
+        let row = i / cols;
+        let col = i % cols;
 
         // last row
-        if row == cols - 1 {
+        if row == rows - 1 {
             continue;
         }
 
         if col == 0 {
             indices[tri] = i as u32;
-            indices[tri + 1] = (i + rows) as u32;
+            indices[tri + 1] = (i + cols) as u32;
             indices[tri + 2] = (i + 1) as u32;
             tri += 3;
-        } else if col == rows - 1 {
+        } else if col == cols - 1 {
             indices[tri] = i as u32;
-            indices[tri + 1] = (i + rows - 1) as u32;
-            indices[tri + 2] = (i + rows) as u32;
+            indices[tri + 1] = (i + cols - 1) as u32;
+            indices[tri + 2] = (i + cols) as u32;
             tri += 3;
         } else {
             indices[tri] = i as u32;
-            indices[tri + 1] = (i + rows - 1) as u32;
-            indices[tri + 2] = (i + rows) as u32;
+            indices[tri + 1] = (i + cols - 1) as u32;
+            indices[tri + 2] = (i + cols) as u32;
             indices[tri + 3] = i as u32;
-            indices[tri + 4] = (i + rows) as u32;
+            indices[tri + 4] = (i + cols) as u32;
             indices[tri + 5] = (i + 1) as u32;
             tri += 6;
         }
     }
 
     indices
+}
+
+pub(crate) fn regular_triangulation_v2(
+    positions: &[Vec3],
+    rows: usize,
+    cols: usize,
+) -> Vec<[u32; 3]> {
+    assert_eq!(
+        positions.len(),
+        (rows * cols) as usize,
+        "triangulation: positions.len() != rows * cols"
+    );
+    //let mut indices: Vec<u32> = vec![0; 2 * (rows - 1) * (cols - 1) * 3];
+    let mut tris: Vec<[u32; 3]> = vec![[0, 0, 0]; 2 * (rows - 1) * (cols - 1)];
+    let mut tri = 0;
+    for i in 0..rows * cols {
+        let row = i / rows;
+        let col = i % rows;
+        // last row
+        if row == cols - 1 {
+            continue;
+        }
+
+        if col == 0 {
+            tris[tri] = [i as u32, (i + rows) as u32, (i + 1) as u32];
+            tri += 1;
+        } else if col == rows - 1 {
+            tris[tri] = [i as u32, (i + rows - 1) as u32, (i + rows) as u32];
+            tri += 1;
+        } else {
+            tris[tri] = [i as u32, (i + rows - 1) as u32, (i + rows) as u32];
+            tris[tri + 1] = [i as u32, (i + rows) as u32, (i + 1) as u32];
+            tri += 2;
+        }
+    }
+
+    tris
 }

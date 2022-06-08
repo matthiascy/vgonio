@@ -23,9 +23,19 @@ pub fn input3_spherical(value: &mut Vec3) -> impl egui::Widget + '_ {
     move |ui: &mut egui::Ui| {
         ui.horizontal(|ui| {
             ui.add(egui::DragValue::new(&mut value.x).prefix("r: "));
-            ui.add(egui::DragValue::new(&mut value.y).prefix("θ: ").suffix("°").clamp_range(0.0..=90.0));
-            ui.add(egui::DragValue::new(&mut value.z).prefix("φ: ").suffix("°").clamp_range(0.0..=360.0));
+            ui.add(
+                egui::DragValue::new(&mut value.y)
+                    .prefix("θ: ")
+                    .suffix("°")
+                    .clamp_range(0.0..=90.0),
+            );
+            ui.add(
+                egui::DragValue::new(&mut value.z)
+                    .prefix("φ: ")
+                    .suffix("°")
+                    .clamp_range(0.0..=360.0),
+            );
         })
-            .response
+        .response
     }
 }

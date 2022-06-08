@@ -1,6 +1,6 @@
 use crate::acq::ray::Ray;
 use crate::acq::tracing::RayTracingMethod;
-use crate::app::gui::widgets::{input3_xyz, input3_spherical};
+use crate::app::gui::widgets::{input3_spherical, input3_xyz};
 use crate::app::gui::VgonioEvent;
 use glam::Vec3;
 use std::sync::Arc;
@@ -19,6 +19,7 @@ pub(crate) struct RayTracingPane {
     ray_mode: RayMode,
     max_bounces: u32,
     method: RayTracingMethod,
+    prim_id: u32,
     t: f32,
     event_loop: Arc<EventLoopProxy<VgonioEvent>>,
 }
@@ -32,6 +33,7 @@ impl RayTracingPane {
             ray_mode: RayMode::OriginDirection,
             max_bounces: 20,
             method: RayTracingMethod::Standard,
+            prim_id: 0,
             t: 10.0,
             event_loop,
         }
@@ -58,12 +60,50 @@ impl egui::Widget for &mut RayTracingPane {
 
         ui.horizontal_wrapped(|ui| {
             ui.label("t");
-            let res = ui.add(
-                egui::DragValue::new(&mut self.t)
-                    .clamp_range(0.1..=200.0)
-            );
-            if res.changed() && self.event_loop.send_event(VgonioEvent::UpdateDebugT(self.t)).is_err() {
+            let res = ui.add(egui::DragValue::new(&mut self.t).clamp_range(0.1..=200.0));
+            if res.changed()
+                && self
+                    .event_loop
+                    .send_event(VgonioEvent::UpdateDebugT(self.t))
+                    .is_err()
+            {
                 log::warn!("Failed to send event VgonioEvent::UpdateDebugT");
+            }
+        });
+
+        ui.horizontal_wrapped(|ui| {
+            ui.label("prim id");
+            ui.add(egui::DragValue::new(&mut self.prim_id));
+
+            if ui.button("print").clicked()
+                && self
+                    .event_loop
+                    .send_event(VgonioEvent::UpdatePrimId(self.prim_id))
+                    .is_err()
+            {
+                log::warn!("Failed to send event VgonioEvent::UpdatePrimId");
+            }
+
+            if ui.button("prev").clicked() {
+                self.prim_id -= 1;
+                if self
+                    .event_loop
+                    .send_event(VgonioEvent::UpdatePrimId(self.prim_id))
+                    .is_err()
+                {
+                    log::warn!("Failed to send event VgonioEvent::UpdatePrimId");
+                }
+            }
+
+            if ui.button("next").clicked() {
+                self.prim_id += 1;
+                if self
+                    .event_loop
+                    .send_event(VgonioEvent::UpdatePrimId(self.prim_id))
+                    .is_err()
+                {
+                    log::warn!("Failed to send event VgonioEvent::UpdatePrimId");
+                }
             }
         });
 
@@ -73,7 +113,11 @@ impl egui::Widget for &mut RayTracingPane {
                 egui::ComboBox::from_id_source("ray_mod")
                     .selected_text(format!("{:?}", self.ray_mode))
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.ray_mode, RayMode::OriginDirection, "Cartesian");
+                        ui.selectable_value(
+                            &mut self.ray_mode,
+                            RayMode::OriginDirection,
+                            "Cartesian",
+                        );
                         ui.selectable_value(&mut self.ray_mode, RayMode::OriginTarget, "Spherical");
                     });
 
@@ -109,18 +153,16 @@ impl egui::Widget for &mut RayTracingPane {
         ui.horizontal(|ui| {
             if ui.button("Trace").clicked() {
                 let ray = match self.ray_mode {
-                    RayMode::OriginDirection => {
-                        Ray {
-                            o: self.ray.o,
-                            d: self.ray.d.normalize(),
-                            e: self.ray.e,
-                        }
-                    }
+                    RayMode::OriginDirection => Ray {
+                        o: self.ray.o,
+                        d: self.ray.d.normalize(),
+                        e: self.ray.e,
+                    },
                     RayMode::OriginTarget => {
                         let r = self.ray_origin_spherical.x;
                         let theta = self.ray_origin_spherical.y.to_radians();
                         let phi = self.ray_origin_spherical.z.to_radians();
-                        let origin =  Vec3::new(
+                        let origin = Vec3::new(
                             r * theta.sin() * phi.sin(),
                             r * theta.cos(),
                             r * theta.sin() * phi.cos(),
