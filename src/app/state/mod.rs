@@ -25,7 +25,7 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use wgpu::util::DeviceExt;
-use wgpu::{VertexFormat, VertexStepMode};
+use wgpu::{VertexFormat, VertexStepMode, COPY_BYTES_PER_ROW_ALIGNMENT};
 use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopProxy;
 
@@ -39,9 +39,15 @@ const NUM_ZENITH_BINS: usize = ((0.5 * std::f32::consts::PI) / ZENITH_BIN_SIZE_R
 // TODO: fix blending.
 
 /// Stores the content of depth buffer.
+/// In general the size of the depth map is equal to the size of the window.
+/// Width will be recalculated when the window's bytes per row is not a multiple
+/// of 256.
 struct DepthMap {
     depth_attachment: Texture,
     depth_attachment_storage: wgpu::Buffer, // used to store depth attachment
+    /// Manually padded width to make sure the bytes per row is a multiple of
+    /// 256.
+    width: u32,
 }
 
 impl DepthMap {
@@ -53,6 +59,9 @@ impl DepthMap {
             None,
             Some("depth-texture"),
         );
+        // Manually align the width to 256 bytes.
+        let width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
+        let height = ctx.surface_config.height;
         let depth_attachment_storage_size = (std::mem::size_of::<f32>()
             * (ctx.surface_config.width * ctx.surface_config.height) as usize)
             as wgpu::BufferAddress;
@@ -66,6 +75,7 @@ impl DepthMap {
         Self {
             depth_attachment,
             depth_attachment_storage,
+            width,
         }
     }
 
@@ -77,8 +87,9 @@ impl DepthMap {
             None,
             Some("depth-texture"),
         );
+        self.width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
         let depth_map_buffer_size = (std::mem::size_of::<f32>()
-            * (ctx.surface_config.width * ctx.surface_config.height) as usize)
+            * (self.width * ctx.surface_config.height) as usize)
             as wgpu::BufferAddress;
         self.depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -105,9 +116,7 @@ impl DepthMap {
                 buffer: &self.depth_attachment_storage,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(
-                        std::mem::size_of::<f32>() as u32 * ctx.surface_config.width,
-                    ),
+                    bytes_per_row: NonZeroU32::new(std::mem::size_of::<f32>() as u32 * self.width),
                     rows_per_image: NonZeroU32::new(ctx.surface_config.height),
                 },
             },
@@ -122,7 +131,7 @@ impl DepthMap {
 
     /// Save current depth buffer content to a PNG file.
     pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path) {
-        let mut image = image::GrayImage::new(ctx.surface_config.width, ctx.surface_config.height);
+        let mut image = image::GrayImage::new(self.width, ctx.surface_config.height);
         {
             let buffer_slice = self.depth_attachment_storage.slice(..);
 
@@ -785,26 +794,19 @@ impl VgonioApp {
                     .simulation
                     .visual_debug_tool
                     .shadow_map_pane
-                    .update_depth_map(&self.gpu_ctx, &self.depth_map.depth_attachment_storage);
+                    .update_depth_map(
+                        &self.gpu_ctx,
+                        &self.gui_ctx,
+                        &self.depth_map.depth_attachment_storage,
+                        self.depth_map.width,
+                        self.gpu_ctx.surface_config.height,
+                    );
             }
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
                 self.surface_scale_factor = factor;
             }
             VgonioEvent::UpdateDebugT(t) => {
                 self.debug_drawing.ray_t = t;
-                // let content = self.debug_drawing.rays.iter().flat_map(|r| {
-                //     [r.org_x, r.org_y, r.org_z,
-                //         r.org_x + self.debug_drawing.ray_t * r.dir_x,
-                //         r.org_y + self.debug_drawing.ray_t * r.dir_y,
-                //         r.org_z + self.debug_drawing.ray_t * r.dir_z]
-                // }).collect::<Vec<_>>();
-                // self.debug_drawing.vert_count =
-                // (self.debug_drawing.rays.len() * 2) as u32;
-                // self.gpu_ctx.queue.write_buffer(
-                //     &self.debug_drawing.vert_buffer.raw,
-                //     0,
-                //     bytemuck::cast_slice(&content),
-                // );
             }
             VgonioEvent::UpdatePrimId(prim_id) => {
                 if let Some(mesh) = &self.surface_mesh {
@@ -845,18 +847,19 @@ impl VgonioApp {
                 method,
                 max_bounces,
             } => {
-                log::warn!("trace ray: {:?}", ray);
+                log::debug!("= = = = [Debug Ray Tracing] = = = =\n  => {:?}", ray);
                 if self.surface.is_none() {
                     log::warn!("No heightfield loaded, can't trace ray!");
                 } else {
                     match method {
                         RayTracingMethod::Standard => {
+                            log::debug!("  => [Standard Ray Tracing]");
                             self.debug_drawing.rays = crate::acq::tracing::trace_ray_standard(
                                 ray,
                                 max_bounces,
                                 self.surface_mesh.as_ref().unwrap(),
                             );
-                            println!(">> {:?}", self.debug_drawing.rays.len() - 1);
+                            log::debug!(">> {:?}", self.debug_drawing.rays.len() - 1);
                             if self.debug_drawing_enabled {
                                 let mut content =
                                     vec![0.0f32; (self.debug_drawing.rays.len() + 1) * 3];
@@ -875,7 +878,7 @@ impl VgonioApp {
                                 content[last_i * 3 + 5] =
                                     last.org_z + self.debug_drawing.ray_t * last.dir_z;
 
-                                println!("rays: {:?}", content);
+                                log::debug!("rays: {:?}", content);
                                 self.debug_drawing.vert_count =
                                     self.debug_drawing.rays.len() as u32 + 1;
                                 self.gpu_ctx.queue.write_buffer(
@@ -886,8 +889,11 @@ impl VgonioApp {
                             }
                         }
                         RayTracingMethod::Grid => {
+                            log::debug!("  => [Grid Ray Tracing]");
                             crate::acq::tracing::trace_ray_grid(
                                 ray,
+                                max_bounces,
+                                self.surface.as_ref().unwrap(),
                                 self.surface_mesh.as_ref().unwrap(),
                             );
                         }

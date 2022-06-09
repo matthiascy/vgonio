@@ -2,7 +2,7 @@ use crate::acq::ray::Ray;
 use crate::acq::tracing::RayTracingMethod;
 use crate::app::gui::widgets::{input3_spherical, input3_xyz};
 use crate::app::gui::VgonioEvent;
-use glam::Vec3;
+use glam::{IVec2, Vec3};
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
@@ -20,6 +20,7 @@ pub(crate) struct RayTracingPane {
     max_bounces: u32,
     method: RayTracingMethod,
     prim_id: u32,
+    cell_pos: IVec2,
     t: f32,
     event_loop: Arc<EventLoopProxy<VgonioEvent>>,
 }
@@ -34,6 +35,7 @@ impl RayTracingPane {
             max_bounces: 20,
             method: RayTracingMethod::Standard,
             prim_id: 0,
+            cell_pos: Default::default(),
             t: 10.0,
             event_loop,
         }
@@ -71,11 +73,27 @@ impl egui::Widget for &mut RayTracingPane {
             }
         });
 
+        if self.method == RayTracingMethod::Grid {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("cell");
+                ui.add(egui::DragValue::new(&mut self.cell_pos.x).prefix("x: "));
+                ui.add(egui::DragValue::new(&mut self.cell_pos.y).prefix("y:"));
+
+                if ui.button("show").clicked() && self
+                    .event_loop
+                    .send_event(VgonioEvent::UpdateCellPos(self.cell_pos))
+                    .is_err()
+                {
+                    log::warn!("Failed to send event VgonioEvent::UpdateCellPos");
+                }
+            });
+        }
+
         ui.horizontal_wrapped(|ui| {
             ui.label("prim id");
             ui.add(egui::DragValue::new(&mut self.prim_id));
 
-            if ui.button("print").clicked()
+            if ui.button("show").clicked()
                 && self
                     .event_loop
                     .send_event(VgonioEvent::UpdatePrimId(self.prim_id))
@@ -163,9 +181,9 @@ impl egui::Widget for &mut RayTracingPane {
                         let theta = self.ray_origin_spherical.y.to_radians();
                         let phi = self.ray_origin_spherical.z.to_radians();
                         let origin = Vec3::new(
-                            r * theta.sin() * phi.sin(),
-                            r * theta.cos(),
                             r * theta.sin() * phi.cos(),
+                            r * theta.cos(),
+                            r * theta.sin() * phi.sin(),
                         );
                         let d = (self.ray_target - origin).normalize();
                         Ray {

@@ -46,128 +46,128 @@ impl<'a> GridRayTracing<'a> {
         }
     }
 
-    /// Check if the given point is inside the grid.
-    fn inside(&self, pos: IVec2) -> bool {
-        pos.x >= self.min.x && pos.x <= self.max.x && pos.y >= self.min.y && pos.y <= self.max.y
+    /// Check if the given cell position is inside the grid.
+    fn inside(&self, cell_pos: IVec2) -> bool {
+        cell_pos.x >= self.min.x && cell_pos.x <= self.max.x && cell_pos.y >= self.min.y && cell_pos.y <= self.max.y
     }
 
-    pub fn trace_ray(&self, ray: Ray) -> Option<IntersectRecord> {
-        let starting_point = if !self.inside(self.world_to_grid(ray.o)) {
-            // If the ray origin is outside the grid, first check if it intersects
-            // with the surface bounding box.
-            self.mesh
-                .extent
-                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
-                .map(|isect_point| {
-                    log::debug!("Ray origin outside the grid, intersecting with the bounding box.");
-                    isect_point - ray.d * 0.01
-                })
-        } else {
-            // If the ray origin is inside the grid, use the ray origin.
-            Some(ray.o)
-        };
-        log::debug!("Starting point: {:?}", starting_point);
-
-        if let Some(starting_point) = starting_point {
-            // Traverse the grid in x, y coordinates, until the ray exits the grid and
-            // identify all traversed cells.
-            let GridTraversal {
-                traversed,
-                distances,
-            } = self.traverse(starting_point.xz(), ray.d.xz());
-
-            let mut record = None;
-
-            log::debug!("traversed: {:?}", traversed);
-
-            // Iterate over the traversed cells and find the closest intersection.
-            for (i, cell) in traversed.iter().enumerate().filter(|(_, cell)| {
-                cell.x >= self.min.x - 1
-                    && cell.y >= self.min.y - 1
-                    && cell.x <= self.max.x
-                    && cell.y <= self.max.y
-            }) {
-                if cell.x == self.min.x - 1
-                    || cell.y == self.min.y - 1
-                    || cell.x == self.max.x
-                    || cell.y == self.max.y
-                {
-                    // Skip the cell outside the grid, since it is the starting point.
-                    continue;
-                }
-
-                // Calculate the two ray endpoints at the cell boundaries.
-                let entering = ray.o + distances[i] * ray.d;
-                let exiting = ray.o + distances[i + 1] * ray.d;
-
-                if self.intersected_with_cell(*cell, entering.z, exiting.z) {
-                    // Calculate the intersection point of the ray with the
-                    // two triangles inside of the cell.
-                    let tris = self.triangles_at(*cell);
-                    let isect0 = isect_ray_tri(ray, &tris[0]);
-                    let isect1 = isect_ray_tri(ray, &tris[1]);
-
-                    match (isect0, isect1) {
-                        (None, None) => {
-                            continue;
-                        }
-                        (Some((_, u, v)), None) => {
-                            record = Some(IntersectRecord {
-                                ray,
-                                geom_id: 0,
-                                prim_id: 0,
-                                hit_point: (1.0 - u - v) * tris[0][0]
-                                    + u * tris[0][1]
-                                    + v * tris[0][2],
-                                normal: compute_normal(&tris[0]),
-                                nudged_times: 0,
-                            });
-                            break;
-                        }
-                        (None, Some((_, u, v))) => {
-                            record = Some(IntersectRecord {
-                                ray,
-                                geom_id: 0,
-                                prim_id: 0,
-                                hit_point: (1.0 - u - v) * tris[1][0]
-                                    + u * tris[1][1]
-                                    + v * tris[1][2],
-                                normal: compute_normal(&tris[1]),
-                                nudged_times: 0,
-                            });
-                            break;
-                        }
-                        (Some((t0, u, v)), Some((t1, _, _))) => {
-                            // The ray hit the shared edge of two triangles.
-                            if (t0.abs() - t1.abs()).abs() < f32::EPSILON {
-                                record = Some(IntersectRecord {
-                                    ray,
-                                    geom_id: 0,
-                                    prim_id: 0,
-                                    hit_point: (1.0 - u - v) * tris[0][0]
-                                        + u * tris[0][1]
-                                        + v * tris[0][2],
-                                    normal: compute_normal(&tris[0]),
-                                    nudged_times: 0,
-                                });
-                                break;
-                            } else {
-                                log::error!("The ray hit two triangles at the same time.");
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
-            record
-        } else {
-            None
-        }
-    }
+    // pub fn trace_ray(&self, ray: Ray) -> Option<IntersectRecord> {
+    //     let starting_point = if !self.inside(self.world_to_grid(ray.o)) {
+    //         // If the ray origin is outside the grid, first check if it intersects
+    //         // with the surface bounding box.
+    //         self.mesh
+    //             .extent
+    //             .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+    //             .map(|isect_point| {
+    //                 log::debug!("Ray origin outside the grid, intersecting with the bounding box.");
+    //                 isect_point - ray.d * 0.01
+    //             })
+    //     } else {
+    //         // If the ray origin is inside the grid, use the ray origin.
+    //         Some(ray.o)
+    //     };
+    //     log::debug!("Starting point: {:?}", starting_point);
+    //
+    //     if let Some(starting_point) = starting_point {
+    //         // Traverse the grid in x, y coordinates, until the ray exits the grid and
+    //         // identify all traversed cells.
+    //         let GridTraversal {
+    //             traversed,
+    //             distances,
+    //         } = self.traverse(starting_point.xz(), ray.d.xz());
+    //
+    //         let mut record = None;
+    //
+    //         log::debug!("traversed: {:?}", traversed);
+    //
+    //         // Iterate over the traversed cells and find the closest intersection.
+    //         for (i, cell) in traversed.iter().enumerate().filter(|(_, cell)| {
+    //             cell.x >= self.min.x - 1
+    //                 && cell.y >= self.min.y - 1
+    //                 && cell.x <= self.max.x
+    //                 && cell.y <= self.max.y
+    //         }) {
+    //             if cell.x == self.min.x - 1
+    //                 || cell.y == self.min.y - 1
+    //                 || cell.x == self.max.x
+    //                 || cell.y == self.max.y
+    //             {
+    //                 // Skip the cell outside the grid, since it is the starting point.
+    //                 continue;
+    //             }
+    //
+    //             // Calculate the two ray endpoints at the cell boundaries.
+    //             let entering = ray.o + distances[i] * ray.d;
+    //             let exiting = ray.o + distances[i + 1] * ray.d;
+    //
+    //             if self.intersected_with_cell(*cell, entering.z, exiting.z) {
+    //                 // Calculate the intersection point of the ray with the
+    //                 // two triangles inside of the cell.
+    //                 let tris = self.triangles_at(*cell);
+    //                 let isect0 = isect_ray_tri(ray, &tris[0]);
+    //                 let isect1 = isect_ray_tri(ray, &tris[1]);
+    //
+    //                 match (isect0, isect1) {
+    //                     (None, None) => {
+    //                         continue;
+    //                     }
+    //                     (Some((_, u, v)), None) => {
+    //                         record = Some(IntersectRecord {
+    //                             ray,
+    //                             geom_id: 0,
+    //                             prim_id: 0,
+    //                             hit_point: (1.0 - u - v) * tris[0][0]
+    //                                 + u * tris[0][1]
+    //                                 + v * tris[0][2],
+    //                             normal: compute_normal(&tris[0]),
+    //                             nudged_times: 0,
+    //                         });
+    //                         break;
+    //                     }
+    //                     (None, Some((_, u, v))) => {
+    //                         record = Some(IntersectRecord {
+    //                             ray,
+    //                             geom_id: 0,
+    //                             prim_id: 0,
+    //                             hit_point: (1.0 - u - v) * tris[1][0]
+    //                                 + u * tris[1][1]
+    //                                 + v * tris[1][2],
+    //                             normal: compute_normal(&tris[1]),
+    //                             nudged_times: 0,
+    //                         });
+    //                         break;
+    //                     }
+    //                     (Some((t0, u, v)), Some((t1, _, _))) => {
+    //                         // The ray hit the shared edge of two triangles.
+    //                         if (t0.abs() - t1.abs()).abs() < f32::EPSILON {
+    //                             record = Some(IntersectRecord {
+    //                                 ray,
+    //                                 geom_id: 0,
+    //                                 prim_id: 0,
+    //                                 hit_point: (1.0 - u - v) * tris[0][0]
+    //                                     + u * tris[0][1]
+    //                                     + v * tris[0][2],
+    //                                 normal: compute_normal(&tris[0]),
+    //                                 nudged_times: 0,
+    //                             });
+    //                             break;
+    //                         } else {
+    //                             log::error!("The ray hit two triangles at the same time.");
+    //                             continue;
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         record
+    //     } else {
+    //         None
+    //     }
+    // }
 
     /// Convert a world space position into a grid space position (coordinates
     /// of the cell) relative to the origin of the surface (left-top corner).
-    pub fn world_to_grid(&self, world_pos: Vec3) -> IVec2 {
+    pub fn world_to_grid_3d(&self, world_pos: Vec3) -> IVec2 {
         // TODO: deal with the case where the grid is aligned with different world axes.
         let (x, y) = match self.surface.alignment {
             AxisAlignment::XY => (world_pos.x, world_pos.y),
@@ -181,6 +181,14 @@ impl<'a> GridRayTracing<'a> {
         IVec2::new(
             ((x - self.origin.x) / self.surface.du) as i32,
             ((y - self.origin.y) / self.surface.dv) as i32,
+        )
+    }
+
+    /// Convert a world space position into a grid space position.
+    pub fn world_to_grid_2d(&self, world_pos: Vec2) -> IVec2 {
+        IVec2::new(
+            ((world_pos.x - self.origin.x) / self.surface.du) as i32,
+            ((world_pos.y - self.origin.y) / self.surface.dv) as i32,
         )
     }
 
@@ -252,71 +260,147 @@ impl<'a> GridRayTracing<'a> {
     /// # Arguments
     ///
     /// * `ray_org` - The starting position (in world space) of the ray.
-    /// * `ray_dir` - The direction of the ray.
-    pub fn traverse(&self, ray_org: Vec2, ray_dir: Vec2) -> GridTraversal {
-        let ray_dir = ray_dir.normalize();
+    /// * `ray_dir` - The direction of the ray in world space.
+    pub fn traverse(&self, ray_org_world: Vec2, ray_dir: Vec2) -> GridTraversal {
+        log::debug!("Grid origin: {:?}", self.origin);
+        log::debug!("Traverse the grid with the ray: o {:?}, d: {:?}", ray_org_world, ray_dir.normalize());
         // Relocate the ray origin to the position relative to the origin of the grid.
-        let ray_org = ray_org - self.origin;
-        log::debug!("Grid traversal - ray orig: {:?}", ray_org);
+        let ray_org_grid = ray_org_world - self.origin;
+        log::debug!("Recalc ray origin: {:?}", ray_org_grid);
 
-        // Calculate dy/dx -- slope of the ray on the grid.
-        let m = ray_dir.y / ray_dir.x;
-        let m_recip = m.recip();
+        let is_parallel_to_x_axis = f32::abs(ray_dir.y - 0.0) < f32::EPSILON;
+        let is_parallel_to_y_axis = f32::abs(ray_dir.x - 0.0) < f32::EPSILON;
 
-        // Calculate the distance along the direction of the ray when moving
-        // a unit distance (1) along the x-axis and y-axis.
-        let unit_dist = Vec2::new((1.0 + m * m).sqrt(), (1.0 + m_recip * m_recip).sqrt());
-
-        let mut current = ray_org.floor().as_ivec2();
-        log::debug!("  - starting position: {:?}", current);
-
-        let step_dir = IVec2::new(
-            if ray_dir.x >= 0.0 { 1 } else { -1 },
-            if ray_dir.y >= 0.0 { 1 } else { -1 },
-        );
-
-        // Accumulated line length when moving along the x-axis and y-axis.
-        let mut accumulated = Vec2::new(
-            if ray_dir.x < 0.0 {
-                (ray_org.x - current.x as f32) * unit_dist.x
-            } else {
-                ((current.x + 1) as f32 - ray_org.x) * unit_dist.x
-            },
-            if ray_dir.y < 0.0 {
-                (ray_org.y - current.y as f32) * unit_dist.y
-            } else {
-                ((current.y + 1) as f32 - ray_org.y) * unit_dist.y
-            },
-        );
-
-        let mut distances = if accumulated.x > accumulated.y {
-            vec![accumulated.y]
-        } else {
-            vec![accumulated.x]
-        };
-
-        let mut traversed = vec![current];
-
-        while (current.x >= self.min.x - 1 && current.x <= self.max.x + 1)
-            && (current.y >= self.min.y - 1 && current.y <= self.max.y + 1)
-        {
-            let distance = if accumulated.x < accumulated.y {
-                current.x += step_dir.x;
-                accumulated.x += unit_dist.x;
-                accumulated.x
-            } else {
-                current.y += step_dir.y;
-                accumulated.y += unit_dist.y;
-                accumulated.y
-            };
-
-            distances.push(distance);
-            traversed.push(IVec2::new(current.x, current.y));
+        if is_parallel_to_x_axis && is_parallel_to_y_axis{
+            // The ray is parallel to both axes, which means it comes from the top or bottom of the grid.
+            return GridTraversal::FromTopOrBottom(ray_org_grid.floor().as_ivec2());
         }
 
-        GridTraversal {
-            traversed,
-            distances,
+        let ray_dir = ray_dir.normalize();
+        if is_parallel_to_x_axis && !is_parallel_to_y_axis {
+            // Get the cell coordinate of the ray origin.
+            let ray_org_cell = self.world_to_grid_2d(ray_org_world);
+            log::debug!("Ray origin cell: {:?}", ray_org_cell);
+            log::debug!("Ray origin grid: {:?}", ray_org_grid);
+            // Calc the distance from the ray origin to the first cell along the ray direction.
+            let mut dists = vec![];
+            let mut cells = vec![];
+            if ray_dir.x < 0.0 {
+                dists.push(ray_org_grid.x - (ray_org_cell.x as f32) * self.surface.du);
+                for i in 0..=ray_org_cell.x - self.min.x {
+                    cells.push(IVec2::new(ray_org_cell.x - i, ray_org_cell.y));
+                    dists.push(i as f32 * self.surface.du + dists[0]);
+                }
+            } else {
+                dists.push((ray_org_cell.x + 1) as f32 * self.surface.du - ray_org_grid.x);
+                for i in 0..=self.max.x - ray_org_cell.x {
+                    cells.push(IVec2::new(ray_org_cell.x + i, ray_org_cell.y));
+                    dists.push(i as f32 * self.surface.du + dists[0]);
+                }
+            }
+            GridTraversal::Traversed {
+                cells,
+                dists,
+            }
+        } else if is_parallel_to_y_axis && !is_parallel_to_x_axis {
+            // The ray is parallel to the y axis.
+            todo!("The ray is parallel to the y axis.");
+            unimplemented!();
+        } else {
+            // The ray is not parallel to either x or y axis.
+            // Compute the intersection of the ray with the grid.
+            todo!("The ray is not parallel to the x axis, neither to the y axis.");
+            unimplemented!();
+        }
+
+        // // Calculate dy/dx -- slope of the ray on the grid.
+        // let m = ray_dir.y / ray_dir.x;
+        // let m_recip = m.recip();
+        //
+        // // Calculate the distance along the direction of the ray when moving
+        // // a unit distance (1) along the x-axis and y-axis.
+        // let unit_dist = Vec2::new((1.0 + m * m).sqrt(), (1.0 + m_recip * m_recip).sqrt());
+        //
+        // let mut current = ray_org_grid.floor().as_ivec2();
+        // log::debug!("  - starting cell: {:?}", current);
+        //
+        // let step_dir = IVec2::new(
+        //     if ray_dir.x >= 0.0 { 1 } else { -1 },
+        //     if ray_dir.y >= 0.0 { 1 } else { -1 },
+        // );
+        //
+        // // Accumulated line length when moving along the x-axis and y-axis.
+        // let mut accumulated = Vec2::new(
+        //     if ray_dir.x < 0.0 {
+        //         (ray_org_grid.x - current.x as f32) * unit_dist.x
+        //     } else {
+        //         ((current.x + 1) as f32 - ray_org_grid.x) * unit_dist.x
+        //     },
+        //     if ray_dir.y < 0.0 {
+        //         (ray_org_grid.y - current.y as f32) * unit_dist.y
+        //     } else {
+        //         ((current.y + 1) as f32 - ray_org_grid.y) * unit_dist.y
+        //     },
+        // );
+        //
+        // let mut distances = if accumulated.x > accumulated.y {
+        //     vec![accumulated.y]
+        // } else {
+        //     vec![accumulated.x]
+        // };
+        //
+        // let mut traversed = vec![current];
+        //
+        // while (current.x >= self.min.x - 1 && current.x <= self.max.x + 1)
+        //     && (current.y >= self.min.y - 1 && current.y <= self.max.y + 1)
+        // {
+        //     let distance = if accumulated.x < accumulated.y {
+        //         current.x += step_dir.x;
+        //         accumulated.x += unit_dist.x;
+        //         accumulated.x
+        //     } else {
+        //         current.y += step_dir.y;
+        //         accumulated.y += unit_dist.y;
+        //         accumulated.y
+        //     };
+        //
+        //     distances.push(distance);
+        //     traversed.push(IVec2::new(current.x, current.y));
+        // }
+        //
+        // GridTraversal::Traversed {
+        //     cells: traversed,
+        //     dists: distances,
+        // }
+    }
+
+    pub fn trace_one_ray_dbg(&self, ray: Ray, max_bounces: u32, curr_bounces: u32, output: &mut Vec<Ray>) {
+        log::debug!("[{curr_bounces}]");
+        let starting_point = if !self.inside(self.world_to_grid_3d(ray.o)) {
+            // The ray origin is outside the grid, tests first with the bounding box.
+            self.mesh.extent.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+                .map(|point| {
+                    log::debug!("  - intersected with bounding box: {:?}", point);
+                    // Displace the hit point backwards along the ray direction.
+                    point - ray.d * 0.01
+                })
+        } else {
+            Some(ray.o)
+        };
+        log::debug!("  - starting point: {:?}", starting_point);
+
+        if let Some(start) = starting_point {
+            match self.traverse(start.xz(), ray.d.xz()) {
+                GridTraversal::FromTopOrBottom(cell) => {
+                    log::debug!("  - traversed cells: {:?}", cell);
+                }
+                GridTraversal::Traversed { cells, dists } => {
+                    log::debug!("  - traversed cells: {:?}", cells);
+                    log::debug!("  - traversed dists: {:?}", dists);
+                }
+            }
+        } else {
+            log::debug!("  - no starting point");
         }
     }
 }
@@ -327,13 +411,16 @@ fn compute_normal(pts: &[Vec3; 3]) -> Vec3 {
 
 /// Grid traversal outcome.
 #[derive(Debug)]
-pub struct GridTraversal {
-    /// Cells traversed by the ray.
-    pub traversed: Vec<IVec2>,
+pub enum GridTraversal {
+    FromTopOrBottom(IVec2),
 
-    /// Distances from the origin of the ray (entering cell of the ray) to each
-    /// intersection point between the ray and cells.
-    pub distances: Vec<f32>,
+    Traversed {
+        /// Cells traversed by the ray.
+        cells: Vec<IVec2>,
+        /// Distances from the origin of the ray (entering cell of the ray) to each
+        /// intersection point between the ray and cells.
+        dists: Vec<f32>,
+    }
 }
 
 #[test]

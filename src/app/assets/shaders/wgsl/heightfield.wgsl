@@ -24,7 +24,7 @@ fn vs_main([[location(0)]] position: vec3<f32>) ->  VOut {
     let span = uniforms.info.z * scale;
 
     let c: f32 = (scaled.y - lowest) / span;
-    vout.color = vec3<f32>(c, 1.0 - c, 0.025);
+    vout.color = vec3<f32>(c, 1.0 - c, 0.025) * 0.8;
     return vout;
 }
 

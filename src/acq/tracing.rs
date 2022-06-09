@@ -5,6 +5,7 @@ use crate::htfld::Heightfield;
 use crate::mesh::{TriangleMesh, TriangulationMethod};
 use embree::{Config, RayHit};
 use glam::Vec3;
+use crate::acq::grid_rt::GridRayTracing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RayTracingMethod {
@@ -13,18 +14,22 @@ pub enum RayTracingMethod {
     Hybrid,
 }
 
-pub fn trace_ray_grid(ray: Ray, surface: &TriangleMesh) {
-    println!("grid");
+pub fn trace_ray_grid(ray: Ray, max_bounces: u32, surface: &Heightfield, surface_mesh: &TriangleMesh) -> Vec<Ray> {
+    let grid_rt = GridRayTracing::new(surface, surface_mesh);
+    let mut rays= vec![];
+    grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, &mut rays);
+
+    rays
 }
 
 pub fn trace_ray_standard(ray: Ray, max_bounces: u32, surface: &TriangleMesh) -> Vec<embree::Ray> {
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let scn_id = embree_rt.create_scene();
     let mesh = embree_rt.create_triangle_mesh(surface);
-    let geom_id = embree_rt.attach_geometry(scn_id, mesh);
+    embree_rt.attach_geometry(scn_id, mesh);
     let mut rays: Vec<embree::Ray> = vec![];
 
-    embree_rt.trace_one_ray_dbg_auto_adjust(
+    embree_rt.trace_one_ray_dbg(
         scn_id,
         ray.into_embree_ray(),
         max_bounces,
@@ -63,8 +68,6 @@ pub struct IntersectRecord {
     pub nudged_times: u32,
 }
 
-const NUDGE_AMOUNT: f32 = f32::EPSILON * 10.0;
-
 // rtcIntersect/rtcOccluded calls can be invoked from multiple threads.
 // embree api calls to the same object are not thread safe in general.
 pub fn trace_one_ray_embree(
@@ -97,7 +100,8 @@ pub fn trace_one_ray_embree(
                     // Self intersection happens, recalculate the hit point.
                     let nudged_times = prev_isect.nudged_times + 1;
                     log::debug!("        - new nudged_times {}", nudged_times);
-                    let amount = NUDGE_AMOUNT * (nudged_times * nudged_times) as f32 * 0.5;
+                    let amount =
+                        EmbreeRayTracing::NUDGE_AMOUNT * (nudged_times * nudged_times) as f32 * 0.5;
                     let hit_point =
                         nudge_hit_point(prev_isect.hit_point, prev_isect.normal, amount);
                     log::debug!("        - new hit_point {:?}", hit_point);
@@ -147,7 +151,7 @@ pub fn trace_one_ray_embree(
                     let hit_point = nudge_hit_point(
                         compute_hit_point(scene, &ray_hit.hit),
                         normal,
-                        NUDGE_AMOUNT,
+                        EmbreeRayTracing::NUDGE_AMOUNT,
                     );
                     // Record the current intersection information.
                     let curr_isect = IntersectRecord {
@@ -194,8 +198,11 @@ pub fn trace_one_ray_embree(
                 // Not previously hit, so we can continue tracing reflected ray if the ray is
                 // not absorbed.
                 let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
-                let hit_point =
-                    nudge_hit_point(compute_hit_point(scene, &ray_hit.hit), normal, NUDGE_AMOUNT);
+                let hit_point = nudge_hit_point(
+                    compute_hit_point(scene, &ray_hit.hit),
+                    normal,
+                    EmbreeRayTracing::NUDGE_AMOUNT,
+                );
                 // Record the current intersection information.
                 let curr_isect = IntersectRecord {
                     ray,

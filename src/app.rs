@@ -15,8 +15,8 @@ use winit::window::WindowBuilder;
 pub(crate) mod gui;
 pub mod state;
 
-const WIN_INITIAL_WIDTH: u32 = 1280;
-const WIN_INITIAL_HEIGHT: u32 = 720;
+const WIN_INITIAL_WIDTH: u32 = 1600;
+const WIN_INITIAL_HEIGHT: u32 = 900;
 
 const BRIGHT_CYAN: &str = "\u{001b}[36m";
 const BRIGHT_YELLOW: &str = "\u{001b}[33m";
@@ -510,7 +510,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     desc.collector.partition.phi_range_str()
                 );
                 println!("    {BRIGHT_YELLOW}>{RESET} Measuring in-plane BRDF...");
-                crate::acq::bxdf::measure_in_plane_brdf_grid(&desc, &ior_db, &surfaces);
+                crate::acq::bxdf::measure_in_plane_brdf_embree(&desc, &ior_db, &surfaces);
             }
         },
         MeasurementKind::Ndf => {

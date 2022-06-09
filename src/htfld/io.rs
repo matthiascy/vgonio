@@ -107,19 +107,30 @@ fn read_ascii_dong2015<R: BufRead>(
 
     let mut line = String::new();
     reader.read_line(&mut line)?;
-    let extent: Vec<_> = line
-        .trim()
-        .split_ascii_whitespace()
-        .rev()
-        .take(2)
-        .map(|dim| -> u32 { dim.parse().unwrap() })
-        .collect();
+    let (cols, rows, du, dv) = {
+        let first_line = line
+            .trim()
+            .split_ascii_whitespace().collect::<Vec<_>>();
+
+        let cols = first_line[1].parse::<usize>().unwrap();
+        let rows = first_line[2].parse::<usize>().unwrap();
+
+        if first_line.len() == 3 {
+            (cols, rows, 0.11, 0.11)
+        } else if first_line.len() == 5 {
+            let du = first_line[3].parse::<f32>().unwrap();
+            let dv = first_line[4].parse::<f32>().unwrap();
+            (cols, rows, du, dv)
+        } else {
+            panic!("Invalid first line: {:?}", line);
+        }
+    };
     let samples = read_ascii_samples(reader);
     Ok(Heightfield::from_samples(
-        extent[1] as usize,
-        extent[0] as usize,
-        0.11,
-        0.11,
+        cols,
+        rows,
+        du,
+        dv,
         samples,
         orientation.unwrap_or_default(),
     ))
