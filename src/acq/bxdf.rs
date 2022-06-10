@@ -184,9 +184,9 @@ pub fn measure_in_plane_brdf_embree(
 //         let radius = triangulated.extent.max_edge() * 2.5;
 //         let surface_mesh = embree_rt.create_triangle_mesh(&triangulated);
 //         let surface_id = embree_rt.attach_geometry(scene_id, surface_mesh);
-//         let spectrum_samples = SpectrumSampler::from(desc.emitter.spectrum).samples();
-//         let grid_rt = GridRayTracing::new(surface, &triangulated);
-//         log::debug!(
+//         let spectrum_samples =
+// SpectrumSampler::from(desc.emitter.spectrum).samples();         let grid_rt =
+// GridRayTracing::new(surface, &triangulated);         log::debug!(
 //             "Grid - min: {}, max: {} | origin: {:?}",
 //             grid_rt.min,
 //             grid_rt.max,
@@ -207,9 +207,9 @@ pub fn measure_in_plane_brdf_embree(
 //
 //             // For all incident angles; generate samples on each patch
 //             for (i, patch) in emitter.patches.iter().enumerate() {
-//                 // Emit rays from the patch of the emitter. Uniform sampling over the patch.
-//                 let rays = patch.emit_rays(desc.emitter.num_rays, radius);
-//                 log::debug!(
+//                 // Emit rays from the patch of the emitter. Uniform sampling
+// over the patch.                 let rays =
+// patch.emit_rays(desc.emitter.num_rays, radius);                 log::debug!(
 //                     "Emitted {} rays from patch {} - {:?}: {:?}",
 //                     rays.len(),
 //                     i,
@@ -227,7 +227,8 @@ pub fn measure_in_plane_brdf_embree(
 //                 // Trace primary rays with coherent context.
 //                 let mut coherent_ctx = embree::IntersectContext::coherent();
 //                 let ray_hit =
-//                     embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
+//                     embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut
+// coherent_ctx);
 //
 //                 // Filter out primary rays that hit the surface.
 //                 let filtered = ray_hit
@@ -243,8 +244,8 @@ pub fn measure_in_plane_brdf_embree(
 //                             d: ray_hit.ray.dir(i).into(),
 //                             e: 1.0,
 //                         };
-//                         trace_one_ray_grid_tracing(ray, &grid_rt, ior_t, None)
-//                     })
+//                         trace_one_ray_grid_tracing(ray, &grid_rt, ior_t,
+// None)                     })
 //                     .collect::<Vec<_>>();
 //                 println!("{:?}", records);
 //             }
@@ -290,16 +291,16 @@ impl SpectrumSampler {
 // ) -> Option<RayTraceRecord> {
 //     if let Some(isect) = rt_grid.trace_ray(ray) {
 //         if let Some(Scattering { reflected, .. }) =
-//             scattering_air_conductor(ray, isect.hit_point, isect.normal, ior_t.eta, ior_t.k)
-//         {
+//             scattering_air_conductor(ray, isect.hit_point, isect.normal,
+// ior_t.eta, ior_t.k)         {
 //             if reflected.e >= 0.0 {
 //                 let curr_record = RayTraceRecord {
 //                     initial: record.as_ref().unwrap().initial,
 //                     current: ray,
 //                     bounces: record.as_ref().unwrap().bounces + 1,
 //                 };
-//                 trace_one_ray_grid_tracing(reflected, rt_grid, ior_t, Some(curr_record))
-//             } else {
+//                 trace_one_ray_grid_tracing(reflected, rt_grid, ior_t,
+// Some(curr_record))             } else {
 //                 record
 //             }
 //         } else {

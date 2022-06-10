@@ -285,6 +285,9 @@ impl VgonioGui {
                     ui.output().open_url(format!("#{}", ws_name));
                 }
             }
+
+            ui.separator();
+            egui::widgets::global_dark_light_mode_switch(ui);
         });
     }
 }

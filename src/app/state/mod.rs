@@ -11,7 +11,7 @@ use crate::gfx::{
 use camera::CameraState;
 
 use crate::acq::tracing::RayTracingMethod;
-use crate::acq::{MicroSurfaceView, OcclusionEstimationPass};
+use crate::acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass};
 use crate::app::VgonioConfig;
 use crate::error::Error;
 use crate::gfx::camera::{Camera, Projection, ProjectionKind};
@@ -23,6 +23,7 @@ use std::default::Default;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
 use wgpu::{VertexFormat, VertexStepMode, COPY_BYTES_PER_ROW_ALIGNMENT};
@@ -154,7 +155,7 @@ impl DepthMap {
     }
 }
 
-struct DebugDrawing {
+struct DebugState {
     /// Vertex buffer storing all vertices.
     pub vert_buffer: SizedBuffer,
 
@@ -169,11 +170,10 @@ struct DebugDrawing {
     pub prim_bind_group: wgpu::BindGroup,
     pub prim_uniform_buffer: wgpu::Buffer,
     pub prim_vert_buffer: wgpu::Buffer,
-
     pub ray_t: f32,
 }
 
-impl DebugDrawing {
+impl DebugState {
     pub fn new(ctx: &GpuContext) -> Self {
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
@@ -375,15 +375,15 @@ pub struct VgonioApp {
     camera: CameraState,
     passes: HashMap<&'static str, RdrPass>,
     depth_map: DepthMap,
-    debug_drawing: DebugDrawing,
+    debug_drawing: DebugState,
     debug_drawing_enabled: bool,
 
     // Shadow pass used for measurement of shadowing and masking function.
     //shadow_pass: ShadowPass,
     occlusion_estimation_pass: OcclusionEstimationPass,
 
-    surface: Option<Box<Heightfield>>,
-    surface_mesh: Option<TriangleMesh>,
+    surface: Option<Rc<Heightfield>>,
+    surface_mesh: Option<Rc<TriangleMesh>>,
     surface_mesh_view: Option<MeshView>,
     surface_mesh_micro_view: Option<MicroSurfaceView>,
     surface_scale_factor: f32,
@@ -449,7 +449,7 @@ impl VgonioApp {
         };
 
         let occlusion_estimation_pass = OcclusionEstimationPass::new(&gpu_ctx, 512, 512);
-        let debug_drawing = DebugDrawing::new(&gpu_ctx);
+        let debug_drawing = DebugState::new(&gpu_ctx);
 
         Ok(Self {
             gpu_ctx,
@@ -854,7 +854,7 @@ impl VgonioApp {
                     match method {
                         RayTracingMethod::Standard => {
                             log::debug!("  => [Standard Ray Tracing]");
-                            self.debug_drawing.rays = crate::acq::tracing::trace_ray_standard(
+                            self.debug_drawing.rays = crate::acq::tracing::trace_ray_standard_dbg(
                                 ray,
                                 max_bounces,
                                 self.surface_mesh.as_ref().unwrap(),
@@ -890,12 +890,11 @@ impl VgonioApp {
                         }
                         RayTracingMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
-                            crate::acq::tracing::trace_ray_grid(
-                                ray,
-                                max_bounces,
-                                self.surface.as_ref().unwrap(),
-                                self.surface_mesh.as_ref().unwrap(),
+                            let grid_rt = GridRayTracing::new(
+                                self.surface.as_ref().unwrap().clone(),
+                                self.surface_mesh.as_ref().unwrap().clone(),
                             );
+                            crate::acq::tracing::trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
                         }
                         RayTracingMethod::Hybrid => {
                             crate::acq::tracing::trace_ray_hybrid(
@@ -932,8 +931,8 @@ impl VgonioApp {
                 let mesh = hf.triangulate(TriangulationMethod::Regular);
                 let mesh_view = MeshView::from_triangle_mesh(&self.gpu_ctx.device, &mesh);
                 let micro_view = MicroSurfaceView::from_height_field(&self.gpu_ctx.device, &hf);
-                self.surface = Some(Box::new(hf));
-                self.surface_mesh = Some(mesh);
+                self.surface = Some(Rc::new(hf));
+                self.surface_mesh = Some(Rc::new(mesh));
                 self.surface_mesh_view = Some(mesh_view);
                 self.surface_mesh_micro_view = Some(micro_view);
             }

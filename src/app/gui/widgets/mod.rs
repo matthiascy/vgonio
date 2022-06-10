@@ -3,7 +3,7 @@
 mod input;
 mod range;
 
-pub use input::{input, input_ui, input3_spherical, input3_ui, input3_xyz};
+pub use input::{input, input3_spherical, input3_ui, input3_xyz, input_ui};
 pub use range::{range, range_ui};
 
 /// iOS-style toggle switch:

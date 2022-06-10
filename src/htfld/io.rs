@@ -108,9 +108,7 @@ fn read_ascii_dong2015<R: BufRead>(
     let mut line = String::new();
     reader.read_line(&mut line)?;
     let (cols, rows, du, dv) = {
-        let first_line = line
-            .trim()
-            .split_ascii_whitespace().collect::<Vec<_>>();
+        let first_line = line.trim().split_ascii_whitespace().collect::<Vec<_>>();
 
         let cols = first_line[1].parse::<usize>().unwrap();
         let rows = first_line[2].parse::<usize>().unwrap();

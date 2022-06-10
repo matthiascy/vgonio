@@ -31,7 +31,7 @@ pub(crate) struct VisualDebugTool {
     pub(crate) ray_tracing_pane: RayTracingPane,
 }
 
-impl VisualDebugTool {
+impl<'surface> VisualDebugTool {
     pub fn new(evlp: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
             opened: Default::default(),

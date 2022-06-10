@@ -6,10 +6,10 @@ mod tools;
 mod ui;
 mod widgets;
 
-use glam::IVec2;
 use crate::acq::ray::Ray;
 use crate::acq::tracing::RayTracingMethod;
 pub use context::*;
+use glam::IVec2;
 pub(crate) use tools::VisualDebugTool;
 pub use ui::VgonioGui;
 
@@ -31,5 +31,5 @@ pub enum VgonioEvent {
     ToggleSurfaceVisibility,
     UpdateDebugT(f32),
     UpdatePrimId(u32),
-    UpdateCellPos(IVec2)
+    UpdateCellPos(IVec2),
 }

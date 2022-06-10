@@ -1,8 +1,10 @@
 use crate::acq::ray::Ray;
 use crate::acq::tracing::RayTracingMethod;
+use crate::acq::GridRayTracing;
 use crate::app::gui::widgets::{input3_spherical, input3_xyz};
 use crate::app::gui::VgonioEvent;
 use glam::{IVec2, Vec3};
+use std::rc::Rc;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
@@ -79,10 +81,11 @@ impl egui::Widget for &mut RayTracingPane {
                 ui.add(egui::DragValue::new(&mut self.cell_pos.x).prefix("x: "));
                 ui.add(egui::DragValue::new(&mut self.cell_pos.y).prefix("y:"));
 
-                if ui.button("show").clicked() && self
-                    .event_loop
-                    .send_event(VgonioEvent::UpdateCellPos(self.cell_pos))
-                    .is_err()
+                if ui.button("show").clicked()
+                    && self
+                        .event_loop
+                        .send_event(VgonioEvent::UpdateCellPos(self.cell_pos))
+                        .is_err()
                 {
                     log::warn!("Failed to send event VgonioEvent::UpdateCellPos");
                 }

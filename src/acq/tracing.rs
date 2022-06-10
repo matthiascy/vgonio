@@ -1,11 +1,11 @@
 use crate::acq::embree_rt::EmbreeRayTracing;
+use crate::acq::grid_rt::GridRayTracing;
 use crate::acq::ior::RefractiveIndex;
 use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
 use crate::htfld::Heightfield;
 use crate::mesh::{TriangleMesh, TriangulationMethod};
 use embree::{Config, RayHit};
 use glam::Vec3;
-use crate::acq::grid_rt::GridRayTracing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RayTracingMethod {
@@ -14,15 +14,18 @@ pub enum RayTracingMethod {
     Hybrid,
 }
 
-pub fn trace_ray_grid(ray: Ray, max_bounces: u32, surface: &Heightfield, surface_mesh: &TriangleMesh) -> Vec<Ray> {
-    let grid_rt = GridRayTracing::new(surface, surface_mesh);
-    let mut rays= vec![];
+pub fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTracing) -> Vec<Ray> {
+    let mut rays = vec![];
     grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, &mut rays);
 
     rays
 }
 
-pub fn trace_ray_standard(ray: Ray, max_bounces: u32, surface: &TriangleMesh) -> Vec<embree::Ray> {
+pub fn trace_ray_standard_dbg(
+    ray: Ray,
+    max_bounces: u32,
+    surface: &TriangleMesh,
+) -> Vec<embree::Ray> {
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let scn_id = embree_rt.create_scene();
     let mesh = embree_rt.create_triangle_mesh(surface);

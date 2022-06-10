@@ -36,7 +36,7 @@ pub fn input3_ui(ui: &mut egui::Ui, value: &mut Vec3, prefixes: &[&str; 3]) -> e
         ui.add(egui::DragValue::new(&mut value.y).prefix(prefixes[1]));
         ui.add(egui::DragValue::new(&mut value.z).prefix(prefixes[2]));
     })
-        .response
+    .response
 }
 
 /// A wrapper that allows the more idiomatic usage of `input_vec3`.
@@ -66,6 +66,6 @@ pub fn input3_spherical(value: &mut Vec3) -> impl egui::Widget + '_ {
                     .clamp_range(0.0..=360.0),
             );
         })
-            .response
+        .response
     }
 }

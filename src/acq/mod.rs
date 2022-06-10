@@ -14,7 +14,9 @@ pub mod tracing;
 pub mod util;
 
 pub use collector::{Collector, Patch};
+pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
+pub use grid_rt::GridRayTracing;
 
 pub use occlusion::*;
 use std::path::{Path, PathBuf};
