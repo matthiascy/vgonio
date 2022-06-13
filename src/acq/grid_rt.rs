@@ -12,6 +12,8 @@ use std::rc::Rc;
 /// vertices of the triangle mesh are generated following the order from left
 /// to right, top to bottom.
 ///
+/// The geometrical center of the grid is located at the center of the scene.
+///
 /// TODO: deal with the case where the grid is not aligned with the world axes.
 /// TODO: deal with axis alignment of the heightfield, currently XY alignment is
 /// assumed. (with its own transformation matrix).
@@ -201,20 +203,25 @@ impl GridRayTracing {
     /// Obtain the two triangles contained within the cell.
     fn triangles_at(&self, pos: IVec2) -> [[Vec3; 3]; 2] {
         assert!(
-            pos.x < self.min.x || pos.y < self.min.y || pos.x > self.max.x || pos.y > self.max.y,
+            pos.x >= self.min.x
+                && pos.y >= self.min.y
+                && pos.x <= self.max.x
+                && pos.y <= self.max.y,
             "The position is out of the grid."
         );
-        let idx = (self.surface.cols * pos.y as usize + pos.x as usize) * 2 * 3;
+        let cell = ((self.surface.cols - 1) * pos.y as usize + pos.x as usize);
+        let pts = &self.mesh.faces[cell * 6..cell * 6 + 6];
+        log::debug!("cell: {:?}, pts {:?}", cell, pts);
         [
             [
-                self.mesh.verts[idx],
-                self.mesh.verts[idx + 1],
-                self.mesh.verts[idx + 2],
+                self.mesh.verts[pts[0] as usize],
+                self.mesh.verts[pts[1] as usize],
+                self.mesh.verts[pts[2] as usize],
             ],
             [
-                self.mesh.verts[idx + 3],
-                self.mesh.verts[idx + 4],
-                self.mesh.verts[idx + 5],
+                self.mesh.verts[pts[3] as usize],
+                self.mesh.verts[pts[4] as usize],
+                self.mesh.verts[pts[5] as usize],
             ],
         ]
     }
@@ -301,7 +308,7 @@ impl GridRayTracing {
             let (dir, initial_dist, num_cells) = if ray_dir.x < 0.0 {
                 (
                     -1,
-                    ray_org_grid.x - (ray_org_cell.x as f32) * self.surface.du,
+                    ray_org_grid.x - ray_org_cell.x as f32 * self.surface.du,
                     ray_org_cell.x - self.min.x + 1,
                 )
             } else {
@@ -328,7 +335,7 @@ impl GridRayTracing {
             let (dir, initial_dist, count) = if ray_dir.y < 0.0 {
                 (
                     -1,
-                    ray_org_grid.y - (ray_org_cell.y as f32) * self.surface.dv,
+                    ray_org_grid.y - ray_org_cell.y as f32 * self.surface.dv,
                     ray_org_cell.y - self.min.y + 1,
                 )
             } else {
@@ -353,16 +360,22 @@ impl GridRayTracing {
             }
         } else {
             // The ray is not parallel to either x or y axis.
-            // Calculate dy/dx -- slope of the ray on the grid.
-            let m = ray_dir.y / ray_dir.x;
-            let m_recip = m.recip();
+            let m = ray_dir.y / ray_dir.x; // The slope of the ray on the grid, dy/dx.
+            let m_recip = m.recip(); // The reciprocal of the slope of the ray on the grid, dy/dx.
+
+            log::debug!("    Slope: {:?}, Reciprocal: {:?}", m, m_recip);
 
             // Calculate the distance along the direction of the ray when moving
             // a unit distance (size of the cell) along the x-axis and y-axis.
-            let unit_dist = Vec2::new((1.0 + m * m).sqrt() * self.surface.du, (1.0 + m_recip * m_recip).sqrt() * self.surface.dv);
+            let unit = Vec2::new(
+                (1.0 + m * m).sqrt() * self.surface.du,
+                (1.0 + m_recip * m_recip).sqrt() * self.surface.dv,
+            )
+            .abs();
 
             let mut curr_cell = ray_org_cell;
             log::debug!("  - starting cell: {:?}", curr_cell);
+            log::debug!("  - unit dist: {:?}", unit);
 
             let step_dir = IVec2::new(
                 if ray_dir.x >= 0.0 { 1 } else { -1 },
@@ -372,16 +385,18 @@ impl GridRayTracing {
             // Accumulated line length when moving along the x-axis and y-axis.
             let mut accumulated = Vec2::new(
                 if ray_dir.x < 0.0 {
-                    (ray_org_grid.x - curr_cell.x as f32) * unit_dist.x
+                    (ray_org_grid.x - curr_cell.x as f32 * self.surface.du) * unit.x
                 } else {
-                    ((curr_cell.x + 1) as f32 - ray_org_grid.x) * unit_dist.x
+                    ((curr_cell.x + 1) as f32 * self.surface.du - ray_org_grid.x) * unit.x
                 },
                 if ray_dir.y < 0.0 {
-                    (ray_org_grid.y - curr_cell.y as f32) * unit_dist.y
+                    (ray_org_grid.y - curr_cell.y as f32 * self.surface.dv) * unit.y
                 } else {
-                    ((curr_cell.y + 1) as f32 - ray_org_grid.y) * unit_dist.y
+                    ((curr_cell.y + 1) as f32 * self.surface.dv - ray_org_grid.y) * unit.y
                 },
             );
+
+            log::debug!("  - accumulated: {:?}", accumulated);
 
             let mut distances = if accumulated.x > accumulated.y {
                 vec![accumulated.y]
@@ -393,32 +408,36 @@ impl GridRayTracing {
 
             let mut traversed = vec![curr_cell];
 
-            while (curr_cell.x >= self.min.x && curr_cell.x <= self.max.x)
-                && (curr_cell.y >= self.min.y && curr_cell.y <= self.max.y)
-            {
+            loop {
                 let distance = if accumulated.x < accumulated.y {
                     // avoid min - 1, max + 1
-                    if step_dir.x > 0 && curr_cell.x == self.max.x {
-                        break;
-                    } else if step_dir.x < 0 && curr_cell.x == self.min.x {
+                    if (step_dir.x > 0 && curr_cell.x == self.max.x)
+                        || (step_dir.x < 0 && curr_cell.x == self.min.x)
+                    {
                         break;
                     }
                     curr_cell.x += step_dir.x;
-                    accumulated.x += unit_dist.x;
+                    accumulated.x += unit.x;
                     accumulated.x
                 } else {
-                    if step_dir.y > 0 && curr_cell.y == self.max.y {
-                        break;
-                    } else if step_dir.y < 0 && curr_cell.y == self.min.y {
+                    if (step_dir.y > 0 && curr_cell.y == self.max.y)
+                        || (step_dir.y < 0 && curr_cell.y == self.min.y)
+                    {
                         break;
                     }
                     curr_cell.y += step_dir.y;
-                    accumulated.y += unit_dist.y;
+                    accumulated.y += unit.y;
                     accumulated.y
                 };
 
                 distances.push(distance);
                 traversed.push(IVec2::new(curr_cell.x, curr_cell.y));
+
+                if (curr_cell.x < self.min.x && curr_cell.x > self.max.x)
+                    && (curr_cell.y < self.min.y && curr_cell.y > self.max.y)
+                {
+                    break;
+                }
             }
 
             GridTraversal::Traversed {
@@ -440,7 +459,7 @@ impl GridRayTracing {
             // The ray origin is outside the grid, tests first with the bounding box.
             self.mesh
                 .extent
-                .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+                .intersect_with_ray(ray, f32::EPSILON, f32::INFINITY)
                 .map(|point| {
                     log::debug!("  - intersected with bounding box: {:?}", point);
                     // Displace the hit point backwards along the ray direction.
@@ -455,6 +474,17 @@ impl GridRayTracing {
             match self.traverse(start.xz(), ray.d.xz()) {
                 GridTraversal::FromTopOrBottom(cell) => {
                     log::debug!("  - traversed cells: {:?}", cell);
+                    // The ray coming from the top or bottom of the grid, calculate the intersection
+                    // with the grid surface.
+                    let isects = self
+                        .triangles_at(cell)
+                        .iter()
+                        .filter_map(|tri| {
+                            log::debug!("    tri: {:?}", tri);
+                            isect_ray_tri(ray, &tri)
+                        })
+                        .collect::<Vec<_>>();
+                    log::debug!("  - intersections: {:?}", isects);
                 }
                 GridTraversal::Traversed { cells, dists } => {
                     log::debug!("  - traversed cells: {:?}", cells);

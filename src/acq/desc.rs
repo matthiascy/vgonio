@@ -222,7 +222,7 @@ fn scene_desc_serialization() {
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: CollectorDesc {
-            radius: 0.1,
+            radius: RadiusDesc::Auto,
             shape: SphericalShape::WholeSphere,
             partition: SphericalPartition::EqualArea {
                 theta: (0.0, 90.0, 45),
@@ -236,7 +236,7 @@ fn scene_desc_serialization() {
         emitter: EmitterDesc {
             num_rays: 0,
             max_bounces: 0,
-            radius: 0.0,
+            radius: RadiusDesc::Auto,
             spectrum: Range {
                 start: 380.0,
                 stop: 780.0,

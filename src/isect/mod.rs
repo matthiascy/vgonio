@@ -70,12 +70,12 @@ impl Aabb {
 
         for i in 0..3 {
             let inv_d = 1.0 / ray.d[i];
-            let mut t_near = (self.min[i] - ray.o[i]) * inv_d;
-            let mut t_far = (self.max[i] - ray.o[i]) * inv_d;
+            let (t_near, mut t_far) = {
+                let near = (self.min[i] - ray.o[i]) * inv_d;
+                let far = (self.max[i] - ray.o[i]) * inv_d;
 
-            if inv_d < 0.0 {
-                std::mem::swap(&mut t_near, &mut t_far);
-            }
+                (near.min(far), near.max(far))
+            };
 
             t_far *= 1.0 + 2.0 * gamma_f32(3.0);
 
@@ -92,12 +92,12 @@ impl Aabb {
 
         for i in 0..3 {
             let inv_d = 1.0 / ray.d[i];
-            let mut t_near = (self.min[i] - ray.o[i]) * inv_d;
-            let mut t_far = (self.max[i] - ray.o[i]) * inv_d;
+            let (t_near, mut t_far) = {
+                let near = (self.min[i] - ray.o[i]) * inv_d;
+                let far = (self.max[i] - ray.o[i]) * inv_d;
 
-            if inv_d < 0.0 {
-                std::mem::swap(&mut t_near, &mut t_far);
-            }
+                (near.min(far), near.max(far))
+            };
 
             t_far *= 1.0 + 2.0 * gamma_f32(3.0);
 
@@ -341,6 +341,18 @@ pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<(f32, f32, f32)> 
 fn test_ray_aabb_intersection() {
     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
+
+    let ray = Ray::new(Vec3::new(2.0, 2.0, 0.0), Vec3::new(-1.0, -1.0, 0.0));
+    let aabb = Aabb::new(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 0.0, 1.0));
 
     println!(
         "{:?}",
