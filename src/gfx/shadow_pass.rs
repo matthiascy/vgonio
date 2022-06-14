@@ -41,37 +41,27 @@ pub struct DepthPassUniforms {
 }
 
 impl ShadowPass {
-    pub fn new(
-        ctx: &GpuContext,
-        width: u32,
-        height: u32,
-        alloc_buf: bool,
-        shader_accessible: bool,
-    ) -> Self {
+    pub fn new(ctx: &GpuContext, width: u32, height: u32, alloc_buf: bool, shader_accessible: bool) -> Self {
         use wgpu::util::DeviceExt;
         let uniform_buffer_size = std::mem::size_of::<DepthPassUniforms>() as wgpu::BufferAddress;
-        let uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("shadow_pass_uniform_buffer"),
-                contents: bytemuck::cast_slice(&[0.0f32; 48]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-        let bind_group_layout =
-            ctx.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(uniform_buffer_size),
-                        },
-                        count: None,
-                    }],
-                });
+        let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("shadow_pass_uniform_buffer"),
+            contents: bytemuck::cast_slice(&[0.0f32; 48]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let bind_group_layout = ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: wgpu::BufferSize::new(uniform_buffer_size),
+                },
+                count: None,
+            }],
+        });
         let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("shadow_pass_bind_group"),
             layout: &bind_group_layout,
@@ -80,21 +70,15 @@ impl ShadowPass {
                 resource: uniform_buffer.as_entire_binding(),
             }],
         });
-        let pipeline_layout = ctx
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("shadow_pass_pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let shader_module = ctx
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("shadow_pass_shader_module"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../app/assets/shaders/wgsl/shadow_pass.wgsl").into(),
-                ),
-            });
+        let pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("shadow_pass_pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("shadow_pass_shader_module"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../app/assets/shaders/wgsl/shadow_pass.wgsl").into()),
+        });
         let sampler = shader_accessible.then(|| {
             Arc::new(ctx.device.create_sampler(&wgpu::SamplerDescriptor {
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -116,48 +100,46 @@ impl ShadowPass {
             sampler,
             Some("shadow_pass_depth_attachment"),
         );
-        let pipeline = ctx
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("shadow_pass_pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader_module,
-                    entry_point: "vs_main",
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: 12,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &[wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x3,
-                            offset: 0,
-                            shader_location: 0,
-                        }],
+        let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("shadow_pass_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: "vs_main",
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 12,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x3,
+                        offset: 0,
+                        shader_location: 0,
                     }],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                fragment: None,
-                multiview: None,
-            });
+                }],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: None,
+            multiview: None,
+        });
         let pass = RdrPass {
             pipeline,
             bind_groups: vec![bind_group],
@@ -239,8 +221,7 @@ impl ShadowPass {
         index_ranges: &[(u32, u32)],
         i_format: wgpu::IndexFormat,
     ) {
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

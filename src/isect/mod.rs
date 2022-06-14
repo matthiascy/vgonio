@@ -273,6 +273,24 @@ impl Aabb {
     }
 }
 
+/// Ray/Triangle intersection result.
+pub struct RayTriInt {
+    /// Distance from the ray origin to the intersection point.
+    pub t: f32,
+
+    /// Barycentric coordinates of the intersection point.
+    pub u: f32,
+
+    /// Barycentric coordinates of the intersection point.
+    pub v: f32,
+
+    /// Normal of the triangle at the intersection point.
+    pub n: Vec3,
+
+    /// Intersection point.
+    pub p: Vec3,
+}
+
 /// Implementation of Möller-Trumbore fast ray-triangle intersection algorithm.
 ///
 /// P is the point of intersection.
@@ -302,7 +320,7 @@ impl Aabb {
 ///
 /// Tuple of (t, u, v). The t parameter of the ray and the barycentric
 /// coordinates of intersection point on the triangle.
-pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<(f32, f32, f32)> {
+pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
     let e0 = triangle[1] - triangle[0];
     let e1 = triangle[2] - triangle[0];
 
@@ -331,7 +349,13 @@ pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<(f32, f32, f32)> 
 
     let t = tvec_cross_e0.dot(e1) * inv_det; // (T x E0) . E1 / det
     if t > f32::EPSILON {
-        Some((t, u, v))
+        Some(RayTriInt {
+            t,
+            u,
+            v,
+            n: e0.cross(e1).normalize(),
+            p: (1.0 - u - v) * triangle[0] + u * triangle[1] + v * triangle[2],
+        })
     } else {
         None
     }
@@ -342,24 +366,12 @@ fn test_ray_aabb_intersection() {
     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
 
-    println!(
-        "{:?}",
-        aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY)
-    );
-    println!(
-        "{:?}",
-        aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
-    );
+    println!("{:?}", aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY));
+    println!("{:?}", aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY));
 
     let ray = Ray::new(Vec3::new(2.0, 2.0, 0.0), Vec3::new(-1.0, -1.0, 0.0));
     let aabb = Aabb::new(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 0.0, 1.0));
 
-    println!(
-        "{:?}",
-        aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY)
-    );
-    println!(
-        "{:?}",
-        aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
-    );
+    println!("{:?}", aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY));
+    println!("{:?}", aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY));
 }

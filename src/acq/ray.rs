@@ -43,13 +43,7 @@ pub struct Scattering {
     pub refracted: Ray,
 }
 
-pub fn scattering_air_conductor(
-    ray: Ray,
-    p: Vec3,
-    n: Vec3,
-    eta_t: f32,
-    k_t: f32,
-) -> Option<Scattering> {
+pub fn scattering_air_conductor(ray: Ray, p: Vec3, n: Vec3, eta_t: f32, k_t: f32) -> Option<Scattering> {
     if ray.e < 0.0 {
         None
     } else {
@@ -83,8 +77,7 @@ pub fn scattering_air_conductor_spectrum(
     } else {
         let reflected_dir = reflect(ray.d, normal);
         let refracted_dir = refract();
-        let reflectance =
-            fresnel::reflectance_dielectric_conductor_spectrum(ray.d.dot(normal).abs(), iors);
+        let reflectance = fresnel::reflectance_dielectric_conductor_spectrum(ray.d.dot(normal).abs(), iors);
 
         reflectance
             .iter()

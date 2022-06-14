@@ -63,8 +63,7 @@ impl RefractiveIndexDatabase {
             };
             let diff_eta = ior_after.eta - ior_before.eta;
             let diff_k = ior_after.k - ior_before.k;
-            let t = (wavelength - ior_before.wavelength)
-                / (ior_after.wavelength - ior_before.wavelength);
+            let t = (wavelength - ior_before.wavelength) / (ior_after.wavelength - ior_before.wavelength);
             Some(RefractiveIndex {
                 wavelength,
                 eta: ior_before.eta + t * diff_eta,
@@ -73,11 +72,7 @@ impl RefractiveIndexDatabase {
         }
     }
 
-    pub fn ior_of_spectrum(
-        &self,
-        medium: Medium,
-        wavelengths: &[f32],
-    ) -> Option<Vec<RefractiveIndex>> {
+    pub fn ior_of_spectrum(&self, medium: Medium, wavelengths: &[f32]) -> Option<Vec<RefractiveIndex>> {
         wavelengths
             .iter()
             .map(|wavelength| self.refractive_index_of(medium, *wavelength))
@@ -114,16 +109,8 @@ impl RefractiveIndexDatabase {
         let mut n_files = 0;
         if path.is_file() {
             log::debug!("Loading refractive index database from {:?}", path);
-            let medium = Medium::from_str(
-                path.file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .split('_')
-                    .next()
-                    .unwrap(),
-            )
-            .unwrap();
+            let medium =
+                Medium::from_str(path.file_name().unwrap().to_str().unwrap().split('_').next().unwrap()).unwrap();
             let refractive_indices = RefractiveIndex::read_iors_from_file(path).unwrap();
             let iors = ior_db.0.entry(medium).or_insert(Vec::new());
             for ior in refractive_indices {

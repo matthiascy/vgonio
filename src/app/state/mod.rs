@@ -4,12 +4,10 @@ mod input;
 pub use input::InputState;
 
 use crate::app::gui::{GuiContext, VgonioEvent, VgonioGui, WindowSize};
-use crate::gfx::{
-    GpuContext, MeshView, RdrPass, SizedBuffer, Texture, VertexLayout,
-    DEFAULT_BIND_GROUP_LAYOUT_DESC,
-};
+use crate::gfx::{GpuContext, MeshView, RdrPass, SizedBuffer, Texture, VertexLayout, DEFAULT_BIND_GROUP_LAYOUT_DESC};
 use camera::CameraState;
 
+use crate::acq::ray::Ray;
 use crate::acq::tracing::RayTracingMethod;
 use crate::acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass};
 use crate::app::VgonioConfig;
@@ -89,9 +87,8 @@ impl DepthMap {
             Some("depth-texture"),
         );
         self.width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
-        let depth_map_buffer_size = (std::mem::size_of::<f32>()
-            * (self.width * ctx.surface_config.height) as usize)
-            as wgpu::BufferAddress;
+        let depth_map_buffer_size =
+            (std::mem::size_of::<f32>() * (self.width * ctx.surface_config.height) as usize) as wgpu::BufferAddress;
         self.depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: depth_map_buffer_size,
@@ -161,7 +158,8 @@ struct DebugState {
 
     pub vert_count: u32,
 
-    pub rays: Vec<embree::Ray>,
+    pub embree_rays: Vec<embree::Ray>,
+    pub rays: Vec<Ray>,
 
     /// Render pass for rays drawing.
     pub render_pass_rd: RdrPass,
@@ -177,102 +175,83 @@ impl DebugState {
     pub fn new(ctx: &GpuContext) -> Self {
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
-        let shader_module = ctx
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("debug-drawing-rays-shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/wgsl/rays.wgsl").into(),
-                ),
-            });
-        let prim_shader_module = ctx
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("debug-drawing-prim-shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/wgsl/prim.wgsl").into(),
-                ),
-            });
-        let bind_group_layout =
-            ctx.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("debug-drawing-rays-bind-group-layout"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
-        let uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("debug-drawing-rays-uniform-buffer"),
-                contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-        let prim_uniform_buffer =
-            ctx.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("debug-drawing-prim-uniform-buffer"),
-                    contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
+        let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("debug-drawing-rays-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../assets/shaders/wgsl/rays.wgsl").into()),
+        });
+        let prim_shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("debug-drawing-prim-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../assets/shaders/wgsl/prim.wgsl").into()),
+        });
+        let bind_group_layout = ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("debug-drawing-rays-bind-group-layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("debug-drawing-rays-uniform-buffer"),
+            contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let prim_uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("debug-drawing-prim-uniform-buffer"),
+            contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         Self {
             vert_buffer: SizedBuffer::new(
                 &ctx.device,
                 std::mem::size_of::<f32>() * 1024, // initial capacity of 1024 rays
-                wgpu::BufferUsages::VERTEX
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::COPY_SRC,
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
                 Some("debug-rays-vert-buf"),
             ),
             vert_count: 0,
+            embree_rays: vec![],
             rays: vec![],
             render_pass_rd: RdrPass {
-                pipeline: ctx
-                    .device
-                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some("debug-rays-pipeline"),
-                        layout: Some(&ctx.device.create_pipeline_layout(
-                            &wgpu::PipelineLayoutDescriptor {
-                                label: Some("debug-rays-pipeline-layout"),
-                                bind_group_layouts: &[&bind_group_layout],
-                                push_constant_ranges: &[],
-                            },
-                        )),
-                        vertex: wgpu::VertexState {
-                            module: &shader_module,
-                            entry_point: "vs_main",
-                            buffers: &[vert_buffer_layout],
-                        },
-                        primitive: wgpu::PrimitiveState {
-                            topology: wgpu::PrimitiveTopology::LineStrip,
-                            strip_index_format: None,
-                            front_face: wgpu::FrontFace::Ccw,
-                            cull_mode: Some(wgpu::Face::Back),
-                            unclipped_depth: false,
-                            polygon_mode: wgpu::PolygonMode::Line,
-                            conservative: false,
-                        },
-                        depth_stencil: None,
-                        multisample: Default::default(),
-                        fragment: Some(wgpu::FragmentState {
-                            module: &shader_module,
-                            entry_point: "fs_main",
-                            targets: &[wgpu::ColorTargetState {
-                                format: ctx.surface_config.format,
-                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                                write_mask: wgpu::ColorWrites::ALL,
-                            }],
-                        }),
-                        multiview: None,
+                pipeline: ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("debug-rays-pipeline"),
+                    layout: Some(&ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("debug-rays-pipeline-layout"),
+                        bind_group_layouts: &[&bind_group_layout],
+                        push_constant_ranges: &[],
+                    })),
+                    vertex: wgpu::VertexState {
+                        module: &shader_module,
+                        entry_point: "vs_main",
+                        buffers: &[vert_buffer_layout],
+                    },
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::LineStrip,
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: Some(wgpu::Face::Back),
+                        unclipped_depth: false,
+                        polygon_mode: wgpu::PolygonMode::Line,
+                        conservative: false,
+                    },
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader_module,
+                        entry_point: "fs_main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: ctx.surface_config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
                     }),
+                    multiview: None,
+                }),
                 bind_groups: vec![ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("debug-rays-bind-group"),
                     layout: &bind_group_layout,
@@ -283,77 +262,68 @@ impl DebugState {
                 })],
                 uniform_buffer: Some(uniform_buffer),
             },
-            prim_pipeline: ctx
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("debug-prim-pipeline"),
-                    layout: Some(&ctx.device.create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("debug-prim-pipeline-layout"),
-                            bind_group_layouts: &[&bind_group_layout],
-                            push_constant_ranges: &[],
-                        },
-                    )),
-                    vertex: wgpu::VertexState {
-                        module: &prim_shader_module,
-                        entry_point: "vs_main",
-                        buffers: &[VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None)
-                            .buffer_layout(VertexStepMode::Vertex)],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,
-                        unclipped_depth: false,
-                        polygon_mode: wgpu::PolygonMode::Line,
-                        conservative: false,
-                    },
-                    depth_stencil: None,
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &prim_shader_module,
-                        entry_point: "fs_main",
-                        targets: &[wgpu::ColorTargetState {
-                            format: ctx.surface_config.format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }],
-                    }),
-                    multiview: None,
+            prim_pipeline: ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("debug-prim-pipeline"),
+                layout: Some(&ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("debug-prim-pipeline-layout"),
+                    bind_group_layouts: &[&bind_group_layout],
+                    push_constant_ranges: &[],
+                })),
+                vertex: wgpu::VertexState {
+                    module: &prim_shader_module,
+                    entry_point: "vs_main",
+                    buffers: &[
+                        VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None).buffer_layout(VertexStepMode::Vertex)
+                    ],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Line,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &prim_shader_module,
+                    entry_point: "fs_main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: ctx.surface_config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }],
                 }),
+                multiview: None,
+            }),
             prim_bind_group: ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("debug-prim-bind-group"),
-                layout: &ctx
-                    .device
-                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: Some("debug-drawing-prim-bind-group-layout"),
-                        entries: &[wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        }],
-                    }),
+                layout: &ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("debug-drawing-prim-bind-group-layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                }),
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: prim_uniform_buffer.as_entire_binding(),
                 }],
             }),
             prim_uniform_buffer,
-            prim_vert_buffer: ctx
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("debug-drawing-prim-vert-buffer"),
-                    contents: bytemuck::cast_slice(&[0.0f32; std::mem::size_of::<f32>() * 3 * 3]),
-                    usage: wgpu::BufferUsages::VERTEX
-                        | wgpu::BufferUsages::COPY_DST
-                        | wgpu::BufferUsages::COPY_SRC,
-                }),
+            prim_vert_buffer: ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("debug-drawing-prim-vert-buffer"),
+                contents: bytemuck::cast_slice(&[0.0f32; std::mem::size_of::<f32>() * 3 * 3]),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+            }),
             ray_t: 10.0,
         }
     }
@@ -495,9 +465,7 @@ impl VgonioApp {
                 .surface
                 .configure(&self.gpu_ctx.device, &self.gpu_ctx.surface_config);
             self.depth_map.resize(&self.gpu_ctx);
-            self.camera
-                .projection
-                .resize(new_size.width, new_size.height);
+            self.camera.projection.resize(new_size.width, new_size.height);
 
             // self.shadow_pass
             //     .resize(&self.gpu_ctx.device, new_size.width,
@@ -550,26 +518,17 @@ impl VgonioApp {
 
     pub fn update(&mut self, dt: std::time::Duration) {
         // Update camera uniform.
-        self.camera
-            .update(&self.input, dt, ProjectionKind::Perspective);
+        self.camera.update(&self.input, dt, ProjectionKind::Perspective);
         self.gui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
 
-        let (view, proj) = (
-            self.camera.uniform.view_matrix,
-            self.camera.uniform.proj_matrix,
-        );
+        let (view, proj) = (self.camera.uniform.view_matrix, self.camera.uniform.proj_matrix);
 
         self.gpu_ctx.queue.write_buffer(
-            self.passes
-                .get("visual_grid")
-                .unwrap()
-                .uniform_buffer
-                .as_ref()
-                .unwrap(),
+            self.passes.get("visual_grid").unwrap().uniform_buffer.as_ref().unwrap(),
             0,
             bytemuck::cast_slice(&[
                 view,
@@ -595,19 +554,9 @@ impl VgonioApp {
             );
             uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
             uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
-            uniform[48..52].copy_from_slice(&[
-                hf.min,
-                hf.max,
-                hf.max - hf.min,
-                self.surface_scale_factor,
-            ]);
+            uniform[48..52].copy_from_slice(&[hf.min, hf.max, hf.max - hf.min, self.surface_scale_factor]);
             self.gpu_ctx.queue.write_buffer(
-                self.passes
-                    .get("heightfield")
-                    .unwrap()
-                    .uniform_buffer
-                    .as_ref()
-                    .unwrap(),
+                self.passes.get("heightfield").unwrap().uniform_buffer.as_ref().unwrap(),
                 0,
                 bytemuck::cast_slice(&uniform),
             );
@@ -620,8 +569,7 @@ impl VgonioApp {
 
             // Update the uniform buffer for debug drawing.
             if self.debug_drawing_enabled {
-                self.debug_drawing
-                    .update_uniform_buffer(&self.gpu_ctx, &uniform);
+                self.debug_drawing.update_uniform_buffer(&self.gpu_ctx, &uniform);
             }
         }
 
@@ -733,10 +681,7 @@ impl VgonioApp {
             // self.demo_ui.ui(self.gui_ctx.egui_context());
             self.gui.show(&self.gui_ctx);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
-            let meshes = self
-                .gui_ctx
-                .egui_context()
-                .tessellate(ui_output_frame.shapes);
+            let meshes = self.gui_ctx.egui_context().tessellate(ui_output_frame.shapes);
             let frame_time = (Instant::now() - ui_start_time).as_secs_f64() as f32;
             self.prev_frame_time = Some(frame_time);
             let win_size = WindowSize {
@@ -751,12 +696,8 @@ impl VgonioApp {
                     ui_output_frame.textures_delta,
                 )
                 .unwrap();
-            self.gui_ctx.update_buffers(
-                &self.gpu_ctx.device,
-                &self.gpu_ctx.queue,
-                &meshes,
-                &win_size,
-            );
+            self.gui_ctx
+                .update_buffers(&self.gpu_ctx.device, &self.gpu_ctx.queue, &meshes, &win_size);
             self.gui_ctx
                 .render(&mut encoders[2], &output_view, &meshes, &win_size, None)
                 .unwrap();
@@ -812,11 +753,7 @@ impl VgonioApp {
                 if let Some(mesh) = &self.surface_mesh {
                     let id = prim_id as usize;
                     if id < mesh.faces.len() {
-                        let indices = [
-                            mesh.faces[id * 3],
-                            mesh.faces[id * 3 + 1],
-                            mesh.faces[id * 3 + 2],
-                        ];
+                        let indices = [mesh.faces[id * 3], mesh.faces[id * 3 + 1], mesh.faces[id * 3 + 2]];
                         //let indices = mesh.faces[id];
                         let vertices = [
                             mesh.verts[indices[0] as usize],
@@ -854,33 +791,28 @@ impl VgonioApp {
                     match method {
                         RayTracingMethod::Standard => {
                             log::debug!("  => [Standard Ray Tracing]");
-                            self.debug_drawing.rays = crate::acq::tracing::trace_ray_standard_dbg(
+                            self.debug_drawing.embree_rays = crate::acq::tracing::trace_ray_standard_dbg(
                                 ray,
                                 max_bounces,
                                 self.surface_mesh.as_ref().unwrap(),
                             );
-                            log::debug!(">> {:?}", self.debug_drawing.rays.len() - 1);
+                            log::debug!(">> {:?}", self.debug_drawing.embree_rays.len() - 1);
                             if self.debug_drawing_enabled {
-                                let mut content =
-                                    vec![0.0f32; (self.debug_drawing.rays.len() + 1) * 3];
-                                for (i, r) in self.debug_drawing.rays.iter().enumerate() {
+                                let mut content = vec![0.0f32; (self.debug_drawing.embree_rays.len() + 1) * 3];
+                                for (i, r) in self.debug_drawing.embree_rays.iter().enumerate() {
                                     content[i * 3] = r.org_x;
                                     content[i * 3 + 1] = r.org_y;
                                     content[i * 3 + 2] = r.org_z;
                                 }
 
-                                let last_i = self.debug_drawing.rays.len() - 1;
-                                let last = self.debug_drawing.rays[last_i];
-                                content[last_i * 3 + 3] =
-                                    last.org_x + self.debug_drawing.ray_t * last.dir_x;
-                                content[last_i * 3 + 4] =
-                                    last.org_y + self.debug_drawing.ray_t * last.dir_y;
-                                content[last_i * 3 + 5] =
-                                    last.org_z + self.debug_drawing.ray_t * last.dir_z;
+                                let last_i = self.debug_drawing.embree_rays.len() - 1;
+                                let last = self.debug_drawing.embree_rays[last_i];
+                                content[last_i * 3 + 3] = last.org_x + self.debug_drawing.ray_t * last.dir_x;
+                                content[last_i * 3 + 4] = last.org_y + self.debug_drawing.ray_t * last.dir_y;
+                                content[last_i * 3 + 5] = last.org_z + self.debug_drawing.ray_t * last.dir_z;
 
                                 log::debug!("rays: {:?}", content);
-                                self.debug_drawing.vert_count =
-                                    self.debug_drawing.rays.len() as u32 + 1;
+                                self.debug_drawing.vert_count = self.debug_drawing.embree_rays.len() as u32 + 1;
                                 self.gpu_ctx.queue.write_buffer(
                                     &self.debug_drawing.vert_buffer.raw,
                                     0,
@@ -894,13 +826,21 @@ impl VgonioApp {
                                 self.surface.as_ref().unwrap().clone(),
                                 self.surface_mesh.as_ref().unwrap().clone(),
                             );
-                            crate::acq::tracing::trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
+                            self.debug_drawing.rays =
+                                crate::acq::tracing::trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
+                            if self.debug_drawing_enabled {
+                                let mut content = self.debug_drawing.rays.iter().map(|r| r.o).collect::<Vec<_>>();
+                                content.push(ray.o + ray.d * self.debug_drawing.ray_t);
+                                self.debug_drawing.vert_count = self.debug_drawing.rays.len() as u32 + 1;
+                                self.gpu_ctx.queue.write_buffer(
+                                    &self.debug_drawing.vert_buffer.raw,
+                                    0,
+                                    bytemuck::cast_slice(&content),
+                                );
+                            }
                         }
                         RayTracingMethod::Hybrid => {
-                            crate::acq::tracing::trace_ray_hybrid(
-                                ray,
-                                self.surface_mesh.as_ref().unwrap(),
-                            );
+                            crate::acq::tracing::trace_ray_hybrid(ray, self.surface_mesh.as_ref().unwrap());
                         }
                     }
                 }
@@ -1032,13 +972,14 @@ impl VgonioApp {
                             proj * camera.matrix(),
                         );
 
-                        let index_buffer = &self.gpu_ctx.device.create_buffer_init(
-                            &wgpu::util::BufferInitDescriptor {
+                        let index_buffer = &self
+                            .gpu_ctx
+                            .device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: Some("measurement_vertex_buffer"),
                                 contents: bytemuck::cast_slice(&visible_facets),
                                 usage: wgpu::BufferUsages::INDEX,
-                            },
-                        );
+                            });
 
                         let indices_count = visible_facets.len() as u32 * 3;
 
@@ -1077,19 +1018,12 @@ impl VgonioApp {
                         //     )
                         //     .unwrap();
 
-                        self.occlusion_estimation_pass
-                            .calculate_ratio(&self.gpu_ctx.device)
+                        self.occlusion_estimation_pass.calculate_ratio(&self.gpu_ctx.device)
                     };
 
                     writer
                         .write_all(
-                            format!(
-                                "{:<6.2} {:<5.2} {:.6}\n",
-                                phi.to_degrees(),
-                                theta.to_degrees(),
-                                ratio
-                            )
-                            .as_bytes(),
+                            format!("{:<6.2} {:<5.2} {:.6}\n", phi.to_degrees(), theta.to_degrees(), ratio).as_bytes(),
                         )
                         .unwrap();
                 }
@@ -1108,39 +1042,31 @@ pub fn remap_depth(depth: f32, near: f32, far: f32) -> f32 {
 
 fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
     // Load shader
-    let shader_module = ctx
-        .device
-        .create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("height_field_shader_module"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../assets/shaders/wgsl/heightfield.wgsl").into(),
-            ),
-        });
+    let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        label: Some("height_field_shader_module"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("../assets/shaders/wgsl/heightfield.wgsl").into()),
+    });
 
     // Create uniform buffer for rendering height field
-    let uniform_buffer = ctx
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("camera-uniform-buffer"),
-            contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+    let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("camera-uniform-buffer"),
+        contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
 
-    let bind_group_layout = ctx
-        .device
-        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("height_field_bind_group_layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
+    let bind_group_layout = ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("height_field_bind_group_layout"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+    });
 
     let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("height_field_bind_group"),
@@ -1152,65 +1078,61 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
     });
 
     // Create height field render pipeline
-    let render_pipeline_layout =
-        ctx.device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("height_field_render_pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+    let render_pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("height_field_render_pipeline_layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
 
-    let pipeline = ctx
-        .device
-        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("height_field_render_pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader_module,
-                entry_point: "vs_main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 12,
-                    step_mode: VertexStepMode::Vertex,
-                    attributes: &[wgpu::VertexAttribute {
-                        format: VertexFormat::Float32x3,
-                        offset: 0,
-                        shader_location: 0,
-                    }],
+    let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("height_field_render_pipeline"),
+        layout: Some(&render_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader_module,
+            entry_point: "vs_main",
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: 12,
+                step_mode: VertexStepMode::Vertex,
+                attributes: &[wgpu::VertexAttribute {
+                    format: VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
                 }],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Line,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
-                                                             * new pixel */
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader_module,
-                entry_point: "fs_main",
-                targets: &[wgpu::ColorTargetState {
-                    format: ctx.surface_config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                }],
-            }),
-            multiview: None,
-        });
+            }],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Line,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: Texture::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
+                                                         * new pixel */
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader_module,
+            entry_point: "fs_main",
+            targets: &[wgpu::ColorTargetState {
+                format: ctx.surface_config.format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            }],
+        }),
+        multiview: None,
+    });
 
     RdrPass {
         pipeline,
@@ -1220,29 +1142,23 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
 }
 
 fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
-    let grid_vert_shader = ctx.device.create_shader_module(&wgpu::include_spirv!(
-        "../assets/shaders/spirv/grid.vert.spv"
-    ));
-    let grid_frag_shader = ctx.device.create_shader_module(&wgpu::include_spirv!(
-        "../assets/shaders/spirv/grid.frag.spv"
-    ));
-    let bind_group_layout = ctx
+    let grid_vert_shader = ctx
         .device
-        .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
-    let pipeline_layout = ctx
+        .create_shader_module(&wgpu::include_spirv!("../assets/shaders/spirv/grid.vert.spv"));
+    let grid_frag_shader = ctx
         .device
-        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("grid_render_pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-    let uniform_buffer = ctx
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("grid_uniform_buffer"),
-            contents: bytemuck::bytes_of(&crate::gfx::VisualGridUniforms::default()),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        .create_shader_module(&wgpu::include_spirv!("../assets/shaders/spirv/grid.frag.spv"));
+    let bind_group_layout = ctx.device.create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
+    let pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("grid_render_pipeline_layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+    let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("grid_uniform_buffer"),
+        contents: bytemuck::bytes_of(&crate::gfx::VisualGridUniforms::default()),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
     let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("grid_bind_group"),
         layout: &bind_group_layout,
@@ -1251,61 +1167,59 @@ fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
             resource: uniform_buffer.as_entire_binding(),
         }],
     });
-    let pipeline = ctx
-        .device
-        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("grid_render_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &grid_vert_shader,
-                entry_point: "main",
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
-                                                             * new pixel */
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &grid_frag_shader,
-                entry_point: "main",
-                targets: &[wgpu::ColorTargetState {
-                    format: ctx.surface_config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    // blend: Some(wgpu::BlendState {
-                    //     color: wgpu::BlendComponent {
-                    //         src_factor: wgpu::BlendFactor::SrcAlpha,
-                    //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                    //         operation: wgpu::BlendOperation::Add,
-                    //     },
-                    //     alpha: wgpu::BlendComponent {
-                    //         src_factor: wgpu::BlendFactor::One,
-                    //         dst_factor: wgpu::BlendFactor::Zero,
-                    //         operation: wgpu::BlendOperation::Add,
-                    //     },
-                    // }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                }],
-            }),
-            multiview: None,
-        });
+    let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("grid_render_pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &grid_vert_shader,
+            entry_point: "main",
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: Texture::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
+                                                         * new pixel */
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &grid_frag_shader,
+            entry_point: "main",
+            targets: &[wgpu::ColorTargetState {
+                format: ctx.surface_config.format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                // blend: Some(wgpu::BlendState {
+                //     color: wgpu::BlendComponent {
+                //         src_factor: wgpu::BlendFactor::SrcAlpha,
+                //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                //         operation: wgpu::BlendOperation::Add,
+                //     },
+                //     alpha: wgpu::BlendComponent {
+                //         src_factor: wgpu::BlendFactor::One,
+                //         dst_factor: wgpu::BlendFactor::Zero,
+                //         operation: wgpu::BlendOperation::Add,
+                //     },
+                // }),
+                write_mask: wgpu::ColorWrites::ALL,
+            }],
+        }),
+        multiview: None,
+    });
 
     RdrPass {
         pipeline,

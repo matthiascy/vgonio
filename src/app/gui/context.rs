@@ -98,9 +98,7 @@ impl GuiContext {
         let shader_module = {
             device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("ui_shader_module"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                    "../assets/shaders/wgsl/ui.wgsl"
-                ))),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../assets/shaders/wgsl/ui.wgsl"))),
             })
         };
 
@@ -118,20 +116,19 @@ impl GuiContext {
             }
         };
 
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("ui_uniform_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                        ty: wgpu::BufferBindingType::Uniform,
-                    },
-                    count: None,
-                }],
-            });
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("ui_uniform_bind_group_layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                    ty: wgpu::BufferBindingType::Uniform,
+                },
+                count: None,
+            }],
+        });
 
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ui_uniform_bind_group"),
@@ -146,28 +143,27 @@ impl GuiContext {
             }],
         });
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("ui_texture_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("ui_texture_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("ui_pipeline_layout"),
@@ -316,16 +312,7 @@ impl GuiContext {
         let physical_width = screen_descriptor.physical_width;
         let physical_height = screen_descriptor.physical_height;
 
-        for (
-            (
-                egui::epaint::ClippedPrimitive {
-                    clip_rect,
-                    primitive,
-                },
-                vertex_buffer,
-            ),
-            index_buffer,
-        ) in primitives
+        for ((egui::epaint::ClippedPrimitive { clip_rect, primitive }, vertex_buffer), index_buffer) in primitives
             .iter()
             .zip(self.vertex_buffers.iter())
             .zip(self.index_buffers.iter())
@@ -333,14 +320,10 @@ impl GuiContext {
             let (x, y, width, height) = {
                 // Transform clip rect to physical pixels position.
                 let (clip_min_x, clip_min_y, clip_max_x, clip_max_y) = {
-                    let clip_min_x =
-                        (scale_factor * clip_rect.min.x).clamp(0.0, physical_width as f32);
-                    let clip_min_y =
-                        (scale_factor * clip_rect.min.y).clamp(0.0, physical_height as f32);
-                    let clip_max_x =
-                        (scale_factor * clip_rect.max.x).clamp(clip_min_x, physical_width as f32);
-                    let clip_max_y =
-                        (scale_factor * clip_rect.max.y).clamp(clip_min_y, physical_height as f32);
+                    let clip_min_x = (scale_factor * clip_rect.min.x).clamp(0.0, physical_width as f32);
+                    let clip_min_y = (scale_factor * clip_rect.min.y).clamp(0.0, physical_height as f32);
+                    let clip_max_x = (scale_factor * clip_rect.max.x).clamp(clip_min_x, physical_width as f32);
+                    let clip_max_y = (scale_factor * clip_rect.max.y).clamp(clip_min_y, physical_height as f32);
                     (
                         clip_min_x.round() as u32,
                         clip_min_y.round() as u32,
@@ -370,8 +353,7 @@ impl GuiContext {
                     render_pass.set_scissor_rect(x, y, width, height);
                     let bind_group = self.get_texture_bind_group(mesh.texture_id)?;
                     render_pass.set_bind_group(1, bind_group, &[]);
-                    render_pass
-                        .set_index_buffer(index_buffer.raw.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.set_index_buffer(index_buffer.raw.slice(..), wgpu::IndexFormat::Uint32);
                     render_pass.set_vertex_buffer(0, vertex_buffer.raw.slice(..));
                     render_pass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
                 }
@@ -384,10 +366,7 @@ impl GuiContext {
         Ok(())
     }
 
-    fn get_texture_bind_group(
-        &self,
-        texture_id: egui::TextureId,
-    ) -> Result<&wgpu::BindGroup, Error> {
+    fn get_texture_bind_group(&self, texture_id: egui::TextureId) -> Result<&wgpu::BindGroup, Error> {
         self.textures
             .get(&texture_id)
             .ok_or_else(|| Error::Any(format!("Texture {:?} used but not live", texture_id)))
@@ -466,12 +445,8 @@ impl GuiContext {
                             &label_base,
                         );
 
-                        let bind_group = create_texture_bind_group(
-                            device,
-                            &texture,
-                            &self.texture_bind_group_layout,
-                            &label_base,
-                        );
+                        let bind_group =
+                            create_texture_bind_group(device, &texture, &self.texture_bind_group_layout, &label_base);
 
                         let (texture, _) = o.insert((Some(texture), bind_group));
 
@@ -511,12 +486,8 @@ impl GuiContext {
                         &label_base,
                     );
 
-                    let bind_group = create_texture_bind_group(
-                        device,
-                        &texture,
-                        &self.texture_bind_group_layout,
-                        &label_base,
-                    );
+                    let bind_group =
+                        create_texture_bind_group(device, &texture, &self.texture_bind_group_layout, &label_base);
 
                     v.insert((Some(texture), bind_group));
                 }
@@ -565,13 +536,7 @@ impl GuiContext {
             device,
             texture,
             wgpu::SamplerDescriptor {
-                label: Some(
-                    format!(
-                        "egui_user_image_{}_texture_sampler",
-                        self.next_user_texture_id
-                    )
-                    .as_str(),
-                ),
+                label: Some(format!("egui_user_image_{}_texture_sampler", self.next_user_texture_id).as_str()),
                 mag_filter: texture_filter,
                 min_filter: texture_filter,
                 ..Default::default()
@@ -593,13 +558,7 @@ impl GuiContext {
             device,
             texture,
             wgpu::SamplerDescriptor {
-                label: Some(
-                    format!(
-                        "egui_user_image_{}_texture_sampler",
-                        self.next_user_texture_id
-                    )
-                    .as_str(),
-                ),
+                label: Some(format!("egui_user_image_{}_texture_sampler", self.next_user_texture_id).as_str()),
                 mag_filter: texture_filter,
                 min_filter: texture_filter,
                 ..Default::default()
@@ -624,19 +583,10 @@ impl GuiContext {
         texture: &wgpu::TextureView,
         desc: wgpu::SamplerDescriptor,
     ) -> egui::TextureId {
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            compare: None,
-            ..desc
-        });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor { compare: None, ..desc });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(
-                format!(
-                    "egui_user_image_{}_texture_bind_group",
-                    self.next_user_texture_id
-                )
-                .as_str(),
-            ),
+            label: Some(format!("egui_user_image_{}_texture_bind_group", self.next_user_texture_id).as_str()),
             layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -675,13 +625,12 @@ impl GuiContext {
             ));
         }
 
-        let (_user_texture, user_texture_binding) =
-            self.textures.get_mut(&id).ok_or_else(|| {
-                Error::Any(format!(
-                    "InvalidTextureId - user texture for TextureId {:?} could not be found",
-                    id
-                ))
-            })?;
+        let (_user_texture, user_texture_binding) = self.textures.get_mut(&id).ok_or_else(|| {
+            Error::Any(format!(
+                "InvalidTextureId - user texture for TextureId {:?} could not be found",
+                id
+            ))
+        })?;
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             compare: None,
@@ -689,9 +638,7 @@ impl GuiContext {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(
-                format!("egui_user_{}_texture_bind_group", self.next_user_texture_id).as_str(),
-            ),
+            label: Some(format!("egui_user_{}_texture_bind_group", self.next_user_texture_id).as_str()),
             layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -793,21 +740,9 @@ impl GuiContext {
         data: &[u8],
     ) {
         let (buffer, storage, name) = match buffer_type {
-            BufferType::Index => (
-                &mut self.index_buffers[index],
-                wgpu::BufferUsages::INDEX,
-                "index",
-            ),
-            BufferType::Vertex => (
-                &mut self.vertex_buffers[index],
-                wgpu::BufferUsages::VERTEX,
-                "vertex",
-            ),
-            BufferType::Uniform => (
-                &mut self.uniform_buffer,
-                wgpu::BufferUsages::UNIFORM,
-                "uniform",
-            ),
+            BufferType::Index => (&mut self.index_buffers[index], wgpu::BufferUsages::INDEX, "index"),
+            BufferType::Vertex => (&mut self.vertex_buffers[index], wgpu::BufferUsages::VERTEX, "vertex"),
+            BufferType::Uniform => (&mut self.uniform_buffer, wgpu::BufferUsages::UNIFORM, "uniform"),
         };
 
         if data.len() > buffer.size {

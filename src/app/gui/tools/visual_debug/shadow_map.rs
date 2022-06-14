@@ -79,10 +79,7 @@ impl egui::Widget for &mut ShadowMapPane {
         if let Some(handle) = &self.depth_map_handle {
             ui.image(handle, handle.size_vec2())
         } else {
-            let (_, response) = ui.allocate_exact_size(
-                egui::vec2(IMG_WIDTH as f32, IMG_HEIGHT as f32),
-                Sense::click(),
-            );
+            let (_, response) = ui.allocate_exact_size(egui::vec2(IMG_WIDTH as f32, IMG_HEIGHT as f32), Sense::click());
             response
         }
     }

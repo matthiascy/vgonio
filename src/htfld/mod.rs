@@ -99,14 +99,7 @@ impl Heightfield {
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
-    pub fn new(
-        cols: usize,
-        rows: usize,
-        du: f32,
-        dv: f32,
-        height: f32,
-        alignment: AxisAlignment,
-    ) -> Self {
+    pub fn new(cols: usize, rows: usize, du: f32, dv: f32, height: f32, alignment: AxisAlignment) -> Self {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
         samples.resize(cols * rows, height);
@@ -150,14 +143,7 @@ impl Heightfield {
     /// assert_eq!(height_field.samples[2], 2.0);
     /// assert_eq!(height_field.sample_at(2, 3), 5.0);
     /// ```
-    pub fn new_by<F>(
-        cols: usize,
-        rows: usize,
-        du: f32,
-        dv: f32,
-        alignment: AxisAlignment,
-        setter: F,
-    ) -> Heightfield
+    pub fn new_by<F>(cols: usize, rows: usize, du: f32, dv: f32, alignment: AxisAlignment, setter: F) -> Heightfield
     where
         F: Fn(usize, usize) -> f32,
     {
@@ -168,14 +154,8 @@ impl Heightfield {
                 samples.push(setter(r, c));
             }
         }
-        let max = *samples
-            .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
-        let min = *samples
-            .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
+        let max = *samples.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+        let min = *samples.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
 
         Heightfield {
             uuid: uuid::Uuid::new_v4(),
@@ -426,18 +406,9 @@ impl Heightfield {
     /// The vertices are generated following the order from left to right, top
     /// to bottom.
     pub fn generate_vertices(&self) -> (Vec<Vec3>, Aabb) {
-        log::info!(
-            "Generating height field vertices with {:?} alignment",
-            self.alignment
-        );
-        let (rows, cols, half_rows, half_cols, du, dv) = (
-            self.rows,
-            self.cols,
-            self.rows / 2,
-            self.cols / 2,
-            self.du,
-            self.dv,
-        );
+        log::info!("Generating height field vertices with {:?} alignment", self.alignment);
+        let (rows, cols, half_rows, half_cols, du, dv) =
+            (self.rows, self.cols, self.rows / 2, self.cols / 2, self.du, self.dv);
         let mut positions: Vec<Vec3> = vec![];
         let mut extent = Aabb::default();
         for r in 0..rows {

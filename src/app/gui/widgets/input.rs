@@ -7,9 +7,7 @@ pub fn input_ui<T: egui::emath::Numeric>(
     range: Option<RangeInclusive<T>>,
 ) -> egui::Response {
     ui.add(match range {
-        Some(range) => egui::DragValue::new(value)
-            .prefix(prefix)
-            .clamp_range(range),
+        Some(range) => egui::DragValue::new(value).prefix(prefix).clamp_range(range),
         None => egui::DragValue::new(value).prefix(prefix),
     })
 }
@@ -57,13 +55,15 @@ pub fn input3_spherical(value: &mut Vec3) -> impl egui::Widget + '_ {
                 egui::DragValue::new(&mut value.y)
                     .prefix("θ: ")
                     .suffix("°")
-                    .clamp_range(0.0..=90.0),
+                    .clamp_range(0.0..=90.0)
+                    .speed(0.01),
             );
             ui.add(
                 egui::DragValue::new(&mut value.z)
                     .prefix("φ: ")
                     .suffix("°")
-                    .clamp_range(0.0..=360.0),
+                    .clamp_range(0.0..=360.0)
+                    .speed(0.01),
             );
         })
         .response

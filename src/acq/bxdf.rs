@@ -107,21 +107,13 @@ pub fn measure_in_plane_brdf_embree(
 
         for wavelength in spectrum_samples {
             println!("Capturing with wavelength = {}", wavelength);
-            let ior_t = ior_db
-                .refractive_index_of(desc.transmitted_medium, wavelength)
-                .unwrap();
+            let ior_t = ior_db.refractive_index_of(desc.transmitted_medium, wavelength).unwrap();
 
             // For all incident angles; generate samples on each patch
             for (i, patch) in emitter.patches.iter().enumerate() {
                 // Emit rays from the patch of the emitter. Uniform sampling over the patch.
                 let rays = patch.emit_rays(desc.emitter.num_rays, radius);
-                log::debug!(
-                    "Emitted {} rays from patch {} - {:?}: {:?}",
-                    rays.len(),
-                    i,
-                    patch,
-                    rays
-                );
+                log::debug!("Emitted {} rays from patch {} - {:?}: {:?}", rays.len(), i, patch, rays);
 
                 // Populate Embree ray stream with generated rays.
                 let mut ray_stream = embree::RayN::new(rays.len());
@@ -132,14 +124,10 @@ pub fn measure_in_plane_brdf_embree(
 
                 // Trace primary rays with coherent context.
                 let mut coherent_ctx = embree::IntersectContext::coherent();
-                let ray_hit =
-                    embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
+                let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
 
                 // Filter out primary rays that hit the surface.
-                let filtered = ray_hit
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, (_, h))| h.hit().then(|| i));
+                let filtered = ray_hit.iter().enumerate().filter_map(|(i, (_, h))| h.hit().then(|| i));
 
                 let mut incoherent_ctx = embree::IntersectContext::incoherent();
                 let records = filtered

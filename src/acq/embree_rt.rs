@@ -1,10 +1,7 @@
 use crate::acq::ray::reflect;
 use crate::acq::tracing::IntersectRecord;
 use crate::mesh;
-use embree::{
-    Config, Device, Geometry, Hit, IntersectContext, RayHit, RayHitN, RayN, Scene, SceneFlags,
-    TriangleMesh,
-};
+use embree::{Config, Device, Geometry, Hit, IntersectContext, RayHit, RayHitN, RayN, Scene, SceneFlags, TriangleMesh};
 use glam::Vec3;
 use std::sync::Arc;
 
@@ -46,8 +43,7 @@ impl EmbreeRayTracing {
     }
 
     pub fn create_triangle_mesh(&self, mesh: &mesh::TriangleMesh) -> Arc<TriangleMesh> {
-        let mut embree_mesh =
-            TriangleMesh::unanimated(self.device.clone(), mesh.num_tris, mesh.num_verts);
+        let mut embree_mesh = TriangleMesh::unanimated(self.device.clone(), mesh.num_tris, mesh.num_verts);
         {
             let mesh_ref_mut = Arc::get_mut(&mut embree_mesh).unwrap();
             {
@@ -58,11 +54,7 @@ impl EmbreeRayTracing {
                 }
                 // TODO: replace with slice::as_chunks when it's stable.
                 (0..mesh.num_tris).for_each(|tri| {
-                    indxs_buffer[tri] = [
-                        mesh.faces[tri * 3],
-                        mesh.faces[tri * 3 + 1],
-                        mesh.faces[tri * 3 + 2],
-                    ];
+                    indxs_buffer[tri] = [mesh.faces[tri * 3], mesh.faces[tri * 3 + 1], mesh.faces[tri * 3 + 2]];
                 })
             }
             mesh_ref_mut.commit()
@@ -77,24 +69,14 @@ impl EmbreeRayTracing {
         id
     }
 
-    pub fn intersect_stream_soa(
-        &self,
-        scene_id: usize,
-        stream: RayN,
-        context: &mut IntersectContext,
-    ) -> RayHitN {
+    pub fn intersect_stream_soa(&self, scene_id: usize, stream: RayN, context: &mut IntersectContext) -> RayHitN {
         let mut ray_hit = RayHitN::new(stream);
         let scene = self.scene(scene_id);
         scene.intersect_stream_soa(context, &mut ray_hit);
         ray_hit
     }
 
-    pub fn intersect(
-        &mut self,
-        scene_id: usize,
-        ray: embree::Ray,
-        context: &mut IntersectContext,
-    ) -> RayHit {
+    pub fn intersect(&mut self, scene_id: usize, ray: embree::Ray, context: &mut IntersectContext) -> RayHit {
         let mut ray_hit = RayHit::new(ray);
         let scene = self.scene_mut(scene_id);
         scene.set_flags(scene.flags() | SceneFlags::ROBUST);
@@ -114,15 +96,7 @@ impl EmbreeRayTracing {
         let mut context = IntersectContext::incoherent();
         let scene = self.scene_mut(scene_id);
 
-        trace_one_ray_dbg_inner(
-            scene,
-            &mut context,
-            ray,
-            max_bounces,
-            curr_bounces,
-            prev,
-            output,
-        );
+        trace_one_ray_dbg_inner(scene, &mut context, ray, max_bounces, curr_bounces, prev, output);
 
         fn trace_one_ray_dbg_inner(
             scn: &mut Scene,
@@ -148,11 +122,7 @@ impl EmbreeRayTracing {
 
             if ray_hit.hit.hit() && (f32::EPSILON..f32::INFINITY).contains(&ray_hit.ray.tfar) {
                 log::debug!("  > YES[HIT]");
-                log::debug!(
-                    "    geom {} - prim {}",
-                    ray_hit.hit.geomID,
-                    ray_hit.hit.primID
-                );
+                log::debug!("    geom {} - prim {}", ray_hit.hit.geomID, ray_hit.hit.primID);
                 if let Some(prev) = prev {
                     // Check with the previous hit record if the same primitive has been hit.
                     if prev.geom_id == ray_hit.hit.geomID && prev.prim_id == ray_hit.hit.primID {
@@ -182,11 +152,9 @@ impl EmbreeRayTracing {
                 }
 
                 // Previous hit record is not available.
-                let normal =
-                    Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z).normalize();
+                let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z).normalize();
                 let dir = Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z).normalize();
-                let hit_point =
-                    compute_hit_point(scn, &ray_hit.hit) + normal * EmbreeRayTracing::NUDGE_AMOUNT;
+                let hit_point = compute_hit_point(scn, &ray_hit.hit) + normal * EmbreeRayTracing::NUDGE_AMOUNT;
                 let reflected_dir = reflect(dir, normal).normalize();
                 let new_ray = embree::Ray::new(hit_point.into(), reflected_dir.into());
                 let isect = EmbreeIsectRecord {
@@ -198,15 +166,7 @@ impl EmbreeRayTracing {
                     hit_point,
                     nudged_times: 1,
                 };
-                trace_one_ray_dbg_inner(
-                    scn,
-                    ctx,
-                    new_ray,
-                    max_bounces,
-                    curr_bounces + 1,
-                    Some(isect),
-                    output,
-                );
+                trace_one_ray_dbg_inner(scn, ctx, new_ray, max_bounces, curr_bounces + 1, Some(isect), output);
             } else {
                 log::debug!("  > NO[HIT] Quitting [{}]...", curr_bounces);
             }
@@ -233,10 +193,8 @@ pub fn compute_hit_point(scene: &Scene, record: &Hit) -> Vec3 {
     let geom = scene.geometry(record.geomID).unwrap().handle();
     let prim_id = record.primID as isize;
     let points = unsafe {
-        let vertices: *const f32 =
-            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
-        let indices: *const u32 =
-            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
+        let vertices: *const f32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
+        let indices: *const u32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
 
         let mut points = [Vec3::ZERO; 3];
         log::debug!(

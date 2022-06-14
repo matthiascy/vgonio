@@ -82,9 +82,7 @@ impl Projection {
         );
         scale_depth
             * match kind {
-                ProjectionKind::Perspective => {
-                    Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
-                }
+                ProjectionKind::Perspective => Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far),
                 ProjectionKind::Orthographic => Mat4::orthographic_rh(
                     -self.width / 2.0,
                     self.width / 2.0,
@@ -240,13 +238,7 @@ impl Default for OrbitControls {
 }
 
 impl OrbitControls {
-    pub fn new(
-        min_zoom_dist: f32,
-        max_zoom_dist: f32,
-        pan_speed: f32,
-        rotate_speed: f32,
-        zoom_speed: f32,
-    ) -> Self {
+    pub fn new(min_zoom_dist: f32, max_zoom_dist: f32, pan_speed: f32, rotate_speed: f32, zoom_speed: f32) -> Self {
         Self {
             max_zoom_dist,
             min_zoom_dist,
@@ -295,8 +287,7 @@ impl OrbitControls {
         let h_angle = dx * self.rotate_speed;
         let v_angle = dy * self.rotate_speed;
 
-        let rot = Mat4::from_axis_angle(camera.right(), v_angle)
-            * Mat4::from_axis_angle(camera.up(), h_angle);
+        let rot = Mat4::from_axis_angle(camera.right(), v_angle) * Mat4::from_axis_angle(camera.up(), h_angle);
         position = pivot + rot * (position - pivot);
 
         camera.eye = position.xyz();
@@ -314,29 +305,21 @@ impl OrbitControls {
 impl CameraController for OrbitControls {
     fn update(&mut self, input: &InputState, camera: &mut Camera, dt: std::time::Duration) {
         let is_middle_button_pressed = *input.mouse_map.get(&MouseButton::Middle).unwrap_or(&false);
-        let is_shift_pressed = input.is_key_pressed(VirtualKeyCode::LShift)
-            || input.is_key_pressed(VirtualKeyCode::RShift);
-        let is_ctrl_pressed = input.is_key_pressed(VirtualKeyCode::LControl)
-            || input.is_key_pressed(VirtualKeyCode::RControl);
+        let is_shift_pressed =
+            input.is_key_pressed(VirtualKeyCode::LShift) || input.is_key_pressed(VirtualKeyCode::RShift);
+        let is_ctrl_pressed =
+            input.is_key_pressed(VirtualKeyCode::LControl) || input.is_key_pressed(VirtualKeyCode::RControl);
         let [dx, dy] = input.cursor_delta;
         let scroll_delta = input.scroll_delta * 5.0;
 
         let dt = dt.as_secs_f32();
 
-        if self.is_panning_enabled
-            && is_middle_button_pressed
-            && is_shift_pressed
-            && !is_ctrl_pressed
-        {
+        if self.is_panning_enabled && is_middle_button_pressed && is_shift_pressed && !is_ctrl_pressed {
             // Shift + Middle --> panning
             self.pan(-dx * dt, dy * dt, camera);
         }
 
-        if self.is_zooming_enabled
-            && is_middle_button_pressed
-            && !is_shift_pressed
-            && is_ctrl_pressed
-        {
+        if self.is_zooming_enabled && is_middle_button_pressed && !is_shift_pressed && is_ctrl_pressed {
             // Ctrl + Middle --> zooming
             self.zoom(-dy * dt * 5.0, camera);
         }
@@ -346,11 +329,7 @@ impl CameraController for OrbitControls {
             self.zoom(-scroll_delta * dt, camera);
         }
 
-        if self.is_rotation_enabled
-            && is_middle_button_pressed
-            && !is_shift_pressed
-            && !is_ctrl_pressed
-        {
+        if self.is_rotation_enabled && is_middle_button_pressed && !is_shift_pressed && !is_ctrl_pressed {
             // Middle --> rotate
             self.rotate(dx * dt, dy * dt, camera);
         }

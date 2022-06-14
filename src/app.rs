@@ -73,16 +73,10 @@ impl VgonioConfig {
             let default_user_config = config_dir.join("vgonio.toml");
             if current_dir_user_config.exists() {
                 // Try to load the user config file under the current directory.
-                (
-                    std::fs::read_to_string(&current_dir_user_config).ok(),
-                    &current_dir,
-                )
+                (std::fs::read_to_string(&current_dir_user_config).ok(), &current_dir)
             } else if default_user_config.exists() {
                 // Otherwise, try to load the user config file under the config directory.
-                (
-                    std::fs::read_to_string(&default_user_config).ok(),
-                    &config_dir,
-                )
+                (std::fs::read_to_string(&default_user_config).ok(), &config_dir)
             } else {
                 (None, &current_dir)
             }
@@ -107,20 +101,16 @@ impl VgonioConfig {
             }
             if config.output_dir.is_relative() {
                 let output_dir = relative_to.join(&config.output_dir);
-                config.output_dir =
-                    output_dir
-                        .join(config.output_dir)
-                        .canonicalize()
-                        .map_err(|err| {
-                            std::io::Error::new(
-                                err.kind(),
-                                format!(
-                                    "failed to convert relative path '{}' to absolute path: {}",
-                                    output_dir.display(),
-                                    err
-                                ),
-                            )
-                        })?;
+                config.output_dir = output_dir.join(config.output_dir).canonicalize().map_err(|err| {
+                    std::io::Error::new(
+                        err.kind(),
+                        format!(
+                            "failed to convert relative path '{}' to absolute path: {}",
+                            output_dir.display(),
+                            err
+                        ),
+                    )
+                })?;
             }
             config
         } else {
@@ -219,11 +209,7 @@ pub struct MeasureOptions {
     )]
     output_path: Option<std::path::PathBuf>,
 
-    #[clap(
-        short,
-        long = "num-threads",
-        help = "The number of threads in the thread pool"
-    )]
+    #[clap(short, long = "num-threads", help = "The number of threads in the thread pool")]
     nthreads: Option<u32>,
 
     #[clap(long, help = "Use caches to minimize the processing time")]
@@ -304,15 +290,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
                             record.args()
                         )
                     } else {
-                        writeln!(
-                            buf,
-                            "{}:{}:{}.{:03}: {}",
-                            hours,
-                            minutes,
-                            seconds,
-                            milis,
-                            record.args()
-                        )
+                        writeln!(buf, "{}:{}:{}.{:03}: {}", hours, minutes, seconds, milis, record.args())
                     }
                 } else if record.level() <= log::Level::Warn {
                     writeln!(buf, "{}: {}", record.level(), record.args())
@@ -359,8 +337,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    let mut vgonio =
-        pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
+    let mut vgonio = pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
 
     let mut last_frame_time = std::time::Instant::now();
 
@@ -374,10 +351,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
                 *control_flow = ControlFlow::Exit;
             }
             Event::UserEvent(event) => vgonio.handle_user_event(event),
-            Event::WindowEvent {
-                window_id,
-                ref event,
-            } if window_id == window.id() => {
+            Event::WindowEvent { window_id, ref event } if window_id == window.id() => {
                 if !vgonio.handle_input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,

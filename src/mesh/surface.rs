@@ -162,26 +162,11 @@ impl SurfaceMesh {
                 //  v2 - v3
                 //  | \  |
                 // v0 - v1
-                let (v0, v1, v2, v3) = {
-                    (
-                        curr_vert,
-                        curr_vert + 1,
-                        curr_vert + cols,
-                        curr_vert + 1 + cols,
-                    )
-                };
+                let (v0, v1, v2, v3) = { (curr_vert, curr_vert + 1, curr_vert + cols, curr_vert + 1 + cols) };
 
-                let lower_twin = if r == 0 {
-                    usize::MAX
-                } else {
-                    curr_dart - 6 * (cols - 1)
-                };
+                let lower_twin = if r == 0 { usize::MAX } else { curr_dart - 6 * (cols - 1) };
                 let left_twin = if c == 0 { usize::MAX } else { curr_dart - 3 };
-                let right_twin = if is_last_col {
-                    usize::MAX
-                } else {
-                    curr_dart + 8
-                };
+                let right_twin = if is_last_col { usize::MAX } else { curr_dart + 8 };
                 let top_twin = if is_last_row {
                     usize::MAX
                 } else {
@@ -189,13 +174,13 @@ impl SurfaceMesh {
                 };
                 he_darts.extend_from_slice(&[
                     // 1st triangle
-                    HEDart::new(v0, curr_face, curr_dart + 1, curr_dart + 2, lower_twin),  // curr_dart + 0
+                    HEDart::new(v0, curr_face, curr_dart + 1, curr_dart + 2, lower_twin), // curr_dart + 0
                     HEDart::new(v1, curr_face, curr_dart + 2, curr_dart, curr_dart + 5),  // curr_dart + 1
-                    HEDart::new(v2, curr_face, curr_dart, curr_dart + 1, left_twin),  // curr_dart + 2
+                    HEDart::new(v2, curr_face, curr_dart, curr_dart + 1, left_twin),      // curr_dart + 2
                     // 2nd triangle
-                    HEDart::new(v1, curr_face + 1, curr_dart + 4, curr_dart + 5, right_twin),  // curr_dart + 3
-                    HEDart::new(v3, curr_face + 1, curr_dart + 5, curr_dart + 3, top_twin),  // curr_dart + 4
-                    HEDart::new(v2, curr_face + 1, curr_dart + 3, curr_dart + 4, curr_dart + 1),  // // curr_dart + 5
+                    HEDart::new(v1, curr_face + 1, curr_dart + 4, curr_dart + 5, right_twin), // curr_dart + 3
+                    HEDart::new(v3, curr_face + 1, curr_dart + 5, curr_dart + 3, top_twin),   // curr_dart + 4
+                    HEDart::new(v2, curr_face + 1, curr_dart + 3, curr_dart + 4, curr_dart + 1), // // curr_dart + 5
                 ]);
                 he_edges.extend_from_slice(&[
                     HEEdge(curr_dart, lower_twin),
@@ -265,9 +250,7 @@ impl SurfaceMesh {
                 .as_any_mut()
                 .downcast_mut::<AttribArray<Vec3>>()
                 .unwrap();
-            face_normals
-                .0
-                .resize(self.faces.len(), Vec3::new(0.0, 0.0, 0.0));
+            face_normals.0.resize(self.faces.len(), Vec3::new(0.0, 0.0, 0.0));
             let vert_positions = self
                 .vert_attribs
                 .get_mut(&"positions".to_string())

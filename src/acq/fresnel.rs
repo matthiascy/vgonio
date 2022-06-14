@@ -113,11 +113,7 @@ pub fn schlick_reflectance(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
 }
 
 pub fn schlick_reflectance_spectrum(w_i: Vec3, n: Vec3, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
-    assert_eq!(
-        eta_i.len(),
-        eta_t.len(),
-        "eta_i and eta_t must have the same length"
-    );
+    assert_eq!(eta_i.len(), eta_t.len(), "eta_i and eta_t must have the same length");
 
     let cos = w_i.dot(n);
 
@@ -166,10 +162,7 @@ pub fn reflectance_dielectric_conductor(cos_theta: f32, eta_t: f32, k_t: f32) ->
     0.5 * (rp2 + rs2)
 }
 
-pub fn reflectance_dielectric_conductor_spectrum(
-    cos_theta: f32,
-    iors_t: &[RefractiveIndex],
-) -> Vec<f32> {
+pub fn reflectance_dielectric_conductor_spectrum(cos_theta: f32, iors_t: &[RefractiveIndex]) -> Vec<f32> {
     todo!()
 }
 

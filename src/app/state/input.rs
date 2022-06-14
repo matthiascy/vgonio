@@ -36,10 +36,7 @@ impl InputState {
     }
 
     pub fn update_cursor_delta(&mut self, new_pos: PhysicalPosition<f32>) {
-        self.cursor_delta = [
-            new_pos.x - self.cursor_pos[0],
-            new_pos.y - self.cursor_pos[1],
-        ];
+        self.cursor_delta = [new_pos.x - self.cursor_pos[0], new_pos.y - self.cursor_pos[1]];
         self.cursor_pos = new_pos.into();
     }
 

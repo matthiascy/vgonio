@@ -22,12 +22,7 @@ pub struct SizedBuffer {
 }
 
 impl SizedBuffer {
-    pub fn new(
-        device: &wgpu::Device,
-        size: usize,
-        usage: wgpu::BufferUsages,
-        label: Option<&str>,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, size: usize, usage: wgpu::BufferUsages, label: Option<&str>) -> Self {
         let raw = device.create_buffer(&wgpu::BufferDescriptor {
             label,
             size: size as u64,
@@ -37,18 +32,9 @@ impl SizedBuffer {
         Self { raw, size }
     }
 
-    pub fn new_init(
-        device: &wgpu::Device,
-        contents: &[u8],
-        usage: wgpu::BufferUsages,
-        label: Option<&str>,
-    ) -> Self {
+    pub fn new_init(device: &wgpu::Device, contents: &[u8], usage: wgpu::BufferUsages, label: Option<&str>) -> Self {
         let size = contents.len();
-        let raw = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label,
-            contents,
-            usage,
-        });
+        let raw = device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label, contents, usage });
         Self { raw, size }
     }
 }
@@ -61,17 +47,16 @@ pub struct RdrPass {
     pub uniform_buffer: Option<wgpu::Buffer>,
 }
 
-pub const DEFAULT_BIND_GROUP_LAYOUT_DESC: wgpu::BindGroupLayoutDescriptor =
-    wgpu::BindGroupLayoutDescriptor {
-        label: Some("default_vertex_stage_bind_group_layout"),
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-    };
+pub const DEFAULT_BIND_GROUP_LAYOUT_DESC: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescriptor {
+    label: Some("default_vertex_stage_bind_group_layout"),
+    entries: &[wgpu::BindGroupLayoutEntry {
+        binding: 0,
+        visibility: wgpu::ShaderStages::VERTEX,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }],
+};

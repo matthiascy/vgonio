@@ -15,31 +15,21 @@ pub enum RayTracingMethod {
 }
 
 pub fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTracing) -> Vec<Ray> {
+    log::debug!("trace_ray_grid_dbg: {:?}", ray);
     let mut rays = vec![];
-    grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, &mut rays);
+    grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut rays);
 
     rays
 }
 
-pub fn trace_ray_standard_dbg(
-    ray: Ray,
-    max_bounces: u32,
-    surface: &TriangleMesh,
-) -> Vec<embree::Ray> {
+pub fn trace_ray_standard_dbg(ray: Ray, max_bounces: u32, surface: &TriangleMesh) -> Vec<embree::Ray> {
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let scn_id = embree_rt.create_scene();
     let mesh = embree_rt.create_triangle_mesh(surface);
     embree_rt.attach_geometry(scn_id, mesh);
     let mut rays: Vec<embree::Ray> = vec![];
 
-    embree_rt.trace_one_ray_dbg(
-        scn_id,
-        ray.into_embree_ray(),
-        max_bounces,
-        0,
-        None,
-        &mut rays,
-    );
+    embree_rt.trace_one_ray_dbg(scn_id, ray.into_embree_ray(), max_bounces, 0, None, &mut rays);
 
     rays
 }
@@ -96,17 +86,13 @@ pub fn trace_one_ray_embree(
             if let Some(prev_isect) = prev_isect {
                 log::debug!("    - has previous intersection");
                 // Is the ray repeat hitting the same primitive of the same geometry?
-                if prev_isect.geom_id == ray_hit.hit.geomID
-                    && prev_isect.prim_id == ray_hit.hit.primID
-                {
+                if prev_isect.geom_id == ray_hit.hit.geomID && prev_isect.prim_id == ray_hit.hit.primID {
                     log::debug!("      - is repeat intersection");
                     // Self intersection happens, recalculate the hit point.
                     let nudged_times = prev_isect.nudged_times + 1;
                     log::debug!("        - new nudged_times {}", nudged_times);
-                    let amount =
-                        EmbreeRayTracing::NUDGE_AMOUNT * (nudged_times * nudged_times) as f32 * 0.5;
-                    let hit_point =
-                        nudge_hit_point(prev_isect.hit_point, prev_isect.normal, amount);
+                    let amount = EmbreeRayTracing::NUDGE_AMOUNT * (nudged_times * nudged_times) as f32 * 0.5;
+                    let hit_point = nudge_hit_point(prev_isect.hit_point, prev_isect.normal, amount);
                     log::debug!("        - new hit_point {:?}", hit_point);
                     // Update the intersection record.
                     let curr_isect = IntersectRecord {
@@ -116,13 +102,9 @@ pub fn trace_one_ray_embree(
                     };
                     log::debug!("        - new curr_isect {:?}", curr_isect);
                     // Recalculate the reflected ray.
-                    if let Some(Scattering { reflected, .. }) = scattering_air_conductor(
-                        prev_isect.ray,
-                        hit_point,
-                        prev_isect.normal,
-                        ior_t.eta,
-                        ior_t.k,
-                    ) {
+                    if let Some(Scattering { reflected, .. }) =
+                        scattering_air_conductor(prev_isect.ray, hit_point, prev_isect.normal, ior_t.eta, ior_t.k)
+                    {
                         log::debug!("        - new reflected ray {:?}", reflected);
                         if reflected.e >= 0.0 {
                             // Update ray tracing information.
@@ -267,10 +249,8 @@ fn compute_hit_point(scene: &embree::Scene, record: &embree::Hit) -> Vec3 {
     let geom = scene.geometry(record.geomID).unwrap().handle();
     let prim_id = record.primID as isize;
     let points = unsafe {
-        let vertices: *const f32 =
-            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
-        let indices: *const u32 =
-            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
+        let vertices: *const f32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
+        let indices: *const u32 = embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
 
         let mut points = [Vec3::ZERO; 3];
         for (i, p) in points.iter_mut().enumerate() {

@@ -57,10 +57,7 @@ impl<'surface> VisualDebugTool {
         ui.horizontal(|ui| {
             ui.label("Debug Draw");
             if toggle_ui(ui, &mut self.debug_drawing_enabled).changed()
-                && self
-                    .event_loop
-                    .send_event(VgonioEvent::ToggleDebugDrawing)
-                    .is_err()
+                && self.event_loop.send_event(VgonioEvent::ToggleDebugDrawing).is_err()
             {
                 log::warn!("Failed to send VgonioEvent::ToggleDebugDrawing");
             }

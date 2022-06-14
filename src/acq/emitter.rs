@@ -13,9 +13,7 @@ impl From<EmitterDesc> for Emitter {
         Self {
             num_rays: desc.num_rays,
             radius: desc.radius,
-            patches: desc
-                .partition
-                .generate_patches(SphericalShape::UpperHemisphere),
+            patches: desc.partition.generate_patches(SphericalShape::UpperHemisphere),
         }
     }
 }

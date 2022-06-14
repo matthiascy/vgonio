@@ -87,20 +87,16 @@ impl SphericalPartition {
         match self {
             SphericalPartition::EqualAngle { .. } => "equal angular interval",
             SphericalPartition::EqualArea { .. } => "equal area (solid angle)",
-            SphericalPartition::EqualProjectedArea { .. } => {
-                "equal projected area (projected solid angle)"
-            }
+            SphericalPartition::EqualProjectedArea { .. } => "equal projected area (projected solid angle)",
         }
     }
 
     pub fn theta_range_str(&self) -> String {
         match self {
-            SphericalPartition::EqualAngle { theta, .. } => format!(
-                "{}° - {}°, step size {}°",
-                theta.start, theta.stop, theta.step
-            ),
-            SphericalPartition::EqualArea { theta, .. }
-            | SphericalPartition::EqualProjectedArea { theta, .. } => {
+            SphericalPartition::EqualAngle { theta, .. } => {
+                format!("{}° - {}°, step size {}°", theta.start, theta.stop, theta.step)
+            }
+            SphericalPartition::EqualArea { theta, .. } | SphericalPartition::EqualProjectedArea { theta, .. } => {
                 format!("{}° - {}°, samples count {}", theta.0, theta.1, theta.2)
             }
         }
@@ -188,7 +184,8 @@ impl SphericalPartition {
                 for theta in 0..n_theta {
                     for phi in 0..n_phi {
                         patches.push(Patch {
-                            zenith: (1.0 - (h_step * (theta as f32 + 0.5) + h_start)).acos(),  // use the median angle (+ 0.5) as zenith
+                            zenith: (1.0 - (h_step * (theta as f32 + 0.5) + h_start)).acos(), /* use the median angle
+                                                                                               * (+ 0.5) as zenith */
                             azimuth: (phi_start + phi as f32 * phi_step) as f32,
                         });
                     }
@@ -227,8 +224,7 @@ impl SphericalPartition {
                     //                 1st           2nd           3rd
                     // O- - - - | - - - I - - - | - - - I - - - | - - - I - - -|
                     //     r_start_sqr                               r_stop_sqr
-                    let r_sqr =
-                        r_start_sqr + (r_stop_sqr - r_start_sqr) * factor * (i as f32 + 0.5);
+                    let r_sqr = r_start_sqr + (r_stop_sqr - r_start_sqr) * factor * (i as f32 + 0.5);
                     let r = r_sqr.sqrt();
                     let theta = r.asin();
                     for phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {

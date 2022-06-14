@@ -33,32 +33,20 @@ impl GpuContext {
                 compatible_surface: Some(&surface),
             })
             .await
-            .unwrap_or_else(|| {
-                panic!(
-                    "Failed to request physical device! {}",
-                    concat!(file!(), ":", line!())
-                )
-            });
+            .unwrap_or_else(|| panic!("Failed to request physical device! {}", concat!(file!(), ":", line!())));
         let features = adapter.features();
         // Logical device and command queue
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: features
-                        | wgpu::Features::POLYGON_MODE_LINE
-                        | wgpu::Features::TIMESTAMP_QUERY,
+                    features: features | wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
                     limits: wgpu::Limits::default(),
                 },
                 None,
             )
             .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to request logical device! {}",
-                    concat!(file!(), ":", line!())
-                )
-            });
+            .unwrap_or_else(|_| panic!("Failed to request logical device! {}", concat!(file!(), ":", line!())));
 
         log::info!("Device limits: {:?}", device.limits());
 

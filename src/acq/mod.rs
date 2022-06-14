@@ -192,12 +192,7 @@ pub(crate) fn resolve_file_path(base_path: &Path, path: Option<&Path>) -> PathBu
         |path| {
             if let Ok(prefix_stripped) = path.strip_prefix("//") {
                 // Output path is relative to input file's directory
-                let mut resolved = base_path
-                    .parent()
-                    .unwrap()
-                    .to_path_buf()
-                    .canonicalize()
-                    .unwrap();
+                let mut resolved = base_path.parent().unwrap().to_path_buf().canonicalize().unwrap();
                 resolved.push(prefix_stripped);
                 resolved
             } else {
