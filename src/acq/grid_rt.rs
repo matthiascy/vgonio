@@ -231,7 +231,7 @@ impl GridRayTracing {
     /// coordinates.
     fn altitudes_of_cell(&self, pos: IVec2) -> [f32; 4] {
         assert!(
-            pos.x < self.min.x || pos.y < self.min.y || pos.x > self.max.x || pos.y > self.max.y,
+            pos.x >= self.min.x && pos.y >= self.min.y && pos.x <= self.max.x && pos.y <= self.max.y,
             "The position is out of the grid."
         );
 
