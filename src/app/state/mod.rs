@@ -830,7 +830,9 @@ impl VgonioApp {
                                 crate::acq::tracing::trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
                             if self.debug_drawing_enabled {
                                 let mut content = self.debug_drawing.rays.iter().map(|r| r.o).collect::<Vec<_>>();
-                                content.push(ray.o + ray.d * self.debug_drawing.ray_t);
+                                let last_ray = self.debug_drawing.rays[self.debug_drawing.rays.len() - 1];
+                                content.push(last_ray.o + last_ray.d * self.debug_drawing.ray_t);
+                                log::debug!("content: {:?}", content);
                                 self.debug_drawing.vert_count = self.debug_drawing.rays.len() as u32 + 1;
                                 self.gpu_ctx.queue.write_buffer(
                                     &self.debug_drawing.vert_buffer.raw,

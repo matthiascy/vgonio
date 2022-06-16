@@ -30,8 +30,8 @@ pub(crate) struct RayTracingPane {
 impl RayTracingPane {
     pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
-            ray_origin_cartesian: Default::default(),
-            ray_origin_spherical: Default::default(),
+            ray_origin_cartesian: Vec3::new(0.0, 5.0, 0.0),
+            ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),
             ray_target: Default::default(),
             ray_mode: RayMode::Cartesian,
             max_bounces: 20,

@@ -206,7 +206,7 @@ impl GridRayTracing {
         );
         let cell = ((self.surface.cols - 1) * pos.y as usize + pos.x as usize);
         let pts = &self.mesh.faces[cell * 6..cell * 6 + 6];
-        log::debug!("cell: {:?}, tris: {:?}, pts {:?}", cell, [cell * 2, cell * 2 + 1], pts);
+        log::debug!("  - cell: {:?}, tris: {:?}, pts {:?}", cell, [cell * 2, cell * 2 + 1], pts);
         [
             (
                 (cell * 2) as u32,
@@ -249,21 +249,14 @@ impl GridRayTracing {
     /// intersects the cell of the height field at the given position.
     fn intersected_with_cell(&self, cell: IVec2, entering: f32, exiting: f32) -> bool {
         let altitudes = self.altitudes_of_cell(cell);
+        log::debug!("  - altitudes: {:?}", altitudes);
         let (min, max) = {
-            let (min, max) = (f32::MAX, f32::MIN);
             altitudes
                 .iter()
-                .fold((min, max), |(min, max), height| (min.min(*height), max.max(*height)))
+                .fold((f32::MAX, f32::MIN), |(min, max), height| (min.min(*height), max.max(*height)))
         };
-
-        // The ray is either entering the cell beneath the surface or
-        // entering and exiting the cell above the surface.
-        //            a > max             b > max
-        // max - - - - - - - - - - - - - - - - - -
-        //      min < a < max       min < b < max
-        // min - - - - - - - - - - - - - - - - - -
-        //            a < min             b < min
-        !(entering < min || (entering > max && exiting > max))
+        log::debug!("  - min: {:?}, max: {:?}", min, max);
+        (entering >= min && exiting <= max) && (entering >= min && exiting <= max)
     }
 
     /// Modified version of Digital Differential Analyzer (DDA) Algorithm.
@@ -292,8 +285,8 @@ impl GridRayTracing {
         // Relocate the ray origin to the position relative to the origin of the grid.
         let ray_org_grid = ray_org_world - self.origin;
         let ray_org_cell = self.world_to_grid_2d(ray_org_world);
-        log::debug!("    Ray origin cell: {:?}", ray_org_cell);
-        log::debug!("    Ray origin grid: {:?}", ray_org_grid);
+        log::debug!("      - ray origin cell: {:?}", ray_org_cell);
+        log::debug!("      - ray origin grid: {:?}", ray_org_grid);
 
         let is_parallel_to_x_axis = f32::abs(ray_dir.y - 0.0) < f32::EPSILON;
         let is_parallel_to_y_axis = f32::abs(ray_dir.x - 0.0) < f32::EPSILON;
@@ -301,11 +294,13 @@ impl GridRayTracing {
         if is_parallel_to_x_axis && is_parallel_to_y_axis {
             // The ray is parallel to both axes, which means it comes from the top or bottom
             // of the grid.
-            return GridTraversal::FromTopOrBottom(ray_org_grid.floor().as_ivec2());
+            log::debug!("      -> parallel to both axes");
+            return GridTraversal::FromTopOrBottom(ray_org_cell);
         }
 
         let ray_dir = ray_dir.normalize();
         if is_parallel_to_x_axis && !is_parallel_to_y_axis {
+            log::debug!("      -> parallel to X axis");
             let (dir, initial_dist, num_cells) = if ray_dir.x < 0.0 {
                 (
                     -1,
@@ -333,6 +328,7 @@ impl GridRayTracing {
                 dists: cells_dists.1,
             }
         } else if is_parallel_to_y_axis && !is_parallel_to_x_axis {
+            log::debug!("      -> parallel to Y axis");
             let (dir, initial_dist, count) = if ray_dir.y < 0.0 {
                 (
                     -1,
@@ -448,11 +444,12 @@ impl GridRayTracing {
     ///
     /// A vector of intersection information [`RayTriInt`] with corresponding triangle index.
     fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriInt)> {
+        log::debug!("  - intersecting with cell: {:?}", cell);
         let tris = self.triangles_at(cell);
         tris
             .iter()
             .filter_map(|(index, pts)| {
-                log::debug!("    tri: {:?}", index);
+                log::debug!("    isect test with tri: {:?}", index);
                 isect_ray_tri(ray, pts).map(|isect| (*index, isect))
             })
             .collect::<Vec<_>>()
@@ -460,6 +457,9 @@ impl GridRayTracing {
 
     pub fn trace_one_ray_dbg(&self, ray: Ray, max_bounces: u32, curr_bounces: u32, last_prim: Option<u32>, output: &mut Vec<Ray>) {
         log::debug!("[{curr_bounces}]");
+        log::debug!("Trace {:?}", ray);
+        output.push(ray);
+
         let starting_point = if !self.inside(self.world_to_grid_3d(ray.o)) {
             // The ray origin is outside the grid, tests first with the bounding box.
             self.mesh
@@ -475,12 +475,10 @@ impl GridRayTracing {
         };
         log::debug!("  - starting point: {:?}", starting_point);
 
-        output.push(ray);
-
         if let Some(start) = starting_point {
             match self.traverse(start.xz(), ray.d.xz()) {
                 GridTraversal::FromTopOrBottom(cell) => {
-                    log::debug!("  - traversed cells: {:?}", cell);
+                    log::debug!("  - [top/bot] traversed cells: {:?}", cell);
                     // The ray coming from the top or bottom of the grid, calculate the intersection
                     // with the grid surface.
                     let intersections = self.intersect_with_cell(ray, cell);
@@ -489,10 +487,13 @@ impl GridRayTracing {
                             return;
                         }
                         1 => {
+                            log::debug!("  --> intersected with triangle {:?}", intersections[0].0);
                             let p = intersections[0].1.p;
                             let n = intersections[0].1.n;
-                            log::debug!("  - intersection point: {:?}", p);
-                            let d = reflect(ray.d, n);
+                            log::debug!("    n: {:?}", n);
+                            log::debug!("    p: {:?}", p);
+                            let d = reflect(ray.d, n).normalize();
+                            log::debug!("    r: {:?}", d);
                             self.trace_one_ray_dbg(Ray::new(p, d), max_bounces, curr_bounces + 1, Some(intersections[0].0), output);
                         }
                         2 => {
@@ -500,6 +501,14 @@ impl GridRayTracing {
                             // check if they are the same.
                             if intersections[0].1.p != intersections[1].1.p {
                                 panic!("Intersected with two triangles but they are not the same!");
+                            } else {
+                                let p = intersections[0].1.p;
+                                let n = intersections[0].1.n;
+                                log::debug!("    n: {:?}", n);
+                                log::debug!("    p: {:?}", p);
+                                let d = reflect(ray.d, n).normalize();
+                                log::debug!("    r: {:?}", d);
+                                self.trace_one_ray_dbg(Ray::new(p, d), max_bounces, curr_bounces + 1, Some(intersections[0].0), output);
                             }
                         }
                         _ => {
@@ -508,6 +517,7 @@ impl GridRayTracing {
                     }
                 }
                 GridTraversal::Traversed { cells, dists } => {
+                    log::debug!("  - [arbitrary] traversed cells: {:?}", cells);
                     let dists = {
                         let mut dists_ = vec![0.0];
                         dists_.extend_from_slice(&dists);
@@ -519,16 +529,20 @@ impl GridRayTracing {
                         let entering = dists[i] * ray.d.y;
                         let exiting = dists[i + 1] * ray.d.y;
                         if self.intersected_with_cell(cells[i], entering, exiting) {
+                            log::debug!("  --> intersected with cell {:?}", cells[i]);
                             let intersections = match last_prim {
                                 Some(last_prim) => {
                                     self.intersect_with_cell(ray, cells[i]).into_iter().filter(|(index, info)| {
+                                        log::debug!("    isect test with tri: {:?}, last_prim: {:?}", index, last_prim);
                                         *index != last_prim
                                     }).collect::<Vec<_>>()
                                 }
                                 None => {
+                                    log::debug!("    no last prim");
                                     self.intersect_with_cell(ray, cells[i])
                                 }
                             };
+                            log::debug!("        --> intersections: {:?}", intersections);
 
                             match intersections.len() {
                                 0 => {
@@ -536,7 +550,7 @@ impl GridRayTracing {
                                 }
                                 1 => {
                                     let p = intersections[0].1.p;
-                                    log::debug!("  - intersection point: {:?}", p);
+                                    log::debug!("  - p: {:?}", p);
                                     let d = reflect(ray.d, intersections[0].1.n);
                                     self.trace_one_ray_dbg(Ray::new(p, d), max_bounces, curr_bounces + 1, Some(intersections[0].0), output);
                                 }
