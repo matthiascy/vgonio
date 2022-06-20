@@ -323,7 +323,7 @@ pub const TOLERANCE: f32 = f32::EPSILON * 10.0;
 ///
 /// Tuple of (t, u, v). The t parameter of the ray and the barycentric
 /// coordinates of intersection point on the triangle.
-pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
+pub fn intersect_ray_with_triangle(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
     let e0 = triangle[1] - triangle[0];
     let e1 = triangle[2] - triangle[0];
 
@@ -341,26 +341,26 @@ pub fn isect_ray_tri(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
 
     let u = d_cross_e1.dot(tvec) * inv_det; // (D x E1) . T / det
     log::debug!("    => u = {}", u);
-    if !(0.0..=1.0).contains(&u) {
+    if !(-f32::EPSILON..=1.0+f32::EPSILON).contains(&u) {
         log::debug!("    => break u");
         return None;
     }
 
-    let tvec_cross_e0 = tvec.cross(e0).as_dvec3(); // (T x E0)
-    let v = tvec_cross_e0.dot(ray.d.as_dvec3()) * inv_det as f64; // (T x E0) . D / det
+    let tvec_cross_e0 = tvec.cross(e0); // (T x E0)
+    let v = tvec_cross_e0.dot(ray.d) * inv_det; // (T x E0) . D / det
     log::debug!("    => v = {}", v);
-    if v < 0.0 || u as f64 + v > 1.0 {
+    if v < -f32::EPSILON || u + v > 1.0 + f32::EPSILON {
         log::debug!("    => break v");
         return None;
     }
 
-    let t = tvec_cross_e0.as_vec3().dot(e1) * inv_det; // (T x E0) . E1 / det
+    let t = tvec_cross_e0.dot(e1) * inv_det; // (T x E0) . E1 / det
     log::debug!("    => t = {}", t);
 
     if t > f32::EPSILON {
         let n = e0.cross(e1).normalize();
-        let p = (1.0 - u - v as f32) * triangle[0] + u * triangle[1] + v as f32 * triangle[2];
-        log::debug!("    => ray/tri test: {}, {}, {}, {}, {}", t, u, v, n, p);
+        let p = (1.0 - u - v) * triangle[0] + u * triangle[1] + v * triangle[2];
+        log::debug!("      => ray/tri test, t = {}, u = {}, v = {}, n = {}, p = {}", t, u, v, n, p);
         Some(RayTriInt {
             t,
             u,
