@@ -292,7 +292,7 @@ pub struct RayTriInt {
     pub p: Vec3,
 }
 
-pub const TOLERANCE: f32 = f32::EPSILON * 10.0;
+pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
 /// Implementation of Möller-Trumbore fast ray-triangle intersection algorithm.
 ///
@@ -324,12 +324,18 @@ pub const TOLERANCE: f32 = f32::EPSILON * 10.0;
 /// Tuple of (t, u, v). The t parameter of the ray and the barycentric
 /// coordinates of intersection point on the triangle.
 pub fn intersect_ray_with_triangle(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
-    let e0 = triangle[1] - triangle[0];
-    let e1 = triangle[2] - triangle[0];
+    let ray_d = ray.d.as_dvec3();
+    let ray_o = ray.o.as_dvec3();
+    let p0 = triangle[0].as_dvec3();
+    let p1 = triangle[1].as_dvec3();
+    let p2 = triangle[2].as_dvec3();
 
-    let d_cross_e1 = ray.d.cross(e1); // D x E1
+    let e0 = p1 - p0;
+    let e1 = p2 - p0;
 
-    let det = d_cross_e1.dot(e0);
+    let d_cross_e1 = ray_d.cross(e1); // D x E1
+
+    let det = d_cross_e1.dot(e0) as f32;
 
     // If the determinant is zero, the ray misses the triangle.
     if det.abs() < f32::EPSILON {
@@ -337,36 +343,36 @@ pub fn intersect_ray_with_triangle(ray: Ray, triangle: &[Vec3; 3]) -> Option<Ray
     }
 
     let inv_det = 1.0 / det;
-    let tvec = ray.o - triangle[0]; // O - A
+    let tvec = ray_o - p0; // O - A
 
-    let u = d_cross_e1.dot(tvec) * inv_det; // (D x E1) . T / det
+    let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
     log::debug!("    => u = {}", u);
-    if !(-f32::EPSILON..=1.0+f32::EPSILON).contains(&u) {
+    if !(-TOLERANCE..=1.0+TOLERANCE).contains(&u) {
         log::debug!("    => break u");
         return None;
     }
 
     let tvec_cross_e0 = tvec.cross(e0); // (T x E0)
-    let v = tvec_cross_e0.dot(ray.d) * inv_det; // (T x E0) . D / det
+    let v = tvec_cross_e0.dot(ray_d) as f32 * inv_det; // (T x E0) . D / det
     log::debug!("    => v = {}", v);
-    if v < -f32::EPSILON || u + v > 1.0 + f32::EPSILON {
+    if v < -TOLERANCE || u + v > 1.0 + TOLERANCE {
         log::debug!("    => break v");
         return None;
     }
 
-    let t = tvec_cross_e0.dot(e1) * inv_det; // (T x E0) . E1 / det
+    let t = tvec_cross_e0.dot(e1) as f32 * inv_det; // (T x E0) . E1 / det
     log::debug!("    => t = {}", t);
 
     if t > f32::EPSILON {
         let n = e0.cross(e1).normalize();
-        let p = (1.0 - u - v) * triangle[0] + u * triangle[1] + v * triangle[2];
+        let p = (1.0 - u - v) as f64 * p0 + u as f64 * p1 + v as f64 * p2;
         log::debug!("      => ray/tri test, t = {}, u = {}, v = {}, n = {}, p = {}", t, u, v, n, p);
         Some(RayTriInt {
             t,
             u,
-            v: v as f32,
-            n,
-            p,
+            v,
+            n: n.as_vec3(),
+            p: p.as_vec3(),
         })
     } else {
         None

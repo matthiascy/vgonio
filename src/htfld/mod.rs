@@ -293,7 +293,7 @@ impl Heightfield {
     pub fn sample_at(&self, col: usize, row: usize) -> f32 {
         assert!(col < self.cols);
         assert!(row < self.rows);
-        self.samples[col * self.rows + row]
+        self.samples[row * self.cols + col]
     }
 
     /// Fill holes on the height field.

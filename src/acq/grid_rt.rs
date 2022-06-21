@@ -52,7 +52,7 @@ impl GridRayTracing {
     }
 
     /// Check if the given cell position is inside the grid.
-    fn inside(&self, cell_pos: IVec2) -> bool {
+    fn contains(&self, cell_pos: &IVec2) -> bool {
         cell_pos.x >= self.min.x && cell_pos.x <= self.max.x && cell_pos.y >= self.min.y && cell_pos.y <= self.max.y
     }
 
@@ -254,8 +254,9 @@ impl GridRayTracing {
                 .iter()
                 .fold((f32::MAX, f32::MIN), |(min, max), height| (min.min(*height), max.max(*height)))
         };
-        log::debug!("      -> intersecting with cell: {:?}, altitudes: {:?}, min: {:?}, max: {:?}, entering & existing: {}, {}", cell, altitudes, min, max, entering, exiting);
-        (entering >= min && exiting <= max) && (entering >= min && exiting <= max)
+        let condition = (entering >= min && exiting <= max) || (entering >= max && exiting <= min);
+        log::debug!("      -> intersecting with cell [{}]: {:?}, altitudes: {:?}, min: {:?}, max: {:?}, entering & existing: {}, {}", condition, cell, altitudes, min, max, entering, exiting);
+        condition
     }
 
     /// Modified version of Digital Differential Analyzer (DDA) Algorithm.
@@ -458,7 +459,7 @@ impl GridRayTracing {
         log::debug!("Trace {:?}", ray);
         output.push(ray);
 
-        let entering_point = if !self.inside(self.world_to_grid_3d(ray.o)) {
+        let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
             log::debug!("  - ray origin is outside of the grid, test if it intersects with the bounding box");
             // The ray origin is outside the grid, tests first with the bounding box.
             self.mesh
@@ -518,6 +519,15 @@ impl GridRayTracing {
                 }
                 GridTraversal::Traversed { cells, dists } => {
                     let displaced_ray = Ray::new(start, ray.d);
+                    log::debug!("      -- traversed cells: {:?}", cells);
+                    log::debug!("      -- traversed dists: {:?}", dists);
+                    // For the reason that the entering point is displaced backwards along the ray direction,
+                    // here we will skip the first cell if it is outside of the grid.
+                    let (cells, dists): (Vec<IVec2>, Vec<f32>) = cells.into_iter()
+                        .zip(dists)
+                        .skip_while(|(c, _)| !self.contains(c))
+                        .unzip();
+                    log::debug!("      -- updated dists: {:?}", dists);
                     let ray_dists = {
                         let cos = ray.d.dot(Vec3::Y).abs();
                         let sin = (1.0 - cos * cos).sqrt();
@@ -525,10 +535,15 @@ impl GridRayTracing {
                         dists_.extend_from_slice(&dists);
                         dists_.iter().map(|d| displaced_ray.o.y + *d / sin * displaced_ray.d.y).collect::<Vec<_>>()
                     };
-                    log::debug!("      -- traversed cells: {:?}", cells);
-                    log::debug!("      -- traversed dists: {:?}", dists);
+                    log::debug!("      -- ray dists:       {:?}", ray_dists);
 
-                    let intersections = cells.iter().enumerate().map(|(i, cell)| {
+                    let mut intersections = vec![None; cells.len()];
+                    for (i, cell) in cells.iter().enumerate() {
+                        // // For the reason that the entering point is displaced backwards along the ray direction,
+                        // // here we will skip the first cell if it is outside of the grid.
+                        // if !self.contains(cell) && (i == 0 || i == 1) {
+                        //     continue;
+                        // }
                         let entering = ray_dists[i];
                         let exiting = ray_dists[i + 1];
                         if self.intersected_with_cell(*cell, entering, exiting) {
@@ -550,40 +565,51 @@ impl GridRayTracing {
                             log::debug!("           intersections: {:?}", prim_intersections);
                             match prim_intersections.len() {
                                 0 => {
-                                    None
+                                    intersections[i] = None;
                                 }
                                 1 => {
                                     let p = prim_intersections[0].1.p;
-                                    let d = reflect(ray.d, prim_intersections[0].1.n);
                                     let prim = prim_intersections[0].0;
                                     log::debug!("  - p: {:?}", p);
-                                    Some((p, d, prim))
+                                    // Avoid backface hitting.
+                                    if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
+                                        let d = reflect(ray.d, prim_intersections[0].1.n);
+                                        intersections[i] = Some((p, d, prim))
+                                    }
                                 }
                                 2 => {
                                     // When the ray is intersected with two triangles inside of a cell,
                                     // check if they are the same.
                                     if prim_intersections[0].1.p != prim_intersections[1].1.p {
-                                        panic!("Intersected with two triangles but they are not the same!");
+                                        log::warn!("Intersected with two triangles but they are not the same!");
+                                        log::debug!("  - p0: {:?}, p1: {:?}", prim_intersections[0].1.p, prim_intersections[1].1.p);
+                                        let p = prim_intersections[0].1.p;
+                                        let n = prim_intersections[0].1.n;
+                                        let d = reflect(ray.d, n);
+                                        let prim = prim_intersections[0].0;
+                                        if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
+                                            let d = reflect(ray.d, prim_intersections[0].1.n);
+                                            intersections[i] = Some((p, d, prim))
+                                        }
                                     } else {
                                         let p = prim_intersections[0].1.p;
                                         let n = prim_intersections[0].1.n;
                                         log::debug!("    n: {:?}", n);
                                         log::debug!("    p: {:?}", p);
-                                        let d = reflect(ray.d, n).normalize();
-                                        log::debug!("    r: {:?}", d);
                                         let prim = prim_intersections[0].0;
-                                        Some((p, d, prim))
+                                        if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
+                                            let d = reflect(ray.d, n);
+                                            log::debug!("    r: {:?}", d);
+                                            intersections[i] = Some((p, d, prim))
+                                        }
                                     }
                                 }
                                 _ => {
                                     unreachable!("Can't have more than 2 intersections with one cell of the grid.");
                                 }
                             }
-                        } else {
-                            log::debug!("        ✗ not intersected");
-                            None
                         }
-                    }).collect::<Vec<_>>();
+                    }
 
                     if let Some(Some((p, d, prim))) = intersections.iter().find(|i| i.is_some()) {
                         self.trace_one_ray_dbg(Ray::new(*p, *d), max_bounces, curr_bounces + 1, Some(*prim), output);
