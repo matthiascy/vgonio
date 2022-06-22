@@ -5,7 +5,7 @@ use winit::event_loop::EventLoopProxy;
 mod ray_tracing;
 mod shadow_map;
 
-use crate::app::gui::widgets::{toggle, toggle_ui};
+use crate::app::gui::widgets::toggle_ui;
 use ray_tracing::RayTracingPane;
 use shadow_map::ShadowMapPane;
 
@@ -31,7 +31,7 @@ pub(crate) struct VisualDebugTool {
     pub(crate) ray_tracing_pane: RayTracingPane,
 }
 
-impl<'surface> VisualDebugTool {
+impl VisualDebugTool {
     pub fn new(evlp: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
         Self {
             opened: Default::default(),

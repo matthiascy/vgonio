@@ -346,27 +346,34 @@ pub fn intersect_ray_with_triangle(ray: Ray, triangle: &[Vec3; 3]) -> Option<Ray
     let tvec = ray_o - p0; // O - A
 
     let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
-    log::debug!("    => u = {}", u);
-    if !(-TOLERANCE..=1.0+TOLERANCE).contains(&u) {
-        log::debug!("    => break u");
+    log::debug!("                 => u = {}", u);
+    if !(-TOLERANCE..=1.0 + TOLERANCE).contains(&u) {
+        log::debug!("                 => break u");
         return None;
     }
 
     let tvec_cross_e0 = tvec.cross(e0); // (T x E0)
     let v = tvec_cross_e0.dot(ray_d) as f32 * inv_det; // (T x E0) . D / det
-    log::debug!("    => v = {}", v);
+    log::debug!("                 => v = {}", v);
     if v < -TOLERANCE || u + v > 1.0 + TOLERANCE {
-        log::debug!("    => break v");
+        log::debug!("                 => break v");
         return None;
     }
 
     let t = tvec_cross_e0.dot(e1) as f32 * inv_det; // (T x E0) . E1 / det
-    log::debug!("    => t = {}", t);
+    log::debug!("                 => t = {}", t);
 
     if t > f32::EPSILON {
         let n = e0.cross(e1).normalize();
         let p = (1.0 - u - v) as f64 * p0 + u as f64 * p1 + v as f64 * p2;
-        log::debug!("      => ray/tri test, t = {}, u = {}, v = {}, n = {}, p = {}", t, u, v, n, p);
+        log::debug!(
+            "                   => ray/tri test, t = {}, u = {}, v = {}, n = {}, p = {}",
+            t,
+            u,
+            v,
+            n,
+            p
+        );
         Some(RayTriInt {
             t,
             u,

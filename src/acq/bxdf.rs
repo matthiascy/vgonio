@@ -8,7 +8,6 @@ use crate::acq::{Collector, Emitter, Patch};
 use crate::htfld::Heightfield;
 use crate::mesh::TriangulationMethod;
 use embree::{Config, RayHit, SoARay};
-use glam::Vec3;
 
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

@@ -60,10 +60,8 @@ impl DepthMap {
         );
         // Manually align the width to 256 bytes.
         let width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
-        let height = ctx.surface_config.height;
-        let depth_attachment_storage_size = (std::mem::size_of::<f32>()
-            * (ctx.surface_config.width * ctx.surface_config.height) as usize)
-            as wgpu::BufferAddress;
+        let depth_attachment_storage_size =
+            (std::mem::size_of::<f32>() * (width * ctx.surface_config.height) as usize) as wgpu::BufferAddress;
         let depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: depth_attachment_storage_size,
@@ -87,11 +85,11 @@ impl DepthMap {
             Some("depth-texture"),
         );
         self.width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
-        let depth_map_buffer_size =
+        let depth_map_storage_size =
             (std::mem::size_of::<f32>() * (self.width * ctx.surface_config.height) as usize) as wgpu::BufferAddress;
         self.depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: depth_map_buffer_size,
+            size: depth_map_storage_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });

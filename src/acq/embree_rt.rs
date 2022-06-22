@@ -1,5 +1,4 @@
 use crate::acq::ray::reflect;
-use crate::acq::tracing::IntersectRecord;
 use crate::mesh;
 use embree::{Config, Device, Geometry, Hit, IntersectContext, RayHit, RayHitN, RayN, Scene, SceneFlags, TriangleMesh};
 use glam::Vec3;
