@@ -22,7 +22,7 @@ pub struct GridRayTracing {
     surface: Rc<Heightfield>,
 
     /// Corresponding `TriangleMesh` of the surface.
-    mesh: Rc<TriangleMesh>,
+    surface_mesh: Rc<TriangleMesh>,
 
     /// Minimum coordinates of the grid.
     pub min: IVec2,
@@ -43,7 +43,7 @@ impl GridRayTracing {
         );
         GridRayTracing {
             surface,
-            mesh,
+            surface_mesh: mesh,
             min: IVec2::ZERO,
             max,
             origin,
@@ -204,7 +204,7 @@ impl GridRayTracing {
             "The position is out of the grid."
         );
         let cell = ((self.surface.cols - 1) * pos.y as usize + pos.x as usize);
-        let pts = &self.mesh.faces[cell * 6..cell * 6 + 6];
+        let pts = &self.surface_mesh.faces[cell * 6..cell * 6 + 6];
         log::debug!(
             "             - cell: {:?}, tris: {:?}, pts {:?}",
             cell,
@@ -215,17 +215,17 @@ impl GridRayTracing {
             (
                 (cell * 2) as u32,
                 [
-                    self.mesh.verts[pts[0] as usize],
-                    self.mesh.verts[pts[1] as usize],
-                    self.mesh.verts[pts[2] as usize],
+                    self.surface_mesh.verts[pts[0] as usize],
+                    self.surface_mesh.verts[pts[1] as usize],
+                    self.surface_mesh.verts[pts[2] as usize],
                 ],
             ),
             (
                 (cell * 2 + 1) as u32,
                 [
-                    self.mesh.verts[pts[3] as usize],
-                    self.mesh.verts[pts[4] as usize],
-                    self.mesh.verts[pts[5] as usize],
+                    self.surface_mesh.verts[pts[3] as usize],
+                    self.surface_mesh.verts[pts[4] as usize],
+                    self.surface_mesh.verts[pts[5] as usize],
                 ],
             ),
         ]
@@ -444,12 +444,70 @@ impl GridRayTracing {
     ///
     /// A vector of intersection information [`RayTriInt`] with corresponding
     /// triangle index.
-    fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriInt)> {
+    fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriInt, Option<u32>)> {
         let tris = self.triangles_at(cell);
         tris.iter()
             .filter_map(|(index, pts)| {
                 log::debug!("               - isect test with tri: {:?}", index);
-                intersect_ray_with_triangle(ray, pts).map(|isect| (*index, isect))
+                intersect_ray_with_triangle(ray, pts)
+                    .map(|isect| {
+                        let tris_per_row = (self.surface.cols - 1) * 2;
+                        let cells_per_row = self.surface.cols - 1;
+                        let tri_index = *index as usize;
+                        let is_tri_index_odd = tri_index % 2 != 0;
+                        let cell_index = tri_index / 2;
+                        let cell_row = cell_index / cells_per_row;
+                        let cell_col = cell_index % cells_per_row;
+                        let is_first_col = cell_col == 0;
+                        let is_last_col = cell_col == cells_per_row - 1;
+                        let is_first_row = cell_row == 0;
+                        let is_last_row = cell_row == self.surface.rows - 1;
+                        let adjacent: Option<(usize, Vec3)> = if isect.u.abs() < 2.0 * f32::EPSILON {
+                            // u == 0, intersection happens on the first edge of triangle
+                            // If the triangle index is odd or it's not located in the cell of the 1st column
+                            if is_tri_index_odd || !is_first_col {
+                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index - 1);
+                                Some((tri_index - 1, self.surface_mesh.normals[tri_index - 1]))
+                            } else {
+                                None
+                            }
+                        } else if isect.v.abs() < 2.0 * f32::EPSILON {
+                            // v == 0, intersection happens on the second edge of triangle
+                            if !is_tri_index_odd && !is_first_row {
+                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index - (tris_per_row - 1));
+                                Some((tri_index - (tris_per_row - 1), (self.surface_mesh.normals[tri_index - (tris_per_row - 1)])))
+                            } else if is_tri_index_odd && !is_last_col {
+                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index + 1);
+                                Some((tri_index + 1, self.surface_mesh.normals[tri_index + 1]))
+                            } else {
+                                None
+                            }
+                        } else if (isect.u + isect.v - 1.0).abs() < f32::EPSILON {
+                            // u + v == 1, intersection happens on the third edge of triangle
+                            if !is_tri_index_odd {
+                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index + 1);
+                                Some((tri_index + 1, self.surface_mesh.normals[tri_index + 1]))
+                            } else if is_tri_index_odd && !is_last_row {
+                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index + (tris_per_row - 1));
+                                Some((tri_index + (tris_per_row - 1), self.surface_mesh.normals[tri_index + (tris_per_row - 1)]))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        match adjacent {
+                            None => (*index, isect, None),
+                            Some((adj_tri, adj_n)) => {
+                                let avg_n = (isect.n + adj_n).normalize();
+                                log::debug!("              -- hitting shared edge, use averaged normal: {:?}", avg_n);
+                                (*index, RayTriInt {
+                                    n: avg_n,
+                                    ..isect
+                                }, Some(adj_tri as u32))
+                            }
+                        }
+                    })
             })
             .collect::<Vec<_>>()
     }
@@ -469,7 +527,7 @@ impl GridRayTracing {
         let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
             log::debug!("  - ray origin is outside of the grid, test if it intersects with the bounding box");
             // The ray origin is outside the grid, tests first with the bounding box.
-            self.mesh
+            self.surface_mesh
                 .extent
                 .intersect_with_ray(ray, f32::EPSILON, f32::INFINITY)
                 .map(|point| {
@@ -492,7 +550,7 @@ impl GridRayTracing {
                     log::debug!("  - [top/bot] intersections: {:?}", intersections);
                     match intersections.len() {
                         0 => {}
-                        1 => {
+                        1 | 2 => {
                             log::debug!("  --> intersected with triangle {:?}", intersections[0].0);
                             let p = intersections[0].1.p;
                             let n = intersections[0].1.n;
@@ -507,30 +565,6 @@ impl GridRayTracing {
                                 Some(intersections[0].0),
                                 output,
                             );
-                        }
-                        2 => {
-                            // When the ray is intersected with two triangles inside of a cell,
-                            // check if they are the same.
-                            if !intersections[0].1.p.abs_diff_eq(intersections[1].1.p, f32::EPSILON) {
-                                panic!(
-                                    "Intersected with two triangles but they are not the same! {}, {}",
-                                    intersections[0].1.p, intersections[1].1.p
-                                );
-                            } else {
-                                let p = intersections[0].1.p;
-                                let n = intersections[0].1.n;
-                                log::debug!("    n: {:?}", n);
-                                log::debug!("    p: {:?}", p);
-                                let d = reflect(ray.d, n).normalize();
-                                log::debug!("    r: {:?}", d);
-                                self.trace_one_ray_dbg(
-                                    Ray::new(p, d),
-                                    max_bounces,
-                                    curr_bounces + 1,
-                                    Some(intersections[0].0),
-                                    output,
-                                );
-                            }
                         }
                         _ => {
                             unreachable!("Can't have more than 2 intersections with one cell of the grid.");
@@ -568,7 +602,7 @@ impl GridRayTracing {
                                     log::debug!("             has last prim");
                                     self.intersect_with_cell(displaced_ray, cells[i])
                                         .into_iter()
-                                        .filter(|(index, info)| {
+                                        .filter(|(index, info, _)| {
                                             log::debug!(
                                                 "            isect test with tri: {:?}, last_prim: {:?}",
                                                 index,
@@ -601,25 +635,28 @@ impl GridRayTracing {
                                 2 => {
                                     // When the ray is intersected with two triangles inside of a cell,
                                     // check if they are the same.
-                                    if !prim_intersections[0]
-                                        .1
-                                        .p
-                                        .abs_diff_eq(prim_intersections[1].1.p, f32::EPSILON)
-                                    {
-                                        panic!(
-                                            "Intersected with two triangles but they are not the same! {}, {}",
-                                            prim_intersections[0].1.p, prim_intersections[1].1.p
-                                        );
-                                    } else {
-                                        let p = prim_intersections[0].1.p;
-                                        let n = prim_intersections[0].1.n;
-                                        log::debug!("    n: {:?}", n);
-                                        log::debug!("    p: {:?}", p);
-                                        let prim = prim_intersections[0].0;
-                                        if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
-                                            let d = reflect(ray.d, n);
-                                            log::debug!("    r: {:?}", d);
-                                            intersections[i] = Some((p, d, prim))
+                                    let prim0 = &prim_intersections[0];
+                                    let prim1 = &prim_intersections[1];
+                                    match (prim0.2, prim1.2) {
+                                        (Some(adj_0), Some(adj_1)) => {
+                                            if prim0.0 == adj_1 && prim1.0 == adj_0 {
+                                                let p = prim0.1.p;
+                                                let n = prim0.1.n;
+                                                let prim = prim0.0;
+                                                log::debug!("    n: {:?}", n);
+                                                log::debug!("    p: {:?}", p);
+                                                if ray.d.dot(prim0.1.n) < 0.0 {
+                                                    let d = reflect(ray.d, n);
+                                                    log::debug!("    r: {:?}", d);
+                                                    intersections[i] = Some((p, d, prim))
+                                                }
+                                            }
+                                        },
+                                        _ => {
+                                            panic!(
+                                                "Intersected with two triangles but they are not the same! {}, {}",
+                                                prim_intersections[0].1.p, prim_intersections[1].1.p
+                                            );
                                         }
                                     }
                                 }

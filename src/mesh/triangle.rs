@@ -22,4 +22,5 @@ pub struct TriangleMesh {
     pub num_verts: usize,
     pub verts: Vec<Vec3>,
     pub faces: Vec<u32>,
+    pub normals: Vec<Vec3>,
 }

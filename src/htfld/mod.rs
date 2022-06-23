@@ -48,11 +48,11 @@ pub struct Heightfield {
     /// with the "ground" plane.
     pub alignment: AxisAlignment,
 
-    /// Number of sample points in horizontal direction (first axis of
+    /// Number of sample points in vertical direction (first axis of
     /// alignment).
     pub rows: usize,
 
-    /// Number of sample points in vertical direction (second axis of
+    /// Number of sample points in horizontal direction (second axis of
     /// alignment).
     pub cols: usize,
 
@@ -444,12 +444,22 @@ impl Heightfield {
             TriangulationMethod::Regular => {
                 let (verts, extent) = self.generate_vertices();
                 let faces = regular_triangulation(&verts, self.cols, self.rows);
+                let num_tris = faces.len() / 3;
+
+                let normals = (0..num_tris).map(|i| {
+                    let p0 = verts[faces[i * 3] as usize];
+                    let p1 = verts[faces[i * 3 + 1] as usize];
+                    let p2 = verts[faces[i * 3 + 2] as usize];
+                    (p1 - p0).cross(p2 - p0).normalize()
+                }).collect();
+
                 TriangleMesh {
-                    num_tris: faces.len() / 3,
+                    num_tris,
                     num_verts: verts.len(),
                     extent,
                     verts,
                     faces,
+                    normals
                 }
             }
             TriangulationMethod::Delaunay => {
