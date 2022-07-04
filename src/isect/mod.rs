@@ -1,3 +1,5 @@
+//! Intersection algorithms.
+
 use crate::math::Vec3;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +14,10 @@ mod axis;
 use crate::acq::ray::Ray;
 use crate::acq::util::gamma_f32;
 pub use axis::Axis;
+mod ray_triangle;
+
+pub use ray_triangle::ray_tri_intersect_moller_trumbore;
+pub use ray_triangle::ray_tri_intersect_woop;
 
 /// Axis-aligned bounding box.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -290,100 +296,6 @@ pub struct RayTriInt {
 
     /// Intersection point.
     pub p: Vec3,
-}
-
-pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
-
-/// Implementation of Möller-Trumbore fast ray-triangle intersection algorithm.
-///
-/// P is the point of intersection.
-///   + expressed by barycentric coordinates (u, v, w): P = wA + uB + vC = A +
-/// u(B - A) + v(C - A)   + expressed by ray parameter t: P = O + tD
-///
-/// O - A = [t, u, v] [-D, B-A, C-A]
-///
-/// E0 = B - A, E1 = C - A, O - A = T
-///
-/// T = [t, u, v] [-D, E0, E1]
-///
-/// Apply Cramer's rule, |A, B, C| = -(A x C) . B = -(C x B) . A:
-///
-/// det = |-D, E0, E1| = -(-D x E1) . E0 = (D x E1) . E0
-/// det_t = |T, E0, E1| = -(T x E1) . E0 = -(T x E1) . E0 = (T x E0) . E1
-/// det_u = |-D, T, E1| = -(-D x E1) . T = (D x E1) . T
-/// det_v = |-D, E0, T| = -(T x E0) . -D = (T x E0) . D
-///
-/// t = det_t / det, u = det_u / det, v = det_v / det
-///
-/// Solve the system of linear equations to find the barycentric coordinates.
-///
-/// # Arguments
-///
-/// # Returns
-///
-/// Tuple of (t, u, v). The t parameter of the ray and the barycentric
-/// coordinates of intersection point on the triangle.
-pub fn intersect_ray_with_triangle(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
-    let ray_d = ray.d.as_dvec3();
-    let ray_o = ray.o.as_dvec3();
-    let p0 = triangle[0].as_dvec3();
-    let p1 = triangle[1].as_dvec3();
-    let p2 = triangle[2].as_dvec3();
-
-    let e0 = p1 - p0;
-    let e1 = p2 - p0;
-
-    let d_cross_e1 = ray_d.cross(e1); // D x E1
-
-    let det = d_cross_e1.dot(e0) as f32;
-
-    // If the determinant is zero, the ray misses the triangle.
-    if det.abs() < f32::EPSILON {
-        return None;
-    }
-
-    let inv_det = 1.0 / det;
-    let tvec = ray_o - p0; // O - A
-
-    let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
-    log::debug!("                 => u = {}", u);
-    if !(-TOLERANCE..=1.0 + TOLERANCE).contains(&u) {
-        log::debug!("                 => break u");
-        return None;
-    }
-
-    let tvec_cross_e0 = tvec.cross(e0); // (T x E0)
-    let v = tvec_cross_e0.dot(ray_d) as f32 * inv_det; // (T x E0) . D / det
-    log::debug!("                 => v = {}", v);
-    if v < -TOLERANCE || u + v > 1.0 + TOLERANCE {
-        log::debug!("                 => break v");
-        return None;
-    }
-
-    let t = tvec_cross_e0.dot(e1) as f32 * inv_det; // (T x E0) . E1 / det
-    log::debug!("                 => t = {}", t);
-
-    if t > f32::EPSILON {
-        let n = e0.cross(e1).normalize();
-        let p = (1.0 - u - v) as f64 * p0 + u as f64 * p1 + v as f64 * p2;
-        log::debug!(
-            "                   => ray/tri test, t = {}, u = {}, v = {}, n = {}, p = {}",
-            t,
-            u,
-            v,
-            n,
-            p
-        );
-        Some(RayTriInt {
-            t,
-            u,
-            v,
-            n: n.as_vec3(),
-            p: p.as_vec3(),
-        })
-    } else {
-        None
-    }
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use crate::acq::ray::{reflect, Ray};
 use crate::htfld::{AxisAlignment, Heightfield};
-use crate::isect::{intersect_ray_with_triangle, RayTriInt};
+use crate::isect::{RayTriInt, ray_tri_intersect_moller_trumbore};
 use crate::mesh::TriangleMesh;
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 use std::rc::Rc;
@@ -449,7 +449,7 @@ impl GridRayTracing {
         tris.iter()
             .filter_map(|(index, pts)| {
                 log::debug!("               - isect test with tri: {:?}", index);
-                intersect_ray_with_triangle(ray, pts)
+                ray_tri_intersect_moller_trumbore(ray, pts)
                     .map(|isect| {
                         let tris_per_row = (self.surface.cols - 1) * 2;
                         let cells_per_row = self.surface.cols - 1;

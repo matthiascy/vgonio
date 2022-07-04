@@ -16,6 +16,7 @@ pub mod mesh;
 
 use crate::error::Error;
 
+/// Main entry point.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> Result<(), Error> {
     use app::VgonioArgs;
