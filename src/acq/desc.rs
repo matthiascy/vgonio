@@ -260,7 +260,7 @@ fn scene_desc_serialization() {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
-        .open("./scene_desc.yml")
+        .open("../../scenes/scene_desc.yml")
         .unwrap();
 
     file.write_all(serialized_0.as_bytes()).unwrap();

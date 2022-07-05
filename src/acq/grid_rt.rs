@@ -203,7 +203,7 @@ impl GridRayTracing {
             pos.x >= self.min.x && pos.y >= self.min.y && pos.x <= self.max.x && pos.y <= self.max.y,
             "The position is out of the grid."
         );
-        let cell = ((self.surface.cols - 1) * pos.y as usize + pos.x as usize);
+        let cell = (self.surface.cols - 1) * pos.y as usize + pos.x as usize;
         let pts = &self.surface_mesh.faces[cell * 6..cell * 6 + 6];
         log::debug!(
             "             - cell: {:?}, tris: {:?}, pts {:?}",

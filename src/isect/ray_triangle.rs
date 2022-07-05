@@ -1,6 +1,7 @@
 use glam::Vec3;
 use crate::acq::ray::Ray;
 use crate::isect::RayTriInt;
+use crate::util::gamma;
 
 pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
@@ -187,7 +188,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 ///
 /// Recall that in 2D, the area of a triangle formed by two vectors is defined as:
 ///
-/// $$A = \vec{a}\times\vec{b} = a_xb_y - b_xa_y$$.
+/// $$Area = \frac{1}{2}\vec{a}\times\vec{b} = \frac{1}{2}(a_xb_y - b_xa_y)$$.
 ///
 /// Given two triangle vertices, then we can define the directed edge function $e$ as the function
 /// that gives twice the are of the triangle given by $p0$, $p1$ and a given point $p$
@@ -196,24 +197,37 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 ///
 /// Then we have the following equations:
 ///
-/// $$e0 = p1_xp2_y - p2_xp1_y$$
-/// $$e1 = p2_xp0_y - p2_yp0_x$$
-/// $$e2 = p0_xp1_y - p0_yp1_x$$
+/// $$e0 = p1_xp2_y - p2_xp1_y \quad (p1, p2)$$
+/// $$e1 = p2_xp0_y - p2_yp0_x \quad (p2, p0)$$
+/// $$e2 = p0_xp1_y - p0_yp1_x \quad (p0, p1)$$
 ///
 /// The value of the edge function is positive if the point is on the right side of the edge, and
 /// negative for points to the left of the line.
 ///
-/// For points $A'$, $B'$ and $C'$ we have
+/// Now we have the scaled barycentric coordinates, $u'=e0$, $v'=e1$ and $w'=e2$.
 ///
-/// $$A' = S \cdot T \cdot A = S \cdot (A - O)$$
-/// $$B' = S \cdot T \cdot B = S \cdot (B - O)$$
-/// $$C' = S \cdot T \cdot C = S \cdot (C - O)$$
+/// If $u'<0$, $v'<0$ and $w'<0$, the ray misses the triangle.
 ///
-/// $E0 = A - O$, $E1 = B - O$, $E2 = C - O$.
+/// The determinant of the system of equations is $det = u' + v' + w'$. If $det=0$, the ray is
+/// co-planar to the triangle and therefore misses. This guarantees later safe divisions.
 ///
-/// $$U = C'_x * B'_y - C'_y * B'_x$$
-/// $$V = A'_x * C'_y - A'_y * C'_x$$
-/// $$W = B'_x * A'_y - B'_y * A'_x$$
+/// Then we can calculate the scaled hit distance $t'$ by interpolating the z-values of the
+/// transformed vertices:
+///
+/// $$t' = u'p0_z + v'p1_z + w'p2_z$$.
+///
+/// As this distance is calculated using non-normalized barycentric coordinates, the actual distance
+/// still requires division by $det$. To defer this costly division util actually required, we first
+/// compute a scaled depth test by rejecting the triangle if the hit is either before the ray
+/// $$t' <= 0$$ or behind and already-found hit ($t_{max}$) $$t' > det \cdot t_{hit}$$.
+///
+/// If the sign of the scaled distance and the sign of the interpolated t value are different,
+/// the the final t value will certainly be negative and thus not a valid intersection.
+///
+/// The check for $t < t_{max}$ can be equivalent performed in two ways:
+///
+/// $$t' < t_{max} \cdot det \quad \text{if} \quad u' + v' + w' > 0$$
+/// $$t' > t_{max} \cdot det \quad \text{otherwise}$$
 ///
 /// # References
 /// (1) Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle Intersection, Journal of
@@ -275,9 +289,11 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     p1t.z *= sz;
     p2t.z *= sz;
     let t_scaled = e0 * p0t.z + e1 * p1t.z + e2 * p2t.z;
-    if det < 0.0 && (t_scaled >= 0.0 || t_scaled < ray.t_max * det) {
+    // Check if the scaled distance value t is in the range [t_min, t_max].
+    // Note: assume ray.t_max * det = MAX_FLOAT
+    if det < 0.0 && (t_scaled >= 0.0 || t_scaled < f32::MAX * 0.5) {
         return None;
-    } else if det > 0.0 && (t_scaled <= 0.0 || t_scaled > ray.t_max * det) {
+    } else if det > 0.0 && (t_scaled <= 0.0 || t_scaled > f32::MAX * 0.5) {
         return None;
     }
 
@@ -288,5 +304,51 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     let w = e2 * det;
     let t = t_scaled * inv_det;
 
-    todo!()
+    // Ensure that computed triangle t is conservatively greater than zero
+    let max_zt = p0t.z.abs().max(p1t.z.abs()).max(p2t.z);
+    // Compute delta_z term for triangle t error bounds
+    let delta_z = gamma(3) * max_zt;
+    // Compute delta_x and delta_y terms for triangle t error bounds
+    let max_xt = p0t.x.abs().max(p1t.x.abs()).max(p2t.x.abs());
+    let max_yt = p0t.y.abs().max(p1t.y.abs()).max(p2t.y.abs());
+    let delta_x = gamma(5) * (max_xt + max_zt);
+    let delta_y = gamma(5) * (max_yt + max_zt);
+    // Compute delta_e term for triangle t error bounds
+    let delta_e = 2.0 * (gamma(2) * max_xt * max_yt + delta_y * max_xt + delta_x * max_yt);
+    // Compute delta_t term for triangle t error bounds and check t
+    let max_e = e0.abs().max(e1.abs()).max(e2.abs());
+    let delta_t = 3.0 * (gamma(3) * max_e * max_zt + delta_e * max_zt + delta_z * max_e) * inv_det.abs();
+
+    if t <= delta_t {
+        return None;
+    }
+
+    let n = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalize();
+    let p = (1.0 - u - v) * triangle[0] + u * triangle[1] + v * triangle[2];
+
+    Some(RayTriInt {
+        t,
+        u,
+        v,
+        n,
+        p
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use glam::Vec3;
+    use crate::acq::ray::Ray;
+    use super::ray_tri_intersect_woop;
+
+    #[test]
+    fn test_ray_tri_intersection_woop() {
+        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0));
+        let triangle = [Vec3::new(-1.0, -1.0, 0.0), Vec3::new(1.0, -1.0, 0.0), Vec3::new(0.0, 1.0, 0.0)];
+
+        let isect = ray_tri_intersect_woop(&ray, &triangle);
+
+        println!("{:?}", isect);
+        assert!(isect.is_some());
+    }
 }

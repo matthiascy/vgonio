@@ -13,6 +13,7 @@ pub mod io;
 pub mod isect;
 mod math;
 pub mod mesh;
+pub mod util;
 
 use crate::error::Error;
 
