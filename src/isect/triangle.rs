@@ -1,6 +1,6 @@
 use glam::Vec3;
-use crate::acq::ray::Ray;
-use crate::isect::RayTriInt;
+use crate::acq::ray::{Ray};
+use crate::isect::RayTriIsect;
 use crate::util::gamma;
 
 pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
@@ -75,7 +75,7 @@ pub fn max_axis(v: Vec3) -> u32 {
 /// # Returns
 ///
 /// [`RayTriInt`] if the ray intersects the triangle, otherwise `None`.
-pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
+pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     let ray_d = ray.d.as_dvec3();
     let ray_o = ray.o.as_dvec3();
     let p0 = triangle[0].as_dvec3();
@@ -98,36 +98,23 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
     let tvec = ray_o - p0; // O - A
 
     let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
-    log::debug!("                 => u = {}", u);
     if !(-TOLERANCE..=1.0 + TOLERANCE).contains(&u) {
-        log::debug!("                 => break u");
         return None;
     }
 
     let tvec_cross_e0 = tvec.cross(e0); // (T x E0)
     let v = tvec_cross_e0.dot(ray_d) as f32 * inv_det; // (T x E0) . D / det
-    log::debug!("                 => v = {}", v);
     if v < -TOLERANCE || u + v > 1.0 + TOLERANCE {
         log::debug!("                 => break v");
         return None;
     }
 
     let t = tvec_cross_e0.dot(e1) as f32 * inv_det; // (T x E0) . E1 / det
-    log::debug!("                 => t = {}", t);
 
     if t > f32::EPSILON {
         let n = e0.cross(e1).normalize();
         let p = (1.0 - u - v) as f64 * p0 + u as f64 * p1 + v as f64 * p2;
-        log::debug!(
-            "                   => ray/tri test, t = {}, u = {}, v = {}, n = {}, p = {}",
-            t,
-            u,
-            v,
-            n,
-            p
-        );
-        Some(RayTriInt {
-            t,
+        Some(RayTriIsect {
             u,
             v,
             n: n.as_vec3(),
@@ -232,11 +219,11 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 /// # References
 /// (1) Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle Intersection, Journal of
 /// Computer Graphics Techniques (JCGT), vol. 2, no. 1, 65-82, 2013
-pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriInt> {
+pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     // Transform the triangle vertices into the ray coordinate system.
-    let p0 = triangle[0] - ray.o; // A'
-    let p1 = triangle[1] - ray.o; // B'
-    let p2 = triangle[2] - ray.o; // C'
+    let mut p0t = triangle[0] - ray.o; // A'
+    let mut p1t = triangle[1] - ray.o; // B'
+    let mut p2t = triangle[2] - ray.o; // C'
 
     // Permutation in a winding preserving way.
     let kz = max_axis(ray.d.abs());
@@ -244,9 +231,9 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     let ky = (kz + 2) % 3;
 
     let d = permute(ray.d, kx, ky, kz);
-    let mut p0t = permute(p0, kx, ky, kz);
-    let mut p1t = permute(p1, kx, ky, kz);
-    let mut p2t = permute(p2, kx, ky, kz);
+    p0t = permute(p0t, kx, ky, kz);
+    p1t = permute(p1t, kx, ky, kz);
+    p2t = permute(p2t, kx, ky, kz);
 
     // Shearing.
     let sx = -d.x / d.z;
@@ -271,8 +258,6 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
         e2 = (p0t.x as f64 * p1t.y as f64 - p0t.y as f64 * p1t.x as f64) as f32;
     }
 
-    // TODO: In the rare case that any of the edge function values is exactly zero, reevaluated using
-    // double precision.
     if (e0 < 0.0 || e1 < 0.0 || e2 < 0.0) && (e0 > 0.0 || e1 > 0.0 || e2 > 0.0) {
         return None;
     }
@@ -291,17 +276,16 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     let t_scaled = e0 * p0t.z + e1 * p1t.z + e2 * p2t.z;
     // Check if the scaled distance value t is in the range [t_min, t_max].
     // Note: assume ray.t_max * det = MAX_FLOAT
-    if det < 0.0 && (t_scaled >= 0.0 || t_scaled < f32::MAX * 0.5) {
-        return None;
-    } else if det > 0.0 && (t_scaled <= 0.0 || t_scaled > f32::MAX * 0.5) {
+    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < f32::MAX * 0.5)) ||
+        (det > 0.0 && (t_scaled <= 0.0 || t_scaled > f32::MAX * 0.5)) {
         return None;
     }
 
     // Compute barycentric coordinates and t value for triangle intersection.
     let inv_det = 1.0 / det;
-    let u = e0 * det;
-    let v = e1 * det;
-    let w = e2 * det;
+    let b0 = e0 * inv_det;
+    let b1 = e1 * inv_det;
+    let b2 = e2 * inv_det;
     let t = t_scaled * inv_det;
 
     // Ensure that computed triangle t is conservatively greater than zero
@@ -324,15 +308,13 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     }
 
     let n = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalize();
-    let p = (1.0 - u - v) * triangle[0] + u * triangle[1] + v * triangle[2];
 
-    Some(RayTriInt {
-        t,
-        u,
-        v,
-        n,
-        p
-    })
+    // Compute error bounds for triangle intersection
+    let abs_sum = (b0 * triangle[0]).abs() + (b1 * triangle[1]).abs() + (b2 * triangle[2]).abs();
+    let p_err = gamma(7) * abs_sum;
+    let p = b0 * triangle[0] + b1 * triangle[1] + b2 * triangle[2];
+
+    Some(RayTriIsect::new(p, p_err, n, b1, b2))
 }
 
 #[cfg(test)]
@@ -343,12 +325,22 @@ mod tests {
 
     #[test]
     fn test_ray_tri_intersection_woop() {
-        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0));
+        let rays = [
+            Ray::new(Vec3::new(0.0, 1.0, -10.0), Vec3::new(0.0, 0.0, 0.5)),
+            Ray::new(Vec3::new(-1.0, -1.0, -10.0), Vec3::new(0.0, 0.0, 0.2)),
+            Ray::new(Vec3::new(1.0, -1.0, -10.0), Vec3::new(0.0, 0.0, 1.0)),
+            Ray::new(Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 0.0, 1.5)),
+            Ray::new(Vec3::new(0.0, -1.0, -10.0), Vec3::new(0.0, 0.0, 0.5)),
+            Ray::new(Vec3::new(0.5, 0.0, -10.0), Vec3::new(0.0, 0.0, 0.2)),
+            Ray::new(Vec3::new(-0.5, 0.0, -10.0), Vec3::new(0.0, 0.0, 1.0)),
+        ];
         let triangle = [Vec3::new(-1.0, -1.0, 0.0), Vec3::new(1.0, -1.0, 0.0), Vec3::new(0.0, 1.0, 0.0)];
 
-        let isect = ray_tri_intersect_woop(&ray, &triangle);
+        for ray in rays {
+            let isect = ray_tri_intersect_woop(&ray, &triangle);
 
-        println!("{:?}", isect);
-        assert!(isect.is_some());
+            println!("{:?}", isect);
+            assert!(isect.is_some());
+        }
     }
 }

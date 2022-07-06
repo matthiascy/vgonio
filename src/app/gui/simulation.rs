@@ -53,7 +53,7 @@ struct Partition {
 }
 
 /// A panel for configuration of the simulation parameters.
-struct SimulationPanel {
+pub struct SimulationPanel {
     /// Measurement description.
     measurement_desc: MeasurementDesc,
 

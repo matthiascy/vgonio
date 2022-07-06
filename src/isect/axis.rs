@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// # Examples
 /// ```
-/// use vgonio::isect::axis::Axis;
+/// use vgonio::isect::Axis;
 ///
 /// let mut pos = [0.1, 0.4, 0.6];
 /// pos[Axis::X] -= 0.1;
@@ -19,6 +19,24 @@ pub enum Axis {
     X = 0,
     Y = 1,
     Z = 2,
+}
+
+impl Axis {
+    /// Given a vector, returns the axis that has the maximum component.
+    pub fn max_axis(v: Vec3) -> Axis {
+        if v.x > v.y && v.x > v.z {
+            Axis::X
+        } else if v.y > v.z {
+            Axis::Y
+        } else {
+            Axis::Z
+        }
+    }
+
+    /// Returns the next axis following the x, y, z order.
+    pub fn next_axis(&self) -> Axis {
+        Axis::from((*self as u32 + 1) % 3)
+    }
 }
 
 impl From<i32> for Axis {

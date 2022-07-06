@@ -1,6 +1,6 @@
 use crate::acq::ray::{reflect, Ray};
 use crate::htfld::{AxisAlignment, Heightfield};
-use crate::isect::{RayTriInt, ray_tri_intersect_moller_trumbore};
+use crate::isect::{RayTriIsect, ray_tri_intersect_moller_trumbore, ray_tri_intersect_woop};
 use crate::mesh::TriangleMesh;
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 use std::rc::Rc;
@@ -54,120 +54,6 @@ impl GridRayTracing {
     fn contains(&self, cell_pos: &IVec2) -> bool {
         cell_pos.x >= self.min.x && cell_pos.x <= self.max.x && cell_pos.y >= self.min.y && cell_pos.y <= self.max.y
     }
-
-    // pub fn trace_ray(&self, ray: Ray) -> Option<IntersectRecord> {
-    //     let starting_point = if !self.inside(self.world_to_grid(ray.o)) {
-    //         // If the ray origin is outside the grid, first check if it
-    // intersects         // with the surface bounding box.
-    //         self.mesh
-    //             .extent
-    //             .intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
-    //             .map(|isect_point| {
-    //                 log::debug!("Ray origin outside the grid, intersecting with
-    // the bounding box.");                 isect_point - ray.d * 0.01
-    //             })
-    //     } else {
-    //         // If the ray origin is inside the grid, use the ray origin.
-    //         Some(ray.o)
-    //     };
-    //     log::debug!("Starting point: {:?}", starting_point);
-    //
-    //     if let Some(starting_point) = starting_point {
-    //         // Traverse the grid in x, y coordinates, until the ray exits the
-    // grid and         // identify all traversed cells.
-    //         let GridTraversal {
-    //             traversed,
-    //             distances,
-    //         } = self.traverse(starting_point.xz(), ray.d.xz());
-    //
-    //         let mut record = None;
-    //
-    //         log::debug!("traversed: {:?}", traversed);
-    //
-    //         // Iterate over the traversed cells and find the closest
-    // intersection.         for (i, cell) in
-    // traversed.iter().enumerate().filter(|(_, cell)| {             cell.x >=
-    // self.min.x - 1                 && cell.y >= self.min.y - 1
-    //                 && cell.x <= self.max.x
-    //                 && cell.y <= self.max.y
-    //         }) {
-    //             if cell.x == self.min.x - 1
-    //                 || cell.y == self.min.y - 1
-    //                 || cell.x == self.max.x
-    //                 || cell.y == self.max.y
-    //             {
-    //                 // Skip the cell outside the grid, since it is the starting
-    // point.                 continue;
-    //             }
-    //
-    //             // Calculate the two ray endpoints at the cell boundaries.
-    //             let entering = ray.o + distances[i] * ray.d;
-    //             let exiting = ray.o + distances[i + 1] * ray.d;
-    //
-    //             if self.intersected_with_cell(*cell, entering.z, exiting.z) {
-    //                 // Calculate the intersection point of the ray with the
-    //                 // two triangles inside of the cell.
-    //                 let tris = self.triangles_at(*cell);
-    //                 let isect0 = isect_ray_tri(ray, &tris[0]);
-    //                 let isect1 = isect_ray_tri(ray, &tris[1]);
-    //
-    //                 match (isect0, isect1) {
-    //                     (None, None) => {
-    //                         continue;
-    //                     }
-    //                     (Some((_, u, v)), None) => {
-    //                         record = Some(IntersectRecord {
-    //                             ray,
-    //                             geom_id: 0,
-    //                             prim_id: 0,
-    //                             hit_point: (1.0 - u - v) * tris[0][0]
-    //                                 + u * tris[0][1]
-    //                                 + v * tris[0][2],
-    //                             normal: compute_normal(&tris[0]),
-    //                             nudged_times: 0,
-    //                         });
-    //                         break;
-    //                     }
-    //                     (None, Some((_, u, v))) => {
-    //                         record = Some(IntersectRecord {
-    //                             ray,
-    //                             geom_id: 0,
-    //                             prim_id: 0,
-    //                             hit_point: (1.0 - u - v) * tris[1][0]
-    //                                 + u * tris[1][1]
-    //                                 + v * tris[1][2],
-    //                             normal: compute_normal(&tris[1]),
-    //                             nudged_times: 0,
-    //                         });
-    //                         break;
-    //                     }
-    //                     (Some((t0, u, v)), Some((t1, _, _))) => {
-    //                         // The ray hit the shared edge of two triangles.
-    //                         if (t0.abs() - t1.abs()).abs() < f32::EPSILON {
-    //                             record = Some(IntersectRecord {
-    //                                 ray,
-    //                                 geom_id: 0,
-    //                                 prim_id: 0,
-    //                                 hit_point: (1.0 - u - v) * tris[0][0]
-    //                                     + u * tris[0][1]
-    //                                     + v * tris[0][2],
-    //                                 normal: compute_normal(&tris[0]),
-    //                                 nudged_times: 0,
-    //                             });
-    //                             break;
-    //                         } else {
-    //                             log::error!("The ray hit two triangles at the
-    // same time.");                             continue;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         record
-    //     } else {
-    //         None
-    //     }
-    // }
 
     /// Convert a world space position into a grid space position (coordinates
     /// of the cell) relative to the origin of the surface (left-top corner).
@@ -444,12 +330,13 @@ impl GridRayTracing {
     ///
     /// A vector of intersection information [`RayTriInt`] with corresponding
     /// triangle index.
-    fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriInt, Option<u32>)> {
+    fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriIsect, Option<u32>)> {
         let tris = self.triangles_at(cell);
         tris.iter()
             .filter_map(|(index, pts)| {
                 log::debug!("               - isect test with tri: {:?}", index);
-                ray_tri_intersect_moller_trumbore(ray, pts)
+                ray_tri_intersect_woop(ray, pts)
+                // ray_tri_intersect_moller_trumbore(ray, pts)
                     .map(|isect| {
                         let tris_per_row = (self.surface.cols - 1) * 2;
                         let cells_per_row = self.surface.cols - 1;
@@ -501,7 +388,7 @@ impl GridRayTracing {
                             Some((adj_tri, adj_n)) => {
                                 let avg_n = (isect.n + adj_n).normalize();
                                 log::debug!("              -- hitting shared edge, use averaged normal: {:?}", avg_n);
-                                (*index, RayTriInt {
+                                (*index, RayTriIsect {
                                     n: avg_n,
                                     ..isect
                                 }, Some(adj_tri as u32))

@@ -17,10 +17,21 @@ pub enum TriangulationMethod {
 /// Triangle representation of the surface mesh.
 #[derive(Debug)]
 pub struct TriangleMesh {
+    /// Axis-aligned bounding box of the mesh.
     pub extent: Aabb,
+
+    /// Number of triangles in the mesh.
     pub num_tris: usize,
+
+    /// Number of vertices in the mesh.
     pub num_verts: usize,
+
+    /// Vertices of the mesh.
     pub verts: Vec<Vec3>,
+
+    /// Triangle indices.
     pub faces: Vec<u32>,
+
+    /// Normal vectors of each triangle.
     pub normals: Vec<Vec3>,
 }

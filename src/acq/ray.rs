@@ -1,7 +1,10 @@
+use std::fmt::Debug;
 use crate::acq::fresnel;
 use crate::acq::ior::RefractiveIndex;
-use glam::Vec3;
+use glam::{UVec3, Vec3};
+use crate::isect::Axis;
 
+/// Representation of a ray.
 #[derive(Debug, Copy, Clone)]
 pub struct Ray {
     /// The origin of the ray.
@@ -17,17 +20,24 @@ pub struct Ray {
 impl Ray {
     /// Create a new ray (direction will be normalised).
     pub fn new(o: Vec3, d: Vec3) -> Self {
+        let d = d.normalize();
+        // let inv_dir_z = 1.0 / d.z;
+        // let kz = Axis::max_axis(d.abs());
+        // let kx = kz.next_axis();
+        // let ky = kz.next_axis();
         Self {
             o,
-            d: d.normalize(),
+            d,
             e: 1.0,
         }
     }
 
     pub fn from_embree_ray(ray: &embree::Ray, energy: f32) -> Self {
+        let o = Vec3::new(ray.org_x, ray.org_y, ray.org_z);
+        let d = Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z);
         Self {
-            o: Vec3::new(ray.org_x, ray.org_y, ray.org_z),
-            d: Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z),
+            o,
+            d,
             e: energy,
         }
     }
