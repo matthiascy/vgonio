@@ -1,19 +1,31 @@
-use crate::acq::desc::{MeasurementDesc, Range};
-use crate::acq::embree_rt::EmbreeRayTracing;
-use crate::acq::grid_rt::GridRayTracing;
-use crate::acq::ior::{RefractiveIndex, RefractiveIndexDatabase};
-use crate::acq::ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering};
-use crate::acq::tracing::trace_one_ray_embree;
-use crate::acq::{Collector, Emitter, Patch};
-use crate::htfld::Heightfield;
-use crate::mesh::TriangulationMethod;
+use crate::{
+    acq::{
+        desc::{MeasurementDesc, Range},
+        embree_rt::EmbreeRayTracing,
+        grid_rt::GridRayTracing,
+        ior::{RefractiveIndex, RefractiveIndexDatabase},
+        ray::{scattering_air_conductor, Ray, RayTraceRecord, Scattering},
+        tracing::trace_one_ray_embree,
+        Collector, Emitter, Patch,
+    },
+    app::{BRIGHT_YELLOW, RESET},
+    app::cache::VgonioCache,
+    htfld::Heightfield,
+    mesh::TriangulationMethod,
+};
 use embree::{Config, RayHit, SoARay};
+use crate::acq::desc::RadiusDesc;
 
+/// Type of the BxDF to be measured.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
+#[serde(rename_all = "kebab-case")] // TODO: use case_insensitive in the future
 pub enum BxdfKind {
-    InPlane,
+    /// In-plane BRDF.
+    InPlaneBrdf,
+
+    /// Whole-hemisphere BRDF.
+    Brdf,
 }
 
 /// Measurement statistics for a single incident direction.
@@ -78,23 +90,74 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 // //     const N_BOUNCE: usize,
 // // >
 // // Vec<Stats<PatchData, N_PATCH, N_BOUNCE>>
-pub fn measure_in_plane_brdf_embree(
-    desc: &MeasurementDesc,
-    ior_db: &RefractiveIndexDatabase,
-    surfaces: &[Heightfield],
-) {
+pub fn measure_in_plane_brdf_embree_rt(desc: &MeasurementDesc, cache: &mut VgonioCache, surfaces: &[&Heightfield]) {
     let collector: Collector = desc.collector.into();
-    let emitter: Emitter = desc.emitter.into();
-    log::debug!("Emitter generated {} patches.", emitter.patches.len());
-
+    let mut emitter: Emitter = desc.emitter.into();
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
+    let triangulated_surfaces = cache.triangulate_surfaces(surfaces);
+
+    // Iterate over every surface.
+    for (surface, mesh) in surfaces.iter().zip(triangulated_surfaces.iter()) {
+        println!(
+            "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+            surface.path.unwrap().display()
+        );
+        let scene_id = embree_rt.create_scene();
+        // Update emitter's radius
+        if desc.emitter.radius.is_auto() {
+            emitter.set_radius(mesh.extent.max_edge() * 2.5);
+        }
+        let embree_mesh = embree_rt.create_triangle_mesh(&mesh);
+        let _surface_id = embree_rt.attach_geometry(scene_id, embree_mesh);
+        let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
+        log::debug!("spectrum samples: {:?}", spectrum);
+
+        let ior_t = cache
+            .ior_db
+            .ior_of_spectrum(desc.transmitted_medium, &spectrum)
+            .expect("transmitted medium IOR not found");
+
+        // Iterate over every incident direction.
+        for pos in emitter.positions() {
+            let rays = emitter.emit_rays(pos);
+            log::debug!("emitted {} rays with direction {} from position {} {}", rays.len(), rays[0].d, pos.zenith, pos.azimuth);
+
+            // Populate embree ray stream with generated rays.
+            let mut ray_stream = embree::RayN::new(rays.len() as u32);
+            for (i, mut ray) in ray_stream.iter_mut().enumerate() {
+                ray.set_origin(rays[i].o.into());
+                ray.set_dir(rays[i].d.into());
+            }
+
+            // Trace primary rays with coherent context
+            let coherent_ctx = embree::IntersectContext::coherent();
+            let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
+
+            // Filter out primary rays (index) that hit the surface.
+            let filtered = ray_hit.iter()
+                .enumerate()
+                .filter_map(|(i, (_, h))| h.hit().then(|| i));
+
+            // Create incoherent context for secondary rays.
+            let mut incoherent_ctx = embree::IntersectContext::incoherent();
+
+            let records = filtered.map(|i| {
+                let ray = Ray {
+                    o: ray_hit.ray.org(i).into(),
+                    d: ray_hit.ray.dir(i).into(),
+                    e: 1.0
+                };
+            });
+        }
+    }
 
     for surface in surfaces {
+        println!("    {BRIGHT_YELLOW}>{RESET} Measure surface {}", surface.name);
         let scene_id = embree_rt.create_scene();
         let triangulated = surface.triangulate(TriangulationMethod::Regular);
         let radius = triangulated.extent.max_edge() * 2.5;
         let surface_mesh = embree_rt.create_triangle_mesh(&triangulated);
-        let surface_id = embree_rt.attach_geometry(scene_id, surface_mesh);
+        let _surface_id = embree_rt.attach_geometry(scene_id, surface_mesh);
         let spectrum_samples = SpectrumSampler::from(desc.emitter.spectrum).samples();
         log::debug!("spectrum samples: {:?}", spectrum_samples);
         // let ior_i = ior_db
@@ -106,10 +169,10 @@ pub fn measure_in_plane_brdf_embree(
 
         for wavelength in spectrum_samples {
             println!("Capturing with wavelength = {}", wavelength);
-            let ior_t = ior_db.refractive_index_of(desc.transmitted_medium, wavelength).unwrap();
+            let ior_t = cache.ior_db.ior_of(desc.transmitted_medium, wavelength).unwrap();
 
             // For all incident angles; generate samples on each patch
-            for (i, patch) in emitter.patches.iter().enumerate() {
+            for (i, patch) in emitter.patch.iter().enumerate() {
                 // Emit rays from the patch of the emitter. Uniform sampling over the patch.
                 let rays = patch.emit_rays(desc.emitter.num_rays, radius);
                 log::debug!("Emitted {} rays from patch {} - {:?}: {:?}", rays.len(), i, patch, rays);
@@ -126,7 +189,8 @@ pub fn measure_in_plane_brdf_embree(
                 let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
 
                 // Filter out primary rays that hit the surface.
-                let filtered = ray_hit.iter().enumerate().filter_map(|(i, (_, h))| h.hit().then(|| i));
+                let filtered = ray_hit.iter().enumerate()
+                    .filter_map(|(i, (_, h))| h.hit().then(|| i));
 
                 let mut incoherent_ctx = embree::IntersectContext::incoherent();
                 let records = filtered
@@ -152,6 +216,14 @@ pub fn measure_in_plane_brdf_embree(
             }
         }
     }
+}
+
+/// Brdf measurement.
+pub fn measure_brdf_grid_rt(desc: &MeasurementDesc, cache: &VgonioCache) {
+    // let collector: Collector = desc.collector.into();
+    // let emitter: Emitter = desc.emitter.into();
+    // log::debug!("Emitter has {} patches.", emitter.patches.len());
+    // let mut grid_rt = GridRayTracing::new(Config::default());
 }
 
 // pub fn measure_in_plane_brdf_grid(

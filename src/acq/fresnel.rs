@@ -26,24 +26,59 @@
 //! perpendicular.
 //!
 //! + reflection and transmission coefficients for perpendicularly polarized
-//! light:
+//! light at the interface of two *dielectric* media:
 //!
-//!   $r_\perp=\frac{n_i\cos\theta_i - n_t\cos\theta_t}{n_i\cos\theta_i +
-//! n_t\cos\theta_t}$
+//!   $r_\perp=\frac{\eta_i\cos\theta_i - \eta_t\cos\theta_t}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}$
 //!
-//!   $t_\perp=\frac{2n_i\cos\theta_i}{\n_i\cos\theta_i + n_t\cost\theta_t}$
+//!   $t_\perp=\frac{2\eta_i\cos\theta_i}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}$
+//!
+//! + reflection and transmission coefficients for perpendicularly polarized
+//! light at the interface between a *conductor* and a *dielectric* medium:
+//!
+//!   $r_\perp=\frac{a^2+b^2-2a\cos\theta+\cos^2\theta}{a^2+b^2+2a\cos\theta+\cos^2\theta}$
 //!
 //! "P" polarization (electric field) is the parallel polarization, and it lies
 //! parallel to the plane of incidence.
 //!
-//! + reflection and transmission coefficients for parallel polarized light:
+//! + reflection and transmission coefficients for parallel polarized light at
+//! the interface of two *dielectric* media are related by the formula:
 //!
-//!   $r_\parallel = \frac{n_t\cos\theta_i-n_i\cos\theta_t}{n_t\cos\theta_i +
-//! n_i\cos\theta_t}$
+//!   $r_\parallel = \frac{\eta_t\cos\theta_i-\eta_i\cos\theta_t}{\eta_t\cos\theta_i + \eta_i\cos\theta_t}$
 //!
-//!   $t_\parallel = \frac{2n_i\cos\theta_i}{n_t\cos\theta_i + n_i\cos\theta_t}$
+//!   $t_\parallel = \frac{2\eta_i\cos\theta_i}{\eta_t\cos\theta_i + \eta_i\cos\theta_t}$
 //!
-//! For both polarizations: $n_i\sin\theta_i = n_t\sin\theta_t$
+//! + reflection and transmission coefficients for parallel polarized
+//! light at the interface between a *conductor* and a *dielectric* medium:
+//!
+//!   $r_\parallel=r_\perp\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\sin^4\theta}{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\sin^4\theta}$
+//!
+//! where
+//!
+//!   $a^2 + b^2 = \sqrt{(\eta^2-k^2-\sin^2\theta)^2+4\eta^2k^2}$
+//!
+//! and $\eta + ik = \eta_t / \eta_i$ is the relative index of refraction computed
+//! using a complex division operation. Generally $\eta_i$ will be a dielectric so
+//! that a normal real division can be used instead.
+//! See [`reflectance_dielectric_conductor`] for details.
+//!
+//! For both polarizations: $\eta_i\sin\theta_i = \eta_t\sin\theta_t$.
+//!
+//! The cosine terms should all be greater than or equal to zero; for the
+//! purposes of computing these values, the geometric normal should be flipped
+//! to be on the same side as $\omega_i$ and $\omega_t$ when computing
+//! $\cos\theta_i$ and $\cos\theta_t$ respectively.
+//!
+//! For unpolarized light, the reflectance is the average of the squares of the
+//! parallel and perpendicular terms:
+//!
+//! $F_r = \frac{1}{2}(r_\parallel^2 + r_\perp^2)$
+//!
+//! Due to conservation of energy, the energy transmitted by a dielectric is $1 - F_r$.
+//!
+//! The cosine terms should all be greater than or equal to zero;
+//! for the purpose of computation, the geometric normal should be
+//! flipped to be on the same side as w_i and w_t when computing
+//! cos_theta_i and cos_theta_t.
 //!
 //! ## Refractive indices
 //!
@@ -55,9 +90,9 @@
 //!   In contrast to dielectrics, conductors have a complex-valued index of
 //!   refraction ῆ = η + ik
 //!
-//! Give the incident direction w_i, and indices of refraction of two mediums,
-//! compute the reflection coefficients for waves parallel and perpendicular
-//! to the plane of incidence.
+//! Give the incident direction $\omega_i$, and indices of refraction of two
+//! mediums, compute the reflection coefficients for waves parallel and
+//! perpendicular to the plane of incidence.
 //!
 //! ## Schlick's approximation
 //!
@@ -70,245 +105,227 @@
 //! However, this approximation fails to model the reflectance when $\eta_i >
 //! \eta_t$. This can be fixed by using $\cos\theta_t$ instead of
 //! $\cos\theta_i$.
-//!
-//! * `w_i` - normalized incident light direction.
-//! * `n` - normalized surface normal.
-//! * `eta_i` - index of refraction of incident medium
-//! * `eta_t` - index of refraction of transmitted medium.
-//!
-//! Note: the cosine terms should all be greater than or equal to zero;
-//!       for the purpose of computation, the geometric normal should be
-//!       flipped to be on the same side as w_i and w_t when computing
-//!       cos_theta_i and cos_theta_t
-
-// #[cfg(target_arch = "x86")]
-// use core::arch::x86 as arch;
-//
-// #[cfg(target_arch = "x86_64")]
-// use core::arch::x86_64 as arch;
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::acq::ior::RefractiveIndex;
+use crate::acq::ior::Ior;
 use glam::Vec3;
 
-/// Compute the Schlick's approximation of the Fresnel specular (reflection)
+/// Computes the Schlick's approximation of the Fresnel specular (reflection)
 /// factor.
+///
+/// In case of incident medium is air, `eta_i` is 1.0.
 ///
 /// # Arguments
 ///
+/// * `cos_i` - Cosine of the angle between the direction from which the incident
+///   light is coming and the normal of the interface between the two media.
 /// * `eta_i` - refractive index of incident medium.
 /// * `eta_t` - refractive index of transmitted medium.
-/// * `n` - normalized surface normal.
-/// * `w_i` - normalized incident direction
-pub fn schlick_reflectance(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
-    let cos = w_i.dot(n);
+pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
     let mut r0 = (eta_i - eta_t) / (eta_i + eta_t);
 
     r0 *= r0;
 
-    let a = 1.0 - cos;
+    let a = 1.0 - cos_i;
 
     r0 + (1.0 - r0) * a * a * a * a * a
 }
 
-pub fn schlick_reflectance_spectrum(w_i: Vec3, n: Vec3, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
-    assert_eq!(eta_i.len(), eta_t.len(), "eta_i and eta_t must have the same length");
-
-    let cos = w_i.dot(n);
+/// Computes the Schlick's approximation of the Fresnel reflectance coefficient
+/// for rays with different wavelengths(different refractive index).
+///
+/// See [`reflectance_schlick_approx`] for details.
+///
+/// # Arguments
+///
+/// * `cos_i` - Cosine of the angle between the direction from which the incident
+///   light is coming and the normal of the interface between the two media.
+/// * `eta_i` - Slice of refractive index of incident medium.
+/// * `eta_t` - Slice of refractive index of transmitted medium.
+///
+/// # Note
+///
+/// The length of the slices must be the same.
+pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
+    assert_eq!(
+        eta_i.len(),
+        eta_t.len(),
+        "eta_i and eta_t must have the same length"
+    );
 
     let mut output = Vec::with_capacity(eta_i.len());
 
     for (i, r) in output.iter_mut().enumerate() {
-        let r0 = (eta_i[i] - eta_t[i]) / (eta_i[i] + eta_t[i]);
-
-        let a = 1.0 - cos;
-
-        *r = r0 + (1.0 - r0) * a * a * a * a * a;
+        *r = reflectance_schlick_approx(cos_i, eta_i[i], eta_t[i]);
     }
 
     output
 }
 
-pub fn schlick_approx(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> f32 {
-    schlick_reflectance(w_i, n, eta_i, eta_t)
+/// Computes the unpolarised Fresnel reflection coefficient at a planar interface between
+/// two dielectric materials.
+///
+/// # Arguments
+///
+/// * `cos_i` - Cosine of the angle between the normal and the incident direction.
+/// * `eta_i` - Refractive index of the incident medium.
+/// * `eta_t` - Refractive index of the transmitted medium.
+///
+/// # Note
+///
+/// The cosine of the angle between normal and incident light should be positive.
+pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
+    // The sign of the cosine of the incident angle indicates on which side of the medium the incident
+    // ray lines. If the cosine is between 0 and 1, the ray is on the outside, and if the cosine is
+    // between -1 and 0, the ray is on the inside. `eta_i` and `eta_t` are adjusted such that `eta_i`
+    // has the refractive index of the incident medium and thus makes sure that `cos_i` is non-negative.
+    let (eta_i, eta_t) = if cos_i <= 0.0 {
+        (eta_t, eta_i)
+    } else {
+        (eta_i, eta_t)
+    };
+
+    // Compute the angle between the normal and the transmitted direction.
+    let sin_i = (1.0 - cos_i * cos_i).sqrt();
+    let sin_t = eta_i / eta_t * sin_i;
+
+    // Handle total internal reflection.
+    if sin_t >= 1.0 {
+        return 1.0;
+    }
+
+    let cos_t = (1.0 - sin_t * sin_t).sqrt();
+
+    let r_parl = (eta_t * cos_i - eta_i * cos_t) / (eta_t * cos_i + eta_i * cos_t);
+    let r_perp = (eta_i * cos_i - eta_t * cos_t) / (eta_i * cos_i + eta_t * cos_t);
+
+    // No polarization.
+    0.5 * (r_parl * r_parl + r_perp * r_perp)
 }
 
-pub fn schlick_approx_spectrum(w_i: Vec3, n: Vec3, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
-    schlick_reflectance_spectrum(w_i, n, eta_i, eta_t)
+
+/// Computes the unpolarised Fresnel reflection coefficient at a planar interface between
+/// two dielectric materials for rays with different wavelengths.
+///
+/// See [`reflectance_dielectric`] for details.
+///
+/// # Arguments
+///
+/// * `cos_i` - Cosine of the angle between the normal and the incident direction.
+/// * `eta_i` - Slice of refractive index of incident medium.
+pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
+    let mut output = Vec::with_capacity(eta.len());
+    for (i, r) in output.iter_mut().enumerate() {
+        *r = reflectance_dielectric(cos_i, eta[i], eta[i]);
+    }
+    output
 }
 
 /// Fresnel reflectance of unpolarised light between dielectric and conductor.
-/// Modified from "Optics" by K.D. Moeller, Unisersity Science Books, 1988
-/// `cos_theta`: noticed this is the cos of the angle between normal and
-/// incident light (should be positive)
-pub fn reflectance_dielectric_conductor(cos_theta: f32, eta_t: f32, k_t: f32) -> f32 {
-    let cos_theta_2 = cos_theta * cos_theta;
-    let sin_theta_2 = 1.0 - cos_theta_2;
-    let sin_theta_4 = sin_theta_2 * sin_theta_2;
+///
+/// Modified from "Optics" by K.D. Moeller, University Science Books, 1988
+///
+/// # Arguments
+///
+/// * `cos_i` - Cosine of the angle between normal and incident light (should be positive).
+/// * `eta_i` - Refractive index of the incident medium.
+/// * `eta_t` - Refractive index of the transmitted medium.
+/// * `k` - Absorption coefficient of the transmitted medium.
+pub fn reflectance_dielectric_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
+    // Computes relative index of refraction.
+    let eta = eta_t / eta_i;
+    let k = k_t / eta_i;
 
-    let tmp1 = eta_t * eta_t - k_t * k_t - sin_theta_2;
-    let a2pb2 = (tmp1 * tmp1 + 4.0 * k_t * k_t * eta_t * eta_t).sqrt();
-    let a = (0.5 * (a2pb2 + tmp1)).sqrt();
+    let cos_i_2 = cos_i * cos_i;
+    let sin_i_2 = 1.0 - cos_i_2;
+    let eta_2 = eta * eta;
+    let k_2 = k * k;
+    let t0 = eta_2 - k_2 - sin_i_2;
+    let a2_plus_b2 = (t0 * t0 + 4.0 * k_t * k_t * eta_t * eta_t).sqrt();
+    let t1 = a2_plus_b2 + cos_i_2;
+    let a = (0.5 * (a2_plus_b2 + t0)).sqrt();
+    let t2 = 2.0 * a * cos_i;
+    let rs = (t1 - t2) / (t1 + t2);
+    let t3 = a2_plus_b2 * cos_i_2 + sin_i_2 * sin_i_2;
+    let t4 = t2 * sin_i_2;
+    let rp = rs * (t3 - t4) / (t3 + t4);
 
-    let term1 = a2pb2 + cos_theta_2;
-    let term2 = 2.0 * a * cos_theta;
-
-    let rs2 = (term1 - term2) / (term1 + term2);
-    let term3 = a2pb2 * cos_theta_2 + sin_theta_4;
-    let term4 = term2 * sin_theta_2;
-    let rp2 = rs2 * (term3 - term4) / (term3 + term4);
-
-    0.5 * (rp2 + rs2)
+    0.5 * (rp + rs)
 }
 
-pub fn reflectance_dielectric_conductor_spectrum(cos_theta: f32, iors_t: &[RefractiveIndex]) -> Vec<f32> {
-    todo!()
+/// Computes the unpolarised Fresnel reflectance of unpolarised light between dielectric and conductor
+/// medium for rays with different wavelengths.
+///
+/// See [`reflectance_dielectric_conductor`] for details.
+///
+/// # Arguments
+///
+/// * `cos` - Cosine of the angle between normal and incident light (should be positive).
+pub fn reflectance_dielectric_conductor_spectrum(cos: f32, eta_i: f32, ior_t: &[Ior]) -> Vec<f32> {
+    let mut output = Vec::with_capacity(ior_t.len());
+    for (i, r) in output.iter_mut().enumerate() {
+        *r = reflectance_dielectric_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
+    }
+    output
 }
 
-// pub fn fresnel_schlick_approx2(w_i: &Vec3f, n: &Vec3f, eta_i: f32, eta_t:
-// f32) -> FresnelCoeff {     let mut r0 = (eta_i - eta_t) / (eta_i + eta_t);
-//     r0 *= r0;
-//     let cos = -n.dot(w_i);
-//     if eta_i > eta_t {
-//         let eta = eta_i / eta_t;
-//         let sin = n * n * (1.0 - )
-//     }
-// }
+/// Computes the unpolarised Fresnel reflectance of unpolarised light between the air
+/// and a conductor medium.
+///
+/// # Arguments
+///
+/// * `cos_i` - Cosine of the angle between normal and incident light (should be positive).
+/// * `eta_t` - Refractive index of the transmitted medium.
+/// * `k_t` - Absorption coefficient of the transmitted medium.
+pub fn reflectance_air_conductor(cos_i: f32, eta_t: f32, k_t: f32) -> f32 {
+    reflectance_dielectric_conductor(cos_i, 1.0, eta_t, k_t)
+}
 
-// pub fn s_polarized_reflection_coeff() ->
+/// Computes the unpolarised Fresnel reflectance of unpolarised light between the air
+/// and a conductor medium for rays with different wavelengths.
+///
+/// See [`reflectance_air_conductor`] for details.
+pub fn reflectance_air_conductor_spectrum(cos: f32, ior_t: &[Ior]) -> Vec<f32> {
+    reflectance_dielectric_conductor_spectrum(cos, 1.0, ior_t)
+}
 
-// fn fresnel_eq_dielectric_dielectric(w_i: &Vec3f, n: &Vec3f, eta_i: f32,
-// eta_t: f32) -> FresnelPowerCoeff {     assert!(ior_i.is_same_wavelength(&
-// ior_t));     unimplemented!()
-// }
-//
-// fn fresnel_eq_dielectric_conductor(w_i: &Vec3f, n: &Vec3f, eta_i: f32, eta_t:
-// f32, k_t: f32) -> FresnelPowerCoeff {     assert!(ior_i.is_same_wavelength(&
-// ior_t));     unimplemented!()
-// }
-//
-// fn fresnel_eq_conductor_dielectric(w_i: &Vec3f, n: &Vec3f, eta_i: f32, k_i:
-// f32, eta_t: f32) -> FresnelPowerCoeff {     assert!(ior_i.
-// is_same_wavelength(&ior_t));     unimplemented!()
-// }
-//
-// fn fresnel_eq_conductor_conductor(w_i: &Vec3f, n: &Vec3f, eta_i: f32, k_i:
-// f32, eta_t: f32, k_t: f32) -> FresnelPowerCoeff {     assert!(ior_i.
-// is_same_wavelength(&ior_t));     unimplemented!()
-// }
+#[cfg(test)]
+mod tests {
+    use std::fs::{OpenOptions};
+    use std::io::Write;
 
-// /// Compute Fresnel equations for the case when incident medium is air and
-// transmitted medium is /// a conductor.
-// ///
-// /// # Examples
-// /// ```
-// /// ```
-// pub fn fresnel_eq_air_conductor(w_i: &Vec3f, n: &Vec3f, eta_t: f32, k_t: f32)
-// -> FresnelCoeff {     // let cos_theta_i = w_i.dot(n).abs();
-//     let cos_theta_i = unsafe {
-//         let mut dot = [0.0f32; 4];
-//         let a = arch::_mm_mul_ps(
-//             arch::_mm_setr_ps(w_i.x, w_i.y, w_i.z, 0.0),
-//             arch::_mm_setr_ps(n.x, n.y, n.z, 0.0),
-//         );
-//         arch::_mm_storeu_ps(dot.as_mut_ptr(), a);
-//         dot[0] + dot[1] + dot[2]
-//     };
-//
-//     let cos_theta_i_2 = cos_theta_i * cos_theta_i;
-//     let two_eta_cos_theta = 2.0 * eta_t * cos_theta_i;
-//
-//     let t0 = eta_t * eta_t + k_t * k_t;
-//     let t1 = t0 * cos_theta_i_2;
-//     let r_s = (t0 - two_eta_cos_theta + cos_theta_i_2) / (t0 +
-// two_eta_cos_theta + cos_theta_i_2);     let r_p = (t1 - two_eta_cos_theta +
-// 1.0) / (t1 + two_eta_cos_theta + 1.0);
-//
-//     let reflectance = 0.5 * (r_p + r_s);
-//
-//     FresnelCoeff {
-//         transmittance: 1.0 - reflectance,
-//         reflectance,
-//     }
-// }
+    #[test]
+    fn reflectance_dielectric_test() {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open("./reflectance_dielectric.csv").unwrap();
+        file.write_all(b"angle,reflectance\n").unwrap();
+        for i in 0..1000 {
+            let cos_i = (1000 - i) as f32 / 1000.0;
+            let angle = cos_i.acos();
+            let eta_i = 1.0; // air
+            let eta_t = 4.7; // glass
+            let r = super::reflectance_dielectric(cos_i, eta_i, eta_t);
+            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes()).unwrap();
+        }
+    }
 
-// pub fn fresnel_reflectance_between_dielectric(
-//     w_i: &Vec3f,
-//     n: &Vec3f,
-//     eta_i: f32,
-//     eta_o: f32,
-// ) -> f32 {
-//     let mut cos_theta_i = w_i.dot(&n);
-//
-//     let (eta_i, eta_t) = if cos_theta_i < 0.0 {
-//         cos_theta_i = cos_theta_i.abs();
-//         (eta_o, eta_i)
-//     } else {
-//         (eta_i, eta_o)
-//     };
-//
-//     // Compute sin_theta_t using Snell's law.
-//     let sin_theta_i = ((1.0 - cos_theta_i * cos_theta_i).max(0.0)).sqrt();
-//     let sin_theta_t = eta_i / eta_t * sin_theta_i;
-//
-//     // Total internal reflection
-//     if sin_theta_t >= 1.0 {
-//         return 1.0;
-//     }
-//
-//     let cos_theta_t = ((1.0 - sin_theta_t * sin_theta_t).max(0.0)).sqrt();
-//
-//     // Fresnel reflectance for p-polarized light
-//     let r_p =
-//         (eta_t * cos_theta_i - eta_i * cos_theta_t) / (eta_t * cos_theta_i +
-// eta_i * cos_theta_t);     // Fresnel reflectance for s-polarized light
-//     let r_s =
-//         (eta_i * cos_theta_i - eta_t * cos_theta_t) / (eta_i * cos_theta_i +
-// eta_t * cos_theta_t);
-//
-//     (r_p * r_p + r_s * r_s) / 2.0
-// }
-//
-// pub fn fresnel_reflectance_dielectric_conductor(
-//     w_i: &Vec3f,
-//     n: &Vec3f,
-//     eta_i: f32,
-//     eta_t: f32,
-//     k: f32,
-// ) -> f32 {
-//     let mut cos_i = w_i.dot(&n);
-//
-//     let (eta_i, eta_t) = if cos_i < 0.0 {
-//         cos_i = cos_i.abs();
-//         (eta_t, eta_i)
-//     } else {
-//         (eta_i, eta_t)
-//     };
-//
-//     let cos2 = cos_i * cos_i;
-//     let sin2 = 1.0 - cos_i * cos_i;
-//     let eta = eta_t / eta_i;
-//     let k = k / eta_i;
-//     let eta2 = eta * eta;
-//     let k2 = k * k;
-//
-//     // https://seblagarde.wordpress.com/2013/04/29/memo-on-fresnel-equations/
-//     let t0 = eta2 - k2 - sin2;
-//     let a2_plus_b2 = (t0 * t0 + 4.0 * eta2 * k2).sqrt();
-//     let t1 = a2_plus_b2 + cos2;
-//     let a = (0.5 * (a2_plus_b2 + t0)).sqrt();
-//     let t2 = 2.0 * cos_i * a;
-//
-//     let r_s = (t1 - t2) / (t1 + t2);
-//     let t3 = cos2 * a2_plus_b2 + sin2 * sin2;
-//     let t4 = t2 * sin2;
-//     let r_p = r_s * (t3 - t4) / (t3 + t4);
-//
-//     0.5 * r_p + r_s
-// }
-
-// Computes the unpolarised Fresnel reflection coefficient at a planer
-// interface between two dielectrics.
-//
-// pub fn fresnel_dielectric(cos_i: f32, cos_t: f32, eta: f32) -> f32 {}
+    #[test]
+    fn reflectance_dielectric_conductor_test() {
+            let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open("./reflectance_dielectric_conductor.csv").unwrap();
+        file.write_all(b"angle,reflectance\n").unwrap();
+        for i in 0..1000 {
+            let cos_i = (1000 - i) as f32 / 1000.0;
+            let angle = cos_i.acos();
+            let eta_i = 1.0; // air
+            let eta_t = 1.1978; // al, 587.6nm
+            let k_t = 7.0488;
+            let r = super::reflectance_dielectric_conductor(cos_i, eta_i, eta_t, k_t);
+            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes()).unwrap();
+        } }
+}
