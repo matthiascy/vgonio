@@ -1,11 +1,12 @@
-use crate::app::state::remap_depth;
-use crate::gfx::{GpuContext, RdrPass, Texture};
-use crate::Error;
+use crate::{
+    app::state::remap_depth,
+    gfx::{GpuContext, RdrPass, Texture},
+    Error,
+};
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
 use std::num::NonZeroU32;
-use wgpu::util::DeviceExt;
-use wgpu::{include_spirv, ColorTargetState};
+use wgpu::{include_spirv, util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of
 /// micro-facets) function of a micro-surface. For a certain viewing direction,
@@ -65,28 +66,33 @@ struct Uniforms {
 }
 
 impl OcclusionEstimationPass {
-    pub const COLOR_ATTACHMENT_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+    pub const COLOR_ATTACHMENT_TEXTURE_FORMAT: wgpu::TextureFormat =
+        wgpu::TextureFormat::Rgba8Unorm;
 
     pub fn new(ctx: &GpuContext, width: u32, height: u32) -> Self {
         let uniform_buffer_size = std::mem::size_of::<Uniforms>() as wgpu::BufferAddress;
-        let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("occlusion_pass_uniform_buffer"),
-            contents: bytemuck::cast_slice(&[0.0f32; 32]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let bind_group_layout = ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(uniform_buffer_size),
-                },
-                count: None,
-            }],
-        });
+        let uniform_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("occlusion_pass_uniform_buffer"),
+                contents: bytemuck::cast_slice(&[0.0f32; 32]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+        let bind_group_layout =
+            ctx.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(uniform_buffer_size),
+                        },
+                        count: None,
+                    }],
+                });
         let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("occlusion_pass_bind_group"),
             layout: &bind_group_layout,
@@ -95,19 +101,26 @@ impl OcclusionEstimationPass {
                 resource: uniform_buffer.as_entire_binding(),
             }],
         });
-        let pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("occlusion_pass_pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-        let vert_shader = ctx
+        let pipeline_layout = ctx
             .device
-            .create_shader_module(&include_spirv!("../app/assets/shaders/spirv/geom_term.vert.spv"));
-        let frag_shader = ctx
-            .device
-            .create_shader_module(&include_spirv!("../app/assets/shaders/spirv/geom_term.frag.spv"));
-        let depth_attachment =
-            Texture::create_depth_texture(&ctx.device, width, height, None, Some("shadow_pass_depth_attachment"));
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("occlusion_pass_pipeline_layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let vert_shader = ctx.device.create_shader_module(include_spirv!(
+            "../app/assets/shaders/spirv/geom_term.vert.spv"
+        ));
+        let frag_shader = ctx.device.create_shader_module(include_spirv!(
+            "../app/assets/shaders/spirv/geom_term.frag.spv"
+        ));
+        let depth_attachment = Texture::create_depth_texture(
+            &ctx.device,
+            width,
+            height,
+            None,
+            Some("shadow_pass_depth_attachment"),
+        );
         let color_attachment = Texture::new(
             &ctx.device,
             &wgpu::TextureDescriptor {
@@ -126,61 +139,63 @@ impl OcclusionEstimationPass {
             None,
         );
 
-        let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("occlusion_pass_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &vert_shader,
-                entry_point: "main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 12,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x3,
-                        offset: 0,
-                        shader_location: 0,
+        let pipeline = ctx
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("occlusion_pass_pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &vert_shader,
+                    entry_point: "main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: 12,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x3,
+                            offset: 0,
+                            shader_location: 0,
+                        }],
                     }],
-                }],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Always,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &frag_shader,
-                entry_point: "main",
-                targets: &[ColorTargetState {
-                    format: Self::COLOR_ATTACHMENT_TEXTURE_FORMAT,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent::REPLACE,
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                }],
-            }),
-            multiview: None,
-        });
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: Texture::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Always,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &frag_shader,
+                    entry_point: "main",
+                    targets: &[Some(ColorTargetState {
+                        format: Self::COLOR_ATTACHMENT_TEXTURE_FORMAT,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::One,
+                                dst_factor: wgpu::BlendFactor::One,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha: wgpu::BlendComponent::REPLACE,
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview: None,
+            });
         let pass = RdrPass {
             pipeline,
             bind_groups: vec![bind_group],
@@ -220,17 +235,11 @@ impl OcclusionEstimationPass {
         }
     }
 
-    pub fn pipeline(&self) -> &wgpu::RenderPipeline {
-        &self.inner.pipeline
-    }
+    pub fn pipeline(&self) -> &wgpu::RenderPipeline { &self.inner.pipeline }
 
-    pub fn bind_groups(&self) -> &[wgpu::BindGroup] {
-        &self.inner.bind_groups
-    }
+    pub fn bind_groups(&self) -> &[wgpu::BindGroup] { &self.inner.bind_groups }
 
-    pub fn uniform_buffer(&self) -> Option<&wgpu::Buffer> {
-        self.inner.uniform_buffer.as_ref()
-    }
+    pub fn uniform_buffer(&self) -> Option<&wgpu::Buffer> { self.inner.uniform_buffer.as_ref() }
 
     pub fn update_uniforms(&self, queue: &wgpu::Queue, model: Mat4, view_proj: Mat4) {
         queue.write_buffer(
@@ -249,12 +258,13 @@ impl OcclusionEstimationPass {
         i_count: u32,
         i_format: wgpu::IndexFormat,
     ) {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("occlusion_pass_compute_render_pass"),
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.color_attachment.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -266,7 +276,7 @@ impl OcclusionEstimationPass {
                         }),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_attachment.view,
                     depth_ops: Some(wgpu::Operations {
@@ -296,7 +306,9 @@ impl OcclusionEstimationPass {
                 buffer: &self.depth_attachment_storage,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(std::mem::size_of::<f32>() as u32 * self.attachment_width),
+                    bytes_per_row: NonZeroU32::new(
+                        std::mem::size_of::<f32>() as u32 * self.attachment_width,
+                    ),
                     rows_per_image: NonZeroU32::new(self.attachment_height),
                 },
             },
@@ -319,7 +331,9 @@ impl OcclusionEstimationPass {
                 buffer: &self.color_attachment_storage,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(std::mem::size_of::<u32>() as u32 * self.attachment_width),
+                    bytes_per_row: NonZeroU32::new(
+                        std::mem::size_of::<u32>() as u32 * self.attachment_width,
+                    ),
                     rows_per_image: NonZeroU32::new(self.attachment_height),
                 },
             },
@@ -341,9 +355,14 @@ impl OcclusionEstimationPass {
     ) -> Result<(), Error> {
         {
             let slice = self.depth_attachment_storage.slice(..);
-            let mapping = slice.map_async(wgpu::MapMode::Read);
+            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                sender.send(result).unwrap();
+            });
             device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async { mapping.await.unwrap() });
+            pollster::block_on(async {
+                receiver.receive().await.unwrap().unwrap();
+            });
 
             let buffer_view = slice.get_mapped_range();
             let data = unsafe {
@@ -354,26 +373,56 @@ impl OcclusionEstimationPass {
             };
 
             use image::{ImageBuffer, Luma};
-            ImageBuffer::<Luma<u8>, _>::from_raw(self.attachment_width, self.attachment_height, data)
-                .ok_or_else(||Error::Any("Failed to create image from depth map buffer, please check if the data have been transferred to the buffer!".into()))
-                .and_then(|img| img.save(path).map_err(Error::from))?;
+            ImageBuffer::<Luma<u8>, _>::from_raw(
+                self.attachment_width,
+                self.attachment_height,
+                data,
+            )
+            .ok_or_else(|| {
+                Error::Any(
+                    "Failed to create image from depth map buffer, please check if the data have \
+                     been transferred to the buffer!"
+                        .into(),
+                )
+            })
+            .and_then(|img| img.save(path).map_err(Error::from))?;
         }
         self.depth_attachment_storage.unmap();
 
         Ok(())
     }
 
-    pub fn save_color_attachment(&self, device: &wgpu::Device, path: &std::path::Path) -> Result<(), Error> {
+    pub fn save_color_attachment(
+        &self,
+        device: &wgpu::Device,
+        path: &std::path::Path,
+    ) -> Result<(), Error> {
         {
             let slice = self.color_attachment_storage.slice(..);
-            let mapping = slice.map_async(wgpu::MapMode::Read);
+            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                sender.send(result).unwrap();
+            });
             device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async { mapping.await.unwrap() });
+            pollster::block_on(async {
+                receiver.receive().await.unwrap().unwrap();
+            });
+
             let buffer_view = slice.get_mapped_range();
             use image::{ImageBuffer, Rgba};
-            ImageBuffer::<Rgba<u8>, _>::from_raw(self.attachment_width, self.attachment_height, buffer_view)
-                .ok_or_else(||Error::Any("Failed to create image from depth map buffer, please check if the data have been transferred to the buffer!".into()))
-                .and_then(|img| img.save(path).map_err(Error::from))?;
+            ImageBuffer::<Rgba<u8>, _>::from_raw(
+                self.attachment_width,
+                self.attachment_height,
+                buffer_view,
+            )
+            .ok_or_else(|| {
+                Error::Any(
+                    "Failed to create image from depth map buffer, please check if the data have \
+                     been transferred to the buffer!"
+                        .into(),
+                )
+            })
+            .and_then(|img| img.save(path).map_err(Error::from))?;
         }
         self.color_attachment_storage.unmap();
 
@@ -384,9 +433,14 @@ impl OcclusionEstimationPass {
         use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
         let count: u32 = {
             let slice = self.depth_attachment_storage.slice(..);
-            let mapping = slice.map_async(wgpu::MapMode::Read);
+            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                sender.send(result).unwrap();
+            });
             device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async { mapping.await.unwrap() });
+            pollster::block_on(async {
+                receiver.receive().await.unwrap().unwrap();
+            });
 
             let buffer_view = slice.get_mapped_range();
             unsafe {
@@ -412,9 +466,14 @@ impl OcclusionEstimationPass {
     fn calculate_area_without_occlusion(&self, device: &wgpu::Device) -> f32 {
         let count = {
             let slice = self.color_attachment_storage.slice(..);
-            let mapping = slice.map_async(wgpu::MapMode::Read);
+            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                sender.send(result).unwrap();
+            });
             device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async { mapping.await.unwrap() });
+            pollster::block_on(async {
+                receiver.receive().await.unwrap().unwrap();
+            });
 
             let data = slice.get_mapped_range();
             let mut count = 0.0f32;

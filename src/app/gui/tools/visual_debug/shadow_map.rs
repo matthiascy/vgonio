@@ -1,6 +1,10 @@
-use crate::app::gui::{GuiContext, VgonioEvent};
-use crate::app::state::remap_depth;
-use crate::gfx::GpuContext;
+use crate::{
+    app::{
+        gui::{GuiContext, VgonioEvent},
+        state::remap_depth,
+    },
+    gfx::GpuContext,
+};
 use egui::Sense;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
@@ -35,10 +39,14 @@ impl ShadowMapPane {
         let mut image = image::RgbaImage::new(width, height);
         {
             let buffer_slice = buffer.slice(..);
-
-            let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
+            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+            buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+                sender.send(result).unwrap();
+            });
             gpu_ctx.device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async { mapping.await.unwrap() });
+            pollster::block_on(async {
+                receiver.receive().await.unwrap().unwrap();
+            });
 
             let buffer_view_f32 = buffer_slice.get_mapped_range();
             let data_u8 = unsafe {
@@ -79,7 +87,10 @@ impl egui::Widget for &mut ShadowMapPane {
         if let Some(handle) = &self.depth_map_handle {
             ui.image(handle, handle.size_vec2())
         } else {
-            let (_, response) = ui.allocate_exact_size(egui::vec2(IMG_WIDTH as f32, IMG_HEIGHT as f32), Sense::click());
+            let (_, response) = ui.allocate_exact_size(
+                egui::vec2(IMG_WIDTH as f32, IMG_HEIGHT as f32),
+                Sense::click(),
+            );
             response
         }
     }

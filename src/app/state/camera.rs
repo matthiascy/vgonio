@@ -1,5 +1,7 @@
 use super::InputState;
-use crate::gfx::camera::{Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind};
+use crate::gfx::camera::{
+    Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind,
+};
 
 pub struct CameraState {
     pub(crate) camera: Camera,

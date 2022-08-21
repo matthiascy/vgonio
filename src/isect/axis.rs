@@ -16,8 +16,13 @@ use std::ops::{Index, IndexMut};
 /// ```
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Axis {
+    /// X-axis.
     X = 0,
+
+    /// Y-axis.
     Y = 1,
+
+    /// Z-axis.
     Z = 2,
 }
 
@@ -34,9 +39,7 @@ impl Axis {
     }
 
     /// Returns the next axis following the x, y, z order.
-    pub fn next_axis(&self) -> Axis {
-        Axis::from((*self as u32 + 1) % 3)
-    }
+    pub fn next_axis(&self) -> Axis { Axis::from((*self as u32 + 1) % 3) }
 }
 
 impl From<i32> for Axis {
@@ -66,9 +69,7 @@ impl From<u32> for Axis {
 impl Index<Axis> for [f32] {
     type Output = f32;
 
-    fn index(&self, index: Axis) -> &Self::Output {
-        &self[index as usize]
-    }
+    fn index(&self, index: Axis) -> &Self::Output { &self[index as usize] }
 }
 
 impl Index<Axis> for Vec3 {
@@ -84,9 +85,7 @@ impl Index<Axis> for Vec3 {
 }
 
 impl IndexMut<Axis> for [f32] {
-    fn index_mut(&mut self, index: Axis) -> &mut Self::Output {
-        &mut self[index as usize]
-    }
+    fn index_mut(&mut self, index: Axis) -> &mut Self::Output { &mut self[index as usize] }
 }
 
 impl IndexMut<Axis> for Vec3 {

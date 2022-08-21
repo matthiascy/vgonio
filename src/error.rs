@@ -1,6 +1,8 @@
 use image::ImageError;
-use std::fmt::{Display, Formatter};
-use std::str;
+use std::{
+    fmt::{Display, Formatter},
+    str,
+};
 
 #[derive(Debug)]
 pub enum Error {
@@ -75,27 +77,19 @@ impl Display for Error {
 impl std::error::Error for Error {}
 
 impl From<wgpu::Error> for Error {
-    fn from(err: wgpu::Error) -> Self {
-        Error::Rhi(err)
-    }
+    fn from(err: wgpu::Error) -> Self { Error::Rhi(err) }
 }
 
 impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
-    }
+    fn from(err: std::io::Error) -> Self { Error::Io(err) }
 }
 
 impl From<log::SetLoggerError> for Error {
-    fn from(err: log::SetLoggerError) -> Self {
-        Error::Logger(err)
-    }
+    fn from(err: log::SetLoggerError) -> Self { Error::Logger(err) }
 }
 
 impl From<str::Utf8Error> for Error {
-    fn from(err: str::Utf8Error) -> Self {
-        Error::Utf8Error(err)
-    }
+    fn from(err: str::Utf8Error) -> Self { Error::Utf8Error(err) }
 }
 
 impl From<bincode::Error> for Error {
@@ -111,9 +105,7 @@ impl From<serde_yaml::Error> for Error {
 }
 
 impl From<image::ImageError> for Error {
-    fn from(err: ImageError) -> Self {
-        Error::ImageError(err)
-    }
+    fn from(err: ImageError) -> Self { Error::ImageError(err) }
 }
 
 impl From<toml::ser::Error> for Error {

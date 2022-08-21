@@ -1,6 +1,8 @@
 use std::collections::HashMap;
-use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode};
+use winit::{
+    dpi::PhysicalPosition,
+    event::{ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode},
+};
 
 pub struct InputState {
     pub(crate) key_map: HashMap<VirtualKeyCode, bool>,
@@ -23,9 +25,7 @@ impl Default for InputState {
 }
 
 impl InputState {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn update_key_map(&mut self, key_code: VirtualKeyCode, state: ElementState) {
         *self.key_map.entry(key_code).or_insert(false) = state == ElementState::Pressed;
@@ -36,7 +36,10 @@ impl InputState {
     }
 
     pub fn update_cursor_delta(&mut self, new_pos: PhysicalPosition<f32>) {
-        self.cursor_delta = [new_pos.x - self.cursor_pos[0], new_pos.y - self.cursor_pos[1]];
+        self.cursor_delta = [
+            new_pos.x - self.cursor_pos[0],
+            new_pos.y - self.cursor_pos[1],
+        ];
         self.cursor_pos = new_pos.into();
     }
 

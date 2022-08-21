@@ -1,3 +1,5 @@
+//! vgonio is a library for micro-level light transport simulation.
+
 #![feature(is_some_with)]
 #![feature(const_fn_floating_point_arithmetic)]
 #![warn(missing_docs)]
@@ -5,15 +7,15 @@
 extern crate core;
 
 pub mod acq;
-pub mod app;
-pub mod error;
-pub mod gfx;
+mod app;
+mod error;
+mod gfx;
 pub mod htfld;
-pub mod io;
+mod io;
 pub mod isect;
 mod math;
-pub mod mesh;
-pub mod util;
+mod mesh;
+mod util;
 
 use crate::error::Error;
 

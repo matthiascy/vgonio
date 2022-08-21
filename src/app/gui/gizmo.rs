@@ -42,9 +42,7 @@ impl VgonioGizmo {
         self.proj_matrix = proj;
     }
 
-    pub fn name(&self) -> &'static str {
-        "Gizmo"
-    }
+    pub fn name(&self) -> &'static str { "Gizmo" }
 
     pub fn show(&mut self, ctx: &egui::Context, _open: &mut bool) {
         egui::Area::new(self.name())

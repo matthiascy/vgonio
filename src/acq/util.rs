@@ -1,5 +1,23 @@
-use crate::acq::collector::Patch;
-use crate::acq::desc::Range;
+use crate::acq::{collector::Patch, desc::Range};
+
+/// Spherical coordinate in radians.
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SphericalCoord {
+    pub zenith: f32,
+    pub azimuth: f32,
+}
+
+impl SphericalCoord {
+    pub fn into_cartesian(self) -> glam::Vec3 {
+        let theta = self.zenith;
+        let phi = self.azimuth;
+        glam::Vec3::new(
+            theta.sin() * phi.cos(),
+            theta.cos(),
+            theta.sin() * phi.sin(),
+        )
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -87,16 +105,22 @@ impl SphericalPartition {
         match self {
             SphericalPartition::EqualAngle { .. } => "equal angular interval",
             SphericalPartition::EqualArea { .. } => "equal area (solid angle)",
-            SphericalPartition::EqualProjectedArea { .. } => "equal projected area (projected solid angle)",
+            SphericalPartition::EqualProjectedArea { .. } => {
+                "equal projected area (projected solid angle)"
+            }
         }
     }
 
     pub fn theta_range_str(&self) -> String {
         match self {
             SphericalPartition::EqualAngle { theta, .. } => {
-                format!("{}° - {}°, step size {}°", theta.start, theta.stop, theta.step)
+                format!(
+                    "{}° - {}°, step size {}°",
+                    theta.start, theta.stop, theta.step
+                )
             }
-            SphericalPartition::EqualArea { theta, .. } | SphericalPartition::EqualProjectedArea { theta, .. } => {
+            SphericalPartition::EqualArea { theta, .. }
+            | SphericalPartition::EqualProjectedArea { theta, .. } => {
                 format!("{}° - {}°, samples count {}", theta.0, theta.1, theta.2)
             }
         }
@@ -113,6 +137,7 @@ impl SphericalPartition {
     }
 }
 
+// todo: improve the implementation of this function
 impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
     /// partition is limited by `SphericalShape`.
@@ -144,12 +169,18 @@ impl SphericalPartition {
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
-                for theta in 0..n_theta {
-                    for phi in 0..n_phi {
-                        patches.push(Patch {
-                            zenith: (theta as f32 + 0.5) * theta_step,
-                            azimuth: (phi as f32 + 0.5) * phi_step,
-                        });
+                for i_theta in 0..n_theta {
+                    for i_phi in 0..n_phi {
+                        patches.push(Patch::new(
+                            (
+                                i_theta as f32 * theta_step + theta_start,
+                                i_theta as f32 * (theta_step + 1.0) + theta_start,
+                            ),
+                            (
+                                i_phi as f32 * phi_step + phi_start,
+                                i_phi as f32 * (phi_step + 1.0) + phi_start,
+                            ),
+                        ));
                     }
                 }
                 patches
@@ -163,7 +194,7 @@ impl SphericalPartition {
                         step: phi_step,
                     },
             } => {
-                // Uniformly divide the zenith angle into count patches. Suppose r == 1
+                // Uniformly divide the azimuthal angle. Suppose r == 1
                 // Spherical cap area = 2πrh, where r is the radius of the sphere on which
                 // resides the cap, and h is the height from the top of the cap
                 // to the bottom of the cap.
@@ -181,13 +212,18 @@ impl SphericalPartition {
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
-                for theta in 0..n_theta {
-                    for phi in 0..n_phi {
-                        patches.push(Patch {
-                            zenith: (1.0 - (h_step * (theta as f32 + 0.5) + h_start)).acos(), /* use the median angle
-                                                                                               * (+ 0.5) as zenith */
-                            azimuth: (phi_start + phi as f32 * phi_step) as f32,
-                        });
+                for i_theta in 0..n_theta {
+                    for i_phi in 0..n_phi {
+                        patches.push(Patch::new(
+                            (
+                                (1.0 - (h_step * i_theta as f32 + h_start)).acos(),
+                                (1.0 - (h_step * (i_theta + 1) as f32 + h_start)).acos(),
+                            ),
+                            (
+                                phi_start + i_phi as f32 * phi_step,
+                                phi_start + (i_phi + 1) as f32 * phi_step,
+                            ),
+                        ));
                     }
                 }
                 patches
@@ -218,20 +254,30 @@ impl SphericalPartition {
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
+
+                let calc_theta = |i: usize| -> f32 {
+                    let r_sqr =
+                        r_start_sqr + (r_stop_sqr - r_start_sqr) * factor * (i as f32 + 0.5);
+                    let r = r_sqr.sqrt();
+                    r.asin()
+                };
+
                 for i in 0..n_theta {
                     // Linearly interpolate squared radius range.
                     // Projected area is proportional to squared radius.
                     //                 1st           2nd           3rd
                     // O- - - - | - - - I - - - | - - - I - - - | - - - I - - -|
                     //     r_start_sqr                               r_stop_sqr
-                    let r_sqr = r_start_sqr + (r_stop_sqr - r_start_sqr) * factor * (i as f32 + 0.5);
-                    let r = r_sqr.sqrt();
-                    let theta = r.asin();
-                    for phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
-                        patches.push(Patch {
-                            zenith: theta,
-                            azimuth: (phi_start + phi as f32 * phi_step) as f32,
-                        });
+                    let theta = calc_theta(i);
+                    let theta_next = calc_theta(i + 1);
+                    for i_phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
+                        patches.push(Patch::new(
+                            (theta, theta_next),
+                            (
+                                phi_start + i_phi as f32 * phi_step,
+                                phi_start + (i_phi as f32 + 1.0) * phi_step,
+                            ),
+                        ));
                     }
                 }
                 patches

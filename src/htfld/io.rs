@@ -1,9 +1,13 @@
-use crate::error::Error;
-use crate::htfld::{AxisAlignment, Heightfield};
-use crate::io::{CacheHeader, CacheKind, MsHeader};
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
-use std::path::Path;
+use crate::{
+    error::Error,
+    htfld::{AxisAlignment, Heightfield},
+    io::{CacheHeader, CacheKind, MsHeader},
+};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Read},
+    path::Path,
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum HeightFieldOrigin {
@@ -32,8 +36,8 @@ impl Heightfield {
         if let Some(origin) = origin {
             // If origin is specified, call directly corresponding loading function.
             match origin {
-                HeightFieldOrigin::Dong2015 => read_ascii_dong2015(reader, true, alignment),
-                HeightFieldOrigin::Usurf => read_ascii_usurf(reader, true, alignment),
+                HeightFieldOrigin::Dong2015 => read_ascii_dong2015(reader, true, alignment, path),
+                HeightFieldOrigin::Usurf => read_ascii_usurf(reader, true, alignment, path),
             }
         } else {
             // Otherwise, try to figure out the file format by reading first several bytes.
@@ -41,8 +45,8 @@ impl Heightfield {
             reader.read_exact(&mut buf)?;
 
             match std::str::from_utf8(&buf)? {
-                "Asci" => read_ascii_dong2015(reader, false, alignment),
-                "DATA" => read_ascii_usurf(reader, false, alignment),
+                "Asci" => read_ascii_dong2015(reader, false, alignment, path),
+                "DATA" => read_ascii_usurf(reader, false, alignment, path),
                 "DCCC" => {
                     let header = {
                         let mut buf = [0_u8; 6];
@@ -78,6 +82,7 @@ impl Heightfield {
                         header.spacing[1],
                         samples,
                         alignment.unwrap_or_default(),
+                        Some(path.into()),
                     ))
                 }
                 _ => Err(Error::UnrecognizedFile),
@@ -95,6 +100,7 @@ fn read_ascii_dong2015<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
     orientation: Option<AxisAlignment>,
+    path: &Path,
 ) -> Result<Heightfield, Error> {
     if read_first_4_bytes {
         let mut buf = [0_u8; 4];
@@ -131,6 +137,7 @@ fn read_ascii_dong2015<R: BufRead>(
         dv,
         samples,
         orientation.unwrap_or_default(),
+        Some(path.into()),
     ))
 }
 
@@ -139,6 +146,7 @@ fn read_ascii_usurf<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
     orientation: Option<AxisAlignment>,
+    path: &Path,
 ) -> Result<Heightfield, Error> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
@@ -176,6 +184,7 @@ fn read_ascii_usurf<R: BufRead>(
         dv,
         samples,
         orientation.unwrap_or_default(),
+        Some(path.into()),
     ))
 }
 
@@ -264,7 +273,8 @@ mod tests {
         let lines = [
             "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
             "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
-            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
+            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\\
+             t\t\t\t\n",
         ];
 
         assert_eq!(read_line_ascii_usurf(lines[0]).len(), 16);
@@ -278,7 +288,8 @@ mod tests {
             "0.00\t12.65\t\t12.63\t12.70\t12.73\t\t12.85\t\n",
             "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
             "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
-            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
+            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\\
+             t\t\t\t\n",
         ];
 
         fn _read_line(line: &str) -> Vec<&str> {

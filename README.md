@@ -1,5 +1,9 @@
 # vgonio
 
+## Requirements
+
+* [Embree](https://www.embree.org/)
+
 
 ## Documentation
 

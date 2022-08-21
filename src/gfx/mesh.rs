@@ -1,11 +1,12 @@
-use crate::gfx::VertexLayout;
-use crate::htfld::{regular_triangulation, Heightfield};
-use crate::isect::Aabb;
-use crate::mesh::TriangleMesh;
+use crate::{
+    gfx::VertexLayout,
+    htfld::{regular_triangulation, Heightfield},
+    isect::Aabb,
+    mesh::TriangleMesh,
+};
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
-use wgpu::util::DeviceExt;
-use wgpu::{PrimitiveTopology, VertexFormat};
+use wgpu::{util::DeviceExt, PrimitiveTopology, VertexFormat};
 
 /// Surface mesh which contains only triangles.
 #[derive(Debug)]

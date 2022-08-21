@@ -1,7 +1,12 @@
-use crate::isect::Aabb;
-use crate::mesh::{TriangleMesh, TriangulationMethod};
+//! Heightfield
+
+use crate::{
+    isect::Aabb,
+    mesh::{TriangleMesh, TriangulationMethod},
+};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 mod io;
 
@@ -21,18 +26,27 @@ fn gen_height_field_name() -> String {
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum AxisAlignment {
+    /// Aligned with XY plane.
     XY,
+
+    /// Aligned with XZ plane.
     XZ,
+
+    /// Aligned with YX plane.
     YX,
+
+    /// Aligned with YZ plane.
     YZ,
+
+    /// Aligned with ZX plane.
     ZX,
+
+    /// Aligned with ZY plane.
     ZY,
 }
 
 impl Default for AxisAlignment {
-    fn default() -> Self {
-        AxisAlignment::XZ
-    }
+    fn default() -> Self { AxisAlignment::XZ }
 }
 
 /// Representation of the micro-surface.
@@ -43,6 +57,9 @@ pub struct Heightfield {
 
     /// User defined name for the height field.
     pub name: String,
+
+    /// Location where the heightfield is loaded from.
+    pub path: Option<PathBuf>,
 
     /// The initial axis alignment in world space. The default is XY, aligned
     /// with the "ground" plane.
@@ -99,13 +116,21 @@ impl Heightfield {
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
-    pub fn new(cols: usize, rows: usize, du: f32, dv: f32, height: f32, alignment: AxisAlignment) -> Self {
+    pub fn new(
+        cols: usize,
+        rows: usize,
+        du: f32,
+        dv: f32,
+        height: f32,
+        alignment: AxisAlignment,
+    ) -> Self {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
         samples.resize(cols * rows, height);
         Heightfield {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
+            path: None,
             alignment,
             rows,
             cols,
@@ -135,7 +160,9 @@ impl Heightfield {
     ///
     /// ```
     /// # use vgonio::htfld::{AxisAlignment, Heightfield};
-    /// let height_field = Heightfield::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| (row + col) as f32);
+    /// let height_field = Heightfield::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| {
+    ///     (row + col) as f32
+    /// });
     /// assert_eq!(height_field.samples_count(), 16);
     /// assert_eq!(height_field.max, 6.0);
     /// assert_eq!(height_field.min, 0.0);
@@ -143,7 +170,14 @@ impl Heightfield {
     /// assert_eq!(height_field.samples[2], 2.0);
     /// assert_eq!(height_field.sample_at(2, 3), 5.0);
     /// ```
-    pub fn new_by<F>(cols: usize, rows: usize, du: f32, dv: f32, alignment: AxisAlignment, setter: F) -> Heightfield
+    pub fn new_by<F>(
+        cols: usize,
+        rows: usize,
+        du: f32,
+        dv: f32,
+        alignment: AxisAlignment,
+        setter: F,
+    ) -> Heightfield
     where
         F: Fn(usize, usize) -> f32,
     {
@@ -154,12 +188,19 @@ impl Heightfield {
                 samples.push(setter(r, c));
             }
         }
-        let max = *samples.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
-        let min = *samples.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+        let max = *samples
+            .iter()
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap();
+        let min = *samples
+            .iter()
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap();
 
         Heightfield {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
+            path: None,
             alignment,
             cols,
             rows,
@@ -204,6 +245,7 @@ impl Heightfield {
         dv: f32,
         samples: Vec<f32>,
         alignment: AxisAlignment,
+        path: Option<PathBuf>,
     ) -> Heightfield {
         assert!(cols > 0 && rows > 0 && samples.len() >= cols * rows);
         let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x));
@@ -211,6 +253,7 @@ impl Heightfield {
         Heightfield {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
+            path,
             alignment,
             rows,
             cols,
@@ -246,9 +289,7 @@ impl Heightfield {
     /// let height_field = HeightField::from_samples(3, 3, 0.2, 0.2, samples, Default::default());
     /// assert_eq!(height_field.samples_count(), 9);
     /// ```
-    pub fn samples_count(&self) -> usize {
-        self.cols * self.rows
-    }
+    pub fn samples_count(&self) -> usize { self.cols * self.rows }
 
     /// Returns the number of cells of height field.
     ///
@@ -406,9 +447,18 @@ impl Heightfield {
     /// The vertices are generated following the order from left to right, top
     /// to bottom.
     pub fn generate_vertices(&self) -> (Vec<Vec3>, Aabb) {
-        log::info!("Generating height field vertices with {:?} alignment", self.alignment);
-        let (rows, cols, half_rows, half_cols, du, dv) =
-            (self.rows, self.cols, self.rows / 2, self.cols / 2, self.du, self.dv);
+        log::info!(
+            "Generating height field vertices with {:?} alignment",
+            self.alignment
+        );
+        let (rows, cols, half_rows, half_cols, du, dv) = (
+            self.rows,
+            self.cols,
+            self.rows / 2,
+            self.cols / 2,
+            self.du,
+            self.dv,
+        );
         let mut positions: Vec<Vec3> = vec![];
         let mut extent = Aabb::default();
         for r in 0..rows {
@@ -439,6 +489,7 @@ impl Heightfield {
         (positions, extent)
     }
 
+    /// Triangulate the heightfield into a [`TriangleMesh`].
     pub fn triangulate(&self, method: TriangulationMethod) -> TriangleMesh {
         match method {
             TriangulationMethod::Regular => {
@@ -446,12 +497,14 @@ impl Heightfield {
                 let faces = regular_triangulation(&verts, self.cols, self.rows);
                 let num_tris = faces.len() / 3;
 
-                let normals = (0..num_tris).map(|i| {
-                    let p0 = verts[faces[i * 3] as usize];
-                    let p1 = verts[faces[i * 3 + 1] as usize];
-                    let p2 = verts[faces[i * 3 + 2] as usize];
-                    (p1 - p0).cross(p2 - p0).normalize()
-                }).collect();
+                let normals = (0..num_tris)
+                    .map(|i| {
+                        let p0 = verts[faces[i * 3] as usize];
+                        let p1 = verts[faces[i * 3 + 1] as usize];
+                        let p2 = verts[faces[i * 3 + 2] as usize];
+                        (p1 - p0).cross(p2 - p0).normalize()
+                    })
+                    .collect();
 
                 TriangleMesh {
                     num_tris,
@@ -459,7 +512,7 @@ impl Heightfield {
                     extent,
                     verts,
                     faces,
-                    normals
+                    normals,
                 }
             }
             TriangulationMethod::Delaunay => {

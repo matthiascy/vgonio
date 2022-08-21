@@ -12,15 +12,19 @@
 //! + Edge attributes (rarely used)
 //!   - Visible line
 
-use crate::error::Error;
-use crate::gfx::MeshView;
-use crate::htfld::Heightfield;
-use crate::isect::Aabb;
-use crate::math::Vec3;
-use crate::mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert};
-use std::any::Any;
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
+use crate::{
+    error::Error,
+    gfx::MeshView,
+    htfld::Heightfield,
+    isect::Aabb,
+    math::Vec3,
+    mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert},
+};
+use std::{
+    any::Any,
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+};
 
 /// Vertex attributes container.
 trait AttribContainer {
@@ -31,33 +35,23 @@ trait AttribContainer {
 struct AttribArray<T>(Vec<T>);
 
 impl<T> AttribArray<T> {
-    pub fn new() -> Self {
-        Self(vec![])
-    }
+    pub fn new() -> Self { Self(vec![]) }
 }
 
 impl<T> Deref for AttribArray<T> {
     type Target = Vec<T>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl<T> DerefMut for AttribArray<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
 impl<T: 'static> AttribContainer for AttribArray<T> {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }
 
 type VertAttribs = HashMap<String, Box<dyn AttribContainer>>;
@@ -98,9 +92,7 @@ pub struct SurfaceMesh {
 // SurfaceTriangulation -- triangulate polygons to get a pure triangle mesh.
 
 impl Default for SurfaceMesh {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl SurfaceMesh {
@@ -134,9 +126,13 @@ impl SurfaceMesh {
     /// # Examples
     ///
     /// ```
-    /// use vgonio::htfld::{AxisAlignment, Heightfield};
-    /// use vgonio::mesh::SurfaceMesh;
-    /// let hf = Heightfield::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| (x * y) as f32 * 0.5);
+    /// use vgonio::{
+    ///     htfld::{AxisAlignment, Heightfield},
+    ///     mesh::SurfaceMesh,
+    /// };
+    /// let hf = Heightfield::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| {
+    ///     (x * y) as f32 * 0.5
+    /// });
     /// let mesh = SurfaceMesh::from_height_field(&hf);
     /// ```
     pub fn from_height_field(hf: &Heightfield) -> Self {
@@ -162,11 +158,26 @@ impl SurfaceMesh {
                 //  v2 - v3
                 //  | \  |
                 // v0 - v1
-                let (v0, v1, v2, v3) = { (curr_vert, curr_vert + 1, curr_vert + cols, curr_vert + 1 + cols) };
+                let (v0, v1, v2, v3) = {
+                    (
+                        curr_vert,
+                        curr_vert + 1,
+                        curr_vert + cols,
+                        curr_vert + 1 + cols,
+                    )
+                };
 
-                let lower_twin = if r == 0 { usize::MAX } else { curr_dart - 6 * (cols - 1) };
+                let lower_twin = if r == 0 {
+                    usize::MAX
+                } else {
+                    curr_dart - 6 * (cols - 1)
+                };
                 let left_twin = if c == 0 { usize::MAX } else { curr_dart - 3 };
-                let right_twin = if is_last_col { usize::MAX } else { curr_dart + 8 };
+                let right_twin = if is_last_col {
+                    usize::MAX
+                } else {
+                    curr_dart + 8
+                };
                 let top_twin = if is_last_row {
                     usize::MAX
                 } else {
@@ -250,7 +261,9 @@ impl SurfaceMesh {
                 .as_any_mut()
                 .downcast_mut::<AttribArray<Vec3>>()
                 .unwrap();
-            face_normals.0.resize(self.faces.len(), Vec3::new(0.0, 0.0, 0.0));
+            face_normals
+                .0
+                .resize(self.faces.len(), Vec3::new(0.0, 0.0, 0.0));
             let vert_positions = self
                 .vert_attribs
                 .get_mut(&"positions".to_string())
@@ -281,15 +294,9 @@ impl SurfaceMesh {
     // TODO: add_vertex
     // TODO: add_triangle
 
-    pub fn dump_vertex_normals(&self) -> Result<(), Error> {
-        Ok(())
-    }
+    pub fn dump_vertex_normals(&self) -> Result<(), Error> { Ok(()) }
 
-    pub fn dump_face_normals(&self) -> Result<(), Error> {
-        Ok(())
-    }
+    pub fn dump_face_normals(&self) -> Result<(), Error> { Ok(()) }
 
-    pub fn view(&self) -> MeshView {
-        todo!()
-    }
+    pub fn view(&self) -> MeshView { todo!() }
 }

@@ -1,8 +1,7 @@
 ---
 length_unit: m
-measurement_kind:
-  bxdf:
-    kind: inplane
+measurement_kind: !bsdf in-plane-brdf
+tracing_method: standard
 incident_medium: air
 transmitted_medium: aluminium
 surfaces:
@@ -10,19 +9,17 @@ surfaces:
   # - local://surfaces/AluminiumMirror.txt
   # - //surfaces/AluminiumMirror.txt
 emitter:
-  num_rays: 1
+  num_rays: 10000
   max_bounces: 10
   radius: auto
-  partition:
-    equal_area:
-      theta: [0.0, 90.0, 1] # [start, stop, count]
-      phi: [0.0, 360.0, 120.0] # [start, stop, step]
+  theta: [0.0, 90.0, 5.0] # [start, stop, count]
+  phi: [0.0, 360.0, 60.0] # [start, stop, step]
   spectrum: [380.0, 780.0, 400.0] # [start, stop, step]
 collector:
   radius: auto
   shape: upper_hemisphere
   partition:
-    equal_area:
+    !equal_area
       theta: [0.0, 90.0, 45]
       phi: [0.0, 360.0, 10.0]
     #equal_projected_area:

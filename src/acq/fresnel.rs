@@ -80,7 +80,7 @@
 //! flipped to be on the same side as w_i and w_t when computing
 //! cos_theta_i and cos_theta_t.
 //!
-//! ## Refractive indices
+//! ## refractive indices
 //!
 //! + Dielectrics/Insulators
 //!   Dielectrics dont' conduct electricity, they have real-valued indices
@@ -109,7 +109,6 @@
 // TODO: unify fresnel calculation (using complex refractive index).
 
 use crate::acq::ior::Ior;
-use glam::Vec3;
 
 /// Computes the Schlick's approximation of the Fresnel specular (reflection)
 /// factor.
@@ -118,7 +117,7 @@ use glam::Vec3;
 ///
 /// # Arguments
 ///
-/// * `cos_i` - Cosine of the angle between the direction from which the incident
+/// * `cos_i` - absolute cosine of the angle between the direction from which the incident
 ///   light is coming and the normal of the interface between the two media.
 /// * `eta_i` - refractive index of incident medium.
 /// * `eta_t` - refractive index of transmitted medium.
@@ -139,10 +138,10 @@ pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// # Arguments
 ///
-/// * `cos_i` - Cosine of the angle between the direction from which the incident
+/// * `cos_i` - cosine of the angle between the direction from which the incident
 ///   light is coming and the normal of the interface between the two media.
-/// * `eta_i` - Slice of refractive index of incident medium.
-/// * `eta_t` - Slice of refractive index of transmitted medium.
+/// * `eta_i` - slice of refractive index of incident medium.
+/// * `eta_t` - slice of refractive index of transmitted medium.
 ///
 /// # Note
 ///
@@ -154,7 +153,7 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
         "eta_i and eta_t must have the same length"
     );
 
-    let mut output = Vec::with_capacity(eta_i.len());
+    let mut output = vec![1.0; eta_i.len()];
 
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_schlick_approx(cos_i, eta_i[i], eta_t[i]);
@@ -168,19 +167,19 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 ///
 /// # Arguments
 ///
-/// * `cos_i` - Cosine of the angle between the normal and the incident direction.
-/// * `eta_i` - Refractive index of the incident medium.
-/// * `eta_t` - Refractive index of the transmitted medium.
+/// * `cos_i` - cosine of the angle between the normal and the incident direction.
+/// * `eta_i` - refractive index of the incident medium.
+/// * `eta_t` - refractive index of the transmitted medium.
 ///
 /// # Note
 ///
-/// The cosine of the angle between normal and incident light should be positive.
+/// The incident direction is not originated from the intersection point.
 pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
     // The sign of the cosine of the incident angle indicates on which side of the medium the incident
-    // ray lines. If the cosine is between 0 and 1, the ray is on the outside, and if the cosine is
-    // between -1 and 0, the ray is on the inside. `eta_i` and `eta_t` are adjusted such that `eta_i`
+    // ray lines. If the cosine is between -1 and 0, the ray is on the outside, and if the cosine is
+    // between 0 and 1, the ray is on the inside. `eta_i` and `eta_t` are adjusted such that `eta_i`
     // has the refractive index of the incident medium and thus makes sure that `cos_i` is non-negative.
-    let (eta_i, eta_t) = if cos_i <= 0.0 {
+    let (eta_i, eta_t) = if cos_i >= 0.0 {
         (eta_t, eta_i)
     } else {
         (eta_i, eta_t)
@@ -204,7 +203,6 @@ pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
     0.5 * (r_parl * r_parl + r_perp * r_perp)
 }
 
-
 /// Computes the unpolarised Fresnel reflection coefficient at a planar interface between
 /// two dielectric materials for rays with different wavelengths.
 ///
@@ -212,10 +210,10 @@ pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// # Arguments
 ///
-/// * `cos_i` - Cosine of the angle between the normal and the incident direction.
-/// * `eta_i` - Slice of refractive index of incident medium.
+/// * `cos_i` - cosine of the angle between the normal and the incident direction.
+/// * `eta_i` - slice of refractive index of incident medium.
 pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
-    let mut output = Vec::with_capacity(eta.len());
+    let mut output = vec![1.0; eta.len()];
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_dielectric(cos_i, eta[i], eta[i]);
     }
@@ -228,11 +226,15 @@ pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
 ///
 /// # Arguments
 ///
-/// * `cos_i` - Cosine of the angle between normal and incident light (should be positive).
-/// * `eta_i` - Refractive index of the incident medium.
-/// * `eta_t` - Refractive index of the transmitted medium.
-/// * `k` - Absorption coefficient of the transmitted medium.
+/// * `cos_i` - cosine of the angle between normal and incident light (should be positive).
+/// * `eta_i` - refractive index of the incident medium.
+/// * `eta_t` - refractive index of the transmitted medium.
+/// * `k` - absorption coefficient of the transmitted medium.
 pub fn reflectance_dielectric_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
+    assert!(
+        cos_i >= 0.0,
+        "the angle between normal and incident light should be positive"
+    );
     // Computes relative index of refraction.
     let eta = eta_t / eta_i;
     let k = k_t / eta_i;
@@ -261,9 +263,9 @@ pub fn reflectance_dielectric_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t:
 ///
 /// # Arguments
 ///
-/// * `cos` - Cosine of the angle between normal and incident light (should be positive).
+/// * `cos` - cosine of the angle between normal and incident light (should be positive).
 pub fn reflectance_dielectric_conductor_spectrum(cos: f32, eta_i: f32, ior_t: &[Ior]) -> Vec<f32> {
-    let mut output = Vec::with_capacity(ior_t.len());
+    let mut output = vec![1.0; ior_t.len()];
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_dielectric_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
     }
@@ -275,9 +277,9 @@ pub fn reflectance_dielectric_conductor_spectrum(cos: f32, eta_i: f32, ior_t: &[
 ///
 /// # Arguments
 ///
-/// * `cos_i` - Cosine of the angle between normal and incident light (should be positive).
-/// * `eta_t` - Refractive index of the transmitted medium.
-/// * `k_t` - Absorption coefficient of the transmitted medium.
+/// * `cos_i` - cosine of the angle between normal and incident light (should be positive).
+/// * `eta_t` - refractive index of the transmitted medium.
+/// * `k_t` - absorption coefficient of the transmitted medium.
 pub fn reflectance_air_conductor(cos_i: f32, eta_t: f32, k_t: f32) -> f32 {
     reflectance_dielectric_conductor(cos_i, 1.0, eta_t, k_t)
 }
@@ -292,32 +294,34 @@ pub fn reflectance_air_conductor_spectrum(cos: f32, ior_t: &[Ior]) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{OpenOptions};
-    use std::io::Write;
+    use std::{fs::OpenOptions, io::Write};
 
     #[test]
     fn reflectance_dielectric_test() {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
-            .open("./reflectance_dielectric.csv").unwrap();
+            .open("./reflectance_dielectric.csv")
+            .unwrap();
         file.write_all(b"angle,reflectance\n").unwrap();
         for i in 0..1000 {
             let cos_i = (1000 - i) as f32 / 1000.0;
             let angle = cos_i.acos();
             let eta_i = 1.0; // air
-            let eta_t = 4.7; // glass
+            let eta_t = 1.5; // glass
             let r = super::reflectance_dielectric(cos_i, eta_i, eta_t);
-            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes()).unwrap();
+            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+                .unwrap();
         }
     }
 
     #[test]
     fn reflectance_dielectric_conductor_test() {
-            let mut file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .write(true)
             .create(true)
-            .open("./reflectance_dielectric_conductor.csv").unwrap();
+            .open("./reflectance_dielectric_conductor.csv")
+            .unwrap();
         file.write_all(b"angle,reflectance\n").unwrap();
         for i in 0..1000 {
             let cos_i = (1000 - i) as f32 / 1000.0;
@@ -326,6 +330,8 @@ mod tests {
             let eta_t = 1.1978; // al, 587.6nm
             let k_t = 7.0488;
             let r = super::reflectance_dielectric_conductor(cos_i, eta_i, eta_t, k_t);
-            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes()).unwrap();
-        } }
+            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+                .unwrap();
+        }
+    }
 }

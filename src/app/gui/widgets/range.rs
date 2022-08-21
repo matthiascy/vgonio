@@ -1,6 +1,9 @@
 use crate::acq::desc::Range;
 
-pub fn range_ui<T: Copy + egui::emath::Numeric>(ui: &mut egui::Ui, value: &mut Range<T>) -> egui::Response {
+pub fn range_ui<T: Copy + egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    value: &mut Range<T>,
+) -> egui::Response {
     ui.horizontal(|ui| {
         ui.add(egui::DragValue::new(&mut value.start).prefix("start: "));
         ui.add(egui::DragValue::new(&mut value.stop).prefix("stop: "));

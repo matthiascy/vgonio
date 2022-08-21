@@ -1,7 +1,9 @@
-use crate::acq::ray::{reflect, Ray};
-use crate::htfld::{AxisAlignment, Heightfield};
-use crate::isect::{RayTriIsect, ray_tri_intersect_moller_trumbore, ray_tri_intersect_woop};
-use crate::mesh::TriangleMesh;
+use crate::{
+    acq::{scattering::reflect, Ray},
+    htfld::{AxisAlignment, Heightfield},
+    isect::{ray_tri_intersect_moller_trumbore, ray_tri_intersect_woop, RayTriIsect},
+    mesh::TriangleMesh,
+};
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 use std::rc::Rc;
 
@@ -52,7 +54,10 @@ impl GridRayTracing {
 
     /// Check if the given cell position is inside the grid.
     fn contains(&self, cell_pos: &IVec2) -> bool {
-        cell_pos.x >= self.min.x && cell_pos.x <= self.max.x && cell_pos.y >= self.min.y && cell_pos.y <= self.max.y
+        cell_pos.x >= self.min.x
+            && cell_pos.x <= self.max.x
+            && cell_pos.y >= self.min.y
+            && cell_pos.y <= self.max.y
     }
 
     /// Convert a world space position into a grid space position (coordinates
@@ -86,7 +91,10 @@ impl GridRayTracing {
     /// the cell.
     fn triangles_at(&self, pos: IVec2) -> [(u32, [Vec3; 3]); 2] {
         assert!(
-            pos.x >= self.min.x && pos.y >= self.min.y && pos.x <= self.max.x && pos.y <= self.max.y,
+            pos.x >= self.min.x
+                && pos.y >= self.min.y
+                && pos.x <= self.max.x
+                && pos.y <= self.max.y,
             "The position is out of the grid."
         );
         let cell = (self.surface.cols - 1) * pos.y as usize + pos.x as usize;
@@ -121,7 +129,10 @@ impl GridRayTracing {
     /// coordinates.
     fn altitudes_of_cell(&self, pos: IVec2) -> [f32; 4] {
         assert!(
-            pos.x >= self.min.x && pos.y >= self.min.y && pos.x <= self.max.x && pos.y <= self.max.y,
+            pos.x >= self.min.x
+                && pos.y >= self.min.y
+                && pos.x <= self.max.x
+                && pos.y <= self.max.y,
             "The position is out of the grid."
         );
 
@@ -140,12 +151,24 @@ impl GridRayTracing {
     fn intersections_happened_at(&self, cell: IVec2, entering: f32, exiting: f32) -> bool {
         let altitudes = self.altitudes_of_cell(cell);
         let (min, max) = {
-            altitudes.iter().fold((f32::MAX, f32::MIN), |(min, max), height| {
-                (min.min(*height), max.max(*height))
-            })
+            altitudes
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(min, max), height| {
+                    (min.min(*height), max.max(*height))
+                })
         };
         let condition = (entering >= min && exiting <= max) || (entering >= max && exiting <= min);
-        log::debug!("      -> intersecting with cell [{}]: {:?}, altitudes: {:?}, min: {:?}, max: {:?}, entering & existing: {}, {}", condition, cell, altitudes, min, max, entering, exiting);
+        log::debug!(
+            "      -> intersecting with cell [{}]: {:?}, altitudes: {:?}, min: {:?}, max: {:?}, \
+             entering & existing: {}, {}",
+            condition,
+            cell,
+            altitudes,
+            min,
+            max,
+            entering,
+            exiting
+        );
         condition
     }
 
@@ -160,9 +183,7 @@ impl GridRayTracing {
     /// * `ray_dir` - The direction of the ray in world space.
     pub fn traverse(&self, ray_org_world: Vec2, ray_dir: Vec2) -> GridTraversal {
         log::debug!(
-            "    Grid origin: {:?}\
-             \n       min: {:?}\
-             \n       max: {:?}",
+            "    Grid origin: {:?}\n       min: {:?}\n       max: {:?}",
             self.origin,
             self.min,
             self.max
@@ -285,14 +306,18 @@ impl GridRayTracing {
             loop {
                 if accumulated.x <= accumulated.y {
                     // avoid min - 1, max + 1
-                    if (step_dir.x > 0 && curr_cell.x == self.max.x) || (step_dir.x < 0 && curr_cell.x == self.min.x) {
+                    if (step_dir.x > 0 && curr_cell.x == self.max.x)
+                        || (step_dir.x < 0 && curr_cell.x == self.min.x)
+                    {
                         break;
                     }
                     distances.push(accumulated.x);
                     curr_cell.x += step_dir.x;
                     accumulated.x += unit.x;
                 } else {
-                    if (step_dir.y > 0 && curr_cell.y == self.max.y) || (step_dir.y < 0 && curr_cell.y == self.min.y) {
+                    if (step_dir.y > 0 && curr_cell.y == self.max.y)
+                        || (step_dir.y < 0 && curr_cell.y == self.min.y)
+                    {
                         break;
                     }
                     distances.push(accumulated.y);
@@ -336,7 +361,7 @@ impl GridRayTracing {
             .filter_map(|(index, pts)| {
                 log::debug!("               - isect test with tri: {:?}", index);
                 ray_tri_intersect_woop(ray, pts)
-                // ray_tri_intersect_moller_trumbore(ray, pts)
+                    // ray_tri_intersect_moller_trumbore(ray, pts)
                     .map(|isect| {
                         let tris_per_row = (self.surface.cols - 1) * 2;
                         let cells_per_row = self.surface.cols - 1;
@@ -349,11 +374,17 @@ impl GridRayTracing {
                         let is_last_col = cell_col == cells_per_row - 1;
                         let is_first_row = cell_row == 0;
                         let is_last_row = cell_row == self.surface.rows - 1;
-                        let adjacent: Option<(usize, Vec3)> = if isect.u.abs() < 2.0 * f32::EPSILON {
+                        let adjacent: Option<(usize, Vec3)> = if isect.u.abs() < 2.0 * f32::EPSILON
+                        {
                             // u == 0, intersection happens on the first edge of triangle
-                            // If the triangle index is odd or it's not located in the cell of the 1st column
+                            // If the triangle index is odd or it's not located in the cell of the
+                            // 1st column
                             if is_tri_index_odd || !is_first_col {
-                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index - 1);
+                                log::debug!(
+                                    "              adjacent triangle of {} is {}",
+                                    tri_index,
+                                    tri_index - 1
+                                );
                                 Some((tri_index - 1, self.surface_mesh.normals[tri_index - 1]))
                             } else {
                                 None
@@ -361,10 +392,21 @@ impl GridRayTracing {
                         } else if isect.v.abs() < 2.0 * f32::EPSILON {
                             // v == 0, intersection happens on the second edge of triangle
                             if !is_tri_index_odd && !is_first_row {
-                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index - (tris_per_row - 1));
-                                Some((tri_index - (tris_per_row - 1), (self.surface_mesh.normals[tri_index - (tris_per_row - 1)])))
+                                log::debug!(
+                                    "              adjacent triangle of {} is {}",
+                                    tri_index,
+                                    tri_index - (tris_per_row - 1)
+                                );
+                                Some((
+                                    tri_index - (tris_per_row - 1),
+                                    (self.surface_mesh.normals[tri_index - (tris_per_row - 1)]),
+                                ))
                             } else if is_tri_index_odd && !is_last_col {
-                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index + 1);
+                                log::debug!(
+                                    "              adjacent triangle of {} is {}",
+                                    tri_index,
+                                    tri_index + 1
+                                );
                                 Some((tri_index + 1, self.surface_mesh.normals[tri_index + 1]))
                             } else {
                                 None
@@ -372,11 +414,22 @@ impl GridRayTracing {
                         } else if (isect.u + isect.v - 1.0).abs() < f32::EPSILON {
                             // u + v == 1, intersection happens on the third edge of triangle
                             if !is_tri_index_odd {
-                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index + 1);
+                                log::debug!(
+                                    "              adjacent triangle of {} is {}",
+                                    tri_index,
+                                    tri_index + 1
+                                );
                                 Some((tri_index + 1, self.surface_mesh.normals[tri_index + 1]))
                             } else if is_tri_index_odd && !is_last_row {
-                                log::debug!("              adjacent triangle of {} is {}", tri_index, tri_index + (tris_per_row - 1));
-                                Some((tri_index + (tris_per_row - 1), self.surface_mesh.normals[tri_index + (tris_per_row - 1)]))
+                                log::debug!(
+                                    "              adjacent triangle of {} is {}",
+                                    tri_index,
+                                    tri_index + (tris_per_row - 1)
+                                );
+                                Some((
+                                    tri_index + (tris_per_row - 1),
+                                    self.surface_mesh.normals[tri_index + (tris_per_row - 1)],
+                                ))
                             } else {
                                 None
                             }
@@ -387,11 +440,16 @@ impl GridRayTracing {
                             None => (*index, isect, None),
                             Some((adj_tri, adj_n)) => {
                                 let avg_n = (isect.n + adj_n).normalize();
-                                log::debug!("              -- hitting shared edge, use averaged normal: {:?}", avg_n);
-                                (*index, RayTriIsect {
-                                    n: avg_n,
-                                    ..isect
-                                }, Some(adj_tri as u32))
+                                log::debug!(
+                                    "              -- hitting shared edge, use averaged normal: \
+                                     {:?}",
+                                    avg_n
+                                );
+                                (
+                                    *index,
+                                    RayTriIsect { n: avg_n, ..isect },
+                                    Some(adj_tri as u32),
+                                )
                             }
                         }
                     })
@@ -412,7 +470,10 @@ impl GridRayTracing {
         output.push(ray);
 
         let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
-            log::debug!("  - ray origin is outside of the grid, test if it intersects with the bounding box");
+            log::debug!(
+                "  - ray origin is outside of the grid, test if it intersects with the bounding \
+                 box"
+            );
             // The ray origin is outside the grid, tests first with the bounding box.
             self.surface_mesh
                 .extent
@@ -454,7 +515,9 @@ impl GridRayTracing {
                             );
                         }
                         _ => {
-                            unreachable!("Can't have more than 2 intersections with one cell of the grid.");
+                            unreachable!(
+                                "Can't have more than 2 intersections with one cell of the grid."
+                            );
                         }
                     }
                 }
@@ -491,7 +554,8 @@ impl GridRayTracing {
                                         .into_iter()
                                         .filter(|(index, info, _)| {
                                             log::debug!(
-                                                "            isect test with tri: {:?}, last_prim: {:?}",
+                                                "            isect test with tri: {:?}, \
+                                                 last_prim: {:?}",
                                                 index,
                                                 last_prim
                                             );
@@ -520,8 +584,9 @@ impl GridRayTracing {
                                     }
                                 }
                                 2 => {
-                                    // When the ray is intersected with two triangles inside of a cell,
-                                    // check if they are the same.
+                                    // When the ray is intersected with two triangles inside of a
+                                    // cell, check if they are
+                                    // the same.
                                     let prim0 = &prim_intersections[0];
                                     let prim1 = &prim_intersections[1];
                                     match (prim0.2, prim1.2) {
@@ -538,24 +603,35 @@ impl GridRayTracing {
                                                     intersections[i] = Some((p, d, prim))
                                                 }
                                             }
-                                        },
+                                        }
                                         _ => {
                                             panic!(
-                                                "Intersected with two triangles but they are not the same! {}, {}",
-                                                prim_intersections[0].1.p, prim_intersections[1].1.p
+                                                "Intersected with two triangles but they are not \
+                                                 the same! {}, {}",
+                                                prim_intersections[0].1.p,
+                                                prim_intersections[1].1.p
                                             );
                                         }
                                     }
                                 }
                                 _ => {
-                                    unreachable!("Can't have more than 2 intersections with one cell of the grid.");
+                                    unreachable!(
+                                        "Can't have more than 2 intersections with one cell of \
+                                         the grid."
+                                    );
                                 }
                             }
                         }
                     }
 
                     if let Some(Some((p, d, prim))) = intersections.iter().find(|i| i.is_some()) {
-                        self.trace_one_ray_dbg(Ray::new(*p, *d), max_bounces, curr_bounces + 1, Some(*prim), output);
+                        self.trace_one_ray_dbg(
+                            Ray::new(*p, *d),
+                            max_bounces,
+                            curr_bounces + 1,
+                            Some(*prim),
+                            output,
+                        );
                     }
                 }
             }
@@ -565,9 +641,7 @@ impl GridRayTracing {
     }
 }
 
-fn compute_normal(pts: &[Vec3; 3]) -> Vec3 {
-    (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalize()
-}
+fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalize() }
 
 /// Grid traversal outcome.
 #[derive(Debug)]

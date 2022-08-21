@@ -1,11 +1,7 @@
-use super::analysis::AnalysisWorkspace;
-use super::simulation::SimulationWorkspace;
-use super::VgonioEvent;
-use crate::app::gui::GuiContext;
-use crate::app::VgonioConfig;
+use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
+use crate::app::{gui::GuiContext, VgonioConfig};
 use glam::Mat4;
-use std::fmt::Write;
-use std::sync::Arc;
+use std::{fmt::Write, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 pub trait Workspace {
@@ -69,13 +65,13 @@ impl VgonioGui {
 
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
         if self.selected_workspace == "Simulation" {
-            self.workspaces.simulation.update_gizmo_matrices(model, view, proj);
+            self.workspaces
+                .simulation
+                .update_gizmo_matrices(model, view, proj);
         }
     }
 
-    pub fn current_workspace_name(&self) -> &str {
-        &self.selected_workspace
-    }
+    pub fn current_workspace_name(&self) -> &str { &self.selected_workspace }
 
     pub fn show(&mut self, ctx: &GuiContext) {
         let ctx = &ctx.egui_context();
@@ -135,7 +131,8 @@ impl VgonioGui {
                 }
             }
 
-            let painter = ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
+            let painter =
+                ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
 
             let screen_rect = ctx.input().screen_rect();
             painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
@@ -156,21 +153,23 @@ impl VgonioGui {
         // Show dropped files (if any):
         if !self.dropped_files.is_empty() {
             let mut open = true;
-            egui::Window::new("Dropped files").open(&mut open).show(ctx, |ui| {
-                for file in &self.dropped_files {
-                    let mut info = if let Some(path) = &file.path {
-                        path.display().to_string()
-                    } else if !file.name.is_empty() {
-                        file.name.clone()
-                    } else {
-                        "???".to_owned()
-                    };
-                    if let Some(bytes) = &file.bytes {
-                        write!(info, " ({} bytes)", bytes.len()).unwrap();
+            egui::Window::new("Dropped files")
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    for file in &self.dropped_files {
+                        let mut info = if let Some(path) = &file.path {
+                            path.display().to_string()
+                        } else if !file.name.is_empty() {
+                            file.name.clone()
+                        } else {
+                            "???".to_owned()
+                        };
+                        if let Some(bytes) = &file.bytes {
+                            write!(info, " ({} bytes)", bytes.len()).unwrap();
+                        }
+                        ui.label(info);
                     }
-                    ui.label(info);
-                }
-            });
+                });
             if !open {
                 self.dropped_files.clear();
             }
@@ -194,7 +193,11 @@ impl VgonioGui {
                             .set_directory(&self.config.user_config.data_files_dir)
                             .pick_file()
                         {
-                            if self.event_loop.send_event(VgonioEvent::OpenFile(filepath)).is_err() {
+                            if self
+                                .event_loop
+                                .send_event(VgonioEvent::OpenFile(filepath))
+                                .is_err()
+                            {
                                 log::warn!("[EVENT] Failed to send OpenFile event");
                             }
                         }
@@ -235,7 +238,9 @@ impl VgonioGui {
 
                 ui.separator();
 
-                if ui.button("     Quit").clicked() && self.event_loop.send_event(VgonioEvent::Quit).is_err() {
+                if ui.button("     Quit").clicked()
+                    && self.event_loop.send_event(VgonioEvent::Quit).is_err()
+                {
                     log::warn!("[EVENT] Failed to send Quit event.");
                 }
             });

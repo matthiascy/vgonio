@@ -1,4 +1,6 @@
-pub mod bxdf;
+//! Acquisition related.
+
+pub mod bsdf;
 mod collector;
 pub mod desc;
 mod embree_rt;
@@ -8,9 +10,7 @@ mod grid_rt;
 pub mod ior;
 pub mod ndf;
 mod occlusion;
-pub mod ray;
 pub mod scattering;
-pub mod tracing;
 pub mod util;
 
 pub use collector::{Collector, Patch};
@@ -19,15 +19,92 @@ pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
 
 pub use occlusion::*;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
-use crate::gfx::camera::{Projection, ProjectionKind};
-use crate::htfld::{regular_triangulation, Heightfield};
-use crate::isect::Aabb;
-use crate::Error;
+use crate::{
+    gfx::camera::{Projection, ProjectionKind},
+    htfld::{regular_triangulation, Heightfield},
+    isect::Aabb,
+    Error,
+};
 use glam::Vec3;
 use wgpu::util::DeviceExt;
+
+/// Representation of a ray.
+#[derive(Debug, Copy, Clone)]
+pub struct Ray {
+    /// The origin of the ray.
+    pub o: Vec3,
+
+    /// The direction of the ray.
+    pub d: Vec3,
+}
+
+impl Ray {
+    /// Create a new ray (direction will be normalised).
+    pub fn new(o: Vec3, d: Vec3) -> Self {
+        let d = d.normalize();
+        // let inv_dir_z = 1.0 / d.z;
+        // let kz = Axis::max_axis(d.abs());
+        // let kx = kz.next_axis();
+        // let ky = kz.next_axis();
+        Self { o, d }
+    }
+}
+
+impl From<embree::Ray> for Ray {
+    fn from(ray: embree::Ray) -> Self {
+        let o = Vec3::new(ray.org_x, ray.org_y, ray.org_z);
+        let d = Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z);
+        Self { o, d }
+    }
+}
+
+impl From<Ray> for embree::Ray {
+    fn from(ray: Ray) -> Self { Self::new(ray.o.into(), ray.d.into()) }
+}
+
+/// Implemented ray tracing method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")] // todo: case_insensitive
+pub enum RayTracingMethod {
+    /// Standard using embree.
+    Standard,
+    /// Customised grid tracing method.
+    Grid,
+}
+
+/// Struct used to record ray path.
+#[derive(Debug, Copy, Clone)]
+pub struct TrajectoryNode {
+    /// The ray of the node.
+    pub ray: Ray,
+
+    /// The cosine of the angle between the ray and the normal (always positive).
+    pub cos: f32,
+}
+
+/// Ray tracing record.
+#[derive(Debug)]
+pub struct RtcRecord {
+    /// Path of traced ray.
+    pub trajectory: Vec<TrajectoryNode>,
+
+    /// Energy of the ray with different wavelengths at each bounce.
+    /// Inner vector is the energy of the ray of different wavelengths.
+    /// Outer vector is the number of bounces.
+    pub energy_each_bounce: Vec<Vec<f32>>,
+}
+
+impl RtcRecord {
+    /// Returns the bounces of traced ray.
+    pub fn bounces(&self) -> usize {
+        self.trajectory.len() - 1
+    }
+}
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -82,7 +159,7 @@ impl LightSource {
 /// Micro-surface mesh used to measure geometric masking/shadowing function.
 /// Position is the only attribute that a vertex possesses. See
 /// [`Self::VERTEX_FORMAT`]. Indices is stored as `u32`. See
-/// [`Self::INDEX_FORMAT`]. The mesh is constructed from a heightfield.
+/// [`Self::INDEX_FORMAT`]. The mesh is constructed from a height field.
 ///
 /// Indices are generated in the following order: azimuthal angle first then
 /// polar angle.
@@ -192,7 +269,12 @@ pub(crate) fn resolve_file_path(base_path: &Path, path: Option<&Path>) -> PathBu
         |path| {
             if let Ok(prefix_stripped) = path.strip_prefix("//") {
                 // Output path is relative to input file's directory
-                let mut resolved = base_path.parent().unwrap().to_path_buf().canonicalize().unwrap();
+                let mut resolved = base_path
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+                    .canonicalize()
+                    .unwrap();
                 resolved.push(prefix_stripped);
                 resolved
             } else {

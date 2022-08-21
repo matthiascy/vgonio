@@ -1,7 +1,5 @@
+use crate::{acq::Ray, isect::RayTriIsect, util::gamma};
 use glam::Vec3;
-use crate::acq::ray::{Ray};
-use crate::isect::RayTriIsect;
-use crate::util::gamma;
 
 pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
@@ -27,20 +25,21 @@ pub fn max_axis(v: Vec3) -> u32 {
 
 /// Modified Möller-Trumbore ray-triangle intersection algorithm.
 ///
-/// As an improvement over the original algorithm (1), the algorithm is implemented in a way that
-/// some factors are precalculated and the calculations are differently factorized to allow
-/// precalculating the cross product e1 x e2 which is similar to the algorithm in (2).
+/// As an improvement over the original algorithm (1), the algorithm is
+/// implemented in a way that some factors are precalculated and the
+/// calculations are differently factorized to allow precalculating the cross
+/// product e1 x e2 which is similar to the algorithm in (2).
 ///
 /// # Algorithm
-/// Möller and Trumbore solve the ray-triangle intersection problem by directly solving a linear
-/// system of equations using Cramer's rule and by evaluating determinants using scalar triple
-/// products.
+/// Möller and Trumbore solve the ray-triangle intersection problem by directly
+/// solving a linear system of equations using Cramer's rule and by evaluating
+/// determinants using scalar triple products.
 /// Assuming that `P` is the point of intersection. It can be expressed:
 ///   + by barycentric coordinates $(u, v, w)$: $P = wA + uB + vC = A + u(B - A) + v(C - A)$
 ///   + or by ray parameter t: $P = O + tD$
 ///
-/// Moller and Trumbore use the barycentric coordinates to evaluate the intersection point. The
-/// system of equations is defined as follows:
+/// Moller and Trumbore use the barycentric coordinates to evaluate the
+/// intersection point. The system of equations is defined as follows:
 ///
 /// $$O - A = \begin{bmatrix}-D & B-A & C-A\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$$
 ///
@@ -51,20 +50,25 @@ pub fn max_axis(v: Vec3) -> u32 {
 /// Apply Cramer's rule,
 /// $$\begin{vmatrix}A & B & C\end{vmatrix} = -(A \times C) \cdot B = -(C \times B) \cdot A$$, we have
 ///
-/// $$det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0 = (D \times E1) \cdot E0$$
-/// $$det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix} = -(T \times E1) \cdot E0 = -(T \times E1) \cdot E0 = (T \times E0) \cdot E1$$
-/// $$det_u = \begin{vmatrix}-D & T & E1\end{vmatrix} = -(-D \times E1) \cdot T = (D \times E1) \cdot T$$
-/// $$det_v = \begin{vmatrix}-D & E0 & T\end{vmatrix} = -(T \times E0) \cdot -D = (T \times E0) \cdot D$$
+/// $$det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0
+/// = (D \times E1) \cdot E0$$ $$det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix}
+/// = -(T \times E1) \cdot E0 = -(T \times E1) \cdot E0 = (T \times E0) \cdot
+/// E1$$ $$det_u = \begin{vmatrix}-D & T & E1\end{vmatrix} = -(-D \times E1)
+/// \cdot T = (D \times E1) \cdot T$$ $$det_v = \begin{vmatrix}-D & E0 &
+/// T\end{vmatrix} = -(T \times E0) \cdot -D = (T \times E0) \cdot D$$
 ///
-/// and finally we have $$t = \frac{det_t}{det}, u = \frac{det_u}{det}, v = \frac{det_v}{det}$$.
+/// and finally we have $$t = \frac{det_t}{det}, u = \frac{det_u}{det}, v =
+/// \frac{det_v}{det}$$.
 ///
 /// # References
 ///
-/// (1) Tomas Möller & Ben Trumbore (1997) Fast, Minimum Storage Ray-Triangle Intersection,
-/// Journal of Graphics Tools, 2:1, 21-28, DOI: 10.1080/10867651.1997.10487468
+/// (1) Tomas Möller & Ben Trumbore (1997) Fast, Minimum Storage Ray-Triangle
+/// Intersection, Journal of Graphics Tools, 2:1, 21-28, DOI:
+/// 10.1080/10867651.1997.10487468
 ///
-/// (2) A. Kensler and P. Shirley, "Optimizing Ray-Triangle Intersection via Automated Search,"
-/// 2006 IEEE Symposium on Interactive Ray Tracing, 2006, pp. 33-38, doi: 10.1109/RT.2006.280212.
+/// (2) A. Kensler and P. Shirley, "Optimizing Ray-Triangle Intersection via
+/// Automated Search," 2006 IEEE Symposium on Interactive Ray Tracing, 2006, pp.
+/// 33-38, doi: 10.1109/RT.2006.280212.
 ///
 /// # Arguments
 ///
@@ -74,7 +78,7 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///
 /// # Returns
 ///
-/// [`RayTriInt`] if the ray intersects the triangle, otherwise `None`.
+/// [`RayTriIsect`] if the ray intersects the triangle, otherwise `None`.
 pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     let ray_d = ray.d.as_dvec3();
     let ray_o = ray.o.as_dvec3();
@@ -130,55 +134,63 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 ///
 /// # Algorithm
 ///
-/// The algorithm operates in two stages. First an affine transformation is applied to the *ray*
-/// and the *vertices* of the triangle to simplify the intersection problem. In the second stage,
-/// the simplified problem is accurately solved using 2D edge tests with a double precision fallback.
+/// The algorithm operates in two stages. First an affine transformation is
+/// applied to the *ray* and the *vertices* of the triangle to simplify the
+/// intersection problem. In the second stage, the simplified problem is
+/// accurately solved using 2D edge tests with a double precision fallback.
 ///
 /// ## 1. Affine transformation
 ///
-/// The affine transformation transforms the ray such that its origin is at $(0, 0, 0)$ in the
-/// transformed coordinate system, and its direction is along the $+z$ axis. Triangle vertices are also
-/// transformed into this coordinate system before the intersection test. The transformation is defined
+/// The affine transformation transforms the ray such that its origin is at $(0,
+/// 0, 0)$ in the transformed coordinate system, and its direction is along the
+/// $+z$ axis. Triangle vertices are also transformed into this coordinate
+/// system before the intersection test. The transformation is defined
 /// by a translation matrix followed by a shearing and scaling matrix.
 ///
-/// Note that this transformation is *only* dependent on the ray (i.e. it does not depend on whatever
-/// triangle is being intersected).
+/// Note that this transformation is *only* dependent on the ray (i.e. it does
+/// not depend on whatever triangle is being intersected).
 ///
 /// ### Translation
 ///
-/// The translation matrix places the ray origin at the origin of the coordinate system, is defined
-/// by the following:
+/// The translation matrix places the ray origin at the origin of the coordinate
+/// system, is defined by the following:
 ///
-/// $$T = \begin{bmatrix}1 & 0 & 0 & -o_x \\\0 & 1 & 0 & -o_y \\\0 & 0 & 1 & -o_z \\\0 & 0 & 0 & 1\end{bmatrix}$$
+/// $$T = \begin{bmatrix}1 & 0 & 0 & -o_x \\\0 & 1 & 0 & -o_y \\\0 & 0 & 1 &
+/// -o_z \\\0 & 0 & 0 & 1\end{bmatrix}$$
 ///
-/// This transformation doesn't need to be explicitly applied to the ray, but will be applied to the
-/// vertices of the triangle.
+/// This transformation doesn't need to be explicitly applied to the ray, but
+/// will be applied to the vertices of the triangle.
 ///
 /// ### Axis Permutation
 ///
-/// Make sure that the $z$ component of the ray direction has the largest absolute value. This can
-/// be achieved by renaming the $x$, $y$ and $z$ dimensions in a *winding preserving* way.
+/// Make sure that the $z$ component of the ray direction has the largest
+/// absolute value. This can be achieved by renaming the $x$, $y$ and $z$
+/// dimensions in a *winding preserving* way.
 ///
 /// ### Shearing
 ///
 /// The shearing transformation aligns the ray direction with the $+z$ axis:
 ///
-/// $$S = \begin{bmatrix}1 & 0 & -d_x & 0 \\\0 & 1 & -d_y/d_z & 0 \\\0 & 0 & 1/d_z & 0 \\\0 & 0 & 0 & 1\end{bmatrix}$$
+/// $$S = \begin{bmatrix}1 & 0 & -d_x & 0 \\\0 & 1 & -d_y/d_z & 0 \\\0 & 0 &
+/// 1/d_z & 0 \\\0 & 0 & 0 & 1\end{bmatrix}$$
 ///
 /// ## 2. Intersection test
 ///
-/// With the triangle vertices transformed to this coordinate system, the intersection test now is
-/// to find if the ray starting from the origin and traveling along the $+z$ axis intersects the
-/// transformed triangle. Because of the way the coordinate system was constructed, this problem is
-/// equivalent to the 2D problem of determining if the $x$, $y$ coordinates $(0, 0)$ are inside the
-/// $xy$ projection of the triangle.
+/// With the triangle vertices transformed to this coordinate system, the
+/// intersection test now is to find if the ray starting from the origin and
+/// traveling along the $+z$ axis intersects the transformed triangle. Because
+/// of the way the coordinate system was constructed, this problem is equivalent
+/// to the 2D problem of determining if the $x$, $y$ coordinates $(0, 0)$ are
+/// inside the $xy$ projection of the triangle.
 ///
-/// Recall that in 2D, the area of a triangle formed by two vectors is defined as:
+/// Recall that in 2D, the area of a triangle formed by two vectors is defined
+/// as:
 ///
 /// $$Area = \frac{1}{2}\vec{a}\times\vec{b} = \frac{1}{2}(a_xb_y - b_xa_y)$$.
 ///
-/// Given two triangle vertices, then we can define the directed edge function $e$ as the function
-/// that gives twice the are of the triangle given by $p0$, $p1$ and a given point $p$
+/// Given two triangle vertices, then we can define the directed edge function
+/// $e$ as the function that gives twice the are of the triangle given by $p0$,
+/// $p1$ and a given point $p$
 ///
 /// $$e(p) = (p1_x - p0_x)(p_y - p0_y) - (p1_y - p0_y)(p_x - p0_x)$$
 ///
@@ -188,28 +200,32 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 /// $$e1 = p2_xp0_y - p2_yp0_x \quad (p2, p0)$$
 /// $$e2 = p0_xp1_y - p0_yp1_x \quad (p0, p1)$$
 ///
-/// The value of the edge function is positive if the point is on the right side of the edge, and
-/// negative for points to the left of the line.
+/// The value of the edge function is positive if the point is on the right side
+/// of the edge, and negative for points to the left of the line.
 ///
-/// Now we have the scaled barycentric coordinates, $u'=e0$, $v'=e1$ and $w'=e2$.
+/// Now we have the scaled barycentric coordinates, $u'=e0$, $v'=e1$ and
+/// $w'=e2$.
 ///
 /// If $u'<0$, $v'<0$ and $w'<0$, the ray misses the triangle.
 ///
-/// The determinant of the system of equations is $det = u' + v' + w'$. If $det=0$, the ray is
-/// co-planar to the triangle and therefore misses. This guarantees later safe divisions.
+/// The determinant of the system of equations is $det = u' + v' + w'$. If
+/// $det=0$, the ray is co-planar to the triangle and therefore misses. This
+/// guarantees later safe divisions.
 ///
-/// Then we can calculate the scaled hit distance $t'$ by interpolating the z-values of the
-/// transformed vertices:
+/// Then we can calculate the scaled hit distance $t'$ by interpolating the
+/// z-values of the transformed vertices:
 ///
 /// $$t' = u'p0_z + v'p1_z + w'p2_z$$.
 ///
-/// As this distance is calculated using non-normalized barycentric coordinates, the actual distance
-/// still requires division by $det$. To defer this costly division util actually required, we first
-/// compute a scaled depth test by rejecting the triangle if the hit is either before the ray
-/// $$t' <= 0$$ or behind and already-found hit ($t_{max}$) $$t' > det \cdot t_{hit}$$.
+/// As this distance is calculated using non-normalized barycentric coordinates,
+/// the actual distance still requires division by $det$. To defer this costly
+/// division util actually required, we first compute a scaled depth test by
+/// rejecting the triangle if the hit is either before the ray $$t' <= 0$$ or
+/// behind and already-found hit ($t_{max}$) $$t' > det \cdot t_{hit}$$.
 ///
-/// If the sign of the scaled distance and the sign of the interpolated t value are different,
-/// the the final t value will certainly be negative and thus not a valid intersection.
+/// If the sign of the scaled distance and the sign of the interpolated t value
+/// are different, the the final t value will certainly be negative and thus not
+/// a valid intersection.
 ///
 /// The check for $t < t_{max}$ can be equivalent performed in two ways:
 ///
@@ -217,8 +233,9 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 /// $$t' > t_{max} \cdot det \quad \text{otherwise}$$
 ///
 /// # References
-/// (1) Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle Intersection, Journal of
-/// Computer Graphics Techniques (JCGT), vol. 2, no. 1, 65-82, 2013
+/// (1) Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle
+/// Intersection, Journal of Computer Graphics Techniques (JCGT), vol. 2, no. 1,
+/// 65-82, 2013
 pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     // Transform the triangle vertices into the ray coordinate system.
     let mut p0t = triangle[0] - ray.o; // A'
@@ -254,7 +271,7 @@ pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIs
 
     if e0 == 0.0 || e1 == 0.0 || e2 == 0.0 {
         e0 = (p1t.x as f64 * p2t.y as f64 - p1t.y as f64 * p2t.x as f64) as f32;
-        e1 = (p2t.x as f64 * p0t.y as f64- p2t.y as f64 * p0t.x as f64) as f32;
+        e1 = (p2t.x as f64 * p0t.y as f64 - p2t.y as f64 * p0t.x as f64) as f32;
         e2 = (p0t.x as f64 * p1t.y as f64 - p0t.y as f64 * p1t.x as f64) as f32;
     }
 
@@ -276,8 +293,9 @@ pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIs
     let t_scaled = e0 * p0t.z + e1 * p1t.z + e2 * p2t.z;
     // Check if the scaled distance value t is in the range [t_min, t_max].
     // Note: assume ray.t_max * det = MAX_FLOAT
-    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < f32::MAX * 0.5)) ||
-        (det > 0.0 && (t_scaled <= 0.0 || t_scaled > f32::MAX * 0.5)) {
+    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < f32::MAX * 0.5))
+        || (det > 0.0 && (t_scaled <= 0.0 || t_scaled > f32::MAX * 0.5))
+    {
         return None;
     }
 
@@ -301,13 +319,16 @@ pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIs
     let delta_e = 2.0 * (gamma(2) * max_xt * max_yt + delta_y * max_xt + delta_x * max_yt);
     // Compute delta_t term for triangle t error bounds and check t
     let max_e = e0.abs().max(e1.abs()).max(e2.abs());
-    let delta_t = 3.0 * (gamma(3) * max_e * max_zt + delta_e * max_zt + delta_z * max_e) * inv_det.abs();
+    let delta_t =
+        3.0 * (gamma(3) * max_e * max_zt + delta_e * max_zt + delta_z * max_e) * inv_det.abs();
 
     if t <= delta_t {
         return None;
     }
 
-    let n = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalize();
+    let n = (triangle[1] - triangle[0])
+        .cross(triangle[2] - triangle[0])
+        .normalize();
 
     // Compute error bounds for triangle intersection
     let abs_sum = (b0 * triangle[0]).abs() + (b1 * triangle[1]).abs() + (b2 * triangle[2]).abs();
@@ -319,9 +340,9 @@ pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIs
 
 #[cfg(test)]
 mod tests {
-    use glam::Vec3;
-    use crate::acq::ray::Ray;
     use super::ray_tri_intersect_woop;
+    use crate::acq::ray::Ray;
+    use glam::Vec3;
 
     #[test]
     fn test_ray_tri_intersection_woop() {
@@ -334,10 +355,14 @@ mod tests {
             Ray::new(Vec3::new(0.5, 0.0, -10.0), Vec3::new(0.0, 0.0, 0.2)),
             Ray::new(Vec3::new(-0.5, 0.0, -10.0), Vec3::new(0.0, 0.0, 1.0)),
         ];
-        let triangle = [Vec3::new(-1.0, -1.0, 0.0), Vec3::new(1.0, -1.0, 0.0), Vec3::new(0.0, 1.0, 0.0)];
+        let triangle = [
+            Vec3::new(-1.0, -1.0, 0.0),
+            Vec3::new(1.0, -1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+        ];
 
         for ray in rays {
-            let isect = ray_tri_intersect_woop(&ray, &triangle);
+            let isect = ray_tri_intersect_woop(ray, &triangle);
 
             println!("{:?}", isect);
             assert!(isect.is_some());

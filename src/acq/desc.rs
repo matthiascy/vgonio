@@ -1,10 +1,18 @@
-use crate::acq::bxdf::BxdfKind;
-use crate::acq::util::{SphericalPartition, SphericalShape};
-use crate::acq::Medium;
-use crate::Error;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use crate::{
+    acq::{
+        bsdf::BsdfKind,
+        util::{SphericalPartition, SphericalShape},
+        Medium,
+    },
+    Error,
+};
+use std::{
+    fs::File,
+    io::Read,
+    ops::Sub,
+    path::{Path, PathBuf},
+};
+use crate::acq::RayTracingMethod;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LengthUnit {
@@ -37,6 +45,23 @@ pub struct Range<T: Copy> {
     pub step: T,
 }
 
+impl<T: Copy> Range<T> {
+    pub fn map(&self, f: impl Fn(T) -> T) -> Range<T> {
+        Range {
+            start: f(self.start),
+            stop: f(self.stop),
+            step: self.step,
+        }
+    }
+
+    pub fn span(&self) -> T
+    where
+        T: Sub<Output = T>,
+    {
+        self.stop - self.start
+    }
+}
+
 impl<T: Copy> From<[T; 3]> for Range<T> {
     fn from(vals: [T; 3]) -> Self {
         Self {
@@ -48,9 +73,7 @@ impl<T: Copy> From<[T; 3]> for Range<T> {
 }
 
 impl<T: Copy> From<Range<T>> for [T; 3] {
-    fn from(range: Range<T>) -> Self {
-        [range.start, range.stop, range.step]
-    }
+    fn from(range: Range<T>) -> Self { [range.start, range.stop, range.step] }
 }
 
 impl<T: Copy> From<(T, T, T)> for Range<T> {
@@ -64,9 +87,7 @@ impl<T: Copy> From<(T, T, T)> for Range<T> {
 }
 
 impl<T: Copy> From<Range<T>> for (T, T, T) {
-    fn from(range: Range<T>) -> Self {
-        (range.start, range.stop, range.step)
-    }
+    fn from(range: Range<T>) -> Self { (range.start, range.stop, range.step) }
 }
 
 impl<T: Default + Copy> Default for Range<T> {
@@ -80,11 +101,10 @@ impl<T: Default + Copy> Default for Range<T> {
 }
 
 impl Range<f32> {
-    pub fn samples_count(&self) -> usize {
-        ((self.stop - self.start) / self.step).floor() as usize
-    }
+    pub fn samples_count(&self) -> usize { ((self.stop - self.start) / self.step).floor() as usize }
 }
 
+/// Describes the radius of measurement.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
 pub enum RadiusDesc {
@@ -93,6 +113,15 @@ pub enum RadiusDesc {
 
     /// Radius is given explicitly.
     Fixed(f32),
+}
+
+impl RadiusDesc {
+    pub fn is_auto(&self) -> bool {
+        match self {
+            RadiusDesc::Auto => true,
+            RadiusDesc::Fixed(_) => false,
+        }
+    }
 }
 
 /// Description of the light source.
@@ -107,8 +136,13 @@ pub struct EmitterDesc {
     /// Radius (r) specifying the spherical coordinates of the light source.
     pub radius: RadiusDesc,
 
-    /// Partition of the emitter sphere.
-    pub partition: SphericalPartition,
+    /// Angle (theta) specifying the spherical coordinates of the light source
+    /// (**in degrees**).
+    pub zenith: Range<f32>,
+
+    /// Angle (phi) specifying the spherical coordinates of the light source
+    /// (**in degrees**).
+    pub azimuth: Range<f32>,
 
     /// Light source's spectrum.
     pub spectrum: Range<f32>,
@@ -127,10 +161,14 @@ pub struct CollectorDesc {
     pub partition: SphericalPartition,
 }
 
+/// Supported type of measurement.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
 pub enum MeasurementKind {
-    Bxdf { kind: BxdfKind },
+    /// Bidirectional Scattering Distribution Function
+    Bsdf(BsdfKind),
+
+    /// Normal Distribution Function
     Ndf,
 }
 
@@ -144,6 +182,9 @@ pub struct MeasurementDesc {
 
     /// The measurement kind.
     pub measurement_kind: MeasurementKind,
+
+    /// Ray tracing method used for the measurement.
+    pub tracing_method: RayTracingMethod,
 
     /// Incident medium of the measurement.
     pub incident_medium: Medium,
@@ -164,10 +205,23 @@ pub struct MeasurementDesc {
 }
 
 impl MeasurementDesc {
-    pub fn load_from_file(filepath: &Path) -> Result<MeasurementDesc, Error> {
-        let file = File::open(filepath)?;
-        let reader = BufReader::new(file);
-        serde_yaml::from_reader(reader).map_err(Error::from)
+    /// Load measurement descriptions from a file. A file may contain multiple
+    /// descriptions.
+    pub fn load_from_file(filepath: &Path) -> Result<Vec<MeasurementDesc>, Error> {
+        use serde::Deserialize;
+
+        let mut file = File::open(filepath)?;
+        let content = {
+            let mut str_ = String::new();
+            file.read_to_string(&mut str_)?;
+            str_
+        };
+        let measurements = serde_yaml::Deserializer::from_str(&content)
+            .into_iter()
+            .map(|doc| MeasurementDesc::deserialize(doc).map_err(Error::from))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(measurements)
     }
 }
 
@@ -176,20 +230,23 @@ impl Default for MeasurementDesc {
         Self {
             length_unit: LengthUnit::Nanometres,
             measurement_kind: MeasurementKind::Ndf,
+            tracing_method: RayTracingMethod::Standard,
             incident_medium: Medium::Air,
             transmitted_medium: Medium::Air,
             surfaces: vec![],
             emitter: EmitterDesc {
-                num_rays: 0,
-                max_bounces: 0,
+                num_rays: 1000,
+                max_bounces: 10,
                 radius: RadiusDesc::Auto,
-                partition: SphericalPartition::EqualArea {
-                    theta: (0.0, 0.0, 0),
-                    phi: Range::<f32> {
-                        start: 0.0,
-                        stop: 0.0,
-                        step: 0.0,
-                    },
+                zenith: Range::<f32> {
+                    start: 0.0,
+                    stop: 90.0,
+                    step: 5.0,
+                },
+                azimuth: Range::<f32> {
+                    start: 0.0,
+                    stop: 360.0,
+                    step: 120.0,
                 },
                 spectrum: Default::default(),
             },
@@ -211,13 +268,12 @@ impl Default for MeasurementDesc {
 
 #[test]
 fn scene_desc_serialization() {
-    use std::io::Write;
+    use std::io::{Cursor, Write};
 
-    let desc_0 = MeasurementDesc {
+    let desc = MeasurementDesc {
         length_unit: LengthUnit::Meters,
-        measurement_kind: MeasurementKind::Bxdf {
-            kind: BxdfKind::InPlane,
-        },
+        measurement_kind: MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),
+        tracing_method: RayTracingMethod::Standard,
         incident_medium: Medium::Air,
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
@@ -242,33 +298,31 @@ fn scene_desc_serialization() {
                 stop: 780.0,
                 step: 10.0,
             },
-            partition: SphericalPartition::EqualArea {
-                theta: (0.0, 90.0, 45),
-                phi: Range {
-                    start: 0.0,
-                    stop: 360.0,
-                    step: 0.0,
-                },
+            zenith: Range {
+                start: 0.0,
+                stop: 90.0,
+                step: 0.0,
+            },
+            azimuth: Range {
+                start: 0.0,
+                stop: 360.0,
+                step: 0.0,
             },
         },
     };
-    let desc_1 = desc_0.clone();
 
-    let serialized_0 = serde_yaml::to_string(&desc_0).unwrap();
-    let serialized_1 = serde_yaml::to_string(&desc_1).unwrap();
+    let serialized = serde_yaml::to_string(&desc).unwrap();
 
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open("../../scenes/scene_desc.yml")
-        .unwrap();
+    let mut file = Cursor::new(vec![0u8; 128]);
+    file.write_all(serialized.as_bytes()).unwrap();
 
-    file.write_all(serialized_0.as_bytes()).unwrap();
-    file.write_all(serialized_0.as_bytes()).unwrap();
+    file.set_position(0);
+    let deserialized_0: MeasurementDesc = serde_yaml::from_reader(file).unwrap();
+    let deserialized_1: MeasurementDesc = serde_yaml::from_str(&serialized).unwrap();
 
-    let deserialized_0: MeasurementDesc = serde_yaml::from_str(&serialized_0).unwrap();
-    let deserialized_1: MeasurementDesc = serde_yaml::from_str(&serialized_1).unwrap();
+    println!("{}", serialized);
 
-    assert_eq!(desc_0, deserialized_0);
-    assert_eq!(desc_1, deserialized_1);
+    assert_eq!(desc, deserialized_0);
+    assert_eq!(desc, deserialized_1);
+    assert_eq!(deserialized_0, deserialized_1);
 }

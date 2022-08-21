@@ -2,15 +2,14 @@
 
 use crate::math::Vec3;
 
+mod aabb;
 mod axis;
 mod triangle;
-mod aabb;
 
-pub use axis::Axis;
 pub use aabb::Aabb;
+pub use axis::Axis;
 
-pub use triangle::ray_tri_intersect_moller_trumbore;
-pub use triangle::ray_tri_intersect_woop;
+pub use triangle::{ray_tri_intersect_moller_trumbore, ray_tri_intersect_woop};
 
 /// Ray/Triangle intersection result.
 #[derive(Debug)]
@@ -30,12 +29,5 @@ pub struct RayTriIsect {
 
 impl RayTriIsect {
     // TODO:
-    pub fn new(p: Vec3, p_err: Vec3, n: Vec3, u: f32, v: f32) -> Self {
-        Self {
-            u,
-            v,
-            n,
-            p
-        }
-    }
+    pub fn new(p: Vec3, p_err: Vec3, n: Vec3, u: f32, v: f32) -> Self { Self { u, v, n, p } }
 }

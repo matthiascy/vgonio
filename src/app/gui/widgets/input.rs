@@ -7,7 +7,9 @@ pub fn input_ui<T: egui::emath::Numeric>(
     range: Option<RangeInclusive<T>>,
 ) -> egui::Response {
     ui.add(match range {
-        Some(range) => egui::DragValue::new(value).prefix(prefix).clamp_range(range),
+        Some(range) => egui::DragValue::new(value)
+            .prefix(prefix)
+            .clamp_range(range),
         None => egui::DragValue::new(value).prefix(prefix),
     })
 }

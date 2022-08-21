@@ -7,33 +7,36 @@ build = "build.rs"
 [dependencies]
 image = "0.24"
 winit = "0.26"
-glam = { version = "0.20", features = ["serde", "bytemuck"] }
+glam = { version = "0.21", features = ["serde", "bytemuck"] }
 env_logger = "0.9"
 log = "0.4"
-wgpu = { version = "0.12", features = ["spirv"] }
+wgpu = { version = "0.13", features = ["spirv"] }
 pollster = "0.2"
 bytemuck = { version = "1.7", features = ["derive"] }
 clap = { version = "3", features = ["derive"] }
-uuid = { version = "0.8", features = ["serde", "v4"] }
+uuid = { version = "1.1", features = ["serde", "v4"] }
 bincode = "1"
 byteorder = "1"
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 serde_json = "1.0"
 egui = { version = "0.18", features = ["bytemuck"] }
 egui_demo_lib = "0.18"
-egui-winit = "0.18"
+egui-winit = "0.18.0"
 egui-gizmo = "0.7"
-rfd = "0.8"
+futures-intrusive = "0.4"
+rfd = "0.10"
 rayon = "1.5"
 chrono = "0.4"
 dirs = "4.0"
 toml = "0.5"
 csv = "1"
+rand = "0.8"
+rand_distr = "0.4"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 
 [build-dependencies]
-shaderc = "0.7"
+shaderc = "0.8"
 
 # Compile build-dependencies in release mode with
 # the same settings as regular dependencies.

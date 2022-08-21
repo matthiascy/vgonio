@@ -1,7 +1,5 @@
 use crate::isect::Aabb;
-use embree::Geometry;
 use glam::Vec3;
-use std::sync::Arc;
 
 /// Surface triangulation method.
 #[non_exhaustive]

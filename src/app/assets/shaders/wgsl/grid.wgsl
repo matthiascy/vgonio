@@ -1,26 +1,26 @@
 struct Uniforms {
-    view: mat4x4<f32>;
-    proj: mat4x4<f32>;
-    view_inv: mat4x4<f32>;
-    proj_inv: mat4x4<f32>;
-};
+    view: mat4x4<f32>,
+    proj: mat4x4<f32>,
+    view_inv: mat4x4<f32>,
+    proj_inv: mat4x4<f32>,
+}
 
 struct VOutput {
-    [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] v_position: vec3<f32>;
-    [[location(1)]] near: vec3<f32>;
-    [[location(2)]] far: vec3<f32>;
-};
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) v_position: vec3<f32>,
+    @location(1) near: vec3<f32>,
+    @location(2) far: vec3<f32>,
+}
 
-[[group(0), binding(0)]] var<uniform> uniforms: Uniforms;
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
 fn unproject(p: vec3<f32>) -> vec3<f32> {
     let unprojected: vec4<f32> = uniforms.view_inv * uniforms.proj_inv * vec4<f32>(p, 1.0);
     return unprojected.xyz / unprojected.w;
 }
 
-[[stage(vertex)]]
-fn vs_main([[builtin(vertex_index)]] idx: u32) -> VOutput {
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> VOutput {
     var out: VOutput;
 
     var vertices = array<vec3<f32>, 6>(
@@ -67,10 +67,10 @@ fn checkerboard(r: vec2<f32>, scale: f32) -> f32 {
 //}
 
 struct FOutput {
-    [[location(0)]] color: vec4<f32>;
-};
+    @location(0) color: vec4<f32>,
+}
 
-[[stage(fragment)]]
+@fragment
 fn fs_main(in: VOutput) -> FOutput {
     var out: FOutput;
 

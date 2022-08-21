@@ -5,14 +5,16 @@ use core::arch::x86_64::*;
 use core::arch::x86::*;
 use glam::Vec3;
 
+use crate::acq::{util::gamma_f32, Ray};
 use serde::{Deserialize, Serialize};
-use crate::acq::ray::Ray;
-use crate::acq::util::gamma_f32;
 
 /// Axis-aligned bounding box.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Aabb {
+    /// Minimum corner of the box.
     pub min: Vec3,
+
+    /// Maximum corner of the box.
     pub max: Vec3,
 }
 
@@ -27,14 +29,10 @@ impl Default for Aabb {
 
 impl Aabb {
     /// Creates a new [`Aabb`] from the given bounds.
-    pub fn new(min: Vec3, max: Vec3) -> Self {
-        Self { min, max }
-    }
+    pub fn new(min: Vec3, max: Vec3) -> Self { Self { min, max } }
 
     /// Creates a new empty (zero-initialised) [`Aabb`].
-    pub fn empty() -> Self {
-        Self::default()
-    }
+    pub fn empty() -> Self { Self::default() }
 
     /// Construct from three points (e.g. triangle face)
     pub fn from(v0: Vec3, v1: Vec3, v2: Vec3) -> Self {
@@ -82,6 +80,7 @@ impl Aabb {
         t_exit > t_enter && t_exit >= 0.0
     }
 
+    /// Find the intersection between a ray and a axis-aligned bounding box.
     pub fn intersect_with_ray(&self, ray: Ray, t_min: f32, t_max: f32) -> Option<Vec3> {
         let mut t_enter = t_min;
         let mut t_exit = t_max;
@@ -136,9 +135,8 @@ impl Aabb {
         self.max = Vec3::new(max[0], max[1], max[2]);
     }
 
-    pub fn max_edge(&self) -> f32 {
-        self.max.x.max(self.max.y).max(self.max.z)
-    }
+    /// Maximum edge length.
+    pub fn max_edge(&self) -> f32 { self.max.x.max(self.max.y).max(self.max.z) }
 
     // /// Union of two bounding boxes.
     // pub fn union(lhs: &Aabb, rhs: &Aabb) -> Aabb {
@@ -264,9 +262,7 @@ impl Aabb {
 
     /// Compute the minimum Euclidean distance from a point on the surface of
     /// this [`Aabb`] to the point of interest.
-    pub fn distance(&self, _point: &[f32; 3]) -> bool {
-        todo!()
-    }
+    pub fn distance(&self, _point: &[f32; 3]) -> bool { todo!() }
 }
 
 #[test]
@@ -274,12 +270,24 @@ fn test_ray_aabb_intersection() {
     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
 
-    println!("{:?}", aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY));
-    println!("{:?}", aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY));
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
 
     let ray = Ray::new(Vec3::new(2.0, 2.0, 0.0), Vec3::new(-1.0, -1.0, 0.0));
     let aabb = Aabb::new(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 0.0, 1.0));
 
-    println!("{:?}", aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY));
-    println!("{:?}", aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY));
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray_p(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
+    println!(
+        "{:?}",
+        aabb.intersect_with_ray(ray, f32::NEG_INFINITY, f32::INFINITY)
+    );
 }

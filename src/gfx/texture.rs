@@ -1,6 +1,5 @@
 use image::GenericImageView;
-use std::num::NonZeroU32;
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 
 // TODO: a texture may don't have a sampler (in case used as render pass
 // attachments)
@@ -26,7 +25,11 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn new(device: &wgpu::Device, desc: &wgpu::TextureDescriptor, sampler: Option<Arc<wgpu::Sampler>>) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        desc: &wgpu::TextureDescriptor,
+        sampler: Option<Arc<wgpu::Sampler>>,
+    ) -> Self {
         let texture = device.create_texture(desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = sampler.unwrap_or_else(|| {

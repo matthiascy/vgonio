@@ -17,9 +17,7 @@ enum PaneKind {
 }
 
 impl Default for PaneKind {
-    fn default() -> Self {
-        Self::ShadowMap
-    }
+    fn default() -> Self { Self::ShadowMap }
 }
 
 // TODO: adaptive image size
@@ -42,9 +40,7 @@ impl VisualDebugTool {
         }
     }
 
-    pub const fn name(&self) -> &'static str {
-        "Visual Debug"
-    }
+    pub const fn name(&self) -> &'static str { "Visual Debug" }
 
     pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         egui::Window::new(self.name())
@@ -57,7 +53,10 @@ impl VisualDebugTool {
         ui.horizontal(|ui| {
             ui.label("Debug Draw");
             if toggle_ui(ui, &mut self.debug_drawing_enabled).changed()
-                && self.event_loop.send_event(VgonioEvent::ToggleDebugDrawing).is_err()
+                && self
+                    .event_loop
+                    .send_event(VgonioEvent::ToggleDebugDrawing)
+                    .is_err()
             {
                 log::warn!("Failed to send VgonioEvent::ToggleDebugDrawing");
             }

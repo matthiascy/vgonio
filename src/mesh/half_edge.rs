@@ -52,9 +52,7 @@ pub struct HEFace {
 }
 
 impl HEFace {
-    pub fn new(face: usize, dart: usize) -> Self {
-        Self { face, dart }
-    }
+    pub fn new(face: usize, dart: usize) -> Self { Self { face, dart } }
 }
 
 /// Representation of a vertex.
@@ -71,7 +69,5 @@ pub struct HEVert {
 }
 
 impl HEVert {
-    pub fn new(vert: usize, dart: usize) -> Self {
-        Self { vert, dart }
-    }
+    pub fn new(vert: usize, dart: usize) -> Self { Self { vert, dart } }
 }

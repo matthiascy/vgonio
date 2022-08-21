@@ -1,12 +1,16 @@
-use crate::acq::ray::Ray;
-use crate::acq::tracing::RayTracingMethod;
-use crate::acq::GridRayTracing;
-use crate::app::gui::widgets::{input3_spherical, input3_xyz};
-use crate::app::gui::VgonioEvent;
+use crate::{
+    acq::Ray,
+    app::gui::{
+        widgets::{input3_spherical, input3_xyz},
+        VgonioEvent,
+    },
+};
 use glam::{IVec2, Vec3};
-use std::rc::Rc;
 use std::sync::Arc;
+use embree::Config;
 use winit::event_loop::EventLoopProxy;
+use crate::acq::{EmbreeRayTracing, RayTracingMethod, TrajectoryNode};
+use crate::mesh::TriangleMesh;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum RayMode {
@@ -50,18 +54,26 @@ impl egui::Widget for &mut RayTracingPane {
             ui.label("method");
             ui.selectable_value(&mut self.method, RayTracingMethod::Standard, "Standard");
             ui.selectable_value(&mut self.method, RayTracingMethod::Grid, "Grid");
-            ui.selectable_value(&mut self.method, RayTracingMethod::Hybrid, "Hybrid");
         });
 
         ui.horizontal_wrapped(|ui| {
             ui.label("max_bounces");
-            ui.add(egui::DragValue::new(&mut self.max_bounces).clamp_range(1..=32).speed(1));
+            ui.add(
+                egui::DragValue::new(&mut self.max_bounces)
+                    .clamp_range(1..=32)
+                    .speed(1),
+            );
         });
 
         ui.horizontal_wrapped(|ui| {
             ui.label("t");
             let res = ui.add(egui::DragValue::new(&mut self.t).clamp_range(0.1..=200.0));
-            if res.changed() && self.event_loop.send_event(VgonioEvent::UpdateDebugT(self.t)).is_err() {
+            if res.changed()
+                && self
+                    .event_loop
+                    .send_event(VgonioEvent::UpdateDebugT(self.t))
+                    .is_err()
+            {
                 log::warn!("Failed to send event VgonioEvent::UpdateDebugT");
             }
         });
@@ -119,32 +131,34 @@ impl egui::Widget for &mut RayTracingPane {
             }
         });
 
-        egui::CollapsingHeader::new("ray").default_open(true).show(ui, |ui| {
-            egui::ComboBox::from_id_source("ray_mod")
-                .selected_text(format!("{:?}", self.ray_mode))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.ray_mode, RayMode::Cartesian, "Cartesian");
-                    ui.selectable_value(&mut self.ray_mode, RayMode::Spherical, "Spherical");
-                });
+        egui::CollapsingHeader::new("ray")
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::ComboBox::from_id_source("ray_mod")
+                    .selected_text(format!("{:?}", self.ray_mode))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.ray_mode, RayMode::Cartesian, "Cartesian");
+                        ui.selectable_value(&mut self.ray_mode, RayMode::Spherical, "Spherical");
+                    });
 
-            egui::Grid::new("ray_grid").num_columns(2).show(ui, |ui| {
-                match self.ray_mode {
-                    RayMode::Cartesian => {
-                        ui.label("origin");
-                        ui.add(input3_xyz(&mut self.ray_origin_cartesian));
-                        ui.end_row();
+                egui::Grid::new("ray_grid").num_columns(2).show(ui, |ui| {
+                    match self.ray_mode {
+                        RayMode::Cartesian => {
+                            ui.label("origin");
+                            ui.add(input3_xyz(&mut self.ray_origin_cartesian));
+                            ui.end_row();
+                        }
+                        RayMode::Spherical => {
+                            ui.label("origin");
+                            ui.add(input3_spherical(&mut self.ray_origin_spherical));
+                            ui.end_row();
+                        }
                     }
-                    RayMode::Spherical => {
-                        ui.label("origin");
-                        ui.add(input3_spherical(&mut self.ray_origin_spherical));
-                        ui.end_row();
-                    }
-                }
-                ui.label("target");
-                ui.add(input3_xyz(&mut self.ray_target));
-                ui.end_row();
-            })
-        });
+                    ui.label("target");
+                    ui.add(input3_xyz(&mut self.ray_target));
+                    ui.end_row();
+                })
+            });
 
         ui.separator();
 
@@ -154,7 +168,6 @@ impl egui::Widget for &mut RayTracingPane {
                     RayMode::Cartesian => Ray {
                         o: self.ray_origin_cartesian,
                         d: (self.ray_target - self.ray_origin_cartesian).normalize(),
-                        e: 1.0,
                     },
                     RayMode::Spherical => {
                         let r = self.ray_origin_spherical.x;
@@ -168,7 +181,6 @@ impl egui::Widget for &mut RayTracingPane {
                         Ray {
                             o: origin,
                             d: (self.ray_target - origin).normalize(),
-                            e: 1.0,
                         }
                     }
                 };

@@ -14,7 +14,7 @@ Measurement:
     shape: upper-hemisphere  # or lower-hemisphere or whole-sphere
     partition: equal-angle  # equal-area or equal-projected-area
   light_source:
-    position: [ 0.0, 0.0, 0.0]
+    position: [0.0, 0.0, 0.0]
       radius: auto
       phi_range: [ 0.0, 80.0, 10.0 ]
       theta_range: [ 0.0, 0.0, 0.0 ]

@@ -1,15 +1,11 @@
 use crate::acq::Medium;
-use crate::app::VgonioConfig;
-use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::path::Path;
-use std::str::FromStr;
+use std::{cmp::Ordering, collections::HashMap, path::Path};
 
 /// Material's complex refractive index which varies with wavelength of the
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
 /// is constant over all the wavelengths.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct RefractiveIndex {
+pub struct Ior {
     /// corresponding wavelength in nanometres.
     pub wavelength: f32,
 
@@ -20,28 +16,25 @@ pub struct RefractiveIndex {
     pub k: f32,
 }
 
-impl PartialOrd for RefractiveIndex {
+impl PartialOrd for Ior {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.wavelength.partial_cmp(&other.wavelength)
     }
 }
 
-pub struct RefractiveIndexDatabase(HashMap<Medium, Vec<RefractiveIndex>>);
+#[derive(Debug)]
+pub struct IorDb(pub(crate) HashMap<Medium, Vec<Ior>>);
 
-impl Default for RefractiveIndexDatabase {
-    fn default() -> Self {
-        Self::new()
-    }
+impl Default for IorDb {
+    fn default() -> Self { Self::new() }
 }
 
-impl RefractiveIndexDatabase {
-    pub fn new() -> RefractiveIndexDatabase {
-        RefractiveIndexDatabase(HashMap::new())
-    }
+impl IorDb {
+    pub fn new() -> IorDb { IorDb(HashMap::new()) }
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
-    pub fn refractive_index_of(&self, medium: Medium, wavelength: f32) -> Option<RefractiveIndex> {
+    pub fn ior_of(&self, medium: Medium, wavelength: f32) -> Option<Ior> {
         let refractive_indices = self.0.get(&medium).expect("unknown medium");
         // Search for the position of the first wavelength equal or greater than the
         // given one in refractive indices.
@@ -63,8 +56,9 @@ impl RefractiveIndexDatabase {
             };
             let diff_eta = ior_after.eta - ior_before.eta;
             let diff_k = ior_after.k - ior_before.k;
-            let t = (wavelength - ior_before.wavelength) / (ior_after.wavelength - ior_before.wavelength);
-            Some(RefractiveIndex {
+            let t = (wavelength - ior_before.wavelength)
+                / (ior_after.wavelength - ior_before.wavelength);
+            Some(Ior {
                 wavelength,
                 eta: ior_before.eta + t * diff_eta,
                 k: ior_before.k + t * diff_k,
@@ -72,67 +66,17 @@ impl RefractiveIndexDatabase {
         }
     }
 
-    pub fn ior_of_spectrum(&self, medium: Medium, wavelengths: &[f32]) -> Option<Vec<RefractiveIndex>> {
+    /// Returns the refractive index of the given medium at the given spectrum
+    /// (in nanometers).
+    pub fn ior_of_spectrum(&self, medium: Medium, wavelengths: &[f32]) -> Option<Vec<Ior>> {
         wavelengths
             .iter()
-            .map(|wavelength| self.refractive_index_of(medium, *wavelength))
+            .map(|wavelength| self.ior_of(medium, *wavelength))
             .collect()
-    }
-
-    /// Load the refractive index database from the paths specified in the
-    /// config.
-    pub fn load_from_config_dirs(config: &VgonioConfig) -> Self {
-        let mut database = RefractiveIndexDatabase::new();
-        let default_path = config.data_files_dir.join("ior");
-        let user_path = config.user_config.data_files_dir.join("ior");
-
-        // First load refractive indices from `VgonioConfig::data_files_dir`.
-        if default_path.exists() {
-            // Load one by one the files in the directory.
-            let n = Self::load_refractive_indices(&mut database, &default_path);
-            log::debug!("Loaded {} ior files from {:?}", n, default_path);
-        }
-
-        // Second load refractive indices from
-        // `VgonioConfig::user_config::data_files_dir`.
-        if user_path.exists() {
-            let n = Self::load_refractive_indices(&mut database, &user_path);
-            log::debug!("Loaded {} ior files from {:?}", n, user_path);
-        }
-
-        database
-    }
-
-    /// Load the refractive index database from the given path.
-    /// Returns the number of files loaded.
-    fn load_refractive_indices(ior_db: &mut RefractiveIndexDatabase, path: &Path) -> u32 {
-        let mut n_files = 0;
-        if path.is_file() {
-            log::debug!("Loading refractive index database from {:?}", path);
-            let medium =
-                Medium::from_str(path.file_name().unwrap().to_str().unwrap().split('_').next().unwrap()).unwrap();
-            let refractive_indices = RefractiveIndex::read_iors_from_file(path).unwrap();
-            let iors = ior_db.0.entry(medium).or_insert(Vec::new());
-            for ior in refractive_indices {
-                if !iors.contains(&ior) {
-                    iors.push(ior);
-                }
-            }
-            iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
-            n_files += 1;
-        } else if path.is_dir() {
-            for entry in path.read_dir().unwrap() {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                n_files += RefractiveIndexDatabase::load_refractive_indices(ior_db, &path);
-            }
-        }
-
-        n_files
     }
 }
 
-impl RefractiveIndex {
+impl Ior {
     pub const VACUUM: Self = Self {
         wavelength: 0.0,
         eta: 1.0,
@@ -145,17 +89,13 @@ impl RefractiveIndex {
         k: 0.0,
     };
 
-    pub fn new(wavelength: f32, eta: f32, k: f32) -> RefractiveIndex {
-        RefractiveIndex { wavelength, eta, k }
-    }
+    pub fn new(wavelength: f32, eta: f32, k: f32) -> Ior { Ior { wavelength, eta, k } }
 
-    pub fn is_dielectric(&self) -> bool {
-        (self.k - 0.0).abs() < f32::EPSILON
-    }
+    pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
 
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"
-    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Vec<RefractiveIndex>> {
+    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Vec<Ior>> {
         std::fs::File::open(path)
             .map(|f| {
                 let mut rdr = csv::Reader::from_reader(f);
@@ -179,7 +119,7 @@ impl RefractiveIndex {
                             let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                             let eta = record[1].parse::<f32>().unwrap();
                             let k = record[2].parse::<f32>().unwrap();
-                            Some(RefractiveIndex::new(wavelength, eta, k))
+                            Some(Ior::new(wavelength, eta, k))
                         }
                         Err(_) => None,
                     })
