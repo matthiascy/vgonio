@@ -12,11 +12,13 @@ pub mod ndf;
 mod occlusion;
 pub mod scattering;
 pub mod util;
+mod si_units;
 
 pub use collector::{Collector, Patch};
 pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
+pub use si_units::*;
 
 pub use occlusion::*;
 use std::{
@@ -101,9 +103,7 @@ pub struct RtcRecord {
 
 impl RtcRecord {
     /// Returns the bounces of traced ray.
-    pub fn bounces(&self) -> usize {
-        self.trajectory.len() - 1
-    }
+    pub fn bounces(&self) -> usize { self.trajectory.len() - 1 }
 }
 
 #[non_exhaustive]

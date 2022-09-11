@@ -1,21 +1,26 @@
 use crate::{
     acq::{
+        bsdf,
         bsdf::BsdfKind,
         desc::{MeasurementDesc, MeasurementKind},
         util::SphericalShape,
-        Medium,
+        Medium, RayTracingMethod,
     },
-    app::gui::{gizmo::VgonioGizmo, ui::Workspace, widgets::input, VgonioEvent, VisualDebugTool},
+    app::{
+        cache::{VgonioCache, VgonioDatafiles},
+        gui::{gizmo::VgonioGizmo, ui::Workspace, widgets::input, VgonioEvent, VisualDebugTool},
+    },
 };
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
 use std::{
+    cell::RefCell,
     fmt::{Display, Formatter},
     path::PathBuf,
+    rc::Rc,
     sync::Arc,
 };
 use winit::event_loop::EventLoopProxy;
-use crate::acq::{bsdf, RayTracingMethod};
 
 /// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -72,7 +77,6 @@ pub struct SimulationPanel {
 
     // /// Emitter partition.
     // emitter_partition: Partition,
-
     /// Collector radius mode.
     collector_radius_mode: RadiusMode,
 
@@ -85,10 +89,12 @@ pub struct SimulationPanel {
     simulation_started: bool,
 
     simulation_progress: f32,
+
+    cache: Rc<RefCell<VgonioCache>>,
 }
 
 impl SimulationPanel {
-    pub fn new() -> Self {
+    pub fn new(cache: Rc<RefCell<VgonioCache>>) -> Self {
         Self {
             desc: MeasurementDesc::default(),
             selected_surface_index: 0,
@@ -103,6 +109,7 @@ impl SimulationPanel {
             },
             simulation_started: false,
             simulation_progress: 0.0,
+            cache,
         }
     }
 
@@ -142,11 +149,7 @@ impl SimulationPanel {
                 egui::ComboBox::from_id_source("incident_medium_choice")
                     .selected_text(format!("{:?}", self.desc.incident_medium))
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.desc.incident_medium,
-                            Medium::Air,
-                            "Air",
-                        );
+                        ui.selectable_value(&mut self.desc.incident_medium, Medium::Air, "Air");
                         ui.selectable_value(
                             &mut self.desc.incident_medium,
                             Medium::Copper,
@@ -169,11 +172,7 @@ impl SimulationPanel {
                 egui::ComboBox::from_id_source("transmitted_medium_choice")
                     .selected_text(format!("{:?}", self.desc.transmitted_medium))
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.desc.transmitted_medium,
-                            Medium::Air,
-                            "Air",
-                        );
+                        ui.selectable_value(&mut self.desc.transmitted_medium, Medium::Air, "Air");
                         ui.selectable_value(
                             &mut self.desc.transmitted_medium,
                             Medium::Copper,
@@ -216,8 +215,16 @@ impl SimulationPanel {
                 ui.end_row();
 
                 ui.add(egui::Label::new("tracing method"));
-                ui.selectable_value(&mut self.desc.tracing_method, RayTracingMethod::Standard, "standard");
-                ui.selectable_value(&mut self.desc.tracing_method, RayTracingMethod::Grid, "  grid  ");
+                ui.selectable_value(
+                    &mut self.desc.tracing_method,
+                    RayTracingMethod::Standard,
+                    "standard",
+                );
+                ui.selectable_value(
+                    &mut self.desc.tracing_method,
+                    RayTracingMethod::Grid,
+                    "  grid  ",
+                );
                 ui.end_row();
             });
 
@@ -228,15 +235,11 @@ impl SimulationPanel {
                     .num_columns(2)
                     .show(ui, |ui| {
                         ui.label("num rays");
-                        ui.add(egui::DragValue::new(
-                            &mut self.desc.emitter.num_rays,
-                        ));
+                        ui.add(egui::DragValue::new(&mut self.desc.emitter.num_rays));
                         ui.end_row();
 
                         ui.label("max bounces");
-                        ui.add(egui::DragValue::new(
-                            &mut self.desc.emitter.max_bounces,
-                        ));
+                        ui.add(egui::DragValue::new(&mut self.desc.emitter.max_bounces));
                         ui.end_row();
 
                         ui.label("radius");
@@ -258,25 +261,19 @@ impl SimulationPanel {
                         ui.label("spectrum (nm)");
                         ui.horizontal(|ui| {
                             ui.add(
-                                egui::DragValue::new(
-                                    &mut self.desc.emitter.spectrum.start,
-                                )
-                                .prefix("start: ")
-                                .clamp_range(380.0..=780.0),
+                                egui::DragValue::new(&mut self.desc.emitter.spectrum.start)
+                                    .prefix("start: ")
+                                    .clamp_range(380.0..=780.0),
                             );
                             ui.add(
-                                egui::DragValue::new(
-                                    &mut self.desc.emitter.spectrum.stop,
-                                )
-                                .prefix("stop: ")
-                                .clamp_range(self.desc.emitter.spectrum.start..=780.0),
+                                egui::DragValue::new(&mut self.desc.emitter.spectrum.stop)
+                                    .prefix("stop: ")
+                                    .clamp_range(self.desc.emitter.spectrum.start..=780.0),
                             );
                             ui.add(
-                                egui::DragValue::new(
-                                    &mut self.desc.emitter.spectrum.step,
-                                )
-                                .prefix("step: ")
-                                .clamp_range(0.1..=400.0),
+                                egui::DragValue::new(&mut self.desc.emitter.spectrum.step)
+                                    .prefix("step: ")
+                                    .clamp_range(0.1..=400.0),
                             );
                         });
 
@@ -513,14 +510,17 @@ impl Workspace for SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
-    pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
+    pub fn new(
+        event_loop: Arc<EventLoopProxy<VgonioEvent>>,
+        cache: Rc<RefCell<VgonioCache>>,
+    ) -> Self {
         Self {
             view_gizmo_opened: false,
             visual_debugger_opened: false,
             simulation_pane_opened: false,
             view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
             visual_debug_tool: VisualDebugTool::new(event_loop.clone()),
-            simulation_panel: SimulationPanel::new(),
+            simulation_panel: SimulationPanel::new(cache),
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             event_loop,
@@ -531,16 +531,8 @@ impl SimulationWorkspace {
     pub fn update_surface_list(&mut self, list: &Vec<PathBuf>) {
         if !list.is_empty() {
             for surface in list {
-                if !self
-                    .simulation_panel
-                    .desc
-                    .surfaces
-                    .contains(surface)
-                {
-                    self.simulation_panel
-                        .desc
-                        .surfaces
-                        .push(surface.clone());
+                if !self.simulation_panel.desc.surfaces.contains(surface) {
+                    self.simulation_panel.desc.surfaces.push(surface.clone());
                 }
             }
         }

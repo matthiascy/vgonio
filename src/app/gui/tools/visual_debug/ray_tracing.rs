@@ -1,16 +1,15 @@
 use crate::{
-    acq::Ray,
+    acq::{EmbreeRayTracing, Ray, RayTracingMethod, TrajectoryNode},
     app::gui::{
         widgets::{input3_spherical, input3_xyz},
         VgonioEvent,
     },
+    mesh::TriangleMesh,
 };
+use embree::Config;
 use glam::{IVec2, Vec3};
 use std::sync::Arc;
-use embree::Config;
 use winit::event_loop::EventLoopProxy;
-use crate::acq::{EmbreeRayTracing, RayTracingMethod, TrajectoryNode};
-use crate::mesh::TriangleMesh;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum RayMode {

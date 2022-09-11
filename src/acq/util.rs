@@ -69,10 +69,10 @@ pub enum SphericalPartition {
     /// angular interval. Angles are expressed in *degrees*.
     EqualAngle {
         /// Range of interest of the polar angle θ (start, stop, step).
-        theta: Range<f32>,
+        zenith: Range<f32>,
 
         /// Range of interest of the azimuthal angle φ (start, stop, step).
-        phi: Range<f32>,
+        azimuth: Range<f32>,
     },
 
     /// The collector is partitioned into a number of regions with the same
@@ -81,26 +81,27 @@ pub enum SphericalPartition {
     /// Angles are expressed in *degrees*
     EqualArea {
         /// Range of interest of the polar angle θ (start, stop, count).
-        theta: (f32, f32, u32),
+        zenith: (f32, f32, u32),
 
         /// Range of interest interval of the azimuthal angle φ (start, stop,
         /// step).
-        phi: Range<f32>,
+        azimuth: Range<f32>,
     },
 
     /// The collector is partitioned into a number of regions with the same
     /// projected area (projected solid angle).
     EqualProjectedArea {
         /// Range of interest of the polar angle θ (start, stop, count).
-        theta: (f32, f32, u32),
+        zenith: (f32, f32, u32),
 
         /// Range of interest interval of the azimuthal angle φ (start, stop,
         /// step) in degrees.
-        phi: Range<f32>,
+        azimuth: Range<f32>,
     },
 }
 
 impl SphericalPartition {
+    /// Returns human-friendly description of the partition.
     pub fn kind_str(&self) -> &'static str {
         match self {
             SphericalPartition::EqualAngle { .. } => "equal angular interval",
@@ -111,26 +112,28 @@ impl SphericalPartition {
         }
     }
 
-    pub fn theta_range_str(&self) -> String {
+    /// Returns human-friendly description of the polar angle range.
+    pub fn zenith_range_str(&self) -> String {
         match self {
-            SphericalPartition::EqualAngle { theta, .. } => {
+            SphericalPartition::EqualAngle { zenith: theta, .. } => {
                 format!(
                     "{}° - {}°, step size {}°",
                     theta.start, theta.stop, theta.step
                 )
             }
-            SphericalPartition::EqualArea { theta, .. }
-            | SphericalPartition::EqualProjectedArea { theta, .. } => {
+            SphericalPartition::EqualArea { zenith: theta, .. }
+            | SphericalPartition::EqualProjectedArea { zenith: theta, .. } => {
                 format!("{}° - {}°, samples count {}", theta.0, theta.1, theta.2)
             }
         }
     }
 
-    pub fn phi_range_str(&self) -> String {
+    /// Returns human-friendly description of the azimuthal angle range.
+    pub fn azimuth_range_str(&self) -> String {
         match self {
-            SphericalPartition::EqualAngle { phi, .. }
-            | SphericalPartition::EqualArea { phi, .. }
-            | SphericalPartition::EqualProjectedArea { phi, .. } => {
+            SphericalPartition::EqualAngle { azimuth: phi, .. }
+            | SphericalPartition::EqualArea { azimuth: phi, .. }
+            | SphericalPartition::EqualProjectedArea { azimuth: phi, .. } => {
                 format!("{}° - {}°, step size {}°", phi.start, phi.stop, phi.step)
             }
         }
@@ -145,13 +148,13 @@ impl SphericalPartition {
     pub fn generate_patches(&self, shape: SphericalShape) -> Vec<Patch> {
         match self {
             SphericalPartition::EqualAngle {
-                theta:
+                zenith:
                     Range {
                         start: theta_start,
                         stop: theta_stop,
                         step: theta_step,
                     },
-                phi:
+                azimuth:
                     Range {
                         start: phi_start,
                         stop: phi_stop,
@@ -186,8 +189,8 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualArea {
-                theta: (theta_start, theta_stop, count),
-                phi:
+                zenith: (theta_start, theta_stop, count),
+                azimuth:
                     Range {
                         start: phi_start,
                         stop: phi_stop,
@@ -229,8 +232,8 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualProjectedArea {
-                theta: (start, stop, count),
-                phi:
+                zenith: (start, stop, count),
+                azimuth:
                     Range {
                         start: phi_start,
                         stop: phi_stop,

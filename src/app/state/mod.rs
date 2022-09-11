@@ -13,8 +13,12 @@ use crate::{
 use camera::CameraState;
 
 use crate::{
-    acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray},
-    app::VgonioConfig,
+    acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray, RayTracingMethod},
+    app::{
+        cache::{VgonioCache, VgonioDatafiles},
+        gui::{trace_ray_grid_dbg, trace_ray_standard_dbg},
+        VgonioConfig,
+    },
     error::Error,
     gfx::camera::{Camera, Projection, ProjectionKind},
     htfld::Heightfield,
@@ -22,6 +26,7 @@ use crate::{
 };
 use glam::{Mat4, Vec3};
 use std::{
+    cell::RefCell,
     collections::HashMap,
     default::Default,
     io::{BufWriter, Write},
@@ -35,8 +40,6 @@ use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::EventLoopProxy,
 };
-use crate::acq::RayTracingMethod;
-use crate::app::gui::{trace_ray_grid_dbg, trace_ray_standard_dbg};
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -383,7 +386,19 @@ impl DebugState {
 pub struct VgonioApp {
     gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
+
+    /// The configuration of the application. See [`VgonioConfig`].
+    config: Rc<VgonioConfig>,
+
+    /// The GUI application state.
     gui: VgonioGui,
+
+    /// The datafiles of the application. See [`VgonioDatafiles`].
+    db: VgonioDatafiles,
+
+    /// The cache of the application. See [`VgonioCache`].
+    cache: Rc<RefCell<VgonioCache>>,
+
     input: InputState,
     camera: CameraState,
     passes: HashMap<&'static str, RdrPass>,
@@ -450,8 +465,13 @@ impl VgonioApp {
 
         let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
 
+        let config = Rc::new(config);
+        let mut db = VgonioDatafiles::new();
+        db.load_ior_database(&config);
+        let cache = Rc::new(RefCell::new(VgonioCache::new(config.cache_dir.clone())));
+
         //let ui = egui_demo_lib::WrapApp::default();
-        let gui = VgonioGui::new(event_loop, config);
+        let gui = VgonioGui::new(event_loop.clone(), config.clone(), cache.clone());
 
         let input = InputState {
             key_map: Default::default(),
@@ -467,7 +487,10 @@ impl VgonioApp {
         Ok(Self {
             gpu_ctx,
             gui_ctx,
+            config,
             gui,
+            db,
+            cache,
             input,
             passes,
             depth_map,
@@ -860,18 +883,17 @@ impl VgonioApp {
                     match method {
                         RayTracingMethod::Standard => {
                             log::debug!("  => [Standard Ray Tracing]");
-                            self.debug_drawing.rays =
-                                trace_ray_standard_dbg(
-                                    ray,
-                                    max_bounces,
-                                    self.surface_mesh.as_ref().unwrap(),
-                                );
+                            self.debug_drawing.rays = trace_ray_standard_dbg(
+                                ray,
+                                max_bounces,
+                                self.surface_mesh.as_ref().unwrap(),
+                            );
                         }
                         RayTracingMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
                             let grid_rt = GridRayTracing::new(
-                                self.surface.as_ref().unwrap().clone(),
-                                self.surface_mesh.as_ref().unwrap().clone(),
+                                self.surface.as_ref().unwrap(),
+                                self.surface_mesh.as_ref().unwrap(),
                             );
                             self.debug_drawing.rays =
                                 trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
@@ -884,12 +906,10 @@ impl VgonioApp {
                             .iter()
                             .map(|r| r.o)
                             .collect::<Vec<_>>();
-                        let last_ray =
-                            self.debug_drawing.rays[self.debug_drawing.rays.len() - 1];
+                        let last_ray = self.debug_drawing.rays[self.debug_drawing.rays.len() - 1];
                         content.push(last_ray.o + last_ray.d * self.debug_drawing.ray_t);
                         log::debug!("content: {:?}", content);
-                        self.debug_drawing.vert_count =
-                            self.debug_drawing.rays.len() as u32 + 1;
+                        self.debug_drawing.vert_count = self.debug_drawing.rays.len() as u32 + 1;
                         self.gpu_ctx.queue.write_buffer(
                             &self.debug_drawing.vert_buffer.raw,
                             0,

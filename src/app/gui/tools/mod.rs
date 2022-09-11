@@ -1,9 +1,11 @@
 mod visual_debug;
 
+use crate::{
+    acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode},
+    mesh::TriangleMesh,
+};
 use embree::Config;
 pub(crate) use visual_debug::VisualDebugTool;
-use crate::acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode};
-use crate::mesh::TriangleMesh;
 
 pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTracing) -> Vec<Ray> {
     log::debug!("trace_ray_grid_dbg: {:?}", ray);

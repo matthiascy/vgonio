@@ -341,7 +341,7 @@ pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIs
 #[cfg(test)]
 mod tests {
     use super::ray_tri_intersect_woop;
-    use crate::acq::ray::Ray;
+    use crate::acq::Ray;
     use glam::Vec3;
 
     #[test]

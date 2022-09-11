@@ -2,12 +2,7 @@
 // embree api calls to the same object are not thread safe in general.
 
 use crate::{
-    acq::{
-        fresnel,
-        ior::Ior,
-        scattering::{reflect},
-        Ray, RtcRecord, TrajectoryNode,
-    },
+    acq::{fresnel, ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     mesh,
 };
 use embree::{
@@ -199,10 +194,7 @@ fn trace_one_ray_inner(
     trajectory: &mut Vec<TrajectoryNode>,
 ) {
     log::debug!("---- current bounce {} ----", curr_bounces);
-    trajectory.push(TrajectoryNode {
-        ray,
-        cos: 0.0,
-    });
+    trajectory.push(TrajectoryNode { ray, cos: 0.0 });
     log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());
 
     if curr_bounces >= max_bounces {
@@ -216,16 +208,29 @@ fn trace_one_ray_inner(
     // Checks if the ray hit something.
     if ray_hit.hit.hit() && (f32::EPSILON..f32::INFINITY).contains(&ray_hit.ray.tfar) {
         log::debug!("  > YES[HIT]");
-        log::debug!("    geom {} - prim {}", ray_hit.hit.geomID, ray_hit.hit.primID);
+        log::debug!(
+            "    geom {} - prim {}",
+            ray_hit.hit.geomID,
+            ray_hit.hit.primID
+        );
 
         // Check with the previous hit record if the same primitive has been hit.
         log::debug!("    > has prev? {}", prev.is_some());
         if let Some(prev) = prev {
-            log::debug!("      -- geom_id - prev: {}, now: {}, prim_id - prev: {}, now: {}", prev.geom_id, ray_hit.hit.geomID, prev.prim_id, ray_hit.hit.primID);
+            log::debug!(
+                "      -- geom_id - prev: {}, now: {}, prim_id - prev: {}, now: {}",
+                prev.geom_id,
+                ray_hit.hit.geomID,
+                prev.prim_id,
+                ray_hit.hit.primID
+            );
             if prev.geom_id == ray_hit.hit.geomID && prev.prim_id == ray_hit.hit.primID {
                 log::debug!("       > THE SAME PRIMITIVE");
                 trajectory.pop();
-                log::debug!("        -- nudging | pop out last | after len: {:?}", trajectory.len());
+                log::debug!(
+                    "        -- nudging | pop out last | after len: {:?}",
+                    trajectory.len()
+                );
                 // nudge more
                 let nudged_times = prev.nudged_times + 1;
                 let amount = nudged_times as f32 * EmbreeRayTracing::NUDGE_AMOUNT;

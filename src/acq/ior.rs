@@ -1,6 +1,8 @@
 use crate::acq::Medium;
 use std::{cmp::Ordering, collections::HashMap, path::Path};
 
+// todo: merge ior db into vgonio db
+
 /// Material's complex refractive index which varies with wavelength of the
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
 /// is constant over all the wavelengths.
@@ -22,6 +24,7 @@ impl PartialOrd for Ior {
     }
 }
 
+/// Refractive index database.
 #[derive(Debug)]
 pub struct IorDb(pub(crate) HashMap<Medium, Vec<Ior>>);
 
@@ -30,6 +33,7 @@ impl Default for IorDb {
 }
 
 impl IorDb {
+    /// Create an empty database.
     pub fn new() -> IorDb { IorDb(HashMap::new()) }
 
     /// Returns the refractive index of the given medium at the given wavelength
@@ -77,20 +81,24 @@ impl IorDb {
 }
 
 impl Ior {
+    /// Refractive index of vacuum.
     pub const VACUUM: Self = Self {
         wavelength: 0.0,
         eta: 1.0,
         k: 0.0,
     };
 
+    /// Refractive index of air.
     pub const AIR: Self = Self {
         wavelength: 0.0,
         eta: 1.00029,
         k: 0.0,
     };
 
+    /// Creates a new refractive index.
     pub fn new(wavelength: f32, eta: f32, k: f32) -> Ior { Ior { wavelength, eta, k } }
 
+    /// Whether the refractive index represents dielectric material.
     pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
 
     /// Read a csv file and return a vector of refractive indices.

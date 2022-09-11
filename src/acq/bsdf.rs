@@ -1,8 +1,6 @@
-use std::fmt::{Display, Formatter};
 use crate::{
     acq::{
         desc::{MeasurementDesc, Range},
-        embree_rt::EmbreeRayTracing,
         Collector, Emitter, Patch, Ray,
     },
     app::{
@@ -11,6 +9,7 @@ use crate::{
     },
 };
 use embree::{Config, SoARay};
+use std::fmt::{Display, Formatter};
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
@@ -101,15 +100,20 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 // // Vec<Stats<PatchData, N_PATCH, N_BOUNCE>>
 pub fn measure_bsdf_embree_rt(
     desc: &MeasurementDesc,
-    cache: &mut VgonioCache,
+    cache: &VgonioCache,
     db: &VgonioDatafiles,
-    handles: &[SurfaceHandle],
+    surfaces: &[SurfaceHandle],
 ) {
+    use crate::acq::EmbreeRayTracing;
     let mut collector: Collector = desc.collector.into();
     let mut emitter: Emitter = desc.emitter.into();
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
-    let surfaces = cache.get_surfaces(handles).unwrap();
-    let meshes = cache.get_surface_meshes(handles);
+    let (surfaces, meshes) = {
+        (
+            cache.get_surfaces(surfaces).unwrap(),
+            cache.get_surface_meshes(surfaces),
+        )
+    };
 
     // Iterate over every surface.
     for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
@@ -122,7 +126,7 @@ pub fn measure_bsdf_embree_rt(
         if desc.emitter.radius.is_auto() {
             emitter.set_radius(mesh.extent.max_edge() * 2.5);
         }
-        let embree_mesh = embree_rt.create_triangle_mesh(&mesh);
+        let embree_mesh = embree_rt.create_triangle_mesh(mesh);
         let _surface_id = embree_rt.attach_geometry(scene_id, embree_mesh);
         let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
         log::debug!("spectrum samples: {:?}", spectrum);
@@ -158,7 +162,8 @@ pub fn measure_bsdf_embree_rt(
             let filtered: Vec<_> = ray_hit
                 .iter()
                 .enumerate()
-                .filter_map(|(i, (_, h))| h.hit().then_some(i)).collect();
+                .filter_map(|(i, (_, h))| h.hit().then_some(i))
+                .collect();
 
             println!("first hit count: {}", filtered.len());
 
@@ -173,9 +178,46 @@ pub fn measure_bsdf_embree_rt(
 }
 
 /// Brdf measurement.
-pub fn measure_bsdf_grid_rt(_desc: &MeasurementDesc, _cache: &VgonioCache) {
-    // let collector: Collector = desc.collector.into();
-    // let emitter: Emitter = desc.emitter.into();
+pub fn measure_bsdf_grid_rt(
+    desc: &MeasurementDesc,
+    cache: &VgonioCache,
+    db: &VgonioDatafiles,
+    surfaces: &[SurfaceHandle],
+) {
+    use crate::acq::GridRayTracing;
+
+    let collector: Collector = desc.collector.into();
+    let mut emitter: Emitter = desc.emitter.into();
+    let (surfaces, meshes) = {
+        (
+            cache.get_surfaces(surfaces).unwrap(),
+            cache.get_surface_meshes(surfaces),
+        )
+    };
+
+    for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
+        let mut grid_rt = GridRayTracing::new(surface, mesh);
+        println!(
+            "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+            surface.path.as_ref().unwrap().display()
+        );
+        if desc.emitter.radius.is_auto() {
+            emitter.set_radius(mesh.extent.max_edge() * 2.5);
+        }
+        let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
+        let ior_t = db.ior_db.ior_of_spectrum(desc.transmitted_medium, &spectrum)
+            .expect("transmitted medium IOR not found");
+
+        // for pos in emitter.positions() {
+        //     let rays = emitter.emit_rays(pos);
+        //     let records = rays.iter().filter_map(|ray| {
+        //         grid_rt.trace_one_ray_dbg()
+        //         grid_rt.trace_one_ray(ray, desc.emitter.max_bounces, &ior_t)
+        //     });
+        //     collector.collect(records, BsdfKind::InPlaneBrdf);
+        // }
+
+    }
     // log::debug!("Emitter has {} patches.", emitter.patches.len());
     // let mut grid_rt = GridRayTracing::new(Config::default());
 }

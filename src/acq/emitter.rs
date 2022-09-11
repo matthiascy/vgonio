@@ -1,9 +1,4 @@
-use crate::acq::{
-    collector::Patch,
-    desc::{EmitterDesc, RadiusDesc, Range},
-    util::SphericalCoord,
-    Ray,
-};
+use crate::acq::{collector::Patch, desc::{EmitterDesc, RadiusDesc, Range}, util::SphericalCoord, Ray, Length, Metres};
 
 /// Light emitter of the virtual gonio-photometer. The shape of the emitter
 /// patch is spherical cap. The patch will be rotated during the measurement.

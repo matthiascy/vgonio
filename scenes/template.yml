@@ -1,7 +1,7 @@
 ---
 length_unit: m
 measurement_kind: !bsdf in-plane-brdf
-tracing_method: standard
+tracing_method: grid
 incident_medium: air
 transmitted_medium: aluminium
 surfaces:
@@ -12,8 +12,8 @@ emitter:
   num_rays: 10000
   max_bounces: 10
   radius: auto
-  theta: [0.0, 90.0, 5.0] # [start, stop, count]
-  phi: [0.0, 360.0, 60.0] # [start, stop, step]
+  zenith: [0.0, 90.0, 5.0] # [start, stop, count]
+  azimuth: [0.0, 360.0, 60.0] # [start, stop, step]
   spectrum: [380.0, 780.0, 400.0] # [start, stop, step]
 collector:
   radius: auto

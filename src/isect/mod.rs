@@ -28,6 +28,6 @@ pub struct RayTriIsect {
 }
 
 impl RayTriIsect {
-    // TODO:
+    /// Constructs a new `RayTriIsect`.
     pub fn new(p: Vec3, p_err: Vec3, n: Vec3, u: f32, v: f32) -> Self { Self { u, v, n, p } }
 }

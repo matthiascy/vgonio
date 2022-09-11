@@ -1,10 +1,10 @@
 use crate::acq::{
+    bsdf::BsdfKind,
     desc::{CollectorDesc, RadiusDesc},
     util::{SphericalPartition, SphericalShape},
     RtcRecord,
 };
 use std::fmt::Debug;
-use crate::acq::bsdf::BsdfKind;
 
 /// The virtual goniophotometer's detectors represented by the patches
 /// of a sphere (or an hemisphere) positioned around the specimen.

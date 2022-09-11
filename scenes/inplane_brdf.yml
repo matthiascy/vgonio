@@ -2,7 +2,7 @@
 Measurement:
   angle_unit: degree
   length_unit: nm
-  bxdf_kind: in-plane
+  bsdf_kind: in-plane-brdf
   rays_count: 10e6
   max_bounces: 20
   incident_medium: vacuum

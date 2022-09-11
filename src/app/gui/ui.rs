@@ -1,7 +1,11 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
-use crate::app::{gui::GuiContext, VgonioConfig};
+use crate::app::{
+    cache::{VgonioCache, VgonioDatafiles},
+    gui::GuiContext,
+    VgonioConfig,
+};
 use glam::Mat4;
-use std::{fmt::Write, sync::Arc};
+use std::{cell::RefCell, fmt::Write, rc::Rc, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 pub trait Workspace {
@@ -16,9 +20,12 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
+    pub fn new(
+        event_loop: Arc<EventLoopProxy<VgonioEvent>>,
+        cache: Rc<RefCell<VgonioCache>>,
+    ) -> Self {
         Self {
-            simulation: SimulationWorkspace::new(event_loop),
+            simulation: SimulationWorkspace::new(event_loop, cache),
             analysis: AnalysisWorkspace {},
         }
     }
@@ -35,7 +42,7 @@ impl Workspaces {
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
     /// The configuration of the application. See [`VgonioConfig`].
-    config: VgonioConfig,
+    config: Rc<VgonioConfig>,
 
     /// Workspaces are essentially predefined window layouts for certain usage.
     pub(crate) workspaces: Workspaces,
@@ -51,9 +58,13 @@ pub struct VgonioGui {
 }
 
 impl VgonioGui {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, config: VgonioConfig) -> Self {
+    pub fn new(
+        event_loop: EventLoopProxy<VgonioEvent>,
+        config: Rc<VgonioConfig>,
+        cache: Rc<RefCell<VgonioCache>>,
+    ) -> Self {
         let event_loop = Arc::new(event_loop);
-        let workspaces = Workspaces::new(event_loop.clone());
+        let workspaces = Workspaces::new(event_loop.clone(), cache);
         Self {
             config,
             event_loop,

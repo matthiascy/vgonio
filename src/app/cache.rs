@@ -151,7 +151,7 @@ impl VgonioCache {
             let surface = self
                 .surfaces
                 .get(&handle.path.to_string_lossy().to_string())
-                .ok_or(Error::Any("Surface not exist!".to_string()))?;
+                .ok_or_else(|| Error::Any("Surface not exist!".to_string()))?;
             surfaces.push(surface)
         }
 
@@ -165,11 +165,13 @@ impl VgonioCache {
         for handle in handles {
             for surface in self.surfaces.values() {
                 if surface.uuid == handle.uuid {
-                    if self.triangle_meshes.contains_key(&surface.uuid) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        self.triangle_meshes.entry(surface.uuid)
+                    {
+                        let mesh = surface.triangulate(TriangulationMethod::Regular);
+                        e.insert(mesh);
                         meshes.push(surface.uuid);
                     } else {
-                        let mesh = surface.triangulate(TriangulationMethod::Regular);
-                        self.triangle_meshes.insert(surface.uuid, mesh);
                         meshes.push(surface.uuid);
                     }
                     break;

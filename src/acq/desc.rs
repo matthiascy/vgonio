@@ -2,7 +2,7 @@ use crate::{
     acq::{
         bsdf::BsdfKind,
         util::{SphericalPartition, SphericalShape},
-        Medium,
+        Medium, RayTracingMethod,
     },
     Error,
 };
@@ -12,29 +12,12 @@ use std::{
     ops::Sub,
     path::{Path, PathBuf},
 };
-use crate::acq::RayTracingMethod;
+use crate::acq::{Length, SiMetre, Metres};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum LengthUnit {
-    #[serde(rename = "m")]
-    Meters,
-
-    #[serde(rename = "mm")]
-    Millimetres,
-
-    #[serde(rename = "um")]
-    Micrometres,
-
-    #[serde(rename = "nm")]
-    Nanometres,
-
-    #[serde(rename = "pm")]
-    Picometres,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+/// Helper struct used to specify the range of all kind of measurement (mostly angle ranges).
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(into = "[T; 3]", from = "[T; 3]")]
-pub struct Range<T: Copy> {
+pub struct Range<T: Copy + Clone> {
     /// Initial wavelength of the spectrum.
     pub start: T,
 
@@ -45,7 +28,19 @@ pub struct Range<T: Copy> {
     pub step: T,
 }
 
-impl<T: Copy> Range<T> {
+impl<T: Copy + Clone> PartialEq for Range<T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start && self.stop == other.stop && self.step == other.step
+    }
+}
+
+impl<T: Copy + Clone> Eq for Range<T> where T: PartialEq + Eq {}
+
+impl<T: Copy + Clone> Range<T> {
+    /// Maps a function over the start and stop of the range.
     pub fn map(&self, f: impl Fn(T) -> T) -> Range<T> {
         Range {
             start: f(self.start),
@@ -54,6 +49,7 @@ impl<T: Copy> Range<T> {
         }
     }
 
+    /// Returns the span of the range.
     pub fn span(&self) -> T
     where
         T: Sub<Output = T>,
@@ -101,6 +97,7 @@ impl<T: Default + Copy> Default for Range<T> {
 }
 
 impl Range<f32> {
+    /// Returns the sample count of the range.
     pub fn samples_count(&self) -> usize { ((self.stop - self.start) / self.step).floor() as usize }
 }
 
@@ -116,6 +113,7 @@ pub enum RadiusDesc {
 }
 
 impl RadiusDesc {
+    /// Whether the radius is deduced from the dimension of the surface.
     pub fn is_auto(&self) -> bool {
         match self {
             RadiusDesc::Auto => true,
@@ -177,9 +175,6 @@ pub enum MeasurementKind {
 /// Note: angle in the description file is always in degrees.
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MeasurementDesc {
-    /// Length unit of the measurement.
-    pub length_unit: LengthUnit,
-
     /// The measurement kind.
     pub measurement_kind: MeasurementKind,
 
@@ -228,7 +223,6 @@ impl MeasurementDesc {
 impl Default for MeasurementDesc {
     fn default() -> Self {
         Self {
-            length_unit: LengthUnit::Nanometres,
             measurement_kind: MeasurementKind::Ndf,
             tracing_method: RayTracingMethod::Standard,
             incident_medium: Medium::Air,
@@ -254,8 +248,8 @@ impl Default for MeasurementDesc {
                 radius: RadiusDesc::Auto,
                 shape: SphericalShape::UpperHemisphere,
                 partition: SphericalPartition::EqualArea {
-                    theta: (0.0, 0.0, 0),
-                    phi: Range::<f32> {
+                    zenith: (0.0, 0.0, 0),
+                    azimuth: Range::<f32> {
                         start: 0.0,
                         stop: 0.0,
                         step: 0.0,
@@ -271,7 +265,6 @@ fn scene_desc_serialization() {
     use std::io::{Cursor, Write};
 
     let desc = MeasurementDesc {
-        length_unit: LengthUnit::Meters,
         measurement_kind: MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),
         tracing_method: RayTracingMethod::Standard,
         incident_medium: Medium::Air,
@@ -281,8 +274,8 @@ fn scene_desc_serialization() {
             radius: RadiusDesc::Auto,
             shape: SphericalShape::WholeSphere,
             partition: SphericalPartition::EqualArea {
-                theta: (0.0, 90.0, 45),
-                phi: Range {
+                zenith: (0.0, 90.0, 45),
+                azimuth: Range {
                     start: 0.0,
                     stop: 360.0,
                     step: 0.0,

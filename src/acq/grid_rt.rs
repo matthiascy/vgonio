@@ -1,11 +1,13 @@
 use crate::{
     acq::{scattering::reflect, Ray},
     htfld::{AxisAlignment, Heightfield},
-    isect::{ray_tri_intersect_moller_trumbore, ray_tri_intersect_woop, RayTriIsect},
+    isect::{ray_tri_intersect_woop, RayTriIsect},
     mesh::TriangleMesh,
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 use std::rc::Rc;
+use crate::acq::ior::Ior;
+use crate::acq::{RtcRecord, TrajectoryNode};
 
 /// Helper structure for grid ray tracing.
 ///
@@ -19,12 +21,12 @@ use std::rc::Rc;
 /// TODO: deal with axis alignment of the heightfield, currently XY alignment is
 /// assumed. (with its own transformation matrix).
 #[derive(Debug)]
-pub struct GridRayTracing {
+pub struct GridRayTracing<'hf> {
     /// The heightfield where the grid is defined.
-    surface: Rc<Heightfield>,
+    surface: &'hf Heightfield,
 
     /// Corresponding `TriangleMesh` of the surface.
-    surface_mesh: Rc<TriangleMesh>,
+    surface_mesh: &'hf TriangleMesh,
 
     /// Minimum coordinates of the grid.
     pub min: IVec2,
@@ -36,8 +38,9 @@ pub struct GridRayTracing {
     pub origin: Vec2,
 }
 
-impl GridRayTracing {
-    pub fn new(surface: Rc<Heightfield>, mesh: Rc<TriangleMesh>) -> Self {
+impl<'hf> GridRayTracing<'hf> {
+    /// Creates a new grid ray tracing object.
+    pub fn new(surface: &'hf Heightfield, mesh: &'hf TriangleMesh) -> Self {
         let max = IVec2::new(surface.cols as i32 - 2, surface.rows as i32 - 2);
         let origin = Vec2::new(
             -surface.du * (surface.cols / 2) as f32,
@@ -90,13 +93,7 @@ impl GridRayTracing {
     /// Obtain the two triangles (with its corresponding index) contained within
     /// the cell.
     fn triangles_at(&self, pos: IVec2) -> [(u32, [Vec3; 3]); 2] {
-        assert!(
-            pos.x >= self.min.x
-                && pos.y >= self.min.y
-                && pos.x <= self.max.x
-                && pos.y <= self.max.y,
-            "The position is out of the grid."
-        );
+        assert!(self.contains(&pos), "the position is out of the grid.");
         let cell = (self.surface.cols - 1) * pos.y as usize + pos.x as usize;
         let pts = &self.surface_mesh.faces[cell * 6..cell * 6 + 6];
         log::debug!(
@@ -128,13 +125,7 @@ impl GridRayTracing {
     /// Get the four altitudes associated with the cell at the given
     /// coordinates.
     fn altitudes_of_cell(&self, pos: IVec2) -> [f32; 4] {
-        assert!(
-            pos.x >= self.min.x
-                && pos.y >= self.min.y
-                && pos.x <= self.max.x
-                && pos.y <= self.max.y,
-            "The position is out of the grid."
-        );
+        assert!(self.contains(&pos), "the position is out of the grid.");
 
         let x = pos.x as usize;
         let y = pos.y as usize;
@@ -639,6 +630,48 @@ impl GridRayTracing {
             log::debug!("  - no starting point");
         }
     }
+
+    pub fn trace_one_ray(&self, ray: Ray, max_bounces: u32, ior_t: &[Ior]) -> Option<RtcRecord> {
+
+        // self.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut output);
+        // output
+        todo!()
+    }
+
+    fn trace_one_ray_inner(&self, ray: Ray, max_bounces: u32, curr_bounces: u32, prev_prim: Option<u32>, trajectory: &mut Vec<TrajectoryNode>) {
+        log::debug!("--- current bounce {} ----", curr_bounces);
+        trajectory.push(TrajectoryNode {ray, cos: 0.0 });
+        log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());;
+
+        if curr_bounces >= max_bounces {
+            log::debug!("  > bounce limit reached");
+            return;
+        }
+
+        // todo: hierachical grid
+
+        let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
+            log::debug!("  > entering point outside of grid -- test if it intersects with the bounding box");
+            self.surface_mesh
+                .extent
+                .intersect_with_ray(ray, f32::EPSILON, f32::INFINITY)
+                .map(|point| {
+                    log::debug!("    - intersected with bounding box: {:?}", point);
+                    // Displaces the hit point backwards along the ray direction.
+                    point - ray.d * 0.001
+                })
+        } else {
+            Some(ray.o)
+        };
+        log::debug!("  > entering point: {:?}", entering_point);
+
+        if let Some(start) = entering_point {
+            match self.traverse(start.xz(), ray.d.xz()) {
+                GridTraversal::FromTopOrBottom(_) => {}
+                GridTraversal::Traversed { .. } => {}
+            }
+        }
+    }
 }
 
 fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalize() }
@@ -660,9 +693,9 @@ pub enum GridTraversal {
 #[test]
 fn test_grid_traversal() {
     use crate::mesh::TriangulationMethod;
-    let heightfield = Rc::new(Heightfield::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY));
-    let triangle_mesh = Rc::new(heightfield.triangulate(TriangulationMethod::Regular));
-    let grid = GridRayTracing::new(heightfield.clone(), triangle_mesh.clone());
+    let heightfield = Heightfield::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
+    let triangle_mesh = heightfield.triangulate(TriangulationMethod::Regular);
+    let grid = GridRayTracing::new(&heightfield, &triangle_mesh);
     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
     println!("{:?}", result);
 }

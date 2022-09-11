@@ -1,8 +1,7 @@
 use crate::{
     acq::{
-        bsdf::BsdfKind,
         desc::{MeasurementDesc, MeasurementKind},
-        resolve_file_path,
+        resolve_file_path, RayTracingMethod,
     },
     app::cache::{VgonioCache, VgonioDatafiles},
     error::Error,
@@ -15,7 +14,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use crate::acq::RayTracingMethod;
 
 pub mod cache;
 pub(crate) mod gui;
@@ -323,7 +321,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
             .format(move |buf, record| {
                 if timestamp {
                     let duration = launch_time.elapsed().unwrap();
-                    let milis = duration.as_millis() % 1000;
+                    let millis = duration.as_millis() % 1000;
                     let seconds = duration.as_secs() % 60;
                     let minutes = (duration.as_secs() / 60) % 60;
                     let hours = (duration.as_secs() / 60) / 60;
@@ -335,7 +333,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
                             hours,
                             minutes,
                             seconds,
-                            milis,
+                            millis,
                             record.level(),
                             record.args()
                         )
@@ -346,7 +344,7 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
                             hours,
                             minutes,
                             seconds,
-                            milis,
+                            millis,
                             record.args()
                         )
                     }
@@ -493,7 +491,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     );
 
     println!("    - Resolving and loading surfaces...");
-    let surfaces = measurements
+    let all_surfaces = measurements
         .iter()
         .map(|desc| {
             let to_be_loaded = desc
@@ -518,7 +516,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
 
     let start = std::time::SystemTime::now();
-    for (desc, surface_handles) in measurements.iter().zip(surfaces.iter()) {
+    for (desc, surfaces) in measurements.iter().zip(all_surfaces.iter()) {
         match desc.measurement_kind {
             MeasurementKind::Bsdf(kind) => {
                 println!(
@@ -544,7 +542,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     chrono::DateTime::<chrono::Utc>::from(start),
                     desc.incident_medium,
                     desc.transmitted_medium,
-                    surface_handles,
+                    surfaces,
                     desc.emitter.radius,
                     desc.emitter.num_rays,
                     desc.emitter.max_bounces,
@@ -560,27 +558,19 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     desc.collector.radius,
                     desc.collector.shape,
                     desc.collector.partition.kind_str(),
-                    desc.collector.partition.theta_range_str(),
-                    desc.collector.partition.phi_range_str()
+                    desc.collector.partition.zenith_range_str(),
+                    desc.collector.partition.azimuth_range_str()
                 );
                 println!("    {BRIGHT_YELLOW}>{RESET} Measuring {}...", kind);
                 match desc.tracing_method {
                     RayTracingMethod::Standard => {
-                        crate::acq::bsdf::measure_bsdf_embree_rt(
-                            desc,
-                            &mut cache,
-                            &db,
-                            surface_handles,
-                        );
+                        crate::acq::bsdf::measure_bsdf_embree_rt(desc, &cache, &db, surfaces);
                     }
                     RayTracingMethod::Grid => {
-                        crate::acq::bsdf::measure_bsdf_grid_rt(
-                            desc,
-                            &mut cache,
-                        );
+                        crate::acq::bsdf::measure_bsdf_grid_rt(desc, &cache, &db, surfaces);
                     }
                 }
-            },
+            }
             MeasurementKind::Ndf => {
                 // todo: measure ndf
                 todo!()
