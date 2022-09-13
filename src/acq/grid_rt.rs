@@ -1,13 +1,11 @@
 use crate::{
-    acq::{scattering::reflect, Ray},
+    acq::{ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     htfld::{AxisAlignment, Heightfield},
     isect::{ray_tri_intersect_woop, RayTriIsect},
     mesh::TriangleMesh,
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 use std::rc::Rc;
-use crate::acq::ior::Ior;
-use crate::acq::{RtcRecord, TrajectoryNode};
 
 /// Helper structure for grid ray tracing.
 ///
@@ -632,16 +630,22 @@ impl<'hf> GridRayTracing<'hf> {
     }
 
     pub fn trace_one_ray(&self, ray: Ray, max_bounces: u32, ior_t: &[Ior]) -> Option<RtcRecord> {
-
         // self.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut output);
         // output
         todo!()
     }
 
-    fn trace_one_ray_inner(&self, ray: Ray, max_bounces: u32, curr_bounces: u32, prev_prim: Option<u32>, trajectory: &mut Vec<TrajectoryNode>) {
+    fn trace_one_ray_inner(
+        &self,
+        ray: Ray,
+        max_bounces: u32,
+        curr_bounces: u32,
+        prev_prim: Option<u32>,
+        trajectory: &mut Vec<TrajectoryNode>,
+    ) {
         log::debug!("--- current bounce {} ----", curr_bounces);
-        trajectory.push(TrajectoryNode {ray, cos: 0.0 });
-        log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());;
+        trajectory.push(TrajectoryNode { ray, cos: 0.0 });
+        log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());
 
         if curr_bounces >= max_bounces {
             log::debug!("  > bounce limit reached");
@@ -651,7 +655,9 @@ impl<'hf> GridRayTracing<'hf> {
         // todo: hierachical grid
 
         let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
-            log::debug!("  > entering point outside of grid -- test if it intersects with the bounding box");
+            log::debug!(
+                "  > entering point outside of grid -- test if it intersects with the bounding box"
+            );
             self.surface_mesh
                 .extent
                 .intersect_with_ray(ray, f32::EPSILON, f32::INFINITY)

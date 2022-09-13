@@ -2,6 +2,7 @@
 
 #![feature(is_some_with)]
 #![feature(const_fn_floating_point_arithmetic)]
+#![feature(const_trait_impl)]
 #![warn(missing_docs)]
 
 extern crate core;

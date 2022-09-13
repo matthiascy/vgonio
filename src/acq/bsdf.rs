@@ -205,7 +205,9 @@ pub fn measure_bsdf_grid_rt(
             emitter.set_radius(mesh.extent.max_edge() * 2.5);
         }
         let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
-        let ior_t = db.ior_db.ior_of_spectrum(desc.transmitted_medium, &spectrum)
+        let ior_t = db
+            .ior_db
+            .ior_of_spectrum(desc.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
 
         // for pos in emitter.positions() {
@@ -216,7 +218,6 @@ pub fn measure_bsdf_grid_rt(
         //     });
         //     collector.collect(records, BsdfKind::InPlaneBrdf);
         // }
-
     }
     // log::debug!("Emitter has {} patches.", emitter.patches.len());
     // let mut grid_rt = GridRayTracing::new(Config::default());

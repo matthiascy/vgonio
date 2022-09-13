@@ -2,7 +2,7 @@ use crate::{
     acq::{
         bsdf::BsdfKind,
         util::{SphericalPartition, SphericalShape},
-        Medium, RayTracingMethod,
+        Length, Medium, Metre, Metres, RayTracingMethod,
     },
     Error,
 };
@@ -12,7 +12,6 @@ use std::{
     ops::Sub,
     path::{Path, PathBuf},
 };
-use crate::acq::{Length, SiMetre, Metres};
 
 /// Helper struct used to specify the range of all kind of measurement (mostly angle ranges).
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]

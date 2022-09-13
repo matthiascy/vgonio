@@ -11,8 +11,9 @@ pub mod ior;
 pub mod ndf;
 mod occlusion;
 pub mod scattering;
-pub mod util;
+#[macro_use]
 mod si_units;
+pub mod util;
 
 pub use collector::{Collector, Patch};
 pub use embree_rt::EmbreeRayTracing;
