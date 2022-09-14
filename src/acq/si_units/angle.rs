@@ -1,10 +1,5 @@
 use crate::util::ulp_eq;
-use core::{
-    fmt::{Debug, Display},
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
-use paste::paste;
+use core::fmt::{Debug, Display};
 
 /// Radian unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -52,8 +47,8 @@ impl AngleUnit for Degree {
 /// Angle with unit.
 #[derive(Copy, Clone)]
 pub struct Angle<A: AngleUnit> {
-    value: f32,
-    unit: PhantomData<A>,
+    pub(crate) value: f32,
+    pub(crate) unit: core::marker::PhantomData<A>,
 }
 
 impl<A: AngleUnit> Debug for Angle<A> {
@@ -82,7 +77,7 @@ impl<A: AngleUnit> Angle<A> {
     pub fn new(value: f32) -> Self {
         Angle {
             value,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -116,7 +111,7 @@ impl<'a, A: AngleUnit> TryFrom<&'a str> for Angle<A> {
     }
 }
 
-impl_serialization!(Angle<A> where A: AngleUnit, #[doc = "Customized serialization for the `Angle` type."]);
+super::impl_serialization!(Angle<A> where A: AngleUnit, #[doc = "Customized serialization for the `Angle` type."]);
 
 /// Customized deserialization for the `Angle` type.
 impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
@@ -124,7 +119,7 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
     where
         D: serde::Deserializer<'de>,
     {
-        struct AngleVisitor<T>(PhantomData<T>);
+        struct AngleVisitor<T>(core::marker::PhantomData<T>);
 
         impl<'de, T: AngleUnit> serde::de::Visitor<'de> for AngleVisitor<T> {
             type Value = Angle<T>;
@@ -144,7 +139,7 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
             }
         }
 
-        deserializer.deserialize_str(AngleVisitor::<A>(PhantomData))
+        deserializer.deserialize_str(AngleVisitor::<A>(core::marker::PhantomData))
     }
 }
 
@@ -165,19 +160,13 @@ pub type Radians = Angle<Radian>;
 pub type Degrees = Angle<Degree>;
 
 /// Helper creating a new `Angle<Radian>`.
-#[macro_export]
-macro_rules! radians {
-    ($value:expr) => {
-        $crate::acq::Angle::<$crate::acq::Radian>::new($value)
-    };
+pub macro radians($value:expr) {
+    $crate::acq::Angle::<$crate::acq::Radian>::new($value)
 }
 
-/// Helper creating a new `Angle<Degree>`
-#[macro_export]
-macro_rules! degrees {
-    ($value:expr) => {
-        $crate::acq::Angle::<$crate::acq::Degree>::new($value)
-    };
+/// Helper creating a new `Angle<Degree>`.
+pub macro degrees($value:expr) {
+    $crate::acq::Angle::<$crate::acq::Degree>::new($value)
 }
 
 impl From<Angle<Degree>> for Angle<Radian> {
@@ -188,21 +177,21 @@ impl From<Angle<Radian>> for Angle<Degree> {
     fn from(angle: Angle<Radian>) -> Self { angle.in_degrees() }
 }
 
-impl_ops!(Add, Sub for Angle where A, B: AngleUnit);
-impl_ops_with_f32!(Mul, Div for Angle where A: AngleUnit);
+super::impl_ops!(Add, Sub for Angle where A, B: AngleUnit);
+super::impl_ops_with_f32!(Mul, Div for Angle where A: AngleUnit);
 
-impl<A: AngleUnit> Mul<Angle<A>> for f32 {
+impl<A: AngleUnit> core::ops::Mul<Angle<A>> for f32 {
     type Output = Angle<A>;
 
     fn mul(self, rhs: Angle<A>) -> Self::Output {
         Angle {
             value: self * rhs.value,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
 
-impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
+super::impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
 
 #[cfg(test)]
 mod angle_unit_tests {

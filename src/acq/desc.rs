@@ -2,7 +2,7 @@ use crate::{
     acq::{
         bsdf::BsdfKind,
         util::{SphericalPartition, SphericalShape},
-        Length, Medium, Metre, Metres, RayTracingMethod,
+        Length, LengthUnit, Medium, Metre, Metres, RayTracingMethod,
     },
     Error,
 };
@@ -98,6 +98,11 @@ impl<T: Default + Copy> Default for Range<T> {
 impl Range<f32> {
     /// Returns the sample count of the range.
     pub fn samples_count(&self) -> usize { ((self.stop - self.start) / self.step).floor() as usize }
+}
+
+impl<A: LengthUnit> Range<Length<A>> {
+    /// Returns the sample count of the range.
+    pub fn samples_count(&self) -> usize { ((self.stop.value - self.start.value) / self.step.value).floor() as usize }
 }
 
 /// Describes the radius of measurement.

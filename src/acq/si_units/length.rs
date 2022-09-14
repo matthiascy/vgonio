@@ -1,10 +1,5 @@
 use crate::util::ulp_eq;
-use paste::paste;
-use std::{
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use core::fmt::Debug;
 
 /// Trait representing a unit of length.
 pub trait LengthUnit: Debug + Copy + Clone {
@@ -144,8 +139,8 @@ impl LengthUnit for Picometre {
 /// Length with a unit.
 #[derive(Copy, Clone)]
 pub struct Length<A: LengthUnit> {
-    value: f32,
-    unit: PhantomData<A>,
+    pub(crate) value: f32,
+    pub(crate) unit: core::marker::PhantomData<A>,
 }
 
 impl<A: LengthUnit> Debug for Length<A> {
@@ -174,7 +169,7 @@ impl<A: LengthUnit> Length<A> {
     pub const fn new(value: f32) -> Self {
         Self {
             value,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -212,7 +207,7 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
     }
 }
 
-impl_serialization!(Length<A> where A: LengthUnit, #[doc = "Customized serialization for the `Length` type."]);
+super::impl_serialization!(Length<A> where A: LengthUnit, #[doc = "Customized serialization for the `Length` type."]);
 
 // Customized deserialization for the `Length` type.
 impl<'de, A: LengthUnit> serde::Deserialize<'de> for Length<A> {
@@ -220,7 +215,7 @@ impl<'de, A: LengthUnit> serde::Deserialize<'de> for Length<A> {
     where
         D: serde::Deserializer<'de>,
     {
-        struct LengthVisitor<T>(PhantomData<T>);
+        struct LengthVisitor<T>(core::marker::PhantomData<T>);
 
         impl<'de, T: LengthUnit> serde::de::Visitor<'de> for LengthVisitor<T> {
             type Value = Length<T>;
@@ -240,7 +235,7 @@ impl<'de, A: LengthUnit> serde::Deserialize<'de> for Length<A> {
             }
         }
 
-        deserializer.deserialize_str(LengthVisitor::<A>(PhantomData))
+        deserializer.deserialize_str(LengthVisitor::<A>(core::marker::PhantomData))
     }
 }
 
@@ -250,7 +245,7 @@ impl Length<Metre> {
     pub const fn in_centimetres(self) -> Length<Centimetre> {
         Length {
             value: self.value * 100.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -259,7 +254,7 @@ impl Length<Metre> {
     pub const fn in_millimetres(self) -> Length<Millimetre> {
         Length {
             value: self.value * 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -268,7 +263,7 @@ impl Length<Metre> {
     pub const fn in_micrometres(self) -> Length<Micrometre> {
         Length {
             value: self.value * 1_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -277,7 +272,7 @@ impl Length<Metre> {
     pub const fn in_nanometres(self) -> Length<Nanometre> {
         Length {
             value: self.value * 1_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -286,7 +281,7 @@ impl Length<Metre> {
     pub const fn in_picometres(self) -> Length<Picometre> {
         Length {
             value: self.value * 1_000_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
@@ -297,7 +292,7 @@ impl Length<Centimetre> {
     pub const fn in_metres(self) -> Length<Metre> {
         Length {
             value: self.value / 100.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -306,7 +301,7 @@ impl Length<Centimetre> {
     pub const fn in_millimetres(self) -> Length<Millimetre> {
         Length {
             value: self.value * 10.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -315,7 +310,7 @@ impl Length<Centimetre> {
     pub const fn in_micrometres(self) -> Length<Micrometre> {
         Length {
             value: self.value * 10_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -324,7 +319,7 @@ impl Length<Centimetre> {
     pub const fn in_nanometres(self) -> Length<Nanometre> {
         Length {
             value: self.value * 10_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -333,7 +328,7 @@ impl Length<Centimetre> {
     pub const fn in_picometres(self) -> Length<Picometre> {
         Length {
             value: self.value * 10_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
@@ -344,7 +339,7 @@ impl Length<Millimetre> {
     pub const fn in_metres(self) -> Length<Metre> {
         Length {
             value: self.value / 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -353,7 +348,7 @@ impl Length<Millimetre> {
     pub const fn in_centimetres(self) -> Length<Centimetre> {
         Length {
             value: self.value / 10.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -362,7 +357,7 @@ impl Length<Millimetre> {
     pub const fn in_micrometres(self) -> Length<Micrometre> {
         Length {
             value: self.value * 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -371,7 +366,7 @@ impl Length<Millimetre> {
     pub const fn in_nanometres(self) -> Length<Nanometre> {
         Length {
             value: self.value * 1_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -380,7 +375,7 @@ impl Length<Millimetre> {
     pub const fn in_picometres(self) -> Length<Picometre> {
         Length {
             value: self.value * 1_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
@@ -391,7 +386,7 @@ impl Length<Micrometre> {
     pub const fn in_metres(self) -> Length<Metre> {
         Length {
             value: self.value / 1_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -400,7 +395,7 @@ impl Length<Micrometre> {
     pub const fn in_centimetres(self) -> Length<Centimetre> {
         Length {
             value: self.value / 10_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -409,7 +404,7 @@ impl Length<Micrometre> {
     pub const fn in_millimetres(self) -> Length<Millimetre> {
         Length {
             value: self.value / 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -418,7 +413,7 @@ impl Length<Micrometre> {
     pub const fn in_nanometres(self) -> Length<Nanometre> {
         Length {
             value: self.value * 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -427,7 +422,7 @@ impl Length<Micrometre> {
     pub const fn in_picometres(self) -> Length<Picometre> {
         Length {
             value: self.value * 1_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
@@ -438,7 +433,7 @@ impl Length<Nanometre> {
     pub const fn in_metres(self) -> Length<Metre> {
         Length {
             value: self.value / 1_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -447,7 +442,7 @@ impl Length<Nanometre> {
     pub const fn in_centimetres(self) -> Length<Centimetre> {
         Length {
             value: self.value / 10_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -456,7 +451,7 @@ impl Length<Nanometre> {
     pub const fn in_millimetres(self) -> Length<Millimetre> {
         Length {
             value: self.value / 1_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -465,7 +460,7 @@ impl Length<Nanometre> {
     pub const fn in_micrometres(self) -> Length<Micrometre> {
         Length {
             value: self.value / 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -474,7 +469,7 @@ impl Length<Nanometre> {
     pub const fn in_picometres(self) -> Length<Picometre> {
         Length {
             value: self.value * 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
@@ -485,7 +480,7 @@ impl Length<Picometre> {
     pub const fn in_metres(self) -> Length<Metre> {
         Length {
             value: self.value / 1_000_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -494,7 +489,7 @@ impl Length<Picometre> {
     pub const fn in_centimetres(self) -> Length<Centimetre> {
         Length {
             value: self.value / 10_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -503,7 +498,7 @@ impl Length<Picometre> {
     pub const fn in_millimetres(self) -> Length<Millimetre> {
         Length {
             value: self.value / 1_000_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -512,7 +507,7 @@ impl Length<Picometre> {
     pub const fn in_micrometres(self) -> Length<Micrometre> {
         Length {
             value: self.value / 1_000_000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 
@@ -521,7 +516,7 @@ impl Length<Picometre> {
     pub const fn in_nanometres(self) -> Length<Nanometre> {
         Length {
             value: self.value / 1000.0,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
@@ -545,67 +540,47 @@ pub type Nanometres = Length<Nanometre>;
 pub type Picometres = Length<Picometre>;
 
 /// Macro for creating a new length type in metres.
-#[macro_export]
-macro_rules! metres {
-    ($val:expr) => {
-        $crate::acq::Length::<$crate::acq::Metre>::new($val)
-    };
+pub macro metres($val:expr) {
+    $crate::acq::Length::<$crate::acq::Metre>::new($val)
 }
 
 /// Macro for creating a new length type in centimetres.
-#[macro_export]
-macro_rules! centimetres {
-    ($val:expr) => {
-        $crate::acq::Length::<$crate::acq::Centimetre>::new($val)
-    };
+pub macro centimetres($val:expr) {
+    $crate::acq::Length::<$crate::acq::Centimetre>::new($val)
 }
 
 /// Macro for creating a new length type in millimetres.
-#[macro_export]
-macro_rules! millimetres {
-    ($val:expr) => {
-        $crate::acq::Length::<$crate::acq::Millimetre>::new($val)
-    };
+pub macro millimetres($val:expr) {
+    $crate::acq::Length::<$crate::acq::Millimetre>::new($val)
 }
 
 /// Macro for creating a new length type in micrometres.
-#[macro_export]
-macro_rules! micrometres {
-    ($val:expr) => {
-        $crate::acq::Length::<$crate::acq::Micrometre>::new($val)
-    };
+pub macro micrometres($val:expr) {
+    $crate::acq::Length::<$crate::acq::Micrometre>::new($val)
 }
 
 /// Macro for creating a new length type in nanometres.
-#[macro_export]
-macro_rules! nanometres {
-    ($val:expr) => {
-        $crate::acq::Length::<$crate::acq::Nanometre>::new($val)
-    };
+pub macro nanometres($val:expr) {
+    $crate::acq::Length::<$crate::acq::Nanometre>::new($val)
 }
 
 /// Macro for creating a new length type in picometres.
-#[macro_export]
-macro_rules! picometres {
-    ($val:expr) => {
-        $crate::acq::Length::<$crate::acq::Picometre>::new($val)
-    };
+pub macro picometres($val:expr) {
+    $crate::acq::Length::<$crate::acq::Picometre>::new($val)
 }
 
-macro_rules! impl_conversion {
-    ($from:ident => $($to:ident, $factor:expr);*) => {
-        $(
-            impl const From<Length<$from>> for Length<$to> {
-                #[inline(always)]
-                fn from(other: Length<$from>) -> Self {
-                    Length {
-                        value: other.value * $factor,
-                        unit: PhantomData,
-                    }
+macro impl_conversion($from:ident => $($to:ident, $factor:expr);*) {
+    $(
+        impl const From<Length<$from>> for Length<$to> {
+            #[inline(always)]
+            fn from(other: Length<$from>) -> Self {
+                Length {
+                    value: other.value * $factor,
+                    unit: core::marker::PhantomData,
                 }
             }
-        )*
-    };
+        }
+    )*
 }
 
 impl_conversion!(Metre => Centimetre, 1e2; Millimetre, 1e3; Micrometre, 1e6; Nanometre, 1e9; Picometre, 1e12);
@@ -615,21 +590,21 @@ impl_conversion!(Micrometre => Metre, 1e-6; Centimetre, 1e-4; Millimetre, 1e-3; 
 impl_conversion!(Nanometre => Metre, 1e-9; Centimetre, 1e-7; Millimetre, 1e-6; Micrometre, 1e-3; Picometre, 1e3);
 impl_conversion!(Picometre => Metre, 1e-12; Centimetre, 1e-10; Millimetre, 1e-9; Micrometre, 1e-6; Nanometre, 1e-3);
 
-impl_ops!(Add, Sub for Length where A, B: LengthUnit);
-impl_ops_with_f32!(Mul, Div for Length where A: LengthUnit);
+super::impl_ops!(Add, Sub for Length where A, B: LengthUnit);
+super::impl_ops_with_f32!(Mul, Div for Length where A: LengthUnit);
 
-impl<A: LengthUnit> Mul<Length<A>> for f32 {
+impl<A: LengthUnit> core::ops::Mul<Length<A>> for f32 {
     type Output = Length<A>;
 
     fn mul(self, rhs: Length<A>) -> Self::Output {
         Length {
             value: self * rhs.value,
-            unit: PhantomData,
+            unit: core::marker::PhantomData,
         }
     }
 }
 
-impl_ops_assign!(AddAssign, SubAssign for Length where A, B: LengthUnit);
+super::impl_ops_assign!(AddAssign, SubAssign for Length where A, B: LengthUnit);
 
 #[cfg(test)]
 mod length_unit_tests {

@@ -3,6 +3,7 @@
 #![feature(is_some_with)]
 #![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_trait_impl)]
+#![feature(decl_macro)]
 #![warn(missing_docs)]
 
 extern crate core;
