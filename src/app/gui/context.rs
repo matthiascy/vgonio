@@ -7,6 +7,7 @@ use std::{
 
 use crate::{error::Error, gfx::SizedBuffer};
 use wgpu::util::DeviceExt;
+use crate::app::gui::VgonioEvent;
 
 /// Enum for selecting the right buffer type.
 #[derive(Debug)]
@@ -88,13 +89,13 @@ impl GuiContext {
     /// If the format passed is not a *Srgb format, the shader will
     /// automatically convert to sRGB colors in the shader.
     pub fn new(
-        window: &winit::window::Window,
+        event_loop: &winit::event_loop::EventLoopWindowTarget<VgonioEvent>,
         device: &wgpu::Device,
         surface_format: wgpu::TextureFormat,
         msaa_samples: u32,
     ) -> Self {
         let egui_context = egui::Context::default();
-        let egui_state = egui_winit::State::new(4096, window);
+        let egui_state = egui_winit::State::new(event_loop);
         let shader_module = {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("ui_shader_module"),

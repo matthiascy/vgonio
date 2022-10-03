@@ -6,7 +6,7 @@ use crate::{
     app::cache::{VgonioCache, VgonioDatafiles},
     error::Error,
 };
-use clap::{AppSettings, ArgEnum, Args, Parser, Subcommand};
+use clap::{ValueEnum, Args, Parser, Subcommand};
 use std::{io::Write, path::PathBuf};
 use winit::{
     dpi::PhysicalSize,
@@ -14,6 +14,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
+use winit::event_loop::EventLoopBuilder;
 
 pub mod cache;
 pub(crate) mod gui;
@@ -161,11 +162,8 @@ impl VgonioConfig {
 
 /// Top-level CLI arguments.
 #[derive(Parser, Debug)]
-#[clap(
-    author = "Yang Chen <matthiasychen@gmail.com/y.chen-14@tudelft.nl>",
-    version = "0.1.0",
+#[clap(author, version,
     about = "Micro-geometry level light transportation simulation.",
-    setting = AppSettings::DeriveDisplayOrder,
 )]
 pub struct VgonioArgs {
     /// Whether to print any information to stdout.
@@ -207,7 +205,7 @@ pub struct VgonioArgs {
 }
 
 /// Micro-surface information that can be retrieved.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ArgEnum)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum)]
 pub enum MicroSurfaceInfo {
     /// Normal vectors per vertex.
     VertexNormal,
@@ -230,7 +228,6 @@ pub enum VgonioCommand {
 #[derive(Args, Debug)]
 #[clap(
 about = "Measure different aspects of the micro-surface.",
-setting = AppSettings::DeriveDisplayOrder
 )]
 pub struct MeasureOptions {
     #[clap(short, long, help = "The input measurement description file.")]
@@ -266,10 +263,9 @@ pub struct MeasureOptions {
 #[derive(Args, Debug)]
 #[clap(
 about = "Extract information from micro-surface.",
-setting = AppSettings::DeriveDisplayOrder
 )]
 pub struct ExtractOptions {
-    #[clap(arg_enum, short, long, help = "Type of information to be extracted.")]
+    #[clap(value_enum, short, long, help = "Type of information to be extracted.")]
     kind: MicroSurfaceInfo,
 
     #[clap(
@@ -380,7 +376,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
     use crate::app::gui::VgonioEvent;
     use state::VgonioApp;
 
-    let event_loop = EventLoop::<VgonioEvent>::with_user_event();
+    let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
 
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -394,8 +390,11 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
+    // let mut vgonio =
+    //     pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
+
     let mut vgonio =
-        pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
+        pollster::block_on(VgonioApp::new(config, &window, &event_loop))?;
 
     let mut last_frame_time = std::time::Instant::now();
 

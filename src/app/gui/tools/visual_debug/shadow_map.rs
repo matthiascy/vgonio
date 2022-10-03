@@ -5,7 +5,7 @@ use crate::{
     },
     gfx::GpuContext,
 };
-use egui::Sense;
+use egui::{Sense, TextureFilter};
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
@@ -74,6 +74,7 @@ impl ShadowMapPane {
                 [IMG_WIDTH, IMG_HEIGHT],
                 self.depth_map_image.as_flat_samples().as_slice(),
             ),
+            TextureFilter::Linear,
         ));
     }
 }

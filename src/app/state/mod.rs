@@ -40,6 +40,7 @@ use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::EventLoopProxy,
 };
+use winit::event_loop::EventLoop;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -431,7 +432,8 @@ impl VgonioApp {
     pub async fn new(
         config: VgonioConfig,
         window: &winit::window::Window,
-        event_loop: EventLoopProxy<VgonioEvent>,
+        // event_loop: EventLoopProxy<VgonioEvent>,
+        event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
         let depth_map = DepthMap::new(&gpu_ctx);
@@ -463,7 +465,7 @@ impl VgonioApp {
         //     true,
         // );
 
-        let gui_ctx = GuiContext::new(window, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
+        let gui_ctx = GuiContext::new(&event_loop, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
 
         let config = Rc::new(config);
         let mut db = VgonioDatafiles::new();
@@ -471,7 +473,7 @@ impl VgonioApp {
         let cache = Rc::new(RefCell::new(VgonioCache::new(config.cache_dir.clone())));
 
         //let ui = egui_demo_lib::WrapApp::default();
-        let gui = VgonioGui::new(event_loop.clone(), config.clone(), cache.clone());
+        let gui = VgonioGui::new(event_loop.create_proxy(), config.clone(), cache.clone());
 
         let input = InputState {
             key_map: Default::default(),
