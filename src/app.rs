@@ -309,8 +309,8 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
         log::LevelFilter::Error
     };
 
-    #[cfg(not(target_arch = "wasm32"))]
-    {
+    cfg_if::cfg_if! {
+        if #[cfg(not(target_arch = "wasm32"))] {
         // Initialize logger settings.
         let timestamp = args.log_timestamp;
         env_logger::builder()
@@ -360,15 +360,14 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
                 _ => log::LevelFilter::Info,
             })
             .init();
-
-        // Load the configuration file.
-        VgonioConfig::load_config()
+        } else {
+            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+            console_log::init_with_level(wgpu_log_level.to_level().unwrap()).expect("error initializing log");
+        }
     }
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        todo!()
-    }
+    // Load the configuration file.
+    VgonioConfig::load_config()
 }
 
 /// Runs the GUI application.
@@ -390,8 +389,21 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    // let mut vgonio =
-    //     pollster::block_on(VgonioApp::new(config, &window, event_loop.create_proxy()))?;
+    #[cfg(target_arch = "wasm32")]
+    {
+        use winit::dpi::PhysicalSize;
+        window.set_inner_size(PhysicalSize::new(WIN_INITIAL_WIDTH, WIN_INITIAL_HEIGHT));
+
+        use winit::platform::web::WindowExtWebSys;
+        web_sys::window()
+            .and_then(|win| win.document())
+            .and_then(|doc| {
+                let dst = doc.get_element_by_id("vgonio")?;
+                let canvas = web_sys::Element::from(window.canvas());
+                dst.append_child(&canvas).ok()?;
+                Some(())
+            }).expect("Couldn't append canvas to document body.");
+    }
 
     let mut vgonio =
         pollster::block_on(VgonioApp::new(config, &window, &event_loop))?;

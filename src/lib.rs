@@ -6,6 +6,9 @@
 #![feature(decl_macro)]
 #![warn(missing_docs)]
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 extern crate core;
 
 pub mod acq;
@@ -22,7 +25,6 @@ mod util;
 use crate::error::Error;
 
 /// Main entry point.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> Result<(), Error> {
     use app::VgonioArgs;
     use clap::Parser;
@@ -41,9 +43,12 @@ pub fn run() -> Result<(), Error> {
     // Initialize vgonio application
     let config = app::init(&args, launch_time)?;
 
-    // Dispatch subcommands
-    match args.command {
-        None => app::launch_gui(config),
-        Some(cmd) => app::execute_command(cmd, config),
+    if cfg!(target_arch = "wasm32") {
+        app::launch_gui(config)
+    } else {
+        match args.command {
+            None => app::launch_gui(config),
+            Some(cmd) => app::execute_command(cmd, config),
+        }
     }
 }

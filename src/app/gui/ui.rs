@@ -200,16 +200,38 @@ impl VgonioGui {
                         }
                     });
                     if ui.button("\u{1F4C2} Open").clicked() {
-                        if let Some(filepath) = rfd::FileDialog::new()
-                            .set_directory(&self.config.user_config.data_files_dir)
-                            .pick_file()
+                        // RFD only supports async file dialogs on wasm32.
+                        #[cfg(target_arch = "wasm32")]
                         {
-                            if self
-                                .event_loop
-                                .send_event(VgonioEvent::OpenFile(filepath))
-                                .is_err()
+                            use rfd::AsyncFileDialog;
+                            let event_loop = self.event_loop.clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                let file = AsyncFileDialog::new()
+                                    .set_directory("/")
+                                    .pick_file()
+                                    .await;
+                                if let Some(file) = file {
+                                    if event_loop
+                                        .send_event(VgonioEvent::OpenFile(file.file_name().into()))
+                                        .is_err() {
+                                        log::warn!("[EVENT] Failed to send OpenFile event");
+                                    }
+                                }
+                            });
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            if let Some(filepath) = rfd::FileDialog::new()
+                                .set_directory(&self.config.user_config.data_files_dir)
+                                .pick_file()
                             {
-                                log::warn!("[EVENT] Failed to send OpenFile event");
+                                if self
+                                    .event_loop
+                                    .send_event(VgonioEvent::OpenFile(filepath))
+                                    .is_err()
+                                {
+                                    log::warn!("[EVENT] Failed to send OpenFile event");
+                                }
                             }
                         }
                     }

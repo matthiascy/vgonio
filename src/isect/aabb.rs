@@ -115,24 +115,32 @@ impl Aabb {
         let mut min = [0.0_f32; 4];
         let mut max = [0.0_f32; 4];
 
-        unsafe {
-            _mm_storeu_ps(
-                min.as_mut_ptr(),
-                _mm_min_ps(
-                    _mm_setr_ps(self.min.x, self.min.y, self.min.z, 0.0),
-                    _mm_setr_ps(other.min.x, other.min.y, other.min.z, 0.0),
-                ),
-            );
-            _mm_storeu_ps(
-                max.as_mut_ptr(),
-                _mm_max_ps(
-                    _mm_setr_ps(self.max.x, self.max.y, self.max.z, 0.0),
-                    _mm_setr_ps(other.max.x, other.max.y, other.max.z, 0.0),
-                ),
-            );
+        #[cfg(target_arch = "x86_64")]
+        {
+            unsafe {
+                _mm_storeu_ps(
+                    min.as_mut_ptr(),
+                    _mm_min_ps(
+                        _mm_setr_ps(self.min.x, self.min.y, self.min.z, 0.0),
+                        _mm_setr_ps(other.min.x, other.min.y, other.min.z, 0.0),
+                    ),
+                );
+                _mm_storeu_ps(
+                    max.as_mut_ptr(),
+                    _mm_max_ps(
+                        _mm_setr_ps(self.max.x, self.max.y, self.max.z, 0.0),
+                        _mm_setr_ps(other.max.x, other.max.y, other.max.z, 0.0),
+                    ),
+                );
+            }
+            self.min = Vec3::new(min[0], min[1], min[2]);
+            self.max = Vec3::new(max[0], max[1], max[2]);
         }
-        self.min = Vec3::new(min[0], min[1], min[2]);
-        self.max = Vec3::new(max[0], max[1], max[2]);
+
+        #[cfg(target_arch = "wasm32")]
+        {
+
+        }
     }
 
     /// Maximum edge length.
