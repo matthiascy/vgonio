@@ -6,15 +6,14 @@ use crate::{
     app::cache::{VgonioCache, VgonioDatafiles},
     error::Error,
 };
-use clap::{ValueEnum, Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::{io::Write, path::PathBuf};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::WindowBuilder,
 };
-use winit::event_loop::EventLoopBuilder;
 
 pub mod cache;
 pub(crate) mod gui;
@@ -162,8 +161,10 @@ impl VgonioConfig {
 
 /// Top-level CLI arguments.
 #[derive(Parser, Debug)]
-#[clap(author, version,
-    about = "Micro-geometry level light transportation simulation.",
+#[clap(
+    author,
+    version,
+    about = "Micro-geometry level light transportation simulation."
 )]
 pub struct VgonioArgs {
     /// Whether to print any information to stdout.
@@ -226,9 +227,7 @@ pub enum VgonioCommand {
 
 /// Options for the `measure` command.
 #[derive(Args, Debug)]
-#[clap(
-about = "Measure different aspects of the micro-surface.",
-)]
+#[clap(about = "Measure different aspects of the micro-surface.")]
 pub struct MeasureOptions {
     #[clap(short, long, help = "The input measurement description file.")]
     input_path: PathBuf,
@@ -261,9 +260,7 @@ pub struct MeasureOptions {
 
 /// Options for the `extract` command.
 #[derive(Args, Debug)]
-#[clap(
-about = "Extract information from micro-surface.",
-)]
+#[clap(about = "Extract information from micro-surface.")]
 pub struct ExtractOptions {
     #[clap(value_enum, short, long, help = "Type of information to be extracted.")]
     kind: MicroSurfaceInfo,
@@ -309,62 +306,55 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
         log::LevelFilter::Error
     };
 
-    cfg_if::cfg_if! {
-        if #[cfg(not(target_arch = "wasm32"))] {
-        // Initialize logger settings.
-        let timestamp = args.log_timestamp;
-        env_logger::builder()
-            .format(move |buf, record| {
-                if timestamp {
-                    let duration = launch_time.elapsed().unwrap();
-                    let millis = duration.as_millis() % 1000;
-                    let seconds = duration.as_secs() % 60;
-                    let minutes = (duration.as_secs() / 60) % 60;
-                    let hours = (duration.as_secs() / 60) / 60;
-                    // Show log level only in Warn and Error level
-                    if record.level() <= log::Level::Warn {
-                        writeln!(
-                            buf,
-                            "{}:{}:{}.{:03} {}: {}",
-                            hours,
-                            minutes,
-                            seconds,
-                            millis,
-                            record.level(),
-                            record.args()
-                        )
-                    } else {
-                        writeln!(
-                            buf,
-                            "{}:{}:{}.{:03}: {}",
-                            hours,
-                            minutes,
-                            seconds,
-                            millis,
-                            record.args()
-                        )
-                    }
-                } else if record.level() <= log::Level::Warn {
-                    writeln!(buf, "{}: {}", record.level(), record.args())
+    // Initialize logger settings.
+    let timestamp = args.log_timestamp;
+    env_logger::builder()
+        .format(move |buf, record| {
+            if timestamp {
+                let duration = launch_time.elapsed().unwrap();
+                let millis = duration.as_millis() % 1000;
+                let seconds = duration.as_secs() % 60;
+                let minutes = (duration.as_secs() / 60) % 60;
+                let hours = (duration.as_secs() / 60) / 60;
+                // Show log level only in Warn and Error level
+                if record.level() <= log::Level::Warn {
+                    writeln!(
+                        buf,
+                        "{}:{}:{}.{:03} {}: {}",
+                        hours,
+                        minutes,
+                        seconds,
+                        millis,
+                        record.level(),
+                        record.args()
+                    )
                 } else {
-                    writeln!(buf, "{}", record.args())
+                    writeln!(
+                        buf,
+                        "{}:{}:{}.{:03}: {}",
+                        hours,
+                        minutes,
+                        seconds,
+                        millis,
+                        record.args()
+                    )
                 }
-            })
-            .filter(Some("wgpu"), wgpu_log_level)
-            .filter_level(match log_level {
-                0 => log::LevelFilter::Error,
-                1 => log::LevelFilter::Warn,
-                2 => log::LevelFilter::Info,
-                3 => log::LevelFilter::Debug,
-                4 => log::LevelFilter::Trace,
-                _ => log::LevelFilter::Info,
-            })
-            .init();
-        } else {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init_with_level(wgpu_log_level.to_level().unwrap()).expect("error initializing log");
-        }
-    }
+            } else if record.level() <= log::Level::Warn {
+                writeln!(buf, "{}: {}", record.level(), record.args())
+            } else {
+                writeln!(buf, "{}", record.args())
+            }
+        })
+        .filter(Some("wgpu"), wgpu_log_level)
+        .filter_level(match log_level {
+            0 => log::LevelFilter::Error,
+            1 => log::LevelFilter::Warn,
+            2 => log::LevelFilter::Info,
+            3 => log::LevelFilter::Debug,
+            4 => log::LevelFilter::Trace,
+            _ => log::LevelFilter::Info,
+        })
+        .init();
 
     // Load the configuration file.
     VgonioConfig::load_config()
@@ -389,24 +379,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(WIN_INITIAL_WIDTH, WIN_INITIAL_HEIGHT));
-
-        use winit::platform::web::WindowExtWebSys;
-        web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| {
-                let dst = doc.get_element_by_id("vgonio")?;
-                let canvas = web_sys::Element::from(window.canvas());
-                dst.append_child(&canvas).ok()?;
-                Some(())
-            }).expect("Couldn't append canvas to document body.");
-    }
-
-    let mut vgonio =
-        pollster::block_on(VgonioApp::new(config, &window, &event_loop))?;
+    let mut vgonio = pollster::block_on(VgonioApp::new(config, &window, &event_loop))?;
 
     let mut last_frame_time = std::time::Instant::now();
 
@@ -462,7 +435,7 @@ pub fn launch_gui(config: VgonioConfig) -> Result<(), Error> {
 
             _ => {}
         }
-    });
+    })
 }
 
 /// Execute a vgonio subcommand.

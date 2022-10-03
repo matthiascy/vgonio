@@ -43,12 +43,8 @@ pub fn run() -> Result<(), Error> {
     // Initialize vgonio application
     let config = app::init(&args, launch_time)?;
 
-    if cfg!(target_arch = "wasm32") {
-        app::launch_gui(config)
-    } else {
-        match args.command {
-            None => app::launch_gui(config),
-            Some(cmd) => app::execute_command(cmd, config),
-        }
+    match args.command {
+        None => app::launch_gui(config),
+        Some(cmd) => app::execute_command(cmd, config),
     }
 }

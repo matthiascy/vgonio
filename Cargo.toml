@@ -39,31 +39,20 @@ rand_distr = "0.4"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 paste = "1.0"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-console_error_panic_hook = "0.1"
-console_log = "0.2"
-wgpu = { version = "0.13", features = ["webgl"] }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", feature = ["Document", "Window", "Element"] }
-
 [build-dependencies]
 shaderc = "0.8"
 
-[lib]
-crate-type = ["cdylib", "rlib"] # build native rust static library and c/c++ compatible dynamic library.
+[dev-dependencies]
+quickcheck = "1"
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+strip = "debuginfo"  # Remove unnecessary debug info from release builds.
 
 # Compile build-dependencies in release mode with
 # the same settings as regular dependencies.
 [profile.release.build-override]
 opt-level = 3
 codegen-units = 16
-
-[profile.release]
-strip = "debuginfo"  # Remove unnecessary debug info from release builds.
-
-[profile.dev.build-override]
-opt-level = 3
-
-[dev-dependencies]
-quickcheck = "1"

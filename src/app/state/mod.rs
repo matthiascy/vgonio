@@ -38,9 +38,8 @@ use std::{
 use wgpu::{util::DeviceExt, VertexFormat, VertexStepMode, COPY_BYTES_PER_ROW_ALIGNMENT};
 use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::EventLoopProxy,
+    event_loop::{EventLoop, EventLoopProxy},
 };
-use winit::event_loop::EventLoop;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -465,7 +464,12 @@ impl VgonioApp {
         //     true,
         // );
 
-        let gui_ctx = GuiContext::new(&event_loop, &gpu_ctx.device, gpu_ctx.surface_config.format, 1);
+        let gui_ctx = GuiContext::new(
+            &event_loop,
+            &gpu_ctx.device,
+            gpu_ctx.surface_config.format,
+            1,
+        );
 
         let config = Rc::new(config);
         let mut db = VgonioDatafiles::new();

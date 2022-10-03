@@ -102,7 +102,9 @@ impl Range<f32> {
 
 impl<A: LengthUnit> Range<Length<A>> {
     /// Returns the sample count of the range.
-    pub fn samples_count(&self) -> usize { ((self.stop.value - self.start.value) / self.step.value).floor() as usize }
+    pub fn samples_count(&self) -> usize {
+        ((self.stop.value - self.start.value) / self.step.value).floor() as usize
+    }
 }
 
 /// Describes the radius of measurement.

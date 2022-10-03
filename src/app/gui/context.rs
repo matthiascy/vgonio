@@ -5,9 +5,8 @@ use std::{
     num::NonZeroU32,
 };
 
-use crate::{error::Error, gfx::SizedBuffer};
+use crate::{app::gui::VgonioEvent, error::Error, gfx::SizedBuffer};
 use wgpu::util::DeviceExt;
-use crate::app::gui::VgonioEvent;
 
 /// Enum for selecting the right buffer type.
 #[derive(Debug)]

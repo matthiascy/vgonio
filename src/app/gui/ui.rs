@@ -206,14 +206,13 @@ impl VgonioGui {
                             use rfd::AsyncFileDialog;
                             let event_loop = self.event_loop.clone();
                             wasm_bindgen_futures::spawn_local(async move {
-                                let file = AsyncFileDialog::new()
-                                    .set_directory("/")
-                                    .pick_file()
-                                    .await;
+                                let file =
+                                    AsyncFileDialog::new().set_directory("/").pick_file().await;
                                 if let Some(file) = file {
                                     if event_loop
                                         .send_event(VgonioEvent::OpenFile(file.file_name().into()))
-                                        .is_err() {
+                                        .is_err()
+                                    {
                                         log::warn!("[EVENT] Failed to send OpenFile event");
                                     }
                                 }

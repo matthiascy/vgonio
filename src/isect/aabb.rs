@@ -138,9 +138,7 @@ impl Aabb {
         }
 
         #[cfg(target_arch = "wasm32")]
-        {
-
-        }
+        {}
     }
 
     /// Maximum edge length.
