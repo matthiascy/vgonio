@@ -4,7 +4,7 @@ use crate::{
         RayTracingMethod,
     },
     app::{
-        cache::{VgonioCache, VgonioDatafiles},
+        cache::{Cache, VgonioDatafiles},
         Config, ExtractOptions, MeasureOptions,
     },
     util, Error,
@@ -31,7 +31,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
 
     // Load data files: refractive indices, spd etc.
     println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
-    let mut cache = VgonioCache::new(config.cache_dir.clone());
+    let mut cache = Cache::new(config.cache_dir.clone());
     let mut db = VgonioDatafiles::new();
     db.load_ior_database(&config);
 

@@ -1,11 +1,13 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
 use crate::app::{
-    cache::{VgonioCache, VgonioDatafiles},
+    cache::{Cache, VgonioDatafiles},
     gui::GuiContext,
     Config,
 };
+use crate::app::gui::sketch::Sketch;
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, rc::Rc, sync::Arc};
+use std::collections::BTreeSet;
 use winit::event_loop::EventLoopProxy;
 
 pub trait Workspace {
@@ -20,7 +22,7 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<VgonioCache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<Cache>>) -> Self {
         Self {
             simulation: SimulationWorkspace::new(event_loop, cache),
             analysis: AnalysisWorkspace {},
@@ -34,6 +36,12 @@ impl Workspaces {
         ]
         .into_iter()
     }
+}
+
+pub trait Tool {
+    fn name(&self) -> &'static str;
+
+    fn show(&mut self, ctx: &egui::Context, open: &mut bool);
 }
 
 /// Implementation of the GUI for vgonio application.
@@ -50,6 +58,12 @@ pub struct VgonioGui {
     /// Current activated workspace.
     selected_workspace: String,
 
+    /// Tools are small windows that can be opened and closed.
+    tools: Vec<Box<dyn Tool>>,
+
+    /// Set recording the open state of tools.
+    tools_open: BTreeSet<String>,
+
     /// Event loop proxy for sending user defined events.
     event_loop: EventLoopProxy<VgonioEvent>,
 }
@@ -58,15 +72,22 @@ impl VgonioGui {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
         config: Arc<Config>,
-        cache: Arc<RefCell<VgonioCache>>,
+        cache: Arc<RefCell<Cache>>,
     ) -> Self {
         let workspaces = Workspaces::new(event_loop.clone(), cache);
+        let tools = vec![
+            Box::new(Sketch::default()),
+        ];
+        let mut tools_open = BTreeSet::new();
+
         Self {
             config,
             event_loop,
             workspaces,
             dropped_files: vec![],
             selected_workspace: "".to_string(),
+            tools,
+            tools_open: Default::default()
         }
     }
 
@@ -271,6 +292,49 @@ impl VgonioGui {
 
                 if ui.button("\u{2699} Preferences").clicked() {
                     println!("TODO: open preferences window");
+                }
+            });
+            ui.menu_button("Tools", |ui| {
+                if ui.button("\u{1F50D} Search").clicked() {
+                    println!("TODO: open search window");
+                }
+                if ui.button("\u{1F4D6} Inspector").clicked() {
+                    println!("TODO: open inspector window");
+                }
+                if ui.button("\u{1F4D8} Console").clicked() {
+                    println!("TODO: open console window");
+                }
+                if ui.button("\u{1F4D7} Profiler").clicked() {
+                    println!("TODO: open profiler window");
+                }
+                if ui.button("\u{1F4D9} Debugger").clicked() {
+                    println!("TODO: open debugger window");
+                }
+                if ui.button("\u{1F4DA} Logger").clicked() {
+                    println!("TODO: open logger window");
+                }
+                if ui.button("\u{1F4D5} Assets").clicked() {
+                    println!("TODO: open assets window");
+                }
+                if ui.button("\u{1F4D4} Scene").clicked() {
+                    println!("TODO: open scene window");
+                }
+                if ui.button("\u{1F4D3} Hierarchy").clicked() {
+                    println!("TODO: open hierarchy window");
+                }
+                if ui.button("\u{1F4D2} Project").clicked() {
+                    println!("TODO: open project window");
+                }
+                if ui.button("\u{1F4D1} Animation").clicked() {
+                    println!("TODO: open animation window");
+                }
+                if ui.button("\u{1F4D0} Audio").clicked() {
+                    println!("TODO: open audio window");
+                }
+                if ui.button("\u{2750} Sketch").clicked() {
+                    egui::Window::new("Sketch").show(ui.ctx(), |ui| {
+                        self.sketch.ui(ui)
+                    });
                 }
             });
             ui.menu_button("Help", |ui| {

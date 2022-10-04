@@ -95,7 +95,7 @@ impl VgonioDatafiles {
 
 /// Structure for caching intermediate results and data.
 #[derive(Debug)]
-pub struct VgonioCache {
+pub struct Cache {
     /// Path to the cache directory.
     pub dir: std::path::PathBuf,
 
@@ -104,14 +104,22 @@ pub struct VgonioCache {
 
     /// Cache for triangulated heightfield meshes.
     pub triangle_meshes: HashMap<Uuid, TriangleMesh>,
+
+    /// Cache for recently opened files.
+    pub recent_opened_files: Option<Vec<std::path::PathBuf>>,
+
+    /// Cache for recently opened directory.
+    pub last_opened_dir: Option<std::path::PathBuf>,
 }
 
-impl VgonioCache {
+impl Cache {
     pub fn new(cache_dir: PathBuf) -> Self {
         Self {
             dir: cache_dir,
             surfaces: Default::default(),
             triangle_meshes: Default::default(),
+            recent_opened_files: None,
+            last_opened_dir: None
         }
     }
 

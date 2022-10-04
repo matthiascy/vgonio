@@ -7,7 +7,7 @@ use crate::{
         Medium, RayTracingMethod,
     },
     app::{
-        cache::{VgonioCache, VgonioDatafiles},
+        cache::{Cache, VgonioDatafiles},
         gui::{gizmo::VgonioGizmo, ui::Workspace, widgets::input, VgonioEvent, VisualDebugTool},
     },
 };
@@ -90,11 +90,11 @@ pub struct SimulationPanel {
 
     simulation_progress: f32,
 
-    cache: Arc<RefCell<VgonioCache>>,
+    cache: Arc<RefCell<Cache>>,
 }
 
 impl SimulationPanel {
-    pub fn new(cache: Arc<RefCell<VgonioCache>>) -> Self {
+    pub fn new(cache: Arc<RefCell<Cache>>) -> Self {
         Self {
             desc: MeasurementDesc::default(),
             selected_surface_index: 0,
@@ -510,7 +510,7 @@ impl Workspace for SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<VgonioCache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<Cache>>) -> Self {
         Self {
             view_gizmo_opened: false,
             visual_debugger_opened: false,

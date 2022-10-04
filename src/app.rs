@@ -3,7 +3,7 @@ use crate::{
         desc::{MeasurementDesc, MeasurementKind},
         RayTracingMethod,
     },
-    app::cache::{VgonioCache, VgonioDatafiles},
+    app::cache::{Cache, VgonioDatafiles},
     error::Error,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -36,12 +36,12 @@ pub struct Config {
     pub data_files_dir: std::path::PathBuf,
 
     /// Path to the user-defined configuration.
-    pub user_config: VgonioUserConfig,
+    pub user_config: UserConfig,
 }
 
 /// User-defined configuration.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct VgonioUserConfig {
+pub struct UserConfig {
     /// Path to the output directory.
     pub output_dir: std::path::PathBuf,
 
@@ -102,7 +102,7 @@ impl Config {
 
         // If the user config file exists, parse it.
         let user_config = if let Some(user_config_file) = user_config_file {
-            let mut config: VgonioUserConfig = toml::from_str(&user_config_file)?;
+            let mut config: UserConfig = toml::from_str(&user_config_file)?;
             // Convert relative paths to absolute paths.
             if config.data_files_dir.is_relative() {
                 let data_files_dir = relative_to.join(&config.data_files_dir);
@@ -137,7 +137,7 @@ impl Config {
             config
         } else {
             // If the user config file doesn't exist, create it.
-            let user_config = VgonioUserConfig {
+            let user_config = UserConfig {
                 output_dir: config_dir.join("output"),
                 data_files_dir: config_dir.join("datafiles"),
             };

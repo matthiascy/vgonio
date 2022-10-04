@@ -4,7 +4,7 @@ use crate::{
         Collector, Emitter, Patch, Ray,
     },
     app::{
-        cache::{SurfaceHandle, VgonioCache, VgonioDatafiles},
+        cache::{SurfaceHandle, Cache, VgonioDatafiles},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
 };
@@ -100,7 +100,7 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 // // Vec<Stats<PatchData, N_PATCH, N_BOUNCE>>
 pub fn measure_bsdf_embree_rt(
     desc: &MeasurementDesc,
-    cache: &VgonioCache,
+    cache: &Cache,
     db: &VgonioDatafiles,
     surfaces: &[SurfaceHandle],
 ) {
@@ -180,7 +180,7 @@ pub fn measure_bsdf_embree_rt(
 /// Brdf measurement.
 pub fn measure_bsdf_grid_rt(
     desc: &MeasurementDesc,
-    cache: &VgonioCache,
+    cache: &Cache,
     db: &VgonioDatafiles,
     surfaces: &[SurfaceHandle],
 ) {

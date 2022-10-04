@@ -1,6 +1,8 @@
 mod camera;
 mod input;
 
+// TODO: create default config folder the first time the app is launched (gui and cli)
+
 pub use input::InputState;
 
 use crate::{
@@ -15,7 +17,7 @@ use camera::CameraState;
 use crate::{
     acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray, RayTracingMethod},
     app::{
-        cache::{VgonioCache, VgonioDatafiles},
+        cache::{Cache, VgonioDatafiles},
         gui::{trace_ray_grid_dbg, trace_ray_standard_dbg},
         Config,
     },
@@ -398,7 +400,7 @@ pub struct VgonioState {
     db: VgonioDatafiles,
 
     /// The cache of the application. See [`VgonioCache`].
-    cache: Arc<RefCell<VgonioCache>>,
+    cache: Arc<RefCell<Cache>>,
 
     input: InputState,
     camera: CameraState,
@@ -422,7 +424,7 @@ pub struct VgonioState {
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
-    //pub demo_ui: egui_demo_lib::DemoWindows,
+    pub demos: egui_demo_lib::DemoWindows,
     pub visual_grid_enabled: bool,
     pub surface_visible: bool,
 }
@@ -474,9 +476,7 @@ impl VgonioState {
         let config = Arc::new(config);
         let mut db = VgonioDatafiles::new();
         db.load_ior_database(&config);
-        let cache = Arc::new(RefCell::new(VgonioCache::new(config.cache_dir.clone())));
-
-        //let ui = egui_demo_lib::WrapApp::default();
+        let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir.clone())));
         let gui = VgonioGui::new(event_loop.create_proxy(), config.clone(), cache.clone());
 
         let input = InputState {
@@ -511,7 +511,7 @@ impl VgonioState {
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
-            // demo_ui: ui,
+            demos: egui_demo_lib::DemoWindows::default(),
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
             opened_surfaces: vec![],
@@ -768,7 +768,7 @@ impl VgonioState {
             let ui_start_time = Instant::now();
             self.gui_ctx.take_input(window);
             self.gui_ctx.begin_frame();
-            // self.demo_ui.ui(self.gui_ctx.egui_context());
+            // self.demos.ui(self.gui_ctx.egui_context());
             self.gui.show(&self.gui_ctx);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
             let meshes = self
