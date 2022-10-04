@@ -3,7 +3,7 @@ use crate::{
         ior::{Ior, IorDb},
         Medium,
     },
-    app::VgonioConfig,
+    app::Config,
     htfld::{AxisAlignment, Heightfield},
     mesh::{TriangleMesh, TriangulationMethod},
     Error,
@@ -36,7 +36,7 @@ impl VgonioDatafiles {
 
     /// Load the refractive index database from the paths specified in the
     /// config.
-    pub fn load_ior_database(&mut self, config: &VgonioConfig) {
+    pub fn load_ior_database(&mut self, config: &Config) {
         // let mut database = RefractiveIndexDatabase::new();
         let default_path = config.data_files_dir.join("ior");
         let user_path = config.user_config.data_files_dir.join("ior");

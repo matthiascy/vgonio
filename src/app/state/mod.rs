@@ -17,7 +17,7 @@ use crate::{
     app::{
         cache::{VgonioCache, VgonioDatafiles},
         gui::{trace_ray_grid_dbg, trace_ray_standard_dbg},
-        VgonioConfig,
+        Config,
     },
     error::Error,
     gfx::camera::{Camera, Projection, ProjectionKind},
@@ -33,6 +33,7 @@ use std::{
     num::NonZeroU32,
     path::{Path, PathBuf},
     rc::Rc,
+    sync::Arc,
     time::Instant,
 };
 use wgpu::{util::DeviceExt, VertexFormat, VertexStepMode, COPY_BYTES_PER_ROW_ALIGNMENT};
@@ -383,12 +384,12 @@ impl DebugState {
     }
 }
 
-pub struct VgonioApp {
+pub struct VgonioState {
     gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
 
     /// The configuration of the application. See [`VgonioConfig`].
-    config: Rc<VgonioConfig>,
+    config: Arc<Config>,
 
     /// The GUI application state.
     gui: VgonioGui,
@@ -397,7 +398,7 @@ pub struct VgonioApp {
     db: VgonioDatafiles,
 
     /// The cache of the application. See [`VgonioCache`].
-    cache: Rc<RefCell<VgonioCache>>,
+    cache: Arc<RefCell<VgonioCache>>,
 
     input: InputState,
     camera: CameraState,
@@ -426,12 +427,11 @@ pub struct VgonioApp {
     pub surface_visible: bool,
 }
 
-impl VgonioApp {
+impl VgonioState {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
-        config: VgonioConfig,
+        config: Config,
         window: &winit::window::Window,
-        // event_loop: EventLoopProxy<VgonioEvent>,
         event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, Error> {
         let gpu_ctx = GpuContext::new(window).await;
@@ -471,10 +471,10 @@ impl VgonioApp {
             1,
         );
 
-        let config = Rc::new(config);
+        let config = Arc::new(config);
         let mut db = VgonioDatafiles::new();
         db.load_ior_database(&config);
-        let cache = Rc::new(RefCell::new(VgonioCache::new(config.cache_dir.clone())));
+        let cache = Arc::new(RefCell::new(VgonioCache::new(config.cache_dir.clone())));
 
         //let ui = egui_demo_lib::WrapApp::default();
         let gui = VgonioGui::new(event_loop.create_proxy(), config.clone(), cache.clone());

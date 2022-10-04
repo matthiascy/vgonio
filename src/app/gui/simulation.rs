@@ -90,11 +90,11 @@ pub struct SimulationPanel {
 
     simulation_progress: f32,
 
-    cache: Rc<RefCell<VgonioCache>>,
+    cache: Arc<RefCell<VgonioCache>>,
 }
 
 impl SimulationPanel {
-    pub fn new(cache: Rc<RefCell<VgonioCache>>) -> Self {
+    pub fn new(cache: Arc<RefCell<VgonioCache>>) -> Self {
         Self {
             desc: MeasurementDesc::default(),
             selected_surface_index: 0,
@@ -493,7 +493,7 @@ pub struct SimulationWorkspace {
     surface_scale_factor: f32,
 
     /// Event loop proxy of user defined events. See [`UserEvent`].
-    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
+    event_loop: EventLoopProxy<VgonioEvent>,
 }
 
 impl Workspace for SimulationWorkspace {
@@ -510,10 +510,7 @@ impl Workspace for SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
-    pub fn new(
-        event_loop: Arc<EventLoopProxy<VgonioEvent>>,
-        cache: Rc<RefCell<VgonioCache>>,
-    ) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<VgonioCache>>) -> Self {
         Self {
             view_gizmo_opened: false,
             visual_debugger_opened: false,

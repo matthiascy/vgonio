@@ -14,15 +14,15 @@ const IMG_HEIGHT: usize = 270;
 
 pub(crate) struct ShadowMapPane {
     /// The event loop proxy used to send events to the main event loop.
-    evlp: Arc<EventLoopProxy<VgonioEvent>>,
+    event_loop: EventLoopProxy<VgonioEvent>,
     depth_map_image: image::RgbaImage,
     depth_map_handle: Option<egui::TextureHandle>,
 }
 
 impl ShadowMapPane {
-    pub fn new(evlp: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
-            evlp,
+            event_loop,
             depth_map_handle: None,
             depth_map_image: image::RgbaImage::new(IMG_WIDTH as _, IMG_HEIGHT as _),
         }
@@ -82,7 +82,9 @@ impl ShadowMapPane {
 impl egui::Widget for &mut ShadowMapPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         if ui.button("Update").clicked() {
-            self.evlp.send_event(VgonioEvent::UpdateDepthMap).unwrap();
+            self.event_loop
+                .send_event(VgonioEvent::UpdateDepthMap)
+                .unwrap();
         }
 
         if let Some(handle) = &self.depth_map_handle {

@@ -27,11 +27,11 @@ pub(crate) struct RayTracingPane {
     prim_id: u32,
     cell_pos: IVec2,
     t: f32,
-    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
+    event_loop: EventLoopProxy<VgonioEvent>,
 }
 
 impl RayTracingPane {
-    pub fn new(event_loop: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
             ray_origin_cartesian: Vec3::new(0.0, 5.0, 0.0),
             ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),

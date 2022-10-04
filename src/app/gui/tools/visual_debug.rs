@@ -24,19 +24,19 @@ impl Default for PaneKind {
 pub(crate) struct VisualDebugTool {
     opened: PaneKind,
     debug_drawing_enabled: bool,
-    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
+    event_loop: EventLoopProxy<VgonioEvent>,
     pub(crate) shadow_map_pane: ShadowMapPane,
     pub(crate) ray_tracing_pane: RayTracingPane,
 }
 
 impl VisualDebugTool {
-    pub fn new(evlp: Arc<EventLoopProxy<VgonioEvent>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
             opened: Default::default(),
             debug_drawing_enabled: true,
-            event_loop: evlp.clone(),
-            shadow_map_pane: ShadowMapPane::new(evlp.clone()),
-            ray_tracing_pane: RayTracingPane::new(evlp),
+            event_loop: event_loop.clone(),
+            shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
+            ray_tracing_pane: RayTracingPane::new(event_loop),
         }
     }
 

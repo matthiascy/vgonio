@@ -2,7 +2,7 @@ use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, Vgonio
 use crate::app::{
     cache::{VgonioCache, VgonioDatafiles},
     gui::GuiContext,
-    VgonioConfig,
+    Config,
 };
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, rc::Rc, sync::Arc};
@@ -20,10 +20,7 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn new(
-        event_loop: Arc<EventLoopProxy<VgonioEvent>>,
-        cache: Rc<RefCell<VgonioCache>>,
-    ) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<VgonioCache>>) -> Self {
         Self {
             simulation: SimulationWorkspace::new(event_loop, cache),
             analysis: AnalysisWorkspace {},
@@ -42,7 +39,7 @@ impl Workspaces {
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
     /// The configuration of the application. See [`VgonioConfig`].
-    config: Rc<VgonioConfig>,
+    config: Arc<Config>,
 
     /// Workspaces are essentially predefined window layouts for certain usage.
     pub(crate) workspaces: Workspaces,
@@ -54,16 +51,15 @@ pub struct VgonioGui {
     selected_workspace: String,
 
     /// Event loop proxy for sending user defined events.
-    event_loop: Arc<EventLoopProxy<VgonioEvent>>,
+    event_loop: EventLoopProxy<VgonioEvent>,
 }
 
 impl VgonioGui {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
-        config: Rc<VgonioConfig>,
-        cache: Rc<RefCell<VgonioCache>>,
+        config: Arc<Config>,
+        cache: Arc<RefCell<VgonioCache>>,
     ) -> Self {
-        let event_loop = Arc::new(event_loop);
         let workspaces = Workspaces::new(event_loop.clone(), cache);
         Self {
             config,
@@ -200,39 +196,24 @@ impl VgonioGui {
                         }
                     });
                     if ui.button("\u{1F4C2} Open").clicked() {
-                        // RFD only supports async file dialogs on wasm32.
-                        #[cfg(target_arch = "wasm32")]
-                        {
-                            use rfd::AsyncFileDialog;
-                            let event_loop = self.event_loop.clone();
-                            wasm_bindgen_futures::spawn_local(async move {
-                                let file =
-                                    AsyncFileDialog::new().set_directory("/").pick_file().await;
+                        use rfd::AsyncFileDialog;
+                        let task = AsyncFileDialog::new()
+                            .set_directory(&self.config.user_config.data_files_dir)
+                            .pick_file();
+                        let event_loop_proxy = self.event_loop.clone();
+                        std::thread::spawn(move || {
+                            pollster::block_on(async {
+                                let file = task.await;
                                 if let Some(file) = file {
-                                    if event_loop
-                                        .send_event(VgonioEvent::OpenFile(file.file_name().into()))
+                                    if event_loop_proxy
+                                        .send_event(VgonioEvent::OpenFile(file.path().into()))
                                         .is_err()
                                     {
                                         log::warn!("[EVENT] Failed to send OpenFile event");
                                     }
                                 }
-                            });
-                        }
-                        #[cfg(not(target_arch = "wasm32"))]
-                        {
-                            if let Some(filepath) = rfd::FileDialog::new()
-                                .set_directory(&self.config.user_config.data_files_dir)
-                                .pick_file()
-                            {
-                                if self
-                                    .event_loop
-                                    .send_event(VgonioEvent::OpenFile(filepath))
-                                    .is_err()
-                                {
-                                    log::warn!("[EVENT] Failed to send OpenFile event");
-                                }
-                            }
-                        }
+                            })
+                        });
                     }
                     ui.menu_button("\u{1F4DC} Open Recent", |ui| {
                         for i in 0..10 {

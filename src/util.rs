@@ -1,5 +1,8 @@
 use rand_distr::num_traits::abs;
-use std::ops::{Add, Div, Mul, Sub};
+use std::{
+    ops::{Add, Div, Mul, Sub},
+    path::{Path, PathBuf},
+};
 
 /// Machine epsilon for double precision floating point numbers.
 pub const MACHINE_EPSILON_F64: f64 = f64::EPSILON * 0.5;
@@ -32,6 +35,57 @@ pub fn ulp_eq(a: f32, b: f32) -> bool {
     } else {
         (diff / f32::min(a_abs + b_abs, f32::MAX)) < f32::EPSILON
     }
+}
+
+/// Resolves the path for the given base path.
+///
+/// # Note
+///
+/// Resolved path is not guaranteed to exist.
+///
+/// # Arguments
+///
+/// * `input_path` - Path of the input file.
+///
+/// * `output_path` - Output path.
+///
+/// # Returns
+///
+/// A `PathBuf` indicating the resolved path. It differs according to the
+/// base path and patterns inside of `path`.
+///
+///   1. `path` is `None`
+///
+///      Returns the current working directory.
+///
+///   2. `path` is prefixed with `//`
+///
+///      Returns the a path which is relative to `base_path`'s directory, with
+///      the remaining of the `path` appended.
+///
+///   3. `path` is not `None` but is not prefixed with `//`
+///
+///      Returns the `path` as is.
+pub(crate) fn resolve_file_path(base_path: &Path, path: Option<&Path>) -> PathBuf {
+    path.map_or_else(
+        || std::env::current_dir().unwrap(),
+        |path| {
+            if let Ok(prefix_stripped) = path.strip_prefix("//") {
+                // Output path is relative to input file's directory
+                let mut resolved = base_path
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+                    .canonicalize()
+                    .unwrap();
+                resolved.push(prefix_stripped);
+                resolved
+            } else {
+                // Output path is at somewhere else.
+                path.to_path_buf()
+            }
+        },
+    )
 }
 
 #[test]

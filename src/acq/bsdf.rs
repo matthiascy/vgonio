@@ -5,7 +5,7 @@ use crate::{
     },
     app::{
         cache::{SurfaceHandle, VgonioCache, VgonioDatafiles},
-        BRIGHT_YELLOW, RESET,
+        cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
 };
 use embree::{Config, SoARay};
