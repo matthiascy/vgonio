@@ -768,7 +768,7 @@ impl VgonioState {
             let ui_start_time = Instant::now();
             self.gui_ctx.take_input(window);
             self.gui_ctx.begin_frame();
-            // self.demos.ui(self.gui_ctx.egui_context());
+            self.demos.ui(self.gui_ctx.egui_context());
             self.gui.show(&self.gui_ctx);
             let ui_output_frame = self.gui_ctx.egui_context().end_frame();
             let meshes = self

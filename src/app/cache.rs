@@ -119,7 +119,7 @@ impl Cache {
             surfaces: Default::default(),
             triangle_meshes: Default::default(),
             recent_opened_files: None,
-            last_opened_dir: None
+            last_opened_dir: None,
         }
     }
 

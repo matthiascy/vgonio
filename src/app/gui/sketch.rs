@@ -1,4 +1,4 @@
-use egui::{Stroke, Pos2};
+use egui::{Pos2, Stroke};
 
 pub struct Sketch {
     lines: Vec<(Stroke, Vec<Pos2>)>,

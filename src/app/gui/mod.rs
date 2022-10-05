@@ -1,12 +1,12 @@
 mod analysis;
 mod context;
 mod gizmo;
+mod plotter;
 mod simulation;
+mod sketch;
 mod tools;
 mod ui;
 mod widgets;
-mod plotter;
-mod sketch;
 
 use crate::acq::{Ray, RayTracingMethod};
 pub use context::*;

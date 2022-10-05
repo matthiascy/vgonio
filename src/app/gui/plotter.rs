@@ -1,4 +1,4 @@
-use egui::plot::{LineStyle};
+use egui::plot::LineStyle;
 
 pub struct LinePlotter {
     is_square_view: bool,
@@ -8,6 +8,4 @@ pub struct LinePlotter {
     line_style: LineStyle,
 }
 
-pub struct Plotter {
-
-}
+pub struct Plotter {}

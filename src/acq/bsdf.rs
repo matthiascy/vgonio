@@ -4,7 +4,7 @@ use crate::{
         Collector, Emitter, Patch, Ray,
     },
     app::{
-        cache::{SurfaceHandle, Cache, VgonioDatafiles},
+        cache::{Cache, SurfaceHandle, VgonioDatafiles},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
 };

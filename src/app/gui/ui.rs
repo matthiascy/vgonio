@@ -1,13 +1,11 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
 use crate::app::{
     cache::{Cache, VgonioDatafiles},
-    gui::GuiContext,
+    gui::{sketch::Sketch, GuiContext},
     Config,
 };
-use crate::app::gui::sketch::Sketch;
 use glam::Mat4;
-use std::{cell::RefCell, fmt::Write, rc::Rc, sync::Arc};
-use std::collections::BTreeSet;
+use std::{cell::RefCell, collections::BTreeSet, fmt::Write, rc::Rc, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 pub trait Workspace {
@@ -58,12 +56,11 @@ pub struct VgonioGui {
     /// Current activated workspace.
     selected_workspace: String,
 
-    /// Tools are small windows that can be opened and closed.
-    tools: Vec<Box<dyn Tool>>,
-
-    /// Set recording the open state of tools.
-    tools_open: BTreeSet<String>,
-
+    // /// Tools are small windows that can be opened and closed.
+    // tools: Vec<Box<dyn Tool>>,
+    //
+    // /// Set recording the open state of tools.
+    // tools_open: BTreeSet<String>,
     /// Event loop proxy for sending user defined events.
     event_loop: EventLoopProxy<VgonioEvent>,
 }
@@ -75,10 +72,8 @@ impl VgonioGui {
         cache: Arc<RefCell<Cache>>,
     ) -> Self {
         let workspaces = Workspaces::new(event_loop.clone(), cache);
-        let tools = vec![
-            Box::new(Sketch::default()),
-        ];
-        let mut tools_open = BTreeSet::new();
+        let tools = vec![Box::new(Sketch::default())];
+        // let mut tools_open = BTreeSet::new();
 
         Self {
             config,
@@ -86,8 +81,8 @@ impl VgonioGui {
             workspaces,
             dropped_files: vec![],
             selected_workspace: "".to_string(),
-            tools,
-            tools_open: Default::default()
+            // tools,
+            // tools_open: Default::default()
         }
     }
 
@@ -331,11 +326,11 @@ impl VgonioGui {
                 if ui.button("\u{1F4D0} Audio").clicked() {
                     println!("TODO: open audio window");
                 }
-                if ui.button("\u{2750} Sketch").clicked() {
-                    egui::Window::new("Sketch").show(ui.ctx(), |ui| {
-                        self.sketch.ui(ui)
-                    });
-                }
+                // if ui.button("\u{2750} Sketch").clicked() {
+                //     egui::Window::new("Sketch").show(ui.ctx(), |ui| {
+                //         self.sketch.ui(ui)
+                //     });
+                // }
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("\u{1F4DA} Docs").clicked() {

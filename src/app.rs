@@ -197,6 +197,12 @@ pub struct VgonioArgs {
     )]
     pub log_level: u8,
 
+    #[clap(long, help = "Enable debug messages from `wgpu-rs` and `naga`")]
+    pub debug_wgpu: bool,
+
+    #[clap(long, help = "Enable debug messages from `winit`")]
+    pub debug_winit: bool,
+
     /// Command to execute.
     #[clap(subcommand)]
     pub command: Option<VgonioCommand>,
@@ -283,6 +289,16 @@ pub struct ExtractOptions {
     enable_cache: bool,
 }
 
+pub fn log_filter_from_level(level: u8) -> log::LevelFilter {
+    match level {
+        0 => log::LevelFilter::Error,
+        1 => log::LevelFilter::Warn,
+        2 => log::LevelFilter::Info,
+        3 => log::LevelFilter::Debug,
+        _ => log::LevelFilter::Trace,
+    }
+}
+
 /// Initialises settings for the vgonio program.
 ///
 /// This function will set up the logger and the thread pool.
@@ -295,18 +311,14 @@ pub struct ExtractOptions {
 /// * `launch_time` - The time when the program is launched.
 pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Config, Error> {
     let log_level = if args.verbose { 4 } else { args.log_level };
-
-    // Only enable info logging for wgpu only if the log level is greater than 2.
-    let wgpu_log_level = if log_level > 2 {
-        log::LevelFilter::Info
-    } else {
-        log::LevelFilter::Error
-    };
+    let log_level_wgpu = if args.debug_wgpu { 3 } else { 0 };
+    let log_level_winit = if args.debug_winit { 3 } else { 0 };
 
     // Initialize logger settings.
     let timestamp = args.log_timestamp;
     env_logger::builder()
         .format(move |buf, record| {
+            let top_level_module = record.module_path().unwrap().split("::").next().unwrap();
             if timestamp {
                 let duration = launch_time.elapsed().unwrap();
                 let millis = duration.as_millis() % 1000;
@@ -314,44 +326,34 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
                 let minutes = (duration.as_secs() / 60) % 60;
                 let hours = (duration.as_secs() / 60) / 60;
                 // Show log level only in Warn and Error level
-                if record.level() <= log::Level::Warn {
-                    writeln!(
-                        buf,
-                        "{}:{}:{}.{:03} {}: {}",
-                        hours,
-                        minutes,
-                        seconds,
-                        millis,
-                        record.level(),
-                        record.args()
-                    )
-                } else {
-                    writeln!(
-                        buf,
-                        "{}:{}:{}.{:03}: {}",
-                        hours,
-                        minutes,
-                        seconds,
-                        millis,
-                        record.args()
-                    )
-                }
-            } else if record.level() <= log::Level::Warn {
-                writeln!(buf, "{}: {}", record.level(), record.args())
+                writeln!(
+                    buf,
+                    "{}:{}:{}.{:03} {:5} [{}]: {}",
+                    hours,
+                    minutes,
+                    seconds,
+                    millis,
+                    record.level(),
+                    top_level_module,
+                    record.args()
+                )
             } else {
-                writeln!(buf, "{}", record.args())
+                writeln!(
+                    buf,
+                    "{:5} [{}]: {}",
+                    record.level(),
+                    top_level_module,
+                    record.args()
+                )
             }
         })
-        .filter(Some("wgpu"), wgpu_log_level)
-        .filter_level(match log_level {
-            0 => log::LevelFilter::Error,
-            1 => log::LevelFilter::Warn,
-            2 => log::LevelFilter::Info,
-            3 => log::LevelFilter::Debug,
-            4 => log::LevelFilter::Trace,
-            _ => log::LevelFilter::Info,
-        })
+        .filter(Some("wgpu"), log_filter_from_level(log_level_wgpu))
+        .filter(Some("naga"), log_filter_from_level(log_level_wgpu))
+        .filter(Some("winit"), log_filter_from_level(log_level_winit))
+        .filter_level(log_filter_from_level(log_level))
         .init();
+
+    log::info!("Initializing vgonio...");
 
     // Load the configuration file.
     Config::load_config()
