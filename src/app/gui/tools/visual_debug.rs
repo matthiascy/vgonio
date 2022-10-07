@@ -1,5 +1,7 @@
+use std::any::Any;
 use crate::app::gui::VgonioEvent;
 use std::sync::Arc;
+use egui::Response;
 use winit::event_loop::EventLoopProxy;
 
 mod ray_tracing;
@@ -8,6 +10,7 @@ mod shadow_map;
 use crate::app::gui::widgets::toggle_ui;
 use ray_tracing::RayTracingPane;
 use shadow_map::ShadowMapPane;
+use crate::app::gui::tools::Tool;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]
@@ -21,28 +24,20 @@ impl Default for PaneKind {
 }
 
 // TODO: adaptive image size
-pub(crate) struct VisualDebugTool {
-    opened: PaneKind,
+pub(crate) struct VisualDebugger {
+    opened_pane: PaneKind,
     debug_drawing_enabled: bool,
     event_loop: EventLoopProxy<VgonioEvent>,
     pub(crate) shadow_map_pane: ShadowMapPane,
     pub(crate) ray_tracing_pane: RayTracingPane,
 }
 
-impl VisualDebugTool {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
-        Self {
-            opened: Default::default(),
-            debug_drawing_enabled: true,
-            event_loop: event_loop.clone(),
-            shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
-            ray_tracing_pane: RayTracingPane::new(event_loop),
-        }
+impl Tool for VisualDebugger {
+    fn name(&self) -> &'static str {
+        "Visual Debugger"
     }
 
-    pub const fn name(&self) -> &'static str { "Visual Debug" }
-
-    pub fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
+    fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         egui::Window::new(self.name())
             .open(open)
             .resizable(true)
@@ -54,27 +49,47 @@ impl VisualDebugTool {
             ui.label("Debug Draw");
             if toggle_ui(ui, &mut self.debug_drawing_enabled).changed()
                 && self
-                    .event_loop
-                    .send_event(VgonioEvent::ToggleDebugDrawing)
-                    .is_err()
+                .event_loop
+                .send_event(VgonioEvent::ToggleDebugDrawing)
+                .is_err()
             {
                 log::warn!("Failed to send VgonioEvent::ToggleDebugDrawing");
             }
         });
 
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.opened, PaneKind::ShadowMap, "Shadow Map");
-            ui.selectable_value(&mut self.opened, PaneKind::RayTracing, "Ray Tracing");
+            ui.selectable_value(&mut self.opened_pane, PaneKind::ShadowMap, "Shadow Map");
+            ui.selectable_value(&mut self.opened_pane, PaneKind::RayTracing, "Ray Tracing");
         });
         ui.separator();
 
-        match self.opened {
+        match self.opened_pane {
             PaneKind::ShadowMap => {
                 ui.add(&mut self.shadow_map_pane);
             }
             PaneKind::RayTracing => {
                 ui.add(&mut self.ray_tracing_pane);
             }
+        }
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl VisualDebugger {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+        Self {
+            opened_pane: Default::default(),
+            debug_drawing_enabled: true,
+            event_loop: event_loop.clone(),
+            shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
+            ray_tracing_pane: RayTracingPane::new(event_loop),
         }
     }
 }

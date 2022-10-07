@@ -8,7 +8,7 @@ use crate::{
     },
     app::{
         cache::{Cache, VgonioDatafiles},
-        gui::{gizmo::VgonioGizmo, ui::Workspace, widgets::input, VgonioEvent, VisualDebugTool},
+        gui::{gizmo::VgonioGizmo, ui::Workspace, widgets::input, VgonioEvent, VisualDebugger},
     },
 };
 use egui_gizmo::{GizmoMode, GizmoOrientation};
@@ -21,6 +21,7 @@ use std::{
     sync::Arc,
 };
 use winit::event_loop::EventLoopProxy;
+use crate::app::gui::tools::Tool;
 
 /// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -471,8 +472,6 @@ impl SimulationPanel {
 pub struct SimulationWorkspace {
     view_gizmo_opened: bool,
 
-    visual_debugger_opened: bool,
-
     simulation_pane_opened: bool,
 
     /// Whether the visual grid (ground) is visible.
@@ -482,9 +481,6 @@ pub struct SimulationWorkspace {
 
     /// The gizmo used to indicate the camera's orientation.
     view_gizmo: VgonioGizmo,
-
-    /// The visual debugger.
-    pub(crate) visual_debug_tool: VisualDebugTool,
 
     /// The simulation parameters.
     pub(crate) simulation_panel: SimulationPanel,
@@ -502,8 +498,6 @@ impl Workspace for SimulationWorkspace {
     fn show(&mut self, ctx: &egui::Context) {
         self.ui(ctx);
         self.view_gizmo.show(ctx, &mut self.view_gizmo_opened);
-        self.visual_debug_tool
-            .show(ctx, &mut self.visual_debugger_opened);
         self.simulation_panel
             .show(ctx, &mut self.simulation_pane_opened);
     }
@@ -513,10 +507,8 @@ impl SimulationWorkspace {
     pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<Cache>>) -> Self {
         Self {
             view_gizmo_opened: false,
-            visual_debugger_opened: false,
             simulation_pane_opened: false,
             view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
-            visual_debug_tool: VisualDebugTool::new(event_loop.clone()),
             simulation_panel: SimulationPanel::new(cache),
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
@@ -597,9 +589,6 @@ impl SimulationWorkspace {
             egui::menu::bar(ui, |ui| {
                 if ui.button("Simulation Pane").clicked() {
                     self.simulation_pane_opened = !self.simulation_pane_opened;
-                }
-                if ui.button("Visual Debugger").clicked() {
-                    self.visual_debugger_opened = !self.visual_debugger_opened;
                 }
             });
         });

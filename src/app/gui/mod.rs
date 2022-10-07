@@ -3,7 +3,6 @@ mod context;
 mod gizmo;
 mod plotter;
 mod simulation;
-mod sketch;
 mod tools;
 mod ui;
 mod widgets;
@@ -11,7 +10,7 @@ mod widgets;
 use crate::acq::{Ray, RayTracingMethod};
 pub use context::*;
 use glam::IVec2;
-pub(crate) use tools::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugTool};
+pub(crate) use tools::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger};
 pub use ui::VgonioGui;
 
 /// Events used by Vgonio application.

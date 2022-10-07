@@ -1,12 +1,13 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
 use crate::app::{
     cache::{Cache, VgonioDatafiles},
-    gui::{sketch::Sketch, GuiContext},
+    gui::{GuiContext},
     Config,
 };
 use glam::Mat4;
 use std::{cell::RefCell, collections::BTreeSet, fmt::Write, rc::Rc, sync::Arc};
 use winit::event_loop::EventLoopProxy;
+use crate::app::gui::tools::{Tool, Tools};
 
 pub trait Workspace {
     fn name(&self) -> &str;
@@ -36,12 +37,6 @@ impl Workspaces {
     }
 }
 
-pub trait Tool {
-    fn name(&self) -> &'static str;
-
-    fn show(&mut self, ctx: &egui::Context, open: &mut bool);
-}
-
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
     /// The configuration of the application. See [`VgonioConfig`].
@@ -56,11 +51,9 @@ pub struct VgonioGui {
     /// Current activated workspace.
     selected_workspace: String,
 
-    // /// Tools are small windows that can be opened and closed.
-    // tools: Vec<Box<dyn Tool>>,
-    //
-    // /// Set recording the open state of tools.
-    // tools_open: BTreeSet<String>,
+    /// Tools are small windows that can be opened and closed.
+    pub(crate) tools: Tools,
+
     /// Event loop proxy for sending user defined events.
     event_loop: EventLoopProxy<VgonioEvent>,
 }
@@ -72,17 +65,14 @@ impl VgonioGui {
         cache: Arc<RefCell<Cache>>,
     ) -> Self {
         let workspaces = Workspaces::new(event_loop.clone(), cache);
-        let tools = vec![Box::new(Sketch::default())];
-        // let mut tools_open = BTreeSet::new();
 
         Self {
             config,
-            event_loop,
+            event_loop: event_loop.clone(),
             workspaces,
             dropped_files: vec![],
             selected_workspace: "".to_string(),
-            // tools,
-            // tools_open: Default::default()
+            tools: Tools::new(event_loop),
         }
     }
 
@@ -103,17 +93,10 @@ impl VgonioGui {
         }
 
         egui::TopBottomPanel::top("vgonio_menu_bar").show(ctx, |ui| {
-            egui::trace!(ui);
-            self.menu_bar_contents(ui);
+            self.menu_bar(ui);
         });
 
-        // egui::SidePanel::right("vgonio_right_panel").show(ctx, |ui| {
-        //     ui.add(egui::Label::new("Hello World!"));
-        //     ui.label("A shorter and more convenient way to add a label.");
-        //     if ui.button("Click me").clicked() {
-        //         println!("Bla");
-        //     }
-        // });
+        self.tools.show(ctx);
 
         for (ws_name, ws) in self.workspaces.iter_mut() {
             if ws_name == self.selected_workspace || ctx.memory().everything_is_visible() {
@@ -122,18 +105,6 @@ impl VgonioGui {
         }
 
         self.file_drag_and_drop(ctx);
-
-        // egui::Window::new("Window").show(ctx, |ui| {
-        //     ui.label("Hello World!");
-        // });
-
-        // egui::Area::new("Area").show(ctx, |ui| {
-        //     ui.label("Hello World!");
-        //
-        //     egui::Frame::default().show(ui, |ui| {
-        //         ui.label("Frame!");
-        //     });
-        // });
     }
 }
 
@@ -199,7 +170,7 @@ impl VgonioGui {
         }
     }
 
-    fn menu_bar_contents(&mut self, ui: &mut egui::Ui) {
+    fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("File", |ui| {
                 {
@@ -290,47 +261,18 @@ impl VgonioGui {
                 }
             });
             ui.menu_button("Tools", |ui| {
-                if ui.button("\u{1F50D} Search").clicked() {
-                    println!("TODO: open search window");
-                }
-                if ui.button("\u{1F4D6} Inspector").clicked() {
-                    println!("TODO: open inspector window");
-                }
                 if ui.button("\u{1F4D8} Console").clicked() {
                     println!("TODO: open console window");
                 }
-                if ui.button("\u{1F4D7} Profiler").clicked() {
-                    println!("TODO: open profiler window");
+                if ui.button("Plot").clicked() {
+                    self.tools.toggle("Plot");
                 }
-                if ui.button("\u{1F4D9} Debugger").clicked() {
-                    println!("TODO: open debugger window");
+                if ui.button("Visual Debugger").clicked() {
+                    self.tools.toggle("Visual Debugger");
                 }
-                if ui.button("\u{1F4DA} Logger").clicked() {
-                    println!("TODO: open logger window");
+                if ui.button("Scratch").clicked() {
+                    self.tools.toggle("Scratch");
                 }
-                if ui.button("\u{1F4D5} Assets").clicked() {
-                    println!("TODO: open assets window");
-                }
-                if ui.button("\u{1F4D4} Scene").clicked() {
-                    println!("TODO: open scene window");
-                }
-                if ui.button("\u{1F4D3} Hierarchy").clicked() {
-                    println!("TODO: open hierarchy window");
-                }
-                if ui.button("\u{1F4D2} Project").clicked() {
-                    println!("TODO: open project window");
-                }
-                if ui.button("\u{1F4D1} Animation").clicked() {
-                    println!("TODO: open animation window");
-                }
-                if ui.button("\u{1F4D0} Audio").clicked() {
-                    println!("TODO: open audio window");
-                }
-                // if ui.button("\u{2750} Sketch").clicked() {
-                //     egui::Window::new("Sketch").show(ui.ctx(), |ui| {
-                //         self.sketch.ui(ui)
-                //     });
-                // }
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("\u{1F4DA} Docs").clicked() {

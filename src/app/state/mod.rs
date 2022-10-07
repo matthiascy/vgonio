@@ -43,6 +43,8 @@ use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{EventLoop, EventLoopProxy},
 };
+use winit::platform::unix::x11::ffi::Visual;
+use crate::app::gui::VisualDebugger;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -813,6 +815,7 @@ impl VgonioState {
         match event {
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFile(path) => {
+                // TODO: deal with different file types
                 self.load_height_field(path.as_path());
                 if !self.opened_surfaces.contains(&path) {
                     self.opened_surfaces.push(path);
@@ -828,17 +831,15 @@ impl VgonioState {
             VgonioEvent::UpdateDepthMap => {
                 self.depth_map.copy_to_buffer(&self.gpu_ctx);
                 self.gui
-                    .workspaces
-                    .simulation
-                    .visual_debug_tool
+                    .tools
+                    .get_tool::<VisualDebugger>("visual_debugger")
+                    .unwrap()
                     .shadow_map_pane
-                    .update_depth_map(
-                        &self.gpu_ctx,
-                        &self.gui_ctx,
-                        &self.depth_map.depth_attachment_storage,
-                        self.depth_map.width,
-                        self.gpu_ctx.surface_config.height,
-                    );
+                    .update_depth_map(&self.gpu_ctx,
+                                      &self.gui_ctx,
+                                      &self.depth_map.depth_attachment_storage,
+                                      self.depth_map.width,
+                                      self.gpu_ctx.surface_config.height);
             }
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
                 self.surface_scale_factor = factor;
