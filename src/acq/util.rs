@@ -1,10 +1,10 @@
-use crate::acq::{collector::Patch, desc::Range};
+use crate::acq::{collector::Patch, desc::Range, Radians};
 
 /// Spherical coordinate in radians.
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SphericalCoord {
-    pub zenith: f32,
-    pub azimuth: f32,
+    pub zenith: Radians,
+    pub azimuth: Radians,
 }
 
 impl SphericalCoord {
@@ -21,7 +21,7 @@ impl SphericalCoord {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SphericalShape {
+pub enum SphericalDomain {
     /// Only capture the upper part of the sphere.
     UpperHemisphere,
 
@@ -32,7 +32,7 @@ pub enum SphericalShape {
     WholeSphere,
 }
 
-impl SphericalShape {
+impl SphericalDomain {
     const MIN_AZIMUTH: f32 = 0.0;
     const MAX_AZIMUTH: f32 = std::f32::consts::PI * 2.0;
 
@@ -49,9 +49,9 @@ impl SphericalShape {
     #[inline]
     pub fn clamp(&self, zenith: f32, azimuth: f32) -> (f32, f32) {
         let (zenith_min, zenith_max) = match self {
-            SphericalShape::UpperHemisphere => (0.0, std::f32::consts::FRAC_PI_2),
-            SphericalShape::LowerHemisphere => (std::f32::consts::FRAC_PI_2, std::f32::consts::PI),
-            SphericalShape::WholeSphere => (0.0, std::f32::consts::PI),
+            SphericalDomain::UpperHemisphere => (0.0, std::f32::consts::FRAC_PI_2),
+            SphericalDomain::LowerHemisphere => (std::f32::consts::FRAC_PI_2, std::f32::consts::PI),
+            SphericalDomain::WholeSphere => (0.0, std::f32::consts::PI),
         };
 
         (
@@ -145,7 +145,7 @@ impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
     /// partition is limited by `SphericalShape`.
     /// TODO: limit the angle range by `SphericalShape`
-    pub fn generate_patches(&self, shape: SphericalShape) -> Vec<Patch> {
+    pub fn generate_patches(&self, shape: SphericalDomain) -> Vec<Patch> {
         match self {
             SphericalPartition::EqualAngle {
                 zenith:

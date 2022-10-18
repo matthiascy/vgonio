@@ -1,13 +1,6 @@
-use crate::acq::{
-    collector::Patch,
-    desc::{EmitterDesc, RadiusDesc, Range},
-    util::SphericalCoord,
-    Length, Metres, Ray,
-};
+use crate::acq::{collector::Patch, desc::{EmitterDesc, RadiusDesc, Range}, util::SphericalCoord, Metres, Ray, Radians, radians, SolidAngle, steradians};
 
-/// Light emitter of the virtual gonio-photometer. The shape of the emitter
-/// patch is spherical cap. The patch will be rotated during the measurement.
-///
+/// Light emitter of the virtual gonio-photometer.
 /// Note: need to update the radius for each surface before the measurement to
 /// make sure that the surface is covered by the patch.
 pub struct Emitter {
@@ -15,25 +8,71 @@ pub struct Emitter {
     pub num_rays: u32,
 
     /// Distance of the emitter from the origin.
-    pub radius: Option<f32>,
+    pub radius: Option<Metres>,
 
-    /// Inclination angle range of the emitter (in radians).
-    pub zenith: Range<f32>,
+    /// Emitter's possible positions in spherical coordinates (inclination angle range).
+    pub zenith: Range<Radians>,
 
-    /// Azimuthal angle range of the emitter (in radians).
-    pub azimuth: Range<f32>,
+    /// Emitter's possible positions in spherical coordinates (azimuthal angle range).
+    pub azimuth: Range<Radians>,
 
-    /// The patch from which the rays are emitted.
-    pub patch: Patch,
+    /// Shape of the emitter.
+    pub shape: RegionShape,
 
     /// Samples generated for the patch.
     pub samples: Vec<glam::Vec3>,
 }
 
+/// Represents the shape of a region on the surface of a sphere.
+pub enum RegionShape {
+    /// A patch has a disk shape on the surface of the sphere.
+    SphericalCap {
+        /// Maximum zenith angle of the spherical cap.
+        zenith: Radians,
+    },
+    /// A patch has a rectangular shape on the surface of the sphere.
+    SphericalRect {
+        /// Polar angle range of the patch (in radians).
+        zenith: (Radians, Radians),
+
+        /// Azimuthal angle range of the patch (in radians).
+        azimuth: (Radians, Radians),
+    },
+}
+
+impl RegionShape {
+    /// Create a new spherical cap emitter.
+    pub fn spherical_cap(zenith: Radians) -> Self {
+        Self::SphericalCap { zenith }
+    }
+
+    /// Create a new spherical rectangle emitter.
+    pub fn spherical_rect(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
+        Self::SphericalRect { zenith, azimuth }
+    }
+
+    pub fn solid_angle(&self) -> SolidAngle {
+        match self {
+            Self::SphericalCap { zenith } => {
+                let solid_angle: f32 = (zenith.cos() - 0.0) * (2.0 * std::f32::consts::PI);
+                steradians!(solid_angle)
+            }
+            Self::SphericalRect { zenith, azimuth } => {
+                let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) * (azimuth.1 - azimuth.0);
+                steradians!(solid_angle)
+            }
+        }
+    }
+}
+
 impl From<EmitterDesc> for Emitter {
     fn from(desc: EmitterDesc) -> Self {
-        let theta = desc.zenith.map(f32::to_radians);
-        let phi = desc.azimuth.map(f32::to_radians);
+        let theta = desc.zenith.map(|v| {
+            Radians::new(v.to_radians())
+        });
+        let phi = desc.azimuth.map(|v| {
+            Radians::new(v.to_radians())
+        });
         let samples = uniform_sampling_on_unit_sphere(
             desc.num_rays,
             theta.start,
@@ -42,7 +81,7 @@ impl From<EmitterDesc> for Emitter {
             phi.stop,
         );
         let radius = match desc.radius {
-            RadiusDesc::Auto => None,
+            RadiusDesc::Dynamic => None,
             RadiusDesc::Fixed(val) => Some(val),
         };
         Self {
@@ -60,7 +99,7 @@ impl From<EmitterDesc> for Emitter {
 }
 
 impl Emitter {
-    pub fn set_radius(&mut self, radius: f32) { self.radius = Some(radius); }
+    pub fn set_radius(&mut self, radius: Metres) { self.radius = Some(radius); }
 
     /// All possible positions of the emitter.
     pub fn positions(&self) -> Vec<SphericalCoord> {
@@ -82,20 +121,21 @@ impl Emitter {
     /// Emits rays from the patch located at `pos`.
     pub fn emit_rays(&self, pos: SphericalCoord) -> Vec<Ray> {
         let r = self.radius.expect("radius not set");
-        let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith)
-            * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth);
+        let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
+            * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
         let dir = -pos.into_cartesian();
 
         self.samples
             .iter()
             .map(|sample| {
-                let origin = mat * *sample * r;
+                let origin = mat * *sample * r.value;
                 Ray { o: origin, d: dir }
             })
             .collect()
     }
 }
 
+// TODO: update
 /// Generates uniformly distributed samples on the unit sphere.
 /// Right-handed Z-up coordinate system is used.
 ///
@@ -104,10 +144,10 @@ impl Emitter {
 /// z = cos theta
 pub fn uniform_sampling_on_unit_sphere(
     num_samples: u32,
-    theta_start: f32,
-    theta_stop: f32,
-    phi_start: f32,
-    phi_stop: f32,
+    theta_start: Radians,
+    theta_stop: Radians,
+    phi_start: Radians,
+    phi_stop: Radians,
 ) -> Vec<glam::Vec3> {
     use rand_distr::Distribution;
     use std::f32::consts::PI;
@@ -118,8 +158,8 @@ pub fn uniform_sampling_on_unit_sphere(
 
     let mut i = 0;
     while i < num_samples {
-        let phi = uniform.sample(&mut rng) * PI * 2.0;
-        let theta = (1.0 - 2.0 * uniform.sample(&mut rng)).acos();
+        let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
+        let theta = radians!((1.0 - 2.0 * uniform.sample(&mut rng)).acos());
 
         if (theta_start..theta_stop).contains(&theta) && (phi_start..phi_stop).contains(&phi) {
             samples.push(glam::Vec3::new(

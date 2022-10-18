@@ -10,6 +10,7 @@ use crate::{
 };
 use embree::{Config, SoARay};
 use std::fmt::{Display, Formatter};
+use crate::acq::metres;
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
@@ -124,7 +125,9 @@ pub fn measure_bsdf_embree_rt(
         let scene_id = embree_rt.create_scene();
         // Update emitter's radius
         if desc.emitter.radius.is_auto() {
-            emitter.set_radius(mesh.extent.max_edge() * 2.5);
+            // fixme: use surface's physical size
+            // TODO: get real size of the surface
+            emitter.set_radius(metres!(mesh.extent.max_edge() * 2.5));
         }
         let embree_mesh = embree_rt.create_triangle_mesh(mesh);
         let _surface_id = embree_rt.attach_geometry(scene_id, embree_mesh);
@@ -202,7 +205,9 @@ pub fn measure_bsdf_grid_rt(
             surface.path.as_ref().unwrap().display()
         );
         if desc.emitter.radius.is_auto() {
-            emitter.set_radius(mesh.extent.max_edge() * 2.5);
+            // fixme: use surface's physical size
+            // TODO: get real size of the surface
+            emitter.set_radius(metres!(mesh.extent.max_edge() * 2.5));
         }
         let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
         let ior_t = db

@@ -1,8 +1,8 @@
 use crate::{
     acq::{
         bsdf::BsdfKind,
-        util::{SphericalPartition, SphericalShape},
-        Length, LengthUnit, Medium, Metre, Metres, RayTracingMethod,
+        util::{SphericalPartition, SphericalDomain},
+        Length, LengthUnit, Medium, UMetre, Metres, RayTracingMethod,
     },
     Error,
 };
@@ -40,11 +40,11 @@ impl<T: Copy + Clone> Eq for Range<T> where T: PartialEq + Eq {}
 
 impl<T: Copy + Clone> Range<T> {
     /// Maps a function over the start and stop of the range.
-    pub fn map(&self, f: impl Fn(T) -> T) -> Range<T> {
+    pub fn map<U: Copy>(&self, f: impl Fn(T) -> U) -> Range<U> {
         Range {
             start: f(self.start),
             stop: f(self.stop),
-            step: self.step,
+            step: f(self.step),
         }
     }
 
@@ -111,18 +111,33 @@ impl<A: LengthUnit> Range<Length<A>> {
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
 pub enum RadiusDesc {
-    /// Radius is deduced from the dimension of the surface.
-    Auto,
+    /// Radius is dynamically deduced from the dimension of the surface.
+    Dynamic,
 
     /// Radius is given explicitly.
-    Fixed(f32),
+    Fixed(Metres),
+}
+
+#[derive(Debug)]
+pub enum Radius {
+    Dynamic,
+    Fixed(Metres),
+}
+
+impl From<RadiusDesc> for Radius {
+    fn from(desc: RadiusDesc) -> Self {
+        match desc {
+            RadiusDesc::Dynamic => Radius::Dynamic,
+            RadiusDesc::Fixed(radius) => Radius::Fixed(radius),
+        }
+    }
 }
 
 impl RadiusDesc {
     /// Whether the radius is deduced from the dimension of the surface.
     pub fn is_auto(&self) -> bool {
         match self {
-            RadiusDesc::Auto => true,
+            RadiusDesc::Dynamic => true,
             RadiusDesc::Fixed(_) => false,
         }
     }
@@ -140,12 +155,12 @@ pub struct EmitterDesc {
     /// Radius (r) specifying the spherical coordinates of the light source.
     pub radius: RadiusDesc,
 
-    /// Angle (theta) specifying the spherical coordinates of the light source
-    /// (**in degrees**).
+    /// Angle (theta) specifying the position in spherical coordinates of the
+    /// light source (**in degrees**).
     pub zenith: Range<f32>,
 
-    /// Angle (phi) specifying the spherical coordinates of the light source
-    /// (**in degrees**).
+    /// Angle (phi, zenith) specifying the position in spherical coordinates of the
+    /// light source (**in degrees**).
     pub azimuth: Range<f32>,
 
     /// Light source's spectrum.
@@ -159,7 +174,7 @@ pub struct CollectorDesc {
     pub radius: RadiusDesc,
 
     /// Exact spherical shape of the collector.
-    pub shape: SphericalShape,
+    pub shape: SphericalDomain,
 
     /// Partition of the collector patches.
     pub partition: SphericalPartition,
@@ -237,7 +252,7 @@ impl Default for MeasurementDesc {
             emitter: EmitterDesc {
                 num_rays: 1000,
                 max_bounces: 10,
-                radius: RadiusDesc::Auto,
+                radius: RadiusDesc::Dynamic,
                 zenith: Range::<f32> {
                     start: 0.0,
                     stop: 90.0,
@@ -251,8 +266,8 @@ impl Default for MeasurementDesc {
                 spectrum: Default::default(),
             },
             collector: CollectorDesc {
-                radius: RadiusDesc::Auto,
-                shape: SphericalShape::UpperHemisphere,
+                radius: RadiusDesc::Dynamic,
+                shape: SphericalDomain::UpperHemisphere,
                 partition: SphericalPartition::EqualArea {
                     zenith: (0.0, 0.0, 0),
                     azimuth: Range::<f32> {
@@ -277,8 +292,8 @@ fn scene_desc_serialization() {
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: CollectorDesc {
-            radius: RadiusDesc::Auto,
-            shape: SphericalShape::WholeSphere,
+            radius: RadiusDesc::Dynamic,
+            shape: SphericalDomain::WholeSphere,
             partition: SphericalPartition::EqualArea {
                 zenith: (0.0, 90.0, 45),
                 azimuth: Range {
@@ -291,7 +306,7 @@ fn scene_desc_serialization() {
         emitter: EmitterDesc {
             num_rays: 0,
             max_bounces: 0,
-            radius: RadiusDesc::Auto,
+            radius: RadiusDesc::Dynamic,
             spectrum: Range {
                 start: 380.0,
                 stop: 780.0,

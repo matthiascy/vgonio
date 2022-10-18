@@ -3,7 +3,7 @@ use crate::{
         bsdf,
         bsdf::BsdfKind,
         desc::{MeasurementDesc, MeasurementKind},
-        util::SphericalShape,
+        util::SphericalDomain,
         Medium, RayTracingMethod,
     },
     app::{
@@ -350,17 +350,17 @@ impl SimulationPanel {
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.desc.collector.shape,
-                                    SphericalShape::WholeSphere,
+                                    SphericalDomain::WholeSphere,
                                     "Whole hemisphere",
                                 );
                                 ui.selectable_value(
                                     &mut self.desc.collector.shape,
-                                    SphericalShape::UpperHemisphere,
+                                    SphericalDomain::UpperHemisphere,
                                     "Upper hemisphere",
                                 );
                                 ui.selectable_value(
                                     &mut self.desc.collector.shape,
-                                    SphericalShape::LowerHemisphere,
+                                    SphericalDomain::LowerHemisphere,
                                     "Lower hemisphere",
                                 );
                             });

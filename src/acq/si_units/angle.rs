@@ -1,13 +1,14 @@
 use crate::util::ulp_eq;
 use core::fmt::{Debug, Display};
+use std::ops::{Deref, DerefMut};
 
 /// Radian unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Radian;
+pub struct URadian;
 
 /// Degree unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Degree;
+pub struct UDegree;
 
 /// Unit trait for angle units.
 pub trait AngleUnit: Debug + Copy + Clone {
@@ -30,14 +31,14 @@ pub trait AngleUnit: Debug + Copy + Clone {
     const FACTOR_TO_DEG: f32 = 1.0 / Self::FACTOR_FROM_DEG;
 }
 
-impl AngleUnit for Radian {
+impl AngleUnit for URadian {
     const NAME: &'static str = "radian";
     const SYMBOL: &'static str = "rad";
     const FACTOR_FROM_RAD: f32 = 1.0;
     const FACTOR_FROM_DEG: f32 = 1.0 / 180.0 * std::f32::consts::PI;
 }
 
-impl AngleUnit for Degree {
+impl AngleUnit for UDegree {
     const NAME: &'static str = "degree";
     const SYMBOL: &'static str = "deg";
     const FACTOR_FROM_RAD: f32 = 180.0 / std::f32::consts::PI;
@@ -72,6 +73,14 @@ impl<A: AngleUnit, B: AngleUnit> PartialEq<Angle<B>> for Angle<A> {
     }
 }
 
+impl<A: AngleUnit, B: AngleUnit> PartialOrd<Angle<B>> for Angle<A> {
+    fn partial_cmp(&self, other: &Angle<B>) -> Option<core::cmp::Ordering> {
+        let self_rad = self.value * A::FACTOR_TO_RAD;
+        let other_rad = other.value * B::FACTOR_TO_RAD;
+        Some(self_rad.partial_cmp(&other_rad)?)
+    }
+}
+
 impl<A: AngleUnit> Angle<A> {
     /// Create a new angle with unit.
     pub fn new(value: f32) -> Self {
@@ -83,6 +92,10 @@ impl<A: AngleUnit> Angle<A> {
 
     /// Get the value of the angle.
     pub fn value(&self) -> f32 { self.value }
+
+    pub fn abs(&self) -> Self {
+        Angle::new(self.value.abs())
+    }
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
@@ -143,42 +156,60 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
     }
 }
 
-impl Angle<Radian> {
+impl Angle<URadian> {
     /// Convert to degree.
-    pub fn in_degrees(&self) -> Angle<Degree> { Angle::new(self.value * Degree::FACTOR_FROM_RAD) }
+    pub fn in_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * UDegree::FACTOR_FROM_RAD) }
+    pub fn sin(&self) -> f32 { self.value.sin() }
+    pub fn cos(&self) -> f32 { self.value.cos() }
+    pub fn tan(&self) -> f32 { self.value.tan() }
+    pub fn asin(&self) -> f32 { self.value.asin() }
+    pub fn acos(&self) -> f32 { self.value.acos() }
+    pub fn atan(&self) -> f32 { self.value.atan() }
 }
 
-impl Angle<Degree> {
+impl Angle<UDegree> {
     /// Convert to radian.
-    pub fn in_radians(&self) -> Angle<Radian> { Angle::new(self.value * Radian::FACTOR_FROM_DEG) }
+    pub fn in_radians(&self) -> Angle<URadian> { Angle::new(self.value * URadian::FACTOR_FROM_DEG) }
+    pub fn sin(&self) -> f32 { self.value.to_radians().sin() }
+    pub fn cos(&self) -> f32 { self.value.to_radians().cos() }
+    pub fn tan(&self) -> f32 { self.value.to_radians().tan() }
+    pub fn asin(&self) -> f32 { self.value.to_radians().asin() }
+    pub fn acos(&self) -> f32 { self.value.to_radians().acos() }
+    pub fn atan(&self) -> f32 { self.value.to_radians().atan() }
 }
 
 /// Type alias for `Angle<Radian>`.
-pub type Radians = Angle<Radian>;
+pub type Radians = Angle<URadian>;
 
 /// Type alias for `Angle<Degree>`.
-pub type Degrees = Angle<Degree>;
+pub type Degrees = Angle<UDegree>;
 
 /// Helper creating a new `Angle<Radian>`.
 pub macro radians($value:expr) {
-    $crate::acq::Angle::<$crate::acq::Radian>::new($value)
+    $crate::acq::Angle::<$crate::acq::URadian>::new($value)
 }
 
 /// Helper creating a new `Angle<Degree>`.
 pub macro degrees($value:expr) {
-    $crate::acq::Angle::<$crate::acq::Degree>::new($value)
+    $crate::acq::Angle::<$crate::acq::UDegree>::new($value)
 }
 
-impl From<Angle<Degree>> for Angle<Radian> {
-    fn from(angle: Angle<Degree>) -> Self { angle.in_radians() }
+impl From<Angle<UDegree>> for Angle<URadian> {
+    fn from(angle: Angle<UDegree>) -> Self { angle.in_radians() }
 }
 
-impl From<Angle<Radian>> for Angle<Degree> {
-    fn from(angle: Angle<Radian>) -> Self { angle.in_degrees() }
+impl From<Angle<URadian>> for Angle<UDegree> {
+    fn from(angle: Angle<URadian>) -> Self { angle.in_degrees() }
 }
 
 super::impl_ops!(Add, Sub for Angle where A, B: AngleUnit);
 super::impl_ops_with_f32!(Mul, Div for Angle where A: AngleUnit);
+
+impl<A: AngleUnit, B: AngleUnit> core::ops::Div<Angle<B>> for Angle<A> {
+    type Output = f32;
+
+    fn div(self, rhs: Angle<B>) -> Self::Output { self.value.to_radians() / rhs.value.to_radians() }
+}
 
 impl<A: AngleUnit> core::ops::Mul<Angle<A>> for f32 {
     type Output = Angle<A>;
@@ -186,6 +217,17 @@ impl<A: AngleUnit> core::ops::Mul<Angle<A>> for f32 {
     fn mul(self, rhs: Angle<A>) -> Self::Output {
         Angle {
             value: self * rhs.value,
+            unit: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<A: AngleUnit> core::ops::Neg for Angle<A> {
+    type Output = Angle<A>;
+
+    fn neg(self) -> Self::Output {
+        Angle {
+            value: -self.value,
             unit: core::marker::PhantomData,
         }
     }
@@ -200,16 +242,16 @@ mod angle_unit_tests {
 
     #[test]
     fn conversion() {
-        let a = Angle::<Radian>::new(1.0);
-        let b: Angle<Degree> = a.into();
+        let a = Angle::<URadian>::new(1.0);
+        let b: Angle<UDegree> = a.into();
         let c = a.in_degrees();
         assert!(ulp_eq(b.value, 1.0f32.to_degrees()));
         assert!(ulp_eq(c.value, 1.0f32.to_degrees()));
         assert_eq!(a, b);
 
         {
-            let a = Angle::<Degree>::new(180.0);
-            let b: Angle<Radian> = a.into();
+            let a = Angle::<UDegree>::new(180.0);
+            let b: Angle<URadian> = a.into();
             let c = a.in_radians();
             assert!(ulp_eq(b.value, core::f32::consts::PI));
             assert!(ulp_eq(c.value, core::f32::consts::PI));
@@ -219,73 +261,79 @@ mod angle_unit_tests {
 
     #[test]
     fn equivalence() {
-        let a = Angle::<Radian>::new(1.0);
-        let b = Angle::<Degree>::new(1.0f32.to_degrees());
+        let a = Angle::<URadian>::new(1.0);
+        let b = Angle::<UDegree>::new(1.0f32.to_degrees());
         assert_eq!(a, b);
     }
 
     #[test]
     fn add_and_assign() {
-        let a = Angle::<Degree>::new(1.0);
-        let b = Angle::<Degree>::new(2.0);
+        let a = Angle::<UDegree>::new(1.0);
+        let b = Angle::<UDegree>::new(2.0);
         let c = a + b;
         assert_eq!(c.value, 3.0);
 
-        let a = Angle::<Radian>::new(1.0);
-        let b = Angle::<Degree>::new(180.0);
+        let a = Angle::<URadian>::new(1.0);
+        let b = Angle::<UDegree>::new(180.0);
         let c = a + b;
         assert_eq!(c.value, 1.0 + core::f32::consts::PI);
 
-        let mut a = Angle::<Degree>::new(1.0);
-        let b = Angle::<Degree>::new(2.0);
+        let mut a = Angle::<UDegree>::new(1.0);
+        let b = Angle::<UDegree>::new(2.0);
         a += b;
-        assert_eq!(a, Angle::<Degree>::new(3.0));
+        assert_eq!(a, Angle::<UDegree>::new(3.0));
 
-        let mut a = Angle::<Radian>::new(1.0);
-        let b = Angle::<Degree>::new(180.0);
+        let mut a = Angle::<URadian>::new(1.0);
+        let b = Angle::<UDegree>::new(180.0);
         a += b;
-        assert_eq!(a, Angle::<Radian>::new(1.0 + core::f32::consts::PI));
+        assert_eq!(a, Angle::<URadian>::new(1.0 + core::f32::consts::PI));
     }
 
     #[test]
     fn sub() {
-        let a = Angle::<Degree>::new(1.0);
-        let b = Angle::<Degree>::new(2.0);
+        let a = Angle::<UDegree>::new(1.0);
+        let b = Angle::<UDegree>::new(2.0);
         let c = a - b;
         assert_eq!(c.value, -1.0);
 
-        let a = Angle::<Radian>::new(1.0);
-        let b = Angle::<Degree>::new(180.0);
+        let a = Angle::<URadian>::new(1.0);
+        let b = Angle::<UDegree>::new(180.0);
         let c = a - b;
         assert!(ulp_eq(c.value, 1.0 - core::f32::consts::PI));
 
-        let mut a = Angle::<Degree>::new(1.0);
-        let b = Angle::<Degree>::new(2.0);
+        let mut a = Angle::<UDegree>::new(1.0);
+        let b = Angle::<UDegree>::new(2.0);
         a -= b;
-        assert_eq!(a, Angle::<Degree>::new(-1.0));
+        assert_eq!(a, Angle::<UDegree>::new(-1.0));
 
-        let mut a = Angle::<Degree>::new(1.0);
-        let b = Angle::<Radian>::new(1.0);
+        let mut a = Angle::<UDegree>::new(1.0);
+        let b = Angle::<URadian>::new(1.0);
         a -= b;
-        assert_eq!(a, Angle::<Radian>::new(1.0f32.to_radians() - 1.0));
+        assert_eq!(a, Angle::<URadian>::new(1.0f32.to_radians() - 1.0));
     }
 
     #[test]
     fn mul() {
-        let a = Angle::<Radian>::new(1.0);
+        let a = Angle::<URadian>::new(1.0);
         let b = a * 2.0;
         assert_eq!(b.value, 2.0);
 
-        let a = Angle::<Degree>::new(1.0);
+        let a = Angle::<UDegree>::new(1.0);
         let b = 2.0 * a;
         assert_eq!(b.value, 2.0);
     }
 
     #[test]
     fn div() {
-        let a = Angle::<Degree>::new(1.0);
+        let a = Angle::<UDegree>::new(1.0);
         let b = a / 2.0;
+
+        let c = Angle::<UDegree>::new(90.0);
+        let d = Angle::<URadian>::new(0.78);
+        let e = c / d;
+
         assert_eq!(b.value, 0.5);
+        assert_eq!(e.round(), 2.0);
     }
 
     #[test]

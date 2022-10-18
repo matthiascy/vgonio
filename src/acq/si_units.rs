@@ -91,9 +91,11 @@ macro impl_ops_assign($($op:ident),* for $t:ident where A, B: $unit_trait:ident)
 
 mod angle;
 mod length;
+mod solid_angle;
 
 pub use angle::*;
 pub use length::*;
+pub use solid_angle::*;
 
 fn findr_first_ascii_alphabetic(s: &[u8]) -> Option<usize> {
     let mut i = s.len() - 1;

@@ -133,8 +133,11 @@ impl FromStr for Medium {
 
 /// Light source used for acquisition of shadowing and masking function.
 pub struct LightSource {
+    /// Position of the light source.
     pub pos: Vec3,
+    /// Parameters of projection.
     pub proj: Projection,
+    /// Type of projection.
     pub proj_kind: ProjectionKind,
 }
 
@@ -234,11 +237,3 @@ impl MicroSurfaceView {
         }
     }
 }
-
-// fn measure_micro_surface_geometric_term(
-//     device: wgpu::Device,
-//     queue: wgpu::Queue,
-//     view: &MicroSurfaceView,
-// ) {
-//     unimplemented!()
-// }
