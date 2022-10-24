@@ -25,8 +25,8 @@ impl SolidAngle {
 
     /// Calculate the solid angle subtended by a region of the sphere delimited by two ranges of angles.
     pub fn from_angle_ranges(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
-        let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) * (azimuth.1 - azimuth.0);
-        Self(solid_angle)
+        let solid_angle = (zenith.0.cos() - zenith.1.cos()) * (azimuth.1 - azimuth.0);
+        Self(solid_angle.value())
     }
 }
 

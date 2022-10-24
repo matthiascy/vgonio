@@ -60,7 +60,7 @@ impl GpuContext {
                 )
             });
 
-        log::info!("Device limits: {:?}", device.limits());
+        log::trace!("GPU limits: {:?}", device.limits());
 
         let query_set = if features.contains(wgpu::Features::TIMESTAMP_QUERY) {
             Some(device.create_query_set(&wgpu::QuerySetDescriptor {

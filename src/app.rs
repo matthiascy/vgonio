@@ -325,7 +325,6 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
                 let seconds = duration.as_secs() % 60;
                 let minutes = (duration.as_secs() / 60) % 60;
                 let hours = (duration.as_secs() / 60) / 60;
-                // Show log level only in Warn and Error level
                 writeln!(
                     buf,
                     "{}:{}:{}.{:03} {:5} [{}]: {}",

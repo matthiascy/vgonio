@@ -1,4 +1,5 @@
-use crate::acq::{collector::Patch, desc::Range, Radians};
+use crate::acq::{collector::Patch, Degrees, desc::Range, Radians};
+use crate::acq::desc::Range2;
 
 /// Spherical coordinate in radians.
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
@@ -66,37 +67,36 @@ impl SphericalDomain {
 #[serde(rename_all = "snake_case")]
 pub enum SphericalPartition {
     /// The collector is partitioned into a number of regions with the same
-    /// angular interval. Angles are expressed in *degrees*.
+    /// angular interval.
     EqualAngle {
         /// Range of interest of the polar angle θ (start, stop, step).
-        zenith: Range<f32>,
+        zenith: Range<Radians>,
 
         /// Range of interest of the azimuthal angle φ (start, stop, step).
-        azimuth: Range<f32>,
+        azimuth: Range<Radians>,
     },
 
     /// The collector is partitioned into a number of regions with the same
     /// area (solid angle), azimuthal angle φ is divided into equal intervals;
     /// polar angle θ is divided non uniformly to guarantee equal area patches.
-    /// Angles are expressed in *degrees*
     EqualArea {
         /// Range of interest of the polar angle θ (start, stop, count).
-        zenith: (f32, f32, u32),
+        zenith: Range2<Radians>,
 
         /// Range of interest interval of the azimuthal angle φ (start, stop,
         /// step).
-        azimuth: Range<f32>,
+        azimuth: Range<Radians>,
     },
 
     /// The collector is partitioned into a number of regions with the same
     /// projected area (projected solid angle).
     EqualProjectedArea {
         /// Range of interest of the polar angle θ (start, stop, count).
-        zenith: (f32, f32, u32),
+        zenith: Range2<Radians>,
 
         /// Range of interest interval of the azimuthal angle φ (start, stop,
         /// step) in degrees.
-        azimuth: Range<f32>,
+        azimuth: Range<Radians>,
     },
 }
 
@@ -123,7 +123,7 @@ impl SphericalPartition {
             }
             SphericalPartition::EqualArea { zenith: theta, .. }
             | SphericalPartition::EqualProjectedArea { zenith: theta, .. } => {
-                format!("{}° - {}°, samples count {}", theta.0, theta.1, theta.2)
+                format!("{}° - {}°, samples count {}", theta.start, theta.stop, theta.count)
             }
         }
     }
@@ -145,7 +145,7 @@ impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
     /// partition is limited by `SphericalShape`.
     /// TODO: limit the angle range by `SphericalShape`
-    pub fn generate_patches(&self, shape: SphericalDomain) -> Vec<Patch> {
+    pub fn generate_patches(&self, domain: SphericalDomain) -> Vec<Patch> {
         match self {
             SphericalPartition::EqualAngle {
                 zenith:
@@ -161,13 +161,6 @@ impl SphericalPartition {
                         step: phi_step,
                     },
             } => {
-                let theta_start = theta_start.to_radians();
-                let theta_stop = theta_stop.to_radians();
-                let theta_step = theta_step.to_radians();
-                let phi_start = phi_start.to_radians();
-                let phi_stop = phi_stop.to_radians();
-                let phi_step = phi_step.to_radians();
-
                 let n_theta = ((theta_stop - theta_start) / theta_step).ceil() as usize;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
@@ -189,7 +182,11 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualArea {
-                zenith: (theta_start, theta_stop, count),
+                zenith: Range2 {
+                    start: theta_start,
+                    stop: theta_stop,
+                    count
+                },
                 azimuth:
                     Range {
                         start: phi_start,

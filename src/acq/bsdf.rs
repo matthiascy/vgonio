@@ -124,7 +124,7 @@ pub fn measure_bsdf_embree_rt(
         );
         let scene_id = embree_rt.create_scene();
         // Update emitter's radius
-        if desc.emitter.radius.is_auto() {
+        if desc.emitter.radius.is_dynamic() {
             // fixme: use surface's physical size
             // TODO: get real size of the surface
             emitter.set_radius(metres!(mesh.extent.max_edge() * 2.5));
@@ -204,7 +204,7 @@ pub fn measure_bsdf_grid_rt(
             "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
         );
-        if desc.emitter.radius.is_auto() {
+        if desc.emitter.radius.is_dynamic() {
             // fixme: use surface's physical size
             // TODO: get real size of the surface
             emitter.set_radius(metres!(mesh.extent.max_edge() * 2.5));

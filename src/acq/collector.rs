@@ -1,6 +1,6 @@
-use crate::acq::{bsdf::BsdfKind, desc::{CollectorDesc, RadiusDesc}, util::{SphericalPartition, SphericalDomain}, RtcRecord, Radians, steradians, SolidAngle};
+use crate::acq::{bsdf::BsdfKind, desc::{CollectorDesc, Radius}, util::{SphericalPartition, SphericalDomain}, RtcRecord, Radians, steradians, SolidAngle};
 use std::fmt::Debug;
-use crate::acq::desc::{Radius, Range};
+use crate::acq::desc::{Range};
 use crate::acq::emitter::RegionShape;
 
 /// The virtual goniophotometer's detectors represented by the patches
@@ -11,9 +11,11 @@ use crate::acq::emitter::RegionShape;
 pub struct Collector {
     pub radius: Radius,
     pub scheme: CollectorScheme,
+    /// Partitioned patches of the collector.
+    pub patches: Option<Vec<Patch>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CollectorScheme {
     /// The patches are subdivided using a spherical partition.
     Partitioned {
@@ -21,8 +23,6 @@ pub enum CollectorScheme {
         domain: SphericalDomain,
         /// Spherical partition of the collector.
         partition: SphericalPartition,
-        /// Partitioned patches.
-        patches: Vec<Patch>,
     },
     /// The collector is represented by a single shape on the surface of the sphere.
     Individual {
@@ -39,11 +39,11 @@ pub enum CollectorScheme {
 
 impl From<CollectorDesc> for Collector {
     fn from(desc: CollectorDesc) -> Self {
+        let patches = desc.generate_patches();
         Self {
             radius: desc.radius.into(),
-            domain: desc.shape,
-            partition: desc.partition,
-            patches: desc.partition.generate_patches(desc.shape),
+            scheme: desc.scheme.into(),
+            patches,
         }
     }
 }
@@ -54,13 +54,10 @@ impl Collector {
         R: IntoIterator<Item = RtcRecord>,
         <<R as IntoIterator>::IntoIter as Iterator>::Item: Debug,
     {
-        // for record in records.into_iter() {
-        //     // print!("{} ", record.bounces());
-        // }
-        // println!();
+        todo!("Collector::collect")
     }
 
-    pub fn save_stats(&self, path: &str) { unimplemented!() }
+    pub fn save_stats(&self, path: &str) { todo!("Collector::save_stats") }
 }
 
 /// Represents a patch on the spherical [`Collector`].

@@ -1,4 +1,4 @@
-use crate::acq::{collector::Patch, desc::{EmitterDesc, RadiusDesc, Range}, util::SphericalCoord, Metres, Ray, Radians, radians, SolidAngle, steradians};
+use crate::acq::{collector::Patch, desc::{EmitterDesc, Radius, Range}, util::SphericalCoord, Metres, Ray, Radians, radians, SolidAngle, steradians};
 
 /// Light emitter of the virtual gonio-photometer.
 /// Note: need to update the radius for each surface before the measurement to
@@ -24,6 +24,7 @@ pub struct Emitter {
 }
 
 /// Represents the shape of a region on the surface of a sphere.
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum RegionShape {
     /// A patch has a disk shape on the surface of the sphere.
     SphericalCap {
@@ -58,8 +59,9 @@ impl RegionShape {
                 steradians!(solid_angle)
             }
             Self::SphericalRect { zenith, azimuth } => {
-                let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) * (azimuth.1 - azimuth.0);
-                steradians!(solid_angle)
+                todo!()
+                // let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) * (azimuth.1 - azimuth.0);
+                // steradians!(solid_angle)
             }
         }
     }
@@ -81,20 +83,21 @@ impl From<EmitterDesc> for Emitter {
             phi.stop,
         );
         let radius = match desc.radius {
-            RadiusDesc::Dynamic => None,
-            RadiusDesc::Fixed(val) => Some(val),
+            Radius::Dynamic => None,
+            Radius::Fixed(val) => Some(val),
         };
-        Self {
-            num_rays: desc.num_rays,
-            radius,
-            zenith: theta,
-            azimuth: phi,
-            patch: Patch::new(
-                (-theta.step / 2.0, theta.step / 2.0),
-                (-phi.step / 2.0, phi.step / 2.0),
-            ),
-            samples,
-        }
+        todo!()
+        // Self {
+        //     num_rays: desc.num_rays,
+        //     radius,
+        //     zenith: theta,
+        //     azimuth: phi,
+        //     patch: Patch::new(
+        //         (-theta.step / 2.0, theta.step / 2.0),
+        //         (-phi.step / 2.0, phi.step / 2.0),
+        //     ),
+        //     samples,
+        // }
     }
 }
 

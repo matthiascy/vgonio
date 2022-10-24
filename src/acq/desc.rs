@@ -12,19 +12,35 @@ use std::{
     ops::Sub,
     path::{Path, PathBuf},
 };
+use crate::acq::collector::CollectorScheme;
+use crate::acq::{degrees, Patch};
 
 /// Helper struct used to specify the range of all kind of measurement (mostly angle ranges).
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(into = "[T; 3]", from = "[T; 3]")]
 pub struct Range<T: Copy + Clone> {
-    /// Initial wavelength of the spectrum.
+    /// Initial value of the range.
     pub start: T,
 
-    /// Final wavelength of the spectrum.
+    /// Final value of the range.
     pub stop: T,
 
-    /// Increment between wavelength samples.
+    /// Increment between two consecutive values of the range.
     pub step: T,
+}
+
+/// Helper struct used to specify the range without knowing the step size but the number of samples.
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(into = "(T, T, usize)", from = "(T, T, usize)")]
+pub struct Range2<T: Copy + Clone> {
+    /// Initial value of the range.
+    pub start: T,
+
+    /// Final value of the range.
+    pub stop: T,
+
+    /// Number of samples.
+    pub count: usize
 }
 
 impl<T: Copy + Clone> PartialEq for Range<T>
@@ -36,7 +52,17 @@ where
     }
 }
 
+impl<T: Copy + Clone> PartialEq for Range2<T>
+    where T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start && self.stop == other.stop && self.count == other.count
+    }
+}
+
 impl<T: Copy + Clone> Eq for Range<T> where T: PartialEq + Eq {}
+
+impl<T: Copy + Clone> Eq for Range2<T> where T: PartialEq + Eq {}
 
 impl<T: Copy + Clone> Range<T> {
     /// Maps a function over the start and stop of the range.
@@ -52,6 +78,24 @@ impl<T: Copy + Clone> Range<T> {
     pub fn span(&self) -> T
     where
         T: Sub<Output = T>,
+    {
+        self.stop - self.start
+    }
+}
+
+impl<T: Copy + Clone> Range2<T> {
+    /// Maps a function over the start and stop of the range.
+    pub fn map<U: Copy>(&self, f: impl Fn(T) -> U) -> Range2<U> {
+        Range2 {
+            start: f(self.start),
+            stop: f(self.stop),
+            count: self.count,
+        }
+    }
+
+    /// Returns the span of the range.
+    pub fn span(&self) -> T
+        where T: Sub<Output = T>,
     {
         self.stop - self.start
     }
@@ -81,8 +125,22 @@ impl<T: Copy> From<(T, T, T)> for Range<T> {
     }
 }
 
+impl<T: Copy> From<(T, T, usize)> for Range2<T> {
+    fn from(vals: (T, T, usize)) -> Self {
+        Self {
+            start: vals.0,
+            stop: vals.1,
+            count: vals.2,
+        }
+    }
+}
+
 impl<T: Copy> From<Range<T>> for (T, T, T) {
     fn from(range: Range<T>) -> Self { (range.start, range.stop, range.step) }
+}
+
+impl<T: Copy> From<Range2<T>> for (T, T, usize) {
+    fn from(range: Range2<T>) -> Self { (range.start, range.stop, range.count) }
 }
 
 impl<T: Default + Copy> Default for Range<T> {
@@ -95,9 +153,25 @@ impl<T: Default + Copy> Default for Range<T> {
     }
 }
 
+impl<T: Default + Copy> Default for Range2<T> {
+    fn default() -> Self {
+        Self {
+            start: T::default(),
+            stop: T::default(),
+            count: 0,
+        }
+    }
+}
+
 impl Range<f32> {
     /// Returns the sample count of the range.
     pub fn samples_count(&self) -> usize { ((self.stop - self.start) / self.step).floor() as usize }
+}
+
+impl Range2<f32> {
+    pub fn step_size(&self) -> f32 {
+        (self.stop - self.start) / (self.count as f32)
+    }
 }
 
 impl<A: LengthUnit> Range<Length<A>> {
@@ -107,10 +181,16 @@ impl<A: LengthUnit> Range<Length<A>> {
     }
 }
 
+impl<A: LengthUnit> Range2<Length<A>> {
+    pub fn step_size(&self) -> Length<A> {
+        Length::new((self.stop.value - self.start.value) / (self.count as f32))
+    }
+}
+
 /// Describes the radius of measurement.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
-pub enum RadiusDesc {
+pub enum Radius {
     /// Radius is dynamically deduced from the dimension of the surface.
     Dynamic,
 
@@ -118,27 +198,12 @@ pub enum RadiusDesc {
     Fixed(Metres),
 }
 
-#[derive(Debug)]
-pub enum Radius {
-    Dynamic,
-    Fixed(Metres),
-}
-
-impl From<RadiusDesc> for Radius {
-    fn from(desc: RadiusDesc) -> Self {
-        match desc {
-            RadiusDesc::Dynamic => Radius::Dynamic,
-            RadiusDesc::Fixed(radius) => Radius::Fixed(radius),
-        }
-    }
-}
-
-impl RadiusDesc {
-    /// Whether the radius is deduced from the dimension of the surface.
-    pub fn is_auto(&self) -> bool {
+impl Radius {
+    /// Whether the radius is dynamically deduced from the dimension of the surface.
+    pub fn is_dynamic(&self) -> bool {
         match self {
-            RadiusDesc::Dynamic => true,
-            RadiusDesc::Fixed(_) => false,
+            Radius::Dynamic => true,
+            Radius::Fixed(_) => false,
         }
     }
 }
@@ -153,7 +218,7 @@ pub struct EmitterDesc {
     pub max_bounces: u32,
 
     /// Radius (r) specifying the spherical coordinates of the light source.
-    pub radius: RadiusDesc,
+    pub radius: Radius,
 
     /// Angle (theta) specifying the position in spherical coordinates of the
     /// light source (**in degrees**).
@@ -168,16 +233,26 @@ pub struct EmitterDesc {
 }
 
 /// Description of the BRDF collector.
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CollectorDesc {
     /// Radius of the underlying shape of the collector.
-    pub radius: RadiusDesc,
+    pub radius: Radius,
 
-    /// Exact spherical shape of the collector.
-    pub shape: SphericalDomain,
+    /// Capture scheme of the collector.
+    pub scheme: CollectorScheme,
+}
 
-    /// Partition of the collector patches.
-    pub partition: SphericalPartition,
+impl CollectorDesc {
+    /// Generates the patches of the collector in case
+    /// of a spherical partition.
+    pub fn generate_patches(&self) -> Option<Vec<Patch>> {
+        match self.scheme {
+            CollectorScheme::Partitioned { domain, partition } => {
+                Some(partition.generate_patches(domain))
+            }
+            CollectorScheme::Individual { .. } => { None }
+        }
+    }
 }
 
 /// Supported type of measurement.
@@ -252,7 +327,7 @@ impl Default for MeasurementDesc {
             emitter: EmitterDesc {
                 num_rays: 1000,
                 max_bounces: 10,
-                radius: RadiusDesc::Dynamic,
+                radius: Radius::Dynamic,
                 zenith: Range::<f32> {
                     start: 0.0,
                     stop: 90.0,
@@ -266,16 +341,22 @@ impl Default for MeasurementDesc {
                 spectrum: Default::default(),
             },
             collector: CollectorDesc {
-                radius: RadiusDesc::Dynamic,
-                shape: SphericalDomain::UpperHemisphere,
-                partition: SphericalPartition::EqualArea {
-                    zenith: (0.0, 0.0, 0),
-                    azimuth: Range::<f32> {
-                        start: 0.0,
-                        stop: 0.0,
-                        step: 0.0,
+                radius: Radius::Dynamic,
+                scheme: CollectorScheme::Partitioned {
+                    domain: SphericalDomain::UpperHemisphere,
+                    partition: SphericalPartition::EqualArea {
+                        zenith: Range2 {
+                            start: degrees!(0.0),
+                            stop: degrees!(90.0),
+                            count: 0,
+                        },
+                        azimuth: Range {
+                            start: degrees!(0.0),
+                            stop: degrees!(0.0),
+                            step: degrees!(0.0),
+                        },
                     },
-                },
+                }
             },
         }
     }
@@ -292,7 +373,7 @@ fn scene_desc_serialization() {
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: CollectorDesc {
-            radius: RadiusDesc::Dynamic,
+            radius: Radius::Dynamic,
             shape: SphericalDomain::WholeSphere,
             partition: SphericalPartition::EqualArea {
                 zenith: (0.0, 90.0, 45),
@@ -306,7 +387,7 @@ fn scene_desc_serialization() {
         emitter: EmitterDesc {
             num_rays: 0,
             max_bounces: 0,
-            radius: RadiusDesc::Dynamic,
+            radius: Radius::Dynamic,
             spectrum: Range {
                 start: 380.0,
                 stop: 780.0,
