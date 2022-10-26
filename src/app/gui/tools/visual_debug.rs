@@ -1,16 +1,14 @@
-use std::any::Any;
 use crate::app::gui::VgonioEvent;
-use std::sync::Arc;
 use egui::Response;
+use std::{any::Any, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 mod ray_tracing;
 mod shadow_map;
 
-use crate::app::gui::widgets::toggle_ui;
+use crate::app::gui::{tools::Tool, widgets::toggle_ui};
 use ray_tracing::RayTracingPane;
 use shadow_map::ShadowMapPane;
-use crate::app::gui::tools::Tool;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]
@@ -33,9 +31,7 @@ pub(crate) struct VisualDebugger {
 }
 
 impl Tool for VisualDebugger {
-    fn name(&self) -> &'static str {
-        "Visual Debugger"
-    }
+    fn name(&self) -> &'static str { "Visual Debugger" }
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         egui::Window::new(self.name())
@@ -49,9 +45,9 @@ impl Tool for VisualDebugger {
             ui.label("Debug Draw");
             if toggle_ui(ui, &mut self.debug_drawing_enabled).changed()
                 && self
-                .event_loop
-                .send_event(VgonioEvent::ToggleDebugDrawing)
-                .is_err()
+                    .event_loop
+                    .send_event(VgonioEvent::ToggleDebugDrawing)
+                    .is_err()
             {
                 log::warn!("Failed to send VgonioEvent::ToggleDebugDrawing");
             }
@@ -73,13 +69,9 @@ impl Tool for VisualDebugger {
         }
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 impl VisualDebugger {

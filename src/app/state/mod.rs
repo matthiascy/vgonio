@@ -18,7 +18,7 @@ use crate::{
     acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray, RayTracingMethod},
     app::{
         cache::{Cache, VgonioDatafiles},
-        gui::{trace_ray_grid_dbg, trace_ray_standard_dbg},
+        gui::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger},
         Config,
     },
     error::Error,
@@ -42,9 +42,8 @@ use wgpu::{util::DeviceExt, VertexFormat, VertexStepMode, COPY_BYTES_PER_ROW_ALI
 use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{EventLoop, EventLoopProxy},
+    platform::unix::x11::ffi::Visual,
 };
-use winit::platform::unix::x11::ffi::Visual;
-use crate::app::gui::VisualDebugger;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -835,11 +834,13 @@ impl VgonioState {
                     .get_tool::<VisualDebugger>("visual_debugger")
                     .unwrap()
                     .shadow_map_pane
-                    .update_depth_map(&self.gpu_ctx,
-                                      &self.gui_ctx,
-                                      &self.depth_map.depth_attachment_storage,
-                                      self.depth_map.width,
-                                      self.gpu_ctx.surface_config.height);
+                    .update_depth_map(
+                        &self.gpu_ctx,
+                        &self.gui_ctx,
+                        &self.depth_map.depth_attachment_storage,
+                        self.depth_map.width,
+                        self.gpu_ctx.surface_config.height,
+                    );
             }
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
                 self.surface_scale_factor = factor;

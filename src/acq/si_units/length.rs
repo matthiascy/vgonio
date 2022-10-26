@@ -39,12 +39,6 @@ pub trait LengthUnit: Debug + Copy + Clone {
 
     /// The factor to convert from the unit to nanometers.
     const FACTOR_TO_NANOMETRE: f32 = 1.0 / Self::FACTOR_FROM_NANOMETRE;
-
-    /// The factor to convert from picometers to the unit.
-    const FACTOR_FROM_PICOMETRE: f32;
-
-    /// The factor to convert from the unit to picometers.
-    const FACTOR_TO_PICOMETRE: f32 = 1.0 / Self::FACTOR_FROM_PICOMETRE;
 }
 
 /// Meters.
@@ -67,10 +61,6 @@ pub struct UMicrometre;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct UNanometre;
 
-/// Picometers.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct UPicometre;
-
 impl LengthUnit for UMetre {
     const NAME: &'static str = "metre";
     const SYMBOL: &'static str = "m";
@@ -79,7 +69,6 @@ impl LengthUnit for UMetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e-3;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-6;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-9;
-    const FACTOR_FROM_PICOMETRE: f32 = 1.0e-12;
 }
 
 impl LengthUnit for UCentimetre {
@@ -90,7 +79,6 @@ impl LengthUnit for UCentimetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e-1;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-4;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-7;
-    const FACTOR_FROM_PICOMETRE: f32 = 1.0e-10;
 }
 
 impl LengthUnit for UMillimetre {
@@ -101,7 +89,6 @@ impl LengthUnit for UMillimetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-3;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-6;
-    const FACTOR_FROM_PICOMETRE: f32 = 1.0e-9;
 }
 
 impl LengthUnit for UMicrometre {
@@ -112,7 +99,6 @@ impl LengthUnit for UMicrometre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e3;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-3;
-    const FACTOR_FROM_PICOMETRE: f32 = 1.0e-6;
 }
 
 impl LengthUnit for UNanometre {
@@ -123,18 +109,6 @@ impl LengthUnit for UNanometre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e6;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e3;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0;
-    const FACTOR_FROM_PICOMETRE: f32 = 1.0e-3;
-}
-
-impl LengthUnit for UPicometre {
-    const NAME: &'static str = "picometre";
-    const SYMBOL: &'static str = "pm";
-    const FACTOR_FROM_METRE: f32 = 1.0e12;
-    const FACTOR_FROM_CENTIMETRE: f32 = 1.0e10;
-    const FACTOR_FROM_MILLIMETRE: f32 = 1.0e9;
-    const FACTOR_FROM_MICROMETRE: f32 = 1.0e6;
-    const FACTOR_FROM_NANOMETRE: f32 = 1.0e3;
-    const FACTOR_FROM_PICOMETRE: f32 = 1.0;
 }
 
 /// Length with a unit.
@@ -184,6 +158,46 @@ impl<A: LengthUnit> Length<A> {
 
     /// Returns the value of the length.
     pub const fn value(&self) -> f32 { self.value }
+
+    super::forward_f32_methods!(abs, ceil, round, trunc, fract, sqrt, cbrt);
+
+    pub fn abs_diff_eq<B: LengthUnit>(&self, other: &Length<B>, epsilon: f32) -> bool {
+        let a = self.value * A::FACTOR_TO_METRE;
+        let b = other.value * B::FACTOR_TO_METRE;
+        (a - b).abs() <= epsilon
+    }
+
+    /// Returns the length in metres.
+    #[inline]
+    pub const fn in_metres(&self) -> Length<UMetre> {
+        Length::new(self.value * A::FACTOR_TO_METRE)
+    }
+
+    /// Returns the length in centimetres.
+    #[inline]
+    pub const fn in_centimetres(&self) -> Length<UCentimetre> {
+        Length::new(self.value * A::FACTOR_TO_CENTIMETRE)
+    }
+
+    /// Returns the length in millimetres.
+    #[inline]
+    pub const fn in_millimetres(&self) -> Length<UMillimetre> {
+        Length::new(self.value * A::FACTOR_TO_MILLIMETRE)
+    }
+
+    /// Returns the length in micrometres.
+    #[inline]
+    pub const fn in_micrometres(&self) -> Length<UMicrometre> {
+        Length::new(self.value * A::FACTOR_TO_MICROMETRE)
+    }
+
+    /// Returns the length in nanometres.
+    #[inline]
+    pub const fn in_nanometres(&self) -> Length<UNanometre> {
+        Length::new(self.value * A::FACTOR_TO_NANOMETRE)
+    }
+
+    // TODO: relative_eq
 }
 
 impl<A: LengthUnit> From<f32> for Length<A> {
@@ -210,7 +224,6 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
             "mm" => Ok(Self::new(A::FACTOR_FROM_MILLIMETRE * value)),
             "um" => Ok(Self::new(A::FACTOR_FROM_MICROMETRE * value)),
             "nm" => Ok(Self::new(A::FACTOR_FROM_NANOMETRE * value)),
-            "pm" => Ok(Self::new(A::FACTOR_FROM_PICOMETRE * value)),
             _ => Err("invalid length unit"),
         }
     }
@@ -248,288 +261,6 @@ impl<'de, A: LengthUnit> serde::Deserialize<'de> for Length<A> {
     }
 }
 
-impl Length<UMetre> {
-    /// Returns the length in centimetres.
-    #[inline(always)]
-    pub const fn in_centimetres(self) -> Length<UCentimetre> {
-        Length {
-            value: self.value * 100.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in millimetres.
-    #[inline(always)]
-    pub const fn in_millimetres(self) -> Length<UMillimetre> {
-        Length {
-            value: self.value * 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in micrometres.
-    #[inline(always)]
-    pub const fn in_micrometres(self) -> Length<UMicrometre> {
-        Length {
-            value: self.value * 1_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in nanometres.
-    #[inline(always)]
-    pub const fn in_nanometres(self) -> Length<UNanometre> {
-        Length {
-            value: self.value * 1_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in picometres.
-    #[inline(always)]
-    pub const fn in_picometres(self) -> Length<UPicometre> {
-        Length {
-            value: self.value * 1_000_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-}
-
-impl Length<UCentimetre> {
-    /// Returns the length in metres.
-    #[inline(always)]
-    pub const fn in_metres(self) -> Length<UMetre> {
-        Length {
-            value: self.value / 100.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in millimetres.
-    #[inline(always)]
-    pub const fn in_millimetres(self) -> Length<UMillimetre> {
-        Length {
-            value: self.value * 10.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in micrometres.
-    #[inline(always)]
-    pub const fn in_micrometres(self) -> Length<UMicrometre> {
-        Length {
-            value: self.value * 10_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in nanometres.
-    #[inline(always)]
-    pub const fn in_nanometres(self) -> Length<UNanometre> {
-        Length {
-            value: self.value * 10_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in picometres.
-    #[inline(always)]
-    pub const fn in_picometres(self) -> Length<UPicometre> {
-        Length {
-            value: self.value * 10_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-}
-
-impl Length<UMillimetre> {
-    /// Returns the length in metres.
-    #[inline(always)]
-    pub const fn in_metres(self) -> Length<UMetre> {
-        Length {
-            value: self.value / 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in centimetres.
-    #[inline(always)]
-    pub const fn in_centimetres(self) -> Length<UCentimetre> {
-        Length {
-            value: self.value / 10.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in micrometres.
-    #[inline(always)]
-    pub const fn in_micrometres(self) -> Length<UMicrometre> {
-        Length {
-            value: self.value * 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in nanometres.
-    #[inline(always)]
-    pub const fn in_nanometres(self) -> Length<UNanometre> {
-        Length {
-            value: self.value * 1_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in picometres.
-    #[inline(always)]
-    pub const fn in_picometres(self) -> Length<UPicometre> {
-        Length {
-            value: self.value * 1_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-}
-
-impl Length<UMicrometre> {
-    /// Returns the length in metres.
-    #[inline(always)]
-    pub const fn in_metres(self) -> Length<UMetre> {
-        Length {
-            value: self.value / 1_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in centimetres.
-    #[inline(always)]
-    pub const fn in_centimetres(self) -> Length<UCentimetre> {
-        Length {
-            value: self.value / 10_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in millimetres.
-    #[inline(always)]
-    pub const fn in_millimetres(self) -> Length<UMillimetre> {
-        Length {
-            value: self.value / 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in nanometres.
-    #[inline(always)]
-    pub const fn in_nanometres(self) -> Length<UNanometre> {
-        Length {
-            value: self.value * 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in picometres.
-    #[inline(always)]
-    pub const fn in_picometres(self) -> Length<UPicometre> {
-        Length {
-            value: self.value * 1_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-}
-
-impl Length<UNanometre> {
-    /// Returns the length in metres.
-    #[inline(always)]
-    pub const fn in_metres(self) -> Length<UMetre> {
-        Length {
-            value: self.value / 1_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in centimetres.
-    #[inline(always)]
-    pub const fn in_centimetres(self) -> Length<UCentimetre> {
-        Length {
-            value: self.value / 10_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in millimetres.
-    #[inline(always)]
-    pub const fn in_millimetres(self) -> Length<UMillimetre> {
-        Length {
-            value: self.value / 1_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in micrometres.
-    #[inline(always)]
-    pub const fn in_micrometres(self) -> Length<UMicrometre> {
-        Length {
-            value: self.value / 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in picometres.
-    #[inline(always)]
-    pub const fn in_picometres(self) -> Length<UPicometre> {
-        Length {
-            value: self.value * 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-}
-
-impl Length<UPicometre> {
-    /// Returns the length in metres.
-    #[inline(always)]
-    pub const fn in_metres(self) -> Length<UMetre> {
-        Length {
-            value: self.value / 1_000_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in centimetres.
-    #[inline(always)]
-    pub const fn in_centimetres(self) -> Length<UCentimetre> {
-        Length {
-            value: self.value / 10_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in millimetres.
-    #[inline(always)]
-    pub const fn in_millimetres(self) -> Length<UMillimetre> {
-        Length {
-            value: self.value / 1_000_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in micrometres.
-    #[inline(always)]
-    pub const fn in_micrometres(self) -> Length<UMicrometre> {
-        Length {
-            value: self.value / 1_000_000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-
-    /// Returns the length in nanometres.
-    #[inline(always)]
-    pub const fn in_nanometres(self) -> Length<UNanometre> {
-        Length {
-            value: self.value / 1000.0,
-            unit: core::marker::PhantomData,
-        }
-    }
-}
-
 /// Type alias for a length in metres.
 pub type Metres = Length<UMetre>;
 
@@ -544,9 +275,6 @@ pub type Micrometres = Length<UMicrometre>;
 
 /// Type alias for a length in nanometres.
 pub type Nanometres = Length<UNanometre>;
-
-/// Type alias for a length in picometres.
-pub type Picometres = Length<UPicometre>;
 
 /// Macro for creating a new length type in metres.
 pub macro metres($val:expr) {
@@ -573,11 +301,6 @@ pub macro nanometres($val:expr) {
     $crate::acq::Length::<$crate::acq::UNanometre>::new($val)
 }
 
-/// Macro for creating a new length type in picometres.
-pub macro picometres($val:expr) {
-    $crate::acq::Length::<$crate::acq::UPicometre>::new($val)
-}
-
 macro impl_conversion($from:ident => $($to:ident, $factor:expr);*) {
     $(
         impl const From<Length<$from>> for Length<$to> {
@@ -592,15 +315,21 @@ macro impl_conversion($from:ident => $($to:ident, $factor:expr);*) {
     )*
 }
 
-impl_conversion!(UMetre => UCentimetre, 1e2; UMillimetre, 1e3; UMicrometre, 1e6; UNanometre, 1e9; UPicometre, 1e12);
-impl_conversion!(UCentimetre => UMetre, 1e-2; UMillimetre, 1e1; UMicrometre, 1e4; UNanometre, 1e7; UPicometre, 1e10); 
-impl_conversion!(UMillimetre => UMetre, 1e-3; UCentimetre, 1e-1; UMicrometre, 1e3; UNanometre, 1e6; UPicometre, 1e9);
-impl_conversion!(UMicrometre => UMetre, 1e-6; UCentimetre, 1e-4; UMillimetre, 1e-3; UNanometre, 1e3; UPicometre, 1e6);
-impl_conversion!(UNanometre => UMetre, 1e-9; UCentimetre, 1e-7; UMillimetre, 1e-6; UMicrometre, 1e-3; UPicometre, 1e3);
-impl_conversion!(UPicometre => UMetre, 1e-12; UCentimetre, 1e-10; UMillimetre, 1e-9; UMicrometre, 1e-6; UNanometre, 1e-3);
+impl_conversion!(UMetre => UCentimetre, 1e2; UMillimetre, 1e3; UMicrometre, 1e6; UNanometre, 1e9);
+impl_conversion!(UCentimetre => UMetre, 1e-2; UMillimetre, 1e1; UMicrometre, 1e4; UNanometre, 1e7);
+impl_conversion!(UMillimetre => UMetre, 1e-3; UCentimetre, 1e-1; UMicrometre, 1e3; UNanometre, 1e6);
+impl_conversion!(UMicrometre => UMetre, 1e-6; UCentimetre, 1e-4; UMillimetre, 1e-3; UNanometre, 1e3);
+impl_conversion!(UNanometre => UMetre, 1e-9; UCentimetre, 1e-7; UMillimetre, 1e-6; UMicrometre, 1e-3);
 
 super::impl_ops!(Add, Sub for Length where A, B: LengthUnit);
 super::impl_ops_with_f32!(Mul, Div for Length where A: LengthUnit);
+
+impl<A: LengthUnit> core::ops::Div<Length<A>> for Length<A> {
+    type Output = f32;
+
+    #[inline(always)]
+    fn div(self, other: Length<A>) -> Self::Output { self.value / other.value }
+}
 
 impl<A: LengthUnit> core::ops::Mul<Length<A>> for f32 {
     type Output = Length<A>;
@@ -651,12 +380,11 @@ mod length_unit_tests {
 
     #[test]
     fn conversion() {
-        test_conversion!(Metre, 1.0 => Centimetre, 100.0; Millimetre, 1000.0; Micrometre, 1e6; Nanometre, 1e9; Picometre, 1e12);
-        test_conversion!(Centimetre, 1.234 => Metre, 1.234e-2; Millimetre, 12.34; Micrometre, 1.234e4; Nanometre, 1.234e7; Picometre, 1.234e10);
-        test_conversion!(Millimetre, 1.234 => Metre, 0.001234; Centimetre, 0.1234; Micrometre, 1.234e3; Nanometre, 1.234e6; Picometre, 1.234e9);
-        test_conversion!(Micrometre, 1.234 => Metre, 1.234e-6; Centimetre, 1.234e-4; Millimetre, 0.001234; Nanometre, 1.234e3; Picometre, 1.234e6);
-        test_conversion!(Nanometre, 1.234 => Metre, 1.234e-9; Centimetre, 1.234e-7; Millimetre, 1.234e-6; Micrometre, 0.001234; Picometre, 1.234e3);
-        test_conversion!(Picometre, 1.234 => Metre, 1.234e-12; Centimetre, 1.234e-10; Millimetre, 1.234e-9; Micrometre, 1.234e-6; Nanometre, 0.001234);
+        test_conversion!(Metre, 1.0 => Centimetre, 100.0; Millimetre, 1000.0; Micrometre, 1e6; Nanometre, 1e9);
+        test_conversion!(Centimetre, 1.234 => Metre, 1.234e-2; Millimetre, 12.34; Micrometre, 1.234e4; Nanometre, 1.234e7);
+        test_conversion!(Millimetre, 1.234 => Metre, 0.001234; Centimetre, 0.1234; Micrometre, 1.234e3; Nanometre, 1.234e6);
+        test_conversion!(Micrometre, 1.234 => Metre, 1.234e-6; Centimetre, 1.234e-4; Millimetre, 0.001234; Nanometre, 1.234e3);
+        test_conversion!(Nanometre, 1.234 => Metre, 1.234e-9; Centimetre, 1.234e-7; Millimetre, 1.234e-6; Micrometre, 0.001234);
     }
 
     macro_rules! test_equivalence {
@@ -675,12 +403,11 @@ mod length_unit_tests {
 
     #[test]
     fn equivalence() {
-        test_equivalence!(UMetre, 1.5 => UCentimetre, 150.0; UMillimetre, 1500.0; UMicrometre, 1.5e6; UNanometre, 1.5e9; UPicometre, 1.5e12);
-        test_equivalence!(UCentimetre, 1.234 => UMetre, 1.234e-2; UMillimetre, 12.34; UMicrometre, 1.234e4; UNanometre, 1.234e7; UPicometre, 1.234e10);
-        test_equivalence!(UMillimetre, 1.234 => UMetre, 0.001234; UCentimetre, 0.1234; UMicrometre, 1.234e3; UNanometre, 1.234e6; UPicometre, 1.234e9);
-        test_equivalence!(UMicrometre, 1.234 => UMetre, 1.234e-6; UCentimetre, 1.234e-4; UMillimetre, 0.001234; UNanometre, 1.234e3; UPicometre, 1.234e6);
-        test_equivalence!(UNanometre, 1.234 => UMetre, 1.234e-9; UCentimetre, 1.234e-7; UMillimetre, 1.234e-6; UMicrometre, 0.001234; UPicometre, 1.234e3);
-        test_equivalence!(UPicometre, 1.234 => UMetre, 1.234e-12; UCentimetre, 1.234e-10; UMillimetre, 1.234e-9; UMicrometre, 1.234e-6; UNanometre, 0.001234);
+        test_equivalence!(UMetre, 1.5 => UCentimetre, 150.0; UMillimetre, 1500.0; UMicrometre, 1.5e6; UNanometre, 1.5e9);
+        test_equivalence!(UCentimetre, 1.234 => UMetre, 1.234e-2; UMillimetre, 12.34; UMicrometre, 1.234e4; UNanometre, 1.234e7);
+        test_equivalence!(UMillimetre, 1.234 => UMetre, 0.001234; UCentimetre, 0.1234; UMicrometre, 1.234e3; UNanometre, 1.234e6);
+        test_equivalence!(UMicrometre, 1.234 => UMetre, 1.234e-6; UCentimetre, 1.234e-4; UMillimetre, 0.001234; UNanometre, 1.234e3);
+        test_equivalence!(UNanometre, 1.234 => UMetre, 1.234e-9; UCentimetre, 1.234e-7; UMillimetre, 1.234e-6; UMicrometre, 0.001234);
     }
 
     #[test]

@@ -1,37 +1,58 @@
-use crate::acq::{collector::Patch, desc::{EmitterDesc, Radius, Range}, util::SphericalCoord, Metres, Ray, Radians, radians, SolidAngle, steradians};
+use crate::acq::{
+    collector::Patch,
+    measurement::Radius,
+    radians, steradians,
+    util::{RangeByStepSize, SphericalCoord},
+    Metres, Nanometres, Radians, Ray, SolidAngle,
+};
 
 /// Light emitter of the virtual gonio-photometer.
 /// Note: need to update the radius for each surface before the measurement to
 /// make sure that the surface is covered by the patch.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Emitter {
-    /// Number of rays emitted by the emitter.
+    /// Number of emitted rays.
     pub num_rays: u32,
 
-    /// Distance of the emitter from the origin.
-    pub radius: Option<Metres>,
+    /// Max allowed bounces for each ray.
+    pub max_bounces: u32,
+
+    /// Distance from the emitter's center to the specimen's center.
+    pub radius: Radius,
 
     /// Emitter's possible positions in spherical coordinates (inclination angle range).
-    pub zenith: Range<Radians>,
+    pub zenith: RangeByStepSize<Radians>,
 
     /// Emitter's possible positions in spherical coordinates (azimuthal angle range).
-    pub azimuth: Range<Radians>,
+    pub azimuth: RangeByStepSize<Radians>,
 
     /// Shape of the emitter.
     pub shape: RegionShape,
 
+    /// Light source's spectrum.
+    pub spectrum: RangeByStepSize<Nanometres>,
+
+    /// Solid angle subtended by the emitter.
+    #[serde(skip)]
+    pub solid_angle: SolidAngle,
+
     /// Samples generated for the patch.
+    #[serde(skip)]
     pub samples: Vec<glam::Vec3>,
 }
 
 /// Represents the shape of a region on the surface of a sphere.
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RegionShape {
     /// A patch has a disk shape on the surface of the sphere.
+    #[serde(rename = "disk")]
     SphericalCap {
         /// Maximum zenith angle of the spherical cap.
         zenith: Radians,
     },
     /// A patch has a rectangular shape on the surface of the sphere.
+    #[serde(rename = "rect")]
     SphericalRect {
         /// Polar angle range of the patch (in radians).
         zenith: (Radians, Radians),
@@ -43,9 +64,7 @@ pub enum RegionShape {
 
 impl RegionShape {
     /// Create a new spherical cap emitter.
-    pub fn spherical_cap(zenith: Radians) -> Self {
-        Self::SphericalCap { zenith }
-    }
+    pub fn spherical_cap(zenith: Radians) -> Self { Self::SphericalCap { zenith } }
 
     /// Create a new spherical rectangle emitter.
     pub fn spherical_rect(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
@@ -67,55 +86,21 @@ impl RegionShape {
     }
 }
 
-impl From<EmitterDesc> for Emitter {
-    fn from(desc: EmitterDesc) -> Self {
-        let theta = desc.zenith.map(|v| {
-            Radians::new(v.to_radians())
-        });
-        let phi = desc.azimuth.map(|v| {
-            Radians::new(v.to_radians())
-        });
-        let samples = uniform_sampling_on_unit_sphere(
-            desc.num_rays,
-            theta.start,
-            theta.stop,
-            phi.start,
-            phi.stop,
-        );
-        let radius = match desc.radius {
-            Radius::Dynamic => None,
-            Radius::Fixed(val) => Some(val),
-        };
-        todo!()
-        // Self {
-        //     num_rays: desc.num_rays,
-        //     radius,
-        //     zenith: theta,
-        //     azimuth: phi,
-        //     patch: Patch::new(
-        //         (-theta.step / 2.0, theta.step / 2.0),
-        //         (-phi.step / 2.0, phi.step / 2.0),
-        //     ),
-        //     samples,
-        // }
-    }
-}
-
 impl Emitter {
-    pub fn set_radius(&mut self, radius: Metres) { self.radius = Some(radius); }
+    pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
 
     /// All possible positions of the emitter.
     pub fn positions(&self) -> Vec<SphericalCoord> {
-        let n_zenith = ((self.zenith.stop - self.zenith.start) / self.zenith.step).ceil() as usize;
+        let n_zenith = ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
         let n_azimuth =
-            ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step).ceil() as usize;
+            ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step_size).ceil() as usize;
 
         (0..n_zenith)
             .into_iter()
             .flat_map(|i_theta| {
                 (0..n_azimuth).into_iter().map(move |i_phi| SphericalCoord {
-                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step,
-                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step,
+                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
+                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
                 })
             })
             .collect()
@@ -123,7 +108,7 @@ impl Emitter {
 
     /// Emits rays from the patch located at `pos`.
     pub fn emit_rays(&self, pos: SphericalCoord) -> Vec<Ray> {
-        let r = self.radius.expect("radius not set");
+        let r = self.radius.value();
         let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
         let dir = -pos.into_cartesian();
@@ -135,6 +120,10 @@ impl Emitter {
                 Ray { o: origin, d: dir }
             })
             .collect()
+    }
+
+    pub fn generate_samples(&mut self) {
+        // TODO
     }
 }
 

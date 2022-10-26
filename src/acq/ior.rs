@@ -1,4 +1,4 @@
-use crate::acq::Medium;
+use crate::acq::{Length, LengthUnit, Medium, Nanometres, nanometres};
 use std::{cmp::Ordering, collections::HashMap, path::Path};
 
 // todo: merge ior db into vgonio db
@@ -9,7 +9,7 @@ use std::{cmp::Ordering, collections::HashMap, path::Path};
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Ior {
     /// corresponding wavelength in nanometres.
-    pub wavelength: f32,
+    pub wavelength: Nanometres,
 
     /// Index of refraction.
     pub eta: f32,
@@ -38,7 +38,7 @@ impl IorDb {
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
-    pub fn ior_of(&self, medium: Medium, wavelength: f32) -> Option<Ior> {
+    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<Ior> {
         let refractive_indices = self.0.get(&medium).expect("unknown medium");
         // Search for the position of the first wavelength equal or greater than the
         // given one in refractive indices.
@@ -49,7 +49,7 @@ impl IorDb {
         let ior_after = refractive_indices[i];
 
         // If the first wavelength is equal to the given one, return it.
-        if (ior_after.wavelength - wavelength).abs() < f32::EPSILON {
+        if ior_after.wavelength.abs_diff_eq(&wavelength, f32::EPSILON) {
             Some(ior_after)
         } else {
             // Otherwise, interpolate between the two closest refractive indices.
@@ -72,10 +72,15 @@ impl IorDb {
 
     /// Returns the refractive index of the given medium at the given spectrum
     /// (in nanometers).
-    pub fn ior_of_spectrum(&self, medium: Medium, wavelengths: &[f32]) -> Option<Vec<Ior>> {
+    pub fn ior_of_spectrum<A: LengthUnit>(
+        &self,
+        medium: Medium,
+        wavelengths: &[Length<A>],
+    ) -> Option<Vec<Ior>> {
         wavelengths
             .iter()
-            .map(|wavelength| self.ior_of(medium, *wavelength))
+            .map(|wavelength| self.ior_of(medium,
+                                          wavelength.in_nanometres()))
             .collect()
     }
 }
@@ -83,20 +88,20 @@ impl IorDb {
 impl Ior {
     /// Refractive index of vacuum.
     pub const VACUUM: Self = Self {
-        wavelength: 0.0,
+        wavelength: nanometres!(0.0),
         eta: 1.0,
         k: 0.0,
     };
 
     /// Refractive index of air.
     pub const AIR: Self = Self {
-        wavelength: 0.0,
+        wavelength: nanometres!(0.0),
         eta: 1.00029,
         k: 0.0,
     };
 
     /// Creates a new refractive index.
-    pub fn new(wavelength: f32, eta: f32, k: f32) -> Ior { Ior { wavelength, eta, k } }
+    pub fn new(wavelength: Nanometres, eta: f32, k: f32) -> Ior { Ior { wavelength, eta, k } }
 
     /// Whether the refractive index represents dielectric material.
     pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
@@ -127,7 +132,7 @@ impl Ior {
                             let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                             let eta = record[1].parse::<f32>().unwrap();
                             let k = record[2].parse::<f32>().unwrap();
-                            Some(Ior::new(wavelength, eta, k))
+                            Some(Ior::new(wavelength.into(), eta, k))
                         }
                         Err(_) => None,
                     })

@@ -1,20 +1,20 @@
-mod visual_debug;
-mod scratch;
 mod plotting;
+mod scratch;
+mod visual_debug;
 
-use std::collections::BTreeSet;
-use egui::plot::Legend;
 use crate::{
     acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode},
+    app::gui::VgonioEvent,
     mesh::TriangleMesh,
 };
+use egui::plot::Legend;
 use embree::Config;
+use std::collections::BTreeSet;
 use winit::event_loop::EventLoopProxy;
-use crate::app::gui::VgonioEvent;
 
+pub(crate) use plotting::Plotting;
 pub(crate) use scratch::Scratch;
 pub(crate) use visual_debug::VisualDebugger;
-pub(crate) use plotting::Plotting;
 
 pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTracing) -> Vec<Ray> {
     log::debug!("trace_ray_grid_dbg: {:?}", ray);
@@ -52,7 +52,7 @@ pub trait Tool {
 
 pub struct Tools {
     windows: Vec<Box<dyn Tool>>,
-    states: Vec<bool>
+    states: Vec<bool>,
 }
 
 impl Tools {
@@ -63,7 +63,7 @@ impl Tools {
                 Box::new(VisualDebugger::new(event_loop)),
                 Box::new(Plotting::default()),
             ],
-            states: vec![false, false, false]
+            states: vec![false, false, false],
         }
     }
 
@@ -80,7 +80,9 @@ impl Tools {
     }
 
     pub fn get_tool<T: 'static>(&mut self, name: &str) -> Option<&mut T> {
-        self.windows.iter_mut().find(|w| w.name() == name)
+        self.windows
+            .iter_mut()
+            .find(|w| w.name() == name)
             .and_then(|w| w.as_any_mut().downcast_mut::<T>())
     }
 }

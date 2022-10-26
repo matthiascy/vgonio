@@ -1,16 +1,17 @@
 use crate::{
     acq::{
-        desc::{MeasurementDesc, Range},
-        Collector, Emitter, Patch, Ray,
+        measurement::{Measurement, Radius},
+        metres,
+        util::RangeByStepSize,
+        Collector, Emitter, Nanometres, Patch, Ray,
     },
     app::{
         cache::{Cache, SurfaceHandle, VgonioDatafiles},
-        cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
+        cli::{BRIGHT_YELLOW, RESET},
     },
 };
 use embree::{Config, SoARay};
 use std::fmt::{Display, Formatter};
-use crate::acq::metres;
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
@@ -100,14 +101,16 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 // // >
 // // Vec<Stats<PatchData, N_PATCH, N_BOUNCE>>
 pub fn measure_bsdf_embree_rt(
-    desc: &MeasurementDesc,
+    desc: Measurement,
     cache: &Cache,
     db: &VgonioDatafiles,
     surfaces: &[SurfaceHandle],
 ) {
     use crate::acq::EmbreeRayTracing;
-    let mut collector: Collector = desc.collector.into();
-    let mut emitter: Emitter = desc.emitter.into();
+    let mut collector: Collector = desc.collector;
+    let mut emitter: Emitter = desc.emitter;
+    collector.generate_patches();
+    emitter.generate_samples();
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let (surfaces, meshes) = {
         (
@@ -124,14 +127,14 @@ pub fn measure_bsdf_embree_rt(
         );
         let scene_id = embree_rt.create_scene();
         // Update emitter's radius
-        if desc.emitter.radius.is_dynamic() {
+        if emitter.radius.is_dynamic() {
             // fixme: use surface's physical size
             // TODO: get real size of the surface
-            emitter.set_radius(metres!(mesh.extent.max_edge() * 2.5));
+            emitter.set_radius(Radius::Fixed(metres!(mesh.extent.max_edge() * 2.5)));
         }
         let embree_mesh = embree_rt.create_triangle_mesh(mesh);
         let _surface_id = embree_rt.attach_geometry(scene_id, embree_mesh);
-        let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
+        let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
         log::debug!("spectrum samples: {:?}", spectrum);
 
         let ior_t = db
@@ -170,27 +173,31 @@ pub fn measure_bsdf_embree_rt(
 
             println!("first hit count: {}", filtered.len());
 
-            let records = filtered.iter().filter_map(|i| {
-                let ray = Ray::new(ray_hit.ray.org(*i).into(), ray_hit.ray.dir(*i).into());
-                embree_rt.trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
-            });
+            // TODO:
+            // let records = filtered.iter().filter_map(|i| {
+            //     let ray = Ray::new(ray_hit.ray.org(*i).into(), ray_hit.ray.dir(*i).into());
+            //     embree_rt.trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
+            // });
 
-            collector.collect(records, BsdfKind::InPlaneBrdf);
+            // collector.collect(records, BsdfKind::InPlaneBrdf);
         }
     }
 }
 
 /// Brdf measurement.
 pub fn measure_bsdf_grid_rt(
-    desc: &MeasurementDesc,
+    desc: Measurement,
     cache: &Cache,
     db: &VgonioDatafiles,
     surfaces: &[SurfaceHandle],
 ) {
     use crate::acq::GridRayTracing;
 
-    let collector: Collector = desc.collector.into();
-    let mut emitter: Emitter = desc.emitter.into();
+    let mut collector: Collector = desc.collector;
+    let mut emitter: Emitter = desc.emitter;
+    collector.generate_patches();
+    emitter.generate_samples();
+
     let (surfaces, meshes) = {
         (
             cache.get_surfaces(surfaces).unwrap(),
@@ -204,12 +211,12 @@ pub fn measure_bsdf_grid_rt(
             "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
         );
-        if desc.emitter.radius.is_dynamic() {
+        if emitter.radius.is_dynamic() {
             // fixme: use surface's physical size
             // TODO: get real size of the surface
-            emitter.set_radius(metres!(mesh.extent.max_edge() * 2.5));
+            emitter.set_radius(Radius::Fixed(metres!(mesh.extent.max_edge() * 2.5)));
         }
-        let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
+        let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
         let ior_t = db
             .ior_db
             .ior_of_spectrum(desc.transmitted_medium, &spectrum)
@@ -321,23 +328,25 @@ pub fn measure_bsdf_grid_rt(
 
 /// Structure to sample over a spectrum.
 pub(crate) struct SpectrumSampler {
-    range: Range<f32>,
+    range: RangeByStepSize<Nanometres>,
     num_samples: usize,
 }
 
-impl From<Range<f32>> for SpectrumSampler {
-    fn from(range: Range<f32>) -> Self {
-        let num_samples = ((range.stop - range.start) / range.step) as usize + 1;
+impl From<RangeByStepSize<Nanometres>> for SpectrumSampler {
+    fn from(range: RangeByStepSize<Nanometres>) -> Self {
+        let num_samples = ((range.stop - range.start) / range.step_size) as usize + 1;
         Self { range, num_samples }
     }
 }
 
 impl SpectrumSampler {
     /// Returns the nth wavelength of the spectrum.
-    pub fn nth_sample(&self, n: usize) -> f32 { self.range.start + self.range.step * n as f32 }
+    pub fn nth_sample(&self, n: usize) -> Nanometres {
+        self.range.start + self.range.step_size * n as f32
+    }
 
     /// Returns the spectrum's whole wavelength range.
-    pub fn samples(&self) -> Vec<f32> {
+    pub fn samples(&self) -> Vec<Nanometres> {
         (0..self.num_samples).map(|i| self.nth_sample(i)).collect()
     }
 }

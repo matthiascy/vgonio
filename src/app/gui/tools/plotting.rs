@@ -1,7 +1,9 @@
-use std::any::Any;
-use egui::{Context, Ui};
-use egui::plot::{Legend, Plot, Corner};
 use crate::app::gui::tools::{Scratch, Tool};
+use egui::{
+    plot::{Corner, Legend, Plot},
+    Context, Ui,
+};
+use std::any::Any;
 
 pub struct Plotting {
     pub legend: Legend,
@@ -13,16 +15,12 @@ impl Default for Plotting {
             .text_style(egui::TextStyle::Monospace)
             .background_alpha(1.0)
             .position(Corner::RightTop);
-        Self {
-            legend
-        }
+        Self { legend }
     }
 }
 
 impl Tool for Plotting {
-    fn name(&self) -> &'static str {
-        "Plot"
-    }
+    fn name(&self) -> &'static str { "Plot" }
 
     fn show(&mut self, ctx: &Context, open: &mut bool) {
         egui::Window::new(self.name())
@@ -38,11 +36,7 @@ impl Tool for Plotting {
         plot.show(ui, |_| {});
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }

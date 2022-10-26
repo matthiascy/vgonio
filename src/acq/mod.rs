@@ -2,12 +2,12 @@
 
 pub mod bsdf;
 mod collector;
-pub mod desc;
 mod embree_rt;
 mod emitter;
 pub mod fresnel;
 mod grid_rt;
 pub mod ior;
+pub mod measurement;
 pub mod ndf;
 mod occlusion;
 pub mod scattering;
@@ -15,7 +15,7 @@ pub mod scattering;
 mod si_units;
 pub mod util;
 
-pub use collector::{Collector, Patch};
+pub use collector::{Collector, Patch, CollectorScheme};
 pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
@@ -71,7 +71,7 @@ impl From<Ray> for embree::Ray {
 }
 
 /// Implemented ray tracing method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // todo: case_insensitive
 pub enum RayTracingMethod {
     /// Standard using embree.

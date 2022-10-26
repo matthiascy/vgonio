@@ -1,21 +1,34 @@
-use crate::acq::{bsdf::BsdfKind, desc::{CollectorDesc, Radius}, util::{SphericalPartition, SphericalDomain}, RtcRecord, Radians, steradians, SolidAngle};
-use std::fmt::Debug;
-use crate::acq::desc::{Range};
-use crate::acq::emitter::RegionShape;
+use crate::acq::{
+    bsdf::BsdfKind,
+    emitter::RegionShape,
+    measurement::Radius,
+    util::{RangeByStepSize, SphericalDomain, SphericalPartition},
+    Radians, RtcRecord, SolidAngle,
+};
 
+/// Description of a collector.
+///
+/// A collector could be either a single shape or a set of patches.
+///
 /// The virtual goniophotometer's detectors represented by the patches
 /// of a sphere (or an hemisphere) positioned around the specimen.
 /// The detectors are positioned on the center of each patch; the patches
 /// are partitioned using 1.0 as radius.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Collector {
+    /// Distance from the collector's center to the specimen's center.
     pub radius: Radius,
+
+    /// Strategy for data collection.
     pub scheme: CollectorScheme,
+
     /// Partitioned patches of the collector.
+    #[serde(skip)]
     pub patches: Option<Vec<Patch>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CollectorScheme {
     /// The patches are subdivided using a spherical partition.
     Partitioned {
@@ -31,19 +44,19 @@ pub enum CollectorScheme {
         /// Shape of the collector.
         shape: RegionShape,
         /// Collector's possible positions in spherical coordinates (inclination angle range).
-        zenith: Range<Radians>,
+        zenith: RangeByStepSize<Radians>,
         /// Collector's possible positions in spherical coordinates (azimuthal angle range).
-        azimuth: Range<Radians>,
+        azimuth: RangeByStepSize<Radians>,
     },
 }
 
-impl From<CollectorDesc> for Collector {
-    fn from(desc: CollectorDesc) -> Self {
-        let patches = desc.generate_patches();
-        Self {
-            radius: desc.radius.into(),
-            scheme: desc.scheme.into(),
-            patches,
+impl CollectorScheme {
+    /// Generate the patches of the collector.
+    pub fn generate_patches(&self) -> Option<Vec<Patch>> {
+        match self {
+            Self::Partitioned { domain, partition } => Some(partition.generate_patches(domain)),
+            // TODO: implement
+            Self::Individual { .. } => None,
         }
     }
 }
@@ -52,16 +65,20 @@ impl Collector {
     pub fn collect<R>(&mut self, records: R, kind: BsdfKind)
     where
         R: IntoIterator<Item = RtcRecord>,
-        <<R as IntoIterator>::IntoIter as Iterator>::Item: Debug,
+        <<R as IntoIterator>::IntoIter as Iterator>::Item: core::fmt::Debug,
     {
         todo!("Collector::collect")
     }
 
     pub fn save_stats(&self, path: &str) { todo!("Collector::save_stats") }
+
+    pub fn generate_patches(&mut self) {
+        self.patches = self.scheme.generate_patches();
+    }
 }
 
 /// Represents a patch on the spherical [`Collector`].
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Patch {
     /// Polar angle range of the patch (in radians).
     pub zenith: (Radians, Radians),

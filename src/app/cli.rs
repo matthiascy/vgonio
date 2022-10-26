@@ -1,6 +1,7 @@
+use std::fmt::Debug;
 use crate::{
     acq::{
-        desc::{MeasurementDesc, MeasurementKind},
+        measurement::{Measurement, MeasurementKind},
         RayTracingMethod,
     },
     app::{
@@ -9,6 +10,9 @@ use crate::{
     },
     util, Error,
 };
+use crate::acq::CollectorScheme;
+use crate::acq::measurement::SimulationKind;
+use crate::acq::util::SphericalPartition;
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
@@ -36,7 +40,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     db.load_ior_database(&config);
 
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description file...");
-    let measurements = MeasurementDesc::load_from_file(&opts.input_path)?;
+    let measurements = Measurement::load_from_file(&opts.input_path)?;
     println!(
         "    {BRIGHT_YELLOW}✓{RESET} {} measurements",
         measurements.len()
@@ -68,8 +72,62 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
 
     let start = std::time::SystemTime::now();
-    for (desc, surfaces) in measurements.iter().zip(all_surfaces.iter()) {
-        match desc.measurement_kind {
+    for (measurement, surfaces) in measurements.into_iter().zip(all_surfaces.iter()) {
+        let collector_info = match measurement.collector.scheme {
+            CollectorScheme::Partitioned { domain, partition } => {
+                match partition {
+                    SphericalPartition::EqualAngle {
+                        zenith, azimuth
+                    } => {
+                        format!("        - domain: {:?}\n\
+                        - partition: {}\n\
+                        - polar angle: {}° - {}°, step size {}°\n\
+                        - azimuthal angle {}° - {}°, step size {}°\n", domain, "equal angle",
+                                zenith.start.in_degrees().value,
+                                zenith.stop.in_degrees().value,
+                                zenith.step_size.in_degrees().value,
+                                azimuth.stop.in_degrees().value,
+                                azimuth.stop.in_degrees().value,
+                                azimuth.step_size.in_degrees().value)
+                    },
+                    SphericalPartition::EqualArea {
+                        zenith, azimuth
+                    } => {
+                        format!("        - domain: {:?}\n\
+                        - partition: {}\n\
+                        - polar angle: {}° - {}°, step count {}\n\
+                        - azimuthal angle {}° - {}°, step size {}°\n", domain, "equal area",
+                                zenith.start.in_degrees().value,
+                                zenith.stop.in_degrees().value,
+                                zenith.step_count,
+                                azimuth.stop.in_degrees().value,
+                                azimuth.stop.in_degrees().value,
+                                azimuth.step_size.in_degrees().value)
+                    },
+                    SphericalPartition::EqualProjectedArea {
+                        zenith, azimuth
+                    } => {
+                        format!("        - domain: {:?}\n\
+                        - partition: {}\n\
+                        - polar angle: {}° - {}°, step count {}\n\
+                        - azimuthal angle {}° - {}°, step size {}°\n", domain, "equal projected area",
+                                zenith.start.in_degrees().value,
+                                zenith.stop.in_degrees().value,
+                                zenith.step_count,
+                                azimuth.stop.in_degrees().value,
+                                azimuth.stop.in_degrees().value,
+                                azimuth.step_size.in_degrees().value)
+                    }
+                }
+            }
+            CollectorScheme::Individual { domain, shape, zenith, azimuth } => {
+                format!("        - domain: {:?}\n\
+                        - shape: {:?}\n\
+                        - polar angle: {:?}\n\
+                        - azimuthal angle {:?}\n", domain, shape, zenith, azimuth)
+            }
+        };
+        match measurement.kind {
             MeasurementKind::Bsdf(kind) => {
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
@@ -86,40 +144,40 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         - azimuthal angle: {}° - {}°, step size {}°
       + collector:
         - radius: {:?}
-        - shape: {:?}
-        - partition:
-          - type: {}
-          - polar angle: {}
-          - azimuthal angle: {}",
+        {}",
                     chrono::DateTime::<chrono::Utc>::from(start),
-                    desc.incident_medium,
-                    desc.transmitted_medium,
+                    measurement.incident_medium,
+                    measurement.transmitted_medium,
                     surfaces,
-                    desc.emitter.radius,
-                    desc.emitter.num_rays,
-                    desc.emitter.max_bounces,
-                    desc.emitter.spectrum.start,
-                    desc.emitter.spectrum.stop,
-                    desc.emitter.spectrum.step,
-                    desc.emitter.zenith.start,
-                    desc.emitter.zenith.stop,
-                    desc.emitter.zenith.step,
-                    desc.emitter.azimuth.start,
-                    desc.emitter.azimuth.stop,
-                    desc.emitter.azimuth.step,
-                    desc.collector.radius,
-                    desc.collector.shape,
-                    desc.collector.partition.kind_str(),
-                    desc.collector.partition.zenith_range_str(),
-                    desc.collector.partition.azimuth_range_str()
+                    measurement.emitter.radius,
+                    measurement.emitter.num_rays,
+                    measurement.emitter.max_bounces,
+                    measurement.emitter.spectrum.start,
+                    measurement.emitter.spectrum.stop,
+                    measurement.emitter.spectrum.step_size,
+                    measurement.emitter.zenith.start,
+                    measurement.emitter.zenith.stop,
+                    measurement.emitter.zenith.step_size,
+                    measurement.emitter.azimuth.start,
+                    measurement.emitter.azimuth.stop,
+                    measurement.emitter.azimuth.step_size,
+                    measurement.collector.radius,
+                    collector_info
                 );
                 println!("    {BRIGHT_YELLOW}>{RESET} Measuring {}...", kind);
-                match desc.tracing_method {
-                    RayTracingMethod::Standard => {
-                        crate::acq::bsdf::measure_bsdf_embree_rt(desc, &cache, &db, surfaces);
+                match measurement.sim_kind {
+                    SimulationKind::GeomOptics { method } => {
+                        match method {
+                            RayTracingMethod::Standard => {
+                                crate::acq::bsdf::measure_bsdf_embree_rt(measurement, &cache, &db, surfaces);
+                            }
+                            RayTracingMethod::Grid => {
+                                crate::acq::bsdf::measure_bsdf_grid_rt(measurement, &cache, &db, surfaces);
+                            }
+                        }
                     }
-                    RayTracingMethod::Grid => {
-                        crate::acq::bsdf::measure_bsdf_grid_rt(desc, &cache, &db, surfaces);
+                    SimulationKind::WaveOptics => {
+                        // TODO: implement
                     }
                 }
             }

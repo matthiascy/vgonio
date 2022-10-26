@@ -2,13 +2,16 @@ use crate::{
     acq::{
         bsdf,
         bsdf::BsdfKind,
-        desc::{MeasurementDesc, MeasurementKind},
+        measurement::{Measurement, MeasurementKind},
         util::SphericalDomain,
         Medium, RayTracingMethod,
     },
     app::{
         cache::{Cache, VgonioDatafiles},
-        gui::{gizmo::VgonioGizmo, ui::Workspace, widgets::input, VgonioEvent, VisualDebugger},
+        gui::{
+            gizmo::VgonioGizmo, tools::Tool, ui::Workspace, widgets::input, VgonioEvent,
+            VisualDebugger,
+        },
     },
 };
 use egui_gizmo::{GizmoMode, GizmoOrientation};
@@ -21,7 +24,6 @@ use std::{
     sync::Arc,
 };
 use winit::event_loop::EventLoopProxy;
-use crate::app::gui::tools::Tool;
 
 /// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -65,7 +67,7 @@ struct Partition {
 /// A panel for configuration of the simulation parameters.
 pub struct SimulationPanel {
     /// Measurement description.
-    desc: MeasurementDesc,
+    desc: Measurement,
 
     /// Selected surface index.
     selected_surface_index: usize,
@@ -97,7 +99,7 @@ pub struct SimulationPanel {
 impl SimulationPanel {
     pub fn new(cache: Arc<RefCell<Cache>>) -> Self {
         Self {
-            desc: MeasurementDesc::default(),
+            desc: Measurement::default(),
             selected_surface_index: 0,
             emitter_radius_mode: RadiusMode::Auto,
             emitter_radius: 0.0,
@@ -126,345 +128,342 @@ impl SimulationPanel {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::Grid::new("simulation_pane_grid")
-            .num_columns(2)
-            .show(ui, |ui| {
-                ui.add(egui::Label::new("measurement"));
-                egui::ComboBox::from_id_source("measurement_choice")
-                    .selected_text(format!("{:?}", self.desc.measurement_kind))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.desc.measurement_kind,
-                            MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),
-                            "in-plane brdf",
-                        );
-                        ui.selectable_value(
-                            &mut self.desc.measurement_kind,
-                            MeasurementKind::Ndf,
-                            "ndf",
-                        );
-                    });
-                ui.end_row();
-
-                ui.add(egui::Label::new("incident medium"));
-                egui::ComboBox::from_id_source("incident_medium_choice")
-                    .selected_text(format!("{:?}", self.desc.incident_medium))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.desc.incident_medium, Medium::Air, "Air");
-                        ui.selectable_value(
-                            &mut self.desc.incident_medium,
-                            Medium::Copper,
-                            "Copper",
-                        );
-                        ui.selectable_value(
-                            &mut self.desc.incident_medium,
-                            Medium::Aluminium,
-                            "Aluminium",
-                        );
-                        ui.selectable_value(
-                            &mut self.desc.incident_medium,
-                            Medium::Vacuum,
-                            "Vacuum",
-                        );
-                    });
-                ui.end_row();
-
-                ui.add(egui::Label::new("transmitted medium"));
-                egui::ComboBox::from_id_source("transmitted_medium_choice")
-                    .selected_text(format!("{:?}", self.desc.transmitted_medium))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.desc.transmitted_medium, Medium::Air, "Air");
-                        ui.selectable_value(
-                            &mut self.desc.transmitted_medium,
-                            Medium::Copper,
-                            "Copper",
-                        );
-                        ui.selectable_value(
-                            &mut self.desc.transmitted_medium,
-                            Medium::Aluminium,
-                            "Aluminium",
-                        );
-                        ui.selectable_value(
-                            &mut self.desc.transmitted_medium,
-                            Medium::Vacuum,
-                            "Vacuum",
-                        );
-                    });
-                ui.end_row();
-
-                ui.add(egui::Label::new("surface"));
-                if self.desc.surfaces.is_empty() {
-                    ui.add(egui::Label::new("no surface loaded!"));
-                } else {
-                    egui::ComboBox::from_id_source("surface_choice")
-                        .selected_text(format!(
-                            "{:?}",
-                            self.desc.surfaces[self.selected_surface_index]
-                                .file_name()
-                                .unwrap()
-                        ))
-                        .show_ui(ui, |ui| {
-                            for (i, surface) in self.desc.surfaces.iter().enumerate() {
-                                ui.selectable_value(
-                                    &mut self.selected_surface_index,
-                                    i,
-                                    self.desc.surfaces[i].to_str().unwrap(),
-                                );
-                            }
-                        });
-                }
-                ui.end_row();
-
-                ui.add(egui::Label::new("tracing method"));
-                ui.selectable_value(
-                    &mut self.desc.tracing_method,
-                    RayTracingMethod::Standard,
-                    "standard",
-                );
-                ui.selectable_value(
-                    &mut self.desc.tracing_method,
-                    RayTracingMethod::Grid,
-                    "  grid  ",
-                );
-                ui.end_row();
-            });
-
-        egui::CollapsingHeader::new("emitter")
-            .default_open(true)
-            .show(ui, |ui| {
-                egui::Grid::new("emitter_grid")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("num rays");
-                        ui.add(egui::DragValue::new(&mut self.desc.emitter.num_rays));
-                        ui.end_row();
-
-                        ui.label("max bounces");
-                        ui.add(egui::DragValue::new(&mut self.desc.emitter.max_bounces));
-                        ui.end_row();
-
-                        ui.label("radius");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::DragValue::new(&mut self.emitter_radius));
-                            ui.selectable_value(
-                                &mut self.emitter_radius_mode,
-                                RadiusMode::Auto,
-                                "auto",
-                            );
-                            ui.selectable_value(
-                                &mut self.emitter_radius_mode,
-                                RadiusMode::Fixed,
-                                "fixed",
-                            );
-                        });
-                        ui.end_row();
-
-                        ui.label("spectrum (nm)");
-                        ui.horizontal(|ui| {
-                            ui.add(
-                                egui::DragValue::new(&mut self.desc.emitter.spectrum.start)
-                                    .prefix("start: ")
-                                    .clamp_range(380.0..=780.0),
-                            );
-                            ui.add(
-                                egui::DragValue::new(&mut self.desc.emitter.spectrum.stop)
-                                    .prefix("stop: ")
-                                    .clamp_range(self.desc.emitter.spectrum.start..=780.0),
-                            );
-                            ui.add(
-                                egui::DragValue::new(&mut self.desc.emitter.spectrum.step)
-                                    .prefix("step: ")
-                                    .clamp_range(0.1..=400.0),
-                            );
-                        });
-
-                        ui.end_row();
-
-                        ui.label("zenith (θ)");
-                        ui.horizontal(|ui| {
-                            ui.add(input(
-                                &mut self.desc.emitter.zenith.start,
-                                "start: ",
-                                Some(0.0..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.desc.emitter.zenith.stop,
-                                "stop: ",
-                                Some(self.desc.emitter.zenith.start..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.desc.emitter.zenith.step,
-                                "step: ",
-                                Some(1.0..=360.0),
-                            ));
-                        });
-                        ui.end_row();
-
-                        ui.label("azimuth (φ)");
-                        ui.horizontal(|ui| {
-                            ui.add(input(
-                                &mut self.desc.emitter.azimuth.start,
-                                "start: ",
-                                Some(0.0..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.desc.emitter.azimuth.stop,
-                                "stop: ",
-                                Some(self.desc.emitter.azimuth.start..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.desc.emitter.azimuth.step,
-                                "step: ",
-                                Some(1.0..=360.0),
-                            ));
-                        });
-                        ui.end_row();
-                    });
-            });
-
-        egui::CollapsingHeader::new("collector")
-            .default_open(true)
-            .show(ui, |ui| {
-                egui::Grid::new("collector_grid")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("radius");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::DragValue::new(&mut self.collector_radius));
-                            ui.selectable_value(
-                                &mut self.collector_radius_mode,
-                                RadiusMode::Auto,
-                                "auto",
-                            );
-                            ui.selectable_value(
-                                &mut self.collector_radius_mode,
-                                RadiusMode::Fixed,
-                                "fixed",
-                            );
-                        });
-                        ui.end_row();
-
-                        ui.label("shape");
-                        egui::ComboBox::from_id_source("collector_shape_choice")
-                            .selected_text(format!("{:?}", self.desc.collector.shape))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.desc.collector.shape,
-                                    SphericalDomain::WholeSphere,
-                                    "Whole hemisphere",
-                                );
-                                ui.selectable_value(
-                                    &mut self.desc.collector.shape,
-                                    SphericalDomain::UpperHemisphere,
-                                    "Upper hemisphere",
-                                );
-                                ui.selectable_value(
-                                    &mut self.desc.collector.shape,
-                                    SphericalDomain::LowerHemisphere,
-                                    "Lower hemisphere",
-                                );
-                            });
-                        ui.end_row();
-
-                        ui.label("partition");
-                        egui::ComboBox::from_id_source("collector_partition_mode")
-                            .selected_text(format!("{}", self.collector_partition.mode))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.collector_partition.mode,
-                                    PartitionMode::Angle,
-                                    "Equal Angle",
-                                );
-                                ui.selectable_value(
-                                    &mut self.collector_partition.mode,
-                                    PartitionMode::Area,
-                                    "Equal Area",
-                                );
-                                ui.selectable_value(
-                                    &mut self.collector_partition.mode,
-                                    PartitionMode::ProjectedArea,
-                                    "Equal Projected Area",
-                                );
-                            });
-                        ui.end_row();
-
-                        ui.label("        zenith (θ)");
-                        ui.horizontal(|ui| {
-                            ui.add(input(
-                                &mut self.collector_partition.zenith.0,
-                                "start: ",
-                                Some(0.0..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.collector_partition.zenith.1,
-                                "stop: ",
-                                Some(self.collector_partition.zenith.0..=360.0),
-                            ));
-
-                            if self.collector_partition.mode == PartitionMode::Angle {
-                                ui.add(input(
-                                    &mut self.collector_partition.zenith.2,
-                                    "step: ",
-                                    Some(0.0..=360.0),
-                                ));
-                            } else {
-                                ui.add(input(
-                                    &mut self.collector_partition.zenith.2,
-                                    "count: ",
-                                    None,
-                                ));
-                            }
-                        });
-                        ui.end_row();
-
-                        ui.label("        azimuth (φ)");
-                        ui.horizontal(|ui| {
-                            ui.add(input(
-                                &mut self.collector_partition.azimuth.0,
-                                "start: ",
-                                Some(0.0..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.collector_partition.azimuth.1,
-                                "stop: ",
-                                Some(self.collector_partition.azimuth.0..=360.0),
-                            ));
-                            ui.add(input(
-                                &mut self.collector_partition.azimuth.2,
-                                "step: ",
-                                Some(0.0..=360.0),
-                            ));
-                        });
-                        ui.end_row();
-                    })
-            });
-
-        ui.separator();
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Simulate").clicked() {
-                self.simulation_started = true;
-                // match self.desc.measurement_kind {
-                //     MeasurementKind::Bsdf(kind) => {
-                //         match self.desc.tracing_method {
-                //             RayTracingMethod::Standard => {
-                //                 bsdf::measure_bsdf_embree_rt(&self.desc, )
-                //             }
-                //             RayTracingMethod::Grid => {}
-                //         }
-                //     }
-                //     MeasurementKind::Ndf => {
-                //         todo!()
-                //     }
-                // }
-                todo!()
-            }
-
-            ui.add(
-                egui::ProgressBar::new(self.simulation_progress)
-                    .show_percentage()
-                    .animate(self.simulation_started),
-            );
-        });
+        // TODO:
+        // egui::Grid::new("simulation_pane_grid")
+        //     .num_columns(2)
+        //     .show(ui, |ui| {
+        //         ui.add(egui::Label::new("measurement"));
+        //         egui::ComboBox::from_id_source("measurement_choice")
+        //             .selected_text(format!("{:?}", self.desc.kind))
+        //             .show_ui(ui, |ui| {
+        //                 ui.selectable_value(
+        //                     &mut self.desc.kind,
+        //                     MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),
+        //                     "in-plane brdf",
+        //                 );
+        //                 ui.selectable_value(&mut self.desc.kind, MeasurementKind::Ndf, "ndf");
+        //             });
+        //         ui.end_row();
+        //
+        //         ui.add(egui::Label::new("incident medium"));
+        //         egui::ComboBox::from_id_source("incident_medium_choice")
+        //             .selected_text(format!("{:?}", self.desc.incident_medium))
+        //             .show_ui(ui, |ui| {
+        //                 ui.selectable_value(&mut self.desc.incident_medium, Medium::Air, "Air");
+        //                 ui.selectable_value(
+        //                     &mut self.desc.incident_medium,
+        //                     Medium::Copper,
+        //                     "Copper",
+        //                 );
+        //                 ui.selectable_value(
+        //                     &mut self.desc.incident_medium,
+        //                     Medium::Aluminium,
+        //                     "Aluminium",
+        //                 );
+        //                 ui.selectable_value(
+        //                     &mut self.desc.incident_medium,
+        //                     Medium::Vacuum,
+        //                     "Vacuum",
+        //                 );
+        //             });
+        //         ui.end_row();
+        //
+        //         ui.add(egui::Label::new("transmitted medium"));
+        //         egui::ComboBox::from_id_source("transmitted_medium_choice")
+        //             .selected_text(format!("{:?}", self.desc.transmitted_medium))
+        //             .show_ui(ui, |ui| {
+        //                 ui.selectable_value(&mut self.desc.transmitted_medium, Medium::Air, "Air");
+        //                 ui.selectable_value(
+        //                     &mut self.desc.transmitted_medium,
+        //                     Medium::Copper,
+        //                     "Copper",
+        //                 );
+        //                 ui.selectable_value(
+        //                     &mut self.desc.transmitted_medium,
+        //                     Medium::Aluminium,
+        //                     "Aluminium",
+        //                 );
+        //                 ui.selectable_value(
+        //                     &mut self.desc.transmitted_medium,
+        //                     Medium::Vacuum,
+        //                     "Vacuum",
+        //                 );
+        //             });
+        //         ui.end_row();
+        //
+        //         ui.add(egui::Label::new("surface"));
+        //         if self.desc.surfaces.is_empty() {
+        //             ui.add(egui::Label::new("no surface loaded!"));
+        //         } else {
+        //             egui::ComboBox::from_id_source("surface_choice")
+        //                 .selected_text(format!(
+        //                     "{:?}",
+        //                     self.desc.surfaces[self.selected_surface_index]
+        //                         .file_name()
+        //                         .unwrap()
+        //                 ))
+        //                 .show_ui(ui, |ui| {
+        //                     for (i, surface) in self.desc.surfaces.iter().enumerate() {
+        //                         ui.selectable_value(
+        //                             &mut self.selected_surface_index,
+        //                             i,
+        //                             self.desc.surfaces[i].to_str().unwrap(),
+        //                         );
+        //                     }
+        //                 });
+        //         }
+        //         ui.end_row();
+        //
+        //         // ui.add(egui::Label::new("tracing method"));
+        //         // ui.selectable_value(
+        //         //     &mut self.desc.tracing_method,
+        //         //     RayTracingMethod::Standard,
+        //         //     "standard",
+        //         // );
+        //         // ui.selectable_value(
+        //         //     &mut self.desc.tracing_method,
+        //         //     RayTracingMethod::Grid,
+        //         //     "  grid  ",
+        //         // );
+        //         // ui.end_row();
+        //     });
+        //
+        // egui::CollapsingHeader::new("emitter")
+        //     .default_open(true)
+        //     .show(ui, |ui| {
+        //         egui::Grid::new("emitter_grid")
+        //             .num_columns(2)
+        //             .show(ui, |ui| {
+        //                 ui.label("num rays");
+        //                 ui.add(egui::DragValue::new(&mut self.desc.emitter.num_rays));
+        //                 ui.end_row();
+        //
+        //                 ui.label("max bounces");
+        //                 ui.add(egui::DragValue::new(&mut self.desc.emitter.max_bounces));
+        //                 ui.end_row();
+        //
+        //                 ui.label("radius");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(egui::DragValue::new(&mut self.emitter_radius));
+        //                     ui.selectable_value(
+        //                         &mut self.emitter_radius_mode,
+        //                         RadiusMode::Auto,
+        //                         "auto",
+        //                     );
+        //                     ui.selectable_value(
+        //                         &mut self.emitter_radius_mode,
+        //                         RadiusMode::Fixed,
+        //                         "fixed",
+        //                     );
+        //                 });
+        //                 ui.end_row();
+        //
+        //                 ui.label("spectrum (nm)");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(
+        //                         egui::DragValue::new(&mut self.desc.emitter.spectrum.start.value)
+        //                             .prefix("start: ")
+        //                             .clamp_range(380.0..=780.0),
+        //                     );
+        //                     ui.add(
+        //                         egui::DragValue::new(&mut self.desc.emitter.spectrum.stop.value)
+        //                             .prefix("stop: ")
+        //                             .clamp_range(self.desc.emitter.spectrum.start..=780.0),
+        //                     );
+        //                     ui.add(
+        //                         egui::DragValue::new(&mut self.desc.emitter.spectrum.step_size.value)
+        //                             .prefix("step: ")
+        //                             .clamp_range(0.1..=400.0),
+        //                     );
+        //                 });
+        //
+        //                 ui.end_row();
+        //
+        //                 ui.label("zenith (θ)");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(input(
+        //                         &mut self.desc.emitter.zenith.start,
+        //                         "start: ",
+        //                         Some(0.0..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.desc.emitter.zenith.stop,
+        //                         "stop: ",
+        //                         Some(self.desc.emitter.zenith.start..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.desc.emitter.zenith.step_size,
+        //                         "step: ",
+        //                         Some(1.0..=360.0),
+        //                     ));
+        //                 });
+        //                 ui.end_row();
+        //
+        //                 ui.label("azimuth (φ)");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(input(
+        //                         &mut self.desc.emitter.azimuth.start,
+        //                         "start: ",
+        //                         Some(0.0..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.desc.emitter.azimuth.stop,
+        //                         "stop: ",
+        //                         Some(self.desc.emitter.azimuth.start..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.desc.emitter.azimuth.step_size,
+        //                         "step: ",
+        //                         Some(1.0..=360.0),
+        //                     ));
+        //                 });
+        //                 ui.end_row();
+        //             });
+        //     });
+        //
+        // egui::CollapsingHeader::new("collector")
+        //     .default_open(true)
+        //     .show(ui, |ui| {
+        //         egui::Grid::new("collector_grid")
+        //             .num_columns(2)
+        //             .show(ui, |ui| {
+        //                 ui.label("radius");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(egui::DragValue::new(&mut self.collector_radius));
+        //                     ui.selectable_value(
+        //                         &mut self.collector_radius_mode,
+        //                         RadiusMode::Auto,
+        //                         "auto",
+        //                     );
+        //                     ui.selectable_value(
+        //                         &mut self.collector_radius_mode,
+        //                         RadiusMode::Fixed,
+        //                         "fixed",
+        //                     );
+        //                 });
+        //                 ui.end_row();
+        //
+        //                 ui.label("shape");
+        //                 egui::ComboBox::from_id_source("collector_shape_choice")
+        //                     .selected_text(format!("{:?}", self.desc.collector.shape))
+        //                     .show_ui(ui, |ui| {
+        //                         ui.selectable_value(
+        //                             &mut self.desc.collector.shape,
+        //                             SphericalDomain::WholeSphere,
+        //                             "Whole hemisphere",
+        //                         );
+        //                         ui.selectable_value(
+        //                             &mut self.desc.collector.shape,
+        //                             SphericalDomain::UpperHemisphere,
+        //                             "Upper hemisphere",
+        //                         );
+        //                         ui.selectable_value(
+        //                             &mut self.desc.collector.shape,
+        //                             SphericalDomain::LowerHemisphere,
+        //                             "Lower hemisphere",
+        //                         );
+        //                     });
+        //                 ui.end_row();
+        //
+        //                 ui.label("partition");
+        //                 egui::ComboBox::from_id_source("collector_partition_mode")
+        //                     .selected_text(format!("{}", self.collector_partition.mode))
+        //                     .show_ui(ui, |ui| {
+        //                         ui.selectable_value(
+        //                             &mut self.collector_partition.mode,
+        //                             PartitionMode::Angle,
+        //                             "Equal Angle",
+        //                         );
+        //                         ui.selectable_value(
+        //                             &mut self.collector_partition.mode,
+        //                             PartitionMode::Area,
+        //                             "Equal Area",
+        //                         );
+        //                         ui.selectable_value(
+        //                             &mut self.collector_partition.mode,
+        //                             PartitionMode::ProjectedArea,
+        //                             "Equal Projected Area",
+        //                         );
+        //                     });
+        //                 ui.end_row();
+        //
+        //                 ui.label("        zenith (θ)");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(input(
+        //                         &mut self.collector_partition.zenith.0,
+        //                         "start: ",
+        //                         Some(0.0..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.collector_partition.zenith.1,
+        //                         "stop: ",
+        //                         Some(self.collector_partition.zenith.0..=360.0),
+        //                     ));
+        //
+        //                     if self.collector_partition.mode == PartitionMode::Angle {
+        //                         ui.add(input(
+        //                             &mut self.collector_partition.zenith.2,
+        //                             "step: ",
+        //                             Some(0.0..=360.0),
+        //                         ));
+        //                     } else {
+        //                         ui.add(input(
+        //                             &mut self.collector_partition.zenith.2,
+        //                             "count: ",
+        //                             None,
+        //                         ));
+        //                     }
+        //                 });
+        //                 ui.end_row();
+        //
+        //                 ui.label("        azimuth (φ)");
+        //                 ui.horizontal(|ui| {
+        //                     ui.add(input(
+        //                         &mut self.collector_partition.azimuth.0,
+        //                         "start: ",
+        //                         Some(0.0..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.collector_partition.azimuth.1,
+        //                         "stop: ",
+        //                         Some(self.collector_partition.azimuth.0..=360.0),
+        //                     ));
+        //                     ui.add(input(
+        //                         &mut self.collector_partition.azimuth.2,
+        //                         "step: ",
+        //                         Some(0.0..=360.0),
+        //                     ));
+        //                 });
+        //                 ui.end_row();
+        //             })
+        //     });
+        //
+        // ui.separator();
+        // ui.horizontal_wrapped(|ui| {
+        //     if ui.button("Simulate").clicked() {
+        //         self.simulation_started = true;
+        //         // match self.desc.measurement_kind {
+        //         //     MeasurementKind::Bsdf(kind) => {
+        //         //         match self.desc.tracing_method {
+        //         //             RayTracingMethod::Standard => {
+        //         //                 bsdf::measure_bsdf_embree_rt(&self.desc, )
+        //         //             }
+        //         //             RayTracingMethod::Grid => {}
+        //         //         }
+        //         //     }
+        //         //     MeasurementKind::Ndf => {
+        //         //         todo!()
+        //         //     }
+        //         // }
+        //         todo!()
+        //     }
+        //
+        //     ui.add(
+        //         egui::ProgressBar::new(self.simulation_progress)
+        //             .show_percentage()
+        //             .animate(self.simulation_started),
+        //     );
+        // });
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{
     acq::{
-        desc::{MeasurementDesc, MeasurementKind},
+        measurement::{Measurement, MeasurementKind},
         RayTracingMethod,
     },
     app::cache::{Cache, VgonioDatafiles},

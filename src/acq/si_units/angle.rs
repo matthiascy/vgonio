@@ -93,9 +93,7 @@ impl<A: AngleUnit> Angle<A> {
     /// Get the value of the angle.
     pub fn value(&self) -> f32 { self.value }
 
-    pub fn abs(&self) -> Self {
-        Angle::new(self.value.abs())
-    }
+    super::forward_f32_methods!(abs, ceil, round, trunc, fract, sqrt, cbrt);
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
@@ -160,22 +158,22 @@ impl Angle<URadian> {
     /// Convert to degree.
     pub fn in_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * UDegree::FACTOR_FROM_RAD) }
     pub fn sin(&self) -> f32 { self.value.sin() }
+    pub fn sinh(&self) -> f32 { self.value.sinh() }
     pub fn cos(&self) -> f32 { self.value.cos() }
+    pub fn cosh(&self) -> f32 { self.value.cosh() }
     pub fn tan(&self) -> f32 { self.value.tan() }
-    pub fn asin(&self) -> f32 { self.value.asin() }
-    pub fn acos(&self) -> f32 { self.value.acos() }
-    pub fn atan(&self) -> f32 { self.value.atan() }
+    pub fn tanh(&self) -> f32 { self.value.tanh() }
 }
 
 impl Angle<UDegree> {
     /// Convert to radian.
     pub fn in_radians(&self) -> Angle<URadian> { Angle::new(self.value * URadian::FACTOR_FROM_DEG) }
     pub fn sin(&self) -> f32 { self.value.to_radians().sin() }
+    pub fn sinh(&self) -> f32 { self.value.to_radians().sinh() }
     pub fn cos(&self) -> f32 { self.value.to_radians().cos() }
+    pub fn cosh(&self) -> f32 { self.value.to_radians().cosh() }
     pub fn tan(&self) -> f32 { self.value.to_radians().tan() }
-    pub fn asin(&self) -> f32 { self.value.to_radians().asin() }
-    pub fn acos(&self) -> f32 { self.value.to_radians().acos() }
-    pub fn atan(&self) -> f32 { self.value.to_radians().atan() }
+    pub fn tanh(&self) -> f32 { self.value.to_radians().tanh() }
 }
 
 /// Type alias for `Angle<Radian>`.

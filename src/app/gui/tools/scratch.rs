@@ -1,6 +1,8 @@
-use std::any::Any;
-use egui::{Context, Pos2, Stroke, Ui, Window, Frame, Response, Rect, emath, Color32, Sense, Shape};
 use crate::app::gui::tools::Tool;
+use egui::{
+    emath, Color32, Context, Frame, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Window,
+};
+use std::any::Any;
 
 pub struct Scratch {
     lines: Vec<(Stroke, Vec<Pos2>)>,
@@ -17,9 +19,7 @@ impl Default for Scratch {
 }
 
 impl Tool for Scratch {
-    fn name(&self) -> &'static str {
-        "Scratch"
-    }
+    fn name(&self) -> &'static str { "Scratch" }
 
     fn show(&mut self, ctx: &Context, open: &mut bool) {
         Window::new(self.name())
@@ -35,13 +35,9 @@ impl Tool for Scratch {
         });
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 impl Scratch {

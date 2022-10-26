@@ -1,6 +1,6 @@
-use crate::acq::desc::MeasurementDesc;
+use crate::acq::measurement::Measurement;
 
-pub fn measure_ndf(_desc: &MeasurementDesc) -> Vec<f32> {
+pub fn measure_ndf(_desc: &Measurement) -> Vec<f32> {
     // TODO: implement
     vec![]
 }
