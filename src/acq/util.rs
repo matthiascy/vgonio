@@ -1,6 +1,7 @@
 mod range;
 mod numeric;
 
+use std::fmt::Display;
 pub use range::*;
 pub use numeric::*;
 
@@ -39,6 +40,16 @@ pub enum SphericalDomain {
     WholeSphere,
 }
 
+impl Display for SphericalDomain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UpperHemisphere => write!(f, "upper hemisphere"),
+            Self::LowerHemisphere => write!(f, "lower hemisphere"),
+            Self::WholeSphere => write!(f, "whole sphere"),
+        }
+    }
+}
+
 impl SphericalDomain {
     const MIN_AZIMUTH: f32 = 0.0;
     const MAX_AZIMUTH: f32 = std::f32::consts::PI * 2.0;
@@ -75,10 +86,10 @@ pub enum SphericalPartition {
     /// The collector is partitioned into a number of regions with the same
     /// angular interval.
     EqualAngle {
-        /// Range of interest of the polar angle θ (start, stop, step).
+        /// Range of interest of the polar angle θ.
         zenith: RangeByStepSize<Radians>,
 
-        /// Range of interest of the azimuthal angle φ (start, stop, step).
+        /// Range of interest of the azimuthal angle φ.
         azimuth: RangeByStepSize<Radians>,
     },
 
@@ -86,22 +97,20 @@ pub enum SphericalPartition {
     /// area (solid angle), azimuthal angle φ is divided into equal intervals;
     /// polar angle θ is divided non uniformly to guarantee equal area patches.
     EqualArea {
-        /// Range of interest of the polar angle θ (start, stop, count).
+        /// Range of interest of the polar angle θ.
         zenith: RangeByStepCount<Radians>,
 
-        /// Range of interest interval of the azimuthal angle φ (start, stop,
-        /// step).
+        /// Range of interest interval of the azimuthal angle φ.
         azimuth: RangeByStepSize<Radians>,
     },
 
     /// The collector is partitioned into a number of regions with the same
     /// projected area (projected solid angle).
     EqualProjectedArea {
-        /// Range of interest of the polar angle θ (start, stop, count).
+        /// Range of interest of the polar angle θ.
         zenith: RangeByStepCount<Radians>,
 
-        /// Range of interest interval of the azimuthal angle φ (start, stop,
-        /// step) in degrees.
+        /// Range of interest interval of the azimuthal angle φ.
         azimuth: RangeByStepSize<Radians>,
     },
 }

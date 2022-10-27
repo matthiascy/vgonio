@@ -193,7 +193,7 @@ pub struct VgonioArgs {
         help = "Setting logging verbosity level (higher for more\ndetails)\n  0 - error\n  1 - \
                 warn + error\n  2 - info + warn + error\n  3 - debug + info + warn + error\n  4 - \
                 trace + debug + info + warn + error\n\x08",
-        default_value_t = 2
+        default_value_t = 1
     )]
     pub log_level: u8,
 

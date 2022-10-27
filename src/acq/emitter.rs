@@ -5,6 +5,7 @@ use crate::acq::{
     util::{RangeByStepSize, SphericalCoord},
     Metres, Nanometres, Radians, Ray, SolidAngle,
 };
+use crate::error::Error;
 
 /// Light emitter of the virtual gonio-photometer.
 /// Note: need to update the radius for each surface before the measurement to

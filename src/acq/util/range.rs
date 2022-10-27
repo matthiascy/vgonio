@@ -29,6 +29,15 @@ impl<T: Copy + Clone> PartialEq for RangeByStepSize<T>
 impl<T: Copy + Clone> Eq for RangeByStepSize<T> where T: PartialEq + Eq {}
 
 impl<T: Copy + Clone> RangeByStepSize<T> {
+    /// Create a new range.
+    pub fn new(start: T, stop: T, step_size: T) -> Self {
+        Self {
+            start,
+            stop,
+            step_size,
+        }
+    }
+
     /// Maps a function over the start and stop of the range.
     pub fn map<U: Copy>(&self, f: impl Fn(T) -> U) -> RangeByStepSize<U> {
         RangeByStepSize {
@@ -150,6 +159,16 @@ where
 impl<T: Copy + Clone> Eq for RangeByStepCount<T> where T: PartialEq + Eq {}
 
 impl<T: Copy + Clone> RangeByStepCount<T> {
+    /// Create a new range.
+    pub fn new(start: T, stop: T, step_count: usize) -> Self {
+        Self {
+            start,
+            stop,
+            step_count,
+        }
+    }
+
+
     /// Maps a function over the start and stop of the range.
     pub fn map<U: Copy>(&self, f: impl Fn(T) -> U) -> RangeByStepCount<U> {
         RangeByStepCount {

@@ -32,7 +32,7 @@ pub fn run() -> Result<(), Error> {
     let launch_time = std::time::SystemTime::now();
 
     println!(
-        "Vgonio launched at {} on {}.\n",
+        "Vgonio launched at {} on {}.",
         chrono::DateTime::<chrono::Utc>::from(launch_time),
         std::env::consts::OS
     );

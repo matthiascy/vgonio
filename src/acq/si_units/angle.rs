@@ -16,7 +16,7 @@ pub trait AngleUnit: Debug + Copy + Clone {
     const NAME: &'static str;
 
     /// The symbol of the unit.
-    const SYMBOL: &'static str;
+    const SYMBOLS: &'static [&'static str];
 
     /// The conversion factor from radians.
     const FACTOR_FROM_RAD: f32;
@@ -33,14 +33,14 @@ pub trait AngleUnit: Debug + Copy + Clone {
 
 impl AngleUnit for URadian {
     const NAME: &'static str = "radian";
-    const SYMBOL: &'static str = "rad";
+    const SYMBOLS: &'static [&'static str] = &["rad"];
     const FACTOR_FROM_RAD: f32 = 1.0;
     const FACTOR_FROM_DEG: f32 = 1.0 / 180.0 * std::f32::consts::PI;
 }
 
 impl AngleUnit for UDegree {
     const NAME: &'static str = "degree";
-    const SYMBOL: &'static str = "deg";
+    const SYMBOLS: &'static [&'static str] = &["deg", "°"];
     const FACTOR_FROM_RAD: f32 = 180.0 / std::f32::consts::PI;
     const FACTOR_FROM_DEG: f32 = 1.0;
 }
@@ -54,13 +54,13 @@ pub struct Angle<A: AngleUnit> {
 
 impl<A: AngleUnit> Debug for Angle<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Angle {{ value: {}, unit: {} }}", self.value, A::SYMBOL)
+        write!(f, "Angle {{ value: {}, unit: {} }}", self.value, A::SYMBOLS[0])
     }
 }
 
 impl<A: AngleUnit> Display for Angle<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.value, A::SYMBOL)
+        write!(f, "{} {}", self.value, A::SYMBOLS[0])
     }
 }
 
@@ -93,6 +93,15 @@ impl<A: AngleUnit> Angle<A> {
     /// Get the value of the angle.
     pub fn value(&self) -> f32 { self.value }
 
+    #[inline(always)]
+    pub fn is_positive(&self) -> bool { self.value > 0.0 }
+
+    /// Prints the angle in human readable format in degrees.
+    #[inline]
+    pub fn prettified(&self) -> String {
+        format!("{}{}", self.value * A::FACTOR_TO_DEG, UDegree::SYMBOLS[1])
+    }
+
     super::forward_f32_methods!(abs, ceil, round, trunc, fract, sqrt, cbrt);
 }
 
@@ -106,9 +115,10 @@ impl<'a, A: AngleUnit> TryFrom<&'a str> for Angle<A> {
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let bytes = s.trim().as_bytes();
         let i =
-            super::findr_first_ascii_alphabetic(bytes).ok_or("no unit found in angle string")?;
+            super::findr_first_non_ascii_alphabetic(bytes).ok_or("no unit found in angle string")?;
         let value = std::str::from_utf8(&bytes[..i])
             .map_err(|_| "invalid angle string")?
+            .trim()
             .parse::<f32>()
             .map_err(|_| "invalid angle value")?;
         let unit = std::str::from_utf8(&bytes[i..])
@@ -157,11 +167,17 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
 impl Angle<URadian> {
     /// Convert to degree.
     pub fn in_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * UDegree::FACTOR_FROM_RAD) }
+    /// Compute the sine of the angle.
     pub fn sin(&self) -> f32 { self.value.sin() }
+    /// Compute the hyperbolic sine of the angle.
     pub fn sinh(&self) -> f32 { self.value.sinh() }
+    /// Compute the cosine of the angle.
     pub fn cos(&self) -> f32 { self.value.cos() }
+    /// Compute the hyperbolic cosine of the angle.
     pub fn cosh(&self) -> f32 { self.value.cosh() }
+    /// Compute the tangent of the angle.
     pub fn tan(&self) -> f32 { self.value.tan() }
+    /// Compute the hyperbolic tangent of the angle.
     pub fn tanh(&self) -> f32 { self.value.tanh() }
 }
 

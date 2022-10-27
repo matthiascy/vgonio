@@ -5,6 +5,7 @@ use crate::acq::{
     util::{RangeByStepSize, SphericalDomain, SphericalPartition},
     Radians, RtcRecord, SolidAngle,
 };
+use crate::error::Error;
 
 /// Description of a collector.
 ///

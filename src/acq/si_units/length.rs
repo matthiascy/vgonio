@@ -1,6 +1,7 @@
 use crate::util::ulp_eq;
 use core::fmt::Debug;
 use std::cmp::Ordering;
+use crate::error::Error;
 
 /// Trait representing a unit of length.
 pub trait LengthUnit: Debug + Copy + Clone {
@@ -118,6 +119,12 @@ pub struct Length<A: LengthUnit> {
     pub(crate) unit: core::marker::PhantomData<A>,
 }
 
+impl<A: LengthUnit> Default for Length<A> {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
+}
+
 impl<A: LengthUnit> Debug for Length<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Length {{ value: {}, unit: {} }}", self.value, A::NAME)
@@ -205,18 +212,20 @@ impl<A: LengthUnit> From<f32> for Length<A> {
 }
 
 impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let bytes = s.trim().as_bytes();
         let i =
-            super::findr_first_ascii_alphabetic(bytes).ok_or("no unit found in length string")?;
+            super::findr_first_non_ascii_alphabetic(bytes)
+                .ok_or(Error::Any("no unit found in length string".to_string()))?;
         let value = std::str::from_utf8(&bytes[..i])
-            .map_err(|_| "invalid length string")?
+            .map_err(|_| Error::Any("invalid length string".to_string()))?
+            .trim()
             .parse::<f32>()
-            .map_err(|_| "invalid length value")?;
+            .map_err(|_| Error::Any("invalid length value".to_string()))?;
         let unit = std::str::from_utf8(&bytes[i..])
-            .map_err(|_| "invalid length unit")?
+            .map_err(|err| Error::Any(format!("invalid length unit: {}", err)))?
             .trim();
         match unit {
             "m" => Ok(Self::new(A::FACTOR_FROM_METRE * value)),
@@ -224,7 +233,7 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
             "mm" => Ok(Self::new(A::FACTOR_FROM_MILLIMETRE * value)),
             "um" => Ok(Self::new(A::FACTOR_FROM_MICROMETRE * value)),
             "nm" => Ok(Self::new(A::FACTOR_FROM_NANOMETRE * value)),
-            _ => Err("invalid length unit"),
+            _ => Err(Error::Any("invalid length unit".to_string())),
         }
     }
 }

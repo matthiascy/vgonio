@@ -17,6 +17,7 @@ use std::{
     ops::Sub,
     path::{Path, PathBuf},
 };
+use std::fmt::{Display, Formatter};
 use crate::acq::metres;
 
 /// Describes the radius of measurement.
@@ -24,26 +25,43 @@ use crate::acq::metres;
 #[serde(rename_all = "lowercase")]
 pub enum Radius {
     /// Radius is dynamically deduced from the dimension of the surface.
-    #[serde(rename(serialize = "dyn", deserialize = "dyn"))]
-    Dynamic(Metres),
+    /// Note: This value will be updated before each measurement.
+    Auto(#[serde(skip)]Metres),
 
     /// Radius is given explicitly.
-    #[serde(rename(serialize = "fix", deserialize = "fix"))]
     Fixed(Metres),
+}
+
+impl Display for Radius {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto(_) => write!(f, "auto"),
+            Self::Fixed(v) => write!(f, "fixed: {}", v),
+        }
+    }
 }
 
 impl Radius {
     /// Whether the radius is dynamically deduced from the dimension of the surface.
-    pub fn is_dynamic(&self) -> bool {
+    pub fn is_auto(&self) -> bool {
         match self {
-            Radius::Dynamic(_) => true,
+            Radius::Auto(_) => true,
             Radius::Fixed(_) => false,
         }
     }
 
+    /// Whether the radius is valid for the given surface.
+    pub fn is_valid(&self) -> bool {
+        match self {
+            Radius::Auto(_) => true,
+            Radius::Fixed(m) => m.value() > 0.0,
+        }
+    }
+
+    /// Get the radius value.
     pub fn value(&self) -> Metres {
         match self {
-            Radius::Dynamic(value) => *value,
+            Radius::Auto(value) => *value,
             Radius::Fixed(value) => *value,
         }
     }
@@ -125,7 +143,62 @@ impl Measurement {
     }
 
     /// Validate the measurement description.
-    pub fn validate(self) -> Result<Self, Error> { todo!() }
+    pub fn validate(self) -> Result<Self, Error> {
+        log::info!("Validating measurement description...");
+        let emitter = &self.emitter;
+        let collector = &self.collector;
+        if emitter.num_rays < 1 {
+            return Err(Error::InvalidEmitter("number of rays must be at least 1"));
+        }
+
+        if emitter.max_bounces < 1 {
+            return Err(Error::InvalidEmitter("maximum number of bounces must be at least 1"));
+        }
+
+        if !(emitter.radius.is_valid() && emitter.zenith.step_size > radians!(0.0) && emitter.azimuth.step_size > radians!(0.0)) {
+            return Err(Error::InvalidEmitter("emitter's radius, zenith step size and azimuth step size must be positive"));
+        }
+
+        if !collector.radius.is_valid() {
+            return Err(Error::InvalidCollector("collector's radius must be positive"));
+        }
+
+        let is_valid_scheme = match &collector.scheme {
+            CollectorScheme::Partitioned { partition, .. } => {
+                match partition {
+                    SphericalPartition::EqualAngle { zenith, azimuth } => {
+                        (zenith.start != zenith.stop && azimuth.start != azimuth.stop, "zenith and azimuth's start and stop must not be equal")
+                    }
+                    SphericalPartition::EqualArea { zenith, azimuth } => {
+                        (zenith.start != zenith.stop && azimuth.start != azimuth.stop, "zenith and azimuth's start and stop must not be equal")
+                    }
+                    SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                        (zenith.start != zenith.stop && azimuth.start != azimuth.stop, "zenith and azimuth's start and stop must not be equal")
+                    }
+                }
+            }
+            CollectorScheme::Individual { shape, .. } => {
+                match shape {
+                    RegionShape::SphericalCap { zenith } => {
+                        if !zenith.is_positive() {
+                            (false, "collector's zenith angle must be positive")
+                        } else {
+                            (true, "")
+                        }
+                    }
+                    RegionShape::SphericalRect { .. } => {
+                        (true, "")
+                    }
+                }
+            }
+        };
+
+        if !is_valid_scheme.0 {
+            return Err(Error::InvalidCollector(is_valid_scheme.1));
+        }
+
+        Ok(self)
+    }
 }
 
 impl Default for Measurement {
@@ -141,7 +214,7 @@ impl Default for Measurement {
             emitter: Emitter {
                 num_rays: 1000,
                 max_bounces: 10,
-                radius: Radius::Dynamic(metres!(0.0)),
+                radius: Radius::Auto(metres!(0.0)),
                 zenith: RangeByStepSize::<Radians> {
                     start: degrees!(0.0).in_radians(),
                     stop: degrees!(90.0).in_radians(),
@@ -167,7 +240,7 @@ impl Default for Measurement {
                 samples: vec![],
             },
             collector: Collector {
-                radius: Radius::Dynamic(metres!(0.0)),
+                radius: Radius::Auto(metres!(0.0)),
                 scheme: CollectorScheme::Partitioned {
                     domain: SphericalDomain::UpperHemisphere,
                     partition: SphericalPartition::EqualArea {
@@ -200,7 +273,7 @@ fn scene_desc_serialization() {
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: Collector {
-            radius: Radius::Dynamic(metres!(0.0)),
+            radius: Radius::Auto(metres!(0.0)),
             scheme: CollectorScheme::Partitioned {
                 domain: SphericalDomain::UpperHemisphere,
                 partition: SphericalPartition::EqualArea {
@@ -221,7 +294,7 @@ fn scene_desc_serialization() {
         emitter: Emitter {
             num_rays: 0,
             max_bounces: 0,
-            radius: Radius::Dynamic(metres!(0.0)),
+            radius: Radius::Auto(metres!(0.0)),
             spectrum: RangeByStepSize {
                 start: nanometres!(380.0),
                 stop: nanometres!(780.0),

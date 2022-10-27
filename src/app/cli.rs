@@ -20,7 +20,7 @@ pub const RESET: &str = "\u{001b}[0m";
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
-    println!("{:?}", config);
+    log::info!("{:?}", config);
     // Configure thread pool for parallelism.
     if let Some(nthreads) = opts.nthreads {
         rayon::ThreadPoolBuilder::new()
@@ -38,11 +38,12 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     let mut cache = Cache::new(config.cache_dir.clone());
     let mut db = VgonioDatafiles::new();
     db.load_ior_database(&config);
+    println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
 
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description file...");
     let measurements = Measurement::load_from_file(&opts.input_path)?;
     println!(
-        "    {BRIGHT_YELLOW}✓{RESET} {} measurements",
+        "    {BRIGHT_YELLOW}✓{RESET} {} measurement(s)",
         measurements.len()
     );
 
@@ -79,54 +80,60 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     SphericalPartition::EqualAngle {
                         zenith, azimuth
                     } => {
-                        format!("        - domain: {:?}\n\
-                        - partition: {}\n\
-                        - polar angle: {}° - {}°, step size {}°\n\
-                        - azimuthal angle {}° - {}°, step size {}°\n", domain, "equal angle",
-                                zenith.start.in_degrees().value,
-                                zenith.stop.in_degrees().value,
-                                zenith.step_size.in_degrees().value,
-                                azimuth.stop.in_degrees().value,
-                                azimuth.stop.in_degrees().value,
-                                azimuth.step_size.in_degrees().value)
+                        format!("        - domain: {}\
+                        \n        - partition: {}\
+                        \n          - polar angle: {} ~ {}, per {}\
+                        \n          - azimuthal angle {} ~ {}, per {}", domain, "equal angle",
+                                zenith.start.prettified(),
+                                zenith.stop.prettified(),
+                                zenith.step_size.prettified(),
+                                azimuth.stop.prettified(),
+                                azimuth.stop.prettified(),
+                                azimuth.step_size.prettified())
                     },
                     SphericalPartition::EqualArea {
                         zenith, azimuth
                     } => {
-                        format!("        - domain: {:?}\n\
-                        - partition: {}\n\
-                        - polar angle: {}° - {}°, step count {}\n\
-                        - azimuthal angle {}° - {}°, step size {}°\n", domain, "equal area",
-                                zenith.start.in_degrees().value,
-                                zenith.stop.in_degrees().value,
+                        format!("        - domain: {}\
+                        \n        - partition: {}\
+                        \n          - polar angle: {} ~ {}, {} steps\
+                        \n          - azimuthal angle: {} ~ {}, per {}", domain, "equal area",
+                                zenith.start.prettified(),
+                                zenith.stop.prettified(),
                                 zenith.step_count,
-                                azimuth.stop.in_degrees().value,
-                                azimuth.stop.in_degrees().value,
-                                azimuth.step_size.in_degrees().value)
+                                azimuth.start.prettified(),
+                                azimuth.stop.prettified(),
+                                azimuth.step_size.prettified())
                     },
                     SphericalPartition::EqualProjectedArea {
                         zenith, azimuth
                     } => {
-                        format!("        - domain: {:?}\n\
-                        - partition: {}\n\
-                        - polar angle: {}° - {}°, step count {}\n\
-                        - azimuthal angle {}° - {}°, step size {}°\n", domain, "equal projected area",
-                                zenith.start.in_degrees().value,
-                                zenith.stop.in_degrees().value,
+                        format!("        - domain: {}\
+                        \n        - partition: {}\
+                        \n          - polar angle: {} - {}, {} steps\
+                        \n          - azimuthal angle {} - {}, per {}", domain, "equal projected area",
+                                zenith.start.prettified(),
+                                zenith.stop.prettified(),
                                 zenith.step_count,
-                                azimuth.stop.in_degrees().value,
-                                azimuth.stop.in_degrees().value,
-                                azimuth.step_size.in_degrees().value)
+                                azimuth.start.prettified(),
+                                azimuth.stop.prettified(),
+                                azimuth.step_size.prettified())
                     }
                 }
             }
             CollectorScheme::Individual { domain, shape, zenith, azimuth } => {
-                format!("        - domain: {:?}\n\
+                format!("        - domain: {}\n\
                         - shape: {:?}\n\
                         - polar angle: {:?}\n\
                         - azimuthal angle {:?}\n", domain, shape, zenith, azimuth)
             }
         };
+
+        let surfaces_str = surfaces
+            .iter()
+            .map(|s| format!("       - {}", s.path.display()))
+            .collect::<Vec<_>>()
+            .join("\n");
         match measurement.kind {
             MeasurementKind::Bsdf(kind) => {
                 println!(
@@ -134,33 +141,32 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     • parameters:
       + incident medium: {:?}
       + transmitted medium: {:?}
-      + surfaces: {:?}
+      + surfaces:\n {}
       + emitter:
-        - radius: {:?}
+        - radius: {}
         - num rays: {}
         - max bounces: {}
-        - spectrum: {} - {}, step size {}
-        - polar angle: {}° - {}°, step size {}°
-        - azimuthal angle: {}° - {}°, step size {}°
+        - spectrum: {} ~ {} per {}
+        - polar angle: {} ~ {} per {}
+        - azimuthal angle: {} ~ {} per {}
       + collector:
-        - radius: {:?}
-        {}",
+        - radius: {}\n{}",
                     chrono::DateTime::<chrono::Utc>::from(start),
                     measurement.incident_medium,
                     measurement.transmitted_medium,
-                    surfaces,
+                    surfaces_str,
                     measurement.emitter.radius,
                     measurement.emitter.num_rays,
                     measurement.emitter.max_bounces,
                     measurement.emitter.spectrum.start,
                     measurement.emitter.spectrum.stop,
                     measurement.emitter.spectrum.step_size,
-                    measurement.emitter.zenith.start,
-                    measurement.emitter.zenith.stop,
-                    measurement.emitter.zenith.step_size,
-                    measurement.emitter.azimuth.start,
-                    measurement.emitter.azimuth.stop,
-                    measurement.emitter.azimuth.step_size,
+                    measurement.emitter.zenith.start.prettified(),
+                    measurement.emitter.zenith.stop.prettified(),
+                    measurement.emitter.zenith.step_size.prettified(),
+                    measurement.emitter.azimuth.start.prettified(),
+                    measurement.emitter.azimuth.stop.prettified(),
+                    measurement.emitter.azimuth.step_size.prettified(),
                     measurement.collector.radius,
                     collector_info
                 );

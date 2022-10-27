@@ -109,10 +109,10 @@ pub use angle::*;
 pub use length::*;
 pub use solid_angle::*;
 
-fn findr_first_ascii_alphabetic(s: &[u8]) -> Option<usize> {
-    let mut i = s.len() - 1;
+fn findr_first_non_ascii_alphabetic(s: &[u8]) -> Option<usize> {
+    let mut i = s.len();
     while i > 0 {
-        if s[i].is_ascii_alphabetic() {
+        if s[i - 1].is_ascii_alphabetic() {
             i -= 1;
         } else {
             return Some(i);

@@ -3,20 +3,26 @@ sim_kind: wave_optics
 incident_medium: air
 transmitted_medium: air
 surfaces:
-  - /tmp/scene.obj
+  - user://surfaces/Aluminium65bar100.txt
 emitter:
-  num_rays: 0
-  max_bounces: 0
-  radius: !dyn 0 m
-  zenith: [0 rad, 90 rad, 0 rad]
-  azimuth: [0 rad, 360 rad, 0 rad]
+  num_rays: 10000
+  max_bounces: 5
+  radius: !auto
+  zenith: [0deg, 90deg, 10deg]
+  azimuth: [0deg, 360deg, 120deg]
   shape: !disk
-    zenith: 0 rad
-  spectrum: [380 nm, 780 nm, 10 nm]
+    zenith: 0rad
+  spectrum: [380nm, 780nm, 10nm]
 collector:
-  radius: !dyn 0 m
+  radius: !auto
   scheme: !partitioned
     domain: upper_hemisphere
-    partition: !equal_area
-      zenith: [0 rad, 0 rad, 0]
-      azimuth: [0 rad, 0 rad, 10 rad]
+#    partition: !equal_area
+#      zenith: [0deg, 100deg, 10]
+#      azimuth: [0deg, 420deg, 60deg]
+#    partition: !equal_angle
+#        zenith: [0deg, 90deg, 10deg]
+#        azimuth: [0deg, 420deg, 60deg]
+    partition: !equal_projected_area
+      zenith: [0deg, 100deg, 10]
+      azimuth: [0deg, 420deg, 60deg]

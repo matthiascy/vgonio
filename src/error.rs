@@ -1,4 +1,3 @@
-use image::ImageError;
 use std::{
     fmt::{Display, Formatter},
     str,
@@ -15,6 +14,8 @@ pub enum Error {
     FileError(&'static str),
     ImageError(image::ImageError),
     SerialisationError(SerialisationError),
+    InvalidEmitter(&'static str),
+    InvalidCollector(&'static str),
     ConfigDirNotFound,
 }
 
@@ -70,6 +71,12 @@ impl Display for Error {
                     write!(f, "Bincode de/serialisation error: {}", err)
                 }
             },
+            Error::InvalidEmitter(err) => {
+                write!(f, "Invalid emitter: {}", err)
+            },
+            Error::InvalidCollector(err) => {
+                write!(f, "Invalid collector: {}", err)
+            }
         }
     }
 }
@@ -105,7 +112,7 @@ impl From<serde_yaml::Error> for Error {
 }
 
 impl From<image::ImageError> for Error {
-    fn from(err: ImageError) -> Self { Error::ImageError(err) }
+    fn from(err: image::ImageError) -> Self { Error::ImageError(err) }
 }
 
 impl From<toml::ser::Error> for Error {
