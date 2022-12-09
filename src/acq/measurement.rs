@@ -4,21 +4,19 @@ use crate::{
         collector::CollectorScheme,
         degrees,
         emitter::RegionShape,
-        nanometres, radians,
-        util::{RangeByStepSize, RangeByStepCount, SphericalDomain, SphericalPartition},
-        Collector, Emitter, Medium, Metres, Radians,
-        RayTracingMethod, SolidAngle,
+        metres, nanometres, radians,
+        util::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
+        Collector, Emitter, Medium, Metres, Radians, RtcMethod, SolidAngle,
     },
     Error,
 };
+use serde::{Deserialize, Serialize};
 use std::{
+    fmt::{Display, Formatter},
     fs::File,
     io::Read,
     path::{Path, PathBuf},
 };
-use std::fmt::{Display, Formatter};
-use crate::acq::metres;
-use serde::{Deserialize, Serialize};
 
 /// Describes the radius of measurement.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -26,7 +24,7 @@ use serde::{Deserialize, Serialize};
 pub enum Radius {
     /// Radius is dynamically deduced from the dimension of the surface.
     /// Note: This value will be updated before each measurement.
-    Auto(#[serde(skip)]Metres),
+    Auto(#[serde(skip)] Metres),
 
     /// Radius is given explicitly.
     Fixed(Metres),
@@ -42,7 +40,8 @@ impl Display for Radius {
 }
 
 impl Radius {
-    /// Whether the radius is dynamically deduced from the dimension of the surface.
+    /// Whether the radius is dynamically deduced from the dimension of the
+    /// surface.
     pub fn is_auto(&self) -> bool {
         match self {
             Radius::Auto(_) => true,
@@ -83,7 +82,10 @@ pub enum MeasurementKind {
 #[serde(rename_all = "snake_case")]
 pub enum SimulationKind {
     /// Ray optics is used during the simulation.
-    GeomOptics { method: RayTracingMethod },
+    GeomOptics {
+        /// Method used to trace rays.
+        method: RtcMethod,
+    },
 
     /// Wave optics is used during the simulation.
     WaveOptics,
@@ -118,7 +120,14 @@ pub struct Measurement {
 
 impl Measurement {
     /// Load measurement descriptions from a file. A file may contain multiple
-    /// descriptions.
+    /// descriptions, separated by `---` followed by a newline.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the file containing the measurement descriptions.
+    ///
+    /// # Errors
+    /// TODO: specify errors
     pub fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, Error> {
         let mut file = File::open(filepath)?;
         let content = {
@@ -129,18 +138,20 @@ impl Measurement {
         // TODO: invoke generation of patches and samples
         let measurements = serde_yaml::Deserializer::from_str(&content)
             .into_iter()
-            .map(|doc|
-                Measurement::deserialize(doc).map_err(Error::from)
-                    .and_then(|mut measurement| {
-                        measurement.validate()
-                    })
-            )
+            .map(|doc| {
+                Measurement::deserialize(doc)
+                    .map_err(Error::from)
+                    .and_then(|measurement| measurement.validate())
+            })
             .collect::<Result<Vec<_>, Error>>()?;
 
         Ok(measurements)
     }
 
     /// Validate the measurement description.
+    ///
+    /// # Errors
+    /// TODO: specify errors
     pub fn validate(self) -> Result<Self, Error> {
         log::info!("Validating measurement description...");
         let emitter = &self.emitter;
@@ -150,45 +161,51 @@ impl Measurement {
         }
 
         if emitter.max_bounces < 1 {
-            return Err(Error::InvalidEmitter("maximum number of bounces must be at least 1"));
+            return Err(Error::InvalidEmitter(
+                "maximum number of bounces must be at least 1",
+            ));
         }
 
-        if !(emitter.radius.is_valid() && emitter.zenith.step_size > radians!(0.0) && emitter.azimuth.step_size > radians!(0.0)) {
-            return Err(Error::InvalidEmitter("emitter's radius, zenith step size and azimuth step size must be positive"));
+        if !(emitter.radius.is_valid()
+            && emitter.zenith.step_size > radians!(0.0)
+            && emitter.azimuth.step_size > radians!(0.0))
+        {
+            return Err(Error::InvalidEmitter(
+                "emitter's radius, zenith step size and azimuth step size must be positive",
+            ));
         }
 
         if !collector.radius.is_valid() {
-            return Err(Error::InvalidCollector("collector's radius must be positive"));
+            return Err(Error::InvalidCollector(
+                "collector's radius must be positive",
+            ));
         }
 
         let is_valid_scheme = match &collector.scheme {
-            CollectorScheme::Partitioned { partition, .. } => {
-                match partition {
-                    SphericalPartition::EqualAngle { zenith, azimuth } => {
-                        (zenith.start != zenith.stop && azimuth.start != azimuth.stop, "zenith and azimuth's start and stop must not be equal")
-                    }
-                    SphericalPartition::EqualArea { zenith, azimuth } => {
-                        (zenith.start != zenith.stop && azimuth.start != azimuth.stop, "zenith and azimuth's start and stop must not be equal")
-                    }
-                    SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                        (zenith.start != zenith.stop && azimuth.start != azimuth.stop, "zenith and azimuth's start and stop must not be equal")
-                    }
-                }
-            }
-            CollectorScheme::Individual { shape, .. } => {
-                match shape {
-                    RegionShape::SphericalCap { zenith } => {
-                        if !zenith.is_positive() {
-                            (false, "collector's zenith angle must be positive")
-                        } else {
-                            (true, "")
-                        }
-                    }
-                    RegionShape::SphericalRect { .. } => {
+            CollectorScheme::Partitioned { partition, .. } => match partition {
+                SphericalPartition::EqualAngle { zenith, azimuth } => (
+                    zenith.start != zenith.stop && azimuth.start != azimuth.stop,
+                    "zenith and azimuth's start and stop must not be equal",
+                ),
+                SphericalPartition::EqualArea { zenith, azimuth } => (
+                    zenith.start != zenith.stop && azimuth.start != azimuth.stop,
+                    "zenith and azimuth's start and stop must not be equal",
+                ),
+                SphericalPartition::EqualProjectedArea { zenith, azimuth } => (
+                    zenith.start != zenith.stop && azimuth.start != azimuth.stop,
+                    "zenith and azimuth's start and stop must not be equal",
+                ),
+            },
+            CollectorScheme::Individual { shape, .. } => match shape {
+                RegionShape::SphericalCap { zenith } => {
+                    if !zenith.is_positive() {
+                        (false, "collector's zenith angle must be positive")
+                    } else {
                         (true, "")
                     }
                 }
-            }
+                RegionShape::SphericalRect { .. } => (true, ""),
+            },
         };
 
         if !is_valid_scheme.0 {
@@ -204,7 +221,7 @@ impl Default for Measurement {
         Self {
             kind: MeasurementKind::Ndf,
             sim_kind: SimulationKind::GeomOptics {
-                method: RayTracingMethod::Grid,
+                method: RtcMethod::Grid,
             },
             incident_medium: Medium::Air,
             transmitted_medium: Medium::Air,
@@ -262,8 +279,8 @@ impl Default for Measurement {
 
 #[test]
 fn scene_desc_serialization() {
-    use std::io::{Cursor, Write};
     use crate::acq::steradians;
+    use std::io::{Cursor, Write};
 
     let desc = Measurement {
         kind: MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),

@@ -73,7 +73,7 @@ impl Display for Error {
             },
             Error::InvalidEmitter(err) => {
                 write!(f, "Invalid emitter: {}", err)
-            },
+            }
             Error::InvalidCollector(err) => {
                 write!(f, "Invalid collector: {}", err)
             }

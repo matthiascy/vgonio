@@ -38,7 +38,8 @@ pub fn scatter_air_conductor(ray: Ray, p: Vec3, n: Vec3, eta_t: f32, k_t: f32) -
     }
 }
 
-/// Scattering happens between the air and the conductor for rays of different wavelengths.
+/// Scattering happens between the air and the conductor for rays of different
+/// wavelengths.
 pub fn scatter_air_conductor_spectrum(
     ray: Ray,
     p: Vec3,
@@ -72,7 +73,8 @@ pub fn scatter_air_conductor_spectrum(
 ///
 /// # Notes
 ///
-/// The direction of the incident ray `w_i` is determined from the ray's origin rather than the point of intersection.
+/// The direction of the incident ray `w_i` is determined from the ray's origin
+/// rather than the point of intersection.
 pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 { w_i - 2.0 * w_i.dot(n) * n }
 
 /// Compute refraction direction using Snell's law.
@@ -86,11 +88,13 @@ pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 { w_i - 2.0 * w_i.dot(n) * n }
 ///
 /// # Notes
 ///
-/// The direction of the incident ray `w_i` is determined from the ray's origin rather than the point of intersection.
+/// The direction of the incident ray `w_i` is determined from the ray's origin
+/// rather than the point of intersection.
 ///
 /// # Returns
 ///
-/// The refracted direction if the total internal reflection is not occurring, otherwise None.
+/// The refracted direction if the total internal reflection is not occurring,
+/// otherwise None.
 pub fn refract(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> Option<Vec3> {
     let dot = w_i.dot(n);
 
@@ -98,7 +102,8 @@ pub fn refract(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> Option<Vec3> {
         // Ray is on the outside of the interface, `cos_i` needs to be positive.
         (-dot, eta_i, eta_t, n)
     } else {
-        // Ray is on the inside of the interface, normal and refractive indices need to be swapped.
+        // Ray is on the inside of the interface, normal and refractive indices need to
+        // be swapped.
         (dot, eta_t, eta_i, -n)
     };
 

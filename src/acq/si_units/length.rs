@@ -1,7 +1,6 @@
-use crate::util::ulp_eq;
+use crate::{error::Error, util::ulp_eq};
 use core::fmt::Debug;
-use std::cmp::Ordering;
-use crate::error::Error;
+use std::{cmp::Ordering, str::FromStr};
 
 /// Trait representing a unit of length.
 pub trait LengthUnit: Debug + Copy + Clone {
@@ -120,9 +119,7 @@ pub struct Length<A: LengthUnit> {
 }
 
 impl<A: LengthUnit> Default for Length<A> {
-    fn default() -> Self {
-        Self::new(0.0)
-    }
+    fn default() -> Self { Self::new(0.0) }
 }
 
 impl<A: LengthUnit> Debug for Length<A> {
@@ -166,7 +163,23 @@ impl<A: LengthUnit> Length<A> {
     /// Returns the value of the length.
     pub const fn value(&self) -> f32 { self.value }
 
-    super::forward_f32_methods!(abs, ceil, round, trunc, fract, sqrt, cbrt);
+    super::forward_f32_methods!(
+        abs,
+        "Returns the absolute value of the length.",
+        ceil,
+        "Returns the smallest length greater than or equal to `self`.",
+        round,
+        "Returns the nearest value to `self`. Round half-way cases away from 0.0.",
+        trunc,
+        "Returns the integer part of `self`. Non-integer numbers are always truncated towards \
+         zero.",
+        fract,
+        "Returns the fractional part of `self`.",
+        sqrt,
+        "Returns the square root of the length.",
+        cbrt,
+        "returns the cube root of the length."
+    );
 
     pub fn abs_diff_eq<B: LengthUnit>(&self, other: &Length<B>, epsilon: f32) -> bool {
         let a = self.value * A::FACTOR_TO_METRE;
@@ -176,9 +189,7 @@ impl<A: LengthUnit> Length<A> {
 
     /// Returns the length in metres.
     #[inline]
-    pub const fn in_metres(&self) -> Length<UMetre> {
-        Length::new(self.value * A::FACTOR_TO_METRE)
-    }
+    pub const fn in_metres(&self) -> Length<UMetre> { Length::new(self.value * A::FACTOR_TO_METRE) }
 
     /// Returns the length in centimetres.
     #[inline]
@@ -216,9 +227,8 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let bytes = s.trim().as_bytes();
-        let i =
-            super::findr_first_non_ascii_alphabetic(bytes)
-                .ok_or(Error::Any("no unit found in length string".to_string()))?;
+        let i = super::findr_first_non_ascii_alphabetic(bytes)
+            .ok_or(Error::Any("no unit found in length string".to_string()))?;
         let value = std::str::from_utf8(&bytes[..i])
             .map_err(|_| Error::Any("invalid length string".to_string()))?
             .trim()
@@ -236,6 +246,12 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
             _ => Err(Error::Any("invalid length unit".to_string())),
         }
     }
+}
+
+impl<A: LengthUnit> FromStr for Length<A> {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
 super::impl_serialization!(Length<A> where A: LengthUnit, #[doc = "Customized serialization for the `Length` type."]);

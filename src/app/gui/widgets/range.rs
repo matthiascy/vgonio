@@ -18,6 +18,8 @@ pub fn range_ui<T: Copy + egui::emath::Numeric>(
 /// ``` ignore
 /// ui.add(input3(&mut my_vec3));
 /// ```
-pub fn range<T: Copy + egui::emath::Numeric>(value: &mut RangeByStepSize<T>) -> impl egui::Widget + '_ {
+pub fn range<T: Copy + egui::emath::Numeric>(
+    value: &mut RangeByStepSize<T>,
+) -> impl egui::Widget + '_ {
     move |ui: &mut egui::Ui| range_ui(ui, value)
 }

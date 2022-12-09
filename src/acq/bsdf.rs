@@ -11,8 +11,8 @@ use crate::{
     },
 };
 use embree::Config;
-use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
@@ -176,8 +176,9 @@ pub fn measure_bsdf_embree_rt(
 
             // TODO:
             // let records = filtered.iter().filter_map(|i| {
-            //     let ray = Ray::new(ray_hit.ray.org(*i).into(), ray_hit.ray.dir(*i).into());
-            //     embree_rt.trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
+            //     let ray = Ray::new(ray_hit.ray.org(*i).into(),
+            // ray_hit.ray.dir(*i).into());     embree_rt.
+            // trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
             // });
 
             // collector.collect(records, BsdfKind::InPlaneBrdf);

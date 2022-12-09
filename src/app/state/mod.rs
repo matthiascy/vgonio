@@ -1,7 +1,8 @@
 mod camera;
 mod input;
 
-// TODO: create default config folder the first time the app is launched (gui and cli)
+// TODO: create default config folder the first time the app is launched (gui
+// and cli)
 
 pub use input::InputState;
 
@@ -15,7 +16,7 @@ use crate::{
 use camera::CameraState;
 
 use crate::{
-    acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray, RayTracingMethod},
+    acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray, RtcMethod},
     app::{
         cache::{Cache, VgonioDatafiles},
         gui::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger},
@@ -888,7 +889,7 @@ impl VgonioState {
                     log::warn!("No heightfield loaded, can't trace ray!");
                 } else {
                     match method {
-                        RayTracingMethod::Standard => {
+                        RtcMethod::Standard => {
                             log::debug!("  => [Standard Ray Tracing]");
                             self.debug_drawing.rays = trace_ray_standard_dbg(
                                 ray,
@@ -896,7 +897,7 @@ impl VgonioState {
                                 self.surface_mesh.as_ref().unwrap(),
                             );
                         }
-                        RayTracingMethod::Grid => {
+                        RtcMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
                             let grid_rt = GridRayTracing::new(
                                 self.surface.as_ref().unwrap(),

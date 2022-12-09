@@ -1,5 +1,5 @@
 use crate::{
-    acq::{Ray, RayTracingMethod},
+    acq::{Ray, RtcMethod},
     app::gui::{
         widgets::{input3_spherical, input3_xyz},
         VgonioEvent,
@@ -20,7 +20,7 @@ pub(crate) struct RayTracingPane {
     ray_target: Vec3,
     ray_mode: RayMode,
     max_bounces: u32,
-    method: RayTracingMethod,
+    method: RtcMethod,
     prim_id: u32,
     cell_pos: IVec2,
     t: f32,
@@ -35,7 +35,7 @@ impl RayTracingPane {
             ray_target: Default::default(),
             ray_mode: RayMode::Cartesian,
             max_bounces: 20,
-            method: RayTracingMethod::Standard,
+            method: RtcMethod::Standard,
             prim_id: 0,
             cell_pos: Default::default(),
             t: 10.0,
@@ -48,8 +48,8 @@ impl egui::Widget for &mut RayTracingPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal_wrapped(|ui| {
             ui.label("method");
-            ui.selectable_value(&mut self.method, RayTracingMethod::Standard, "Standard");
-            ui.selectable_value(&mut self.method, RayTracingMethod::Grid, "Grid");
+            ui.selectable_value(&mut self.method, RtcMethod::Standard, "Standard");
+            ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
         });
 
         ui.horizontal_wrapped(|ui| {
@@ -74,7 +74,7 @@ impl egui::Widget for &mut RayTracingPane {
             }
         });
 
-        if self.method == RayTracingMethod::Grid {
+        if self.method == RtcMethod::Grid {
             ui.horizontal_wrapped(|ui| {
                 ui.label("cell");
                 ui.add(egui::DragValue::new(&mut self.cell_pos.x).prefix("x: "));

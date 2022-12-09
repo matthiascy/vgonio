@@ -1,5 +1,6 @@
 use crate::error::Error;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use serde::{Deserialize, Serialize};
 use std::{io::Write, path::PathBuf};
 use winit::{
     dpi::PhysicalSize,
@@ -7,14 +8,15 @@ use winit::{
     event_loop::{ControlFlow, EventLoopBuilder},
     window::WindowBuilder,
 };
-use serde::{Serialize, Deserialize};
 
 pub mod cache;
 pub mod cli;
 pub(crate) mod gui;
 pub mod state;
 
+/// Initial window width.
 const WIN_INITIAL_WIDTH: u32 = 1600;
+/// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
 
 /// Vgonio configuration.

@@ -1,9 +1,9 @@
-mod range;
 mod numeric;
+mod range;
 
-use std::fmt::Display;
-pub use range::*;
 pub use numeric::*;
+pub use range::*;
+use std::fmt::Display;
 
 use crate::acq::{collector::Patch, Radians};
 use serde::{Deserialize, Serialize};
@@ -152,7 +152,10 @@ impl SphericalPartition {
             SphericalPartition::EqualAngle { azimuth: phi, .. }
             | SphericalPartition::EqualArea { azimuth: phi, .. }
             | SphericalPartition::EqualProjectedArea { azimuth: phi, .. } => {
-                format!("{}° - {}°, step size {}°", phi.start, phi.stop, phi.step_size)
+                format!(
+                    "{}° - {}°, step size {}°",
+                    phi.start, phi.stop, phi.step_size
+                )
             }
         }
     }
@@ -165,10 +168,7 @@ impl SphericalPartition {
     /// TODO: limit the angle range by `SphericalShape`
     pub fn generate_patches(&self, domain: &SphericalDomain) -> Vec<Patch> {
         match self {
-            SphericalPartition::EqualAngle {
-                zenith,
-                azimuth,
-            } => {
+            SphericalPartition::EqualAngle { zenith, azimuth } => {
                 let n_zenith = zenith.step_count();
                 let n_azimuth = azimuth.step_count();
 
@@ -221,7 +221,9 @@ impl SphericalPartition {
                         patches.push(Patch::new(
                             (
                                 (1.0 - (h_step * i_theta as f32 + h_start)).acos().into(),
-                                (1.0 - (h_step * (i_theta + 1) as f32 + h_start)).acos().into(),
+                                (1.0 - (h_step * (i_theta + 1) as f32 + h_start))
+                                    .acos()
+                                    .into(),
                             ),
                             (
                                 *phi_start + i_phi as f32 * *phi_step,
@@ -233,11 +235,12 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualProjectedArea {
-                zenith: RangeByStepCount {
-                    start: theta_start,
-                    stop: theta_stop,
-                    step_count: count,
-                },
+                zenith:
+                    RangeByStepCount {
+                        start: theta_start,
+                        stop: theta_stop,
+                        step_count: count,
+                    },
                 azimuth:
                     RangeByStepSize {
                         start: phi_start,

@@ -1,7 +1,8 @@
 use crate::{
     acq::{
-        measurement::{Measurement, MeasurementKind},
-        RayTracingMethod,
+        measurement::{Measurement, MeasurementKind, SimulationKind},
+        util::SphericalPartition,
+        CollectorScheme, RtcMethod,
     },
     app::{
         cache::{Cache, VgonioDatafiles},
@@ -9,9 +10,6 @@ use crate::{
     },
     util, Error,
 };
-use crate::acq::CollectorScheme;
-use crate::acq::measurement::SimulationKind;
-use crate::acq::util::SphericalPartition;
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
@@ -74,57 +72,61 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     let start = std::time::SystemTime::now();
     for (measurement, surfaces) in measurements.into_iter().zip(all_surfaces.iter()) {
         let collector_info = match measurement.collector.scheme {
-            CollectorScheme::Partitioned { domain, partition } => {
-                match partition {
-                    SphericalPartition::EqualAngle {
-                        zenith, azimuth
-                    } => {
-                        format!("        - domain: {}\
-                        \n        - partition: {}\
-                        \n          - polar angle: {} ~ {}, per {}\
-                        \n          - azimuthal angle {} ~ {}, per {}", domain, "equal angle",
-                                zenith.start.prettified(),
-                                zenith.stop.prettified(),
-                                zenith.step_size.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.step_size.prettified())
-                    },
-                    SphericalPartition::EqualArea {
-                        zenith, azimuth
-                    } => {
-                        format!("        - domain: {}\
-                        \n        - partition: {}\
-                        \n          - polar angle: {} ~ {}, {} steps\
-                        \n          - azimuthal angle: {} ~ {}, per {}", domain, "equal area",
-                                zenith.start.prettified(),
-                                zenith.stop.prettified(),
-                                zenith.step_count,
-                                azimuth.start.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.step_size.prettified())
-                    },
-                    SphericalPartition::EqualProjectedArea {
-                        zenith, azimuth
-                    } => {
-                        format!("        - domain: {}\
-                        \n        - partition: {}\
-                        \n          - polar angle: {} - {}, {} steps\
-                        \n          - azimuthal angle {} - {}, per {}", domain, "equal projected area",
-                                zenith.start.prettified(),
-                                zenith.stop.prettified(),
-                                zenith.step_count,
-                                azimuth.start.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.step_size.prettified())
-                    }
+            CollectorScheme::Partitioned { domain, partition } => match partition {
+                SphericalPartition::EqualAngle { zenith, azimuth } => {
+                    format!(
+                        "        - domain: {}\n        - partition: {}\n          - polar angle: \
+                         {} ~ {}, per {}\n          - azimuthal angle {} ~ {}, per {}",
+                        domain,
+                        "equal angle",
+                        zenith.start.prettified(),
+                        zenith.stop.prettified(),
+                        zenith.step_size.prettified(),
+                        azimuth.stop.prettified(),
+                        azimuth.stop.prettified(),
+                        azimuth.step_size.prettified()
+                    )
                 }
-            }
-            CollectorScheme::Individual { domain, shape, zenith, azimuth } => {
-                format!("        - domain: {}\n\
-                        - shape: {:?}\n\
-                        - polar angle: {:?}\n\
-                        - azimuthal angle {:?}\n", domain, shape, zenith, azimuth)
+                SphericalPartition::EqualArea { zenith, azimuth } => {
+                    format!(
+                        "        - domain: {}\n        - partition: {}\n          - polar angle: \
+                         {} ~ {}, {} steps\n          - azimuthal angle: {} ~ {}, per {}",
+                        domain,
+                        "equal area",
+                        zenith.start.prettified(),
+                        zenith.stop.prettified(),
+                        zenith.step_count,
+                        azimuth.start.prettified(),
+                        azimuth.stop.prettified(),
+                        azimuth.step_size.prettified()
+                    )
+                }
+                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                    format!(
+                        "        - domain: {}\n        - partition: {}\n          - polar angle: \
+                         {} - {}, {} steps\n          - azimuthal angle {} - {}, per {}",
+                        domain,
+                        "equal projected area",
+                        zenith.start.prettified(),
+                        zenith.stop.prettified(),
+                        zenith.step_count,
+                        azimuth.start.prettified(),
+                        azimuth.stop.prettified(),
+                        azimuth.step_size.prettified()
+                    )
+                }
+            },
+            CollectorScheme::Individual {
+                domain,
+                shape,
+                zenith,
+                azimuth,
+            } => {
+                format!(
+                    "        - domain: {}\n- shape: {:?}\n- polar angle: {:?}\n- azimuthal angle \
+                     {:?}\n",
+                    domain, shape, zenith, azimuth
+                )
             }
         };
 
@@ -171,16 +173,24 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                 );
                 println!("    {BRIGHT_YELLOW}>{RESET} Measuring {}...", kind);
                 match measurement.sim_kind {
-                    SimulationKind::GeomOptics { method } => {
-                        match method {
-                            RayTracingMethod::Standard => {
-                                crate::acq::bsdf::measure_bsdf_embree_rt(measurement, &cache, &db, surfaces);
-                            }
-                            RayTracingMethod::Grid => {
-                                crate::acq::bsdf::measure_bsdf_grid_rt(measurement, &cache, &db, surfaces);
-                            }
+                    SimulationKind::GeomOptics { method } => match method {
+                        RtcMethod::Standard => {
+                            crate::acq::bsdf::measure_bsdf_embree_rt(
+                                measurement,
+                                &cache,
+                                &db,
+                                surfaces,
+                            );
                         }
-                    }
+                        RtcMethod::Grid => {
+                            crate::acq::bsdf::measure_bsdf_grid_rt(
+                                measurement,
+                                &cache,
+                                &db,
+                                surfaces,
+                            );
+                        }
+                    },
                     SimulationKind::WaveOptics => {
                         // TODO: implement
                     }
@@ -208,4 +218,6 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     Ok(())
 }
 
+// TODO: implementation... maybe this subcommand should be removed, since we
+// can "measure" everything...
 pub fn extract(_opts: ExtractOptions, _config: Config) -> Result<(), Error> { Ok(()) }

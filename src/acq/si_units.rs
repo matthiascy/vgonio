@@ -89,8 +89,9 @@ macro impl_ops_assign($($op:ident),* for $t:ident where A, B: $unit_trait:ident)
     }
 }
 
-macro forward_f32_methods($($name:ident),+) {
+macro forward_f32_methods($($name:ident, $doc:expr),+) {
     $(
+        #[doc = $doc]
         #[inline(always)]
         pub fn $name(self) -> Self {
             Self {

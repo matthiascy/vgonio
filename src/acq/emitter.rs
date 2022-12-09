@@ -7,6 +7,11 @@ use crate::acq::{
 use serde::{Deserialize, Serialize};
 
 /// Light emitter of the virtual gonio-photometer.
+///
+/// The light source is represented by a region over the spherical domain
+/// defined by the `radius`. The shape of the region is defined by the
+/// [`RegionShape`].
+///
 /// Note: need to update the radius for each surface before the measurement to
 /// make sure that the surface is covered by the patch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,10 +25,12 @@ pub struct Emitter {
     /// Distance from the emitter's center to the specimen's center.
     pub radius: Radius,
 
-    /// Emitter's possible positions in spherical coordinates (inclination angle range).
+    /// Inclination angle (polar angle) of emitter's possible positions in
+    /// spherical coordinates.
     pub zenith: RangeByStepSize<Radians>,
 
-    /// Emitter's possible positions in spherical coordinates (azimuthal angle range).
+    /// Azimuthal angle range of emitter's possible positions in spherical
+    /// coordinates.
     pub azimuth: RangeByStepSize<Radians>,
 
     /// Shape of the emitter.
@@ -79,8 +86,9 @@ impl RegionShape {
             }
             Self::SphericalRect { zenith, azimuth } => {
                 todo!()
-                // let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) * (azimuth.1 - azimuth.0);
-                // steradians!(solid_angle)
+                // let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) *
+                // (azimuth.1 - azimuth.0); steradians!
+                // (solid_angle)
             }
         }
     }
@@ -91,7 +99,8 @@ impl Emitter {
 
     /// All possible positions of the emitter.
     pub fn positions(&self) -> Vec<SphericalCoord> {
-        let n_zenith = ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
+        let n_zenith =
+            ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
         let n_azimuth =
             ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step_size).ceil() as usize;
 

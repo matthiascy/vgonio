@@ -1,10 +1,7 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
 use crate::app::{
     cache::Cache,
-    gui::{
-        tools::Tools,
-        GuiContext,
-    },
+    gui::{tools::Tools, GuiContext},
     Config,
 };
 use glam::Mat4;

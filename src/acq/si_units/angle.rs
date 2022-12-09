@@ -1,5 +1,6 @@
 use crate::util::ulp_eq;
 use core::fmt::{Debug, Display};
+use std::str::FromStr;
 
 /// Radian unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -53,7 +54,12 @@ pub struct Angle<A: AngleUnit> {
 
 impl<A: AngleUnit> Debug for Angle<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Angle {{ value: {}, unit: {} }}", self.value, A::SYMBOLS[0])
+        write!(
+            f,
+            "Angle {{ value: {}, unit: {} }}",
+            self.value,
+            A::SYMBOLS[0]
+        )
     }
 }
 
@@ -92,6 +98,7 @@ impl<A: AngleUnit> Angle<A> {
     /// Get the value of the angle.
     pub fn value(&self) -> f32 { self.value }
 
+    /// Determines whether the angle is greater than zero.
     #[inline(always)]
     pub fn is_positive(&self) -> bool { self.value > 0.0 }
 
@@ -101,7 +108,23 @@ impl<A: AngleUnit> Angle<A> {
         format!("{}{}", self.value * A::FACTOR_TO_DEG, UDegree::SYMBOLS[1])
     }
 
-    super::forward_f32_methods!(abs, ceil, round, trunc, fract, sqrt, cbrt);
+    super::forward_f32_methods!(
+        abs,
+        "Returns the absolute value of the angle.",
+        ceil,
+        "Returns the smallest angle greater than or equal to `self`.",
+        round,
+        "Returns the nearest value to `self`. Round half-way cases away from 0.0.",
+        trunc,
+        "Returns the integer part of `self`. Non-integer numbers are always truncated towards \
+         zero.",
+        fract,
+        "Returns the fractional part of `self`.",
+        sqrt,
+        "Returns the square root of the angle.",
+        cbrt,
+        "returns the cube root of the angle."
+    );
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
@@ -113,8 +136,8 @@ impl<'a, A: AngleUnit> TryFrom<&'a str> for Angle<A> {
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let bytes = s.trim().as_bytes();
-        let i =
-            super::findr_first_non_ascii_alphabetic(bytes).ok_or("no unit found in angle string")?;
+        let i = super::findr_first_non_ascii_alphabetic(bytes)
+            .ok_or("no unit found in angle string")?;
         let value = std::str::from_utf8(&bytes[..i])
             .map_err(|_| "invalid angle string")?
             .trim()
@@ -129,6 +152,12 @@ impl<'a, A: AngleUnit> TryFrom<&'a str> for Angle<A> {
             _ => Err("invalid angle unit"),
         }
     }
+}
+
+impl<A: AngleUnit> FromStr for Angle<A> {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
 super::impl_serialization!(Angle<A> where A: AngleUnit, #[doc = "Customized serialization for the `Angle` type."]);
@@ -358,7 +387,7 @@ mod angle_unit_tests {
         let deserialized: Radians = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(a, deserialized);
 
-        let deserialized2: Degrees = serde_yaml::from_str("180.0 degs").unwrap();
+        let deserialized2: Degrees = serde_yaml::from_str("180.0degs").unwrap();
         assert_eq!(a, deserialized2);
 
         let deserialized3: Degrees = serde_yaml::from_str("180.0 degrees").unwrap();

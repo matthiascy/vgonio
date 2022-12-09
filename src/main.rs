@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![warn(clippy::all)]
+#![warn(clippy::all, rust_2021_compatibility)]
 
 fn main() {
     std::process::exit(match vgonio::run() {

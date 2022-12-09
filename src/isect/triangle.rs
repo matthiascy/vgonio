@@ -35,20 +35,23 @@ pub fn max_axis(v: Vec3) -> u32 {
 /// solving a linear system of equations using Cramer's rule and by evaluating
 /// determinants using scalar triple products.
 /// Assuming that `P` is the point of intersection. It can be expressed:
-///   + by barycentric coordinates $(u, v, w)$: $P = wA + uB + vC = A + u(B - A) + v(C - A)$
-///   + or by ray parameter t: $P = O + tD$
+///   + by barycentric coordinates $(u, v, w)$: $P = wA + uB + vC = A + u(B - A)
+/// + v(C - A)$   + or by ray parameter t: $P = O + tD$
 ///
 /// Moller and Trumbore use the barycentric coordinates to evaluate the
 /// intersection point. The system of equations is defined as follows:
 ///
-/// $$O - A = \begin{bmatrix}-D & B-A & C-A\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$$
+/// $$O - A = \begin{bmatrix}-D & B-A & C-A\end{bmatrix} \begin{bmatrix}t \\\ u
+/// \\\ v\end{bmatrix}$$
 ///
 /// with $$E0 = B - A,  E1 = C - A, O - A = T$$
 ///
-/// $$T = \begin{bmatrix}-D & E0 & E1\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$$
+/// $$T = \begin{bmatrix}-D & E0 & E1\end{bmatrix} \begin{bmatrix}t \\\ u \\\
+/// v\end{bmatrix}$$
 ///
 /// Apply Cramer's rule,
-/// $$\begin{vmatrix}A & B & C\end{vmatrix} = -(A \times C) \cdot B = -(C \times B) \cdot A$$, we have
+/// $$\begin{vmatrix}A & B & C\end{vmatrix} = -(A \times C) \cdot B = -(C \times
+/// B) \cdot A$$, we have
 ///
 /// $$det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0
 /// = (D \times E1) \cdot E0$$ $$det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix}

@@ -1,4 +1,4 @@
-use crate::acq::{Length, LengthUnit, Medium, Nanometres, nanometres};
+use crate::acq::{nanometres, Length, LengthUnit, Medium, Nanometres};
 use std::{cmp::Ordering, collections::HashMap, path::Path};
 
 // todo: merge ior db into vgonio db
@@ -79,8 +79,7 @@ impl IorDb {
     ) -> Option<Vec<Ior>> {
         wavelengths
             .iter()
-            .map(|wavelength| self.ior_of(medium,
-                                          wavelength.in_nanometres()))
+            .map(|wavelength| self.ior_of(medium, wavelength.in_nanometres()))
             .collect()
     }
 }

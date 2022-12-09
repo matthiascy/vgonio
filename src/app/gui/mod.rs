@@ -7,7 +7,7 @@ mod tools;
 mod ui;
 mod widgets;
 
-use crate::acq::{Ray, RayTracingMethod};
+use crate::acq::{Ray, RtcMethod};
 pub use context::*;
 use glam::IVec2;
 pub(crate) use tools::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger};
@@ -25,7 +25,7 @@ pub enum VgonioEvent {
     TraceRayDbg {
         ray: Ray,
         max_bounces: u32,
-        method: RayTracingMethod,
+        method: RtcMethod,
     },
     ToggleDebugDrawing,
     ToggleSurfaceVisibility,

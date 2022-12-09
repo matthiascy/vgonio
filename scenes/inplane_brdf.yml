@@ -1,20 +1,23 @@
 ---
-Measurement:
-  angle_unit: degree
-  length_unit: nm
-  bsdf_kind: in-plane-brdf
-  rays_count: 10e6
-  max_bounces: 20
-  incident_medium: vacuum
-  transmitted_medium: aluminium
-  surfaces: USR_DATA_FILES/surfaces/Aluminium65bar100.txt
-  spectrum: [380.0, 380.0, 1.0]
-  collector:
-    radius: auto
-    shape: upper-hemisphere  # or lower-hemisphere or whole-sphere
-    partition: equal-angle  # equal-area or equal-projected-area
-  light_source:
-    position: [0.0, 0.0, 0.0]
-      radius: auto
-      phi_range: [ 0.0, 80.0, 10.0 ]
-      theta_range: [ 0.0, 0.0, 0.0 ]
+kind: !bsdf in-plane-brdf
+sim_kind: wave_optics
+incident_medium: air
+transmitted_medium: air
+surfaces:
+- /tmp/scene.obj
+emitter:
+  num_rays: 10
+  max_bounces: 4
+  radius: auto
+  zenith: 0 rad ~ 90 rad / 0 rad
+  azimuth: 0 rad ~ 360 rad / 0 rad
+  shape: !disk
+    zenith: 0 rad
+  spectrum: 380 nm ~ 780 nm / 10 nm
+collector:
+  radius: auto
+  scheme: !partitioned
+    domain: upper_hemisphere
+    partition: !equal_area
+      zenith: 0 rad ~ 0 rad, 10
+      azimuth: 0 rad ~ 0 rad / 0 rad

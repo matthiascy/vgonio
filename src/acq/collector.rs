@@ -39,15 +39,18 @@ pub enum CollectorScheme {
         /// Spherical partition of the collector.
         partition: SphericalPartition,
     },
-    /// The collector is represented by a single shape on the surface of the sphere.
+    /// The collector is represented by a single shape on the surface of the
+    /// sphere.
     Individual {
         /// Spherical domain of the collector.
         domain: SphericalDomain,
         /// Shape of the collector.
         shape: RegionShape,
-        /// Collector's possible positions in spherical coordinates (inclination angle range).
+        /// Collector's possible positions in spherical coordinates (inclination
+        /// angle range).
         zenith: RangeByStepSize<Radians>,
-        /// Collector's possible positions in spherical coordinates (azimuthal angle range).
+        /// Collector's possible positions in spherical coordinates (azimuthal
+        /// angle range).
         azimuth: RangeByStepSize<Radians>,
     },
 }
@@ -74,9 +77,7 @@ impl Collector {
 
     pub fn save_stats(&self, path: &str) { todo!("Collector::save_stats") }
 
-    pub fn generate_patches(&mut self) {
-        self.patches = self.scheme.generate_patches();
-    }
+    pub fn generate_patches(&mut self) { self.patches = self.scheme.generate_patches(); }
 }
 
 /// Represents a patch on the spherical [`Collector`].

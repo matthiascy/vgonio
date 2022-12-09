@@ -2,9 +2,7 @@ use crate::{
     acq::measurement::Measurement,
     app::{
         cache::Cache,
-        gui::{
-            gizmo::VgonioGizmo, ui::Workspace, VgonioEvent,
-        },
+        gui::{gizmo::VgonioGizmo, ui::Workspace, VgonioEvent},
     },
 };
 use egui_gizmo::{GizmoMode, GizmoOrientation};
@@ -133,16 +131,16 @@ impl SimulationPanel {
         //                     MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),
         //                     "in-plane brdf",
         //                 );
-        //                 ui.selectable_value(&mut self.desc.kind, MeasurementKind::Ndf, "ndf");
-        //             });
+        //                 ui.selectable_value(&mut self.desc.kind,
+        // MeasurementKind::Ndf, "ndf");             });
         //         ui.end_row();
         //
         //         ui.add(egui::Label::new("incident medium"));
         //         egui::ComboBox::from_id_source("incident_medium_choice")
-        //             .selected_text(format!("{:?}", self.desc.incident_medium))
-        //             .show_ui(ui, |ui| {
-        //                 ui.selectable_value(&mut self.desc.incident_medium, Medium::Air, "Air");
-        //                 ui.selectable_value(
+        //             .selected_text(format!("{:?}",
+        // self.desc.incident_medium))             .show_ui(ui, |ui| {
+        //                 ui.selectable_value(&mut self.desc.incident_medium,
+        // Medium::Air, "Air");                 ui.selectable_value(
         //                     &mut self.desc.incident_medium,
         //                     Medium::Copper,
         //                     "Copper",
@@ -162,9 +160,10 @@ impl SimulationPanel {
         //
         //         ui.add(egui::Label::new("transmitted medium"));
         //         egui::ComboBox::from_id_source("transmitted_medium_choice")
-        //             .selected_text(format!("{:?}", self.desc.transmitted_medium))
-        //             .show_ui(ui, |ui| {
-        //                 ui.selectable_value(&mut self.desc.transmitted_medium, Medium::Air, "Air");
+        //             .selected_text(format!("{:?}",
+        // self.desc.transmitted_medium))             .show_ui(ui, |ui|
+        // {                 ui.selectable_value(&mut
+        // self.desc.transmitted_medium, Medium::Air, "Air");
         //                 ui.selectable_value(
         //                     &mut self.desc.transmitted_medium,
         //                     Medium::Copper,
@@ -195,10 +194,10 @@ impl SimulationPanel {
         //                         .unwrap()
         //                 ))
         //                 .show_ui(ui, |ui| {
-        //                     for (i, surface) in self.desc.surfaces.iter().enumerate() {
-        //                         ui.selectable_value(
-        //                             &mut self.selected_surface_index,
-        //                             i,
+        //                     for (i, surface) in
+        // self.desc.surfaces.iter().enumerate() {
+        // ui.selectable_value(                             &mut
+        // self.selected_surface_index,                             i,
         //                             self.desc.surfaces[i].to_str().unwrap(),
         //                         );
         //                     }
@@ -227,20 +226,21 @@ impl SimulationPanel {
         //             .num_columns(2)
         //             .show(ui, |ui| {
         //                 ui.label("num rays");
-        //                 ui.add(egui::DragValue::new(&mut self.desc.emitter.num_rays));
-        //                 ui.end_row();
+        //                 ui.add(egui::DragValue::new(&mut
+        // self.desc.emitter.num_rays));                 ui.end_row();
         //
         //                 ui.label("max bounces");
-        //                 ui.add(egui::DragValue::new(&mut self.desc.emitter.max_bounces));
-        //                 ui.end_row();
+        //                 ui.add(egui::DragValue::new(&mut
+        // self.desc.emitter.max_bounces));
+        // ui.end_row();
         //
         //                 ui.label("radius");
         //                 ui.horizontal(|ui| {
-        //                     ui.add(egui::DragValue::new(&mut self.emitter_radius));
-        //                     ui.selectable_value(
-        //                         &mut self.emitter_radius_mode,
-        //                         RadiusMode::Auto,
-        //                         "auto",
+        //                     ui.add(egui::DragValue::new(&mut
+        // self.emitter_radius));
+        // ui.selectable_value(                         &mut
+        // self.emitter_radius_mode,
+        // RadiusMode::Auto,                         "auto",
         //                     );
         //                     ui.selectable_value(
         //                         &mut self.emitter_radius_mode,
@@ -253,20 +253,21 @@ impl SimulationPanel {
         //                 ui.label("spectrum (nm)");
         //                 ui.horizontal(|ui| {
         //                     ui.add(
-        //                         egui::DragValue::new(&mut self.desc.emitter.spectrum.start.value)
-        //                             .prefix("start: ")
-        //                             .clamp_range(380.0..=780.0),
+        //                         egui::DragValue::new(&mut
+        // self.desc.emitter.spectrum.start.value)
+        // .prefix("start: ")
+        // .clamp_range(380.0..=780.0),                     );
+        //                     ui.add(
+        //                         egui::DragValue::new(&mut
+        // self.desc.emitter.spectrum.stop.value)
+        // .prefix("stop: ")
+        // .clamp_range(self.desc.emitter.spectrum.start..=780.0),
         //                     );
         //                     ui.add(
-        //                         egui::DragValue::new(&mut self.desc.emitter.spectrum.stop.value)
-        //                             .prefix("stop: ")
-        //                             .clamp_range(self.desc.emitter.spectrum.start..=780.0),
-        //                     );
-        //                     ui.add(
-        //                         egui::DragValue::new(&mut self.desc.emitter.spectrum.step_size.value)
-        //                             .prefix("step: ")
-        //                             .clamp_range(0.1..=400.0),
-        //                     );
+        //                         egui::DragValue::new(&mut
+        // self.desc.emitter.spectrum.step_size.value)
+        // .prefix("step: ")
+        // .clamp_range(0.1..=400.0),                     );
         //                 });
         //
         //                 ui.end_row();
@@ -301,9 +302,9 @@ impl SimulationPanel {
         //                     ui.add(input(
         //                         &mut self.desc.emitter.azimuth.stop,
         //                         "stop: ",
-        //                         Some(self.desc.emitter.azimuth.start..=360.0),
-        //                     ));
-        //                     ui.add(input(
+        //
+        // Some(self.desc.emitter.azimuth.start..=360.0),
+        // ));                     ui.add(input(
         //                         &mut self.desc.emitter.azimuth.step_size,
         //                         "step: ",
         //                         Some(1.0..=360.0),
@@ -321,11 +322,11 @@ impl SimulationPanel {
         //             .show(ui, |ui| {
         //                 ui.label("radius");
         //                 ui.horizontal(|ui| {
-        //                     ui.add(egui::DragValue::new(&mut self.collector_radius));
-        //                     ui.selectable_value(
-        //                         &mut self.collector_radius_mode,
-        //                         RadiusMode::Auto,
-        //                         "auto",
+        //                     ui.add(egui::DragValue::new(&mut
+        // self.collector_radius));
+        // ui.selectable_value(                         &mut
+        // self.collector_radius_mode,
+        // RadiusMode::Auto,                         "auto",
         //                     );
         //                     ui.selectable_value(
         //                         &mut self.collector_radius_mode,
@@ -336,10 +337,11 @@ impl SimulationPanel {
         //                 ui.end_row();
         //
         //                 ui.label("shape");
-        //                 egui::ComboBox::from_id_source("collector_shape_choice")
-        //                     .selected_text(format!("{:?}", self.desc.collector.shape))
-        //                     .show_ui(ui, |ui| {
-        //                         ui.selectable_value(
+        //
+        // egui::ComboBox::from_id_source("collector_shape_choice")
+        //                     .selected_text(format!("{:?}",
+        // self.desc.collector.shape))                     .show_ui(ui,
+        // |ui| {                         ui.selectable_value(
         //                             &mut self.desc.collector.shape,
         //                             SphericalDomain::WholeSphere,
         //                             "Whole hemisphere",
@@ -358,14 +360,15 @@ impl SimulationPanel {
         //                 ui.end_row();
         //
         //                 ui.label("partition");
-        //                 egui::ComboBox::from_id_source("collector_partition_mode")
-        //                     .selected_text(format!("{}", self.collector_partition.mode))
-        //                     .show_ui(ui, |ui| {
-        //                         ui.selectable_value(
-        //                             &mut self.collector_partition.mode,
-        //                             PartitionMode::Angle,
-        //                             "Equal Angle",
-        //                         );
+        //
+        // egui::ComboBox::from_id_source("collector_partition_mode")
+        //                     .selected_text(format!("{}",
+        // self.collector_partition.mode))
+        // .show_ui(ui, |ui| {
+        // ui.selectable_value(                             &mut
+        // self.collector_partition.mode,
+        // PartitionMode::Angle,                             "Equal
+        // Angle",                         );
         //                         ui.selectable_value(
         //                             &mut self.collector_partition.mode,
         //                             PartitionMode::Area,
@@ -389,11 +392,12 @@ impl SimulationPanel {
         //                     ui.add(input(
         //                         &mut self.collector_partition.zenith.1,
         //                         "stop: ",
-        //                         Some(self.collector_partition.zenith.0..=360.0),
-        //                     ));
         //
-        //                     if self.collector_partition.mode == PartitionMode::Angle {
-        //                         ui.add(input(
+        // Some(self.collector_partition.zenith.0..=360.0),
+        // ));
+        //
+        //                     if self.collector_partition.mode ==
+        // PartitionMode::Angle {                         ui.add(input(
         //                             &mut self.collector_partition.zenith.2,
         //                             "step: ",
         //                             Some(0.0..=360.0),
@@ -418,9 +422,9 @@ impl SimulationPanel {
         //                     ui.add(input(
         //                         &mut self.collector_partition.azimuth.1,
         //                         "stop: ",
-        //                         Some(self.collector_partition.azimuth.0..=360.0),
-        //                     ));
-        //                     ui.add(input(
+        //
+        // Some(self.collector_partition.azimuth.0..=360.0),
+        // ));                     ui.add(input(
         //                         &mut self.collector_partition.azimuth.2,
         //                         "step: ",
         //                         Some(0.0..=360.0),

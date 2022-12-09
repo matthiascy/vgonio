@@ -15,7 +15,7 @@ pub mod scattering;
 mod si_units;
 pub mod util;
 
-pub use collector::{Collector, Patch, CollectorScheme};
+pub use collector::{Collector, CollectorScheme, Patch};
 pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
@@ -30,9 +30,9 @@ use crate::{
     isect::Aabb,
     Error,
 };
+use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 use wgpu::util::DeviceExt;
-use bytemuck::{Pod, Zeroable};
 
 /// Representation of a ray.
 #[derive(Debug, Copy, Clone)]
@@ -68,11 +68,11 @@ impl From<Ray> for embree::Ray {
     fn from(ray: Ray) -> Self { Self::new(ray.o.into(), ray.d.into()) }
 }
 
-/// Implemented ray tracing method.
+/// Enumeration of the different ways to trace rays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // todo: case_insensitive
-pub enum RayTracingMethod {
-    /// Standard using embree.
+pub enum RtcMethod {
+    /// Standard ray tracing using embree.
     Standard,
     /// Customised grid tracing method.
     Grid,
@@ -84,7 +84,8 @@ pub struct TrajectoryNode {
     /// The ray of the node.
     pub ray: Ray,
 
-    /// The cosine of the angle between the ray and the normal (always positive).
+    /// The cosine of the angle between the ray and the normal (always
+    /// positive).
     pub cos: f32,
 }
 
