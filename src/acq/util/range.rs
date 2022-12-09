@@ -1,10 +1,9 @@
-use std::fmt::Display;
 use crate::acq::{Angle, AngleUnit, Length, LengthUnit};
-use std::ops::{Div, Sub};
-use std::process::Output;
+use std::ops::Sub;
+use serde::{Serialize, Deserialize};
 
 /// Defines a left inclusive, right exclusive range [a, b) of values with a given step.
-#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(into = "[T; 3]", from = "[T; 3]")]
 pub struct RangeByStepSize<T: Copy + Clone> {
     /// Initial value of the range.
@@ -134,7 +133,7 @@ impl<A: LengthUnit> RangeByStepSize<Length<A>> {
 }
 
 /// Defines a left inclusive, right exclusive range [a, b) of values with a given number of steps.
-#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(into = "(T, T, usize)", from = "(T, T, usize)")]
 pub struct RangeByStepCount<T: Copy + Clone> {
     /// Initial value of the range.

@@ -3,19 +3,20 @@ use crate::{
         measurement::{Measurement, Radius},
         metres,
         util::RangeByStepSize,
-        Collector, Emitter, Nanometres, Patch, Ray,
+        Collector, Emitter, Nanometres, Patch,
     },
     app::{
         cache::{Cache, SurfaceHandle, VgonioDatafiles},
         cli::{BRIGHT_YELLOW, RESET},
     },
 };
-use embree::{Config, SoARay};
+use embree::Config;
 use std::fmt::{Display, Formatter};
+use serde::{Deserialize, Serialize};
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")] // TODO: use case_insensitive in the future
 pub enum BsdfKind {
     /// In-plane BRDF.

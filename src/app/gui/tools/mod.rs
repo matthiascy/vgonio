@@ -7,9 +7,7 @@ use crate::{
     app::gui::VgonioEvent,
     mesh::TriangleMesh,
 };
-use egui::plot::Legend;
 use embree::Config;
-use std::collections::BTreeSet;
 use winit::event_loop::EventLoopProxy;
 
 pub(crate) use plotting::Plotting;

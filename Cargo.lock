@@ -652,7 +652,7 @@ version = "0.7.0"
 source = "git+https://github.com/matthiascy/egui-gizmo.git?branch=main#a4d2acc294a9cf224f7af8522a3130c0ef474fa8"
 dependencies = [
  "egui",
- "glam",
+ "glam 0.21.3",
 ]
 
 [[package]]
@@ -995,6 +995,12 @@ name = "glam"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "518faa5064866338b013ff9b2350dc318e14cc4fcd6cb8206d7e7c9886c98815"
+
+[[package]]
+name = "glam"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f597d56c1bd55a811a1be189459e8fad2bbc272616375602443bdfb37fa774"
 dependencies = [
  "bytemuck",
  "serde",
@@ -2405,7 +2411,7 @@ dependencies = [
  "embree",
  "env_logger 0.9.1",
  "futures-intrusive",
- "glam",
+ "glam 0.22.0",
  "image",
  "log",
  "paste",

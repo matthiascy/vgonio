@@ -1,6 +1,5 @@
 use crate::app::gui::VgonioEvent;
-use egui::Response;
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 use winit::event_loop::EventLoopProxy;
 
 mod ray_tracing;

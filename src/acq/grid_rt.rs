@@ -5,7 +5,6 @@ use crate::{
     mesh::TriangleMesh,
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
-use std::rc::Rc;
 
 /// Helper structure for grid ray tracing.
 ///

@@ -22,10 +22,7 @@ pub use grid_rt::GridRayTracing;
 pub use si_units::*;
 
 pub use occlusion::*;
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::str::FromStr;
 
 use crate::{
     gfx::camera::{Projection, ProjectionKind},
@@ -35,6 +32,7 @@ use crate::{
 };
 use glam::Vec3;
 use wgpu::util::DeviceExt;
+use bytemuck::{Pod, Zeroable};
 
 /// Representation of a ray.
 #[derive(Debug, Copy, Clone)]
@@ -143,7 +141,7 @@ pub struct LightSource {
 
 /// Light space matrix used for generation of depth map.
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct LightSourceRaw([f32; 16]);
 
 impl LightSource {
@@ -162,7 +160,7 @@ impl LightSource {
 
 /// Micro-surface mesh used to measure geometric masking/shadowing function.
 /// Position is the only attribute that a vertex possesses. See
-/// [`Self::VERTEX_FORMAT`]. Indices is stored as `u32`. See
+/// [`Self::VERTEX_FORMAT`]. Indices are stored as `u32`. See
 /// [`Self::INDEX_FORMAT`]. The mesh is constructed from a height field.
 ///
 /// Indices are generated in the following order: azimuthal angle first then
@@ -180,8 +178,10 @@ pub struct MicroSurfaceView {
 }
 
 impl MicroSurfaceView {
+    /// Data type used for vertex buffer.
     pub const VERTEX_FORMAT: wgpu::VertexFormat = wgpu::VertexFormat::Float32;
 
+    /// Vertex buffer layout.
     pub const VERTEX_BUFFER_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
         array_stride: Self::VERTEX_FORMAT.size(),
         step_mode: wgpu::VertexStepMode::Vertex,
@@ -192,6 +192,7 @@ impl MicroSurfaceView {
         }],
     };
 
+    /// Data type used for index buffer.
     pub const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint32;
 }
 

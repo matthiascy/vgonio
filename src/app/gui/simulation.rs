@@ -1,16 +1,9 @@
 use crate::{
-    acq::{
-        bsdf,
-        bsdf::BsdfKind,
-        measurement::{Measurement, MeasurementKind},
-        util::SphericalDomain,
-        Medium, RayTracingMethod,
-    },
+    acq::measurement::Measurement,
     app::{
-        cache::{Cache, VgonioDatafiles},
+        cache::Cache,
         gui::{
-            gizmo::VgonioGizmo, tools::Tool, ui::Workspace, widgets::input, VgonioEvent,
-            VisualDebugger,
+            gizmo::VgonioGizmo, ui::Workspace, VgonioEvent,
         },
     },
 };
@@ -20,7 +13,6 @@ use std::{
     cell::RefCell,
     fmt::{Display, Formatter},
     path::PathBuf,
-    rc::Rc,
     sync::Arc,
 };
 use winit::event_loop::EventLoopProxy;

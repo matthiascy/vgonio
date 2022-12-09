@@ -1,14 +1,14 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
 use crate::app::{
-    cache::{Cache, VgonioDatafiles},
+    cache::Cache,
     gui::{
-        tools::{Tool, Tools},
+        tools::Tools,
         GuiContext,
     },
     Config,
 };
 use glam::Mat4;
-use std::{cell::RefCell, collections::BTreeSet, fmt::Write, rc::Rc, sync::Arc};
+use std::{cell::RefCell, fmt::Write, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 pub trait Workspace {

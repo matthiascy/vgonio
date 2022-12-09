@@ -1,6 +1,5 @@
 use crate::util::ulp_eq;
 use core::fmt::{Debug, Display};
-use std::ops::{Deref, DerefMut};
 
 /// Radian unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

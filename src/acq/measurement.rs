@@ -4,24 +4,24 @@ use crate::{
         collector::CollectorScheme,
         degrees,
         emitter::RegionShape,
-        nanometres, radians, steradians,
+        nanometres, radians,
         util::{RangeByStepSize, RangeByStepCount, SphericalDomain, SphericalPartition},
-        Angle, Collector, Emitter, Length, LengthUnit, Medium, Metres, Patch, Radians,
-        RayTracingMethod, SolidAngle, UMetre,
+        Collector, Emitter, Medium, Metres, Radians,
+        RayTracingMethod, SolidAngle,
     },
     Error,
 };
 use std::{
     fs::File,
     io::Read,
-    ops::Sub,
     path::{Path, PathBuf},
 };
 use std::fmt::{Display, Formatter};
 use crate::acq::metres;
+use serde::{Deserialize, Serialize};
 
 /// Describes the radius of measurement.
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Radius {
     /// Radius is dynamically deduced from the dimension of the surface.
@@ -68,7 +68,7 @@ impl Radius {
 }
 
 /// Supported type of measurement.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MeasurementKind {
     /// Bidirectional Scattering Distribution Function
@@ -79,7 +79,7 @@ pub enum MeasurementKind {
 }
 
 /// Possible ways to conduct a simulation.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SimulationKind {
     /// Ray optics is used during the simulation.
@@ -90,7 +90,7 @@ pub enum SimulationKind {
 }
 
 /// Description of the measurement.
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Measurement {
     /// The measurement kind.
     pub kind: MeasurementKind,
@@ -120,8 +120,6 @@ impl Measurement {
     /// Load measurement descriptions from a file. A file may contain multiple
     /// descriptions.
     pub fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, Error> {
-        use serde::Deserialize;
-
         let mut file = File::open(filepath)?;
         let content = {
             let mut str_ = String::new();
@@ -265,6 +263,7 @@ impl Default for Measurement {
 #[test]
 fn scene_desc_serialization() {
     use std::io::{Cursor, Write};
+    use crate::acq::steradians;
 
     let desc = Measurement {
         kind: MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),

@@ -6,9 +6,6 @@
 #![feature(decl_macro)]
 #![warn(missing_docs)]
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 extern crate core;
 
 pub mod acq;

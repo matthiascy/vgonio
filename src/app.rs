@@ -1,19 +1,13 @@
-use crate::{
-    acq::{
-        measurement::{Measurement, MeasurementKind},
-        RayTracingMethod,
-    },
-    app::cache::{Cache, VgonioDatafiles},
-    error::Error,
-};
+use crate::error::Error;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::{io::Write, path::PathBuf};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    event_loop::{ControlFlow, EventLoopBuilder},
     window::WindowBuilder,
 };
+use serde::{Serialize, Deserialize};
 
 pub mod cache;
 pub mod cli;
@@ -40,7 +34,7 @@ pub struct Config {
 }
 
 /// User-defined configuration.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserConfig {
     /// Path to the output directory.
     pub output_dir: std::path::PathBuf,

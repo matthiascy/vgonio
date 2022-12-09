@@ -1,14 +1,11 @@
 use crate::{
-    acq::{EmbreeRayTracing, Ray, RayTracingMethod, TrajectoryNode},
+    acq::{Ray, RayTracingMethod},
     app::gui::{
         widgets::{input3_spherical, input3_xyz},
         VgonioEvent,
     },
-    mesh::TriangleMesh,
 };
-use embree::Config;
 use glam::{IVec2, Vec3};
-use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

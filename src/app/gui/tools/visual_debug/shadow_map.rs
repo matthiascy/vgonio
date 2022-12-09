@@ -6,7 +6,6 @@ use crate::{
     gfx::GpuContext,
 };
 use egui::{Sense, TextureFilter};
-use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 const IMG_WIDTH: usize = 480;

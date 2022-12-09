@@ -5,7 +5,7 @@ use crate::acq::{
     util::{RangeByStepSize, SphericalDomain, SphericalPartition},
     Radians, RtcRecord, SolidAngle,
 };
-use crate::error::Error;
+use serde::{Deserialize, Serialize};
 
 /// Description of a collector.
 ///
@@ -15,7 +15,7 @@ use crate::error::Error;
 /// of a sphere (or an hemisphere) positioned around the specimen.
 /// The detectors are positioned on the center of each patch; the patches
 /// are partitioned using 1.0 as radius.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Collector {
     /// Distance from the collector's center to the specimen's center.
     pub radius: Radius,
@@ -28,7 +28,8 @@ pub struct Collector {
     pub patches: Option<Vec<Patch>>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+/// Strategy for data collection.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CollectorScheme {
     /// The patches are subdivided using a spherical partition.

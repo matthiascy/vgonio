@@ -1,16 +1,15 @@
 use crate::acq::{
-    collector::Patch,
     measurement::Radius,
     radians, steradians,
     util::{RangeByStepSize, SphericalCoord},
-    Metres, Nanometres, Radians, Ray, SolidAngle,
+    Nanometres, Radians, Ray, SolidAngle,
 };
-use crate::error::Error;
+use serde::{Deserialize, Serialize};
 
 /// Light emitter of the virtual gonio-photometer.
 /// Note: need to update the radius for each surface before the measurement to
 /// make sure that the surface is covered by the patch.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emitter {
     /// Number of emitted rays.
     pub num_rays: u32,
@@ -43,7 +42,7 @@ pub struct Emitter {
 }
 
 /// Represents the shape of a region on the surface of a sphere.
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegionShape {
     /// A patch has a disk shape on the surface of the sphere.

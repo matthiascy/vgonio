@@ -38,11 +38,10 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use wgpu::{util::DeviceExt, VertexFormat, VertexStepMode, COPY_BYTES_PER_ROW_ALIGNMENT};
+use wgpu::{util::DeviceExt, VertexFormat, VertexStepMode};
 use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{EventLoop, EventLoopProxy},
-    platform::unix::x11::ffi::Visual,
+    event_loop::EventLoop,
 };
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;

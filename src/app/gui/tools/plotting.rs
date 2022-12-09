@@ -1,4 +1,4 @@
-use crate::app::gui::tools::{Scratch, Tool};
+use crate::app::gui::tools::Tool;
 use egui::{
     plot::{Corner, Legend, Plot},
     Context, Ui,

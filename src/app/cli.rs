@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use crate::{
     acq::{
         measurement::{Measurement, MeasurementKind},

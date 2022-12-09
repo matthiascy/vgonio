@@ -1,8 +1,5 @@
 use rand_distr::num_traits::abs;
-use std::{
-    ops::{Add, Div, Mul, Sub},
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 /// Machine epsilon for double precision floating point numbers.
 pub const MACHINE_EPSILON_F64: f64 = f64::EPSILON * 0.5;

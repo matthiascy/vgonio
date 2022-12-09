@@ -6,10 +6,10 @@ pub use range::*;
 pub use numeric::*;
 
 use crate::acq::{collector::Patch, Radians};
-use std::ops::Sub;
+use serde::{Deserialize, Serialize};
 
 /// Spherical coordinate in radians.
-#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct SphericalCoord {
     pub zenith: Radians,
     pub azimuth: Radians,
@@ -27,7 +27,7 @@ impl SphericalCoord {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SphericalDomain {
     /// Only capture the upper part of the sphere.
@@ -80,7 +80,7 @@ impl SphericalDomain {
 }
 
 /// Partition of the collector spherical shape, each patch served as a detector.
-#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SphericalPartition {
     /// The collector is partitioned into a number of regions with the same
