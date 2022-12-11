@@ -66,8 +66,8 @@ impl From<u32> for Axis {
     }
 }
 
-impl Index<Axis> for [f32] {
-    type Output = f32;
+impl<T> Index<Axis> for [T] {
+    type Output = T;
 
     fn index(&self, index: Axis) -> &Self::Output { &self[index as usize] }
 }
@@ -84,7 +84,7 @@ impl Index<Axis> for Vec3 {
     }
 }
 
-impl IndexMut<Axis> for [f32] {
+impl<T> IndexMut<Axis> for [T] {
     fn index_mut(&mut self, index: Axis) -> &mut Self::Output { &mut self[index as usize] }
 }
 
@@ -98,13 +98,14 @@ impl IndexMut<Axis> for Vec3 {
     }
 }
 
+// TODO: replace with proptest
 #[cfg(test)]
 mod test {
     use crate::isect::axis::Axis;
     use quickcheck::quickcheck;
 
     quickcheck! {
-        fn immutable_test(a: f32, b: f32, c: f32) -> bool {
+        fn immutable_test(a: u32, b: u32, c: u32) -> bool {
             let v = [a, b, c];
 
             v[0] == v[Axis::X] && v[1] == v[Axis::Y] && v[2] == v[Axis::Z]

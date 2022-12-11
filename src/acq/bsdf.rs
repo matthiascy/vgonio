@@ -93,14 +93,14 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
     pub hist_reflections_energy: [f32; N_BOUNCE],
 }
 
-/// Measurement of the in-plane BRDF (incident angle and outgoing angle are on
-/// the same plane).
-/// // <
-// //     PatchData: Copy,
-// //     const N_PATCH: usize,
-// //     const N_BOUNCE: usize,
-// // >
-// // Vec<Stats<PatchData, N_PATCH, N_BOUNCE>>
+/// Measurement of the BSDF (bidirectional scattering distribution function) of
+/// a microfacet surface.
+///
+/// # Notes
+/// For the moment, the measurement is limited to the in-plane BRDF where the
+/// incident angle and outgoing angle are on the same plane.
+///
+/// TODO: add support for complete BSDF measurement.
 pub fn measure_bsdf_embree_rt(
     desc: Measurement,
     cache: &Cache,
@@ -129,7 +129,7 @@ pub fn measure_bsdf_embree_rt(
         let scene_id = embree_rt.create_scene();
         // Update emitter's radius
         if emitter.radius.is_auto() {
-            // fixme: use surface's physical size
+            // FIXME: use surface's physical size
             // TODO: get real size of the surface
             emitter.set_radius(Radius::Fixed(metres!(mesh.extent.max_edge() * 2.5)));
         }

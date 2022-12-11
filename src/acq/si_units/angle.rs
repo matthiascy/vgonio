@@ -247,10 +247,16 @@ impl From<Angle<URadian>> for Angle<UDegree> {
 super::impl_ops!(Add, Sub for Angle where A, B: AngleUnit);
 super::impl_ops_with_f32!(Mul, Div for Angle where A: AngleUnit);
 
-impl<A: AngleUnit, B: AngleUnit> core::ops::Div<Angle<B>> for Angle<A> {
+impl<A: AngleUnit, B: AngleUnit> core::ops::Div<Angle<B>> for Angle<A>
+where
+    Angle<A>: From<Angle<B>>,
+{
     type Output = f32;
 
-    fn div(self, rhs: Angle<B>) -> Self::Output { self.value.to_radians() / rhs.value.to_radians() }
+    fn div(self, rhs: Angle<B>) -> Self::Output {
+        let other = Angle::<A>::from(rhs);
+        self.value / other.value
+    }
 }
 
 impl<A: AngleUnit> core::ops::Mul<Angle<A>> for f32 {
@@ -373,6 +379,8 @@ mod angle_unit_tests {
         let c = Angle::<UDegree>::new(90.0);
         let d = Angle::<URadian>::new(0.78);
         let e = c / d;
+
+        println!("{}", e);
 
         assert_eq!(b.value, 0.5);
         assert_eq!(e.round(), 2.0);

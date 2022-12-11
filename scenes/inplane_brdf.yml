@@ -2,15 +2,15 @@
 kind: !bsdf in-plane-brdf
 sim_kind: wave_optics
 incident_medium: air
-transmitted_medium: air
+transmitted_medium: aluminium
 surfaces:
-- /tmp/scene.obj
+  - user://surfaces/Aluminium65bar100.txt
 emitter:
   num_rays: 10
   max_bounces: 4
   radius: auto
-  zenith: 0 rad ~ 90 rad / 0 rad
-  azimuth: 0 rad ~ 360 rad / 0 rad
+  zenith: 0deg ~ 90 deg / 10deg
+  azimuth: 0deg ~ 360deg / 120deg
   shape: !disk
     zenith: 0 rad
   spectrum: 380 nm ~ 780 nm / 10 nm
@@ -19,5 +19,5 @@ collector:
   scheme: !partitioned
     domain: upper_hemisphere
     partition: !equal_area
-      zenith: 0 rad ~ 0 rad, 10
-      azimuth: 0 rad ~ 0 rad / 0 rad
+      zenith: 0 rad ~ 90deg, 6
+      azimuth: 0rad ~ 90deg / 120 deg
