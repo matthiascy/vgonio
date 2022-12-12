@@ -4,6 +4,7 @@
 #![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
+#![feature(is_some_and)]
 #![warn(missing_docs)]
 
 extern crate core;

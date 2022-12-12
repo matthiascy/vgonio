@@ -29,7 +29,10 @@ pub struct Config {
     pub cache_dir: std::path::PathBuf,
 
     /// Path to the data files.
-    pub data_files_dir: std::path::PathBuf,
+    pub data_dir: std::path::PathBuf,
+
+    /// Current working directory (where the user started the program).
+    cwd: std::path::PathBuf,
 
     /// Path to the user-defined configuration.
     pub user_config: UserConfig,
@@ -38,29 +41,116 @@ pub struct Config {
 /// User-defined configuration.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserConfig {
-    /// Path to the output directory.
+    /// Path to user-defined cache directory.
+    /// If not set, the default cache directory is used.
+    pub cache_dir: std::path::PathBuf,
+
+    /// Path to the user-defined output directory.
+    /// If not set, the default output directory is used.
     pub output_dir: std::path::PathBuf,
 
-    /// Path to the user-defined data files.
-    pub data_files_dir: std::path::PathBuf,
+    /// Path to the user-defined data files directory.
+    pub data_dir: std::path::PathBuf,
+}
+
+impl UserConfig {
+    /// Convert the possibly relative paths to absolute.
+    fn to_absolute(self) -> Self {
+        Self {
+            cache_dir: self.cache_dir.canonicalize().expect(&format!(
+                "failed to convert relative path '{}' to absolute",
+                self.cache_dir.display(),
+            )),
+            output_dir: self.output_dir.canonicalize().expect(&format!(
+                "failed to convert relative path '{}' to absolute",
+                self.output_dir.display(),
+            )),
+            data_dir: self.data_dir.canonicalize().expect(&format!(
+                "failed to convert relative path '{}' to absolute",
+                self.data_dir.display(),
+            )),
+        }
+    }
 }
 
 impl Config {
     /// Load the configuration from the config directory.
-    pub fn load_config() -> Result<Self, Error> {
-        // MacOS: ~/Library/Application Support/vgonio
-        // Windows: %APPDATA%\vgonio
-        // Unix-like: ~/.config/vgonio
+    ///
+    /// There is a difference between the default onfiguration and the
+    /// user-defined configuration. The default configuration is reserved for
+    /// the vgonio application itself and can not be modified while the
+    /// user-defined configuration is freely editable by the user.
+    ///
+    /// The default configuration is firstly loaded from the default
+    /// configuration directory if it exists. Otherwise, the default
+    /// configuration is created and saved to the default configuration
+    /// directory.
+    ///
+    /// This function accepts a file path to the user-defined configuration
+    /// file. If it's not set, the function tries to load the user-defined
+    /// configuration from the current working directory (named as
+    /// vgonio-user.toml). If the file still doesn't exist, the function will
+    /// create a new user-specific configuration file and save it to the current
+    /// working directory as vgonio-user.toml with current working directory
+    /// as the default output directory, the default cache directory as the
+    /// user-defined cache directory and the default data directory as the
+    /// user-defined data directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `user_config` - Path to the user configuration file.
+    ///
+    /// # Default configuration directory
+    ///
+    /// + On *nix system: "$XDG_CONFIG_HOME" or "$HOME/.config"
+    ///
+    /// + On windows system: `%APPDATA%` which is usually
+    /// "C:\Users\username\AppData\Roaming"
+    ///
+    /// + On macos system: "$HOME/Library/Application Support"
+    ///
+    /// # Default cache directory
+    ///
+    /// + On *nix system: "$XDG_CACHE_HOME" or "$HOME/.cache"
+    ///
+    /// + On windows system: `%LOCALAPPDATA%` which is usually
+    /// "C:\Users\username\AppData\Local"
+    ///
+    /// + On macos system: "$HOME/Library/Caches"
+    ///
+    /// # Default data files directory
+    ///
+    /// + On *nix system: "$XDG_DATA_HOME" or "$HOME/.local/share"
+    ///
+    /// + On windows system: `%LOCALAPPDATA%` which is usually
+    /// "C:\Users\username\AppData\Local" (same as cache directory)
+    ///
+    /// + On macos system: "$HOME/Library/Application Support"
+    /// (same as configuration directory)
+    pub fn load_config(user_config_file: Option<&PathBuf>) -> Result<Self, Error> {
+        log::info!("Loading configurations...");
+        // Load or create the default configuration.
         let config_dir = {
-            let mut config_dir = dirs::config_dir().ok_or(Error::ConfigDirNotFound)?;
+            let mut config_dir = dirs::config_dir().ok_or(Error::SysConfigDirNotFound)?;
             config_dir.push("vgonio");
             config_dir
         };
+        let cache_dir = {
+            let mut cache_dir = dirs::cache_dir().ok_or(Error::SysCacheDirNotFound)?;
+            cache_dir.push("vgonio");
+            cache_dir
+        };
+        let data_dir = {
+            let mut data_dir = dirs::data_dir().ok_or(Error::SysDataDirNotFound)?;
+            data_dir.push("vgonio");
+            data_dir
+        };
 
-        let cache_dir = config_dir.join("cache");
-        let data_files_dir = config_dir.join("datafiles");
+        log::info!("Configuration directory: {}", config_dir.display());
+        log::info!("Cache directory: {}", cache_dir.display());
+        log::info!("Data files directory: {}", data_dir.display());
 
-        // Create the config directory if it doesn't exist.
+        // Create the default directories if they don't exist.
         if !config_dir.exists() {
             std::fs::create_dir_all(&config_dir)?;
         }
@@ -69,86 +159,61 @@ impl Config {
             std::fs::create_dir_all(&cache_dir)?;
         }
 
-        if !data_files_dir.exists() {
-            std::fs::create_dir_all(&data_files_dir)?;
+        if !data_dir.exists() {
+            std::fs::create_dir_all(&data_dir)?;
         }
 
-        let current_dir = std::env::current_dir()?;
+        let cwd = std::env::current_dir()?;
 
-        // Try to load user config file.
-        let (user_config_file, relative_to) = {
-            let current_dir_user_config = current_dir.join("vgonio.toml");
-            let default_user_config = config_dir.join("vgonio.toml");
-            if current_dir_user_config.exists() {
-                // Try to load the user config file under the current directory.
-                (
-                    std::fs::read_to_string(&current_dir_user_config).ok(),
-                    &current_dir,
-                )
-            } else if default_user_config.exists() {
-                // Otherwise, try to load the user config file under the config directory.
-                (
-                    std::fs::read_to_string(&default_user_config).ok(),
-                    &config_dir,
-                )
+        if let Some(path) = user_config_file {
+            if !path.exists() {
+                Err(Error::UserConfigNotFound)
             } else {
-                (None, &current_dir)
+                log::info!("Loading user configuration from {}", path.display());
+                let user_config: UserConfig = {
+                    let user_config_string = std::fs::read_to_string(path)?;
+                    toml::from_str(&user_config_string)?
+                };
+                Ok(Self {
+                    config_dir,
+                    cache_dir,
+                    data_dir,
+                    cwd,
+                    user_config: user_config.to_absolute(),
+                })
             }
-        };
-
-        // If the user config file exists, parse it.
-        let user_config = if let Some(user_config_file) = user_config_file {
-            let mut config: UserConfig = toml::from_str(&user_config_file)?;
-            // Convert relative paths to absolute paths.
-            if config.data_files_dir.is_relative() {
-                let data_files_dir = relative_to.join(&config.data_files_dir);
-                config.data_files_dir = data_files_dir.canonicalize().map_err(|err| {
-                    std::io::Error::new(
-                        err.kind(),
-                        format!(
-                            "failed to convert relative path '{}' to absolute path: {}",
-                            data_files_dir.display(),
-                            err
-                        ),
-                    )
-                })?;
-            }
-            if config.output_dir.is_relative() {
-                let output_dir = relative_to.join(&config.output_dir);
-                config.output_dir =
-                    output_dir
-                        .join(config.output_dir)
-                        .canonicalize()
-                        .map_err(|err| {
-                            std::io::Error::new(
-                                err.kind(),
-                                format!(
-                                    "failed to convert relative path '{}' to absolute path: {}",
-                                    output_dir.display(),
-                                    err
-                                ),
-                            )
-                        })?;
-            }
-            config
         } else {
-            // If the user config file doesn't exist, create it.
-            let user_config = UserConfig {
-                output_dir: config_dir.join("output"),
-                data_files_dir: config_dir.join("datafiles"),
+            // Try to load the user-defined configuration in the current working
+            // directory. If it doesn't exist, create a new one.
+            let cwd_config_path = cwd.join("vgonio-user.toml");
+            let user_config = if cwd_config_path.exists() {
+                log::info!(
+                    "Loading user configuration from cwd: {}",
+                    cwd_config_path.display()
+                );
+                let user_config_string = std::fs::read_to_string(&cwd_config_path)?;
+                let user_config: UserConfig = toml::from_str(&user_config_string)?;
+                user_config.to_absolute()
+            } else {
+                log::info!("Creating user configuration in cwd: {}", cwd.display());
+                let mut user_config = UserConfig {
+                    cache_dir: cache_dir.clone(),
+                    output_dir: cwd.clone(),
+                    data_dir: data_dir.clone(),
+                };
+                let mut file = std::fs::File::create(&cwd_config_path)?;
+                println!("Serialised user config: {}", toml::to_string(&user_config)?);
+                file.write_all(toml::to_string(&user_config)?.as_bytes())?;
+                user_config
             };
-            let user_config_file = config_dir.join("vgonio.toml");
-            std::fs::write(&user_config_file, toml::to_string(&user_config)?)?;
-
-            user_config
-        };
-
-        Ok(Config {
-            config_dir,
-            cache_dir,
-            data_files_dir,
-            user_config,
-        })
+            Ok(Self {
+                config_dir,
+                cache_dir,
+                data_dir,
+                user_config,
+                cwd,
+            })
+        }
     }
 }
 
@@ -202,6 +267,11 @@ pub struct VgonioArgs {
     /// Command to execute.
     #[clap(subcommand)]
     pub command: Option<VgonioCommand>,
+
+    /// Path to the user config file. If not specified, vgonio will
+    /// load the default config file.
+    #[clap(short, long, help = "Path to the user config file")]
+    pub config: Option<PathBuf>,
 }
 
 /// Micro-surface information that can be retrieved.
@@ -348,10 +418,10 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
         .filter_level(log_filter_from_level(log_level))
         .init();
 
-    log::info!("Initializing vgonio...");
+    log::info!("Initialising...");
 
     // Load the configuration file.
-    Config::load_config()
+    Config::load_config(args.config.as_ref())
 }
 
 /// Runs the GUI application.

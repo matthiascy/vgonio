@@ -16,7 +16,10 @@ pub enum Error {
     SerialisationError(SerialisationError),
     InvalidEmitter(&'static str),
     InvalidCollector(&'static str),
-    ConfigDirNotFound,
+    SysConfigDirNotFound,
+    SysCacheDirNotFound,
+    SysDataDirNotFound,
+    UserConfigNotFound,
 }
 
 #[derive(Debug)]
@@ -54,8 +57,17 @@ impl Display for Error {
             Error::ImageError(err) => {
                 write!(f, "Image error - {}", err)
             }
-            Error::ConfigDirNotFound => {
-                write!(f, "Config dir not found!")
+            Error::SysConfigDirNotFound => {
+                write!(f, "System configuration directory not found!")
+            }
+            Error::SysCacheDirNotFound => {
+                write!(f, "System cache directory not found!")
+            }
+            Error::SysDataDirNotFound => {
+                write!(f, "System cache directory not found!")
+            }
+            Error::UserConfigNotFound => {
+                write!(f, "Specified user configuration file not found!")
             }
             Error::SerialisationError(err) => match err {
                 SerialisationError::TomlSe(err) => {

@@ -45,6 +45,9 @@ shaderc = "0.8"
 [dev-dependencies]
 quickcheck = "1"
 
+[profile.dev]
+split-debuginfo = "unpacked"
+
 [profile.dev.build-override]
 opt-level = 3
 

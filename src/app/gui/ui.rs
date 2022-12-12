@@ -184,7 +184,7 @@ impl VgonioGui {
                     if ui.button("\u{1F4C2} Open").clicked() {
                         use rfd::AsyncFileDialog;
                         let task = AsyncFileDialog::new()
-                            .set_directory(&self.config.user_config.data_files_dir)
+                            .set_directory(&self.config.user_config.data_dir)
                             .pick_file();
                         let event_loop_proxy = self.event_loop.clone();
                         std::thread::spawn(move || {

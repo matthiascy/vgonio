@@ -38,8 +38,8 @@ impl VgonioDatafiles {
     /// config.
     pub fn load_ior_database(&mut self, config: &Config) {
         // let mut database = RefractiveIndexDatabase::new();
-        let default_path = config.data_files_dir.join("ior");
-        let user_path = config.user_config.data_files_dir.join("ior");
+        let default_path = config.data_dir.join("ior");
+        let user_path = config.user_config.data_dir.join("ior");
 
         // First load refractive indices from `VgonioConfig::data_files_dir`.
         if default_path.exists() {

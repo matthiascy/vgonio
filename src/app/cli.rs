@@ -17,7 +17,7 @@ pub const RESET: &str = "\u{001b}[0m";
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
-    log::info!("{:?}", config);
+    log::info!("{:#?}", config);
     // Configure thread pool for parallelism.
     if let Some(nthreads) = opts.nthreads {
         rayon::ThreadPoolBuilder::new()
@@ -53,9 +53,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                 .iter()
                 .map(|s| {
                     if let Ok(stripped) = s.strip_prefix("user://") {
-                        config.user_config.data_files_dir.join(stripped)
+                        config.user_config.data_dir.join(stripped)
                     } else if let Ok(stripped) = s.strip_prefix("local://") {
-                        config.data_files_dir.join(stripped)
+                        config.data_dir.join(stripped)
                     } else {
                         util::resolve_file_path(&opts.input_path, Some(s))
                     }
