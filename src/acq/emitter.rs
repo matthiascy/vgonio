@@ -34,6 +34,7 @@ pub struct Emitter {
     pub azimuth: RangeByStepSize<Radians>,
 
     /// Shape of the emitter.
+    /// The shape is defined by the region over the spherical domain.
     pub shape: RegionShape,
 
     /// Light source's spectrum.
@@ -131,7 +132,7 @@ impl Emitter {
             .collect()
     }
 
-    pub fn generate_samples(&mut self) {
+    pub fn init(&mut self) {
         // TODO
     }
 }

@@ -1,3 +1,3 @@
 cache_dir = "/home/yang/.cache/vgonio"
-output_dir = "/home/yang/Documents/repos/vgonio"
-data_dir = "/home/yang/.local/share/vgonio"
+output_dir = "../../virtual-gonio/output"
+data_dir = "../../virtual-gonio/datafiles"

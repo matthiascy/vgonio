@@ -110,8 +110,10 @@ pub fn measure_bsdf_embree_rt(
     use crate::acq::EmbreeRayTracing;
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
-    collector.generate_patches();
-    emitter.generate_samples();
+    // Generate patches for the collector.
+    collector.init();
+    // Generate rays for the emitter.
+    emitter.init();
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let (surfaces, meshes) = {
         (
@@ -197,8 +199,8 @@ pub fn measure_bsdf_grid_rt(
 
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
-    collector.generate_patches();
-    emitter.generate_samples();
+    collector.init();
+    emitter.init();
 
     let (surfaces, meshes) = {
         (

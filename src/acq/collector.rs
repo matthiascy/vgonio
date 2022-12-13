@@ -67,6 +67,10 @@ impl CollectorScheme {
 }
 
 impl Collector {
+    /// Initialise the collector.
+    /// Generate the patches of the collector.
+    pub fn init(&mut self) { self.patches = self.scheme.generate_patches(); }
+
     pub fn collect<R>(&mut self, records: R, kind: BsdfKind)
     where
         R: IntoIterator<Item = RtcRecord>,
@@ -76,8 +80,6 @@ impl Collector {
     }
 
     pub fn save_stats(&self, path: &str) { todo!("Collector::save_stats") }
-
-    pub fn generate_patches(&mut self) { self.patches = self.scheme.generate_patches(); }
 }
 
 /// Represents a patch on the spherical [`Collector`].
