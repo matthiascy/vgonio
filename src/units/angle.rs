@@ -87,8 +87,11 @@ impl<A: AngleUnit, B: AngleUnit> PartialOrd<Angle<B>> for Angle<A> {
 }
 
 impl<A: AngleUnit> Angle<A> {
+    /// Zero angle.
+    pub const ZERO: Self = Self::new(0.0);
+
     /// Create a new angle with unit.
-    pub fn new(value: f32) -> Self {
+    pub const fn new(value: f32) -> Self {
         Angle {
             value,
             unit: core::marker::PhantomData,
@@ -108,6 +111,14 @@ impl<A: AngleUnit> Angle<A> {
         format!("{}{}", self.value * A::FACTOR_TO_DEG, UDegree::SYMBOLS[1])
     }
 
+    /// Converts the angle to radians.
+    #[inline]
+    pub fn to_radian(&self) -> Angle<URadian> { Angle::new(self.value * A::FACTOR_TO_RAD) }
+
+    /// Converts the angle to degrees.
+    #[inline]
+    pub fn to_degree(&self) -> Angle<UDegree> { Angle::new(self.value * A::FACTOR_TO_DEG) }
+
     super::forward_f32_methods!(
         abs,
         "Returns the absolute value of the angle.",
@@ -125,6 +136,33 @@ impl<A: AngleUnit> Angle<A> {
         cbrt,
         "returns the cube root of the angle."
     );
+
+    #[inline]
+    pub fn clamp<B, C>(self, min: Angle<B>, max: Angle<C>) -> Self
+    where
+        B: AngleUnit,
+        C: AngleUnit,
+        Self: From<Angle<URadian>>,
+    {
+        let value = self.value * A::FACTOR_TO_RAD;
+
+        Angle::<URadian>::new(
+            value.clamp(min.value * B::FACTOR_TO_RAD, max.value * C::FACTOR_TO_RAD),
+        )
+        .into()
+    }
+}
+
+impl Angle<URadian> {
+    pub const PI: Self = Self::new(std::f32::consts::PI);
+    pub const HALF_PI: Self = Self::new(std::f32::consts::FRAC_PI_2);
+    pub const TWO_PI: Self = Self::new(std::f32::consts::PI * 2.0);
+}
+
+impl Angle<UDegree> {
+    pub const PI: Self = Self::new(180.0);
+    pub const HALF_PI: Self = Self::new(90.0);
+    pub const TWO_PI: Self = Self::new(360.0);
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
@@ -193,7 +231,7 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
 }
 
 impl Angle<URadian> {
-    /// Convert to degree.
+    /// Convert to degrees.
     pub fn in_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * UDegree::FACTOR_FROM_RAD) }
     /// Compute the sine of the angle.
     pub fn sin(&self) -> f32 { self.value.sin() }
@@ -210,7 +248,7 @@ impl Angle<URadian> {
 }
 
 impl Angle<UDegree> {
-    /// Convert to radian.
+    /// Convert to radians.
     pub fn in_radians(&self) -> Angle<URadian> { Angle::new(self.value * URadian::FACTOR_FROM_DEG) }
     pub fn sin(&self) -> f32 { self.value.to_radians().sin() }
     pub fn sinh(&self) -> f32 { self.value.to_radians().sinh() }
@@ -228,12 +266,12 @@ pub type Degrees = Angle<UDegree>;
 
 /// Helper creating a new `Angle<Radian>`.
 pub macro radians($value:expr) {
-    $crate::acq::Angle::<$crate::acq::URadian>::new($value)
+    $crate::units::Angle::<$crate::units::URadian>::new($value)
 }
 
 /// Helper creating a new `Angle<Degree>`.
 pub macro degrees($value:expr) {
-    $crate::acq::Angle::<$crate::acq::UDegree>::new($value)
+    $crate::units::Angle::<$crate::units::UDegree>::new($value)
 }
 
 impl From<Angle<UDegree>> for Angle<URadian> {

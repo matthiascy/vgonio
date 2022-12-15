@@ -1,4 +1,4 @@
-use crate::acq::Radians;
+use crate::units::Radians;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -25,6 +25,7 @@ impl SolidAngle {
     }
 }
 
+/// Helper macro to create a new `SolidAngle` from a value in `sr`.
 pub macro steradians($value:expr) {
-    $crate::acq::SolidAngle::new($value)
+    $crate::units::SolidAngle::new($value)
 }

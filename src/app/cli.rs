@@ -10,6 +10,7 @@ use crate::{
     },
     util, Error,
 };
+use crate::htfld::AxisAlignment;
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
@@ -61,7 +62,10 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     }
                 })
                 .collect::<Vec<_>>();
-            let handles = cache.load_surfaces_from_files(&to_be_loaded).unwrap();
+            // Load surfaces height field from files and cache them.
+            // TODO: reuse cached surfaces.
+            let handles = cache.load_surfaces_from_files(&to_be_loaded, Some(AxisAlignment::XZ)).unwrap();
+            // Triangulate all surfaces.
             cache.triangulate_surfaces(&handles);
             handles
         })
@@ -156,7 +160,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     measurement.incident_medium,
                     measurement.transmitted_medium,
                     surfaces_str,
-                    measurement.emitter.radius,
+                    measurement.emitter.radius(),
                     measurement.emitter.num_rays,
                     measurement.emitter.max_bounces,
                     measurement.emitter.spectrum.start,
@@ -171,33 +175,42 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     measurement.collector.radius,
                     collector_info
                 );
-                println!("    {BRIGHT_YELLOW}>{RESET} Measuring {}...", kind);
                 match measurement.sim_kind {
-                    SimulationKind::GeomOptics { method } => match method {
-                        RtcMethod::Standard => {
-                            crate::acq::bsdf::measure_bsdf_embree_rt(
-                                measurement,
-                                &cache,
-                                &db,
-                                surfaces,
-                            );
+                    SimulationKind::GeomOptics { method } => {
+                        println!(
+                            "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
+                            kind
+                        );
+                        match method {
+                            RtcMethod::Standard => {
+                                crate::acq::bsdf::measure_bsdf_embree_rt(
+                                    measurement,
+                                    &cache,
+                                    &db,
+                                    surfaces,
+                                );
+                            }
+                            RtcMethod::Grid => {
+                                crate::acq::bsdf::measure_bsdf_grid_rt(
+                                    measurement,
+                                    &cache,
+                                    &db,
+                                    surfaces,
+                                );
+                            }
                         }
-                        RtcMethod::Grid => {
-                            crate::acq::bsdf::measure_bsdf_grid_rt(
-                                measurement,
-                                &cache,
-                                &db,
-                                surfaces,
-                            );
-                        }
-                    },
+                    }
                     SimulationKind::WaveOptics => {
+                        println!(
+                            "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
+                            kind
+                        );
                         // TODO: implement
                     }
                 }
             }
             MeasurementKind::Ndf => {
-                // todo: measure ndf
+                // TODO: measure ndf
                 todo!()
             }
         };

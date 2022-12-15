@@ -2,12 +2,11 @@ use crate::{
     acq::{
         bsdf::BsdfKind,
         collector::CollectorScheme,
-        degrees,
         emitter::RegionShape,
-        metres, nanometres, radians,
         util::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
-        Collector, Emitter, Medium, Metres, Radians, RtcMethod, SolidAngle,
+        Collector, Emitter, Medium, RtcMethod,
     },
+    units::{degrees, metres, nanometres, radians, Metres, Radians, SolidAngle},
     Error,
 };
 use serde::{Deserialize, Serialize};
@@ -155,7 +154,6 @@ impl Measurement {
     pub fn validate(self) -> Result<Self, Error> {
         log::info!("Validating measurement description...");
         let emitter = &self.emitter;
-        let collector = &self.collector;
         if emitter.num_rays < 1 {
             return Err(Error::InvalidEmitter("number of rays must be at least 1"));
         }
@@ -166,7 +164,7 @@ impl Measurement {
             ));
         }
 
-        if !(emitter.radius.is_valid()
+        if !(emitter.radius().is_valid()
             && emitter.zenith.step_size > radians!(0.0)
             && emitter.azimuth.step_size > radians!(0.0))
         {
@@ -175,6 +173,42 @@ impl Measurement {
             ));
         }
 
+        match emitter.shape {
+            RegionShape::SphericalCap { zenith } => {
+                if zenith <= radians!(0.0) || zenith > degrees!(360.0) {
+                    return Err(Error::InvalidEmitter(
+                        "emitter's zenith angle must be in the range [0°, 360°]",
+                    ));
+                }
+            }
+            RegionShape::SphericalRect { zenith, azimuth } => {
+                if zenith.0 <= radians!(0.0) || zenith.1 > degrees!(360.0) {
+                    return Err(Error::InvalidEmitter(
+                        "emitter's zenith angle must be in the range [0°, 360°]",
+                    ));
+                }
+
+                if azimuth.0 <= radians!(0.0) || azimuth.1 > degrees!(360.0) {
+                    return Err(Error::InvalidEmitter(
+                        "emitter's azimuth angle must be in the range [0°, 360°]",
+                    ));
+                }
+            }
+        }
+
+        if emitter.spectrum.start < nanometres!(0.0) || emitter.spectrum.stop < nanometres!(0.0) {
+            return Err(Error::InvalidEmitter(
+                "emitter's spectrum must be in the range [0nm, ∞)",
+            ));
+        }
+
+        if emitter.spectrum.start > emitter.spectrum.stop {
+            return Err(Error::InvalidEmitter(
+                "emitter's spectrum start must be less than or equal to its end",
+            ));
+        }
+
+        let collector = &self.collector;
         if !collector.radius.is_valid() {
             return Err(Error::InvalidCollector(
                 "collector's radius must be positive",
@@ -257,7 +291,7 @@ impl Default for Measurement {
             collector: Collector {
                 radius: Radius::Auto(metres!(0.0)),
                 scheme: CollectorScheme::Partitioned {
-                    domain: SphericalDomain::UpperHemisphere,
+                    domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualArea {
                         zenith: RangeByStepCount {
                             start: degrees!(0.0).in_radians(),
@@ -279,19 +313,21 @@ impl Default for Measurement {
 
 #[test]
 fn scene_desc_serialization() {
-    use crate::acq::steradians;
+    use crate::units::steradians;
     use std::io::{Cursor, Write};
 
     let desc = Measurement {
         kind: MeasurementKind::Bsdf(BsdfKind::InPlaneBrdf),
-        sim_kind: SimulationKind::WaveOptics,
+        sim_kind: SimulationKind::GeomOptics {
+            method: RtcMethod::Standard,
+        },
         incident_medium: Medium::Air,
         transmitted_medium: Medium::Air,
         surfaces: vec![PathBuf::from("/tmp/scene.obj")],
         collector: Collector {
             radius: Radius::Auto(metres!(0.0)),
             scheme: CollectorScheme::Partitioned {
-                domain: SphericalDomain::UpperHemisphere,
+                domain: SphericalDomain::Upper,
                 partition: SphericalPartition::EqualArea {
                     zenith: RangeByStepCount {
                         start: radians!(0.0),

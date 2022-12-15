@@ -5,17 +5,25 @@ pub use numeric::*;
 pub use range::*;
 use std::fmt::Display;
 
-use crate::acq::{collector::Patch, Radians};
+use crate::{acq::collector::Patch, units::Radians};
 use serde::{Deserialize, Serialize};
 
 /// Spherical coordinate in radians.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct SphericalCoord {
+    /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the nadir.
+    /// The zenith angle is the angle between the positive z-axis and the point
+    /// on the sphere. The zenith angle is always between 0 and pi. 0 ~ pi/2 is
+    /// the upper hemisphere, pi/2 ~ pi is the lower hemisphere.
     pub zenith: Radians,
+    /// Azimuth angle (azimuthal angle) in radians. It is always between 0 and
+    /// 2pi: 0 is the positive x-axis, pi/2 is the positive y-axis, pi is the
+    /// negative x-axis, 3pi/2 is the negative y-axis.
     pub azimuth: Radians,
 }
 
 impl SphericalCoord {
+    /// Convert to a cartesian coordinate.
     pub fn into_cartesian(self) -> glam::Vec3 {
         let theta = self.zenith;
         let phi = self.azimuth;
@@ -27,33 +35,34 @@ impl SphericalCoord {
     }
 }
 
+/// The domain of the spherical coordinate.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SphericalDomain {
-    /// Only capture the upper part of the sphere.
-    UpperHemisphere,
+    /// Simulation happens only on upper part of the sphere.
+    #[serde(rename = "upper_hemisphere")]
+    Upper,
 
-    /// Only capture the lower part of the sphere.
-    LowerHemisphere,
+    /// Simulation happens only on lower part of the sphere.
+    #[serde(rename = "lower_hemisphere")]
+    Lower,
 
-    /// Capture the whole sphere.
-    WholeSphere,
+    /// Simulation happens on the whole sphere.
+    #[serde(rename = "whole_sphere")]
+    Whole,
 }
 
 impl Display for SphericalDomain {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UpperHemisphere => write!(f, "upper hemisphere"),
-            Self::LowerHemisphere => write!(f, "lower hemisphere"),
-            Self::WholeSphere => write!(f, "whole sphere"),
+            Self::Upper => write!(f, "upper hemisphere"),
+            Self::Lower => write!(f, "lower hemisphere"),
+            Self::Whole => write!(f, "whole sphere"),
         }
     }
 }
 
 impl SphericalDomain {
-    const MIN_AZIMUTH: f32 = 0.0;
-    const MAX_AZIMUTH: f32 = std::f32::consts::PI * 2.0;
-
     /// Clamps the given azimuthal and zenith angle to shape's boundaries.
     ///
     /// # Arguments
@@ -65,17 +74,33 @@ impl SphericalDomain {
     ///
     /// `(zenith, azimuth)` - clamped zenith and azimuth angles in radians.
     #[inline]
-    pub fn clamp(&self, zenith: f32, azimuth: f32) -> (f32, f32) {
+    pub fn clamp(&self, zenith: Radians, azimuth: Radians) -> (Radians, Radians) {
         let (zenith_min, zenith_max) = match self {
-            SphericalDomain::UpperHemisphere => (0.0, std::f32::consts::FRAC_PI_2),
-            SphericalDomain::LowerHemisphere => (std::f32::consts::FRAC_PI_2, std::f32::consts::PI),
-            SphericalDomain::WholeSphere => (0.0, std::f32::consts::PI),
+            SphericalDomain::Upper => (Radians::ZERO, Radians::HALF_PI),
+            SphericalDomain::Lower => (Radians::HALF_PI, Radians::PI),
+            SphericalDomain::Whole => (Radians::ZERO, Radians::PI),
         };
 
         (
             zenith.clamp(zenith_min, zenith_max),
-            azimuth.clamp(Self::MIN_AZIMUTH, Self::MAX_AZIMUTH),
+            azimuth.clamp(Radians::ZERO, Radians::TWO_PI),
         )
+    }
+
+    /// Clamps the given zenith angle to shape's boundaries.
+    pub fn clamp_zenith(&self, zenith: Radians) -> Radians {
+        let (zenith_min, zenith_max) = match self {
+            SphericalDomain::Upper => (Radians::ZERO, Radians::HALF_PI),
+            SphericalDomain::Lower => (Radians::HALF_PI, Radians::PI),
+            SphericalDomain::Whole => (Radians::ZERO, Radians::PI),
+        };
+
+        zenith.clamp(zenith_min, zenith_max)
+    }
+
+    /// Clamps the given azimuthal angle to shape's boundaries.
+    pub fn clamp_azimuth(&self, azimuth: Radians) -> Radians {
+        azimuth.clamp(Radians::ZERO, Radians::TWO_PI)
     }
 }
 
@@ -164,9 +189,9 @@ impl SphericalPartition {
 // todo: improve the implementation of this function
 impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
-    /// partition is limited by `SphericalShape`.
-    /// TODO: limit the angle range by `SphericalShape`
-    pub fn generate_patches(&self, domain: &SphericalDomain) -> Vec<Patch> {
+    /// partition is limited by `SphericalDomain`.
+    pub fn generate_patches_over_domain(&self, domain: &SphericalDomain) -> Vec<Patch> {
+        // REVIEW: this function is not very efficient, it can be improved
         match self {
             SphericalPartition::EqualAngle { zenith, azimuth } => {
                 let n_zenith = zenith.step_count();
@@ -297,4 +322,19 @@ pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
 
 pub const fn gamma_f32(n: f32) -> f32 {
     (n as f32 * MACHINE_EPSILON) / (1.0 - n as f32 * MACHINE_EPSILON)
+}
+
+#[test]
+fn spherical_domain_clamp() {
+    use crate::units::degrees;
+
+    let domain = SphericalDomain::Upper;
+    let angle = degrees!(91.0);
+    let clamped = domain.clamp_zenith(angle.into());
+    assert_eq!(clamped, degrees!(90.0));
+
+    let domain = SphericalDomain::Lower;
+    let angle = degrees!(191.0);
+    let clamped = domain.clamp_azimuth(angle.into());
+    assert_eq!(clamped, degrees!(180.0));
 }

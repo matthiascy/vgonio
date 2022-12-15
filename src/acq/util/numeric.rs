@@ -23,6 +23,7 @@ pub fn next_f32_up(f: f32) -> f32 {
     }
 }
 
+/// Bumps a floating-point value down to the next representable value.
 #[inline]
 pub fn next_f32_down(f: f32) -> f32 {
     if f.is_infinite() && f < 0.0 {

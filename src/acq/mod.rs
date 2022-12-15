@@ -11,15 +11,12 @@ pub mod measurement;
 pub mod ndf;
 mod occlusion;
 pub mod scattering;
-#[macro_use]
-mod si_units;
 pub mod util;
 
 pub use collector::{Collector, CollectorScheme, Patch};
 pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
-pub use si_units::*;
 
 pub use occlusion::*;
 use std::str::FromStr;

@@ -1,8 +1,10 @@
-use crate::acq::{
-    measurement::Radius,
-    radians, steradians,
-    util::{RangeByStepSize, SphericalCoord},
-    Nanometres, Radians, Ray, SolidAngle,
+use crate::{
+    acq::{
+        measurement::Radius,
+        util::{RangeByStepSize, SphericalCoord},
+        Ray,
+    },
+    units::{radians, steradians, Nanometres, Radians, SolidAngle},
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,14 +25,14 @@ pub struct Emitter {
     pub max_bounces: u32,
 
     /// Distance from the emitter's center to the specimen's center.
-    pub radius: Radius,
+    pub(crate) radius: Radius,
 
-    /// Inclination angle (polar angle) of emitter's possible positions in
-    /// spherical coordinates.
+    /// Inclination angle (polar angle) of emitter's possible positions (center
+    /// of the emitter) in spherical coordinates.
     pub zenith: RangeByStepSize<Radians>,
 
-    /// Azimuthal angle range of emitter's possible positions in spherical
-    /// coordinates.
+    /// Azimuthal angle range of emitter's possible positions (center of the
+    /// emitter) in spherical coordinates.
     pub azimuth: RangeByStepSize<Radians>,
 
     /// Shape of the emitter.
@@ -42,11 +44,11 @@ pub struct Emitter {
 
     /// Solid angle subtended by the emitter.
     #[serde(skip)]
-    pub solid_angle: SolidAngle,
+    pub(crate) solid_angle: SolidAngle,
 
     /// Samples generated for the patch.
     #[serde(skip)]
-    pub samples: Vec<glam::Vec3>,
+    pub(crate) samples: Vec<glam::Vec3>,
 }
 
 /// Represents the shape of a region on the surface of a sphere.
@@ -86,6 +88,7 @@ impl RegionShape {
                 steradians!(solid_angle)
             }
             Self::SphericalRect { zenith, azimuth } => {
+                // TODO: calculate solid angle of the rectangular patch.
                 todo!()
                 // let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) *
                 // (azimuth.1 - azimuth.0); steradians!
@@ -96,6 +99,59 @@ impl RegionShape {
 }
 
 impl Emitter {
+    /// Initialises the emitter.
+    pub fn init(&mut self) {
+        log::info!("Initialising emitter...");
+        use rand_distr::Distribution;
+        let num_samples = self.num_rays as usize;
+        self.samples.resize(num_samples, glam::Vec3::ZERO);
+        let mut rng = rand::thread_rng();
+        let uniform = rand_distr::Uniform::new(0.0, 1.0);
+
+        // Generates uniformly distributed samples using rejection sampling.
+        let (zenith_range, azimuth_range) = {
+            match self.shape {
+                RegionShape::SphericalCap { zenith } => {
+                    let zenith_range = 0.0..zenith.value;
+                    let azimuth_range = 0.0..(2.0 * std::f32::consts::PI);
+                    (zenith_range, azimuth_range)
+                }
+                RegionShape::SphericalRect { zenith, azimuth } => {
+                    let zenith_range = zenith.0.value..zenith.1.value;
+                    let azimuth_range = azimuth.0.value..azimuth.1.value;
+                    (zenith_range, azimuth_range)
+                }
+            }
+        };
+
+        log::info!(
+            "  - Generating {} samples in region θ: {}° ~ {}° φ: {}° ~ {}°",
+            num_samples,
+            zenith_range.start.to_degrees(),
+            zenith_range.end.to_degrees(),
+            azimuth_range.start.to_degrees(),
+            azimuth_range.end.to_degrees()
+        );
+
+        let mut i = 0;
+        while i < num_samples {
+            let phi = uniform.sample(&mut rng) * 2.0 * std::f32::consts::PI;
+            let theta = (1.0 - 2.0 * uniform.sample(&mut rng)).acos();
+            if zenith_range.contains(&theta) && azimuth_range.contains(&phi) {
+                // Height field is generated on XZ plane.
+                let x = theta.sin() * phi.cos();
+                let y = theta.sin() * phi.sin();
+                let z = theta.cos();
+                self.samples[i] = glam::Vec3::new(x, z, y);
+                i += 1;
+            }
+        }
+    }
+
+    /// Accesses the radius of the emitter.
+    pub fn radius(&self) -> Radius { self.radius }
+
+    /// Updates the radius of the emitter.
     pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
 
     /// All possible positions of the emitter.
@@ -130,10 +186,6 @@ impl Emitter {
                 Ray { o: origin, d: dir }
             })
             .collect()
-    }
-
-    pub fn init(&mut self) {
-        // TODO
     }
 }
 

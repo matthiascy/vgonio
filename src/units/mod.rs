@@ -1,3 +1,5 @@
+//! SI units.
+
 macro impl_serialization($t:ty where $unit:ident: $unit_trait:ident, #[$doc:meta]) {
     #[$doc]
     impl<$unit: $unit_trait> serde::Serialize for $t {

@@ -1,19 +1,20 @@
 ---
 kind: !bsdf in-plane-brdf
-sim_kind: wave_optics
+sim_kind: !geom_optics
+  method: standard # wave_optics
 incident_medium: air
 transmitted_medium: aluminium
 surfaces:
   - user://surfaces/Aluminium65bar100.txt
 emitter:
-  num_rays: 10
+  num_rays: 10000
   max_bounces: 4
   radius: auto
-  zenith: 0deg ~ 90 deg / 10deg
+  zenith: 0deg ~ 90 deg / 15deg
   azimuth: 0deg ~ 360deg / 120deg
   shape: !disk
-    zenith: 0 rad
-  spectrum: 380 nm ~ 780 nm / 10 nm
+    zenith: 10deg
+  spectrum: 380 nm ~ 780 nm / 400 nm
 collector:
   radius: auto
   scheme: !partitioned

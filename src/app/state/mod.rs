@@ -44,6 +44,7 @@ use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::EventLoop,
 };
+use crate::htfld::AxisAlignment;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -815,7 +816,7 @@ impl VgonioState {
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFile(path) => {
                 // TODO: deal with different file types
-                self.load_height_field(path.as_path());
+                self.load_height_field(path.as_path(), Some(AxisAlignment::XZ));
                 if !self.opened_surfaces.contains(&path) {
                     self.opened_surfaces.push(path);
                 }
@@ -937,8 +938,8 @@ impl VgonioState {
         }
     }
 
-    fn load_height_field(&mut self, path: &Path) {
-        match Heightfield::read_from_file(path, None, None) {
+    fn load_height_field(&mut self, path: &Path, alignment: Option<AxisAlignment>) {
+        match Heightfield::read_from_file(path, None, alignment) {
             Ok(mut hf) => {
                 log::info!(
                     "Heightfield loaded: {}, rows = {}, cols = {}, du = {}, dv = {}",

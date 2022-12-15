@@ -1,4 +1,4 @@
-use crate::acq::{Angle, AngleUnit, Length, LengthUnit};
+use crate::units::{Angle, AngleUnit, Length, LengthUnit};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
@@ -421,7 +421,7 @@ fn range_by_step_size_try_from_str() {
 
 #[test]
 fn range_by_step_size_try_from_str_with_angle() {
-    use crate::acq::{radians, Radians, URadian};
+    use crate::units::{radians, Radians, URadian};
     let range = RangeByStepSize::<Radians>::try_from("0.0rad ~ 1.0rad / 0.1rad").unwrap();
     assert_eq!(range.start, radians!(0.0));
     assert_eq!(range.stop, radians!(1.0));
@@ -438,7 +438,7 @@ fn range_by_step_count_try_from_str() {
 
 #[test]
 fn range_by_step_count_try_from_str_with_angle() {
-    use crate::acq::{radians, Radians};
+    use crate::units::{radians, Radians};
     let range = RangeByStepCount::<Radians>::try_from("0.0rad ~ 1.0rad, 4").unwrap();
     assert_eq!(range.start, radians!(0.0));
     assert_eq!(range.stop, radians!(1.0));

@@ -1,14 +1,14 @@
 use crate::{
     acq::{
         measurement::{Measurement, Radius},
-        metres,
         util::RangeByStepSize,
-        Collector, Emitter, Nanometres, Patch,
+        Collector, Emitter, Patch,
     },
     app::{
         cache::{Cache, SurfaceHandle, VgonioDatafiles},
         cli::{BRIGHT_YELLOW, RESET},
     },
+    units::{metres, Nanometres},
 };
 use embree::Config;
 use serde::{Deserialize, Serialize};
@@ -110,10 +110,6 @@ pub fn measure_bsdf_embree_rt(
     use crate::acq::EmbreeRayTracing;
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
-    // Generate patches for the collector.
-    collector.init();
-    // Generate rays for the emitter.
-    emitter.init();
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let (surfaces, meshes) = {
         (
@@ -122,24 +118,31 @@ pub fn measure_bsdf_embree_rt(
         )
     };
 
+    collector.init();
+    emitter.init();
+
     // Iterate over every surface.
     for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
         println!(
-            "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+            "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
         );
         let scene_id = embree_rt.create_scene();
-        // Update emitter's radius
-        if emitter.radius.is_auto() {
-            // FIXME: use surface's physical size
-            // TODO: get real size of the surface
-            emitter.set_radius(Radius::Fixed(metres!(mesh.extent.max_edge() * 2.5)));
+        // Update emitter's radius to match the surface's dimensions.
+        if emitter.radius().is_auto() {
+            // TODO: use surface's physical size
+            emitter.set_radius(Radius::Auto(metres!(mesh.extent.max_edge() * 2.5)));
         }
+        log::debug!("mesh extent: {:?}", mesh.extent);
+        log::debug!("emitter radius: {:?}", emitter.radius());
+
+        // Upload the surface's mesh to the Embree scene.
         let embree_mesh = embree_rt.create_triangle_mesh(mesh);
         let _surface_id = embree_rt.attach_geometry(scene_id, embree_mesh);
         let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
         log::debug!("spectrum samples: {:?}", spectrum);
 
+        // Load the surface's reflectance data.
         let ior_t = db
             .ior_db
             .ior_of_spectrum(desc.transmitted_medium, &spectrum)
@@ -149,11 +152,11 @@ pub fn measure_bsdf_embree_rt(
         for pos in emitter.positions() {
             let rays = emitter.emit_rays(pos);
             log::debug!(
-                "emitted {} rays with direction {} from position {} {}",
+                "emitted {} rays with direction {} from position {}° {}°",
                 rays.len(),
                 rays[0].d,
-                pos.zenith,
-                pos.azimuth
+                pos.zenith.in_degrees().value(),
+                pos.azimuth.in_degrees().value()
             );
 
             // Populate embree ray stream with generated rays.
@@ -176,12 +179,14 @@ pub fn measure_bsdf_embree_rt(
 
             println!("first hit count: {}", filtered.len());
 
-            // TODO:
-            // let records = filtered.iter().filter_map(|i| {
-            //     let ray = Ray::new(ray_hit.ray.org(*i).into(),
-            // ray_hit.ray.dir(*i).into());     embree_rt.
-            // trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
-            // });
+            /*
+            TODO:
+            let records = filtered.iter().filter_map(|i| {
+                let ray = Ray::new(ray_hit.ray.org(*i).into(),
+            ray_hit.ray.dir(*i).into());     embree_rt.
+            trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
+            });
+            */
 
             // collector.collect(records, BsdfKind::InPlaneBrdf);
         }
@@ -215,10 +220,10 @@ pub fn measure_bsdf_grid_rt(
             "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
         );
-        if emitter.radius.is_auto() {
+        if emitter.radius().is_auto() {
             // fixme: use surface's physical size
             // TODO: get real size of the surface
-            emitter.set_radius(Radius::Fixed(metres!(mesh.extent.max_edge() * 2.5)));
+            emitter.set_radius(Radius::Auto(metres!(mesh.extent.max_edge() * 2.5)));
         }
         let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
         let ior_t = db

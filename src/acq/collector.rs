@@ -1,10 +1,14 @@
-use crate::acq::{
-    bsdf::BsdfKind,
-    emitter::RegionShape,
-    measurement::Radius,
-    util::{RangeByStepSize, SphericalDomain, SphericalPartition},
-    Radians, RtcRecord, SolidAngle,
+use crate::{
+    acq::{
+        bsdf::BsdfKind,
+        emitter::RegionShape,
+        measurement::Radius,
+        util::{RangeByStepSize, SphericalDomain, SphericalPartition},
+        RtcRecord,
+    },
+    units::{Radians, SolidAngle},
 };
+
 use serde::{Deserialize, Serialize};
 
 /// Description of a collector.
@@ -23,7 +27,8 @@ pub struct Collector {
     /// Strategy for data collection.
     pub scheme: CollectorScheme,
 
-    /// Partitioned patches of the collector.
+    /// Partitioned patches of the collector, generated only if the
+    /// `scheme` is `CollectorScheme::Paritioned`.
     #[serde(skip)]
     pub patches: Option<Vec<Patch>>,
 }
@@ -55,27 +60,25 @@ pub enum CollectorScheme {
     },
 }
 
-impl CollectorScheme {
-    /// Generate the patches of the collector.
-    pub fn generate_patches(&self) -> Option<Vec<Patch>> {
-        match self {
-            Self::Partitioned { domain, partition } => Some(partition.generate_patches(domain)),
-            // TODO: implement
-            Self::Individual { .. } => None,
-        }
-    }
-}
-
 impl Collector {
     /// Initialise the collector.
-    /// Generate the patches of the collector.
-    pub fn init(&mut self) { self.patches = self.scheme.generate_patches(); }
+    pub fn init(&mut self) {
+        log::info!("Initialising collector...");
+        // Generate patches of the collector if the scheme is partitioned.
+        self.patches = match self.scheme {
+            CollectorScheme::Partitioned { domain, partition } => {
+                Some(partition.generate_patches_over_domain(&domain))
+            }
+            CollectorScheme::Individual { .. } => None,
+        };
+    }
 
     pub fn collect<R>(&mut self, records: R, kind: BsdfKind)
     where
         R: IntoIterator<Item = RtcRecord>,
         <<R as IntoIterator>::IntoIter as Iterator>::Item: core::fmt::Debug,
     {
+        // TODO:
         todo!("Collector::collect")
     }
 

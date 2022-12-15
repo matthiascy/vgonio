@@ -18,6 +18,7 @@ mod io;
 pub mod isect;
 mod math;
 mod mesh;
+pub mod units;
 mod util;
 
 use crate::error::Error;

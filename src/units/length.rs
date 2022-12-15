@@ -303,27 +303,27 @@ pub type Nanometres = Length<UNanometre>;
 
 /// Macro for creating a new length type in metres.
 pub macro metres($val:expr) {
-    $crate::acq::Length::<$crate::acq::UMetre>::new($val)
+    $crate::units::Length::<$crate::units::UMetre>::new($val)
 }
 
 /// Macro for creating a new length type in centimetres.
 pub macro centimetres($val:expr) {
-    $crate::acq::Length::<$crate::acq::UCentimetre>::new($val)
+    $crate::units::Length::<$crate::units::UCentimetre>::new($val)
 }
 
 /// Macro for creating a new length type in millimetres.
 pub macro millimetres($val:expr) {
-    $crate::acq::Length::<$crate::acq::UMillimetre>::new($val)
+    $crate::units::Length::<$crate::units::UMillimetre>::new($val)
 }
 
 /// Macro for creating a new length type in micrometres.
 pub macro micrometres($val:expr) {
-    $crate::acq::Length::<$crate::acq::UMicrometre>::new($val)
+    $crate::units::Length::<$crate::units::UMicrometre>::new($val)
 }
 
 /// Macro for creating a new length type in nanometres.
 pub macro nanometres($val:expr) {
-    $crate::acq::Length::<$crate::acq::UNanometre>::new($val)
+    $crate::units::Length::<$crate::units::UNanometre>::new($val)
 }
 
 macro impl_conversion($from:ident => $($to:ident, $factor:expr);*) {

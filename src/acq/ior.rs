@@ -1,4 +1,7 @@
-use crate::acq::{nanometres, Length, LengthUnit, Medium, Nanometres};
+use crate::{
+    acq::Medium,
+    units::{nanometres, Length, LengthUnit, Nanometres},
+};
 use std::{cmp::Ordering, collections::HashMap, path::Path};
 
 // todo: merge ior db into vgonio db

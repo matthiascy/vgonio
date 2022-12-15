@@ -128,13 +128,14 @@ impl Cache {
     pub fn load_surfaces_from_files(
         &mut self,
         surfaces_paths: &[PathBuf],
+        alignment: Option<AxisAlignment>,
     ) -> Result<Vec<SurfaceHandle>, Error> {
         use std::collections::hash_map::Entry;
         let mut loaded = vec![];
         for path in surfaces_paths {
             let path_string = path.to_string_lossy().to_string();
             if let Entry::Vacant(e) = self.surfaces.entry(path_string.clone()) {
-                let heightfield = Heightfield::read_from_file(path, None, Some(AxisAlignment::XZ))?;
+                let heightfield = Heightfield::read_from_file(path, None, alignment)?;
                 loaded.push(SurfaceHandle {
                     uuid: heightfield.uuid,
                     path: path.clone(),
