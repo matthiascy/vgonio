@@ -18,6 +18,7 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
+    /// Requests necessary resources to use the GPU.
     pub async fn new(window: &winit::window::Window) -> Self {
         let win_size = window.inner_size();
         // Create instance handle to GPU
@@ -28,7 +29,7 @@ impl GpuContext {
         // Physical device: handle to actual graphics card.
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
             })
@@ -81,6 +82,7 @@ impl GpuContext {
             width: win_size.width,
             height: win_size.height,
             present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
         surface.configure(&device, &surface_config);
 

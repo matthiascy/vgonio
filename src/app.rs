@@ -2,22 +2,11 @@ use crate::error::Error;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, path::PathBuf};
-use winit::{
-    dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoopBuilder},
-    window::WindowBuilder,
-};
 
 pub mod cache;
 pub mod cli;
+pub mod gfx;
 pub(crate) mod gui;
-pub mod state;
-
-/// Initial window width.
-const WIN_INITIAL_WIDTH: u32 = 1600;
-/// Initial window height.
-const WIN_INITIAL_HEIGHT: u32 = 900;
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -32,7 +21,7 @@ pub struct Config {
     pub data_dir: std::path::PathBuf,
 
     /// Current working directory (where the user started the program).
-    cwd: std::path::PathBuf,
+    pub cwd: std::path::PathBuf,
 
     /// Path to the user-defined configuration.
     pub user_config: UserConfig,
@@ -422,90 +411,4 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
 
     // Load the configuration file.
     Config::load_config(args.config.as_ref())
-}
-
-/// Runs the GUI application.
-pub fn launch_gui(config: Config) -> Result<(), Error> {
-    use crate::app::gui::VgonioEvent;
-    use state::VgonioState;
-
-    let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
-
-    let window = WindowBuilder::new()
-        .with_decorations(true)
-        .with_resizable(true)
-        .with_transparent(false)
-        .with_inner_size(PhysicalSize {
-            width: WIN_INITIAL_WIDTH,
-            height: WIN_INITIAL_HEIGHT,
-        })
-        .with_title("vgonio")
-        .build(&event_loop)
-        .unwrap();
-
-    let mut vgonio = pollster::block_on(VgonioState::new(config, &window, &event_loop))?;
-
-    let mut last_frame_time = std::time::Instant::now();
-
-    event_loop.run(move |event, _, control_flow| {
-        let now = std::time::Instant::now();
-        let dt = now - last_frame_time;
-        last_frame_time = now;
-
-        match event {
-            Event::UserEvent(VgonioEvent::Quit) => {
-                *control_flow = ControlFlow::Exit;
-            }
-            Event::UserEvent(event) => vgonio.handle_user_event(event),
-            Event::WindowEvent {
-                window_id,
-                ref event,
-            } if window_id == window.id() => {
-                if !vgonio.handle_input(event) {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-
-                        WindowEvent::Resized(new_size) => vgonio.resize(*new_size),
-
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            vgonio.resize(**new_inner_size);
-                        }
-
-                        _ => {}
-                    }
-                }
-            }
-
-            Event::RedrawRequested(window_id) if window_id == window.id() => {
-                vgonio.update(dt);
-                match vgonio.render(&window) {
-                    Ok(_) => {}
-                    // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => vgonio.resize(PhysicalSize {
-                        width: vgonio.surface_width(),
-                        height: vgonio.surface_height(),
-                    }),
-                    // The system is out of memory, we should quit
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
-                }
-            }
-
-            Event::MainEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually request it.
-                window.request_redraw()
-            }
-
-            _ => {}
-        }
-    })
-}
-
-/// Execute a vgonio subcommand.
-pub fn execute_command(cmd: VgonioCommand, config: Config) -> Result<(), Error> {
-    match cmd {
-        VgonioCommand::Measure(opts) => cli::measure(opts, config),
-        VgonioCommand::Extract(opts) => cli::extract(opts, config),
-    }
 }

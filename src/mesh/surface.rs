@@ -13,8 +13,8 @@
 //!   - Visible line
 
 use crate::{
+    app::gfx::MeshView,
     error::Error,
-    gfx::MeshView,
     htfld::Heightfield,
     isect::Aabb,
     math::Vec3,

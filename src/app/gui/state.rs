@@ -6,12 +6,12 @@ mod input;
 
 pub use input::InputState;
 
-use crate::{
-    app::gui::{GuiContext, VgonioEvent, VgonioGui, WindowSize},
+use crate::app::{
     gfx::{
         GpuContext, MeshView, RdrPass, SizedBuffer, Texture, VertexLayout,
         DEFAULT_BIND_GROUP_LAYOUT_DESC,
     },
+    gui::{GuiContext, VgonioEvent, VgonioGui, WindowSize},
 };
 use camera::CameraState;
 
@@ -19,12 +19,12 @@ use crate::{
     acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass, Ray, RtcMethod},
     app::{
         cache::{Cache, VgonioDatafiles},
+        gfx::camera::{Camera, Projection, ProjectionKind},
         gui::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger},
         Config,
     },
     error::Error,
-    gfx::camera::{Camera, Projection, ProjectionKind},
-    htfld::Heightfield,
+    htfld::{AxisAlignment, Heightfield},
     mesh::{TriangleMesh, TriangulationMethod},
 };
 use glam::{Mat4, Vec3};
@@ -44,7 +44,6 @@ use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::EventLoop,
 };
-use crate::htfld::AxisAlignment;
 
 const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -203,7 +202,7 @@ impl DebugState {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("debug-drawing-rays-shader"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/wgsl/rays.wgsl").into(),
+                    include_str!("../gui/assets/shaders/wgsl/rays.wgsl").into(),
                 ),
             });
         let prim_shader_module = ctx
@@ -211,7 +210,7 @@ impl DebugState {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("debug-drawing-prim-shader"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/wgsl/prim.wgsl").into(),
+                    include_str!("../gui/assets/shaders/wgsl/prim.wgsl").into(),
                 ),
             });
         let bind_group_layout =
@@ -388,7 +387,7 @@ impl DebugState {
     }
 }
 
-pub struct VgonioState {
+pub struct VgonioGuiState {
     gpu_ctx: GpuContext,
     gui_ctx: GuiContext,
 
@@ -406,7 +405,10 @@ pub struct VgonioState {
 
     input: InputState,
     camera: CameraState,
+
+    /// Different pipelines with its binding groups used for rendering.
     passes: HashMap<&'static str, RdrPass>,
+
     depth_map: DepthMap,
     debug_drawing: DebugState,
     debug_drawing_enabled: bool,
@@ -431,7 +433,7 @@ pub struct VgonioState {
     pub surface_visible: bool,
 }
 
-impl VgonioState {
+impl VgonioGuiState {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
         config: Config,
@@ -546,7 +548,7 @@ impl VgonioState {
     }
 
     pub fn handle_input(&mut self, event: &WindowEvent) -> bool {
-        if !self.gui_ctx.handle_event(event) {
+        if !self.gui_ctx.handle_event(event).consumed {
             match event {
                 WindowEvent::KeyboardInput {
                     input:
@@ -670,12 +672,15 @@ impl VgonioState {
         self.input.cursor_delta = [0.0, 0.0];
     }
 
+    /// Render the frame to the surface.
     pub fn render(&mut self, window: &winit::window::Window) -> Result<(), wgpu::SurfaceError> {
+        // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.gpu_ctx.surface.get_current_texture()?;
+        // Get a `TextureView` to the output frame's color attachment.
         let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
+        // Command encoders for the current frame.
         let mut encoders = [
             self.gpu_ctx
                 .device
@@ -696,11 +701,13 @@ impl VgonioState {
 
         if self.gui.current_workspace_name() == "Simulation" {
             let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
+                label: Some("Main Render Pass"),
                 color_attachments: &[Some(
                     // This is what [[location(0)]] in the fragment shader targets
                     wgpu::RenderPassColorAttachment {
                         view: &output_view,
+                        // This is the texture that will receive the resolved output; will be the
+                        // same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -714,7 +721,6 @@ impl VgonioState {
                     },
                 )],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    // view: &self.depth_attachment.view,
                     view: &self.depth_map.depth_attachment.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
@@ -765,8 +771,9 @@ impl VgonioState {
             render_pass.set_vertex_buffer(0, self.debug_drawing.prim_vert_buffer.slice(..));
             render_pass.draw(0..3, 0..1)
         }
+
+        // Render the UI to the output frame.
         {
-            // Record UI
             let ui_start_time = Instant::now();
             self.gui_ctx.take_input(window);
             self.gui_ctx.begin_frame();
@@ -802,10 +809,12 @@ impl VgonioState {
                 .unwrap();
         }
 
+        // Submit the command buffers to the GPU.
         self.gpu_ctx.queue.submit(encoders.map(|enc| enc.finish()));
 
         self.depth_map.copy_to_buffer(&self.gpu_ctx);
 
+        // Present the frame to the screen.
         output_frame.present();
 
         Ok(())
@@ -832,7 +841,7 @@ impl VgonioState {
                 self.depth_map.copy_to_buffer(&self.gpu_ctx);
                 self.gui
                     .tools
-                    .get_tool::<VisualDebugger>("visual_debugger")
+                    .get_tool::<VisualDebugger>("Visual Debugger")
                     .unwrap()
                     .shadow_map_pane
                     .update_depth_map(
@@ -1135,7 +1144,7 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("height_field_shader_module"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("../assets/shaders/wgsl/heightfield.wgsl").into(),
+                include_str!("../gui/assets/shaders/wgsl/heightfield.wgsl").into(),
             ),
         });
 
@@ -1251,7 +1260,7 @@ fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
     // frag.spv"));
     let grid_shader = ctx
         .device
-        .create_shader_module(wgpu::include_wgsl!("../assets/shaders/wgsl/grid.wgsl"));
+        .create_shader_module(wgpu::include_wgsl!("../gui/assets/shaders/wgsl/grid.wgsl"));
     let bind_group_layout = ctx
         .device
         .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
@@ -1266,7 +1275,7 @@ fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("grid_uniform_buffer"),
-            contents: bytemuck::bytes_of(&crate::gfx::VisualGridUniforms::default()),
+            contents: bytemuck::bytes_of(&crate::app::gfx::VisualGridUniforms::default()),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
     let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {

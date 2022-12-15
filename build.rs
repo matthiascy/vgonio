@@ -1,5 +1,5 @@
-const SPIRV_DST_PATH: &str = "src/app/assets/shaders/spirv";
-const GLSL_SRC_PATH: &str = "src/app/assets/shaders/glsl";
+const SPIRV_DST_PATH: &str = "src/app/gui/assets/shaders/spirv";
+const GLSL_SRC_PATH: &str = "src/app/gui/assets/shaders/glsl";
 const GLSL_SRC_FILES: [&str; 6] = [
     "src/app/assets/shaders/glsl/grid.vert",
     "src/app/assets/shaders/glsl/grid.frag",
@@ -50,7 +50,7 @@ fn main() {
                     match spirv {
                         Ok(compiled) => {
                             let output_filepath =
-                                format!("src/app/assets/shaders/spirv/{}.spv", filename);
+                                format!("src/app/gui/assets/shaders/spirv/{}.spv", filename);
                             match std::fs::write(&output_filepath, compiled.as_binary_u8()) {
                                 Ok(_) => {}
                                 Err(err) => {

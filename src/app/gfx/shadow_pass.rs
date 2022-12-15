@@ -1,6 +1,8 @@
 use crate::{
-    app::state::remap_depth,
-    gfx::{GpuContext, RdrPass, Texture},
+    app::{
+        gfx::{GpuContext, RdrPass, Texture},
+        gui::state::remap_depth,
+    },
     Error,
 };
 use bytemuck::{Pod, Zeroable};
@@ -93,7 +95,7 @@ impl ShadowPass {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("shadow_pass_shader_module"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../app/assets/shaders/wgsl/shadow_pass.wgsl").into(),
+                    include_str!("../gui/assets/shaders/wgsl/shadow_pass.wgsl").into(),
                 ),
             });
         let sampler = shader_accessible.then(|| {

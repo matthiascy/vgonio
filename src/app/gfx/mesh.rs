@@ -1,5 +1,5 @@
 use crate::{
-    gfx::VertexLayout,
+    app::gfx::VertexLayout,
     htfld::{regular_triangulation, Heightfield},
     isect::Aabb,
     mesh::TriangleMesh,

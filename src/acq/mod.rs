@@ -22,7 +22,7 @@ pub use occlusion::*;
 use std::str::FromStr;
 
 use crate::{
-    gfx::camera::{Projection, ProjectionKind},
+    app::gfx::camera::{Projection, ProjectionKind},
     htfld::{regular_triangulation, Heightfield},
     isect::Aabb,
     Error,

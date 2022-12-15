@@ -12,7 +12,6 @@ extern crate core;
 pub mod acq;
 mod app;
 mod error;
-mod gfx;
 pub mod htfld;
 mod io;
 pub mod isect;
@@ -43,7 +42,7 @@ pub fn run() -> Result<(), Error> {
     let config = app::init(&args, launch_time)?;
 
     match args.command {
-        None => app::launch_gui(config),
-        Some(cmd) => app::execute_command(cmd, config),
+        None => app::gui::launch(config),
+        Some(cmd) => app::cli::execute(cmd, config),
     }
 }

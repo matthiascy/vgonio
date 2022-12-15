@@ -6,15 +6,23 @@ use crate::{
     },
     app::{
         cache::{Cache, VgonioDatafiles},
-        Config, ExtractOptions, MeasureOptions,
+        Config, ExtractOptions, MeasureOptions, VgonioCommand,
     },
+    htfld::AxisAlignment,
     util, Error,
 };
-use crate::htfld::AxisAlignment;
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
 pub const RESET: &str = "\u{001b}[0m";
+
+/// The main entry point for vgonio CLI.
+pub fn execute(cmd: VgonioCommand, config: Config) -> Result<(), Error> {
+    match cmd {
+        VgonioCommand::Measure(opts) => measure(opts, config),
+        VgonioCommand::Extract(opts) => extract(opts, config),
+    }
+}
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
@@ -64,7 +72,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                 .collect::<Vec<_>>();
             // Load surfaces height field from files and cache them.
             // TODO: reuse cached surfaces.
-            let handles = cache.load_surfaces_from_files(&to_be_loaded, Some(AxisAlignment::XZ)).unwrap();
+            let handles = cache
+                .load_surfaces_from_files(&to_be_loaded, Some(AxisAlignment::XZ))
+                .unwrap();
             // Triangulate all surfaces.
             cache.triangulate_surfaces(&handles);
             handles

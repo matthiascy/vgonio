@@ -1,6 +1,6 @@
 use crate::{
-    app::state::remap_depth,
-    gfx::{GpuContext, RdrPass, Texture},
+    app::gui::state::remap_depth,
+    app::gfx::{GpuContext, RdrPass, Texture},
     Error,
 };
 use bytemuck::{Pod, Zeroable};
@@ -109,10 +109,10 @@ impl OcclusionEstimationPass {
                 push_constant_ranges: &[],
             });
         let vert_shader = ctx.device.create_shader_module(include_spirv!(
-            "../app/assets/shaders/spirv/geom_term.vert.spv"
+            "../app/gui/assets/shaders/spirv/geom_term.vert.spv"
         ));
         let frag_shader = ctx.device.create_shader_module(include_spirv!(
-            "../app/assets/shaders/spirv/geom_term.frag.spv"
+            "../app/gui/assets/shaders/spirv/geom_term.frag.spv"
         ));
         let depth_attachment = Texture::create_depth_texture(
             &ctx.device,

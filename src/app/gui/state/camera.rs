@@ -1,5 +1,5 @@
 use super::InputState;
-use crate::gfx::camera::{
+use crate::app::gfx::camera::{
     Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind,
 };
 

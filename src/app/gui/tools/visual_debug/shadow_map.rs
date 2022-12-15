@@ -1,9 +1,6 @@
-use crate::{
-    app::{
-        gui::{GuiContext, VgonioEvent},
-        state::remap_depth,
-    },
+use crate::app::{
     gfx::GpuContext,
+    gui::{state::remap_depth, GuiContext, VgonioEvent},
 };
 use egui::{Sense, TextureFilter};
 use winit::event_loop::EventLoopProxy;
@@ -73,7 +70,10 @@ impl ShadowMapPane {
                 [IMG_WIDTH, IMG_HEIGHT],
                 self.depth_map_image.as_flat_samples().as_slice(),
             ),
-            TextureFilter::Linear,
+            egui::TextureOptions {
+                minification: TextureFilter::Nearest,
+                magnification: TextureFilter::Nearest,
+            },
         ));
     }
 }

@@ -1,11 +1,15 @@
 use egui::epaint::Primitive;
+use egui_winit::EventResponse;
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap},
     num::NonZeroU32,
 };
 
-use crate::{app::gui::VgonioEvent, error::Error, gfx::SizedBuffer};
+use crate::{
+    app::{gfx::SizedBuffer, gui::VgonioEvent},
+    error::Error,
+};
 use wgpu::util::DeviceExt;
 
 /// Enum for selecting the right buffer type.
@@ -99,7 +103,7 @@ impl GuiContext {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("ui_shader_module"),
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                    "../assets/shaders/wgsl/ui.wgsl"
+                    "../gui/assets/shaders/wgsl/ui.wgsl"
                 ))),
             })
         };
@@ -258,7 +262,7 @@ impl GuiContext {
 
     pub fn begin_frame(&mut self) { self.egui_context.begin_frame(self.egui_input.take()); }
 
-    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) -> EventResponse {
         self.egui_state.on_event(&self.egui_context, event)
     }
 
@@ -428,7 +432,7 @@ impl GuiContext {
                         image.pixels.len(),
                         "Mismatch between texture size and texel count"
                     );
-                    Cow::Owned(image.srgba_pixels(1.0).collect::<Vec<_>>())
+                    Cow::Owned(image.srgba_pixels(Some(1.0)).collect::<Vec<_>>())
                 }
             };
 
