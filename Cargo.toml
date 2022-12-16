@@ -6,6 +6,9 @@ edition = "2021"
 build = "build.rs"
 description = "Microscopic level light transport simulation."
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 cfg-if = "1"
 image = "0.24"
@@ -28,7 +31,7 @@ egui_demo_lib = "0.20.0"
 egui-winit = { version = "0.20", default-features = false }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "main" }
 futures-intrusive = "0.5"
-rfd = "0.10"
+rfd = { version = "0.10", features = ["file-handle-inner"] }
 rayon = "1.5"
 chrono = "0.4"
 dirs = "4.0"
@@ -38,6 +41,14 @@ rand = "0.8"
 rand_distr = "0.4"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 paste = "1.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1.6"
+console_log = "0.2.0"
+wgpu = { version = "0.14", features = ["webgl", "spirv"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4.30"
+web-sys = { version = "0.3", features = ["Document", "Window", "Element"] }
 
 [build-dependencies]
 shaderc = "0.8"

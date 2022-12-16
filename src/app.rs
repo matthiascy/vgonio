@@ -412,3 +412,9 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
     // Load the configuration file.
     Config::load_config(args.config.as_ref())
 }
+
+#[cfg(target_arch = "wasm32")]
+pub fn init_wasm() -> Result<(), Error> {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    console_log::init_with_level(log::Level::Warn).map_err(|_| Error::WasmConsoleLogInitFailed)
+}

@@ -170,131 +170,135 @@ impl VgonioGui {
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
-        egui::menu::bar(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                {
-                    ui.menu_button("\u{1F4C4} New", |ui| {
-                        if ui.button("General").clicked() {
-                            println!("TODO: new general file")
-                        }
-                        if ui.button("Height field").clicked() {
-                            println!("TODO: new height field");
-                        }
-                    });
-                    if ui.button("\u{1F4C2} Open").clicked() {
-                        use rfd::AsyncFileDialog;
-                        let task = AsyncFileDialog::new()
-                            .set_directory(&self.config.user_config.data_dir)
-                            .pick_file();
-                        let event_loop_proxy = self.event_loop.clone();
-                        std::thread::spawn(move || {
-                            pollster::block_on(async {
-                                let file = task.await;
-                                if let Some(file) = file {
-                                    if event_loop_proxy
-                                        .send_event(VgonioEvent::OpenFile(file.path().into()))
-                                        .is_err()
-                                    {
-                                        log::warn!("[EVENT] Failed to send OpenFile event");
+        // FIXME: temporarily disabled when using the web backend.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    {
+                        ui.menu_button("\u{1F4C4} New", |ui| {
+                            if ui.button("General").clicked() {
+                                println!("TODO: new general file")
+                            }
+                            if ui.button("Height field").clicked() {
+                                println!("TODO: new height field");
+                            }
+                        });
+                        if ui.button("\u{1F4C2} Open").clicked() {
+                            use rfd::AsyncFileDialog;
+                            let task = AsyncFileDialog::new()
+                                .set_directory(&self.config.user_config.data_dir)
+                                .pick_file();
+                            let event_loop_proxy = self.event_loop.clone();
+                            std::thread::spawn(move || {
+                                pollster::block_on(async {
+                                    let file_handle = task.await;
+                                    if let Some(hd) = file_handle {
+                                        if event_loop_proxy
+                                            .send_event(VgonioEvent::OpenFile(hd))
+                                            .is_err()
+                                        {
+                                            log::warn!("[EVENT] Failed to send OpenFile event");
+                                        }
                                     }
+                                })
+                            });
+                        }
+                        ui.menu_button("\u{1F4DC} Open Recent", |ui| {
+                            for i in 0..10 {
+                                if ui.button(format!("item {}", i)).clicked() {
+                                    println!("TODO: open item {}", i);
                                 }
-                            })
+                            }
                         });
                     }
-                    ui.menu_button("\u{1F4DC} Open Recent", |ui| {
-                        for i in 0..10 {
-                            if ui.button(format!("item {}", i)).clicked() {
-                                println!("TODO: open item {}", i);
+
+                    ui.separator();
+
+                    {
+                        if ui.button("\u{1F4E9} Save").clicked() {
+                            println!("TODO: save");
+                        }
+                        if ui.button("     Save As").clicked() {
+                            println!("TODO: save as");
+                        }
+                        if ui.button("     Save Copy").clicked() {
+                            println!("TODO: save copy");
+                        }
+                    }
+
+                    ui.separator();
+
+                    {
+                        ui.menu_button("     Clean up", |ui| {
+                            ui.spacing();
+                            if ui.button("Cache").clicked() {
+                                println!("TODO: clear cache");
                             }
+                        });
+                    }
+
+                    ui.separator();
+
+                    if ui.button("     Quit").clicked()
+                        && self.event_loop.send_event(VgonioEvent::Quit).is_err()
+                    {
+                        log::warn!("[EVENT] Failed to send Quit event.");
+                    }
+                });
+                ui.menu_button("Edit", |ui| {
+                    {
+                        if ui.button("     Undo").clicked() {
+                            println!("TODO: undo");
                         }
-                    });
-                }
-
-                ui.separator();
-
-                {
-                    if ui.button("\u{1F4E9} Save").clicked() {
-                        println!("TODO: save");
-                    }
-                    if ui.button("     Save As").clicked() {
-                        println!("TODO: save as");
-                    }
-                    if ui.button("     Save Copy").clicked() {
-                        println!("TODO: save copy");
-                    }
-                }
-
-                ui.separator();
-
-                {
-                    ui.menu_button("     Clean up", |ui| {
-                        ui.spacing();
-                        if ui.button("Cache").clicked() {
-                            println!("TODO: clear cache");
+                        if ui.button("     Redo").clicked() {
+                            println!("TODO: file");
                         }
-                    });
+                    }
+
+                    ui.separator();
+
+                    if ui.button("\u{2699} Preferences").clicked() {
+                        println!("TODO: open preferences window");
+                    }
+                });
+                ui.menu_button("Tools", |ui| {
+                    if ui.button("\u{1F4D8} Console").clicked() {
+                        println!("TODO: open console window");
+                    }
+                    if ui.button("Plot").clicked() {
+                        self.tools.toggle("Plot");
+                    }
+                    if ui.button("Visual Debugger").clicked() {
+                        self.tools.toggle("Visual Debugger");
+                    }
+                    if ui.button("Scratch").clicked() {
+                        self.tools.toggle("Scratch");
+                    }
+                });
+                ui.menu_button("Help", |ui| {
+                    if ui.button("\u{1F4DA} Docs").clicked() {
+                        println!("TODO: docs");
+                    }
+                    if ui.button("     About").clicked() {
+                        println!("TODO: about");
+                    }
+                });
+                ui.separator();
+
+                for (ws_name, ws) in self.workspaces.iter_mut() {
+                    if ui
+                        .selectable_label(self.selected_workspace == ws_name, ws.name())
+                        .clicked()
+                    {
+                        self.selected_workspace = ws_name.to_owned();
+                        ui.output().open_url(format!("#{}", ws_name));
+                    }
                 }
 
                 ui.separator();
-
-                if ui.button("     Quit").clicked()
-                    && self.event_loop.send_event(VgonioEvent::Quit).is_err()
-                {
-                    log::warn!("[EVENT] Failed to send Quit event.");
-                }
+                egui::widgets::global_dark_light_mode_switch(ui);
             });
-            ui.menu_button("Edit", |ui| {
-                {
-                    if ui.button("     Undo").clicked() {
-                        println!("TODO: undo");
-                    }
-                    if ui.button("     Redo").clicked() {
-                        println!("TODO: file");
-                    }
-                }
-
-                ui.separator();
-
-                if ui.button("\u{2699} Preferences").clicked() {
-                    println!("TODO: open preferences window");
-                }
-            });
-            ui.menu_button("Tools", |ui| {
-                if ui.button("\u{1F4D8} Console").clicked() {
-                    println!("TODO: open console window");
-                }
-                if ui.button("Plot").clicked() {
-                    self.tools.toggle("Plot");
-                }
-                if ui.button("Visual Debugger").clicked() {
-                    self.tools.toggle("Visual Debugger");
-                }
-                if ui.button("Scratch").clicked() {
-                    self.tools.toggle("Scratch");
-                }
-            });
-            ui.menu_button("Help", |ui| {
-                if ui.button("\u{1F4DA} Docs").clicked() {
-                    println!("TODO: docs");
-                }
-                if ui.button("     About").clicked() {
-                    println!("TODO: about");
-                }
-            });
-            ui.separator();
-
-            for (ws_name, ws) in self.workspaces.iter_mut() {
-                if ui
-                    .selectable_label(self.selected_workspace == ws_name, ws.name())
-                    .clicked()
-                {
-                    self.selected_workspace = ws_name.to_owned();
-                    ui.output().open_url(format!("#{}", ws_name));
-                }
-            }
-
-            ui.separator();
-            egui::widgets::global_dark_light_mode_switch(ui);
-        });
+        }
     }
 }

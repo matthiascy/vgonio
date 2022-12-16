@@ -823,16 +823,25 @@ impl VgonioGuiState {
     pub fn handle_user_event(&mut self, event: VgonioEvent) {
         match event {
             VgonioEvent::RequestRedraw => {}
-            VgonioEvent::OpenFile(path) => {
-                // TODO: deal with different file types
-                self.load_height_field(path.as_path(), Some(AxisAlignment::XZ));
-                if !self.opened_surfaces.contains(&path) {
-                    self.opened_surfaces.push(path);
+            VgonioEvent::OpenFile(handle) => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    // TODO: process the file
                 }
-                self.gui
-                    .workspaces
-                    .simulation
-                    .update_surface_list(&self.opened_surfaces);
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    // TODO: maybe not use the String here?
+                    let path = handle.path().to_owned();
+                    // TODO: deal with different file types
+                    self.load_height_field(&path, Some(AxisAlignment::XZ));
+                    if !self.opened_surfaces.contains(&path) {
+                        self.opened_surfaces.push(path);
+                    }
+                    self.gui
+                        .workspaces
+                        .simulation
+                        .update_surface_list(&self.opened_surfaces);
+                }
             }
             VgonioEvent::ToggleGrid => {
                 self.visual_grid_enabled = !self.visual_grid_enabled;

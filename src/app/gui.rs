@@ -34,7 +34,7 @@ const WIN_INITIAL_HEIGHT: u32 = 900;
 pub enum VgonioEvent {
     Quit,
     RequestRedraw,
-    OpenFile(std::path::PathBuf),
+    OpenFile(rfd::FileHandle),
     ToggleGrid,
     UpdateSurfaceScaleFactor(f32),
     UpdateDepthMap,
@@ -53,9 +53,9 @@ pub enum VgonioEvent {
 use super::Config;
 
 /// Launches Vgonio GUI application.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn launch(config: Config) -> Result<(), Error> {
     use state::VgonioGuiState;
-
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -117,6 +117,54 @@ pub fn launch(config: Config) -> Result<(), Error> {
                     Err(e) => eprintln!("{:?}", e),
                 }
             }
+
+            Event::MainEventsCleared => {
+                // RedrawRequested will only trigger once, unless we manually request it.
+                window.request_redraw()
+            }
+
+            _ => {}
+        }
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn launch_wasm() -> Result<(), Error> {
+    let event_loop = winit::event_loop::EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_transparent(false)
+        .with_inner_size(PhysicalSize {
+            width: WIN_INITIAL_WIDTH,
+            height: WIN_INITIAL_HEIGHT,
+        })
+        .with_title("vgonio")
+        .build(&event_loop)
+        .unwrap();
+
+    use winit::platform::web::WindowExtWebSys;
+    web_sys::window()
+        .and_then(|win| win.document())
+        .and_then(|doc| {
+            let dst = doc.get_element_by_id("vgonio")?;
+            let canvas = web_sys::Element::from(window.canvas());
+            dst.append_child(&canvas).ok()?;
+            Some(())
+        })
+        .expect("Couldn't append canvas to document body!");
+
+    event_loop.run(move |event, _, control_flow| {
+        match event {
+            Event::WindowEvent {
+                window_id,
+                ref event,
+            } if window_id == window.id() => match event {
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(new_size) => {}
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {}
+                _ => {}
+            },
+
+            Event::RedrawRequested(window_id) if window_id == window.id() => {}
 
             Event::MainEventsCleared => {
                 // RedrawRequested will only trigger once, unless we manually request it.

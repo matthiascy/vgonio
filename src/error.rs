@@ -20,6 +20,8 @@ pub enum Error {
     SysCacheDirNotFound,
     SysDataDirNotFound,
     UserConfigNotFound,
+    #[cfg(target_arch = "wasm32")]
+    WasmConsoleLogInitFailed,
 }
 
 #[derive(Debug)]
@@ -88,6 +90,13 @@ impl Display for Error {
             }
             Error::InvalidCollector(err) => {
                 write!(f, "Invalid collector: {}", err)
+            }
+            #[cfg(target_arch = "wasm32")]
+            Error::WasmConsoleLogInitFailed => {
+                write!(
+                    f,
+                    "Failed to initialise console log for vgonio wasm module!"
+                )
             }
         }
     }

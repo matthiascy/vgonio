@@ -22,7 +22,8 @@ mod util;
 
 use crate::error::Error;
 
-/// Main entry point.
+/// Main entry point for the application.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> Result<(), Error> {
     use app::VgonioArgs;
     use clap::Parser;
@@ -45,4 +46,17 @@ pub fn run() -> Result<(), Error> {
         None => app::gui::launch(config),
         Some(cmd) => app::cli::execute(cmd, config),
     }
+}
+
+/// Main entry point for the application when compiled to WebAssembly.
+///
+/// Only runs the Vgonio GUI.
+///
+/// wasm_bindgen(start) requires that this function must take no arguments and
+/// must either return `()` or `Result<(), JsValue>`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn run() -> Result<(), wasm_bindgen::JsValue> {
+    app::init_wasm().map_err(|e| wasm_bindgen::JsValue::from_str(&e.to_string()))?;
+    app::gui::launch_wasm().map_err(|e| wasm_bindgen::JsValue::from_str(&e.to_string()))
 }
