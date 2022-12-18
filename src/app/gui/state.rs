@@ -7,10 +7,7 @@ mod input;
 pub use input::InputState;
 
 use crate::app::{
-    gfx::{
-        GpuContext, MeshView, RdrPass, SizedBuffer, Texture, VertexLayout,
-        DEFAULT_BIND_GROUP_LAYOUT_DESC,
-    },
+    gfx::{GpuContext, MeshView, RdrPass, Texture, VertexLayout, DEFAULT_BIND_GROUP_LAYOUT_DESC},
     gui::{GuiContext, VgonioEvent, VgonioGui, WindowSize},
 };
 use camera::CameraState;
@@ -176,7 +173,7 @@ impl DepthMap {
 
 struct DebugState {
     /// Vertex buffer storing all vertices.
-    pub vert_buffer: SizedBuffer,
+    pub vert_buffer: wgpu::Buffer,
 
     pub vert_count: u32,
 
@@ -244,14 +241,14 @@ impl DebugState {
                 });
 
         Self {
-            vert_buffer: SizedBuffer::new(
-                &ctx.device,
-                std::mem::size_of::<f32>() * 1024, // initial capacity of 1024 rays
-                wgpu::BufferUsages::VERTEX
+            vert_buffer: ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("debug-rays-vert-buffer"),
+                size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays
+                usage: wgpu::BufferUsages::VERTEX
                     | wgpu::BufferUsages::COPY_DST
                     | wgpu::BufferUsages::COPY_SRC,
-                Some("debug-rays-vert-buf"),
-            ),
+                mapped_at_creation: false,
+            }),
             vert_count: 0,
             rays: vec![],
             render_pass_rd: RdrPass {
@@ -763,7 +760,7 @@ impl VgonioGuiState {
             });
             render_pass.set_pipeline(&self.debug_drawing.render_pass_rd.pipeline);
             render_pass.set_bind_group(0, &self.debug_drawing.render_pass_rd.bind_groups[0], &[]);
-            render_pass.set_vertex_buffer(0, self.debug_drawing.vert_buffer.raw.slice(..));
+            render_pass.set_vertex_buffer(0, self.debug_drawing.vert_buffer.slice(..));
             render_pass.draw(0..self.debug_drawing.vert_count, 0..1);
 
             render_pass.set_pipeline(&self.debug_drawing.prim_pipeline);
@@ -938,7 +935,7 @@ impl VgonioGuiState {
                         log::debug!("content: {:?}", content);
                         self.debug_drawing.vert_count = self.debug_drawing.rays.len() as u32 + 1;
                         self.gpu_ctx.queue.write_buffer(
-                            &self.debug_drawing.vert_buffer.raw,
+                            &self.debug_drawing.vert_buffer,
                             0,
                             bytemuck::cast_slice(&content),
                         );

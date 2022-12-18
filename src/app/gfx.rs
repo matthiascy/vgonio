@@ -14,45 +14,6 @@ pub use texture::Texture;
 pub use vertex::*;
 use wgpu::util::DeviceExt;
 
-/// Wrap a [`wgpu::Buffer`] and include additional size information.
-#[derive(Debug)]
-pub struct SizedBuffer {
-    pub raw: wgpu::Buffer,
-    pub size: usize,
-}
-
-impl SizedBuffer {
-    pub fn new(
-        device: &wgpu::Device,
-        size: usize,
-        usage: wgpu::BufferUsages,
-        label: Option<&str>,
-    ) -> Self {
-        let raw = device.create_buffer(&wgpu::BufferDescriptor {
-            label,
-            size: size as u64,
-            usage,
-            mapped_at_creation: false,
-        });
-        Self { raw, size }
-    }
-
-    pub fn new_init(
-        device: &wgpu::Device,
-        contents: &[u8],
-        usage: wgpu::BufferUsages,
-        label: Option<&str>,
-    ) -> Self {
-        let size = contents.len();
-        let raw = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label,
-            contents,
-            usage,
-        });
-        Self { raw, size }
-    }
-}
-
 /// Represents a rendering pipeline and its associated bind group (shader
 /// input).
 pub struct RdrPass {
