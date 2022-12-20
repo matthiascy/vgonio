@@ -1,5 +1,13 @@
 /// Aggregation of necessary resources for using GPU.
 pub struct GpuContext {
+    /// Context for wgpu objects.
+    #[allow(dead_code)]
+    instance: wgpu::Instance,
+
+    /// Adapter for wgpu: the physical device + graphics api.
+    #[allow(dead_code)]
+    adapter: wgpu::Adapter,
+
     /// Surface (image texture/framebuffer) to draw on.
     pub surface: wgpu::Surface,
 
@@ -87,6 +95,8 @@ impl GpuContext {
         surface.configure(&device, &surface_config);
 
         Self {
+            instance,
+            adapter,
             surface,
             device,
             queue,
