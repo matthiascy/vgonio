@@ -1,6 +1,9 @@
-use crate::app::{
-    gfx::GpuContext,
-    gui::{state::remap_depth, GuiContext, VgonioEvent},
+use crate::{
+    acq::remap_depth,
+    app::{
+        gfx::GpuContext,
+        gui::{state::GuiState, VgonioEvent},
+    },
 };
 use egui::{Sense, TextureFilter};
 use winit::event_loop::EventLoopProxy;
@@ -27,7 +30,7 @@ impl ShadowMapPane {
     pub fn update_depth_map(
         &mut self,
         gpu_ctx: &GpuContext,
-        gui_ctx: &GuiContext,
+        gui_state: &GuiState,
         buffer: &wgpu::Buffer,
         width: u32,
         height: u32,
@@ -64,7 +67,7 @@ impl ShadowMapPane {
             IMG_HEIGHT as _,
             image::imageops::FilterType::CatmullRom,
         );
-        self.depth_map_handle = Some(gui_ctx.egui_context().load_texture(
+        self.depth_map_handle = Some(gui_state.egui_context().load_texture(
             "depth_map",
             egui::ColorImage::from_rgba_unmultiplied(
                 [IMG_WIDTH, IMG_HEIGHT],

@@ -1,3 +1,4 @@
+mod buffers;
 pub mod camera;
 mod context;
 mod grid;
@@ -6,13 +7,22 @@ mod shadow_pass;
 mod texture;
 mod vertex;
 
-pub use context::GpuContext;
+pub use buffers::*;
+
+pub use context::{GpuContext, WgpuConfig};
 pub use grid::*;
 pub use mesh::*;
 pub use shadow_pass::ShadowPass;
 pub use texture::Texture;
 pub use vertex::*;
-use wgpu::util::DeviceExt;
+
+/// Enum for selecting the right buffer type.
+#[derive(Debug)]
+pub enum BufferType {
+    Uniform,
+    Index,
+    Vertex,
+}
 
 /// Represents a rendering pipeline and its associated bind group (shader
 /// input).

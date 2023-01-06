@@ -1,5 +1,4 @@
 use crate::{
-    app::gui::state::remap_depth,
     app::gfx::{GpuContext, RdrPass, Texture},
     Error,
 };
@@ -501,4 +500,12 @@ impl OcclusionEstimationPass {
             area_with_occlusion / area_without_occlusion
         }
     }
+}
+
+pub fn remap_depth(depth: f32, near: f32, far: f32) -> f32 {
+    linearize_depth(depth, near, far) / (far - near)
+}
+
+pub fn linearize_depth(depth: f32, near: f32, far: f32) -> f32 {
+    (2.0 * near * far) / (far + near - depth * (far - near))
 }

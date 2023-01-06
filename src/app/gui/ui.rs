@@ -1,9 +1,5 @@
 use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
-use crate::app::{
-    cache::Cache,
-    gui::{tools::Tools, GuiContext},
-    Config,
-};
+use crate::app::{cache::Cache, gui::tools::Tools, Config};
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, sync::Arc};
 use winit::event_loop::EventLoopProxy;
@@ -85,8 +81,7 @@ impl VgonioGui {
 
     pub fn current_workspace_name(&self) -> &str { &self.selected_workspace }
 
-    pub fn show(&mut self, ctx: &GuiContext) {
-        let ctx = &ctx.egui_context();
+    pub fn show(&mut self, ctx: &egui::Context) {
         if self.selected_workspace.is_empty() {
             self.selected_workspace = self.workspaces.iter_mut().next().unwrap().0.to_owned();
         }

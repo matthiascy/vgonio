@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use winit::window::Window;
+
 /// Aggregation of necessary resources for using GPU.
 pub struct GpuContext {
     /// Context for wgpu objects.
@@ -12,10 +15,10 @@ pub struct GpuContext {
     pub surface: wgpu::Surface,
 
     /// GPU logical device.
-    pub device: wgpu::Device,
+    pub device: Arc<wgpu::Device>,
 
     /// GPU command queue to execute drawing or computing commands.
-    pub queue: wgpu::Queue,
+    pub queue: Arc<wgpu::Queue>,
 
     /// Query pool to retrieve information from the GPU.
     pub query_set: Option<wgpu::QuerySet>,
@@ -25,9 +28,56 @@ pub struct GpuContext {
     pub surface_config: wgpu::SurfaceConfiguration,
 }
 
+pub struct WgpuConfig {
+    /// Device requirements for requesting a device.
+    pub device_descriptor: wgpu::DeviceDescriptor<'static>,
+    /// Backend API to use.
+    pub backends: wgpu::Backends,
+    /// Present mode used for the primary swap chain (surface).
+    pub present_mode: wgpu::PresentMode,
+    /// Power preference for the GPU.
+    pub power_preference: wgpu::PowerPreference,
+    /// Texture format for the depth buffer.
+    pub depth_format: Option<wgpu::TextureFormat>,
+}
+
+impl Default for WgpuConfig {
+    fn default() -> Self {
+        Self {
+            device_descriptor: wgpu::DeviceDescriptor {
+                label: Some("wgpu-default-device"),
+                features: wgpu::Features::default(),
+                limits: if cfg!(target_arch = "wasm32") {
+                    wgpu::Limits::downlevel_webgl2_defaults()
+                } else {
+                    wgpu::Limits::default()
+                },
+            },
+            backends: wgpu::Backends::PRIMARY | wgpu::Backends::GL,
+            present_mode: wgpu::PresentMode::AutoVsync,
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            depth_format: None,
+        }
+    }
+}
+
+impl WgpuConfig {
+    /// Prefers the non-linear color space.
+    pub fn preferred_surface_format(&self, formats: &[wgpu::TextureFormat]) -> wgpu::TextureFormat {
+        for &format in formats {
+            if format == wgpu::TextureFormat::Bgra8UnormSrgb
+                || format == wgpu::TextureFormat::Rgba8UnormSrgb
+            {
+                return format;
+            }
+        }
+        formats[0]
+    }
+}
+
 impl GpuContext {
     /// Requests necessary resources to use the GPU.
-    pub async fn new(window: &winit::window::Window) -> Self {
+    pub async fn new(window: &Window, config: WgpuConfig) -> Self {
         let win_size = window.inner_size();
         // Create instance handle to GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
@@ -37,7 +87,7 @@ impl GpuContext {
         // Physical device: handle to actual graphics card.
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: config.power_preference,
                 force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
             })
@@ -48,19 +98,13 @@ impl GpuContext {
                     concat!(file!(), ":", line!())
                 )
             });
+
         let features = adapter.features();
+        log::trace!("GPU supported features: {:?}", features);
+
         // Logical device and command queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    features: features
-                        | wgpu::Features::POLYGON_MODE_LINE
-                        | wgpu::Features::TIMESTAMP_QUERY,
-                    limits: wgpu::Limits::default(),
-                },
-                None,
-            )
+            .request_device(&config.device_descriptor, None)
             .await
             .unwrap_or_else(|_| {
                 panic!(
@@ -81,15 +125,17 @@ impl GpuContext {
             None
         };
 
-        // Swapchain format
-        let swapchain_format = surface.get_supported_formats(&adapter)[0];
-
+        // Swap chain configuration
+        let formats = surface.get_supported_formats(&adapter);
+        log::info!("Supported surface formats: {:?}", formats);
+        let format = config.preferred_surface_format(&formats);
+        log::info!("-- choose surface format: {:?}", format);
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: swapchain_format,
+            format,
             width: win_size.width,
             height: win_size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: config.present_mode,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
         surface.configure(&device, &surface_config);
@@ -98,14 +144,28 @@ impl GpuContext {
             instance,
             adapter,
             surface,
-            device,
-            queue,
+            device: Arc::new(device),
+            queue: Arc::new(queue),
             query_set,
             surface_config,
         }
     }
 
+    /// Returns the aspect ratio of the window surface.
     pub fn aspect_ratio(&self) -> f32 {
         self.surface_config.width as f32 / self.surface_config.height as f32
+    }
+
+    /// Resizes the surface to the new size then returns if the surface was
+    /// resized.
+    pub fn resize(&mut self, width: u32, height: u32) -> bool {
+        if self.surface_config.width != width || self.surface_config.height != height {
+            self.surface_config.width = width;
+            self.surface_config.height = height;
+            self.surface.configure(&self.device, &self.surface_config);
+            true
+        } else {
+            false
+        }
     }
 }

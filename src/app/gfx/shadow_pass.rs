@@ -1,8 +1,6 @@
 use crate::{
-    app::{
-        gfx::{GpuContext, RdrPass, Texture},
-        gui::state::remap_depth,
-    },
+    acq::remap_depth,
+    app::gfx::{GpuContext, RdrPass, Texture},
     Error,
 };
 use bytemuck::{Pod, Zeroable};
