@@ -1,18 +1,24 @@
 mod plotting;
+mod sampling;
 mod scratch;
 mod visual_debug;
 
+use std::sync::Arc;
+
 use crate::{
     acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode},
-    app::gui::VgonioEvent,
+    app::{gfx::GpuContext, gui::VgonioEvent},
     mesh::TriangleMesh,
 };
 use embree::Config;
 use winit::event_loop::EventLoopProxy;
 
 pub(crate) use plotting::Plotting;
+pub(crate) use sampling::SamplingDebugger;
 pub(crate) use scratch::Scratch;
 pub(crate) use visual_debug::VisualDebugger;
+
+use super::state::GuiRenderer;
 
 pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTracing) -> Vec<Ray> {
     log::debug!("trace_ray_grid_dbg: {:?}", ray);
@@ -54,14 +60,24 @@ pub struct Tools {
 }
 
 impl Tools {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(
+        event_loop: EventLoopProxy<VgonioEvent>,
+        gpu: &GpuContext,
+        gui: &mut GuiRenderer,
+    ) -> Self {
         Self {
             windows: vec![
                 Box::new(Scratch::default()),
-                Box::new(VisualDebugger::new(event_loop)),
+                Box::new(VisualDebugger::new(event_loop.clone())),
                 Box::new(Plotting::default()),
+                Box::new(SamplingDebugger::new(
+                    gpu,
+                    gui,
+                    wgpu::TextureFormat::Rgba8UnormSrgb,
+                    event_loop,
+                )),
             ],
-            states: vec![false, false, false],
+            states: vec![false, false, false, false],
         }
     }
 

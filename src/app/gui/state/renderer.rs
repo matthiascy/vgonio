@@ -96,7 +96,8 @@ impl CallbackFn {
 
 /// Render state for GUI rendering.
 pub struct GuiRenderer {
-    target_format: wgpu::TextureFormat,
+    /// Texture format of the render pipeline output.
+    output_format: wgpu::TextureFormat,
 
     /// Render pipeline for egui rendering.
     pipeline: wgpu::RenderPipeline,
@@ -297,7 +298,7 @@ impl GuiRenderer {
             samplers: HashMap::new(),
             next_user_texture_id: 0,
             paint_callback_resources: TypeMap::new(),
-            target_format: output_color_format,
+            output_format: output_color_format,
         }
     }
 

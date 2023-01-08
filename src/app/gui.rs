@@ -1,4 +1,3 @@
-mod analysis;
 mod gizmo;
 mod plotter;
 mod simulation;
@@ -10,6 +9,7 @@ mod widgets;
 use crate::{
     acq::{Ray, RtcMethod},
     error::Error,
+    units::degrees,
 };
 use glam::{IVec2, Mat4, Vec3};
 use std::{
@@ -23,7 +23,7 @@ use std::{
     time::Instant,
 };
 pub(crate) use tools::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger};
-pub use ui::VgonioGui;
+pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -35,8 +35,8 @@ use crate::{
             GpuContext, MeshView, RdrPass, Texture, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::state::{
-            camera::CameraState, DebugState, DepthMap, GuiState, InputState, ScreenDescriptor,
-            AZIMUTH_BIN_SIZE_RAD, NUM_AZIMUTH_BINS, NUM_ZENITH_BINS, ZENITH_BIN_SIZE_RAD,
+            camera::CameraState, DebugState, DepthMap, GuiState, InputState, AZIMUTH_BIN_SIZE_RAD,
+            NUM_AZIMUTH_BINS, NUM_ZENITH_BINS, ZENITH_BIN_SIZE_RAD,
         },
     },
     htfld::{AxisAlignment, Heightfield},
@@ -53,6 +53,33 @@ use winit::{
 const WIN_INITIAL_WIDTH: u32 = 1600;
 /// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
+
+/// Event processing state.
+pub enum EventResponse {
+    /// Event wasn't handled, continue processing.
+    Ignored,
+    /// Event was handled, stop processing events.
+    Consumed,
+}
+
+impl EventResponse {
+    /// Returns true if the event was consumed.
+    pub fn is_consumed(&self) -> bool {
+        match self {
+            EventResponse::Ignored => false,
+            EventResponse::Consumed => true,
+        }
+    }
+}
+
+impl From<egui_winit::EventResponse> for EventResponse {
+    fn from(resp: egui_winit::EventResponse) -> Self {
+        match resp.consumed {
+            true => EventResponse::Consumed,
+            false => EventResponse::Ignored,
+        }
+    }
+}
 
 /// Events used by Vgonio application.
 #[derive(Debug)]
@@ -73,7 +100,13 @@ pub enum VgonioEvent {
     UpdateDebugT(f32),
     UpdatePrimId(u32),
     UpdateCellPos(IVec2),
+    UpdateSamplingDebugger {
+        azimuth: (f32, f32),
+        zenith: (f32, f32),
+    },
 }
+
+use self::tools::SamplingDebugger;
 
 use super::Config;
 
@@ -106,12 +139,12 @@ pub fn launch(config: Config) -> Result<(), Error> {
             Event::UserEvent(VgonioEvent::Quit) => {
                 *control_flow = ControlFlow::Exit;
             }
-            Event::UserEvent(event) => vgonio.handle_user_event(event),
+            Event::UserEvent(event) => vgonio.on_user_event(event),
             Event::WindowEvent {
                 window_id,
                 ref event,
             } if window_id == window.id() => {
-                if !vgonio.handle_input(event) {
+                if !vgonio.on_event(event).is_consumed() {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 
@@ -210,11 +243,11 @@ pub struct VgonioApp {
     /// GUI context and state for rendering.
     gui_state: GuiState,
 
+    /// The GUI application state.
+    ui: VgonioUi,
+
     /// The configuration of the application. See [`VgonioConfig`].
     config: Arc<Config>,
-
-    /// The GUI application state.
-    gui: VgonioGui,
 
     /// The datafiles of the application. See [`VgonioDatafiles`].
     db: VgonioDatafiles,
@@ -301,7 +334,7 @@ impl VgonioApp {
         //     true,
         // );
 
-        let gui_ctx = GuiState::new(
+        let mut gui_ctx = GuiState::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             gpu_ctx.surface_config.format,
@@ -313,7 +346,13 @@ impl VgonioApp {
         let mut db = VgonioDatafiles::new();
         db.load_ior_database(&config);
         let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir.clone())));
-        let gui = VgonioGui::new(event_loop.create_proxy(), config.clone(), cache.clone());
+        let gui = VgonioUi::new(
+            event_loop.create_proxy(),
+            config.clone(),
+            cache.clone(),
+            &gpu_ctx,
+            &mut gui_ctx.renderer,
+        );
 
         let input = InputState {
             key_map: Default::default(),
@@ -330,7 +369,7 @@ impl VgonioApp {
             gpu_ctx,
             gui_state: gui_ctx,
             config,
-            gui,
+            ui: gui,
             db,
             cache,
             input,
@@ -379,9 +418,9 @@ impl VgonioApp {
         }
     }
 
-    pub fn handle_input(&mut self, event: &WindowEvent) -> bool {
-        if !self.gui_state.handle_event(event).consumed {
-            match event {
+    pub fn on_event(&mut self, event: &WindowEvent) -> EventResponse {
+        match self.gui_state.on_event(event) {
+            EventResponse::Ignored => match event {
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -401,24 +440,23 @@ impl VgonioApp {
                             (Instant::now() - now).as_secs_f32()
                         );
                     }
-                    true
+                    EventResponse::Consumed
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
                     self.input.update_scroll_delta(*delta);
-                    true
+                    EventResponse::Consumed
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
                     self.input.update_mouse_map(*button, *state);
-                    true
+                    EventResponse::Consumed
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     self.input.update_cursor_delta((*position).cast::<f32>());
-                    true
+                    EventResponse::Consumed
                 }
-                _ => false,
-            }
-        } else {
-            true
+                _ => EventResponse::Ignored,
+            },
+            EventResponse::Consumed => EventResponse::Consumed,
         }
     }
 
@@ -426,7 +464,7 @@ impl VgonioApp {
         // Update camera uniform.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
-        self.gui.update_gizmo_matrices(
+        self.ui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
@@ -528,7 +566,8 @@ impl VgonioApp {
                 }),
         ];
 
-        if self.gui.current_workspace_name() == "Simulation" {
+        // Main render pass
+        {
             let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
                 color_attachments: &[Some(
@@ -577,6 +616,7 @@ impl VgonioApp {
                 render_pass.draw(0..6, 0..1);
             }
         }
+
         if self.debug_drawing_enabled {
             let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -601,69 +641,25 @@ impl VgonioApp {
             render_pass.draw(0..3, 0..1)
         }
 
-        let screen_desc = ScreenDescriptor {
-            width: self.gpu_ctx.surface_config.width,
-            height: self.gpu_ctx.surface_config.height,
-            scale_factor: window.scale_factor() as _,
-        };
+        // UI render pass recoding.
+        let ui_render_output = self.gui_state.render(
+            window,
+            self.gpu_ctx.screen_desc(window),
+            &output_view,
+            |ctx| {
+                // self.demos.ui(ctx);
+                self.ui.show(ctx);
+            },
+        );
 
-        let ui_output = self
-            .gui_state
-            .render(window, screen_desc, &output_view, |ctx| {
-                self.gui.show(ctx);
-            });
-
-        // Render the UI to the output frame.
-        // {
-        //     let ui_start_time = Instant::now();
-        //     self.gui_state.prepare(window);
-        //     //self.gui_ctx.begin_frame();
-        //     // self.demos.ui(self.gui_ctx.egui_context());
-        //     // self.gui.show(&self.gui_ctx);
-        //     // let ui_output_frame = self.gui_ctx.egui_context().end_frame();
-        //
-        //     let ui_output_frame = self.gui_state.run_ui(|ctx| {
-        //         self.demos.ui(ctx);
-        //         self.gui.show(ctx);
-        //     });
-        //
-        //     let meshes = self
-        //         .gui_state
-        //         .egui_context()
-        //         .tessellate(ui_output_frame.shapes);
-        //     let frame_time = (Instant::now() - ui_start_time).as_secs_f64() as f32;
-        //     self.prev_frame_time = Some(frame_time);
-        //     let win_size = ScreenDescriptor {
-        //         width: self.gpu_ctx.surface_config.width,
-        //         height: self.gpu_ctx.surface_config.height,
-        //         scale_factor: window.scale_factor() as f32,
-        //     };
-        //     self.gui_state
-        //         .update_textures(
-        //             &self.gpu_ctx.device,
-        //             &self.gpu_ctx.queue,
-        //             ui_output_frame.textures_delta,
-        //         )
-        //         .unwrap();
-        //     self.gui_state.update_buffers(
-        //         &self.gpu_ctx.device,
-        //         &self.gpu_ctx.queue,
-        //         &meshes,
-        //         &win_size,
-        //     );
-        //     self.gui_state
-        //         .render(&mut encoders[2], &output_view, &meshes, &win_size, None)
-        //         .unwrap();
-        // }
-
-        // Submit the command buffers to the GPU.
-        //self.gpu_ctx.queue.submit(encoders.map(|enc| enc.finish()));
+        // Submit the command buffers to the GPU: first the user's command buffers, then
+        // the main render pass, and finally the UI render pass.
         self.gpu_ctx.queue.submit(
-            ui_output.user_cmds.into_iter().chain(
+            ui_render_output.user_cmds.into_iter().chain(
                 encoders
                     .into_iter()
                     .map(|enc| enc.finish())
-                    .chain(std::iter::once(ui_output.ui_cmd)),
+                    .chain(std::iter::once(ui_render_output.ui_cmd)),
             ),
         );
 
@@ -675,7 +671,7 @@ impl VgonioApp {
         Ok(())
     }
 
-    pub fn handle_user_event(&mut self, event: VgonioEvent) {
+    pub fn on_user_event(&mut self, event: VgonioEvent) {
         match event {
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFile(handle) => {
@@ -688,9 +684,8 @@ impl VgonioApp {
                     if !self.opened_surfaces.contains(&path) {
                         self.opened_surfaces.push(path);
                     }
-                    self.gui
-                        .workspaces
-                        .simulation
+                    self.ui
+                        .simulation_workspace
                         .update_surface_list(&self.opened_surfaces);
                 }
             }
@@ -699,7 +694,7 @@ impl VgonioApp {
             }
             VgonioEvent::UpdateDepthMap => {
                 self.depth_map.copy_to_buffer(&self.gpu_ctx);
-                self.gui
+                self.ui
                     .tools
                     .get_tool::<VisualDebugger>("Visual Debugger")
                     .unwrap()
@@ -802,6 +797,27 @@ impl VgonioApp {
             }
             VgonioEvent::ToggleSurfaceVisibility => {
                 self.surface_visible = !self.surface_visible;
+            }
+            VgonioEvent::UpdateSamplingDebugger { azimuth, zenith } => {
+                let samples = crate::acq::emitter::uniform_sampling_on_unit_sphere(
+                    1000,
+                    degrees!(zenith.0).into(),
+                    degrees!(zenith.1).into(),
+                    degrees!(azimuth.0).into(),
+                    degrees!(azimuth.1).into(),
+                );
+                let mut encoder =
+                    self.gpu_ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Sampling Debugger Encoder"),
+                        });
+                self.ui
+                    .tools
+                    .get_tool::<SamplingDebugger>("Sampling Debugger")
+                    .unwrap()
+                    .record_render_pass(&self.gpu_ctx, &mut encoder, &samples);
+                self.gpu_ctx.queue.submit(Some(encoder.finish()));
             }
             _ => {}
         }

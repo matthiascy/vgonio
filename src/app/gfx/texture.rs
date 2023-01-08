@@ -3,6 +3,7 @@ use std::{num::NonZeroU32, sync::Arc};
 
 // TODO: a texture may don't have a sampler (in case used as render pass
 // attachments)
+// TODO: avoid creating a sampler for each texture (use a cache)
 pub struct Texture {
     /// Image (data) allocated on GPU. It holds the pixels and main
     /// memory of the texture, but doesn't contain a lot information

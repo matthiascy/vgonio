@@ -3,7 +3,7 @@
 pub mod bsdf;
 mod collector;
 mod embree_rt;
-mod emitter;
+pub(crate) mod emitter; // TDOD: make private
 pub mod fresnel;
 mod grid_rt;
 pub mod ior;

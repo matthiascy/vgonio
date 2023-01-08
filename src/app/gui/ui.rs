@@ -1,108 +1,59 @@
-use super::{analysis::AnalysisWorkspace, simulation::SimulationWorkspace, VgonioEvent};
-use crate::app::{cache::Cache, gui::tools::Tools, Config};
+use super::{simulation::SimulationWorkspace, state::GuiRenderer, VgonioEvent};
+use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, Config};
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
-pub trait Workspace {
-    fn name(&self) -> &str;
-
-    fn show(&mut self, ctx: &egui::Context);
-}
-
-pub struct Workspaces {
-    pub(crate) simulation: SimulationWorkspace,
-    pub(crate) analysis: AnalysisWorkspace,
-}
-
-impl Workspaces {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<Cache>>) -> Self {
-        Self {
-            simulation: SimulationWorkspace::new(event_loop, cache),
-            analysis: AnalysisWorkspace {},
-        }
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut dyn Workspace)> {
-        vec![
-            ("Simulation", &mut self.simulation as &mut dyn Workspace),
-            ("Analysis", &mut self.analysis as &mut dyn Workspace),
-        ]
-        .into_iter()
-    }
-}
-
 /// Implementation of the GUI for vgonio application.
-pub struct VgonioGui {
+pub struct VgonioUi {
     /// The configuration of the application. See [`VgonioConfig`].
     config: Arc<Config>,
-
-    /// Workspaces are essentially predefined window layouts for certain usage.
-    pub(crate) workspaces: Workspaces,
 
     /// Files dropped in the window area.
     dropped_files: Vec<egui::DroppedFile>,
 
-    /// Current activated workspace.
-    selected_workspace: String,
+    /// Event loop proxy for sending user defined events.
+    event_loop: EventLoopProxy<VgonioEvent>,
 
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
 
-    /// Event loop proxy for sending user defined events.
-    event_loop: EventLoopProxy<VgonioEvent>,
+    pub simulation_workspace: SimulationWorkspace, // TODO: make private
 }
 
-impl VgonioGui {
+impl VgonioUi {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
         config: Arc<Config>,
         cache: Arc<RefCell<Cache>>,
+        gpu: &GpuContext,
+        gui: &mut GuiRenderer,
     ) -> Self {
-        let workspaces = Workspaces::new(event_loop.clone(), cache);
-
         Self {
             config,
             event_loop: event_loop.clone(),
-            workspaces,
             dropped_files: vec![],
-            selected_workspace: "".to_string(),
-            tools: Tools::new(event_loop),
+            tools: Tools::new(event_loop.clone(), gpu, gui),
+            simulation_workspace: SimulationWorkspace::new(event_loop, cache),
         }
     }
 
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
-        if self.selected_workspace == "Simulation" {
-            self.workspaces
-                .simulation
-                .update_gizmo_matrices(model, view, proj);
-        }
+        self.simulation_workspace
+            .update_gizmo_matrices(model, view, proj);
     }
 
-    pub fn current_workspace_name(&self) -> &str { &self.selected_workspace }
-
     pub fn show(&mut self, ctx: &egui::Context) {
-        if self.selected_workspace.is_empty() {
-            self.selected_workspace = self.workspaces.iter_mut().next().unwrap().0.to_owned();
-        }
-
-        egui::TopBottomPanel::top("vgonio_menu_bar").show(ctx, |ui| {
+        egui::TopBottomPanel::top("vgonio-menu-bar").show(ctx, |ui| {
             self.menu_bar(ui);
         });
-
         self.tools.show(ctx);
-
-        for (ws_name, ws) in self.workspaces.iter_mut() {
-            if ws_name == self.selected_workspace || ctx.memory().everything_is_visible() {
-                ws.show(ctx);
-            }
-        }
-
+        self.simulation_workspace.show(ctx);
         self.file_drag_and_drop(ctx);
     }
 }
 
-impl VgonioGui {
+impl VgonioUi {
     fn file_drag_and_drop(&mut self, ctx: &egui::Context) {
         use egui::*;
 
@@ -258,6 +209,7 @@ impl VgonioGui {
                     }
                 });
                 ui.menu_button("Tools", |ui| {
+                    // TODO: iterater
                     if ui.button("\u{1F4D8} Console").clicked() {
                         println!("TODO: open console window");
                     }
@@ -270,6 +222,9 @@ impl VgonioGui {
                     if ui.button("Scratch").clicked() {
                         self.tools.toggle("Scratch");
                     }
+                    if ui.button("Sampling Debugger").clicked() {
+                        self.tools.toggle("Sampling Debugger");
+                    }
                 });
                 ui.menu_button("Help", |ui| {
                     if ui.button("\u{1F4DA} Docs").clicked() {
@@ -279,18 +234,6 @@ impl VgonioGui {
                         println!("TODO: about");
                     }
                 });
-                ui.separator();
-
-                for (ws_name, ws) in self.workspaces.iter_mut() {
-                    if ui
-                        .selectable_label(self.selected_workspace == ws_name, ws.name())
-                        .clicked()
-                    {
-                        self.selected_workspace = ws_name.to_owned();
-                        ui.output().open_url(format!("#{}", ws_name));
-                    }
-                }
-
                 ui.separator();
                 egui::widgets::global_dark_light_mode_switch(ui);
             });

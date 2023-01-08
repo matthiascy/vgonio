@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use winit::window::Window;
 
+use crate::app::gui::state::ScreenDescriptor;
+
 /// Aggregation of necessary resources for using GPU.
 pub struct GpuContext {
     /// Context for wgpu objects.
@@ -154,6 +156,15 @@ impl GpuContext {
     /// Returns the aspect ratio of the window surface.
     pub fn aspect_ratio(&self) -> f32 {
         self.surface_config.width as f32 / self.surface_config.height as f32
+    }
+
+    /// Returns the [`ScreenDescriptor`] describing the window surface.
+    pub fn screen_desc(&self, window: &Window) -> ScreenDescriptor {
+        ScreenDescriptor {
+            width: self.surface_config.width,
+            height: self.surface_config.height,
+            scale_factor: window.scale_factor() as _,
+        }
     }
 
     /// Resizes the surface to the new size then returns if the surface was

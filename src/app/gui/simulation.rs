@@ -2,7 +2,7 @@ use crate::{
     acq::measurement::Measurement,
     app::{
         cache::Cache,
-        gui::{gizmo::VgonioGizmo, ui::Workspace, VgonioEvent},
+        gui::{gizmo::VgonioGizmo, VgonioEvent},
     },
 };
 use egui_gizmo::{GizmoMode, GizmoOrientation};
@@ -487,17 +487,6 @@ pub struct SimulationWorkspace {
     event_loop: EventLoopProxy<VgonioEvent>,
 }
 
-impl Workspace for SimulationWorkspace {
-    fn name(&self) -> &str { "Simulation" }
-
-    fn show(&mut self, ctx: &egui::Context) {
-        self.ui(ctx);
-        self.view_gizmo.show(ctx, &mut self.view_gizmo_opened);
-        self.simulation_panel
-            .show(ctx, &mut self.simulation_pane_opened);
-    }
-}
-
 impl SimulationWorkspace {
     pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<Cache>>) -> Self {
         Self {
@@ -510,6 +499,13 @@ impl SimulationWorkspace {
             event_loop,
             surface_visible: true,
         }
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context) {
+        self.ui(ctx);
+        self.view_gizmo.show(ctx, &mut self.view_gizmo_opened);
+        self.simulation_panel
+            .show(ctx, &mut self.simulation_pane_opened);
     }
 
     pub fn update_surface_list(&mut self, list: &Vec<PathBuf>) {
