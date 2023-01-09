@@ -1,6 +1,6 @@
 use crate::{
     acq::{
-        measurement::{Measurement, MeasurementKind, SimulationKind},
+        measurement::{Measurement, SimulationKind},
         util::SphericalPartition,
         CollectorScheme, RtcMethod,
     },
@@ -149,10 +149,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
             .map(|s| format!("       - {}", s.path.display()))
             .collect::<Vec<_>>()
             .join("\n");
-        match measurement.kind {
-            MeasurementKind::Bsdf(kind) => {
-                println!(
-                    "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
+
+        println!(
+            "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
     • parameters:
       + incident medium: {:?}
       + transmitted medium: {:?}
@@ -166,64 +165,53 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         - azimuthal angle: {} ~ {} per {}
       + collector:
         - radius: {}\n{}",
-                    chrono::DateTime::<chrono::Utc>::from(start),
-                    measurement.incident_medium,
-                    measurement.transmitted_medium,
-                    surfaces_str,
-                    measurement.emitter.radius(),
-                    measurement.emitter.num_rays,
-                    measurement.emitter.max_bounces,
-                    measurement.emitter.spectrum.start,
-                    measurement.emitter.spectrum.stop,
-                    measurement.emitter.spectrum.step_size,
-                    measurement.emitter.zenith.start.prettified(),
-                    measurement.emitter.zenith.stop.prettified(),
-                    measurement.emitter.zenith.step_size.prettified(),
-                    measurement.emitter.azimuth.start.prettified(),
-                    measurement.emitter.azimuth.stop.prettified(),
-                    measurement.emitter.azimuth.step_size.prettified(),
-                    measurement.collector.radius,
-                    collector_info
+            chrono::DateTime::<chrono::Utc>::from(start),
+            measurement.incident_medium,
+            measurement.transmitted_medium,
+            surfaces_str,
+            measurement.emitter.radius(),
+            measurement.emitter.num_rays,
+            measurement.emitter.max_bounces,
+            measurement.emitter.spectrum.start,
+            measurement.emitter.spectrum.stop,
+            measurement.emitter.spectrum.step_size,
+            measurement.emitter.zenith.start.prettified(),
+            measurement.emitter.zenith.stop.prettified(),
+            measurement.emitter.zenith.step_size.prettified(),
+            measurement.emitter.azimuth.start.prettified(),
+            measurement.emitter.azimuth.stop.prettified(),
+            measurement.emitter.azimuth.step_size.prettified(),
+            measurement.collector.radius,
+            collector_info
+        );
+        match measurement.sim_kind {
+            SimulationKind::GeomOptics { method } => {
+                println!(
+                    "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
+                    measurement.kind
                 );
-                match measurement.sim_kind {
-                    SimulationKind::GeomOptics { method } => {
-                        println!(
-                            "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
-                            kind
+                match method {
+                    RtcMethod::Standard => {
+                        crate::acq::bsdf::measure_bsdf_embree_rt(
+                            measurement,
+                            &cache,
+                            &db,
+                            surfaces,
                         );
-                        match method {
-                            RtcMethod::Standard => {
-                                crate::acq::bsdf::measure_bsdf_embree_rt(
-                                    measurement,
-                                    &cache,
-                                    &db,
-                                    surfaces,
-                                );
-                            }
-                            RtcMethod::Grid => {
-                                crate::acq::bsdf::measure_bsdf_grid_rt(
-                                    measurement,
-                                    &cache,
-                                    &db,
-                                    surfaces,
-                                );
-                            }
-                        }
                     }
-                    SimulationKind::WaveOptics => {
-                        println!(
-                            "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
-                            kind
-                        );
-                        // TODO: implement
+                    RtcMethod::Grid => {
+                        crate::acq::bsdf::measure_bsdf_grid_rt(measurement, &cache, &db, surfaces);
                     }
                 }
             }
-            MeasurementKind::Ndf => {
-                // TODO: measure ndf
-                todo!()
+            SimulationKind::WaveOptics => {
+                println!(
+                    "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
+                    measurement.kind
+                );
+                // TODO: implement
             }
-        };
+        }
     }
 
     println!(
@@ -241,6 +229,5 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     Ok(())
 }
 
-// TODO: implementation... maybe this subcommand should be removed, since we
-// can "measure" everything...
+// TODO: implementation...
 pub fn extract(_opts: ExtractOptions, _config: Config) -> Result<(), Error> { Ok(()) }

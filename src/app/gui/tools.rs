@@ -3,8 +3,6 @@ mod sampling;
 mod scratch;
 mod visual_debug;
 
-use std::sync::Arc;
-
 use crate::{
     acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode},
     app::{gfx::GpuContext, gui::VgonioEvent},

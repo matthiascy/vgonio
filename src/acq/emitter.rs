@@ -102,24 +102,24 @@ impl Emitter {
     /// Initialises the emitter.
     pub fn init(&mut self) {
         log::info!("Initialising emitter...");
-        use rand_distr::Distribution;
         let num_samples = self.num_rays as usize;
-        self.samples.resize(num_samples, glam::Vec3::ZERO);
-        let mut rng = rand::thread_rng();
-        let uniform = rand_distr::Uniform::new(0.0, 1.0);
-
         // Generates uniformly distributed samples using rejection sampling.
-        let (zenith_range, azimuth_range) = {
+        let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
             match self.shape {
                 RegionShape::SphericalCap { zenith } => {
                     let zenith_range = 0.0..zenith.value;
                     let azimuth_range = 0.0..(2.0 * std::f32::consts::PI);
-                    (zenith_range, azimuth_range)
+                    (
+                        radians!(0.0),
+                        zenith,
+                        radians!(0.0),
+                        radians!(2.0 * std::f32::consts::PI),
+                    )
                 }
                 RegionShape::SphericalRect { zenith, azimuth } => {
                     let zenith_range = zenith.0.value..zenith.1.value;
                     let azimuth_range = azimuth.0.value..azimuth.1.value;
-                    (zenith_range, azimuth_range)
+                    (zenith.0, zenith.1, azimuth.0, azimuth.1)
                 }
             }
         };
@@ -127,25 +127,20 @@ impl Emitter {
         log::info!(
             "  - Generating {} samples in region θ: {}° ~ {}° φ: {}° ~ {}°",
             num_samples,
-            zenith_range.start.to_degrees(),
-            zenith_range.end.to_degrees(),
-            azimuth_range.start.to_degrees(),
-            azimuth_range.end.to_degrees()
+            zenith_start.in_degrees().value,
+            zenith_stop.in_degrees().value,
+            azimuth_start.in_degrees().value,
+            azimuth_stop.in_degrees().value
         );
 
-        let mut i = 0;
-        while i < num_samples {
-            let phi = uniform.sample(&mut rng) * 2.0 * std::f32::consts::PI;
-            let theta = (1.0 - 2.0 * uniform.sample(&mut rng)).acos();
-            if zenith_range.contains(&theta) && azimuth_range.contains(&phi) {
-                // Height field is generated on XZ plane.
-                let x = theta.sin() * phi.cos();
-                let y = theta.sin() * phi.sin();
-                let z = theta.cos();
-                self.samples[i] = glam::Vec3::new(x, z, y);
-                i += 1;
-            }
-        }
+        self.samples = uniform_sampling_on_unit_sphere(
+            num_samples,
+            zenith_start,
+            zenith_stop,
+            azimuth_start,
+            azimuth_stop,
+            CSHandedness::RightHandedYUp,
+        );
     }
 
     /// Accesses the radius of the emitter.
@@ -189,39 +184,80 @@ impl Emitter {
     }
 }
 
-// TODO: update
+/// Coordinate system handedness.
+pub enum CSHandedness {
+    RightHandedZUp,
+    RightHandedYUp,
+}
+
 /// Generates uniformly distributed samples on the unit sphere.
-/// Right-handed Z-up coordinate system is used.
+///
+/// Depending on the handedness of the coordinate system, the samples are
+/// generated differently.
+///
+/// 1. Right-handed Z-up coordinate system:
 ///
 /// x = cos phi * sin theta
 /// y = sin phi * sin theta
 /// z = cos theta
+///
+/// 2. Right-handed Y-up coordinate system:
+///
+/// x = cos phi * sin theta
+/// y = cos theta
+/// z = sin phi * sin theta
 pub fn uniform_sampling_on_unit_sphere(
-    num_samples: u32,
+    num_samples: usize,
     theta_start: Radians,
     theta_stop: Radians,
     phi_start: Radians,
     phi_stop: Radians,
+    handedness: CSHandedness,
 ) -> Vec<glam::Vec3> {
     use rand_distr::Distribution;
     use std::f32::consts::PI;
 
     let mut rng = rand::thread_rng();
     let uniform = rand_distr::Uniform::new(0.0, 1.0);
-    let mut samples = vec![];
+    let mut samples = Vec::with_capacity(num_samples as usize);
+    samples.resize(num_samples as usize, glam::Vec3::ZERO);
 
-    let mut i = 0;
-    while i < num_samples {
-        let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
-        let theta = radians!((1.0 - 2.0 * uniform.sample(&mut rng)).acos());
+    match handedness {
+        CSHandedness::RightHandedZUp => {
+            let mut i = 0;
+            while i < num_samples {
+                let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
+                let theta = radians!((1.0 - 2.0 * uniform.sample(&mut rng)).acos());
 
-        if (theta_start..theta_stop).contains(&theta) && (phi_start..phi_stop).contains(&phi) {
-            samples.push(glam::Vec3::new(
-                theta.sin() * phi.cos(),
-                theta.sin() * phi.sin(),
-                theta.cos(),
-            ));
-            i += 1;
+                if (theta_start..theta_stop).contains(&theta)
+                    && (phi_start..phi_stop).contains(&phi)
+                {
+                    samples[i] = glam::Vec3::new(
+                        theta.sin() * phi.cos(),
+                        theta.sin() * phi.sin(),
+                        theta.cos(),
+                    );
+                    i += 1;
+                }
+            }
+        }
+        CSHandedness::RightHandedYUp => {
+            let mut i = 0;
+            while i < num_samples {
+                let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
+                let theta = radians!((1.0 - 2.0 * uniform.sample(&mut rng)).acos());
+
+                if (theta_start..theta_stop).contains(&theta)
+                    && (phi_start..phi_stop).contains(&phi)
+                {
+                    samples[i] = glam::Vec3::new(
+                        theta.sin() * phi.cos(),
+                        theta.cos(),
+                        theta.sin() * phi.sin(),
+                    );
+                    i += 1;
+                }
+            }
         }
     }
 

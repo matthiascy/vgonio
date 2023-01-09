@@ -7,7 +7,7 @@ mod ui;
 mod widgets;
 
 use crate::{
-    acq::{Ray, RtcMethod},
+    acq::{emitter::CSHandedness, Ray, RtcMethod},
     error::Error,
     units::degrees,
 };
@@ -101,6 +101,7 @@ pub enum VgonioEvent {
     UpdatePrimId(u32),
     UpdateCellPos(IVec2),
     UpdateSamplingDebugger {
+        count: u32,
         azimuth: (f32, f32),
         zenith: (f32, f32),
     },
@@ -111,7 +112,6 @@ use self::tools::SamplingDebugger;
 use super::Config;
 
 /// Launches Vgonio GUI application.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn launch(config: Config) -> Result<(), Error> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
     let window = WindowBuilder::new()
@@ -180,59 +180,6 @@ pub fn launch(config: Config) -> Result<(), Error> {
             _ => {}
         }
     })
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn launch_wasm() -> Result<(), Error> {
-    let event_loop = winit::event_loop::EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_transparent(false)
-        .with_inner_size(PhysicalSize {
-            width: WIN_INITIAL_WIDTH,
-            height: WIN_INITIAL_HEIGHT,
-        })
-        .with_title("vgonio")
-        .build(&event_loop)
-        .unwrap();
-
-    use winit::platform::web::WindowExtWebSys;
-    web_sys::window()
-        .and_then(|win| win.document())
-        .and_then(|doc| {
-            let dst = doc.get_element_by_id("vgonio")?;
-            let canvas = web_sys::Element::from(window.canvas());
-            dst.append_child(&canvas).ok()?;
-            Some(())
-        })
-        .expect("Couldn't append canvas to document body!");
-
-    event_loop.run(move |event, _, control_flow| {
-        match event {
-            Event::WindowEvent {
-                window_id,
-                ref event,
-            } if window_id == window.id() => match event {
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::Resized(new_size) => {}
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {}
-                _ => {}
-            },
-
-            Event::RedrawRequested(window_id) if window_id == window.id() => {}
-
-            Event::MainEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually request it.
-                window.request_redraw()
-            }
-
-            _ => {}
-        }
-    })
-}
-
-struct SurfaceState {
-    surface: wgpu::Surface,
-    config: wgpu::SurfaceConfiguration,
 }
 
 /// Vgonio client application with GUI.
@@ -675,19 +622,16 @@ impl VgonioApp {
         match event {
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFile(handle) => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    // TODO: maybe not use the String here?
-                    let path = handle.path().to_owned();
-                    // TODO: deal with different file types
-                    self.load_height_field(&path, Some(AxisAlignment::XZ));
-                    if !self.opened_surfaces.contains(&path) {
-                        self.opened_surfaces.push(path);
-                    }
-                    self.ui
-                        .simulation_workspace
-                        .update_surface_list(&self.opened_surfaces);
+                // TODO: maybe not use the String here?
+                let path = handle.path().to_owned();
+                // TODO: deal with different file types
+                self.load_height_field(&path, Some(AxisAlignment::XZ));
+                if !self.opened_surfaces.contains(&path) {
+                    self.opened_surfaces.push(path);
                 }
+                self.ui
+                    .simulation_workspace
+                    .update_surface_list(&self.opened_surfaces);
             }
             VgonioEvent::ToggleGrid => {
                 self.visual_grid_enabled = !self.visual_grid_enabled;
@@ -798,13 +742,18 @@ impl VgonioApp {
             VgonioEvent::ToggleSurfaceVisibility => {
                 self.surface_visible = !self.surface_visible;
             }
-            VgonioEvent::UpdateSamplingDebugger { azimuth, zenith } => {
+            VgonioEvent::UpdateSamplingDebugger {
+                count,
+                azimuth,
+                zenith,
+            } => {
                 let samples = crate::acq::emitter::uniform_sampling_on_unit_sphere(
-                    1000,
+                    count as usize,
                     degrees!(zenith.0).into(),
                     degrees!(zenith.1).into(),
                     degrees!(azimuth.0).into(),
                     degrees!(azimuth.1).into(),
+                    CSHandedness::RightHandedYUp,
                 );
                 let mut encoder =
                     self.gpu_ctx

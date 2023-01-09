@@ -263,14 +263,20 @@ pub struct VgonioArgs {
     pub config: Option<PathBuf>,
 }
 
-/// Micro-surface information that can be retrieved.
+/// Micro-surface's intrinsic property.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum)]
-pub enum MicroSurfaceInfo {
-    /// Normal vectors per vertex.
-    VertexNormal,
+pub enum MicroSurfaceProperty {
+    /// Micro-facet normal vectors.
+    #[clap(name = "facet-normal")]
+    MicroFacetNormal,
 
-    /// Normal vectors per triangle.
-    SurfaceNormal,
+    /// Micro-facet distribution function (i.e. NDF/D term).
+    #[clap(name = "facet-distrb")]
+    MicroFacetDistribution,
+
+    /// Micro-facet shadowing-masking function (i.e. Geometric term).
+    #[clap(name = "facet-shadow")]
+    MicroFacetMaskingShadowing,
 }
 
 /// Vgonio command.
@@ -279,7 +285,7 @@ pub enum VgonioCommand {
     /// Measures micro-geometry level light transport related metrics.
     Measure(MeasureOptions),
 
-    /// Extracts micro-surface information from a mesh.
+    /// Extracts micro-surface's intrinsic properties.
     Extract(ExtractOptions),
 }
 
@@ -318,18 +324,16 @@ pub struct MeasureOptions {
 
 /// Options for the `extract` command.
 #[derive(Args, Debug)]
-#[clap(about = "Extract information from micro-surface.")]
+#[clap(about = "Extract micro-surface's intrinsic properties.")]
 pub struct ExtractOptions {
-    #[clap(value_enum, short, long, help = "Type of information to be extracted.")]
-    kind: MicroSurfaceInfo,
+    #[clap(value_enum)]
+    property: MicroSurfaceProperty,
 
     #[clap(
-        short,
-        long,
-        help = "The input micro-surface profile, it can be either\nmicro-surface height field or \
-                micro-surface mesh\ncache"
+        help = "The input micro-surface profile description files. Can be a list of files or a \
+                directory."
     )]
-    input_path: PathBuf,
+    inputs: Vec<PathBuf>,
 
     #[clap(
         short,
@@ -411,10 +415,4 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
 
     // Load the configuration file.
     Config::load_config(args.config.as_ref())
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn init_wasm() -> Result<(), Error> {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    console_log::init_with_level(log::Level::Warn).map_err(|_| Error::WasmConsoleLogInitFailed)
 }

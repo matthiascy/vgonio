@@ -3,18 +3,12 @@ use std::{borrow::Cow, sync::Arc};
 use wgpu::util::DeviceExt;
 use winit::event_loop::EventLoopProxy;
 
-use crate::{
-    app::{
-        gfx::{
-            camera::{Camera, CameraController, Projection},
-            GpuContext, Texture,
-        },
-        gui::{
-            state::{GuiContext, GuiRenderer, GuiState},
-            VgonioEvent,
-        },
+use crate::app::{
+    gfx::{
+        camera::{Camera, Projection},
+        GpuContext, Texture,
     },
-    units::degrees,
+    gui::{state::GuiRenderer, VgonioEvent},
 };
 
 use super::Tool;
@@ -33,6 +27,7 @@ pub struct SamplingDebugger {
     pub pipeline: wgpu::RenderPipeline,
     pub vertex_buffer: wgpu::Buffer,
     pub event_loop: EventLoopProxy<VgonioEvent>,
+    sample_count: u32,
     azimuth_min: f32, // in degrees
     azimuth_max: f32, // in degrees
     zenith_min: f32,  // in degrees
@@ -49,30 +44,51 @@ impl Tool for SamplingDebugger {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.label("Sample count");
+        ui.add(
+            egui::DragValue::new(&mut self.sample_count)
+                .speed(1)
+                .clamp_range(1..=u32::MAX),
+        );
         // TODO: strict bounds
-        ui.add(
-            egui::DragValue::new(&mut self.zenith_min)
-                .speed(0.1)
-                .clamp_range(0.0..=180.0),
-        );
-        ui.add(
-            egui::DragValue::new(&mut self.zenith_max)
-                .speed(0.1)
-                .clamp_range(0.0..=180.0),
-        );
-        ui.add(
-            egui::DragValue::new(&mut self.azimuth_min)
-                .speed(0.1)
-                .clamp_range(0.0..=360.0),
-        );
-        ui.add(
-            egui::DragValue::new(&mut self.azimuth_max)
-                .speed(0.1)
-                .clamp_range(0.0..=360.0),
-        );
+        ui.horizontal(|ui| {
+            ui.label("Zenith range");
+            ui.add(
+                egui::DragValue::new(&mut self.zenith_min)
+                    .speed(0.1)
+                    .clamp_range(0.0..=180.0)
+                    .suffix("°")
+                    .prefix("min: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut self.zenith_max)
+                    .speed(0.1)
+                    .clamp_range(0.0..=180.0)
+                    .suffix("°")
+                    .prefix("max: "),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label("Azimuth range");
+            ui.add(
+                egui::DragValue::new(&mut self.azimuth_min)
+                    .speed(0.1)
+                    .clamp_range(0.0..=360.0)
+                    .suffix("°")
+                    .prefix("min: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut self.azimuth_max)
+                    .speed(0.1)
+                    .clamp_range(0.0..=360.0)
+                    .suffix("°")
+                    .prefix("max: "),
+            );
+        });
         if ui.button("Unit Sphere").clicked() {
             self.event_loop
                 .send_event(VgonioEvent::UpdateSamplingDebugger {
+                    count: self.sample_count,
                     azimuth: (self.azimuth_min, self.azimuth_max),
                     zenith: (self.zenith_min, self.zenith_max),
                 })
@@ -98,7 +114,7 @@ impl SamplingDebugger {
         event_loop: EventLoopProxy<VgonioEvent>,
     ) -> SamplingDebugger {
         let camera = Camera::new(
-            glam::Vec3::new(2.0, 2.0, 2.0),
+            glam::Vec3::new(2.0, 1.5, 2.0),
             glam::Vec3::ZERO,
             glam::Vec3::Y,
         );
@@ -260,6 +276,7 @@ impl SamplingDebugger {
             azimuth_max: 360.0,
             zenith_min: 0.0,
             zenith_max: 180.0,
+            sample_count: 1024,
         }
     }
 

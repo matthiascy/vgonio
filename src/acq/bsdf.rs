@@ -22,8 +22,20 @@ pub enum BsdfKind {
     /// In-plane BRDF.
     InPlaneBrdf,
 
-    /// Whole-hemisphere BRDF.
+    /// Bidirectional reflectance distribution function.
     Brdf,
+
+    /// Bidirectional transmittance distribution function.
+    Btdf,
+
+    /// Bidirectional scattering-surface distribution function.
+    Bssdf,
+
+    /// Bidirectional scattering-surface reflectance distribution function.
+    Bssrdf,
+
+    /// Bidirectional scattering-surface transmittance distribution function.
+    Bsstdf,
 }
 
 impl Display for BsdfKind {
@@ -34,6 +46,18 @@ impl Display for BsdfKind {
             }
             BsdfKind::Brdf => {
                 write!(f, "brdf")
+            }
+            BsdfKind::Btdf => {
+                write!(f, "btdf")
+            }
+            BsdfKind::Bssdf => {
+                write!(f, "bssdf")
+            }
+            BsdfKind::Bssrdf => {
+                write!(f, "bssrdf")
+            }
+            BsdfKind::Bsstdf => {
+                write!(f, "bsstdf")
             }
         }
     }

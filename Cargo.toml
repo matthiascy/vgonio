@@ -6,50 +6,39 @@ edition = "2021"
 build = "build.rs"
 description = "Microscopic level light transport simulation."
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
-cfg-if = "1"
-image = "0.24"
-winit = "0.27"
-glam = { version = "0.22", features = ["serde", "bytemuck"] }
-env_logger = "0.10"
-log = "0.4"
-wgpu = { version = "0.14", features = ["spirv"] }
-pollster = "0.2"
-bytemuck = { version = "1.12", features = ["derive"] }
-clap = { version = "4", features = ["derive"] }
-uuid = { version = "1.2", features = ["serde", "v4"] }
 bincode = "1"
+bytemuck = { version = "1.12", features = ["derive"] }
 byteorder = "1"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-serde_json = "1.0"
+cfg-if = "1"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+dirs = "4.0"
 egui = { version = "0.20", features = ["bytemuck"] }
 egui_demo_lib = "0.20.0"
 egui-winit = { version = "0.20", default-features = false }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "main" }
+embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
+env_logger = "0.10"
 futures-intrusive = "0.5"
+glam = { version = "0.22", features = ["serde", "bytemuck"] }
+image = "0.24"
+log = "0.4"
+paste = "1.0"
+pollster = "0.2"
 rfd = { version = "0.10", features = ["file-handle-inner"] }
 rayon = "1.6"
-chrono = "0.4"
-dirs = "4.0"
-toml = "0.5"
-csv = "1"
 rand = "0.8"
 rand_distr = "0.4"
-embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
-paste = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+toml = "0.5"
 type-map = "0.5"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-console_error_panic_hook = "0.1.7"
-console_log = "0.2.0"
-wgpu = { version = "0.14", features = ["webgl", "spirv"] }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4.33"
-web-sys = { version = "0.3", features = ["Document", "Window", "Element"] }
+uuid = { version = "1.2", features = ["serde", "v4"] }
+winit = "0.27"
+wgpu = { version = "0.14", features = ["spirv"] }
 
 [build-dependencies]
 shaderc = "0.8"

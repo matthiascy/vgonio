@@ -65,17 +65,6 @@ impl Radius {
     }
 }
 
-/// Supported type of measurement.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MeasurementKind {
-    /// Bidirectional Scattering Distribution Function
-    Bsdf(BsdfKind),
-
-    /// Normal Distribution Function
-    Ndf,
-}
-
 /// Possible ways to conduct a simulation.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -90,11 +79,11 @@ pub enum SimulationKind {
     WaveOptics,
 }
 
-/// Description of the measurement.
+/// Description of BSDF measurement.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Measurement {
     /// The measurement kind.
-    pub kind: MeasurementKind,
+    pub kind: BsdfKind,
 
     /// The simulation kind.
     pub sim_kind: SimulationKind,
@@ -253,7 +242,7 @@ impl Measurement {
 impl Default for Measurement {
     fn default() -> Self {
         Self {
-            kind: MeasurementKind::Ndf,
+            kind: BsdfKind::InPlaneBrdf,
             sim_kind: SimulationKind::GeomOptics {
                 method: RtcMethod::Grid,
             },
