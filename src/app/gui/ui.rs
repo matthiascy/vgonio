@@ -1,5 +1,5 @@
 use super::{simulation::SimulationWorkspace, state::GuiRenderer, VgonioEvent};
-use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, Config};
+use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, VgonioConfig};
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, sync::Arc};
 use winit::event_loop::EventLoopProxy;
@@ -7,7 +7,7 @@ use winit::event_loop::EventLoopProxy;
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioUi {
     /// The configuration of the application. See [`VgonioConfig`].
-    config: Arc<Config>,
+    config: Arc<VgonioConfig>,
 
     /// Files dropped in the window area.
     dropped_files: Vec<egui::DroppedFile>,
@@ -24,7 +24,7 @@ pub struct VgonioUi {
 impl VgonioUi {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
-        config: Arc<Config>,
+        config: Arc<VgonioConfig>,
         cache: Arc<RefCell<Cache>>,
         gpu: &GpuContext,
         gui: &mut GuiRenderer,

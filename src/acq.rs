@@ -4,6 +4,8 @@ pub mod bsdf;
 mod collector;
 mod embree_rt;
 pub(crate) mod emitter; // TDOD: make private
+pub mod facet_distrb;
+pub mod facet_shadow;
 pub mod fresnel;
 mod grid_rt;
 pub mod ior;

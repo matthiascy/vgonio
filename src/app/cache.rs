@@ -3,7 +3,7 @@ use crate::{
         ior::{Ior, IorDb},
         Medium,
     },
-    app::Config,
+    app::VgonioConfig,
     htfld::{AxisAlignment, Heightfield},
     mesh::{TriangleMesh, TriangulationMethod},
     Error,
@@ -16,7 +16,7 @@ use std::{
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
-pub struct SurfaceHandle {
+pub struct MicroSurfaceHandle {
     pub uuid: Uuid,
     pub path: PathBuf,
 }
@@ -36,7 +36,7 @@ impl VgonioDatafiles {
 
     /// Load the refractive index database from the paths specified in the
     /// config.
-    pub fn load_ior_database(&mut self, config: &Config) {
+    pub fn load_ior_database(&mut self, config: &VgonioConfig) {
         // let mut database = RefractiveIndexDatabase::new();
         let default_path = config.data_dir.join("ior");
         let user_path = config.user_config.data_dir.join("ior");
@@ -124,25 +124,48 @@ impl Cache {
     }
 
     /// Loads surfaces from their relevant places and returns
-    /// their index of inside of the cache.
-    pub fn load_surfaces_from_files(
+    /// their handle inside the cache.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The application configuration.
+    ///
+    /// * `paths` - Paths to the surfaces to be load. Paths are not in canonical
+    ///   form, they may also be relative paths.
+    ///
+    /// * `alignment` - The axis alignment the surfaces mesh.
+    pub fn load_micro_surfaces(
         &mut self,
-        surfaces_paths: &[PathBuf],
+        &config: &VgonioConfig,
+        paths: &[PathBuf],
         alignment: Option<AxisAlignment>,
-    ) -> Result<Vec<SurfaceHandle>, Error> {
+    ) -> Result<Vec<MicroSurfaceHandle>, Error> {
+        let canonical_paths = paths
+            .iter()
+            .map(|s| {
+                if let Ok(stripped) = s.strip_prefix("user://") {
+                    config.user_config.data_dir.join(stripped)
+                } else if let Ok(stripped) = s.strip_prefix("local://") {
+                    config.data_dir.join(stripped)
+                } else {
+                    resolve_file_path(&config.cwd, Some(s))
+                }
+            })
+            .collect::<Vec<_>>();
+
         use std::collections::hash_map::Entry;
         let mut loaded = vec![];
-        for path in surfaces_paths {
+        for path in paths {
             let path_string = path.to_string_lossy().to_string();
             if let Entry::Vacant(e) = self.surfaces.entry(path_string.clone()) {
                 let heightfield = Heightfield::read_from_file(path, None, alignment)?;
-                loaded.push(SurfaceHandle {
+                loaded.push(MicroSurfaceHandle {
                     uuid: heightfield.uuid,
                     path: path.clone(),
                 });
                 e.insert(heightfield);
             } else {
-                loaded.push(SurfaceHandle {
+                loaded.push(MicroSurfaceHandle {
                     uuid: self.surfaces[&path_string].uuid,
                     path: path.clone(),
                 });
@@ -153,7 +176,7 @@ impl Cache {
 
     pub fn get_surfaces(
         &self,
-        surface_handles: &[SurfaceHandle],
+        surface_handles: &[MicroSurfaceHandle],
     ) -> Result<Vec<&Heightfield>, Error> {
         let mut surfaces = vec![];
         for handle in surface_handles {
@@ -169,7 +192,7 @@ impl Cache {
 
     /// Triangulates the given height fields and returns uuid of corresponding
     /// heightfield.
-    pub fn triangulate_surfaces(&mut self, handles: &[SurfaceHandle]) -> Vec<Uuid> {
+    pub fn triangulate_surfaces(&mut self, handles: &[MicroSurfaceHandle]) -> Vec<Uuid> {
         let mut meshes = vec![];
         for handle in handles {
             for surface in self.surfaces.values() {
@@ -190,11 +213,53 @@ impl Cache {
         meshes
     }
 
-    pub fn get_surface_meshes(&self, handles: &[SurfaceHandle]) -> Vec<&TriangleMesh> {
+    pub fn get_surface_meshes(&self, handles: &[MicroSurfaceHandle]) -> Vec<&TriangleMesh> {
         let mut meshes = vec![];
         for handle in handles {
             meshes.push(self.triangle_meshes.get(&handle.uuid).unwrap())
         }
         meshes
     }
+}
+
+/// Resolves the path to canonical form.
+///
+/// # Note
+///
+/// Resolved path is not guaranteed to exist.
+///
+/// # Arguments
+///
+/// * `base` - Base path to resolve relative paths.
+///
+/// * `path` - Path to be resolved.
+///
+/// # Returns
+///
+/// A `PathBuf` indicating the resolved path. It differs according to the
+/// base path and patterns inside of `path`.
+///
+///   1. `path` is `None`
+///
+///      Returns the `base` path.
+///
+///   2. `path` is relative
+///
+///      Returns the a path which is relative to `base` path, with
+///      the remaining of the `path` appended.
+///
+///   3. `path` is absolute
+///
+///      Returns the `path` as is.
+pub(crate) fn resolve_file_path(base: &Path, path: Option<&Path>) -> PathBuf {
+    path.map_or_else(
+        || base.to_path_buf(),
+        |path| {
+            if path.is_absolute() {
+                path.to_path_buf().canonicalize().unwrap()
+            } else {
+                base.join(path).canonicalize().unwrap()
+            }
+        },
+    )
 }

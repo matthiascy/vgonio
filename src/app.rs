@@ -10,7 +10,7 @@ pub(crate) mod gui;
 
 /// Vgonio configuration.
 #[derive(Debug)]
-pub struct Config {
+pub struct VgonioConfig {
     /// Path to the configuration directory.
     pub config_dir: std::path::PathBuf,
 
@@ -62,7 +62,7 @@ impl UserConfig {
     }
 }
 
-impl Config {
+impl VgonioConfig {
     /// Load the configuration from the config directory.
     ///
     /// There is a difference between the default onfiguration and the
@@ -185,7 +185,7 @@ impl Config {
                 user_config.to_absolute()
             } else {
                 log::info!("Creating user configuration in cwd: {}", cwd.display());
-                let mut user_config = UserConfig {
+                let user_config = UserConfig {
                     cache_dir: cache_dir.clone(),
                     output_dir: cwd.clone(),
                     data_dir: data_dir.clone(),
@@ -193,7 +193,7 @@ impl Config {
                 let mut file = std::fs::File::create(&cwd_config_path)?;
                 println!("Serialised user config: {}", toml::to_string(&user_config)?);
                 file.write_all(toml::to_string(&user_config)?.as_bytes())?;
-                user_config
+                user_config.to_absolute()
             };
             Ok(Self {
                 config_dir,
@@ -202,6 +202,14 @@ impl Config {
                 user_config,
                 cwd,
             })
+        }
+    }
+
+    pub fn cache_dir(&self) -> PathBuf {
+        if self.user_config.cache_dir.is_dir() {
+            self.user_config.cache_dir.clone()
+        } else {
+            self.cache_dir.clone()
         }
     }
 }
@@ -331,7 +339,8 @@ pub struct ExtractOptions {
 
     #[clap(
         help = "The input micro-surface profile description files. Can be a list of files or a \
-                directory."
+                directory. Use `user://` or `local://` to indicate the user-defined data file \
+                path or system-defined data file path respectively."
     )]
     inputs: Vec<PathBuf>,
 
@@ -368,7 +377,7 @@ pub fn log_filter_from_level(level: u8) -> log::LevelFilter {
 ///
 /// * `args` - The CLI arguments passed to the program.
 /// * `launch_time` - The time when the program is launched.
-pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Config, Error> {
+pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<VgonioConfig, Error> {
     let log_level = if args.verbose { 4 } else { args.log_level };
     let log_level_wgpu = if args.debug_wgpu { 3 } else { 0 };
     let log_level_winit = if args.debug_winit { 3 } else { 0 };
@@ -414,5 +423,5 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Con
     log::info!("Initialising...");
 
     // Load the configuration file.
-    Config::load_config(args.config.as_ref())
+    VgonioConfig::load_config(args.config.as_ref())
 }

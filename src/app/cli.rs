@@ -1,23 +1,25 @@
 use crate::{
     acq::{
+        self,
         measurement::{Measurement, SimulationKind},
         util::SphericalPartition,
         CollectorScheme, RtcMethod,
     },
     app::{
         cache::{Cache, VgonioDatafiles},
-        Config, ExtractOptions, MeasureOptions, VgonioCommand,
+        ExtractOptions, MeasureOptions, VgonioCommand, VgonioConfig,
     },
     htfld::AxisAlignment,
-    util, Error,
+    Error,
 };
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
 pub const RESET: &str = "\u{001b}[0m";
 
-/// The main entry point for vgonio CLI.
-pub fn execute(cmd: VgonioCommand, config: Config) -> Result<(), Error> {
+/// Execute the given command.
+/// This function is the entry point of vgonio CLI.
+pub fn execute(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
     match cmd {
         VgonioCommand::Measure(opts) => measure(opts, config),
         VgonioCommand::Extract(opts) => extract(opts, config),
@@ -25,7 +27,7 @@ pub fn execute(cmd: VgonioCommand, config: Config) -> Result<(), Error> {
 }
 
 /// Measure different metrics of the micro-surface.
-pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
+fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     log::info!("{:#?}", config);
     // Configure thread pool for parallelism.
     if let Some(nthreads) = opts.nthreads {
@@ -41,7 +43,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
 
     // Load data files: refractive indices, spd etc.
     println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
-    let mut cache = Cache::new(config.cache_dir.clone());
+    let mut cache = Cache::new(config.cache_dir());
     let mut db = VgonioDatafiles::new();
     db.load_ior_database(&config);
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
@@ -57,25 +59,11 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     let all_surfaces = measurements
         .iter()
         .map(|desc| {
-            let to_be_loaded = desc
-                .surfaces
-                .iter()
-                .map(|s| {
-                    if let Ok(stripped) = s.strip_prefix("user://") {
-                        config.user_config.data_dir.join(stripped)
-                    } else if let Ok(stripped) = s.strip_prefix("local://") {
-                        config.data_dir.join(stripped)
-                    } else {
-                        util::resolve_file_path(&opts.input_path, Some(s))
-                    }
-                })
-                .collect::<Vec<_>>();
             // Load surfaces height field from files and cache them.
-            // TODO: reuse cached surfaces.
             let handles = cache
-                .load_surfaces_from_files(&to_be_loaded, Some(AxisAlignment::XZ))
-                .unwrap();
-            // Triangulate all surfaces.
+                .load_micro_surfaces(&config, &desc.surfaces, Some(AxisAlignment::XZ))
+                .expect("Failed to load surfaces from files"); // TODO: better error handling
+                                                               // Triangulate all surfaces.
             cache.triangulate_surfaces(&handles);
             handles
         })
@@ -229,5 +217,24 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     Ok(())
 }
 
-// TODO: implementation...
-pub fn extract(_opts: ExtractOptions, _config: Config) -> Result<(), Error> { Ok(()) }
+// Extract micro-surface intrinsic properties.
+fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
+    let mut cache = Cache::new(config.cache_dir());
+    let micro_surfaces =
+        cache.load_micro_surfaces(&config, &opts.inputs, Some(AxisAlignment::XZ))?;
+    match opts.property {
+        super::MicroSurfaceProperty::MicroFacetNormal => todo!(),
+        super::MicroSurfaceProperty::MicroFacetDistribution => {
+            let distributions =
+                acq::facet_distrb::measure_micro_facet_distribution(&micro_surfaces, &cache);
+            // TODO: output to file
+            Ok(())
+        }
+        super::MicroSurfaceProperty::MicroFacetMaskingShadowing => {
+            let geometric_terms =
+                acq::facet_shadow::measure_micro_facet_masking_shadowing(&micro_surfaces, &cache);
+            // TODO: output to file
+            Ok(())
+        }
+    }
+}

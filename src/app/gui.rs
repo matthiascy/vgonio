@@ -109,10 +109,10 @@ pub enum VgonioEvent {
 
 use self::tools::SamplingDebugger;
 
-use super::Config;
+use super::VgonioConfig;
 
 /// Launches Vgonio GUI application.
-pub fn launch(config: Config) -> Result<(), Error> {
+pub fn launch(config: VgonioConfig) -> Result<(), Error> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -194,7 +194,7 @@ pub struct VgonioApp {
     ui: VgonioUi,
 
     /// The configuration of the application. See [`VgonioConfig`].
-    config: Arc<Config>,
+    config: Arc<VgonioConfig>,
 
     /// The datafiles of the application. See [`VgonioDatafiles`].
     db: VgonioDatafiles,
@@ -235,7 +235,7 @@ pub struct VgonioApp {
 impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
-        config: Config,
+        config: VgonioConfig,
         window: &Window,
         event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, Error> {

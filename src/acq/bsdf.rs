@@ -5,7 +5,7 @@ use crate::{
         Collector, Emitter, Patch,
     },
     app::{
-        cache::{Cache, SurfaceHandle, VgonioDatafiles},
+        cache::{Cache, MicroSurfaceHandle, VgonioDatafiles},
         cli::{BRIGHT_YELLOW, RESET},
     },
     units::{metres, Nanometres},
@@ -129,7 +129,7 @@ pub fn measure_bsdf_embree_rt(
     desc: Measurement,
     cache: &Cache,
     db: &VgonioDatafiles,
-    surfaces: &[SurfaceHandle],
+    surfaces: &[MicroSurfaceHandle],
 ) {
     use crate::acq::EmbreeRayTracing;
     let mut collector: Collector = desc.collector;
@@ -222,7 +222,7 @@ pub fn measure_bsdf_grid_rt(
     desc: Measurement,
     cache: &Cache,
     db: &VgonioDatafiles,
-    surfaces: &[SurfaceHandle],
+    surfaces: &[MicroSurfaceHandle],
 ) {
     use crate::acq::GridRayTracing;
 
