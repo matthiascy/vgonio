@@ -23,6 +23,7 @@ pub fn execute(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
     match cmd {
         VgonioCommand::Measure(opts) => measure(opts, config),
         VgonioCommand::Extract(opts) => extract(opts, config),
+        VgonioCommand::Info => print_info(config),
     }
 }
 
@@ -43,7 +44,8 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
 
     // Load data files: refractive indices, spd etc.
     println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
-    let mut cache = Cache::new(config.cache_dir());
+    let mut cache = Cache::new(config.cache_dir().to_path_buf());
+
     let mut db = VgonioDatafiles::new();
     db.load_ior_database(&config);
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
@@ -217,7 +219,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     Ok(())
 }
 
-// Extract micro-surface intrinsic properties.
+/// Extracts micro-surface intrinsic properties.
 fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
     let mut cache = Cache::new(config.cache_dir());
     let micro_surfaces =
@@ -237,4 +239,10 @@ fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
             Ok(())
         }
     }
+}
+
+/// Prints Vgonio's current configurations.
+fn print_info(config: VgonioConfig) -> Result<(), Error> {
+    println!("{}", config);
+    Ok(())
 }

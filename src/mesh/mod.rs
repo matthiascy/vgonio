@@ -3,4 +3,4 @@ mod surface;
 mod triangle;
 
 pub use surface::SurfaceMesh;
-pub use triangle::{TriangleMesh, TriangulationMethod};
+pub use triangle::{MicroSurfaceTriMesh, TriangulationMethod};

@@ -54,9 +54,9 @@ impl EmbreeRayTracing {
     pub fn scene(&self, id: usize) -> &Scene { &self.scenes[id] }
 
     /// Uploads a triangle mesh to embree.
-    pub fn create_triangle_mesh(&self, mesh: &mesh::TriangleMesh) -> Arc<TriangleMesh> {
+    pub fn create_triangle_mesh(&self, mesh: &mesh::MicroSurfaceTriMesh) -> Arc<TriangleMesh> {
         let mut embree_mesh =
-            TriangleMesh::unanimated(self.device.clone(), mesh.num_tris, mesh.num_verts);
+            TriangleMesh::unanimated(self.device.clone(), mesh.num_facets, mesh.num_verts);
         {
             let mesh_ref_mut = Arc::get_mut(&mut embree_mesh).unwrap();
             {
@@ -66,11 +66,11 @@ impl EmbreeRayTracing {
                     verts_buffer[i] = [vert.x, vert.y, vert.z, 1.0];
                 }
                 // TODO: replace with slice::as_chunks when it's stable.
-                (0..mesh.num_tris).for_each(|tri| {
+                (0..mesh.num_facets).for_each(|tri| {
                     indxs_buffer[tri] = [
-                        mesh.faces[tri * 3],
-                        mesh.faces[tri * 3 + 1],
-                        mesh.faces[tri * 3 + 2],
+                        mesh.facets[tri * 3],
+                        mesh.facets[tri * 3 + 1],
+                        mesh.facets[tri * 3 + 2],
                     ];
                 })
             }

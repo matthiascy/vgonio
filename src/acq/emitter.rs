@@ -2,7 +2,7 @@ use crate::{
     acq::{
         measurement::Radius,
         util::{RangeByStepSize, SphericalCoord},
-        Ray,
+        Handedness, Ray,
     },
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
 };
@@ -139,7 +139,7 @@ impl Emitter {
             zenith_stop,
             azimuth_start,
             azimuth_stop,
-            CSHandedness::RightHandedYUp,
+            Handedness::RightHandedYUp,
         );
     }
 
@@ -184,12 +184,6 @@ impl Emitter {
     }
 }
 
-/// Coordinate system handedness.
-pub enum CSHandedness {
-    RightHandedZUp,
-    RightHandedYUp,
-}
-
 /// Generates uniformly distributed samples on the unit sphere.
 ///
 /// Depending on the handedness of the coordinate system, the samples are
@@ -212,7 +206,7 @@ pub fn uniform_sampling_on_unit_sphere(
     theta_stop: Radians,
     phi_start: Radians,
     phi_stop: Radians,
-    handedness: CSHandedness,
+    handedness: Handedness,
 ) -> Vec<glam::Vec3> {
     use rand_distr::Distribution;
     use std::f32::consts::PI;
@@ -223,7 +217,7 @@ pub fn uniform_sampling_on_unit_sphere(
     samples.resize(num_samples as usize, glam::Vec3::ZERO);
 
     match handedness {
-        CSHandedness::RightHandedZUp => {
+        Handedness::RightHandedZUp => {
             let mut i = 0;
             while i < num_samples {
                 let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
@@ -241,7 +235,7 @@ pub fn uniform_sampling_on_unit_sphere(
                 }
             }
         }
-        CSHandedness::RightHandedYUp => {
+        Handedness::RightHandedYUp => {
             let mut i = 0;
             while i < num_samples {
                 let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);

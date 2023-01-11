@@ -5,7 +5,7 @@ use crate::{
     },
     app::VgonioConfig,
     htfld::{AxisAlignment, Heightfield},
-    mesh::{TriangleMesh, TriangulationMethod},
+    mesh::{MicroSurfaceTriMesh, TriangulationMethod},
     Error,
 };
 use std::{
@@ -38,9 +38,10 @@ impl VgonioDatafiles {
     /// config.
     pub fn load_ior_database(&mut self, config: &VgonioConfig) {
         // let mut database = RefractiveIndexDatabase::new();
-        let default_path = config.data_dir.join("ior");
-        let user_path = config.user_config.data_dir.join("ior");
-
+        let default_path = config.default_data_dir().to_path_buf().join("ior");
+        let user_path = config
+            .user_data_dir()
+            .map(|path| path.to_path_buf().join("ior"));
         // First load refractive indices from `VgonioConfig::data_files_dir`.
         if default_path.exists() {
             // Load one by one the files in the directory.
@@ -50,8 +51,8 @@ impl VgonioDatafiles {
 
         // Second load refractive indices from
         // `VgonioConfig::user_config::data_files_dir`.
-        if user_path.exists() {
-            let n = Self::load_refractive_indices(&mut self.ior_db, &user_path);
+        if user_path.is_some_and(|p| p.exists()) {
+            let n = Self::load_refractive_indices(&mut self.ior_db, &user_path.unwrap());
             log::debug!("Loaded {} ior files from {:?}", n, user_path);
         }
     }
@@ -99,11 +100,11 @@ pub struct Cache {
     /// Path to the cache directory.
     pub dir: std::path::PathBuf,
 
-    /// Surface heightfield cache. (key: surface_path, value: heightfield)
-    pub surfaces: HashMap<String, Heightfield>,
+    /// Micro surface heightfield cache. (key: surface_path, value: heightfield)
+    pub micro_surfaces: HashMap<String, Heightfield>,
 
     /// Cache for triangulated heightfield meshes.
-    pub triangle_meshes: HashMap<Uuid, TriangleMesh>,
+    pub triangle_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
 
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<std::path::PathBuf>>,
@@ -116,7 +117,7 @@ impl Cache {
     pub fn new(cache_dir: PathBuf) -> Self {
         Self {
             dir: cache_dir,
-            surfaces: Default::default(),
+            micro_surfaces: Default::default(),
             triangle_meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
@@ -136,7 +137,7 @@ impl Cache {
     /// * `alignment` - The axis alignment the surfaces mesh.
     pub fn load_micro_surfaces(
         &mut self,
-        &config: &VgonioConfig,
+        config: &VgonioConfig,
         paths: &[PathBuf],
         alignment: Option<AxisAlignment>,
     ) -> Result<Vec<MicroSurfaceHandle>, Error> {
@@ -144,9 +145,9 @@ impl Cache {
             .iter()
             .map(|s| {
                 if let Ok(stripped) = s.strip_prefix("user://") {
-                    config.user_config.data_dir.join(stripped)
-                } else if let Ok(stripped) = s.strip_prefix("local://") {
-                    config.data_dir.join(stripped)
+                    config.user_data_dir()?.join(stripped)
+                } else if let Ok(stripped) = s.strip_prefix("sys://") {
+                    config.default_data_dir().join(stripped)
                 } else {
                     resolve_file_path(&config.cwd, Some(s))
                 }
@@ -157,7 +158,7 @@ impl Cache {
         let mut loaded = vec![];
         for path in paths {
             let path_string = path.to_string_lossy().to_string();
-            if let Entry::Vacant(e) = self.surfaces.entry(path_string.clone()) {
+            if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
                 let heightfield = Heightfield::read_from_file(path, None, alignment)?;
                 loaded.push(MicroSurfaceHandle {
                     uuid: heightfield.uuid,
@@ -166,7 +167,7 @@ impl Cache {
                 e.insert(heightfield);
             } else {
                 loaded.push(MicroSurfaceHandle {
-                    uuid: self.surfaces[&path_string].uuid,
+                    uuid: self.micro_surfaces[&path_string].uuid,
                     path: path.clone(),
                 });
             }
@@ -181,7 +182,7 @@ impl Cache {
         let mut surfaces = vec![];
         for handle in surface_handles {
             let surface = self
-                .surfaces
+                .micro_surfaces
                 .get(&handle.path.to_string_lossy().to_string())
                 .ok_or_else(|| Error::Any("Surface not exist!".to_string()))?;
             surfaces.push(surface)
@@ -195,7 +196,7 @@ impl Cache {
     pub fn triangulate_surfaces(&mut self, handles: &[MicroSurfaceHandle]) -> Vec<Uuid> {
         let mut meshes = vec![];
         for handle in handles {
-            for surface in self.surfaces.values() {
+            for surface in self.micro_surfaces.values() {
                 if surface.uuid == handle.uuid {
                     if let std::collections::hash_map::Entry::Vacant(e) =
                         self.triangle_meshes.entry(surface.uuid)
@@ -213,7 +214,10 @@ impl Cache {
         meshes
     }
 
-    pub fn get_surface_meshes(&self, handles: &[MicroSurfaceHandle]) -> Vec<&TriangleMesh> {
+    pub fn get_micro_surface_meshes(
+        &self,
+        handles: &[MicroSurfaceHandle],
+    ) -> Vec<&MicroSurfaceTriMesh> {
         let mut meshes = vec![];
         for handle in handles {
             meshes.push(self.triangle_meshes.get(&handle.uuid).unwrap())

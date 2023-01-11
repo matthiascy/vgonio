@@ -20,6 +20,7 @@ pub enum Error {
     SysCacheDirNotFound,
     SysDataDirNotFound,
     UserConfigNotFound,
+    UserDataDirNotProvided,
     #[cfg(target_arch = "wasm32")]
     WasmConsoleLogInitFailed,
 }
@@ -96,6 +97,12 @@ impl Display for Error {
                 write!(
                     f,
                     "Failed to initialise console log for vgonio wasm module!"
+                )
+            }
+            Error::UserDataDirNotProvided => {
+                write!(
+                    f,
+                    "Try to load file from user data directory which doesn't exist!"
                 )
             }
         }

@@ -2,7 +2,7 @@ use crate::{
     app::gfx::VertexLayout,
     htfld::{regular_triangulation, Heightfield},
     isect::Aabb,
-    mesh::TriangleMesh,
+    mesh::MicroSurfaceTriMesh,
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
@@ -67,7 +67,7 @@ impl MeshView {
         }
     }
 
-    pub fn from_triangle_mesh(device: &wgpu::Device, mesh: &TriangleMesh) -> Self {
+    pub fn from_triangle_mesh(device: &wgpu::Device, mesh: &MicroSurfaceTriMesh) -> Self {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("mesh_view_vertex_buffer"),
             contents: bytemuck::cast_slice(&mesh.verts),
@@ -76,7 +76,7 @@ impl MeshView {
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("mesh_view_index_buffer"),
-            contents: bytemuck::cast_slice(&mesh.faces),
+            contents: bytemuck::cast_slice(&mesh.facets),
             usage: wgpu::BufferUsages::INDEX,
         });
 
@@ -85,13 +85,13 @@ impl MeshView {
         log::debug!(
             "TriangleMesh --> MeshView, num verts: {}, num faces: {}, num indices: {}",
             mesh.num_verts,
-            mesh.num_tris,
-            mesh.faces.len()
+            mesh.num_facets,
+            mesh.facets.len()
         );
 
         Self {
             vertices_count: mesh.num_verts as u32,
-            indices_count: mesh.faces.len() as u32,
+            indices_count: mesh.facets.len() as u32,
             extent: mesh.extent,
             vertex_layout,
             vertex_buffer,

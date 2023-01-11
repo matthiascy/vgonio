@@ -2,7 +2,7 @@ use crate::{
     acq::{ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     htfld::{AxisAlignment, Heightfield},
     isect::{ray_tri_intersect_woop, RayTriIsect},
-    mesh::TriangleMesh,
+    mesh::MicroSurfaceTriMesh,
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
@@ -23,7 +23,7 @@ pub struct GridRayTracing<'hf> {
     surface: &'hf Heightfield,
 
     /// Corresponding `TriangleMesh` of the surface.
-    surface_mesh: &'hf TriangleMesh,
+    surface_mesh: &'hf MicroSurfaceTriMesh,
 
     /// Minimum coordinates of the grid.
     pub min: IVec2,
@@ -37,7 +37,7 @@ pub struct GridRayTracing<'hf> {
 
 impl<'hf> GridRayTracing<'hf> {
     /// Creates a new grid ray tracing object.
-    pub fn new(surface: &'hf Heightfield, mesh: &'hf TriangleMesh) -> Self {
+    pub fn new(surface: &'hf Heightfield, mesh: &'hf MicroSurfaceTriMesh) -> Self {
         let max = IVec2::new(surface.cols as i32 - 2, surface.rows as i32 - 2);
         let origin = Vec2::new(
             -surface.du * (surface.cols / 2) as f32,
@@ -92,7 +92,7 @@ impl<'hf> GridRayTracing<'hf> {
     fn triangles_at(&self, pos: IVec2) -> [(u32, [Vec3; 3]); 2] {
         assert!(self.contains(&pos), "the position is out of the grid.");
         let cell = (self.surface.cols - 1) * pos.y as usize + pos.x as usize;
-        let pts = &self.surface_mesh.faces[cell * 6..cell * 6 + 6];
+        let pts = &self.surface_mesh.facets[cell * 6..cell * 6 + 6];
         log::debug!(
             "             - cell: {:?}, tris: {:?}, pts {:?}",
             cell,
@@ -373,7 +373,10 @@ impl<'hf> GridRayTracing<'hf> {
                                     tri_index,
                                     tri_index - 1
                                 );
-                                Some((tri_index - 1, self.surface_mesh.normals[tri_index - 1]))
+                                Some((
+                                    tri_index - 1,
+                                    self.surface_mesh.facet_normals[tri_index - 1],
+                                ))
                             } else {
                                 None
                             }
@@ -387,7 +390,8 @@ impl<'hf> GridRayTracing<'hf> {
                                 );
                                 Some((
                                     tri_index - (tris_per_row - 1),
-                                    (self.surface_mesh.normals[tri_index - (tris_per_row - 1)]),
+                                    (self.surface_mesh.facet_normals
+                                        [tri_index - (tris_per_row - 1)]),
                                 ))
                             } else if is_tri_index_odd && !is_last_col {
                                 log::debug!(
@@ -395,7 +399,10 @@ impl<'hf> GridRayTracing<'hf> {
                                     tri_index,
                                     tri_index + 1
                                 );
-                                Some((tri_index + 1, self.surface_mesh.normals[tri_index + 1]))
+                                Some((
+                                    tri_index + 1,
+                                    self.surface_mesh.facet_normals[tri_index + 1],
+                                ))
                             } else {
                                 None
                             }
@@ -407,7 +414,10 @@ impl<'hf> GridRayTracing<'hf> {
                                     tri_index,
                                     tri_index + 1
                                 );
-                                Some((tri_index + 1, self.surface_mesh.normals[tri_index + 1]))
+                                Some((
+                                    tri_index + 1,
+                                    self.surface_mesh.facet_normals[tri_index + 1],
+                                ))
                             } else if is_tri_index_odd && !is_last_row {
                                 log::debug!(
                                     "              adjacent triangle of {} is {}",
@@ -416,7 +426,7 @@ impl<'hf> GridRayTracing<'hf> {
                                 );
                                 Some((
                                     tri_index + (tris_per_row - 1),
-                                    self.surface_mesh.normals[tri_index + (tris_per_row - 1)],
+                                    self.surface_mesh.facet_normals[tri_index + (tris_per_row - 1)],
                                 ))
                             } else {
                                 None

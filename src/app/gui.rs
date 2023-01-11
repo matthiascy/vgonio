@@ -7,7 +7,7 @@ mod ui;
 mod widgets;
 
 use crate::{
-    acq::{emitter::CSHandedness, Ray, RtcMethod},
+    acq::{Handedness, Ray, RtcMethod},
     error::Error,
     units::degrees,
 };
@@ -40,7 +40,7 @@ use crate::{
         },
     },
     htfld::{AxisAlignment, Heightfield},
-    mesh::{TriangleMesh, TriangulationMethod},
+    mesh::{MicroSurfaceTriMesh, TriangulationMethod},
 };
 use winit::{
     dpi::PhysicalSize,
@@ -217,7 +217,7 @@ pub struct VgonioApp {
     occlusion_estimation_pass: OcclusionEstimationPass,
 
     surface: Option<Rc<Heightfield>>,
-    surface_mesh: Option<Rc<TriangleMesh>>,
+    surface_mesh: Option<Rc<MicroSurfaceTriMesh>>,
     surface_mesh_view: Option<MeshView>,
     surface_mesh_micro_view: Option<MicroSurfaceView>,
     surface_scale_factor: f32,
@@ -292,7 +292,7 @@ impl VgonioApp {
         let config = Arc::new(config);
         let mut db = VgonioDatafiles::new();
         db.load_ior_database(&config);
-        let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir.clone())));
+        let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir().to_path_buf())));
         let gui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
@@ -660,11 +660,11 @@ impl VgonioApp {
             VgonioEvent::UpdatePrimId(prim_id) => {
                 if let Some(mesh) = &self.surface_mesh {
                     let id = prim_id as usize;
-                    if id < mesh.faces.len() {
+                    if id < mesh.facets.len() {
                         let indices = [
-                            mesh.faces[id * 3],
-                            mesh.faces[id * 3 + 1],
-                            mesh.faces[id * 3 + 2],
+                            mesh.facets[id * 3],
+                            mesh.facets[id * 3 + 1],
+                            mesh.facets[id * 3 + 2],
                         ];
                         //let indices = mesh.faces[id];
                         let vertices = [
@@ -753,7 +753,7 @@ impl VgonioApp {
                     degrees!(zenith.1).into(),
                     degrees!(azimuth.0).into(),
                     degrees!(azimuth.1).into(),
-                    CSHandedness::RightHandedYUp,
+                    Handedness::RightHandedYUp,
                 );
                 let mut encoder =
                     self.gpu_ctx

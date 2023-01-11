@@ -27,6 +27,7 @@ use crate::{
     app::gfx::camera::{Projection, ProjectionKind},
     htfld::{regular_triangulation, Heightfield},
     isect::Aabb,
+    units::Radians,
     Error,
 };
 use bytemuck::{Pod, Zeroable};
@@ -236,5 +237,35 @@ impl MicroSurfaceView {
             facets,
             facet_normals: normals,
         }
+    }
+}
+
+/// Coordinate system handedness.
+pub enum Handedness {
+    RightHandedZUp,
+    RightHandedYUp,
+}
+
+/// Conversion from spherical coordinate system to cartesian coordinate system.
+///
+/// # Arguments
+///
+/// * `r` - radius
+/// * `zenith` - polar angle
+/// * `azimuth` - azimuthal angle
+/// * `handedness` - handedness of the cartesian coordinate system
+pub fn spherical_to_cartesian(
+    r: f32,
+    zenith: Radians,
+    azimuth: Radians,
+    handedness: Handedness,
+) -> Vec3 {
+    let a = r * zenith.sin() * azimuth.cos();
+    let b = r * zenith.sin() * azimuth.sin();
+    let c = r * zenith.cos();
+
+    match handedness {
+        Handedness::RightHandedZUp => Vec3::new(a, b, c),
+        Handedness::RightHandedYUp => Vec3::new(a, c, b),
     }
 }

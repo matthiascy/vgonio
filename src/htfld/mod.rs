@@ -2,7 +2,7 @@
 
 use crate::{
     isect::Aabb,
-    mesh::{TriangleMesh, TriangulationMethod},
+    mesh::{MicroSurfaceTriMesh, TriangulationMethod},
 };
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
@@ -490,7 +490,7 @@ impl Heightfield {
     }
 
     /// Triangulate the heightfield into a [`TriangleMesh`].
-    pub fn triangulate(&self, method: TriangulationMethod) -> TriangleMesh {
+    pub fn triangulate(&self, method: TriangulationMethod) -> MicroSurfaceTriMesh {
         match method {
             TriangulationMethod::Regular => {
                 let (verts, extent) = self.generate_vertices();
@@ -506,13 +506,13 @@ impl Heightfield {
                     })
                     .collect();
 
-                TriangleMesh {
-                    num_tris,
+                MicroSurfaceTriMesh {
+                    num_facets: num_tris,
                     num_verts: verts.len(),
                     extent,
                     verts,
-                    faces,
-                    normals,
+                    facets: faces,
+                    facet_normals: normals,
                 }
             }
             TriangulationMethod::Delaunay => {

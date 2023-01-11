@@ -35,10 +35,7 @@ pub fn run() -> Result<(), Error> {
         std::env::consts::OS
     );
 
-    // Parse the command line arguments
     let args: VgonioArgs = VgonioArgs::parse();
-
-    // Initialize vgonio application
     let config = app::init(&args, launch_time)?;
 
     match args.command {

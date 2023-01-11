@@ -6,7 +6,7 @@ mod visual_debug;
 use crate::{
     acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode},
     app::{gfx::GpuContext, gui::VgonioEvent},
-    mesh::TriangleMesh,
+    mesh::MicroSurfaceTriMesh,
 };
 use embree::Config;
 use winit::event_loop::EventLoopProxy;
@@ -29,7 +29,7 @@ pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTr
 pub(crate) fn trace_ray_standard_dbg(
     ray: Ray,
     max_bounces: u32,
-    surface: &TriangleMesh,
+    surface: &MicroSurfaceTriMesh,
 ) -> Vec<Ray> {
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let scn_id = embree_rt.create_scene();

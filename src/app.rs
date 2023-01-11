@@ -1,7 +1,11 @@
 use crate::error::Error;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
-use std::{io::Write, path::PathBuf};
+use std::{
+    fmt,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 pub mod cache;
 pub mod cli;
@@ -12,78 +16,68 @@ pub(crate) mod gui;
 #[derive(Debug)]
 pub struct VgonioConfig {
     /// Path to the configuration directory.
-    pub config_dir: std::path::PathBuf,
+    pub sys_config_dir: std::path::PathBuf,
 
     /// Path to the cache directory.
-    pub cache_dir: std::path::PathBuf,
+    pub sys_cache_dir: std::path::PathBuf,
 
     /// Path to the data files.
-    pub data_dir: std::path::PathBuf,
+    pub sys_data_dir: std::path::PathBuf,
 
     /// Current working directory (where the user started the program).
+    /// CWD will be used in case [`UserConfig::output_dir`] is not defined.
     pub cwd: std::path::PathBuf,
 
-    /// Path to the user-defined configuration.
+    /// User-defined configuration.
     pub user_config: UserConfig,
 }
 
-/// User-defined configuration.
+/// Options can be configured by user.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserConfig {
     /// Path to user-defined cache directory.
     /// If not set, the default cache directory is used.
-    pub cache_dir: std::path::PathBuf,
+    pub cache_dir: Option<std::path::PathBuf>,
 
     /// Path to the user-defined output directory.
     /// If not set, the default output directory is used.
-    pub output_dir: std::path::PathBuf,
+    pub output_dir: Option<std::path::PathBuf>,
 
     /// Path to the user-defined data files directory.
-    pub data_dir: std::path::PathBuf,
+    pub data_dir: Option<std::path::PathBuf>,
 }
 
 impl UserConfig {
-    /// Convert the possibly relative paths to absolute.
-    fn to_absolute(self) -> Self {
-        Self {
-            cache_dir: self.cache_dir.canonicalize().expect(&format!(
-                "failed to convert relative path '{}' to absolute",
-                self.cache_dir.display(),
-            )),
-            output_dir: self.output_dir.canonicalize().expect(&format!(
-                "failed to convert relative path '{}' to absolute",
-                self.output_dir.display(),
-            )),
-            data_dir: self.data_dir.canonicalize().expect(&format!(
-                "failed to convert relative path '{}' to absolute",
-                self.data_dir.display(),
-            )),
+    /// Load [`UserConfig`] from a .toml file.
+    pub fn load(path: &Path) -> Result<Self, Error> {
+        let string = std::fs::read_to_string(&path)?;
+        let mut config = toml::from_str(&string)?;
+        if let Some(cache_dir) = config.cache_dir {
+            config.cache_dir = cache_dir.canonicalize()?;
         }
+
+        if let Some(output_dir) = config.output_dir {
+            config.output_dir.canonicalize()?;
+        }
+
+        if let Some(data_dir) = config.data_dir {
+            config.data_dir.canonicalize()?;
+        }
+        config
     }
 }
 
 impl VgonioConfig {
     /// Load the configuration from the config directory.
     ///
-    /// There is a difference between the default onfiguration and the
-    /// user-defined configuration. The default configuration is reserved for
-    /// the vgonio application itself and can not be modified while the
-    /// user-defined configuration is freely editable by the user.
-    ///
-    /// The default configuration is firstly loaded from the default
-    /// configuration directory if it exists. Otherwise, the default
-    /// configuration is created and saved to the default configuration
-    /// directory.
     ///
     /// This function accepts a file path to the user-defined configuration
     /// file. If it's not set, the function tries to load the user-defined
     /// configuration from the current working directory (named as
-    /// vgonio-user.toml). If the file still doesn't exist, the function will
-    /// create a new user-specific configuration file and save it to the current
-    /// working directory as vgonio-user.toml with current working directory
-    /// as the default output directory, the default cache directory as the
-    /// user-defined cache directory and the default data directory as the
-    /// user-defined data directory.
+    /// vgonio.toml). If the file still doesn't exist, the function will
+    /// try to load the config file located in the configuration folder.
+    /// If this config file doesn't exist neither, `vgonio.toml` will
+    /// be created inside the default configuration direction.
     ///
     /// # Arguments
     ///
@@ -116,101 +110,135 @@ impl VgonioConfig {
     ///
     /// + On macos system: "$HOME/Library/Application Support"
     /// (same as configuration directory)
-    pub fn load_config(user_config_file: Option<&PathBuf>) -> Result<Self, Error> {
+    pub fn load_config(config_path: Option<&PathBuf>) -> Result<Self, Error> {
         log::info!("Loading configurations...");
-        // Load or create the default configuration.
-        let config_dir = {
+        let sys_config_dir = {
             let mut config_dir = dirs::config_dir().ok_or(Error::SysConfigDirNotFound)?;
             config_dir.push("vgonio");
             config_dir
         };
-        let cache_dir = {
+        let sys_cache_dir = {
             let mut cache_dir = dirs::cache_dir().ok_or(Error::SysCacheDirNotFound)?;
             cache_dir.push("vgonio");
             cache_dir
         };
-        let data_dir = {
+        let sys_data_dir = {
             let mut data_dir = dirs::data_dir().ok_or(Error::SysDataDirNotFound)?;
             data_dir.push("vgonio");
             data_dir
         };
 
-        log::info!("Configuration directory: {}", config_dir.display());
-        log::info!("Cache directory: {}", cache_dir.display());
-        log::info!("Data files directory: {}", data_dir.display());
+        log::info!(
+            "Default configuration directory: {}",
+            sys_config_dir.display()
+        );
+        log::info!("Default cache directory: {}", sys_cache_dir.display());
+        log::info!("Default data files directory: {}", sys_data_dir.display());
 
         // Create the default directories if they don't exist.
-        if !config_dir.exists() {
-            std::fs::create_dir_all(&config_dir)?;
+        if !sys_config_dir.exists() {
+            std::fs::create_dir_all(&sys_config_dir)?;
         }
 
-        if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir)?;
+        if !sys_cache_dir.exists() {
+            std::fs::create_dir_all(&sys_cache_dir)?;
         }
 
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)?;
+        if !sys_data_dir.exists() {
+            std::fs::create_dir_all(&sys_data_dir)?;
         }
 
         let cwd = std::env::current_dir()?;
 
-        if let Some(path) = user_config_file {
-            if !path.exists() {
-                Err(Error::UserConfigNotFound)
-            } else {
-                log::info!("Loading user configuration from {}", path.display());
-                let user_config: UserConfig = {
-                    let user_config_string = std::fs::read_to_string(path)?;
-                    toml::from_str(&user_config_string)?
-                };
-                Ok(Self {
-                    config_dir,
-                    cache_dir,
-                    data_dir,
-                    cwd,
-                    user_config: user_config.to_absolute(),
-                })
-            }
+        let Some(user_config_path) = config_path else {
+            log::warn!("Configuration file '{}' specified but doesn't exist!", config_path.display());
+        };
+
+        let user_config = if user_config_path.exists() {
+            log::info!("Loading configuration from {}", user_config_path.display());
+            Some(UserConfig::load(&user_config_path)?)
         } else {
-            // Try to load the user-defined configuration in the current working
-            // directory. If it doesn't exist, create a new one.
-            let cwd_config_path = cwd.join("vgonio-user.toml");
-            let user_config = if cwd_config_path.exists() {
-                log::info!(
-                    "Loading user configuration from cwd: {}",
-                    cwd_config_path.display()
-                );
-                let user_config_string = std::fs::read_to_string(&cwd_config_path)?;
-                let user_config: UserConfig = toml::from_str(&user_config_string)?;
-                user_config.to_absolute()
-            } else {
-                log::info!("Creating user configuration in cwd: {}", cwd.display());
-                let user_config = UserConfig {
-                    cache_dir: cache_dir.clone(),
-                    output_dir: cwd.clone(),
-                    data_dir: data_dir.clone(),
-                };
-                let mut file = std::fs::File::create(&cwd_config_path)?;
-                println!("Serialised user config: {}", toml::to_string(&user_config)?);
-                file.write_all(toml::to_string(&user_config)?.as_bytes())?;
-                user_config.to_absolute()
+            // No configuration file specified, try to load from CWD
+            let mut config_in_cwd = cwd.clone();
+            config_in_cwd.push("vgonio.toml");
+            if config_in_cwd.exists() {
+                log::info!("Loading configuration from {}", config_in_cwd.display());
+                Some(UserConfig::load(&config_in_cwd)?)
+            }
+
+            // No configuration file exists in CWD, try load from system
+            // configuration folder.
+            let mut config_in_sys = sys_config_dir.clone();
+            if config_in_sys.exists() {
+                log::info!("Loading configuration from {}", config_in_sys.display());
+                Some(UserConfig::load(&config_in_sys)?)
+            }
+
+            // No configuration file in system level, create one and
+            // fill with default values.
+            let user_config = UserConfig {
+                cache_dir: Some(sys_cache_dir.clone()),
+                output_dir: Some(cwd.clone()),
+                data_dir: Some(sys_data_dir.clone()),
             };
-            Ok(Self {
-                config_dir,
-                cache_dir,
-                data_dir,
-                user_config,
-                cwd,
-            })
-        }
+            let serialized = serde_yaml::to_string(&user_config).unwrap();
+            let mut config_file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(&config_in_sys)?;
+            config_file.write_all(serialized.as_bytes()).unwrap();
+            None
+        };
+        Ok(Self {
+            sys_config_dir,
+            sys_cache_dir,
+            sys_data_dir,
+            cwd,
+            user_config,
+        })
     }
 
-    pub fn cache_dir(&self) -> PathBuf {
-        if self.user_config.cache_dir.is_dir() {
-            self.user_config.cache_dir.clone()
-        } else {
-            self.cache_dir.clone()
-        }
+    /// Returns the cache directory.
+    pub fn cache_dir(&self) -> &Path {
+        self.user_config
+            .cache_dir
+            .map_or(self.sys_cache_dir.as_path(), |cache_dir| {
+                cache_dir.as_path()
+            })
+    }
+
+    /// Returns the output directory.
+    pub fn output_dir(&self) -> &Path {
+        self.user_config
+            .output_dir
+            .map_or(self.cwd.as_path(), |output_dir| output_dir.as_path())
+    }
+
+    /// Returns the user data files directory.
+    pub fn user_data_dir(&self) -> Option<&Path> {
+        self.user_config.data_dir.map(|data_dir| data_dir.as_path())
+    }
+
+    /// Returns the default data files directory.
+    pub fn default_data_dir(&self) -> &Path { &self.sys_data_dir }
+}
+
+impl fmt::Display for VgonioConfig {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Configuration directory: {}\nCache directory: {}\nDatafiles directory: {}\nCurrent \
+             working directory: {}\nCache directory: {}\nOutput directory: {}\nUser datafiles \
+             directory: {}\nVgonio datafiles directory: {}",
+            self.sys_config_dir.display(),
+            self.cache_dir().display(),
+            self.default_data_dir.display(),
+            self.cwd.display(),
+            self.cache_dir.display(),
+            self.output_dir.display(),
+            self.user_data_dir.display(),
+            self.default_data_dir(),
+        )
     }
 }
 
@@ -295,6 +323,9 @@ pub enum VgonioCommand {
 
     /// Extracts micro-surface's intrinsic properties.
     Extract(ExtractOptions),
+
+    /// Prints the current configurations.
+    Info,
 }
 
 /// Options for the `measure` command.
@@ -422,6 +453,5 @@ pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<Vgo
 
     log::info!("Initialising...");
 
-    // Load the configuration file.
     VgonioConfig::load_config(args.config.as_ref())
 }
