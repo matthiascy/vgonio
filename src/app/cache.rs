@@ -174,7 +174,7 @@ impl Cache {
         Ok(loaded)
     }
 
-    pub fn get_surfaces(
+    pub fn get_micro_surfaces(
         &self,
         surface_handles: &[MicroSurfaceHandle],
     ) -> Result<Vec<&Heightfield>, Error> {
