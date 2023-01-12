@@ -1,5 +1,8 @@
 use crate::units::Radians;
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct SolidAngle(f32);
@@ -22,6 +25,12 @@ impl SolidAngle {
     }
 
     pub fn value(&self) -> f32 { self.0 }
+}
+
+impl Display for SolidAngle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} sr", self.0)
+    }
 }
 
 /// Helper macro to create a new `SolidAngle` from a value in `sr`.

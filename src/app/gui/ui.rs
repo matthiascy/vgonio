@@ -132,9 +132,11 @@ impl VgonioUi {
                         });
                         if ui.button("\u{1F4C2} Open").clicked() {
                             use rfd::AsyncFileDialog;
-                            let task = AsyncFileDialog::new()
-                                .set_directory(&self.config.user_config.data_dir)
-                                .pick_file();
+                            let dir = self
+                                .config
+                                .user_data_dir()
+                                .unwrap_or_else(|| self.config.sys_data_dir());
+                            let task = AsyncFileDialog::new().set_directory(dir).pick_file();
                             let event_loop_proxy = self.event_loop.clone();
                             std::thread::spawn(move || {
                                 pollster::block_on(async {

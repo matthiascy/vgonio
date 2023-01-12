@@ -497,14 +497,17 @@ impl Heightfield {
                 let faces = regular_triangulation(&verts, self.cols, self.rows);
                 let num_tris = faces.len() / 3;
 
-                let normals = (0..num_tris)
-                    .map(|i| {
-                        let p0 = verts[faces[i * 3] as usize];
-                        let p1 = verts[faces[i * 3 + 1] as usize];
-                        let p2 = verts[faces[i * 3 + 2] as usize];
-                        (p1 - p0).cross(p2 - p0).normalize()
-                    })
-                    .collect();
+                let mut normals = vec![glam::Vec3::ZERO; num_tris];
+                let mut areas = vec![0.0; num_tris];
+
+                for i in 0..num_tris {
+                    let p0 = verts[faces[i * 3] as usize];
+                    let p1 = verts[faces[i * 3 + 1] as usize];
+                    let p2 = verts[faces[i * 3 + 2] as usize];
+                    let cross = (p1 - p0).cross(p2 - p0);
+                    normals[i] = cross.normalize();
+                    areas[i] = 0.5 * cross.length();
+                }
 
                 MicroSurfaceTriMesh {
                     num_facets: num_tris,
@@ -513,6 +516,7 @@ impl Heightfield {
                     verts,
                     facets: faces,
                     facet_normals: normals,
+                    facet_areas: areas,
                 }
             }
             TriangulationMethod::Delaunay => {

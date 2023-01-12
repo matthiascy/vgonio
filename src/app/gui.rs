@@ -292,7 +292,7 @@ impl VgonioApp {
         let config = Arc::new(config);
         let mut db = VgonioDatafiles::new();
         db.load_ior_database(&config);
-        let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir().to_path_buf())));
+        let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir())));
         let gui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),

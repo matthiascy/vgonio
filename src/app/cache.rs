@@ -27,6 +27,9 @@ pub struct VgonioDatafiles {
     pub ior_db: IorDb,
 }
 
+// TODO(yang): unify HeightField with corresponding MicroSurfaceTriMesh.
+// TODO(yang): maybe rename HeightField as MicroSurface.
+
 impl VgonioDatafiles {
     pub fn new() -> Self {
         Self {
@@ -38,21 +41,20 @@ impl VgonioDatafiles {
     /// config.
     pub fn load_ior_database(&mut self, config: &VgonioConfig) {
         // let mut database = RefractiveIndexDatabase::new();
-        let default_path = config.default_data_dir().to_path_buf().join("ior");
+        let sys_path: PathBuf = config.sys_data_dir().to_path_buf().join("ior");
         let user_path = config
             .user_data_dir()
             .map(|path| path.to_path_buf().join("ior"));
-        // First load refractive indices from `VgonioConfig::data_files_dir`.
-        if default_path.exists() {
+        // First load refractive indices from `VgonioConfig::sys_data_dir()`.
+        if sys_path.exists() {
             // Load one by one the files in the directory.
-            let n = Self::load_refractive_indices(&mut self.ior_db, &default_path);
-            log::debug!("Loaded {} ior files from {:?}", n, default_path);
+            let n = Self::load_refractive_indices(&mut self.ior_db, &sys_path);
+            log::debug!("Loaded {} ior files from {:?}", n, sys_path);
         }
 
-        // Second load refractive indices from
-        // `VgonioConfig::user_config::data_files_dir`.
-        if user_path.is_some_and(|p| p.exists()) {
-            let n = Self::load_refractive_indices(&mut self.ior_db, &user_path.unwrap());
+        // Second load refractive indices from `VgonioConfig::user_data_dir()`.
+        if user_path.as_ref().is_some_and(|p| p.exists()) {
+            let n = Self::load_refractive_indices(&mut self.ior_db, user_path.as_ref().unwrap());
             log::debug!("Loaded {} ior files from {:?}", n, user_path);
         }
     }
@@ -114,9 +116,9 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn new(cache_dir: PathBuf) -> Self {
+    pub fn new(cache_dir: &Path) -> Self {
         Self {
-            dir: cache_dir,
+            dir: cache_dir.to_path_buf(),
             micro_surfaces: Default::default(),
             triangle_meshes: Default::default(),
             recent_opened_files: None,
@@ -125,41 +127,51 @@ impl Cache {
     }
 
     /// Loads surfaces from their relevant places and returns
-    /// their handle inside the cache.
+    /// their cache handles.
     ///
     /// # Arguments
     ///
     /// * `config` - The application configuration.
     ///
-    /// * `paths` - Paths to the surfaces to be load. Paths are not in canonical
-    ///   form, they may also be relative paths.
+    /// * `paths` - Paths to the surfaces to be load. Paths may not in canonical
+    ///   form.
     ///
-    /// * `alignment` - The axis alignment the surfaces mesh.
+    /// * `alignment` - The axis alignment when constructing the surface mesh.
     pub fn load_micro_surfaces(
         &mut self,
         config: &VgonioConfig,
         paths: &[PathBuf],
         alignment: Option<AxisAlignment>,
     ) -> Result<Vec<MicroSurfaceHandle>, Error> {
+        log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
             .iter()
-            .map(|s| {
-                if let Ok(stripped) = s.strip_prefix("user://") {
-                    config.user_data_dir()?.join(stripped)
+            .filter_map(|s| {
+                if let Ok(stripped) = s.strip_prefix("usr://") {
+                    if config.user_data_dir().is_some() {
+                        config.user_data_dir().map(|p| p.join(stripped))
+                    } else {
+                        log::warn!(
+                            "The file path begins with `usr://`: {}, but the user data directory \
+                             is not configured.",
+                            s.display()
+                        );
+                        None
+                    }
                 } else if let Ok(stripped) = s.strip_prefix("sys://") {
-                    config.default_data_dir().join(stripped)
+                    Some(config.sys_data_dir().join(stripped))
                 } else {
-                    resolve_file_path(&config.cwd, Some(s))
+                    Some(resolve_path(&config.cwd, Some(s)))
                 }
             })
             .collect::<Vec<_>>();
-
+        log::debug!("- canonical paths: {:?}", canonical_paths);
         use std::collections::hash_map::Entry;
         let mut loaded = vec![];
-        for path in paths {
+        for path in canonical_paths {
             let path_string = path.to_string_lossy().to_string();
             if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
-                let heightfield = Heightfield::read_from_file(path, None, alignment)?;
+                let heightfield = Heightfield::read_from_file(&path, None, alignment)?;
                 loaded.push(MicroSurfaceHandle {
                     uuid: heightfield.uuid,
                     path: path.clone(),
@@ -172,6 +184,8 @@ impl Cache {
                 });
             }
         }
+        log::debug!("- loaded micro surfaces: {:?}", loaded);
+        self.triangulate_surfaces(&loaded);
         Ok(loaded)
     }
 
@@ -193,7 +207,7 @@ impl Cache {
 
     /// Triangulates the given height fields and returns uuid of corresponding
     /// heightfield.
-    pub fn triangulate_surfaces(&mut self, handles: &[MicroSurfaceHandle]) -> Vec<Uuid> {
+    fn triangulate_surfaces(&mut self, handles: &[MicroSurfaceHandle]) -> Vec<Uuid> {
         let mut meshes = vec![];
         for handle in handles {
             for surface in self.micro_surfaces.values() {
@@ -255,12 +269,12 @@ impl Cache {
 ///   3. `path` is absolute
 ///
 ///      Returns the `path` as is.
-pub(crate) fn resolve_file_path(base: &Path, path: Option<&Path>) -> PathBuf {
+pub(crate) fn resolve_path(base: &Path, path: Option<&Path>) -> PathBuf {
     path.map_or_else(
         || base.to_path_buf(),
         |path| {
             if path.is_absolute() {
-                path.to_path_buf().canonicalize().unwrap()
+                path.canonicalize().unwrap()
             } else {
                 base.join(path).canonicalize().unwrap()
             }

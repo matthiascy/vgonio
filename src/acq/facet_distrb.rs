@@ -1,16 +1,24 @@
+use std::{
+    io::{BufWriter, Write},
+    path::Path,
+};
+
 use crate::{
     app::cache::{Cache, MicroSurfaceHandle},
+    error::Error,
     units::{self, degrees, Degrees, Radians},
 };
 
 use super::{spherical_to_cartesian, Handedness};
 
+use rayon::prelude::*;
+
 pub const AZIMUTH_BIN_SIZE: Degrees = degrees!(5.0);
 pub const ZENITH_BIN_SIZE: Degrees = degrees!(2.0);
 pub const AZIMUTH_BIN_SIZE_HALF: Degrees = degrees!(2.5);
 pub const ZENITH_BIN_SIZE_HALF: Degrees = degrees!(1.0);
-pub const AZIMUTH_BIN_COUNT: usize = 72;
-pub const ZENITH_BIN_COUNT: usize = 17;
+pub const AZIMUTH_BIN_COUNT: usize = (360.0 / AZIMUTH_BIN_SIZE.value()) as usize;
+pub const ZENITH_BIN_COUNT: usize = (90.0 / ZENITH_BIN_SIZE.value()) as usize + 1;
 
 // NOTE(yang): The number of bins is determined by the bin size and the range of
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
@@ -24,6 +32,7 @@ pub const ZENITH_BIN_COUNT: usize = 17;
 /// number of facets oriented in any given direction, or, more precisely, the
 /// relative total facet surface area per unit solid angle of surface normals
 /// pointed in any given direction.
+#[derive(Debug, Clone)]
 pub struct MicrofacetDistribution {
     /// The bin size of azimuthal angle when sampling the microfacet
     /// distribution.
@@ -40,15 +49,50 @@ pub struct MicrofacetDistribution {
     pub samples: Vec<f32>,
 }
 
+impl MicrofacetDistribution {
+    pub fn save_ascii(&self, filepath: &Path) -> Result<(), Error> {
+        log::info!(
+            "Saving microfacet distribution in ascii format to {}",
+            filepath.display()
+        );
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&filepath)?;
+        let mut writter = BufWriter::new(file);
+        let header = format!(
+            "micro-facet distribution\nazimuth - bin size: {}, bins count: {}\nzenith - bin size: \
+             {}, bins count: {}\n",
+            AZIMUTH_BIN_SIZE.prettified(),
+            AZIMUTH_BIN_COUNT,
+            ZENITH_BIN_SIZE.prettified(),
+            ZENITH_BIN_COUNT
+        );
+        writter.write(header.as_bytes())?;
+        self.samples.iter().for_each(|s| {
+            let value = format!("{} ", s);
+            writter.write(value.as_bytes()).unwrap();
+        });
+        Ok(())
+    }
+}
+
+/// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_micro_facet_distribution(
     surfaces: &[MicroSurfaceHandle],
     cache: &Cache,
 ) -> Vec<MicrofacetDistribution> {
+    log::info!("Measuring micro facet distribution...");
     let surfaces = cache.get_micro_surface_meshes(surfaces);
     surfaces
         .iter()
         .map(|surface| {
             let macro_area = surface.macro_surface_area();
+            let solid_angle =
+                units::solid_angle_of_spherical_cap(ZENITH_BIN_SIZE.in_radians()).value();
+            let divisor = macro_area * solid_angle;
+            log::debug!("-- macro surface area: {}", macro_area);
+            log::debug!("-- solid angle per measurement: {}", solid_angle);
             let samples = (0..AZIMUTH_BIN_COUNT)
                 .flat_map(move |azimuth_idx| {
                     (0..ZENITH_BIN_COUNT).map(move |zenith_idx| {
@@ -61,21 +105,31 @@ pub fn measure_micro_facet_distribution(
                             Handedness::RightHandedYUp,
                         )
                         .normalize();
-                        let solid_angle =
-                            units::solid_angle_of_spherical_cap(ZENITH_BIN_SIZE.in_radians());
                         let facets_surface_area = surface
                             .facet_normals
-                            .iter()
+                            .par_iter()
                             .enumerate()
                             .filter_map(|(idx, normal)| {
-                                if normal.dot(dir) > 0.0 {
+                                if normal.dot(dir) >= ZENITH_BIN_SIZE_HALF.cos() {
                                     Some(idx)
                                 } else {
                                     None
                                 }
                             })
-                            .fold(0.0, |area, facet| area + surface.facet_surface_area(facet));
-                        facets_surface_area / (solid_angle.value() * macro_area)
+                            .fold(
+                                || 0.0,
+                                |area, facet| area + surface.facet_surface_area(facet),
+                            )
+                            .reduce(|| 0.0, |a, b| a + b);
+                        let value = facets_surface_area / divisor;
+                        log::trace!(
+                            "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
+                            azimuth.prettified(),
+                            zenith.prettified(),
+                            facets_surface_area,
+                            value
+                        );
+                        value
                     })
                 })
                 .collect::<Vec<_>>();

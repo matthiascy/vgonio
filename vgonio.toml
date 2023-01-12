@@ -1,2 +1,2 @@
 output_dir = "../../virtual-gonio/output"
-data_files_dir = "../../virtual-gonio/datafiles"
+data_dir = "../../virtual-gonio/datafiles"

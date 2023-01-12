@@ -1,5 +1,6 @@
 use std::{
     fmt::{Display, Formatter},
+    path::PathBuf,
     str,
 };
 
@@ -20,7 +21,8 @@ pub enum Error {
     SysCacheDirNotFound,
     SysDataDirNotFound,
     UserConfigNotFound,
-    UserDataDirNotProvided,
+    UserDataDirNotConfigured,
+    InvalidOutputDir(PathBuf),
     #[cfg(target_arch = "wasm32")]
     WasmConsoleLogInitFailed,
 }
@@ -99,11 +101,14 @@ impl Display for Error {
                     "Failed to initialise console log for vgonio wasm module!"
                 )
             }
-            Error::UserDataDirNotProvided => {
+            Error::UserDataDirNotConfigured => {
                 write!(
                     f,
                     "Try to load file from user data directory which doesn't exist!"
                 )
+            }
+            Error::InvalidOutputDir(path) => {
+                write!(f, "Invalid output path {}!", path.display())
             }
         }
     }

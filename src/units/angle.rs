@@ -99,7 +99,7 @@ impl<A: AngleUnit> Angle<A> {
     }
 
     /// Get the value of the angle.
-    pub fn value(&self) -> f32 { self.value }
+    pub const fn value(&self) -> f32 { self.value }
 
     /// Determines whether the angle is greater than zero.
     #[inline(always)]

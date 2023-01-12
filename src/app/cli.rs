@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::{
     acq::{
         self,
@@ -6,14 +8,16 @@ use crate::{
         CollectorScheme, RtcMethod,
     },
     app::{
-        cache::{Cache, VgonioDatafiles},
+        cache::{resolve_path, Cache, MicroSurfaceHandle, VgonioDatafiles},
         ExtractOptions, MeasureOptions, VgonioCommand, VgonioConfig,
     },
     htfld::AxisAlignment,
+    mesh::TriangulationMethod,
     Error,
 };
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
+pub const BRIGHT_RED: &str = "\u{001b}[31m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
 pub const RESET: &str = "\u{001b}[0m";
 
@@ -22,7 +26,7 @@ pub const RESET: &str = "\u{001b}[0m";
 pub fn execute(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
     match cmd {
         VgonioCommand::Measure(opts) => measure(opts, config),
-        VgonioCommand::Extract(opts) => extract(opts, config),
+        VgonioCommand::Extract(opts) => extract(&opts, &config),
         VgonioCommand::Info => print_info(config),
     }
 }
@@ -44,7 +48,7 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
 
     // Load data files: refractive indices, spd etc.
     println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
-    let mut cache = Cache::new(config.cache_dir().to_path_buf());
+    let mut cache = Cache::new(config.cache_dir());
 
     let mut db = VgonioDatafiles::new();
     db.load_ior_database(&config);
@@ -66,7 +70,28 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                 .load_micro_surfaces(&config, &desc.surfaces, Some(AxisAlignment::XZ))
                 .expect("Failed to load surfaces from files"); // TODO: better error handling
                                                                // Triangulate all surfaces.
-            cache.triangulate_surfaces(&handles);
+            {
+                let ref mut this = cache;
+                let handles: &[MicroSurfaceHandle] = &handles;
+                let mut meshes = vec![];
+                for handle in handles {
+                    for surface in this.micro_surfaces.values() {
+                        if surface.uuid == handle.uuid {
+                            if let std::collections::hash_map::Entry::Vacant(e) =
+                                this.triangle_meshes.entry(surface.uuid)
+                            {
+                                let mesh = surface.triangulate(TriangulationMethod::Regular);
+                                e.insert(mesh);
+                                meshes.push(surface.uuid);
+                            } else {
+                                meshes.push(surface.uuid);
+                            }
+                            break;
+                        }
+                    }
+                }
+                meshes
+            };
             handles
         })
         .collect::<Vec<_>>();
@@ -213,23 +238,65 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
     // todo: save to file
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
-        config.user_config.output_dir.display()
+        config.output_dir().display()
     );
 
     Ok(())
 }
 
 /// Extracts micro-surface intrinsic properties.
-fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
+fn extract(opts: &ExtractOptions, config: &VgonioConfig) -> Result<(), Error> {
+    println!("{BRIGHT_YELLOW}>{RESET} Measuring micro-surface intrinsic properties...");
     let mut cache = Cache::new(config.cache_dir());
     let micro_surfaces =
         cache.load_micro_surfaces(&config, &opts.inputs, Some(AxisAlignment::XZ))?;
     match opts.property {
         super::MicroSurfaceProperty::MicroFacetNormal => todo!(),
         super::MicroSurfaceProperty::MicroFacetDistribution => {
+            println!("  {BRIGHT_YELLOW}>{RESET} Measuring micro facet distribution...");
+            let start_time = Instant::now();
             let distributions =
                 acq::facet_distrb::measure_micro_facet_distribution(&micro_surfaces, &cache);
-            // TODO: output to file
+            let duration = Instant::now() - start_time;
+            println!(
+                "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+                duration.as_secs_f32()
+            );
+            let output_dir = if let Some(ref output) = opts.output {
+                let path = resolve_path(config.cwd(), Some(&output));
+                if !path.is_dir() {
+                    return Err(Error::InvalidOutputDir(path));
+                }
+                path
+            } else {
+                config.output_dir().to_path_buf()
+            };
+            println!("  {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+            for (distrb, surface) in distributions.iter().zip(micro_surfaces.iter()) {
+                let filename = format!(
+                    "facet-distrb-{}.txt",
+                    surface
+                        .path
+                        .file_stem()
+                        .unwrap()
+                        .to_ascii_lowercase()
+                        .to_str()
+                        .unwrap()
+                );
+                let filepath = output_dir.join(filename);
+                println!(
+                    "    {BRIGHT_CYAN}-{RESET} Saving to \"{}\"...",
+                    filepath.display()
+                );
+                distrb.save_ascii(&filepath).unwrap_or_else(|err| {
+                    eprintln!(
+                        "      {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                        filepath.display(),
+                        err
+                    );
+                })
+            }
+            println!("    {BRIGHT_CYAN}✓{RESET} Done!");
             Ok(())
         }
         super::MicroSurfaceProperty::MicroFacetMaskingShadowing => {
@@ -243,6 +310,6 @@ fn extract(opts: ExtractOptions, config: VgonioConfig) -> Result<(), Error> {
 
 /// Prints Vgonio's current configurations.
 fn print_info(config: VgonioConfig) -> Result<(), Error> {
-    println!("{}", config);
+    println!("\n{}", config);
     Ok(())
 }
