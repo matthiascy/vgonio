@@ -1,5 +1,5 @@
 use crate::{
-    acq::measurement::Measurement,
+    acq::measurement::{BsdfMeasurement, Measurement},
     app::{
         cache::Cache,
         gui::{gizmo::VgonioGizmo, VgonioEvent},
@@ -54,6 +54,7 @@ struct Partition {
     azimuth: (f32, f32, f32),
 }
 
+// TODO(yang): refactor this because of the change in measurement description.
 /// A panel for configuration of the simulation parameters.
 pub struct SimulationPanel {
     /// Measurement description.
@@ -89,7 +90,12 @@ pub struct SimulationPanel {
 impl SimulationPanel {
     pub fn new(cache: Arc<RefCell<Cache>>) -> Self {
         Self {
-            desc: Measurement::default(),
+            desc: Measurement {
+                details: crate::acq::measurement::MeasurementDetails::Bsdf(
+                    BsdfMeasurement::default(),
+                ),
+                surfaces: vec![],
+            },
             selected_surface_index: 0,
             emitter_radius_mode: RadiusMode::Auto,
             emitter_radius: 0.0,

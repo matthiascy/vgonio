@@ -4,12 +4,12 @@ pub mod bsdf;
 mod collector;
 mod embree_rt;
 pub(crate) mod emitter; // TDOD: make private
-pub mod facet_distrb;
 pub mod facet_shadow;
 pub mod fresnel;
 mod grid_rt;
 pub mod ior;
 pub mod measurement;
+pub mod microfacet;
 pub mod ndf;
 mod occlusion;
 pub mod scattering;

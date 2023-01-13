@@ -23,6 +23,7 @@ pub enum Error {
     UserConfigNotFound,
     UserDataDirNotConfigured,
     InvalidOutputDir(PathBuf),
+    InvalidParameter(&'static str),
     #[cfg(target_arch = "wasm32")]
     WasmConsoleLogInitFailed,
 }
@@ -109,6 +110,9 @@ impl Display for Error {
             }
             Error::InvalidOutputDir(path) => {
                 write!(f, "Invalid output path {}!", path.display())
+            }
+            Error::InvalidParameter(err) => {
+                write!(f, "Invalid parameter: {}", err)
             }
         }
     }

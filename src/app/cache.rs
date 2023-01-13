@@ -129,6 +129,8 @@ impl Cache {
     /// Loads surfaces from their relevant places and returns
     /// their cache handles.
     ///
+    /// Note: this function automatically triangulates the surfaces.
+    ///
     /// # Arguments
     ///
     /// * `config` - The application configuration.

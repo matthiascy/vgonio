@@ -9,7 +9,7 @@ use crate::{
     units::{self, degrees, Degrees, Radians},
 };
 
-use super::{spherical_to_cartesian, Handedness};
+use super::{measurement::MicrofacetDistributionMeasurement, spherical_to_cartesian, Handedness};
 
 use rayon::prelude::*;
 
@@ -78,7 +78,8 @@ impl MicrofacetDistribution {
 }
 
 /// Measure the microfacet distribution of a list of micro surfaces.
-pub fn measure_micro_facet_distribution(
+pub fn measure_microfacet_distribution(
+    _desc: MicrofacetDistributionMeasurement,
     surfaces: &[MicroSurfaceHandle],
     cache: &Cache,
 ) -> Vec<MicrofacetDistribution> {

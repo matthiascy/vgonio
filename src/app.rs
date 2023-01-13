@@ -1,16 +1,15 @@
-use crate::error::Error;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use crate::{acq::MicroSurfaceView, error::Error};
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::{fmt, io::Write, path::Path};
+
+pub(crate) mod args;
 
 pub mod cache;
 pub mod cli;
 pub mod gfx;
 pub(crate) mod gui;
+
+use args::VgonioArgs;
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -255,152 +254,6 @@ impl fmt::Display for VgonioConfig {
             }
         )
     }
-}
-
-/// Top-level CLI arguments.
-#[derive(Parser, Debug)]
-#[clap(
-    author,
-    version,
-    about = "Micro-geometry level light transportation simulation."
-)]
-pub struct VgonioArgs {
-    /// Whether to print any information to stdout.
-    #[clap(short, long, help = "Silent output printed to stdout")]
-    pub quite: bool,
-
-    /// Whether to print verbose information to stdout.
-    #[clap(short, long, help = "Use verbose output (log level = 4)")]
-    pub verbose: bool,
-
-    /// Path to the file where to output the log to.
-    #[clap(long, help = "Set a file to output the log to")]
-    pub log_file: Option<PathBuf>,
-
-    /// File descriptor where to output the log to.
-    #[clap(long, help = "Set a file descriptor as log output [2 = stderr]")]
-    pub log_fd: Option<u32>,
-
-    /// Whether to show the timestamp in the log.
-    #[clap(
-        long,
-        help = "Show timestamp for each log message in seconds since\nprogram starts"
-    )]
-    pub log_timestamp: bool,
-
-    /// Verbosity level for the log.
-    #[clap(
-        long,
-        help = "Setting logging verbosity level (higher for more\ndetails)\n  0 - error\n  1 - \
-                warn + error\n  2 - info + warn + error\n  3 - debug + info + warn + error\n  4 - \
-                trace + debug + info + warn + error\n\x08",
-        default_value_t = 1
-    )]
-    pub log_level: u8,
-
-    #[clap(long, help = "Enable debug messages from `wgpu-rs` and `naga`")]
-    pub debug_wgpu: bool,
-
-    #[clap(long, help = "Enable debug messages from `winit`")]
-    pub debug_winit: bool,
-
-    /// Command to execute.
-    #[clap(subcommand)]
-    pub command: Option<VgonioCommand>,
-
-    /// Path to the user config file. If not specified, vgonio will
-    /// load the default config file.
-    #[clap(short, long, help = "Path to the user config file")]
-    pub config: Option<PathBuf>,
-}
-
-/// Micro-surface's intrinsic property.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum)]
-pub enum MicroSurfaceProperty {
-    /// Micro-facet normal vectors.
-    #[clap(name = "facet-normal")]
-    MicroFacetNormal,
-
-    /// Micro-facet distribution function (i.e. NDF/D term).
-    #[clap(name = "facet-distrb")]
-    MicroFacetDistribution,
-
-    /// Micro-facet shadowing-masking function (i.e. Geometric term).
-    #[clap(name = "facet-shadow")]
-    MicroFacetMaskingShadowing,
-}
-
-/// Vgonio command.
-#[derive(Subcommand, Debug)]
-pub enum VgonioCommand {
-    /// Measures micro-geometry level light transport related metrics.
-    Measure(MeasureOptions),
-
-    /// Extracts micro-surface's intrinsic properties.
-    Extract(ExtractOptions),
-
-    /// Prints the current configurations.
-    Info,
-}
-
-/// Options for the `measure` command.
-#[derive(Args, Debug)]
-#[clap(about = "Measure different aspects of the micro-surface.")]
-pub struct MeasureOptions {
-    #[clap(short, long, help = "The input measurement description file.")]
-    input_path: PathBuf,
-
-    #[clap(
-        short,
-        long,
-        help = "The path where stores the simulation data. Use //\nat the start of the path to \
-                set the output path\nrelative to the input file location. If not \nspecified, \
-                current working directory will be used"
-    )]
-    output_path: Option<PathBuf>,
-
-    #[clap(
-        short,
-        long = "num-threads",
-        help = "The number of threads in the thread pool"
-    )]
-    nthreads: Option<u32>,
-
-    #[clap(long, help = "Use caches to minimize the processing time")]
-    enable_cache: bool,
-
-    #[clap(
-        long,
-        help = "Show detailed statistics about memory and time\nusage during the measurement"
-    )]
-    print_stats: bool,
-}
-
-/// Options for the `extract` command.
-#[derive(Args, Debug)]
-#[clap(about = "Extract micro-surface's intrinsic properties.")]
-pub struct ExtractOptions {
-    #[clap(value_enum)]
-    property: MicroSurfaceProperty,
-
-    #[clap(
-        help = "The input micro-surface profile description files. Can be a list of files\nor a \
-                directory. Use `usr://` or `sys://` to indicate the user-defined data\nfile path \
-                or system-defined data file path respectively."
-    )]
-    inputs: Vec<PathBuf>,
-
-    #[clap(
-        short,
-        long,
-        help = "The directory where stores the output data. Use // at the start of the path\nto \
-                set the output path relative to the input file location. Output path can also\nbe \
-                specified in configuration file."
-    )]
-    output: Option<PathBuf>,
-
-    #[clap(long, help = "Use caches to minimize the processing time")]
-    enable_cache: bool,
 }
 
 pub fn log_filter_from_level(level: u8) -> log::LevelFilter {

@@ -14,6 +14,8 @@ use embree::Config;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+use super::measurement::{BsdfMeasurement, MeasurementDetails};
+
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -126,7 +128,7 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 ///
 /// TODO: add support for complete BSDF measurement.
 pub fn measure_bsdf_embree_rt(
-    desc: Measurement,
+    desc: BsdfMeasurement,
     cache: &Cache,
     db: &VgonioDatafiles,
     surfaces: &[MicroSurfaceHandle],
@@ -219,7 +221,7 @@ pub fn measure_bsdf_embree_rt(
 
 /// Brdf measurement.
 pub fn measure_bsdf_grid_rt(
-    desc: Measurement,
+    desc: BsdfMeasurement,
     cache: &Cache,
     db: &VgonioDatafiles,
     surfaces: &[MicroSurfaceHandle],
