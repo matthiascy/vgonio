@@ -1,9 +1,5 @@
 use crate::{
-    acq::{
-        measurement::{Measurement, Radius},
-        util::RangeByStepSize,
-        Collector, Emitter, Patch,
-    },
+    acq::{measurement::Radius, util::RangeByStepSize, Collector, Emitter, Patch},
     app::{
         cache::{Cache, MicroSurfaceHandle, VgonioDatafiles},
         cli::{BRIGHT_YELLOW, RESET},

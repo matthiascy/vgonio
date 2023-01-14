@@ -24,7 +24,7 @@ use crate::error::Error;
 
 /// Main entry point for the application.
 pub fn run() -> Result<(), Error> {
-    use app::args::VgonioArgs;
+    use app::args::CliArgs;
     use clap::Parser;
 
     let launch_time = std::time::SystemTime::now();
@@ -35,7 +35,7 @@ pub fn run() -> Result<(), Error> {
         std::env::consts::OS
     );
 
-    let args = VgonioArgs::parse();
+    let args = CliArgs::parse();
     let config = app::init(&args, launch_time)?;
 
     match args.command {

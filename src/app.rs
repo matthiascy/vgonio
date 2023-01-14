@@ -9,7 +9,7 @@ pub mod cli;
 pub mod gfx;
 pub(crate) mod gui;
 
-use args::VgonioArgs;
+use args::CliArgs;
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -276,7 +276,7 @@ pub fn log_filter_from_level(level: u8) -> log::LevelFilter {
 ///
 /// * `args` - The CLI arguments passed to the program.
 /// * `launch_time` - The time when the program is launched.
-pub fn init(args: &VgonioArgs, launch_time: std::time::SystemTime) -> Result<VgonioConfig, Error> {
+pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<VgonioConfig, Error> {
     let log_level = if args.verbose { 4 } else { args.log_level };
     let log_level_wgpu = if args.debug_wgpu { 3 } else { 0 };
     let log_level_winit = if args.debug_winit { 3 } else { 0 };

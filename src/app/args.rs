@@ -2,14 +2,14 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Top-level CLI arguments.
+/// Vgonio command line interface arguments.
 #[derive(Parser, Debug)]
 #[clap(
     author,
     version,
     about = "Micro-geometry level light transportation simulation."
 )]
-pub struct VgonioArgs {
+pub struct CliArgs {
     /// Whether to print any information to stdout.
     #[clap(short, long, help = "Silent output printed to stdout")]
     pub quite: bool,
@@ -65,7 +65,8 @@ pub enum VgonioCommand {
     /// Measures micro-geometry level light transport related metrics.
     Measure(MeasureOptions),
 
-    /// Prints the current configurations.
+    /// Prints the current configuration and default parameters for different
+    /// measurements.
     Info,
 }
 

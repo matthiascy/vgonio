@@ -34,13 +34,20 @@ pub fn execute(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
 }
 
 fn measure_normal_mode(
-    filepath: &Path,
+    filepaths: &[&Path],
     config: VgonioConfig,
     cache: &mut Cache,
     datafiles: &mut VgonioDatafiles,
 ) -> Result<(), Error> {
-    println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description file...");
-    let measurements = Measurement::load_from_file(filepath)?;
+    println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
+    let measurements = filepaths
+        .iter()
+        .flat_map(|path| {
+            let resolved = resolve_path(&config.cwd, Some(path));
+            Measurement::load_from_file(&resolved)
+        })
+        .collect::<Vec<_>>();
+    //let measurements = Measurement::load_from_file(filepaths)?;
     println!(
         "    {BRIGHT_YELLOW}✓{RESET} {} measurement(s)",
         measurements.len()
