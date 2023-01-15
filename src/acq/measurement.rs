@@ -12,10 +12,9 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
-    convert::Into,
     fmt::{Display, Formatter},
     fs::File,
-    io::Read,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -437,7 +436,7 @@ pub struct Measurement {
     /// Surfaces to be measured. surface's path can be prefixed with either
     /// `usr://` or `sys://` to indicate the user-defined data file path
     /// or system-defined data file path.
-    pub surfaces: Vec<PathBuf>,
+    pub surfaces: Vec<PathBuf>, // TODO(yang): use Cow<'a, Vec<PathBuf>> to avoid copying the path
 }
 
 impl Measurement {
@@ -489,13 +488,9 @@ impl Measurement {
     ///   must be in canonical form and must exist.
     fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, Error> {
         let mut file = File::open(filepath)?;
-        let content = {
-            let mut str_ = String::new();
-            file.read_to_string(&mut str_)?;
-            str_
-        };
+        let reader = BufReader::new(&mut file);
         // TODO: invoke generation of patches and samples
-        let measurements = serde_yaml::Deserializer::from_str(&content)
+        let measurements = serde_yaml::Deserializer::from_reader(reader)
             .into_iter()
             .map(|doc| {
                 Measurement::deserialize(doc)

@@ -3,7 +3,10 @@ use crate::{
         ior::{Ior, IorDb},
         Medium,
     },
-    app::VgonioConfig,
+    app::{
+        cli::{BRIGHT_RED, RESET},
+        VgonioConfig,
+    },
     htfld::{AxisAlignment, Heightfield},
     mesh::{MicroSurfaceTriMesh, TriangulationMethod},
     Error,
@@ -126,6 +129,8 @@ impl Cache {
         }
     }
 
+    pub fn num_micro_surfaces(&self) -> usize { self.micro_surfaces.len() }
+
     /// Loads surfaces from their relevant places and returns
     /// their cache handles.
     ///
@@ -167,23 +172,30 @@ impl Cache {
                 }
             })
             .collect::<Vec<_>>();
-        log::debug!("- canonical paths: {:?}", canonical_paths);
+        log::debug!("-- canonical paths: {:?}", canonical_paths);
         use std::collections::hash_map::Entry;
         let mut loaded = vec![];
         for path in canonical_paths {
-            let path_string = path.to_string_lossy().to_string();
-            if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
-                let heightfield = Heightfield::read_from_file(&path, None, alignment)?;
-                loaded.push(MicroSurfaceHandle {
-                    uuid: heightfield.uuid,
-                    path: path.clone(),
-                });
-                e.insert(heightfield);
+            if path.exists() {
+                let path_string = path.to_string_lossy().to_string();
+                if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
+                    let heightfield = Heightfield::read_from_file(&path, None, alignment)?;
+                    loaded.push(MicroSurfaceHandle {
+                        uuid: heightfield.uuid,
+                        path: path.clone(),
+                    });
+                    e.insert(heightfield);
+                } else {
+                    loaded.push(MicroSurfaceHandle {
+                        uuid: self.micro_surfaces[&path_string].uuid,
+                        path: path.clone(),
+                    });
+                }
             } else {
-                loaded.push(MicroSurfaceHandle {
-                    uuid: self.micro_surfaces[&path_string].uuid,
-                    path: path.clone(),
-                });
+                eprintln!(
+                    "    {BRIGHT_RED}!{RESET} file not found: {}",
+                    path.display()
+                );
             }
         }
         log::debug!("- loaded micro surfaces: {:?}", loaded);

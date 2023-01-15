@@ -21,3 +21,7 @@ collector:
     partition: !equal_area
       zenith: 0 rad ~ 90deg, 6
       azimuth: 0rad ~ 90deg / 120 deg
+---
+type: !microfacet-distribution
+  zenith: 0deg ~ 90deg / 2 deg
+  azimuth: 0deg ~ 360deg / 5 deg

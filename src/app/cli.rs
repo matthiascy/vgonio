@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    time::Instant,
-};
+use std::{borrow::Cow, path::PathBuf, time::Instant};
 
 use crate::{
     acq::{
@@ -73,31 +70,33 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                 })
                 .flatten()
                 .collect::<Vec<_>>(),
-            Some(kind) => match kind {
-                MeasurementKind::Bsdf => vec![Measurement {
-                    details: MeasurementDetails::Bsdf(BsdfMeasurement::default()),
-                    surfaces: opts.inputs,
-                }],
-                MeasurementKind::MicrofacetDistribution => vec![Measurement {
-                    details: MeasurementDetails::MicrofacetDistribution(
-                        MicrofacetDistributionMeasurement::default(),
-                    ),
-                    surfaces: opts.inputs,
-                }],
-                MeasurementKind::MicrofacetShadowingMasking => vec![Measurement {
-                    details: MeasurementDetails::MicrofacetShadowMasking(
-                        MicrofacetShadowingMaskingMeasurement::default(),
-                    ),
-                    surfaces: opts.inputs,
-                }],
-            },
+            Some(kinds) => kinds
+                .iter()
+                .map(|kind| match kind {
+                    MeasurementKind::Bsdf => Measurement {
+                        details: MeasurementDetails::Bsdf(BsdfMeasurement::default()),
+                        surfaces: opts.inputs.clone(),
+                    },
+                    MeasurementKind::MicrofacetDistribution => Measurement {
+                        details: MeasurementDetails::MicrofacetDistribution(
+                            MicrofacetDistributionMeasurement::default(),
+                        ),
+                        surfaces: opts.inputs.clone(),
+                    },
+                    MeasurementKind::MicrofacetShadowingMasking => Measurement {
+                        details: MeasurementDetails::MicrofacetShadowMasking(
+                            MicrofacetShadowingMaskingMeasurement::default(),
+                        ),
+                        surfaces: opts.inputs.clone(),
+                    },
+                })
+                .collect::<Vec<_>>(),
         }
     };
     println!(
-        "    {BRIGHT_YELLOW}✓{RESET} {} measurement(s)",
+        "    {BRIGHT_CYAN}✓{RESET} {} measurement(s)",
         measurements.len()
     );
-    println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
 
     if measurements.iter().any(|meas| meas.details.is_bsdf()) {
         // Load data files: refractive indices, spd etc.
@@ -106,26 +105,21 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
         println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
     }
 
-    println!("  {BRIGHT_YELLOW}>{RESET} Resolving and loading surfaces...");
+    println!("  {BRIGHT_YELLOW}>{RESET} Resolving and loading micro-surfaces...");
     let tasks = measurements
         .into_iter()
         .filter_map(|meas| {
             // Load surfaces height field from files and cache them.
             cache
                 .load_micro_surfaces(&config, &meas.surfaces, Some(AxisAlignment::XZ))
-                .map_err(|err| {
-                    log::warn!(
-                        "{} failed to load surface: {}, skipping...",
-                        meas.name(),
-                        err
-                    )
-                })
-                .map(|surfaces| (meas, surfaces))
                 .ok()
+                .map(|surfaces| (meas, surfaces))
         })
         .collect::<Vec<_>>();
-    println!("    {BRIGHT_CYAN}✓{RESET} Successfully load surface files");
-
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} {} micro-surface(s) loaded",
+        cache.num_micro_surfaces()
+    );
     for (measurement, surfaces) in tasks {
         match measurement.details {
             MeasurementDetails::Bsdf(measurement) => {
@@ -289,7 +283,19 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     e
                 })?;
             }
-            MeasurementDetails::MicrofacetShadowMasking(measurement) => todo!(),
+            MeasurementDetails::MicrofacetShadowMasking(measurement) => {
+                measure_microfacet_shadowing_masking(
+                    measurement,
+                    &surfaces,
+                    &cache,
+                    &config,
+                    &opts.output,
+                )
+                .map_err(|e| {
+                    eprintln!("  {BRIGHT_RED}✗{RESET} {}", e);
+                    e
+                })?;
+            }
         }
     }
     Ok(())
@@ -323,14 +329,9 @@ fn measure_microfacet_distribution(
         measurement.zenith.stop.prettified(),
         measurement.zenith.step_size.prettified()
     );
-    acq::microfacet::measure_microfacet_distribution(measurement, &surfaces, &cache);
-    println!("  {BRIGHT_YELLOW}>{RESET} Measuring micro facet distribution...");
     let start_time = Instant::now();
-    let distributions = acq::microfacet::measure_microfacet_distribution(
-        MicrofacetDistributionMeasurement::default(),
-        &surfaces,
-        &cache,
-    );
+    let distributions =
+        acq::microfacet::measure_microfacet_distribution(measurement, &surfaces, &cache);
     let duration = Instant::now() - start_time;
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
@@ -374,4 +375,69 @@ fn measure_microfacet_distribution(
     Ok(())
 }
 
-fn measure_bsdf() {}
+/// Measures the microfacet shadowing-masking function of the given
+/// micro-surface and saves the result to the given output directory.
+fn measure_microfacet_shadowing_masking(
+    measurement: MicrofacetShadowingMaskingMeasurement,
+    surfaces: &[MicroSurfaceHandle],
+    cache: &Cache,
+    config: &VgonioConfig,
+    output: &Option<PathBuf>,
+) -> Result<(), Error> {
+    println!(
+        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet shadowing-masking function:
+    • parameters:
+      + azimuth: {} ~ {} per {}
+      + zenith: {} ~ {} per {}",
+        measurement.azimuth.start.prettified(),
+        measurement.azimuth.stop.prettified(),
+        measurement.azimuth.step_size.prettified(),
+        measurement.zenith.start.prettified(),
+        measurement.zenith.stop.prettified(),
+        measurement.zenith.step_size.prettified()
+    );
+    let start_time = Instant::now();
+    let distributions =
+        acq::microfacet::measure_microfacet_shadowing_masking(measurement, &surfaces, &cache);
+    let duration = Instant::now() - start_time;
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+        duration.as_secs_f32()
+    );
+    let output_dir = if let Some(ref output) = output {
+        let path = resolve_path(config.cwd(), Some(&output));
+        if !path.is_dir() {
+            return Err(Error::InvalidOutputDir(path));
+        }
+        path
+    } else {
+        config.output_dir().to_path_buf()
+    };
+    println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+    for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
+        let filename = format!(
+            "microfacet-shdowing-masking-{}.txt",
+            surface
+                .path
+                .file_stem()
+                .unwrap()
+                .to_ascii_lowercase()
+                .to_str()
+                .unwrap()
+        );
+        let filepath = output_dir.join(filename);
+        println!(
+            "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
+            filepath.display()
+        );
+        distrib.save_ascii(&filepath).unwrap_or_else(|err| {
+            eprintln!(
+                "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                filepath.display(),
+                err
+            );
+        })
+    }
+    println!("    {BRIGHT_CYAN}✓{RESET} Done!");
+    Ok(())
+}

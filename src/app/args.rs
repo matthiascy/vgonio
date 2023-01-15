@@ -87,6 +87,9 @@ pub enum MeasurementKind {
 #[clap(about = "Measure different aspects of the micro-surface.")]
 pub struct MeasureOptions {
     #[clap(
+        short,
+        long,
+        num_args(1..),
         help = "The measurement description file. If option '--f, --fast'\nis specified, inputs \
                 will be interpreted as micro-surface\nprofiles instead of measurement description \
                 file."
@@ -97,18 +100,18 @@ pub struct MeasureOptions {
         short,
         long,
         help = "The path where stores the simulation data. Use //\nat the start of the path to \
-                set the output path\nrelative to the input file location. Output path can \
-                also\nbe specified in configuration file."
+                set the output path\nrelative to the input file location. Output path\ncan also \
+                be specified in configuration file."
     )]
     pub output: Option<PathBuf>,
 
     #[clap(
         short,
         long,
-        help = "Quickly measure the micro-surface with default parameters.\nCheck default \
-                parameters using 'info' command."
+        num_args(1..),
+        help = "Quickly measure the micro-surface with default\nparameters(check with 'info' command).\n"
     )]
-    pub fast: Option<MeasurementKind>,
+    pub fast: Option<Vec<MeasurementKind>>,
 
     #[clap(
         short,

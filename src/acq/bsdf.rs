@@ -237,7 +237,7 @@ pub fn measure_bsdf_grid_rt(
     };
 
     for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
-        let mut grid_rt = GridRayTracing::new(surface, mesh);
+        let grid_rt = GridRayTracing::new(surface, mesh);
         println!(
             "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
