@@ -1,18 +1,21 @@
-use std::{path::Path, time::Instant};
+use std::{
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use crate::{
     acq::{
         self,
         measurement::{
             BsdfMeasurement, Measurement, MeasurementDetails, MicrofacetDistributionMeasurement,
-            SimulationKind,
+            MicrofacetShadowingMaskingMeasurement, SimulationKind,
         },
         util::SphericalPartition,
         CollectorScheme, RtcMethod,
     },
     app::{
-        args::{MeasureOptions, VgonioCommand},
-        cache::{resolve_path, Cache, VgonioDatafiles},
+        args::{MeasureOptions, MeasurementKind, SubCommand},
+        cache::{resolve_path, Cache, MicroSurfaceHandle, VgonioDatafiles},
         VgonioConfig,
     },
     htfld::AxisAlignment,
@@ -26,34 +29,77 @@ pub const RESET: &str = "\u{001b}[0m";
 
 /// Execute the given command.
 /// This function is the entry point of vgonio CLI.
-pub fn execute(cmd: VgonioCommand, config: VgonioConfig) -> Result<(), Error> {
+pub fn execute(cmd: SubCommand, config: VgonioConfig) -> Result<(), Error> {
     match cmd {
-        VgonioCommand::Measure(opts) => measure(opts, config),
-        VgonioCommand::Info => print_info(config),
+        SubCommand::Measure(opts) => measure(opts, config),
+        SubCommand::Info => print_info(config),
     }
 }
 
-fn measure_normal_mode(
-    filepaths: &[&Path],
-    config: VgonioConfig,
-    cache: &mut Cache,
-    datafiles: &mut VgonioDatafiles,
-) -> Result<(), Error> {
+/// Measure different metrics of the micro-surface.
+fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
+    log::info!("{:#?}", config);
+    // Configure thread pool for parallelism.
+    if let Some(nthreads) = opts.nthreads {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(nthreads as usize)
+            .build_global()
+            .unwrap();
+    }
+    println!(
+        "{BRIGHT_YELLOW}>{RESET} Executing 'vgonio measure' with a thread pool of size: {}",
+        rayon::current_num_threads()
+    );
+
+    let mut cache = Cache::new(config.cache_dir());
+
+    let mut datafiles = VgonioDatafiles::new();
+
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
-    let measurements = filepaths
-        .iter()
-        .flat_map(|path| {
-            let resolved = resolve_path(&config.cwd, Some(path));
-            Measurement::load_from_file(&resolved)
-        })
-        .collect::<Vec<_>>();
-    //let measurements = Measurement::load_from_file(filepaths)?;
+    let measurements = {
+        match opts.fast {
+            None => opts
+                .inputs
+                .iter()
+                .filter_map(|meas_path| {
+                    let resolved = resolve_path(&config.cwd, Some(meas_path));
+                    match Measurement::load(&resolved) {
+                        Ok(meas) => Some(meas),
+                        Err(err) => {
+                            log::warn!("Failed to load measurement description file: {}", err);
+                            None
+                        }
+                    }
+                })
+                .flatten()
+                .collect::<Vec<_>>(),
+            Some(kind) => match kind {
+                MeasurementKind::Bsdf => vec![Measurement {
+                    details: MeasurementDetails::Bsdf(BsdfMeasurement::default()),
+                    surfaces: opts.inputs,
+                }],
+                MeasurementKind::MicrofacetDistribution => vec![Measurement {
+                    details: MeasurementDetails::MicrofacetDistribution(
+                        MicrofacetDistributionMeasurement::default(),
+                    ),
+                    surfaces: opts.inputs,
+                }],
+                MeasurementKind::MicrofacetShadowingMasking => vec![Measurement {
+                    details: MeasurementDetails::MicrofacetShadowMasking(
+                        MicrofacetShadowingMaskingMeasurement::default(),
+                    ),
+                    surfaces: opts.inputs,
+                }],
+            },
+        }
+    };
     println!(
         "    {BRIGHT_YELLOW}✓{RESET} {} measurement(s)",
         measurements.len()
     );
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully read scene description file");
-    if measurements.iter().any(|m| m.details.is_bsdf()) {
+
+    if measurements.iter().any(|meas| meas.details.is_bsdf()) {
         // Load data files: refractive indices, spd etc.
         println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
         datafiles.load_ior_database(&config);
@@ -63,27 +109,27 @@ fn measure_normal_mode(
     println!("  {BRIGHT_YELLOW}>{RESET} Resolving and loading surfaces...");
     let tasks = measurements
         .into_iter()
-        .filter_map(|desc| {
+        .filter_map(|meas| {
             // Load surfaces height field from files and cache them.
             cache
-                .load_micro_surfaces(&config, &desc.surfaces, Some(AxisAlignment::XZ))
+                .load_micro_surfaces(&config, &meas.surfaces, Some(AxisAlignment::XZ))
                 .map_err(|err| {
                     log::warn!(
                         "{} failed to load surface: {}, skipping...",
-                        desc.name(),
+                        meas.name(),
                         err
                     )
                 })
-                .map(|surfaces| (desc, surfaces))
+                .map(|surfaces| (meas, surfaces))
                 .ok()
         })
         .collect::<Vec<_>>();
     println!("    {BRIGHT_CYAN}✓{RESET} Successfully load surface files");
 
-    let start = std::time::SystemTime::now();
     for (measurement, surfaces) in tasks {
         match measurement.details {
             MeasurementDetails::Bsdf(measurement) => {
+                let start = std::time::SystemTime::now();
                 let collector_info = match measurement.collector.scheme {
                     CollectorScheme::Partitioned { domain, partition } => match partition {
                         SphericalPartition::EqualAngle { zenith, azimuth } => {
@@ -194,18 +240,18 @@ fn measure_normal_mode(
                         );
                         match method {
                             RtcMethod::Standard => {
-                                crate::acq::bsdf::measure_bsdf_embree_rt(
+                                acq::bsdf::measure_bsdf_embree_rt(
                                     measurement,
                                     &cache,
-                                    datafiles,
+                                    &datafiles,
                                     &surfaces,
                                 );
                             }
                             RtcMethod::Grid => {
-                                crate::acq::bsdf::measure_bsdf_grid_rt(
+                                acq::bsdf::measure_bsdf_grid_rt(
                                     measurement,
                                     &cache,
-                                    datafiles,
+                                    &datafiles,
                                     &surfaces,
                                 );
                             }
@@ -219,202 +265,35 @@ fn measure_normal_mode(
                         // TODO: implement
                     }
                 }
+                println!("  {BRIGHT_YELLOW}>{RESET} Saving results...");
+                // todo: save to file
+                println!(
+                    "    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
+                    config.output_dir().display()
+                );
+                println!(
+                    "    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s",
+                    start.elapsed().unwrap().as_secs_f32()
+                );
             }
             MeasurementDetails::MicrofacetDistribution(measurement) => {
-                println!(
-                    "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet distribution at {} • \
-                     parameters:
-        + azimuth: {} ~ {} per {}
-        + zenith: {} ~ {} per {}",
-                    chrono::DateTime::<chrono::Utc>::from(start),
-                    measurement.azimuth.start.prettified(),
-                    measurement.azimuth.stop.prettified(),
-                    measurement.azimuth.step_size.prettified(),
-                    measurement.zenith.start.prettified(),
-                    measurement.zenith.stop.prettified(),
-                    measurement.zenith.step_size.prettified()
-                );
-                acq::microfacet::measure_microfacet_distribution(measurement, &surfaces, &cache);
+                measure_microfacet_distribution(
+                    measurement,
+                    &surfaces,
+                    &cache,
+                    &config,
+                    &opts.output,
+                )
+                .map_err(|e| {
+                    eprintln!("  {BRIGHT_RED}✗{RESET} {}", e);
+                    e
+                })?;
             }
             MeasurementDetails::MicrofacetShadowMasking(measurement) => todo!(),
         }
     }
-
-    println!(
-        "    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s",
-        start.elapsed().unwrap().as_secs_f32()
-    );
-
-    println!("  {BRIGHT_YELLOW}>{RESET} Saving results...");
-    // todo: save to file
-    println!(
-        "    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
-        config.output_dir().display()
-    );
     Ok(())
 }
-
-/// Measure different metrics of the micro-surface.
-fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
-    log::info!("{:#?}", config);
-    // Configure thread pool for parallelism.
-    if let Some(nthreads) = opts.nthreads {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(nthreads as usize)
-            .build_global()
-            .unwrap();
-    }
-    println!(
-        "{BRIGHT_YELLOW}>{RESET} Executing 'vgonio measure' with a thread pool of size: {}",
-        rayon::current_num_threads()
-    );
-
-    let mut cache = Cache::new(config.cache_dir());
-
-    let mut datafiles = VgonioDatafiles::new();
-
-    match opts.fast {
-        Some(kind) => {
-            let micro_surfaces =
-                cache.load_micro_surfaces(&config, &opts.inputs, Some(AxisAlignment::XZ))?;
-            match kind {
-                crate::app::args::MeasurementKind::Bsdf => {
-                    datafiles.load_ior_database(&config);
-                    acq::bsdf::measure_bsdf_embree_rt(
-                        BsdfMeasurement::default(),
-                        &cache,
-                        &mut datafiles,
-                        &micro_surfaces,
-                    );
-                    Ok(())
-                }
-                crate::app::args::MeasurementKind::MicrofacetDistribution => {
-                    println!("  {BRIGHT_YELLOW}>{RESET} Measuring micro facet distribution...");
-                    let start_time = Instant::now();
-                    let distributions = acq::microfacet::measure_microfacet_distribution(
-                        MicrofacetDistributionMeasurement::default(),
-                        &micro_surfaces,
-                        &cache,
-                    );
-                    let duration = Instant::now() - start_time;
-                    println!(
-                        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
-                        duration.as_secs_f32()
-                    );
-                    let output_dir = if let Some(ref output) = opts.output {
-                        let path = resolve_path(config.cwd(), Some(&output));
-                        if !path.is_dir() {
-                            return Err(Error::InvalidOutputDir(path));
-                        }
-                        path
-                    } else {
-                        config.output_dir().to_path_buf()
-                    };
-                    println!("  {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-                    for (distrb, surface) in distributions.iter().zip(micro_surfaces.iter()) {
-                        let filename = format!(
-                            "facet-distrb-{}.txt",
-                            surface
-                                .path
-                                .file_stem()
-                                .unwrap()
-                                .to_ascii_lowercase()
-                                .to_str()
-                                .unwrap()
-                        );
-                        let filepath = output_dir.join(filename);
-                        println!(
-                            "    {BRIGHT_CYAN}-{RESET} Saving to \"{}\"...",
-                            filepath.display()
-                        );
-                        distrb.save_ascii(&filepath).unwrap_or_else(|err| {
-                            eprintln!(
-                                "      {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-                                filepath.display(),
-                                err
-                            );
-                        })
-                    }
-                    println!("    {BRIGHT_CYAN}✓{RESET} Done!");
-                    Ok(())
-                }
-                crate::app::args::MeasurementKind::MicrofacetShadowingMasking => {
-                    todo!()
-                }
-            }
-        }
-        None => measure_normal_mode(&opts.inputs[0], config, &mut cache, &mut datafiles),
-    }
-}
-
-// /// Extracts micro-surface intrinsic properties.
-// fn extract(opts: &ExtractOptions, config: &VgonioConfig) -> Result<(), Error>
-// {     println!("{BRIGHT_YELLOW}>{RESET} Measuring micro-surface intrinsic
-// properties...");     let mut cache = Cache::new(config.cache_dir());
-//     let micro_surfaces =
-//         cache.load_micro_surfaces(&config, &opts.inputs,
-// Some(AxisAlignment::XZ))?;     match opts.property {
-//         MicroSurfaceProperty::MicroFacetNormal => todo!(),
-//         MicroSurfaceProperty::MicroFacetDistribution => {
-//             println!("  {BRIGHT_YELLOW}>{RESET} Measuring micro facet
-// distribution...");             let start_time = Instant::now();
-//             let measurement = MicrofacetDistributionMeasurement::default();
-//             let distributions =
-// acq::microfacet::measure_microfacet_distribution(
-// measurement,                 &micro_surfaces,
-//                 &cache,
-//             );
-//             let duration = Instant::now() - start_time;
-//             println!(
-//                 "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
-//                 duration.as_secs_f32()
-//             );
-//             let output_dir = if let Some(ref output) = opts.output {
-//                 let path = resolve_path(config.cwd(), Some(&output));
-//                 if !path.is_dir() {
-//                     return Err(Error::InvalidOutputDir(path));
-//                 }
-//                 path
-//             } else {
-//                 config.output_dir().to_path_buf()
-//             };
-//             println!("  {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-//             for (distrb, surface) in
-// distributions.iter().zip(micro_surfaces.iter()) {                 let
-// filename = format!(                     "facet-distrb-{}.txt",
-//                     surface
-//                         .path
-//                         .file_stem()
-//                         .unwrap()
-//                         .to_ascii_lowercase()
-//                         .to_str()
-//                         .unwrap()
-//                 );
-//                 let filepath = output_dir.join(filename);
-//                 println!(
-//                     "    {BRIGHT_CYAN}-{RESET} Saving to \"{}\"...",
-//                     filepath.display()
-//                 );
-//                 distrb.save_ascii(&filepath).unwrap_or_else(|err| {
-//                     eprintln!(
-//                         "      {BRIGHT_RED}!{RESET} Failed to save to \"{}\":
-// {}",                         filepath.display(),
-//                         err
-//                     );
-//                 })
-//             }
-//             println!("    {BRIGHT_CYAN}✓{RESET} Done!");
-//             Ok(())
-//         }
-//         MicroSurfaceProperty::MicroFacetMaskingShadowing => {
-//             let geometric_terms =
-//
-// acq::facet_shadow::measure_micro_facet_masking_shadowing(&micro_surfaces,
-// &cache);             // TODO: output to file
-//             Ok(())
-//         }
-//     }
-// }
 
 /// Prints Vgonio's current configurations.
 /// TODO: print default parameters for each measurement
@@ -422,3 +301,77 @@ fn print_info(config: VgonioConfig) -> Result<(), Error> {
     println!("\n{}", config);
     Ok(())
 }
+
+/// Measures the microfacet distribution of the given micro-surface and saves
+/// the result to the given output directory.
+fn measure_microfacet_distribution(
+    measurement: MicrofacetDistributionMeasurement,
+    surfaces: &[MicroSurfaceHandle],
+    cache: &Cache,
+    config: &VgonioConfig,
+    output: &Option<PathBuf>,
+) -> Result<(), Error> {
+    println!(
+        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet distribution:
+    • parameters:
+      + azimuth: {} ~ {} per {}
+      + zenith: {} ~ {} per {}",
+        measurement.azimuth.start.prettified(),
+        measurement.azimuth.stop.prettified(),
+        measurement.azimuth.step_size.prettified(),
+        measurement.zenith.start.prettified(),
+        measurement.zenith.stop.prettified(),
+        measurement.zenith.step_size.prettified()
+    );
+    acq::microfacet::measure_microfacet_distribution(measurement, &surfaces, &cache);
+    println!("  {BRIGHT_YELLOW}>{RESET} Measuring micro facet distribution...");
+    let start_time = Instant::now();
+    let distributions = acq::microfacet::measure_microfacet_distribution(
+        MicrofacetDistributionMeasurement::default(),
+        &surfaces,
+        &cache,
+    );
+    let duration = Instant::now() - start_time;
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+        duration.as_secs_f32()
+    );
+    let output_dir = if let Some(ref output) = output {
+        let path = resolve_path(config.cwd(), Some(&output));
+        if !path.is_dir() {
+            return Err(Error::InvalidOutputDir(path));
+        }
+        path
+    } else {
+        config.output_dir().to_path_buf()
+    };
+    println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+    for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
+        let filename = format!(
+            "microfacet-distribution-{}.txt",
+            surface
+                .path
+                .file_stem()
+                .unwrap()
+                .to_ascii_lowercase()
+                .to_str()
+                .unwrap()
+        );
+        let filepath = output_dir.join(filename);
+        println!(
+            "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
+            filepath.display()
+        );
+        distrib.save_ascii(&filepath).unwrap_or_else(|err| {
+            eprintln!(
+                "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                filepath.display(),
+                err
+            );
+        })
+    }
+    println!("    {BRIGHT_CYAN}✓{RESET} Done!");
+    Ok(())
+}
+
+fn measure_bsdf() {}

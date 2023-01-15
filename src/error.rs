@@ -1,6 +1,6 @@
 use std::{
     fmt::{Display, Formatter},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str,
 };
 
@@ -24,6 +24,7 @@ pub enum Error {
     UserDataDirNotConfigured,
     InvalidOutputDir(PathBuf),
     InvalidParameter(&'static str),
+    DirectoryOrFileNotFound(PathBuf),
     #[cfg(target_arch = "wasm32")]
     WasmConsoleLogInitFailed,
 }
@@ -113,6 +114,9 @@ impl Display for Error {
             }
             Error::InvalidParameter(err) => {
                 write!(f, "Invalid parameter: {}", err)
+            }
+            Error::DirectoryOrFileNotFound(path) => {
+                write!(f, "Directory or file not found: {}", path.display())
             }
         }
     }

@@ -11,6 +11,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
+    convert::Into,
     fmt::{Display, Formatter},
     fs::File,
     io::Read,
@@ -262,6 +264,18 @@ impl BsdfMeasurement {
     }
 }
 
+const DEFAULT_AZIMUTH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
+    start: Radians::ZERO,
+    stop: Radians::TWO_PI,
+    step_size: degrees!(5.0).in_radians(),
+};
+
+const DEFAULT_ZENITH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
+    start: Radians::ZERO,
+    stop: Radians::HALF_PI,
+    step_size: degrees!(2.0).in_radians(),
+};
+
 /// Parameters for microfacet distribution measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MicrofacetDistributionMeasurement {
@@ -272,8 +286,8 @@ pub struct MicrofacetDistributionMeasurement {
 impl Default for MicrofacetDistributionMeasurement {
     fn default() -> Self {
         Self {
-            azimuth: RangeByStepSize::new(Radians::ZERO, Radians::HALF_PI, degrees!(5.0).into()),
-            zenith: RangeByStepSize::new(Radians::ZERO, Radians::HALF_PI, degrees!(2.0).into()),
+            azimuth: DEFAULT_AZIMUTH_RANGE,
+            zenith: DEFAULT_ZENITH_RANGE,
         }
     }
 }
@@ -307,6 +321,15 @@ impl MicrofacetDistributionMeasurement {
 pub struct MicrofacetShadowingMaskingMeasurement {
     pub azimuth: RangeByStepSize<Radians>,
     pub zenith: RangeByStepSize<Radians>,
+}
+
+impl Default for MicrofacetShadowingMaskingMeasurement {
+    fn default() -> Self {
+        Self {
+            azimuth: DEFAULT_AZIMUTH_RANGE,
+            zenith: DEFAULT_ZENITH_RANGE,
+        }
+    }
 }
 
 impl MicrofacetShadowingMaskingMeasurement {
@@ -403,6 +426,8 @@ impl MeasurementDetails {
 }
 
 /// Description of BSDF measurement.
+/// This is used to describe the parameters of different kinds of measurements.
+/// The measurement description file uses the [YAML](https://yaml.org/) format.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub struct Measurement {
@@ -416,16 +441,53 @@ pub struct Measurement {
 }
 
 impl Measurement {
-    /// Load measurement descriptions from a file. A file may contain multiple
+    /// Loads the measurement from a path. The path can be either a file path
+    /// or a directory path. In the latter case, files with the extension
+    /// `.yaml` or `.yml` are loaded.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the measurement file or directory, must be in
+    ///   canonical form.
+    pub fn load(path: &Path) -> Result<Vec<Measurement>, Error> {
+        if path.exists() {
+            if path.is_dir() {
+                Self::load_from_dir(path)
+            } else {
+                Self::load_from_file(path)
+            }
+        } else {
+            Err(Error::DirectoryOrFileNotFound(path.to_path_buf()))
+        }
+    }
+
+    /// Loads the measurement from a directory.
+    /// # Arguments
+    /// * `path` - Path to the measurement directory, must be in canonical form
+    ///   and must exist.
+    fn load_from_dir(dir: &Path) -> Result<Vec<Measurement>, Error> {
+        let mut measurements = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext == "yaml" || ext == "yml" {
+                        measurements.append(&mut Self::load_from_file(&path)?);
+                    }
+                }
+            }
+        }
+        Ok(measurements)
+    }
+
+    /// Loads measurement descriptions from a file. A file may contain multiple
     /// descriptions, separated by `---` followed by a newline.
     ///
     /// # Arguments
     ///
-    /// * `path` - Path to the file containing the measurement descriptions.
-    ///
-    /// # Errors
-    /// TODO: specify errors
-    pub fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, Error> {
+    /// * `filepath` - Path to the file containing the measurement descriptions,
+    ///   must be in canonical form and must exist.
+    fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, Error> {
         let mut file = File::open(filepath)?;
         let content = {
             let mut str_ = String::new();

@@ -1,9 +1,8 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Vgonio command line interface arguments.
-#[derive(Parser, Debug)]
+#[derive(clap::Parser, Debug)]
 #[clap(
     author,
     version,
@@ -51,7 +50,7 @@ pub struct CliArgs {
 
     /// Command to execute.
     #[clap(subcommand)]
-    pub command: Option<VgonioCommand>,
+    pub command: Option<SubCommand>,
 
     /// Path to the user config file. If not specified, vgonio will
     /// load the default config file.
@@ -60,8 +59,8 @@ pub struct CliArgs {
 }
 
 /// Vgonio command.
-#[derive(Subcommand, Debug)]
-pub enum VgonioCommand {
+#[derive(clap::Subcommand, Debug)]
+pub enum SubCommand {
     /// Measures micro-geometry level light transport related metrics.
     Measure(MeasureOptions),
 
@@ -70,7 +69,7 @@ pub enum VgonioCommand {
     Info,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ValueEnum)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 pub enum MeasurementKind {
     #[clap(name = "bsdf")]
     /// Bidirectional reflectance distribution function.
@@ -84,12 +83,10 @@ pub enum MeasurementKind {
 }
 
 /// Options for the `measure` command.
-#[derive(Args, Debug)]
+#[derive(clap::Args, Debug)]
 #[clap(about = "Measure different aspects of the micro-surface.")]
 pub struct MeasureOptions {
     #[clap(
-        short,
-        long,
         help = "The measurement description file. If option '--f, --fast'\nis specified, inputs \
                 will be interpreted as micro-surface\nprofiles instead of measurement description \
                 file."

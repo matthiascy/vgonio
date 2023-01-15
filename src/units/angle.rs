@@ -103,7 +103,7 @@ impl<A: AngleUnit> Angle<A> {
 
     /// Determines whether the angle is greater than zero.
     #[inline(always)]
-    pub fn is_positive(&self) -> bool { self.value > 0.0 }
+    pub const fn is_positive(&self) -> bool { self.value > 0.0 }
 
     /// Prints the angle in human readable format in degrees.
     #[inline]
@@ -249,7 +249,9 @@ impl Angle<URadian> {
 
 impl Angle<UDegree> {
     /// Convert to radians.
-    pub fn in_radians(&self) -> Angle<URadian> { Angle::new(self.value * URadian::FACTOR_FROM_DEG) }
+    pub const fn in_radians(&self) -> Angle<URadian> {
+        Angle::new(self.value * URadian::FACTOR_FROM_DEG)
+    }
     pub fn sin(&self) -> f32 { self.value.to_radians().sin() }
     pub fn sinh(&self) -> f32 { self.value.to_radians().sinh() }
     pub fn cos(&self) -> f32 { self.value.to_radians().cos() }
