@@ -3,13 +3,12 @@
 pub mod bsdf;
 mod collector;
 mod embree_rt;
-pub(crate) mod emitter; // TDOD: make private
+pub(crate) mod emitter; // TODO: maybe make private
 pub mod fresnel;
 mod grid_rt;
 pub mod ior;
 pub mod measurement;
 pub mod microfacet;
-pub mod ndf;
 mod occlusion;
 pub mod scattering;
 pub mod util;

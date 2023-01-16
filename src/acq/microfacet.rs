@@ -55,20 +55,20 @@ impl MicrofacetDistribution {
         let file = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
-            .open(&filepath)?;
+            .open(filepath)?;
         let mut writter = BufWriter::new(file);
         let header = format!(
-            "micro-facet distribution\nazimuth - bin size: {}, bins count: {}\nzenith - bin size: \
+            "microfacet distribution\nazimuth - bin size: {}, bins count: {}\nzenith - bin size: \
              {}, bins count: {}\n",
             self.azimuth_bin_size.in_degrees().prettified(),
             self.azimuth_bins_count,
             self.zenith_bin_size.in_degrees().prettified(),
             self.zenith_bins_count
         );
-        writter.write(header.as_bytes())?;
+        let _ = writter.write(header.as_bytes())?;
         self.samples.iter().for_each(|s| {
-            let value = format!("{} ", s);
-            writter.write(value.as_bytes()).unwrap();
+            let value = format!("{s} ");
+            let _ = writter.write(value.as_bytes()).unwrap();
         });
         Ok(())
     }
@@ -186,20 +186,20 @@ impl MicrofacetShadowingMaskingFunction {
         let file = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
-            .open(&filepath)?;
+            .open(filepath)?;
         let mut writter = BufWriter::new(file);
         let header = format!(
-            "micro-facet shadowing and masking function\nazimuth - bin size: {}, bins count: \
+            "microfacet shadowing and masking function\nazimuth - bin size: {}, bins count: \
              {}\nzenith - bin size: {}, bins count: {}\n",
             self.azimuth_bin_size.in_degrees().prettified(),
             self.azimuth_bins_count,
             self.zenith_bin_size.in_degrees().prettified(),
             self.zenith_bins_count
         );
-        writter.write(header.as_bytes())?;
+        let _ = writter.write(header.as_bytes())?;
         self.samples.iter().for_each(|s| {
-            let value = format!("{} ", s);
-            writter.write(value.as_bytes()).unwrap();
+            let value = format!("{s} ");
+            let _ = writter.write(value.as_bytes()).unwrap();
         });
         Ok(())
     }

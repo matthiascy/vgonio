@@ -487,7 +487,7 @@ impl GuiRenderer {
         } else {
             // Allocate a new texture use the same label for all resources associated with
             // this texture id
-            let label_str = format!("egui_tex_id_{:?}", id);
+            let label_str = format!("egui_tex_id_{id:?}");
             let label = Some(label_str.as_str());
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label,
@@ -728,7 +728,7 @@ impl GuiRenderer {
                         let index_offset =
                             self.index_buffer.subslices().last().unwrap_or(&(0..0)).end;
                         let data = bytemuck::cast_slice(&mesh.indices);
-                        queue.write_buffer(&self.index_buffer.buffer(), index_offset, data);
+                        queue.write_buffer(self.index_buffer.buffer(), index_offset, data);
                         self.index_buffer
                             .subslices_mut()
                             .push(index_offset..index_offset + data.len() as wgpu::BufferAddress);
@@ -738,7 +738,7 @@ impl GuiRenderer {
                         let vertex_offset =
                             self.vertex_buffer.subslices().last().unwrap_or(&(0..0)).end;
                         let data = bytemuck::cast_slice(&mesh.vertices);
-                        queue.write_buffer(&self.vertex_buffer.buffer(), vertex_offset, data);
+                        queue.write_buffer(self.vertex_buffer.buffer(), vertex_offset, data);
                         self.vertex_buffer
                             .subslices_mut()
                             .push(vertex_offset..vertex_offset + data.len() as wgpu::BufferAddress);
@@ -813,8 +813,7 @@ fn create_sampler(
     };
     device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some(&format!(
-            "egui_sampler_(mag: {:?}, min: {:?})",
-            mag_filter, min_filter
+            "egui_sampler_(mag: {mag_filter:?}, min: {min_filter:?})",
         )),
         mag_filter,
         min_filter,

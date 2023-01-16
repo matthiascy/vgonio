@@ -5,7 +5,7 @@ use crate::{
     },
     app::{
         cli::{BRIGHT_RED, RESET},
-        VgonioConfig,
+        Config,
     },
     htfld::{AxisAlignment, Heightfield},
     mesh::{MicroSurfaceTriMesh, TriangulationMethod},
@@ -33,16 +33,21 @@ pub struct VgonioDatafiles {
 // TODO(yang): unify HeightField with corresponding MicroSurfaceTriMesh.
 // TODO(yang): maybe rename HeightField as MicroSurface.
 
-impl VgonioDatafiles {
-    pub fn new() -> Self {
+impl Default for VgonioDatafiles {
+    fn default() -> Self {
         Self {
             ior_db: IorDb::new(),
         }
     }
+}
 
-    /// Load the refractive index database from the paths specified in the
+impl VgonioDatafiles {
+    /// Creates a new `VgonioDatafiles` instance and loads all data files(TODO).
+    pub fn new() -> Self { Self::default() }
+
+    /// Loads the refractive index database from the paths specified in the
     /// config.
-    pub fn load_ior_database(&mut self, config: &VgonioConfig) {
+    pub fn load_ior_database(&mut self, config: &Config) {
         // let mut database = RefractiveIndexDatabase::new();
         let sys_path: PathBuf = config.sys_data_dir().to_path_buf().join("ior");
         let user_path = config
@@ -146,7 +151,7 @@ impl Cache {
     /// * `alignment` - The axis alignment when constructing the surface mesh.
     pub fn load_micro_surfaces(
         &mut self,
-        config: &VgonioConfig,
+        config: &Config,
         paths: &[PathBuf],
         alignment: Option<AxisAlignment>,
     ) -> Result<Vec<MicroSurfaceHandle>, Error> {
@@ -177,19 +182,31 @@ impl Cache {
         let mut loaded = vec![];
         for path in canonical_paths {
             if path.exists() {
-                let path_string = path.to_string_lossy().to_string();
-                if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
-                    let heightfield = Heightfield::read_from_file(&path, None, alignment)?;
-                    loaded.push(MicroSurfaceHandle {
-                        uuid: heightfield.uuid,
-                        path: path.clone(),
-                    });
-                    e.insert(heightfield);
-                } else {
-                    loaded.push(MicroSurfaceHandle {
-                        uuid: self.micro_surfaces[&path_string].uuid,
-                        path: path.clone(),
-                    });
+                let files_to_load = {
+                    if path.is_dir() {
+                        path.read_dir()
+                            .unwrap()
+                            .map(|entry| entry.unwrap().path())
+                            .collect::<Vec<_>>()
+                    } else {
+                        vec![path]
+                    }
+                };
+                for filepath in files_to_load {
+                    let path_string = filepath.to_string_lossy().to_string();
+                    if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
+                        let heightfield = Heightfield::read_from_file(&filepath, None, alignment)?;
+                        loaded.push(MicroSurfaceHandle {
+                            uuid: heightfield.uuid,
+                            path: filepath.clone(),
+                        });
+                        e.insert(heightfield);
+                    } else {
+                        loaded.push(MicroSurfaceHandle {
+                            uuid: self.micro_surfaces[&path_string].uuid,
+                            path: filepath.clone(),
+                        });
+                    }
                 }
             } else {
                 eprintln!(

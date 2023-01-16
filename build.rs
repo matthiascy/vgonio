@@ -12,7 +12,7 @@ const GLSL_SRC_FILES: [&str; 6] = [
 fn main() {
     // Rerun the build if GLSL shaders have changed.
     for entry in GLSL_SRC_FILES {
-        println!("cargo:rerun-if-changed={}", entry);
+        println!("cargo:rerun-if-changed={entry}");
     }
 
     // Create destination directory if it doesn't exist.
@@ -20,7 +20,6 @@ fn main() {
 
     // Compile GLSL shaders to SPIRV.
     let compiler = shaderc::Compiler::new().unwrap();
-    // let mut options = shaderc::CompileOptions::new().unwrap();
 
     for entry in std::fs::read_dir(GLSL_SRC_PATH).expect("Couldn't read glsl source directory.") {
         let entry = entry.unwrap();
@@ -50,11 +49,11 @@ fn main() {
                     match spirv {
                         Ok(compiled) => {
                             let output_filepath =
-                                format!("src/app/gui/assets/shaders/spirv/{}.spv", filename);
+                                format!("src/app/gui/assets/shaders/spirv/{filename}.spv");
                             match std::fs::write(&output_filepath, compiled.as_binary_u8()) {
                                 Ok(_) => {}
                                 Err(err) => {
-                                    panic!("failed to write to {:?}\n{}", output_filepath, err);
+                                    panic!("failed to write to {output_filepath:?}\n{err}");
                                 }
                             }
                         }

@@ -1,13 +1,13 @@
 use super::{simulation::SimulationWorkspace, state::GuiRenderer, VgonioEvent};
-use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, VgonioConfig};
+use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, Config};
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioUi {
-    /// The configuration of the application. See [`VgonioConfig`].
-    config: Arc<VgonioConfig>,
+    /// The configuration of the application. See [`Config`].
+    config: Arc<Config>,
 
     /// Files dropped in the window area.
     dropped_files: Vec<egui::DroppedFile>,
@@ -24,7 +24,7 @@ pub struct VgonioUi {
 impl VgonioUi {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
-        config: Arc<VgonioConfig>,
+        config: Arc<Config>,
         cache: Arc<RefCell<Cache>>,
         gpu: &GpuContext,
         gui: &mut GuiRenderer,
@@ -154,8 +154,8 @@ impl VgonioUi {
                         }
                         ui.menu_button("\u{1F4DC} Open Recent", |ui| {
                             for i in 0..10 {
-                                if ui.button(format!("item {}", i)).clicked() {
-                                    println!("TODO: open item {}", i);
+                                if ui.button(format!("item {i}")).clicked() {
+                                    println!("TODO: open item {i}");
                                 }
                             }
                         });

@@ -11,10 +11,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    borrow::Cow,
     fmt::{Display, Formatter},
     fs::File,
-    io::{BufReader, Read},
+    io::BufReader,
     path::{Path, PathBuf},
 };
 
@@ -34,7 +33,7 @@ impl Display for Radius {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Auto(_) => write!(f, "auto"),
-            Self::Fixed(v) => write!(f, "fixed: {}", v),
+            Self::Fixed(v) => write!(f, "fixed: {v}"),
         }
     }
 }
@@ -491,7 +490,6 @@ impl Measurement {
         let reader = BufReader::new(&mut file);
         // TODO: invoke generation of patches and samples
         let measurements = serde_yaml::Deserializer::from_reader(reader)
-            .into_iter()
             .map(|doc| {
                 Measurement::deserialize(doc)
                     .map_err(Error::from)

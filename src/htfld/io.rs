@@ -126,7 +126,7 @@ fn read_ascii_dong2015<R: BufRead>(
             let dv = first_line[4].parse::<f32>().unwrap();
             (cols, rows, du, dv)
         } else {
-            panic!("Invalid first line: {:?}", line);
+            panic!("Invalid first line: {line:?}");
         }
     };
     let samples = read_ascii_samples(reader);
@@ -239,13 +239,13 @@ fn read_ascii_samples<R: BufRead>(reader: R) -> Vec<f32> {
         .lines()
         .enumerate()
         .flat_map(|(n, line)| {
-            let l = line.unwrap_or_else(|_| panic!("Bad line at {}", n));
+            let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
             l.trim()
                 .split_ascii_whitespace()
                 .enumerate()
                 .map(|(i, x)| {
                     x.parse()
-                        .unwrap_or_else(|_| panic!("Parse float error at line {} pos {}", n, i))
+                        .unwrap_or_else(|_| panic!("Parse float error at line {n} pos {i}"))
                 })
                 .collect::<Vec<f32>>()
         })

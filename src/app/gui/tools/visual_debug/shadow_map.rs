@@ -67,7 +67,7 @@ impl ShadowMapPane {
             IMG_HEIGHT as _,
             image::imageops::FilterType::CatmullRom,
         );
-        self.depth_map_handle = Some(gui_state.egui_context().load_texture(
+        self.depth_map_handle = Some(gui_state.context().load_texture(
             "depth_map",
             egui::ColorImage::from_rgba_unmultiplied(
                 [IMG_WIDTH, IMG_HEIGHT],

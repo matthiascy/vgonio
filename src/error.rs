@@ -1,6 +1,6 @@
 use std::{
     fmt::{Display, Formatter},
-    path::{Path, PathBuf},
+    path::PathBuf,
     str,
 };
 
@@ -25,8 +25,6 @@ pub enum Error {
     InvalidOutputDir(PathBuf),
     InvalidParameter(&'static str),
     DirectoryOrFileNotFound(PathBuf),
-    #[cfg(target_arch = "wasm32")]
-    WasmConsoleLogInitFailed,
 }
 
 #[derive(Debug)]
@@ -41,10 +39,10 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Io(err) => {
-                write!(f, "IO error - {}", err)
+                write!(f, "IO error - {err}")
             }
             Error::Rhi(err) => {
-                write!(f, "RHI error - {}", err)
+                write!(f, "RHI error - {err}")
             }
             Error::Logger(_) => {
                 write!(f, "Set logger error.")
@@ -53,16 +51,16 @@ impl Display for Error {
                 write!(f, "Open file failed:  unrecognized file type!")
             }
             Error::Utf8Error(err) => {
-                write!(f, "Utf8 error - {}", err)
+                write!(f, "Utf8 error - {err}")
             }
             Error::Any(err) => {
-                write!(f, "Error - {}", err)
+                write!(f, "Error - {err}")
             }
             Error::FileError(err) => {
-                write!(f, "File error - {}", err)
+                write!(f, "File error - {err}")
             }
             Error::ImageError(err) => {
-                write!(f, "Image error - {}", err)
+                write!(f, "Image error - {err}")
             }
             Error::SysConfigDirNotFound => {
                 write!(f, "System configuration directory not found!")
@@ -78,23 +76,23 @@ impl Display for Error {
             }
             Error::SerialisationError(err) => match err {
                 SerialisationError::TomlSe(err) => {
-                    write!(f, "Toml serialisation error: {}", err)
+                    write!(f, "Toml serialisation error: {err}")
                 }
                 SerialisationError::TomlDe(err) => {
-                    write!(f, "Toml deserialisation error: {}", err)
+                    write!(f, "Toml deserialization error: {err}")
                 }
                 SerialisationError::Yaml(err) => {
-                    write!(f, "Yaml de/serialisation error: {}", err)
+                    write!(f, "Yaml de/serialisation error: {err}")
                 }
                 SerialisationError::Bincode(err) => {
-                    write!(f, "Bincode de/serialisation error: {}", err)
+                    write!(f, "Bincode de/serialisation error: {err}")
                 }
             },
             Error::InvalidEmitter(err) => {
-                write!(f, "Invalid emitter: {}", err)
+                write!(f, "Invalid emitter: {err}")
             }
             Error::InvalidCollector(err) => {
-                write!(f, "Invalid collector: {}", err)
+                write!(f, "Invalid collector: {err}")
             }
             #[cfg(target_arch = "wasm32")]
             Error::WasmConsoleLogInitFailed => {
@@ -113,7 +111,7 @@ impl Display for Error {
                 write!(f, "Invalid output path {}!", path.display())
             }
             Error::InvalidParameter(err) => {
-                write!(f, "Invalid parameter: {}", err)
+                write!(f, "Invalid parameter: {err}")
             }
             Error::DirectoryOrFileNotFound(path) => {
                 write!(f, "Directory or file not found: {}", path.display())

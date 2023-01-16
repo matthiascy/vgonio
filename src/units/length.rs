@@ -181,6 +181,8 @@ impl<A: LengthUnit> Length<A> {
         "returns the cube root of the length."
     );
 
+    /// Tests if the two lengths are approximately equal using the absolute
+    /// difference.
     pub fn abs_diff_eq<B: LengthUnit>(&self, other: &Length<B>, epsilon: f32) -> bool {
         let a = self.value * A::FACTOR_TO_METRE;
         let b = other.value * B::FACTOR_TO_METRE;
@@ -235,7 +237,7 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
             .parse::<f32>()
             .map_err(|_| Error::Any("invalid length value".to_string()))?;
         let unit = std::str::from_utf8(&bytes[i..])
-            .map_err(|err| Error::Any(format!("invalid length unit: {}", err)))?
+            .map_err(|err| Error::Any(format!("invalid length unit: {err}")))?
             .trim();
         match unit {
             "m" => Ok(Self::new(A::FACTOR_FROM_METRE * value)),

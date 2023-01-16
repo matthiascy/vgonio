@@ -190,7 +190,7 @@ impl SphericalPartition {
 impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
     /// partition is limited by `SphericalDomain`.
-    pub fn generate_patches_over_domain(&self, domain: &SphericalDomain) -> Vec<Patch> {
+    pub fn generate_patches_over_domain(&self, _domain: &SphericalDomain) -> Vec<Patch> {
         // REVIEW: this function is not very efficient, it can be improved
         match self {
             SphericalPartition::EqualAngle { zenith, azimuth } => {
@@ -237,7 +237,7 @@ impl SphericalPartition {
                 let h_stop = 1.0 - theta_stop.cos();
                 let h_step = (h_stop - h_start) / *count as f32;
 
-                let n_theta = *count as usize;
+                let n_theta = *count;
                 let n_phi = ((*phi_stop - *phi_start) / *phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
@@ -282,7 +282,7 @@ impl SphericalPartition {
                 let r_start_sqr = r_start * r_start;
                 let r_stop_sqr = r_stop * r_stop;
                 let factor = 1.0 / *count as f32;
-                let n_theta = *count as usize;
+                let n_theta = *count;
                 let n_phi = ((*phi_stop - *phi_start) / *phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
@@ -320,9 +320,7 @@ impl SphericalPartition {
 
 pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
 
-pub const fn gamma_f32(n: f32) -> f32 {
-    (n as f32 * MACHINE_EPSILON) / (1.0 - n as f32 * MACHINE_EPSILON)
-}
+pub const fn gamma_f32(n: f32) -> f32 { (n * MACHINE_EPSILON) / (1.0 - n * MACHINE_EPSILON) }
 
 #[test]
 fn spherical_domain_clamp() {

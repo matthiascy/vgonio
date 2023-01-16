@@ -16,7 +16,7 @@ static mut HEIGHT_FIELD_COUNTER: u32 = 0;
 /// Helper function to generate a default name for height field instance.
 fn gen_height_field_name() -> String {
     unsafe {
-        let name = format!("height_field_{:03}", HEIGHT_FIELD_COUNTER);
+        let name = format!("height_field_{HEIGHT_FIELD_COUNTER:03}");
         HEIGHT_FIELD_COUNTER += 1;
         name
     }
@@ -539,7 +539,7 @@ impl Heightfield {
 pub(crate) fn regular_triangulation(positions: &[Vec3], cols: usize, rows: usize) -> Vec<u32> {
     assert_eq!(
         positions.len(),
-        (cols * rows) as usize,
+        cols * rows,
         "triangulation: positions.len() != rows * cols"
     );
     let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];

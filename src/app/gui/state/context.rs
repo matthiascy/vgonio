@@ -1,4 +1,5 @@
 use egui_winit::EventResponse;
+use std::ops::{Deref, DerefMut};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
 use crate::app::gui::VgonioEvent;
@@ -17,7 +18,7 @@ impl GuiContext {
     pub(crate) fn new(event_loop: &EventLoopWindowTarget<VgonioEvent>) -> Self {
         Self {
             inner: egui::Context::default(),
-            state: egui_winit::State::new(&event_loop),
+            state: egui_winit::State::new(event_loop),
             input: egui::RawInput::default(),
         }
     }
@@ -44,4 +45,14 @@ impl GuiContext {
     pub fn run(&mut self, ui: impl FnOnce(&egui::Context)) -> egui::FullOutput {
         self.inner.run(self.input.take(), ui)
     }
+}
+
+impl Deref for GuiContext {
+    type Target = egui::Context;
+
+    fn deref(&self) -> &Self::Target { &self.inner }
+}
+
+impl DerefMut for GuiContext {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
 }

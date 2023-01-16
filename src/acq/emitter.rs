@@ -157,9 +157,8 @@ impl Emitter {
             ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step_size).ceil() as usize;
 
         (0..n_zenith)
-            .into_iter()
             .flat_map(|i_theta| {
-                (0..n_azimuth).into_iter().map(move |i_phi| SphericalCoord {
+                (0..n_azimuth).map(move |i_phi| SphericalCoord {
                     zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
                     azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
                 })
@@ -213,8 +212,8 @@ pub fn uniform_sampling_on_unit_sphere(
 
     let mut rng = rand::thread_rng();
     let uniform = rand_distr::Uniform::new(0.0, 1.0);
-    let mut samples = Vec::with_capacity(num_samples as usize);
-    samples.resize(num_samples as usize, glam::Vec3::ZERO);
+    let mut samples = Vec::with_capacity(num_samples);
+    samples.resize(num_samples, glam::Vec3::ZERO);
 
     match handedness {
         Handedness::RightHandedZUp => {

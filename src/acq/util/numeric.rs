@@ -1,10 +1,10 @@
 /// Interprets a floating-point value in terms of its constituent bits.
 #[inline]
-pub fn f32_to_bits(f: f32) -> u32 { unsafe { std::mem::transmute(f) } }
+pub fn f32_to_bits(f: f32) -> u32 { unsafe { f.to_bits() } }
 
 /// Interprets a integer as if its bits constituted a floating-point value.
 #[inline]
-pub fn bits_to_f32(b: u32) -> f32 { unsafe { std::mem::transmute(b) } }
+pub fn bits_to_f32(b: u32) -> f32 { unsafe { f32::from_bits(b) } }
 
 /// Bumps a floating-point value up to the next representable value.
 #[inline]

@@ -32,7 +32,7 @@ impl MeshView {
 
         let indices: Vec<u32> = regular_triangulation(&positions, cols, rows);
 
-        assert_eq!(indices.len(), indices_count as usize);
+        assert_eq!(indices.len(), indices_count);
 
         log::debug!(
             "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",

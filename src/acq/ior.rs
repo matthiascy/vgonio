@@ -128,7 +128,6 @@ impl Ior {
                 }
 
                 rdr.records()
-                    .into_iter()
                     .filter_map(|ior_record| match ior_record {
                         Ok(record) => {
                             let wavelength = record[0].parse::<f32>().unwrap() * coefficient;

@@ -36,7 +36,7 @@ pub(crate) fn trace_ray_standard_dbg(
     let mesh = embree_rt.create_triangle_mesh(surface);
     embree_rt.attach_geometry(scn_id, mesh);
     let mut nodes: Vec<TrajectoryNode> = vec![];
-    embree_rt.trace_one_ray_dbg(scn_id, ray.into(), max_bounces, 0, None, &mut nodes);
+    embree_rt.trace_one_ray_dbg(scn_id, ray, max_bounces, 0, None, &mut nodes);
     nodes.into_iter().map(|n| n.ray).collect()
 }
 
@@ -65,9 +65,9 @@ impl Tools {
     ) -> Self {
         Self {
             windows: vec![
-                Box::new(Scratch::default()),
+                Box::<Scratch>::default(),
                 Box::new(VisualDebugger::new(event_loop.clone())),
-                Box::new(Plotting::default()),
+                Box::<Plotting>::default(),
                 Box::new(SamplingDebugger::new(
                     gpu,
                     gui,

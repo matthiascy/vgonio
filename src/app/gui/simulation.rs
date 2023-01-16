@@ -8,7 +8,6 @@ use crate::{
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
 use std::{
-    borrow::Cow,
     cell::RefCell,
     fmt::{Display, Formatter},
     path::PathBuf,

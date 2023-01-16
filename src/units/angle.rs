@@ -82,7 +82,7 @@ impl<A: AngleUnit, B: AngleUnit> PartialOrd<Angle<B>> for Angle<A> {
     fn partial_cmp(&self, other: &Angle<B>) -> Option<core::cmp::Ordering> {
         let self_rad = self.value * A::FACTOR_TO_RAD;
         let other_rad = other.value * B::FACTOR_TO_RAD;
-        Some(self_rad.partial_cmp(&other_rad)?)
+        self_rad.partial_cmp(&other_rad)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{acq::MicroSurfaceView, error::Error};
+use crate::error::Error;
 use serde::{Deserialize, Serialize};
 use std::{fmt, io::Write, path::Path};
 
@@ -13,7 +13,7 @@ use args::CliArgs;
 
 /// Vgonio configuration.
 #[derive(Debug)]
-pub struct VgonioConfig {
+pub struct Config {
     /// Path to the configuration directory.
     sys_config_dir: std::path::PathBuf,
 
@@ -49,7 +49,7 @@ pub struct UserConfig {
 impl UserConfig {
     /// Load [`UserConfig`] from a .toml file.
     pub fn load(path: &Path) -> Result<Self, Error> {
-        let string = std::fs::read_to_string(&path)?;
+        let string = std::fs::read_to_string(path)?;
         let mut config: UserConfig = toml::from_str(&string)?;
         if let Some(cache_dir) = config.cache_dir {
             config.cache_dir = Some(cache_dir.canonicalize()?);
@@ -64,7 +64,7 @@ impl UserConfig {
     }
 }
 
-impl VgonioConfig {
+impl Config {
     /// Load the configuration from the config directory.
     ///
     ///
@@ -150,7 +150,7 @@ impl VgonioConfig {
         let user_config = if filepath.is_some_and(|p| p.exists()) {
             let user_config_path = filepath.unwrap();
             log::info!("Loading configuration from {}", user_config_path.display());
-            UserConfig::load(&user_config_path)?
+            UserConfig::load(user_config_path)?
         } else {
             // No configuration file specified, try to load from CWD
             let config_in_cwd = cwd.join("vgonio.toml");
@@ -213,12 +213,7 @@ impl VgonioConfig {
     }
 
     /// Returns the user data files directory.
-    pub fn user_data_dir(&self) -> Option<&Path> {
-        self.user
-            .data_dir
-            .as_ref()
-            .map(|data_dir| data_dir.as_path())
-    }
+    pub fn user_data_dir(&self) -> Option<&Path> { self.user.data_dir.as_deref() }
 
     /// Returns the default data files directory.
     pub fn sys_data_dir(&self) -> &Path { &self.sys_data_dir }
@@ -230,7 +225,7 @@ impl VgonioConfig {
     pub fn sys_cache_dir(&self) -> &Path { &self.sys_cache_dir }
 }
 
-impl fmt::Display for VgonioConfig {
+impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -276,7 +271,7 @@ pub fn log_filter_from_level(level: u8) -> log::LevelFilter {
 ///
 /// * `args` - The CLI arguments passed to the program.
 /// * `launch_time` - The time when the program is launched.
-pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<VgonioConfig, Error> {
+pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<Config, Error> {
     let log_level = if args.verbose { 4 } else { args.log_level };
     let log_level_wgpu = if args.debug_wgpu { 3 } else { 0 };
     let log_level_winit = if args.debug_winit { 3 } else { 0 };
@@ -321,5 +316,5 @@ pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<Vgonio
 
     log::info!("Initialising...");
 
-    VgonioConfig::load_config(args.config.as_ref().map(|p| p.as_path()))
+    Config::load_config(args.config.as_deref())
 }

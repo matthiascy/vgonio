@@ -8,7 +8,7 @@ fn main() {
     std::process::exit(match vgonio::run() {
         Ok(_) => 0,
         Err(ref e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             1
         }
     })

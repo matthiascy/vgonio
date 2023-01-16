@@ -2,9 +2,7 @@
 
 ## Requirements
 
-* [Embree](https://www.embree.org/)
-* [wasm-pack](https://rustwasm.github.io/docs/wasm-pack/) for WebAssembly build.
-
+* [Embree3](https://www.embree.org/)
 
 ## Documentation
 

@@ -10,7 +10,7 @@ use embree::Config;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-use super::measurement::{BsdfMeasurement, MeasurementDetails};
+use super::measurement::BsdfMeasurement;
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]

@@ -172,8 +172,8 @@ impl EmbreeRayTracing {
                 let node = &trajectory[i];
                 let reflectance = fresnel::reflectance_air_conductor_spectrum(node.cos, ior_t);
                 log::debug!("calculated reflectance: {:?}", reflectance);
-                for j in 0..ior_t.len() {
-                    energy_each_bounce[i + 1][j] = energy_each_bounce[i][j] * reflectance[j];
+                for (j, energy) in reflectance.iter().enumerate().take(ior_t.len()) {
+                    energy_each_bounce[i + 1][j] = energy_each_bounce[i][j] * energy;
                 }
             }
             Some(RtcRecord {

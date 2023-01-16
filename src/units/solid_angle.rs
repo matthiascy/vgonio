@@ -4,6 +4,9 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+// TODO(yang): implement operators for SolidAngle
+
+/// A type representing a solid angle.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct SolidAngle(f32);
 
@@ -18,12 +21,16 @@ impl DerefMut for SolidAngle {
 }
 
 impl SolidAngle {
+    /// Creates a new solid angle from a value in steradians.
     pub fn new(value: f32) -> Self { Self(value) }
 
+    /// Calculates the solid angle subtended by a cap on a unit sphere delimited
+    /// by polar and azimuthal angles.
     pub fn from_angle_ranges(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
         solid_angle_of_region(zenith, azimuth)
     }
 
+    /// Returns the solid angle value without units.
     pub fn value(&self) -> f32 { self.0 }
 }
 

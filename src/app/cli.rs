@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, time::Instant};
+use std::{path::PathBuf, time::Instant};
 
 use crate::{
     acq::{
@@ -13,7 +13,7 @@ use crate::{
     app::{
         args::{MeasureOptions, MeasurementKind, SubCommand},
         cache::{resolve_path, Cache, MicroSurfaceHandle, VgonioDatafiles},
-        VgonioConfig,
+        Config,
     },
     htfld::AxisAlignment,
     Error,
@@ -26,7 +26,7 @@ pub const RESET: &str = "\u{001b}[0m";
 
 /// Execute the given command.
 /// This function is the entry point of vgonio CLI.
-pub fn execute(cmd: SubCommand, config: VgonioConfig) -> Result<(), Error> {
+pub fn execute(cmd: SubCommand, config: Config) -> Result<(), Error> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
         SubCommand::Info => print_info(config),
@@ -34,7 +34,7 @@ pub fn execute(cmd: SubCommand, config: VgonioConfig) -> Result<(), Error> {
 }
 
 /// Measure different metrics of the micro-surface.
-fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
+fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     log::info!("{:#?}", config);
     // Configure thread pool for parallelism.
     if let Some(nthreads) = opts.nthreads {
@@ -179,9 +179,8 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                         azimuth,
                     } => {
                         format!(
-                            "        - domain: {}\n- shape: {:?}\n- polar angle: {:?}\n- \
-                             azimuthal angle {:?}\n",
-                            domain, shape, zenith, azimuth
+                            "        - domain: {domain}\n- shape: {shape:?}\n- polar angle: \
+                             {zenith:?}\n- azimuthal angle {azimuth:?}\n",
                         )
                     }
                 };
@@ -278,9 +277,9 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     &config,
                     &opts.output,
                 )
-                .map_err(|e| {
-                    eprintln!("  {BRIGHT_RED}✗{RESET} {}", e);
-                    e
+                .map_err(|err| {
+                    eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
+                    err
                 })?;
             }
             MeasurementDetails::MicrofacetShadowMasking(measurement) => {
@@ -291,9 +290,9 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
                     &config,
                     &opts.output,
                 )
-                .map_err(|e| {
-                    eprintln!("  {BRIGHT_RED}✗{RESET} {}", e);
-                    e
+                .map_err(|err| {
+                    eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
+                    err
                 })?;
             }
         }
@@ -303,8 +302,8 @@ fn measure(opts: MeasureOptions, config: VgonioConfig) -> Result<(), Error> {
 
 /// Prints Vgonio's current configurations.
 /// TODO: print default parameters for each measurement
-fn print_info(config: VgonioConfig) -> Result<(), Error> {
-    println!("\n{}", config);
+fn print_info(config: Config) -> Result<(), Error> {
+    println!("\n{config}");
     Ok(())
 }
 
@@ -314,7 +313,7 @@ fn measure_microfacet_distribution(
     measurement: MicrofacetDistributionMeasurement,
     surfaces: &[MicroSurfaceHandle],
     cache: &Cache,
-    config: &VgonioConfig,
+    config: &Config,
     output: &Option<PathBuf>,
 ) -> Result<(), Error> {
     println!(
@@ -331,14 +330,14 @@ fn measure_microfacet_distribution(
     );
     let start_time = Instant::now();
     let distributions =
-        acq::microfacet::measure_microfacet_distribution(measurement, &surfaces, &cache);
+        acq::microfacet::measure_microfacet_distribution(measurement, surfaces, cache);
     let duration = Instant::now() - start_time;
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
         duration.as_secs_f32()
     );
     let output_dir = if let Some(ref output) = output {
-        let path = resolve_path(config.cwd(), Some(&output));
+        let path = resolve_path(config.cwd(), Some(output));
         if !path.is_dir() {
             return Err(Error::InvalidOutputDir(path));
         }
@@ -381,7 +380,7 @@ fn measure_microfacet_shadowing_masking(
     measurement: MicrofacetShadowingMaskingMeasurement,
     surfaces: &[MicroSurfaceHandle],
     cache: &Cache,
-    config: &VgonioConfig,
+    config: &Config,
     output: &Option<PathBuf>,
 ) -> Result<(), Error> {
     println!(
@@ -398,14 +397,14 @@ fn measure_microfacet_shadowing_masking(
     );
     let start_time = Instant::now();
     let distributions =
-        acq::microfacet::measure_microfacet_shadowing_masking(measurement, &surfaces, &cache);
+        acq::microfacet::measure_microfacet_shadowing_masking(measurement, surfaces, cache);
     let duration = Instant::now() - start_time;
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
         duration.as_secs_f32()
     );
     let output_dir = if let Some(ref output) = output {
-        let path = resolve_path(config.cwd(), Some(&output));
+        let path = resolve_path(config.cwd(), Some(output));
         if !path.is_dir() {
             return Err(Error::InvalidOutputDir(path));
         }

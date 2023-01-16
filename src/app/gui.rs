@@ -109,10 +109,10 @@ pub enum VgonioEvent {
 
 use self::tools::SamplingDebugger;
 
-use super::VgonioConfig;
+use super::Config;
 
 /// Launches Vgonio GUI application.
-pub fn launch(config: VgonioConfig) -> Result<(), Error> {
+pub fn launch(config: Config) -> Result<(), Error> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -168,7 +168,7 @@ pub fn launch(config: VgonioConfig) -> Result<(), Error> {
                     // The system is out of memory, we should quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
+                    Err(e) => eprintln!("{e:?}"),
                 }
             }
 
@@ -193,8 +193,8 @@ pub struct VgonioApp {
     /// The GUI application state.
     ui: VgonioUi,
 
-    /// The configuration of the application. See [`VgonioConfig`].
-    config: Arc<VgonioConfig>,
+    /// The configuration of the application. See [`Config`].
+    config: Arc<Config>,
 
     /// The datafiles of the application. See [`VgonioDatafiles`].
     db: VgonioDatafiles,
@@ -235,7 +235,7 @@ pub struct VgonioApp {
 impl VgonioApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
-        config: VgonioConfig,
+        config: Config,
         window: &Window,
         event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, Error> {
@@ -285,7 +285,7 @@ impl VgonioApp {
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             gpu_ctx.surface_config.format,
-            &event_loop,
+            event_loop,
             1,
         );
 

@@ -5,7 +5,8 @@
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
 #![feature(is_some_and)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)] temporarily disabled
+#![allow(unused)] // temporarily enabled
 
 extern crate core;
 

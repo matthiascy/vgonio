@@ -457,11 +457,11 @@ impl GuiState {
         }
     }
 
-    /// Prepare the rendering. This should be called before any rendering.
+    /// Prepares the rendering. This should be called before any rendering.
     pub fn update(&mut self, window: &Window) { self.context.prepare(window); }
 
-    #[deprecated(since = "0.1.0", note = "temporary workaround")]
-    pub fn egui_context(&self) -> &egui::Context { &self.context.inner }
+    /// Returns the encapsulated GUI context.
+    pub fn context(&self) -> &GuiContext { &self.context }
 
     /// Run the UI and record the rendering commands.
     pub fn render(
@@ -478,7 +478,7 @@ impl GuiState {
                 });
         let output = self.context.run(ui);
         self.context
-            .handle_platform_output(&window, output.platform_output);
+            .handle_platform_output(window, output.platform_output);
 
         let primitives = self.context.inner.tessellate(output.shapes);
 

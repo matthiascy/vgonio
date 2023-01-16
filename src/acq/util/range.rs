@@ -128,30 +128,30 @@ where
     type Error = String;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut parts = value.split("~");
+        let mut parts = value.split('~');
         let start = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<T>()
-            .map_err(|_| format!("Invalid range start value: {}", value))?;
+            .map_err(|_| format!("Invalid range start value: {value}"))?;
         let mut parts = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
-            .split("/");
+            .split('/');
         let stop = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<T>()
-            .map_err(|_| format!("Invalid range stop value: {}", value))?;
+            .map_err(|_| format!("Invalid range stop value: {value}"))?;
         let step_size = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<T>()
-            .map_err(|_| format!("Invalid range step size value: {}", value))?;
+            .map_err(|_| format!("Invalid range step size value: {value}"))?;
         Ok(Self {
             start,
             stop,
@@ -317,29 +317,29 @@ where
     type Error = String;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut parts = value.split("~");
+        let mut parts = value.split('~');
         let start = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<T>()
-            .map_err(|_| format!("Invalid range start value: {}", value))?;
+            .map_err(|_| format!("Invalid range start value: {value}"))?;
         let mut parts = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
-            .split(",");
+            .ok_or_else(|| format!("Invalid range: {value}"))?
+            .split(',');
         let stop = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<T>()
-            .map_err(|_| format!("Invalid range stop value: {}", value))?;
+            .map_err(|_| format!("Invalid range stop value: {value}"))?;
         let step_count = parts
             .next()
-            .ok_or_else(|| format!("Invalid range: {}", value))?
+            .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<usize>()
-            .map_err(|_| format!("Invalid range step count: {}", value))?;
+            .map_err(|_| format!("Invalid range step count: {value}"))?;
         Ok(Self {
             start,
             stop,

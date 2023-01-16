@@ -73,7 +73,7 @@ impl Collector {
         };
     }
 
-    pub fn collect<R>(&mut self, records: R, kind: BsdfKind)
+    pub fn collect<R>(&mut self, _records: R, _kind: BsdfKind)
     where
         R: IntoIterator<Item = RtcRecord>,
         <<R as IntoIterator>::IntoIter as Iterator>::Item: core::fmt::Debug,
@@ -82,7 +82,7 @@ impl Collector {
         todo!("Collector::collect")
     }
 
-    pub fn save_stats(&self, path: &str) { todo!("Collector::save_stats") }
+    pub fn save_stats(&self, _path: &str) { todo!("Collector::save_stats") }
 }
 
 /// Represents a patch on the spherical [`Collector`].
