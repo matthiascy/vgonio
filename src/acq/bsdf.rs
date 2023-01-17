@@ -1,7 +1,7 @@
 use crate::{
     acq::{measurement::Radius, util::RangeByStepSize, Collector, Emitter, Patch},
     app::{
-        cache::{Cache, MicroSurfaceHandle, VgonioDatafiles},
+        cache::{Cache, MicroSurfaceHandle},
         cli::{BRIGHT_YELLOW, RESET},
     },
     units::{metres, Nanometres},
@@ -128,7 +128,6 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 pub fn measure_bsdf_embree_rt(
     desc: BsdfMeasurement,
     cache: &Cache,
-    db: &VgonioDatafiles,
     surfaces: &[MicroSurfaceHandle],
 ) {
     use crate::acq::EmbreeRayTracing;
@@ -167,8 +166,8 @@ pub fn measure_bsdf_embree_rt(
         log::debug!("spectrum samples: {:?}", spectrum);
 
         // Load the surface's reflectance data.
-        let ior_t = db
-            .ior_db
+        let ior_t = cache
+            .iors
             .ior_of_spectrum(desc.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
 
@@ -218,12 +217,7 @@ pub fn measure_bsdf_embree_rt(
 }
 
 /// Brdf measurement.
-pub fn measure_bsdf_grid_rt(
-    desc: BsdfMeasurement,
-    cache: &Cache,
-    db: &VgonioDatafiles,
-    surfaces: &[MicroSurfaceHandle],
-) {
+pub fn measure_bsdf_grid_rt(desc: BsdfMeasurement, cache: &Cache, surfaces: &[MicroSurfaceHandle]) {
     use crate::acq::GridRayTracing;
 
     let mut collector: Collector = desc.collector;
@@ -250,8 +244,8 @@ pub fn measure_bsdf_grid_rt(
             emitter.set_radius(Radius::Auto(metres!(mesh.extent.max_edge() * 2.5)));
         }
         let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
-        let ior_t = db
-            .ior_db
+        let ior_t = cache
+            .iors
             .ior_of_spectrum(desc.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
 

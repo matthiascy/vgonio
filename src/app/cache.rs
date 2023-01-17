@@ -1,6 +1,6 @@
 use crate::{
     acq::{
-        ior::{Ior, IorDb},
+        ior::{Ior, IorDatabase},
         Medium,
     },
     app::{
@@ -20,8 +20,16 @@ use std::{
 };
 use uuid::Uuid;
 
-pub enum AssetHandle {
-    MicroSurface { uuid: Uuid, path: PathBuf },
+pub trait Asset: Send + Sync + 'static {}
+
+/// Handle referencing loaded assets.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Handle<T>
+where
+    T: Asset,
+{
+    id: Uuid,
+    _phantom: std::marker::PhantomData<T>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,85 +38,7 @@ pub struct MicroSurfaceHandle {
     pub path: PathBuf,
 }
 
-#[derive(Debug)]
-pub struct VgonioDatafiles {
-    /// Refractive index database.
-    pub ior_db: IorDb,
-}
-
 // TODO(yang): unify HeightField with corresponding MicroSurfaceTriMesh.
-// TODO(yang): maybe rename HeightField as MicroSurface.
-
-impl Default for VgonioDatafiles {
-    fn default() -> Self {
-        Self {
-            ior_db: IorDb::new(),
-        }
-    }
-}
-
-impl VgonioDatafiles {
-    /// Creates a new `VgonioDatafiles` instance and loads all data files(TODO).
-    pub fn new() -> Self { Self::default() }
-
-    /// Loads the refractive index database from the paths specified in the
-    /// config.
-    pub fn load_ior_database(&mut self, config: &Config) {
-        // let mut database = RefractiveIndexDatabase::new();
-        let sys_path: PathBuf = config.sys_data_dir().to_path_buf().join("ior");
-        let user_path = config
-            .user_data_dir()
-            .map(|path| path.to_path_buf().join("ior"));
-        // First load refractive indices from `VgonioConfig::sys_data_dir()`.
-        if sys_path.exists() {
-            // Load one by one the files in the directory.
-            let n = Self::load_refractive_indices(&mut self.ior_db, &sys_path);
-            log::debug!("Loaded {} ior files from {:?}", n, sys_path);
-        }
-
-        // Second load refractive indices from `VgonioConfig::user_data_dir()`.
-        if user_path.as_ref().is_some_and(|p| p.exists()) {
-            let n = Self::load_refractive_indices(&mut self.ior_db, user_path.as_ref().unwrap());
-            log::debug!("Loaded {} ior files from {:?}", n, user_path);
-        }
-    }
-
-    /// Load the refractive index database from the given path.
-    /// Returns the number of files loaded.
-    fn load_refractive_indices(ior_db: &mut IorDb, path: &Path) -> u32 {
-        let mut n_files = 0;
-        if path.is_file() {
-            log::debug!("Loading refractive index database from {:?}", path);
-            let medium = Medium::from_str(
-                path.file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .split('_')
-                    .next()
-                    .unwrap(),
-            )
-            .unwrap();
-            let refractive_indices = Ior::read_iors_from_file(path).unwrap();
-            let iors = ior_db.0.entry(medium).or_insert(Vec::new());
-            for ior in refractive_indices {
-                if !iors.contains(&ior) {
-                    iors.push(ior);
-                }
-            }
-            iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
-            n_files += 1;
-        } else if path.is_dir() {
-            for entry in path.read_dir().unwrap() {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                n_files += Self::load_refractive_indices(ior_db, &path);
-            }
-        }
-
-        n_files
-    }
-}
 
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
@@ -117,11 +47,13 @@ pub struct Cache {
     /// Path to the cache directory.
     pub dir: std::path::PathBuf,
 
+    pub iors: IorDatabase,
+
     /// Micro surface heightfield cache. (key: surface_path, value: heightfield)
     pub micro_surfaces: HashMap<String, MicroSurface>,
 
     /// Cache for triangulated heightfield meshes.
-    pub triangle_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
+    micro_surf_tri_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
 
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<std::path::PathBuf>>,
@@ -135,9 +67,10 @@ impl Cache {
         Self {
             dir: cache_dir.to_path_buf(),
             micro_surfaces: Default::default(),
-            triangle_meshes: Default::default(),
+            micro_surf_tri_meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
+            iors: IorDatabase::default(),
         }
     }
 
@@ -251,7 +184,7 @@ impl Cache {
             for surface in self.micro_surfaces.values() {
                 if surface.uuid == handle.uuid {
                     if let std::collections::hash_map::Entry::Vacant(e) =
-                        self.triangle_meshes.entry(surface.uuid)
+                        self.micro_surf_tri_meshes.entry(surface.uuid)
                     {
                         let mesh = surface.triangulate(TriangulationMethod::Regular);
                         e.insert(mesh);
@@ -272,9 +205,67 @@ impl Cache {
     ) -> Vec<&MicroSurfaceTriMesh> {
         let mut meshes = vec![];
         for handle in handles {
-            meshes.push(self.triangle_meshes.get(&handle.uuid).unwrap())
+            meshes.push(self.micro_surf_tri_meshes.get(&handle.uuid).unwrap())
         }
         meshes
+    }
+
+    /// Loads the refractive index database from the paths specified in the
+    /// config.
+    pub fn load_ior_database(&mut self, config: &Config) {
+        // let mut database = RefractiveIndexDatabase::new();
+        let sys_path: PathBuf = config.sys_data_dir().to_path_buf().join("ior");
+        let user_path = config
+            .user_data_dir()
+            .map(|path| path.to_path_buf().join("ior"));
+        // First load refractive indices from `VgonioConfig::sys_data_dir()`.
+        if sys_path.exists() {
+            // Load one by one the files in the directory.
+            let n = Self::load_refractive_indices(&mut self.iors, &sys_path);
+            log::debug!("Loaded {} ior files from {:?}", n, sys_path);
+        }
+
+        // Second load refractive indices from `VgonioConfig::user_data_dir()`.
+        if user_path.as_ref().is_some_and(|p| p.exists()) {
+            let n = Self::load_refractive_indices(&mut self.iors, user_path.as_ref().unwrap());
+            log::debug!("Loaded {} ior files from {:?}", n, user_path);
+        }
+    }
+
+    /// Load the refractive index database from the given path.
+    /// Returns the number of files loaded.
+    fn load_refractive_indices(iors: &mut IorDatabase, path: &Path) -> u32 {
+        let mut n_files = 0;
+        if path.is_file() {
+            log::debug!("Loading refractive index database from {:?}", path);
+            let medium = Medium::from_str(
+                path.file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .split('_')
+                    .next()
+                    .unwrap(),
+            )
+            .unwrap();
+            let refractive_indices = Ior::read_iors_from_file(path).unwrap();
+            let iors = iors.0.entry(medium).or_insert(Vec::new());
+            for ior in refractive_indices {
+                if !iors.contains(&ior) {
+                    iors.push(ior);
+                }
+            }
+            iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
+            n_files += 1;
+        } else if path.is_dir() {
+            for entry in path.read_dir().unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                n_files += Self::load_refractive_indices(iors, &path);
+            }
+        }
+
+        n_files
     }
 }
 

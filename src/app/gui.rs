@@ -31,7 +31,7 @@ use wgpu::util::DeviceExt;
 use crate::{
     acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass},
     app::{
-        cache::{Cache, VgonioDatafiles},
+        cache::Cache,
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
             GpuContext, MeshView, RdrPass, Texture, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
@@ -200,10 +200,8 @@ pub struct VgonioApp {
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
 
-    /// The datafiles of the application. See [`VgonioDatafiles`].
-    db: VgonioDatafiles,
-
-    /// The cache of the application. See [`VgonioCache`].
+    /// The cache of the application including preloaded datafiles. See
+    /// [`VgonioCache`].
     cache: Arc<RefCell<Cache>>,
 
     input: InputState,
@@ -294,9 +292,12 @@ impl VgonioApp {
         );
 
         let config = Arc::new(config);
-        let mut db = VgonioDatafiles::new();
-        db.load_ior_database(&config);
-        let cache = Arc::new(RefCell::new(Cache::new(config.cache_dir())));
+        let cache = {
+            let mut _cache = Cache::new(config.cache_dir());
+            _cache.load_ior_database(&config);
+            Arc::new(RefCell::new(_cache))
+        };
+
         let gui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
@@ -321,7 +322,6 @@ impl VgonioApp {
             gui_state: gui_ctx,
             config,
             ui: gui,
-            db,
             cache,
             input,
             passes,

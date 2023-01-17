@@ -1,6 +1,7 @@
 //! Heightfield
 
 use crate::{
+    app::cache::Asset,
     isect::Aabb,
     msurf::mesh::{MicroSurfaceTriMesh, TriangulationMethod},
 };
@@ -96,6 +97,8 @@ pub struct MicroSurface {
     /// row major order).
     pub samples: Vec<f32>,
 }
+
+impl Asset for MicroSurface {}
 
 impl MicroSurface {
     /// Creates a flat height field with specified height value.

@@ -29,15 +29,15 @@ impl PartialOrd for Ior {
 
 /// Refractive index database.
 #[derive(Debug)]
-pub struct IorDb(pub(crate) HashMap<Medium, Vec<Ior>>);
+pub struct IorDatabase(pub(crate) HashMap<Medium, Vec<Ior>>);
 
-impl Default for IorDb {
+impl Default for IorDatabase {
     fn default() -> Self { Self::new() }
 }
 
-impl IorDb {
+impl IorDatabase {
     /// Create an empty database.
-    pub fn new() -> IorDb { IorDb(HashMap::new()) }
+    pub fn new() -> IorDatabase { IorDatabase(HashMap::new()) }
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).

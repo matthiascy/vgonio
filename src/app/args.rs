@@ -120,9 +120,6 @@ pub struct MeasureOptions {
     )]
     pub nthreads: Option<u32>,
 
-    #[clap(long, help = "Use caches to minimize the processing time")]
-    pub enable_cache: bool,
-
     #[clap(
         long,
         help = "Show detailed statistics about memory and time\nusage during the measurement"

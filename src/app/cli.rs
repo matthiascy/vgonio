@@ -12,7 +12,7 @@ use crate::{
     },
     app::{
         args::{MeasureOptions, MeasurementKind, SubCommand},
-        cache::{resolve_path, Cache, MicroSurfaceHandle, VgonioDatafiles},
+        cache::{resolve_path, Cache, MicroSurfaceHandle},
         Config,
     },
     msurf::AxisAlignment,
@@ -49,9 +49,6 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     );
 
     let mut cache = Cache::new(config.cache_dir());
-
-    let mut datafiles = VgonioDatafiles::new();
-
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
     let measurements = {
         match opts.fast {
@@ -101,7 +98,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     if measurements.iter().any(|meas| meas.details.is_bsdf()) {
         // Load data files: refractive indices, spd etc.
         println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
-        datafiles.load_ior_database(&config);
+        cache.load_ior_database(&config);
         println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
     }
 
@@ -233,20 +230,10 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         match method {
                             #[cfg(feature = "embree")]
                             RtcMethod::Standard => {
-                                acq::bsdf::measure_bsdf_embree_rt(
-                                    measurement,
-                                    &cache,
-                                    &datafiles,
-                                    &surfaces,
-                                );
+                                acq::bsdf::measure_bsdf_embree_rt(measurement, &cache, &surfaces);
                             }
                             RtcMethod::Grid => {
-                                acq::bsdf::measure_bsdf_grid_rt(
-                                    measurement,
-                                    &cache,
-                                    &datafiles,
-                                    &surfaces,
-                                );
+                                acq::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
                             }
                         }
                     }
