@@ -2,6 +2,7 @@
 
 pub mod bsdf;
 mod collector;
+#[cfg(feature = "embree")]
 mod embree_rt;
 pub(crate) mod emitter; // TODO: maybe make private
 pub mod fresnel;
@@ -14,6 +15,7 @@ pub mod scattering;
 pub mod util;
 
 pub use collector::{Collector, CollectorScheme, Patch};
+#[cfg(feature = "embree")]
 pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
@@ -23,8 +25,8 @@ use std::str::FromStr;
 
 use crate::{
     app::gfx::camera::{Projection, ProjectionKind},
-    htfld::{regular_triangulation, Heightfield},
     isect::Aabb,
+    msurf::{regular_triangulation, MicroSurface},
     units::Radians,
     Error,
 };
@@ -54,6 +56,7 @@ impl Ray {
     }
 }
 
+#[cfg(feature = "embree")]
 impl From<embree::Ray> for Ray {
     fn from(ray: embree::Ray) -> Self {
         let o = Vec3::new(ray.org_x, ray.org_y, ray.org_z);
@@ -62,6 +65,7 @@ impl From<embree::Ray> for Ray {
     }
 }
 
+#[cfg(feature = "embree")]
 impl From<Ray> for embree::Ray {
     fn from(ray: Ray) -> Self { Self::new(ray.o.into(), ray.d.into()) }
 }
@@ -70,6 +74,7 @@ impl From<Ray> for embree::Ray {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // todo: case_insensitive
 pub enum RtcMethod {
+    #[cfg(feature = "embree")]
     /// Standard ray tracing using embree.
     Standard,
     /// Customised grid tracing method.
@@ -196,7 +201,7 @@ impl MicroSurfaceView {
 }
 
 impl MicroSurfaceView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &Heightfield) -> Self {
+    pub fn from_height_field(device: &wgpu::Device, hf: &MicroSurface) -> Self {
         let (rows, cols) = (hf.cols, hf.rows);
         let (positions, extent) = hf.generate_vertices();
         let indices: Vec<u32> = regular_triangulation(&positions, rows, cols);
@@ -240,7 +245,9 @@ impl MicroSurfaceView {
 
 /// Coordinate system handedness.
 pub enum Handedness {
+    /// Right-handed, Z-up coordinate system.
     RightHandedZUp,
+    /// Right-handed, Y-up coordinate system.
     RightHandedYUp,
 }
 

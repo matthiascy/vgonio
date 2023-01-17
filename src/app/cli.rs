@@ -15,7 +15,7 @@ use crate::{
         cache::{resolve_path, Cache, MicroSurfaceHandle, VgonioDatafiles},
         Config,
     },
-    htfld::AxisAlignment,
+    msurf::AxisAlignment,
     Error,
 };
 
@@ -109,7 +109,6 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     let tasks = measurements
         .into_iter()
         .filter_map(|meas| {
-            // Load surfaces height field from files and cache them.
             cache
                 .load_micro_surfaces(&config, &meas.surfaces, Some(AxisAlignment::XZ))
                 .ok()
@@ -232,6 +231,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                             measurement.bsdf_kind
                         );
                         match method {
+                            #[cfg(feature = "embree")]
                             RtcMethod::Standard => {
                                 acq::bsdf::measure_bsdf_embree_rt(
                                     measurement,
@@ -336,15 +336,7 @@ fn measure_microfacet_distribution(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
         duration.as_secs_f32()
     );
-    let output_dir = if let Some(ref output) = output {
-        let path = resolve_path(config.cwd(), Some(output));
-        if !path.is_dir() {
-            return Err(Error::InvalidOutputDir(path));
-        }
-        path
-    } else {
-        config.output_dir().to_path_buf()
-    };
+    let output_dir = resolve_output_dir(config, output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
@@ -403,15 +395,7 @@ fn measure_microfacet_shadowing_masking(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
         duration.as_secs_f32()
     );
-    let output_dir = if let Some(ref output) = output {
-        let path = resolve_path(config.cwd(), Some(output));
-        if !path.is_dir() {
-            return Err(Error::InvalidOutputDir(path));
-        }
-        path
-    } else {
-        config.output_dir().to_path_buf()
-    };
+    let output_dir = resolve_output_dir(config, output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
@@ -439,4 +423,24 @@ fn measure_microfacet_shadowing_masking(
     }
     println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     Ok(())
+}
+
+/// Returns the output directory in canonical form.
+/// If the output directory is not specified, returns config's output directory.
+///
+/// # Arguments
+///
+/// * `config` - The configuration of the current Vgonio session.
+/// * `output` - The output directory specified by the user.
+fn resolve_output_dir(config: &Config, output_dir: &Option<PathBuf>) -> Result<PathBuf, Error> {
+    match output_dir {
+        Some(dir) => {
+            let path = resolve_path(config.cwd(), Some(dir));
+            if !path.is_dir() {
+                return Err(Error::InvalidOutputDir(path));
+            }
+            Ok(path)
+        }
+        None => Ok(config.output_dir().to_path_buf()),
+    }
 }

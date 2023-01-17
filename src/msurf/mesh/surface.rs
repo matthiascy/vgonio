@@ -15,10 +15,12 @@
 use crate::{
     app::gfx::MeshView,
     error::Error,
-    htfld::Heightfield,
     isect::Aabb,
     math::Vec3,
-    mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert},
+    msurf::{
+        mesh::half_edge::{HEDart, HEEdge, HEFace, HEVert},
+        MicroSurface,
+    },
 };
 use std::{
     any::Any,
@@ -127,15 +129,15 @@ impl SurfaceMesh {
     ///
     /// ```
     /// use vgonio::{
-    ///     htfld::{AxisAlignment, Heightfield},
     ///     mesh::SurfaceMesh,
+    ///     msurf::{AxisAlignment, MicroSurface},
     /// };
-    /// let hf = Heightfield::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| {
+    /// let hf = MicroSurface::new_by(6, 6, 0.1, 0.1, AxisAlignment::XZ, |x, y| {
     ///     (x * y) as f32 * 0.5
     /// });
     /// let mesh = SurfaceMesh::from_height_field(&hf);
     /// ```
-    pub fn from_height_field(hf: &Heightfield) -> Self {
+    pub fn from_height_field(hf: &MicroSurface) -> Self {
         // todo: orientation
         let (rows, cols) = (hf.rows, hf.cols);
         let (vert_positions, extent) = hf.generate_vertices();

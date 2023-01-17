@@ -1,8 +1,7 @@
 use crate::{
     acq::{ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
-    htfld::{AxisAlignment, Heightfield},
     isect::{ray_tri_intersect_woop, RayTriIsect},
-    mesh::MicroSurfaceTriMesh,
+    msurf::{mesh::MicroSurfaceTriMesh, AxisAlignment, MicroSurface},
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
@@ -20,7 +19,7 @@ use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 #[derive(Debug)]
 pub struct GridRayTracing<'hf> {
     /// The heightfield where the grid is defined.
-    surface: &'hf Heightfield,
+    surface: &'hf MicroSurface,
 
     /// Corresponding `TriangleMesh` of the surface.
     surface_mesh: &'hf MicroSurfaceTriMesh,
@@ -37,7 +36,7 @@ pub struct GridRayTracing<'hf> {
 
 impl<'hf> GridRayTracing<'hf> {
     /// Creates a new grid ray tracing object.
-    pub fn new(surface: &'hf Heightfield, mesh: &'hf MicroSurfaceTriMesh) -> Self {
+    pub fn new(surface: &'hf MicroSurface, mesh: &'hf MicroSurfaceTriMesh) -> Self {
         let max = IVec2::new(surface.cols as i32 - 2, surface.rows as i32 - 2);
         let origin = Vec2::new(
             -surface.du * (surface.cols / 2) as f32,
@@ -708,7 +707,7 @@ pub enum GridTraversal {
 #[test]
 fn test_grid_traversal() {
     use crate::mesh::TriangulationMethod;
-    let heightfield = Heightfield::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
+    let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
     let triangle_mesh = heightfield.triangulate(TriangulationMethod::Regular);
     let grid = GridRayTracing::new(&heightfield, &triangle_mesh);
     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));

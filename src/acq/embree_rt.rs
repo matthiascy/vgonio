@@ -3,7 +3,7 @@
 
 use crate::{
     acq::{fresnel, ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
-    mesh,
+    msurf,
 };
 use embree::{
     Config, Device, Geometry, Hit, IntersectContext, RayHit, RayHitN, RayN, Scene, SceneFlags,
@@ -54,7 +54,10 @@ impl EmbreeRayTracing {
     pub fn scene(&self, id: usize) -> &Scene { &self.scenes[id] }
 
     /// Uploads a triangle mesh to embree.
-    pub fn create_triangle_mesh(&self, mesh: &mesh::MicroSurfaceTriMesh) -> Arc<TriangleMesh> {
+    pub fn create_triangle_mesh(
+        &self,
+        mesh: &msurf::mesh::MicroSurfaceTriMesh,
+    ) -> Arc<TriangleMesh> {
         let mut embree_mesh =
             TriangleMesh::unanimated(self.device.clone(), mesh.num_facets, mesh.num_verts);
         {

@@ -22,7 +22,9 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-pub(crate) use tools::{trace_ray_grid_dbg, trace_ray_standard_dbg, VisualDebugger};
+#[cfg(feature = "embree")]
+pub(crate) use tools::trace_ray_standard_dbg;
+pub(crate) use tools::{trace_ray_grid_dbg, VisualDebugger};
 pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
@@ -39,8 +41,10 @@ use crate::{
             NUM_AZIMUTH_BINS, NUM_ZENITH_BINS, ZENITH_BIN_SIZE_RAD,
         },
     },
-    htfld::{AxisAlignment, Heightfield},
-    mesh::{MicroSurfaceTriMesh, TriangulationMethod},
+    msurf::{
+        mesh::{MicroSurfaceTriMesh, TriangulationMethod},
+        AxisAlignment, MicroSurface,
+    },
 };
 use winit::{
     dpi::PhysicalSize,
@@ -216,7 +220,7 @@ pub struct VgonioApp {
     //shadow_pass: ShadowPass,
     occlusion_estimation_pass: OcclusionEstimationPass,
 
-    surface: Option<Rc<Heightfield>>,
+    surface: Option<Rc<MicroSurface>>,
     surface_mesh: Option<Rc<MicroSurfaceTriMesh>>,
     surface_mesh_view: Option<MeshView>,
     surface_mesh_micro_view: Option<MicroSurfaceView>,
@@ -698,6 +702,7 @@ impl VgonioApp {
                     log::warn!("No heightfield loaded, can't trace ray!");
                 } else {
                     match method {
+                        #[cfg(feature = "embree")]
                         RtcMethod::Standard => {
                             log::debug!("  => [Standard Ray Tracing]");
                             self.debug_drawing.rays = trace_ray_standard_dbg(
@@ -773,7 +778,7 @@ impl VgonioApp {
     }
 
     fn load_height_field(&mut self, path: &Path, alignment: Option<AxisAlignment>) {
-        match Heightfield::read_from_file(path, None, alignment) {
+        match MicroSurface::read_from_file(path, None, alignment) {
             Ok(mut hf) => {
                 log::info!(
                     "Heightfield loaded: {}, rows = {}, cols = {}, du = {}, dv = {}",

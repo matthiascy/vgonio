@@ -2,13 +2,17 @@ mod plotting;
 mod sampling;
 mod scratch;
 mod visual_debug;
+#[cfg(feature = "embree")]
+use crate::acq::EmbreeRayTracing;
 
 use crate::{
-    acq::{EmbreeRayTracing, GridRayTracing, Ray, TrajectoryNode},
+    acq::{GridRayTracing, Ray, TrajectoryNode},
     app::{gfx::GpuContext, gui::VgonioEvent},
-    mesh::MicroSurfaceTriMesh,
+    msurf::mesh::MicroSurfaceTriMesh,
 };
+#[cfg(feature = "embree")]
 use embree::Config;
+
 use winit::event_loop::EventLoopProxy;
 
 pub(crate) use plotting::Plotting;
@@ -26,6 +30,7 @@ pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTr
     rays
 }
 
+#[cfg(feature = "embree")]
 pub(crate) fn trace_ray_standard_dbg(
     ray: Ray,
     max_bounces: u32,

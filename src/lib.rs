@@ -5,19 +5,17 @@
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
 #![feature(is_some_and)]
-// #![warn(missing_docs)] temporarily disabled
-#![allow(unused)] // temporarily enabled
+#![warn(missing_docs)]
 
 extern crate core;
 
 pub mod acq;
 mod app;
 mod error;
-pub mod htfld;
 mod io;
 pub mod isect;
 mod math;
-mod mesh;
+pub mod msurf;
 pub mod units;
 mod util;
 

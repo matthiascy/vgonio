@@ -1,8 +1,7 @@
 use crate::{
     app::gfx::VertexLayout,
-    htfld::{regular_triangulation, Heightfield},
     isect::Aabb,
-    mesh::MicroSurfaceTriMesh,
+    msurf::{mesh::MicroSurfaceTriMesh, regular_triangulation, MicroSurface},
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
@@ -23,7 +22,7 @@ pub struct MeshView {
 
 // TODO: create a separate method to extract face normals of an heightfield
 impl MeshView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &Heightfield) -> Self {
+    pub fn from_height_field(device: &wgpu::Device, hf: &MicroSurface) -> Self {
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (hf.cols, hf.rows);
         let (positions, extent) = hf.generate_vertices();

@@ -277,7 +277,9 @@ const DEFAULT_ZENITH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
 /// Parameters for microfacet distribution measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MicrofacetDistributionMeasurement {
+    /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSize<Radians>,
+    /// Polar angle sampling range.
     pub zenith: RangeByStepSize<Radians>,
 }
 
@@ -291,6 +293,7 @@ impl Default for MicrofacetDistributionMeasurement {
 }
 
 impl MicrofacetDistributionMeasurement {
+    /// Validate the parameters.
     pub fn validate(self) -> Result<Self, Error> {
         if !(self.azimuth.start >= Radians::ZERO && self.azimuth.stop <= Radians::TWO_PI) {
             return Err(Error::InvalidParameter(
@@ -317,7 +320,9 @@ impl MicrofacetDistributionMeasurement {
 /// Parameters for microfacet shadowing masking measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MicrofacetShadowingMaskingMeasurement {
+    /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSize<Radians>,
+    /// Polar angle sampling range.
     pub zenith: RangeByStepSize<Radians>,
 }
 
@@ -587,7 +592,7 @@ fn scene_desc_serialization() {
     let mut file = Cursor::new(vec![0u8; 128]);
     file.write_all(serialized.as_bytes()).unwrap();
 
-    println!("{}", serialized);
+    println!("{serialized}");
 
     file.set_position(0);
     let deserialized_0: Measurement = serde_yaml::from_reader(file).unwrap();

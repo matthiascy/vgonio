@@ -7,8 +7,10 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    htfld::{AxisAlignment, Heightfield},
-    mesh::{MicroSurfaceTriMesh, TriangulationMethod},
+    msurf::{
+        mesh::{MicroSurfaceTriMesh, TriangulationMethod},
+        AxisAlignment, MicroSurface,
+    },
     Error,
 };
 use std::{
@@ -17,6 +19,10 @@ use std::{
     str::FromStr,
 };
 use uuid::Uuid;
+
+pub enum AssetHandle {
+    MicroSurface { uuid: Uuid, path: PathBuf },
+}
 
 #[derive(Debug, Clone)]
 pub struct MicroSurfaceHandle {
@@ -105,13 +111,14 @@ impl VgonioDatafiles {
 }
 
 /// Structure for caching intermediate results and data.
+/// Also used for managing assets.
 #[derive(Debug)]
 pub struct Cache {
     /// Path to the cache directory.
     pub dir: std::path::PathBuf,
 
     /// Micro surface heightfield cache. (key: surface_path, value: heightfield)
-    pub micro_surfaces: HashMap<String, Heightfield>,
+    pub micro_surfaces: HashMap<String, MicroSurface>,
 
     /// Cache for triangulated heightfield meshes.
     pub triangle_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
@@ -195,7 +202,7 @@ impl Cache {
                 for filepath in files_to_load {
                     let path_string = filepath.to_string_lossy().to_string();
                     if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
-                        let heightfield = Heightfield::read_from_file(&filepath, None, alignment)?;
+                        let heightfield = MicroSurface::read_from_file(&filepath, None, alignment)?;
                         loaded.push(MicroSurfaceHandle {
                             uuid: heightfield.uuid,
                             path: filepath.clone(),
@@ -223,7 +230,7 @@ impl Cache {
     pub fn get_micro_surfaces(
         &self,
         surface_handles: &[MicroSurfaceHandle],
-    ) -> Result<Vec<&Heightfield>, Error> {
+    ) -> Result<Vec<&MicroSurface>, Error> {
         let mut surfaces = vec![];
         for handle in surface_handles {
             let surface = self

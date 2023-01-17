@@ -6,6 +6,7 @@ use crate::{
     },
     units::{metres, Nanometres},
 };
+#[cfg(feature = "embree")]
 use embree::Config;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -115,6 +116,7 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
     pub hist_reflections_energy: [f32; N_BOUNCE],
 }
 
+#[cfg(feature = "embree")]
 /// Measurement of the BSDF (bidirectional scattering distribution function) of
 /// a microfacet surface.
 ///

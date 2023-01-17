@@ -137,6 +137,7 @@ impl<A: AngleUnit> Angle<A> {
         "returns the cube root of the angle."
     );
 
+    /// Clamps the angle between `min` and `max`.
     #[inline]
     pub fn clamp<B, C>(self, min: Angle<B>, max: Angle<C>) -> Self
     where
@@ -154,14 +155,20 @@ impl<A: AngleUnit> Angle<A> {
 }
 
 impl Angle<URadian> {
+    /// PI in radians.
     pub const PI: Self = Self::new(std::f32::consts::PI);
+    /// PI/2 in radians.
     pub const HALF_PI: Self = Self::new(std::f32::consts::FRAC_PI_2);
+    /// 2 * PI in radians.
     pub const TWO_PI: Self = Self::new(std::f32::consts::PI * 2.0);
 }
 
 impl Angle<UDegree> {
+    /// PI in degrees.
     pub const PI: Self = Self::new(180.0);
+    /// PI/2 in degrees.
     pub const HALF_PI: Self = Self::new(90.0);
+    /// 2 * PI in degrees.
     pub const TWO_PI: Self = Self::new(360.0);
 }
 
@@ -231,32 +238,38 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
 }
 
 impl Angle<URadian> {
-    /// Convert to degrees.
+    /// Converts to degrees.
     pub fn in_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * UDegree::FACTOR_FROM_RAD) }
-    /// Compute the sine of the angle.
+    /// Computes the sine of the angle.
     pub fn sin(&self) -> f32 { self.value.sin() }
-    /// Compute the hyperbolic sine of the angle.
+    /// Computes the hyperbolic sine of the angle.
     pub fn sinh(&self) -> f32 { self.value.sinh() }
-    /// Compute the cosine of the angle.
+    /// Computes the cosine of the angle.
     pub fn cos(&self) -> f32 { self.value.cos() }
-    /// Compute the hyperbolic cosine of the angle.
+    /// Computes the hyperbolic cosine of the angle.
     pub fn cosh(&self) -> f32 { self.value.cosh() }
-    /// Compute the tangent of the angle.
+    /// Computes the tangent of the angle.
     pub fn tan(&self) -> f32 { self.value.tan() }
-    /// Compute the hyperbolic tangent of the angle.
+    /// Computes the hyperbolic tangent of the angle.
     pub fn tanh(&self) -> f32 { self.value.tanh() }
 }
 
 impl Angle<UDegree> {
-    /// Convert to radians.
+    /// Converts to radians.
     pub const fn in_radians(&self) -> Angle<URadian> {
         Angle::new(self.value * URadian::FACTOR_FROM_DEG)
     }
+    /// Computes the sine of the angle.
     pub fn sin(&self) -> f32 { self.value.to_radians().sin() }
+    /// Computes the hyperbolic sine of the angle.
     pub fn sinh(&self) -> f32 { self.value.to_radians().sinh() }
+    /// Computes the cosine of the angle.
     pub fn cos(&self) -> f32 { self.value.to_radians().cos() }
+    /// Computes the hyperbolic cosine of the angle.
     pub fn cosh(&self) -> f32 { self.value.to_radians().cosh() }
+    /// Computes the tangent of the angle.
     pub fn tan(&self) -> f32 { self.value.to_radians().tan() }
+    /// Computes the hyperbolic tangent of the angle.
     pub fn tanh(&self) -> f32 { self.value.to_radians().tanh() }
 }
 
@@ -420,7 +433,7 @@ mod angle_unit_tests {
         let d = Angle::<URadian>::new(0.78);
         let e = c / d;
 
-        println!("{}", e);
+        println!("{e}");
 
         assert_eq!(b.value, 0.5);
         assert_eq!(e.round(), 2.0);

@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
-    htfld::{AxisAlignment, Heightfield},
     io::{CacheHeader, CacheKind, MsHeader},
+    msurf::{AxisAlignment, MicroSurface},
 };
 use std::{
     fs::File,
@@ -15,7 +15,7 @@ pub enum HeightFieldOrigin {
     Usurf,
 }
 
-impl Heightfield {
+impl MicroSurface {
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
     ///
@@ -29,7 +29,7 @@ impl Heightfield {
         path: &Path,
         origin: Option<HeightFieldOrigin>,
         alignment: Option<AxisAlignment>,
-    ) -> Result<Heightfield, Error> {
+    ) -> Result<MicroSurface, Error> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
 
@@ -75,7 +75,7 @@ impl Heightfield {
                         read_ascii_samples(reader)
                     };
 
-                    Ok(Heightfield::from_samples(
+                    Ok(MicroSurface::from_samples(
                         header.extent[0] as usize,
                         header.extent[1] as usize,
                         header.spacing[0],
@@ -101,7 +101,7 @@ fn read_ascii_dong2015<R: BufRead>(
     read_first_4_bytes: bool,
     orientation: Option<AxisAlignment>,
     path: &Path,
-) -> Result<Heightfield, Error> {
+) -> Result<MicroSurface, Error> {
     if read_first_4_bytes {
         let mut buf = [0_u8; 4];
         reader.read_exact(&mut buf)?;
@@ -130,7 +130,7 @@ fn read_ascii_dong2015<R: BufRead>(
         }
     };
     let samples = read_ascii_samples(reader);
-    Ok(Heightfield::from_samples(
+    Ok(MicroSurface::from_samples(
         cols,
         rows,
         du,
@@ -147,7 +147,7 @@ fn read_ascii_usurf<R: BufRead>(
     read_first_4_bytes: bool,
     orientation: Option<AxisAlignment>,
     path: &Path,
-) -> Result<Heightfield, Error> {
+) -> Result<MicroSurface, Error> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
 
@@ -177,7 +177,7 @@ fn read_ascii_usurf<R: BufRead>(
     let dv = y_coords[1] - y_coords[0];
     let samples: Vec<f32> = values.into_iter().flatten().collect();
 
-    Ok(Heightfield::from_samples(
+    Ok(MicroSurface::from_samples(
         x_coords.len(),
         y_coords.len(),
         du,
@@ -266,7 +266,7 @@ fn read_binary_samples<R: Read>(mut reader: R, count: usize) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::htfld::io::read_line_ascii_usurf;
+    use crate::msurf::io::read_line_ascii_usurf;
 
     #[test]
     fn test_read_line_ascii_surf0() {

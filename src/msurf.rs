@@ -2,13 +2,14 @@
 
 use crate::{
     isect::Aabb,
-    mesh::{MicroSurfaceTriMesh, TriangulationMethod},
+    msurf::mesh::{MicroSurfaceTriMesh, TriangulationMethod},
 };
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 mod io;
+pub(crate) mod mesh;
 
 /// Static variable used to generate height field name.
 static mut HEIGHT_FIELD_COUNTER: u32 = 0;
@@ -51,7 +52,7 @@ impl Default for AxisAlignment {
 
 /// Representation of the micro-surface.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Heightfield {
+pub struct MicroSurface {
     /// Generated unique identifier.
     pub uuid: uuid::Uuid,
 
@@ -96,7 +97,7 @@ pub struct Heightfield {
     pub samples: Vec<f32>,
 }
 
-impl Heightfield {
+impl MicroSurface {
     /// Creates a flat height field with specified height value.
     ///
     /// # Arguments
@@ -111,8 +112,8 @@ impl Heightfield {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::htfld::{AxisAlignment, Heightfield};
-    /// let height_field = Heightfield::new(10, 10, 0.11, 0.11, 0.12, Default::default());
+    /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
+    /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, Default::default());
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
@@ -127,7 +128,7 @@ impl Heightfield {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
         samples.resize(cols * rows, height);
-        Heightfield {
+        MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
             path: None,
@@ -159,8 +160,8 @@ impl Heightfield {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::htfld::{AxisAlignment, Heightfield};
-    /// let height_field = Heightfield::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| {
+    /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
+    /// let height_field = MicroSurface::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| {
     ///     (row + col) as f32
     /// });
     /// assert_eq!(height_field.samples_count(), 16);
@@ -177,7 +178,7 @@ impl Heightfield {
         dv: f32,
         alignment: AxisAlignment,
         setter: F,
-    ) -> Heightfield
+    ) -> MicroSurface
     where
         F: Fn(usize, usize) -> f32,
     {
@@ -197,7 +198,7 @@ impl Heightfield {
             .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap();
 
-        Heightfield {
+        MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
             path: None,
@@ -230,9 +231,9 @@ impl Heightfield {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::htfld::Heightfield;
+    /// # use vgonio::msurf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = Heightfield::from_samples(3, 3, 0.5, 0.5, samples, Default::default());
+    /// let height_field = MicroSurface::from_samples(3, 3, 0.5, 0.5, samples, Default::default());
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
@@ -246,11 +247,11 @@ impl Heightfield {
         samples: Vec<f32>,
         alignment: AxisAlignment,
         path: Option<PathBuf>,
-    ) -> Heightfield {
+    ) -> MicroSurface {
         assert!(cols > 0 && rows > 0 && samples.len() >= cols * rows);
         let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x));
         let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x));
-        Heightfield {
+        MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             name: gen_height_field_name(),
             path,

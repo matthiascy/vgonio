@@ -205,6 +205,8 @@ impl Config {
     }
 
     /// Returns the output directory.
+    /// If the output directory is not set, the current working directory will
+    /// be returned.
     pub fn output_dir(&self) -> &Path {
         self.user
             .output_dir

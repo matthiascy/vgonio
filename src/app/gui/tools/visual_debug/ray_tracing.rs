@@ -35,7 +35,7 @@ impl RayTracingPane {
             ray_target: Default::default(),
             ray_mode: RayMode::Cartesian,
             max_bounces: 20,
-            method: RtcMethod::Standard,
+            method: RtcMethod::Grid,
             prim_id: 0,
             cell_pos: Default::default(),
             t: 10.0,
@@ -48,6 +48,7 @@ impl egui::Widget for &mut RayTracingPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal_wrapped(|ui| {
             ui.label("method");
+            #[cfg(feature = "embree")]
             ui.selectable_value(&mut self.method, RtcMethod::Standard, "Standard");
             ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
         });
