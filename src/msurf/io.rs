@@ -25,7 +25,7 @@ impl MicroSurface {
     /// 2. Micro-surface height field file (binary format, ends with *.dcms).
     /// 3. Micro-surface height field cache file (binary format, ends with
     /// *.dccc).
-    pub fn read_from_file(
+    pub fn from_file(
         path: &Path,
         origin: Option<HeightFieldOrigin>,
         alignment: Option<AxisAlignment>,

@@ -12,14 +12,14 @@ use crate::{
     },
     app::{
         args::{FastMeasurementKind, MeasureOptions, PrintInfoKind, SubCommand},
-        cache::{resolve_path, Cache, MicroSurfaceHandle},
+        cache::{resolve_path, Cache},
         Config,
     },
-    msurf::AxisAlignment,
+    msurf::{AxisAlignment, MicroSurface},
     Error,
 };
 
-use super::args::PrintInfoOptions;
+use super::{args::PrintInfoOptions, cache::Handle};
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_RED: &str = "\u{001b}[31m";
@@ -118,6 +118,11 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         "    {BRIGHT_CYAN}✓{RESET} {} micro-surface(s) loaded",
         cache.num_micro_surfaces()
     );
+    cache
+        .get_loaded_surface_paths()
+        .unwrap()
+        .iter()
+        .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
     for (measurement, surfaces) in tasks {
         match measurement.kind {
             MeasurementKind::Bsdf(measurement) => {
@@ -183,18 +188,11 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     }
                 };
 
-                let surfaces_str = surfaces
-                    .iter()
-                    .map(|s| format!("       - {}", s.path.display()))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
     • parameters:
       + incident medium: {:?}
       + transmitted medium: {:?}
-      + surfaces:\n {}
       + emitter:
         - radius: {}
         - num rays: {}
@@ -207,7 +205,6 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     chrono::DateTime::<chrono::Utc>::from(start),
                     measurement.incident_medium,
                     measurement.transmitted_medium,
-                    surfaces_str,
                     measurement.emitter.radius(),
                     measurement.emitter.num_rays,
                     measurement.emitter.max_bounces,
@@ -366,7 +363,7 @@ fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
 /// the result to the given output directory.
 fn measure_microfacet_distribution(
     measurement: MicrofacetDistributionMeasurement,
-    surfaces: &[MicroSurfaceHandle],
+    surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
     output: &Option<PathBuf>,
@@ -396,8 +393,9 @@ fn measure_microfacet_distribution(
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
             "microfacet-distribution-{}.txt",
-            surface
-                .path
+            cache
+                .get_micro_surface_path(surface)
+                .unwrap()
                 .file_stem()
                 .unwrap()
                 .to_ascii_lowercase()
@@ -425,7 +423,7 @@ fn measure_microfacet_distribution(
 /// micro-surface and saves the result to the given output directory.
 fn measure_microfacet_shadowing_masking(
     measurement: MicrofacetShadowingMaskingMeasurement,
-    surfaces: &[MicroSurfaceHandle],
+    surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
     output: &Option<PathBuf>,
@@ -455,8 +453,9 @@ fn measure_microfacet_shadowing_masking(
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
             "microfacet-shdowing-masking-{}.txt",
-            surface
-                .path
+            cache
+                .get_micro_surface_path(surface)
+                .unwrap()
                 .file_stem()
                 .unwrap()
                 .to_ascii_lowercase()

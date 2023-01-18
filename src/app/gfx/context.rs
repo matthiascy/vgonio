@@ -274,11 +274,8 @@ impl GpuContext {
 
     /// Reconfigures the surface.
     pub fn reconfigure_surface(&mut self) {
-        match self.surface.as_mut() {
-            Some(surface) => {
-                surface.inner.configure(&self.device, &surface.config);
-            }
-            None => {}
+        if let Some(surface) = self.surface.as_mut() {
+            surface.inner.configure(&self.device, &surface.config);
         }
     }
 

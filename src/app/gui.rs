@@ -780,7 +780,7 @@ impl VgonioApp {
     }
 
     fn load_height_field(&mut self, path: &Path, alignment: Option<AxisAlignment>) {
-        match MicroSurface::read_from_file(path, None, alignment) {
+        match MicroSurface::from_file(path, None, alignment) {
             Ok(mut hf) => {
                 log::info!(
                     "Heightfield loaded: {}, rows = {}, cols = {}, du = {}, dv = {}",

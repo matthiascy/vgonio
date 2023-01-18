@@ -24,12 +24,13 @@ fn gen_micro_surface_name() -> String {
 
 /// Alignment used when generating height field.
 #[repr(u32)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum AxisAlignment {
     /// Aligned with XY plane.
     XY,
 
     /// Aligned with XZ plane.
+    #[default]
     XZ,
 
     /// Aligned with YX plane.
@@ -43,10 +44,6 @@ pub enum AxisAlignment {
 
     /// Aligned with ZY plane.
     ZY,
-}
-
-impl Default for AxisAlignment {
-    fn default() -> Self { AxisAlignment::XZ }
 }
 
 /// Representation of the micro-surface.

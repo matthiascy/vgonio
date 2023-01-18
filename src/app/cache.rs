@@ -22,7 +22,7 @@ use super::gfx::RenderableMesh;
 pub trait Asset: Send + Sync + 'static {}
 
 /// Handle referencing loaded assets.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Handle<T>
 where
     T: Asset,
@@ -31,13 +31,19 @@ where
     _phantom: std::marker::PhantomData<T>,
 }
 
-#[derive(Debug, Clone)]
-pub struct MicroSurfaceHandle {
-    pub uuid: Uuid,
-    pub path: PathBuf,
-}
+impl<T> Handle<T>
+where
+    T: Asset,
+{
+    pub fn new(id: Uuid) -> Self {
+        Self {
+            id,
+            _phantom: std::marker::PhantomData,
+        }
+    }
 
-// TODO(yang): unify HeightField with corresponding TriangleMesh.
+    pub fn id(&self) -> Uuid { self.id }
+}
 
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
@@ -46,16 +52,21 @@ pub struct Cache {
     /// Path to the cache directory.
     pub dir: std::path::PathBuf,
 
+    /// Refractive index database.
     pub iors: IorDatabase,
 
-    /// Micro surface heightfield cache. (key: surface_path, value: heightfield)
-    pub msurfs: HashMap<String, MicroSurface>,
+    /// Lookup table for micro-surface's path to its corresponding uuid.
+    msurf_path_to_uuid: HashMap<PathBuf, Uuid>,
 
-    /// Cache for triangulated heightfield meshes.
+    /// Micro-surface cache, indexed by micro-surface uuid.
+    pub msurfs: HashMap<Uuid, MicroSurface>,
+
+    /// Micro-surface triangle mesh cache, indexed by micro-surface uuid.
     msurf_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
 
-    /// Cache for `RenderableMesh`s.
-    renderabls: HashMap<Uuid, RenderableMesh>,
+    /// Cache for `RenderableMesh`s. TODO: usage?
+    #[allow(dead_code)]
+    renderables: HashMap<Uuid, RenderableMesh>,
 
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<std::path::PathBuf>>,
@@ -73,11 +84,34 @@ impl Cache {
             recent_opened_files: None,
             last_opened_dir: None,
             iors: IorDatabase::default(),
-            renderabls: Default::default(),
+            renderables: Default::default(),
+            msurf_path_to_uuid: Default::default(),
         }
     }
 
     pub fn num_micro_surfaces(&self) -> usize { self.msurfs.len() }
+
+    pub fn get_loaded_surface_paths(&self) -> Option<Vec<&Path>> {
+        self.msurfs
+            .keys()
+            .map(|uuid| self.msurfs.get(uuid).unwrap().path.as_deref())
+            .collect()
+    }
+
+    pub fn get_micro_surface_path(&self, handle: &Handle<MicroSurface>) -> Option<&Path> {
+        if self.msurfs.contains_key(&handle.id) {
+            self.msurfs[&handle.id].path.as_deref()
+        } else {
+            None
+        }
+    }
+
+    pub fn get_micro_surface_paths(&self, handles: &[Handle<MicroSurface>]) -> Option<Vec<&Path>> {
+        handles
+            .iter()
+            .map(|handle| self.get_micro_surface_path(handle))
+            .collect()
+    }
 
     /// Loads surfaces from their relevant places and returns
     /// their cache handles.
@@ -97,7 +131,7 @@ impl Cache {
         config: &Config,
         paths: &[PathBuf],
         alignment: Option<AxisAlignment>,
-    ) -> Result<Vec<MicroSurfaceHandle>, Error> {
+    ) -> Result<Vec<Handle<MicroSurface>>, Error> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
             .iter()
@@ -121,7 +155,6 @@ impl Cache {
             })
             .collect::<Vec<_>>();
         log::debug!("-- canonical paths: {:?}", canonical_paths);
-        use std::collections::hash_map::Entry;
         let mut loaded = vec![];
         for path in canonical_paths {
             if path.exists() {
@@ -136,19 +169,16 @@ impl Cache {
                     }
                 };
                 for filepath in files_to_load {
-                    let path_string = filepath.to_string_lossy().to_string();
-                    if let Entry::Vacant(e) = self.msurfs.entry(path_string.clone()) {
-                        let heightfield = MicroSurface::read_from_file(&filepath, None, alignment)?;
-                        loaded.push(MicroSurfaceHandle {
-                            uuid: heightfield.uuid,
-                            path: filepath.clone(),
-                        });
-                        e.insert(heightfield);
+                    if let Some(uuid) = self.msurf_path_to_uuid.get(&filepath) {
+                        log::debug!("-- already loaded: {}", filepath.display());
+                        loaded.push(Handle::new(*uuid));
                     } else {
-                        loaded.push(MicroSurfaceHandle {
-                            uuid: self.msurfs[&path_string].uuid,
-                            path: filepath.clone(),
-                        });
+                        log::debug!("-- loading: {}", filepath.display());
+                        let msurf = MicroSurface::from_file(&filepath, None, alignment)?;
+                        let uuid = msurf.uuid;
+                        self.msurfs.insert(uuid, msurf);
+                        self.msurf_path_to_uuid.insert(filepath, uuid);
+                        loaded.push(Handle::new(uuid));
                     }
                 }
             } else {
@@ -165,13 +195,13 @@ impl Cache {
 
     pub fn get_micro_surfaces(
         &self,
-        surface_handles: &[MicroSurfaceHandle],
+        handles: &[Handle<MicroSurface>],
     ) -> Result<Vec<&MicroSurface>, Error> {
         let mut surfaces = vec![];
-        for handle in surface_handles {
+        for handle in handles {
             let surface = self
                 .msurfs
-                .get(&handle.path.to_string_lossy().to_string())
+                .get(&handle.id())
                 .ok_or_else(|| Error::Any("Surface not exist!".to_string()))?;
             surfaces.push(surface)
         }
@@ -179,36 +209,29 @@ impl Cache {
         Ok(surfaces)
     }
 
-    /// Triangulates the given height fields and returns uuid of corresponding
-    /// heightfield.
-    fn triangulate_surfaces(&mut self, handles: &[MicroSurfaceHandle]) -> Vec<Uuid> {
-        let mut meshes = vec![];
-        for handle in handles {
-            for surface in self.msurfs.values() {
-                if surface.uuid == handle.uuid {
-                    if let std::collections::hash_map::Entry::Vacant(e) =
-                        self.msurf_meshes.entry(surface.uuid)
-                    {
-                        let mesh = surface.triangulate();
-                        e.insert(mesh);
-                        meshes.push(surface.uuid);
-                    } else {
-                        meshes.push(surface.uuid);
-                    }
-                    break;
+    /// Triangulates the given micro-surface handles.
+    fn triangulate_surfaces(&mut self, handles: &[Handle<MicroSurface>]) {
+        use std::collections::hash_map::Entry;
+        handles.iter().for_each(|handle| {
+            let uuid = handle.id();
+            // Surface must exist.
+            if self.msurfs.contains_key(&uuid) {
+                // Has not been triangulated.
+                if let Entry::Vacant(entry) = self.msurf_meshes.entry(uuid) {
+                    // Triangulate the surface.
+                    entry.insert(self.msurfs.get(&uuid).unwrap().triangulate());
                 }
             }
-        }
-        meshes
+        })
     }
 
     pub fn get_micro_surface_meshes(
         &self,
-        handles: &[MicroSurfaceHandle],
+        handles: &[Handle<MicroSurface>],
     ) -> Vec<&MicroSurfaceTriMesh> {
         let mut meshes = vec![];
         for handle in handles {
-            meshes.push(self.msurf_meshes.get(&handle.uuid).unwrap())
+            meshes.push(self.msurf_meshes.get(&handle.id()).unwrap())
         }
         meshes
     }

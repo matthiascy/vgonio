@@ -4,8 +4,9 @@ use std::{
 };
 
 use crate::{
-    app::cache::{Cache, MicroSurfaceHandle},
+    app::cache::{Cache, Handle},
     error::Error,
+    msurf::MicroSurface,
     units::{self, Radians},
 };
 
@@ -77,7 +78,7 @@ impl MicrofacetDistribution {
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_microfacet_distribution(
     desc: MicrofacetDistributionMeasurement,
-    surfaces: &[MicroSurfaceHandle],
+    surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MicrofacetDistribution> {
     log::info!("Measuring micro facet distribution...");
@@ -207,9 +208,8 @@ impl MicrofacetShadowingMaskingFunction {
 
 pub fn measure_microfacet_shadowing_masking(
     desc: MicrofacetShadowingMaskingMeasurement,
-    surfaces: &[MicroSurfaceHandle],
+    surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MicrofacetShadowingMaskingFunction> {
-    // TODO(yang):
     vec![]
 }
