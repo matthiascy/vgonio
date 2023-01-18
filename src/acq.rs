@@ -109,13 +109,18 @@ impl RtcRecord {
     pub fn bounces(&self) -> usize { self.trajectory.len() - 1 }
 }
 
+/// Medium of the surface.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
 pub enum Medium {
+    /// Air.
     Air,
+    /// Vacuum.
     Vacuum,
+    /// Aluminium.
     Aluminium,
+    /// Copper.
     Copper,
 }
 
@@ -169,7 +174,7 @@ impl LightSource {
 ///
 /// Indices are generated in the following order: azimuthal angle first then
 /// polar angle.
-pub struct MicroSurfaceView {
+pub struct MicroSurfaceMeshView {
     /// Dimension of the micro-surface.
     pub extent: Aabb,
 
@@ -181,7 +186,7 @@ pub struct MicroSurfaceView {
     pub facet_normals: Vec<Vec3>,
 }
 
-impl MicroSurfaceView {
+impl MicroSurfaceMeshView {
     /// Data type used for vertex buffer.
     pub const VERTEX_FORMAT: wgpu::VertexFormat = wgpu::VertexFormat::Float32;
 
@@ -200,7 +205,7 @@ impl MicroSurfaceView {
     pub const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint32;
 }
 
-impl MicroSurfaceView {
+impl MicroSurfaceMeshView {
     pub fn from_height_field(device: &wgpu::Device, hf: &MicroSurface) -> Self {
         let (rows, cols) = (hf.cols, hf.rows);
         let (positions, extent) = hf.generate_vertices();

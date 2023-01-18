@@ -1,25 +1,23 @@
 //! Heightfield
 
-use crate::{
-    app::cache::Asset,
-    isect::Aabb,
-    msurf::mesh::{MicroSurfaceTriMesh, TriangulationMethod},
-};
+use crate::{app::cache::Asset, isect::Aabb};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 mod io;
-pub(crate) mod mesh;
+mod mesh;
+
+pub use mesh::MicroSurfaceTriMesh;
 
 /// Static variable used to generate height field name.
-static mut HEIGHT_FIELD_COUNTER: u32 = 0;
+static mut MICRO_SURFACE_COUNTER: u32 = 0;
 
 /// Helper function to generate a default name for height field instance.
-fn gen_height_field_name() -> String {
+fn gen_micro_surface_name() -> String {
     unsafe {
-        let name = format!("height_field_{HEIGHT_FIELD_COUNTER:03}");
-        HEIGHT_FIELD_COUNTER += 1;
+        let name = format!("micro_surface_{MICRO_SURFACE_COUNTER:03}");
+        MICRO_SURFACE_COUNTER += 1;
         name
     }
 }
@@ -101,7 +99,7 @@ pub struct MicroSurface {
 impl Asset for MicroSurface {}
 
 impl MicroSurface {
-    /// Creates a flat height field with specified height value.
+    /// Creates a micro-surface (height field) with specified height value.
     ///
     /// # Arguments
     ///
@@ -133,7 +131,7 @@ impl MicroSurface {
         samples.resize(cols * rows, height);
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
-            name: gen_height_field_name(),
+            name: gen_micro_surface_name(),
             path: None,
             alignment,
             rows,
@@ -148,7 +146,8 @@ impl MicroSurface {
         }
     }
 
-    /// Creates a height field and sets its height values by using a function.
+    /// Creates a micro-surface (height field) and sets its height values by
+    /// using a function.
     ///
     /// # Arguments
     ///
@@ -164,15 +163,15 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
-    /// let height_field = MicroSurface::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| {
+    /// let msurface = MicroSurface::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| {
     ///     (row + col) as f32
     /// });
-    /// assert_eq!(height_field.samples_count(), 16);
-    /// assert_eq!(height_field.max, 6.0);
-    /// assert_eq!(height_field.min, 0.0);
-    /// assert_eq!(height_field.samples[0], 0.0);
-    /// assert_eq!(height_field.samples[2], 2.0);
-    /// assert_eq!(height_field.sample_at(2, 3), 5.0);
+    /// assert_eq!(msurface.samples_count(), 16);
+    /// assert_eq!(msurface.max, 6.0);
+    /// assert_eq!(msurface.min, 0.0);
+    /// assert_eq!(msurface.samples[0], 0.0);
+    /// assert_eq!(msurface.samples[2], 2.0);
+    /// assert_eq!(msurface.sample_at(2, 3), 5.0);
     /// ```
     pub fn new_by<F>(
         cols: usize,
@@ -203,7 +202,7 @@ impl MicroSurface {
 
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
-            name: gen_height_field_name(),
+            name: gen_micro_surface_name(),
             path: None,
             alignment,
             cols,
@@ -218,7 +217,7 @@ impl MicroSurface {
         }
     }
 
-    /// Create a height field from a array of elevation values.
+    /// Create a micro-surface from a array of elevation values.
     ///
     /// # Arguments
     ///
@@ -256,7 +255,7 @@ impl MicroSurface {
         let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x));
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
-            name: gen_height_field_name(),
+            name: gen_micro_surface_name(),
             path,
             alignment,
             rows,
@@ -342,6 +341,7 @@ impl MicroSurface {
     }
 
     /// Fill holes on the height field.
+    /// TODO: bilinear interpolation
     pub fn fill_holes(&mut self) {
         let mut idx = 0;
         for i in 0..self.cols * self.rows {
@@ -494,38 +494,31 @@ impl MicroSurface {
     }
 
     /// Triangulate the heightfield into a [`TriangleMesh`].
-    pub fn triangulate(&self, method: TriangulationMethod) -> MicroSurfaceTriMesh {
-        match method {
-            TriangulationMethod::Regular => {
-                let (verts, extent) = self.generate_vertices();
-                let faces = regular_triangulation(&verts, self.cols, self.rows);
-                let num_tris = faces.len() / 3;
+    pub fn triangulate(&self) -> MicroSurfaceTriMesh {
+        let (verts, extent) = self.generate_vertices();
+        let faces = regular_triangulation(&verts, self.cols, self.rows);
+        let num_tris = faces.len() / 3;
 
-                let mut normals = vec![glam::Vec3::ZERO; num_tris];
-                let mut areas = vec![0.0; num_tris];
+        let mut normals = vec![glam::Vec3::ZERO; num_tris];
+        let mut areas = vec![0.0; num_tris];
 
-                for i in 0..num_tris {
-                    let p0 = verts[faces[i * 3] as usize];
-                    let p1 = verts[faces[i * 3 + 1] as usize];
-                    let p2 = verts[faces[i * 3 + 2] as usize];
-                    let cross = (p1 - p0).cross(p2 - p0);
-                    normals[i] = cross.normalize();
-                    areas[i] = 0.5 * cross.length();
-                }
+        for i in 0..num_tris {
+            let p0 = verts[faces[i * 3] as usize];
+            let p1 = verts[faces[i * 3 + 1] as usize];
+            let p2 = verts[faces[i * 3 + 2] as usize];
+            let cross = (p1 - p0).cross(p2 - p0);
+            normals[i] = cross.normalize();
+            areas[i] = 0.5 * cross.length();
+        }
 
-                MicroSurfaceTriMesh {
-                    num_facets: num_tris,
-                    num_verts: verts.len(),
-                    extent,
-                    verts,
-                    facets: faces,
-                    facet_normals: normals,
-                    facet_areas: areas,
-                }
-            }
-            TriangulationMethod::Delaunay => {
-                todo!()
-            }
+        MicroSurfaceTriMesh {
+            num_facets: num_tris,
+            num_verts: verts.len(),
+            extent,
+            verts,
+            facets: faces,
+            facet_normals: normals,
+            facet_areas: areas,
         }
     }
 }

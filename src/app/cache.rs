@@ -7,10 +7,7 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    msurf::{
-        mesh::{MicroSurfaceTriMesh, TriangulationMethod},
-        AxisAlignment, MicroSurface,
-    },
+    msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
     Error,
 };
 use std::{
@@ -19,6 +16,8 @@ use std::{
     str::FromStr,
 };
 use uuid::Uuid;
+
+use super::gfx::RenderableMesh;
 
 pub trait Asset: Send + Sync + 'static {}
 
@@ -38,7 +37,7 @@ pub struct MicroSurfaceHandle {
     pub path: PathBuf,
 }
 
-// TODO(yang): unify HeightField with corresponding MicroSurfaceTriMesh.
+// TODO(yang): unify HeightField with corresponding TriangleMesh.
 
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
@@ -50,10 +49,13 @@ pub struct Cache {
     pub iors: IorDatabase,
 
     /// Micro surface heightfield cache. (key: surface_path, value: heightfield)
-    pub micro_surfaces: HashMap<String, MicroSurface>,
+    pub msurfs: HashMap<String, MicroSurface>,
 
     /// Cache for triangulated heightfield meshes.
-    micro_surf_tri_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
+    msurf_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
+
+    /// Cache for `RenderableMesh`s.
+    renderabls: HashMap<Uuid, RenderableMesh>,
 
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<std::path::PathBuf>>,
@@ -66,15 +68,16 @@ impl Cache {
     pub fn new(cache_dir: &Path) -> Self {
         Self {
             dir: cache_dir.to_path_buf(),
-            micro_surfaces: Default::default(),
-            micro_surf_tri_meshes: Default::default(),
+            msurfs: Default::default(),
+            msurf_meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
             iors: IorDatabase::default(),
+            renderabls: Default::default(),
         }
     }
 
-    pub fn num_micro_surfaces(&self) -> usize { self.micro_surfaces.len() }
+    pub fn num_micro_surfaces(&self) -> usize { self.msurfs.len() }
 
     /// Loads surfaces from their relevant places and returns
     /// their cache handles.
@@ -134,7 +137,7 @@ impl Cache {
                 };
                 for filepath in files_to_load {
                     let path_string = filepath.to_string_lossy().to_string();
-                    if let Entry::Vacant(e) = self.micro_surfaces.entry(path_string.clone()) {
+                    if let Entry::Vacant(e) = self.msurfs.entry(path_string.clone()) {
                         let heightfield = MicroSurface::read_from_file(&filepath, None, alignment)?;
                         loaded.push(MicroSurfaceHandle {
                             uuid: heightfield.uuid,
@@ -143,7 +146,7 @@ impl Cache {
                         e.insert(heightfield);
                     } else {
                         loaded.push(MicroSurfaceHandle {
-                            uuid: self.micro_surfaces[&path_string].uuid,
+                            uuid: self.msurfs[&path_string].uuid,
                             path: filepath.clone(),
                         });
                     }
@@ -167,7 +170,7 @@ impl Cache {
         let mut surfaces = vec![];
         for handle in surface_handles {
             let surface = self
-                .micro_surfaces
+                .msurfs
                 .get(&handle.path.to_string_lossy().to_string())
                 .ok_or_else(|| Error::Any("Surface not exist!".to_string()))?;
             surfaces.push(surface)
@@ -181,12 +184,12 @@ impl Cache {
     fn triangulate_surfaces(&mut self, handles: &[MicroSurfaceHandle]) -> Vec<Uuid> {
         let mut meshes = vec![];
         for handle in handles {
-            for surface in self.micro_surfaces.values() {
+            for surface in self.msurfs.values() {
                 if surface.uuid == handle.uuid {
                     if let std::collections::hash_map::Entry::Vacant(e) =
-                        self.micro_surf_tri_meshes.entry(surface.uuid)
+                        self.msurf_meshes.entry(surface.uuid)
                     {
-                        let mesh = surface.triangulate(TriangulationMethod::Regular);
+                        let mesh = surface.triangulate();
                         e.insert(mesh);
                         meshes.push(surface.uuid);
                     } else {
@@ -205,7 +208,7 @@ impl Cache {
     ) -> Vec<&MicroSurfaceTriMesh> {
         let mut meshes = vec![];
         for handle in handles {
-            meshes.push(self.micro_surf_tri_meshes.get(&handle.uuid).unwrap())
+            meshes.push(self.msurf_meshes.get(&handle.uuid).unwrap())
         }
         meshes
     }

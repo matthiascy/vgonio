@@ -6,9 +6,8 @@ mod visual_debug;
 use crate::acq::EmbreeRayTracing;
 
 use crate::{
-    acq::{GridRayTracing, Ray, TrajectoryNode},
+    acq::{GridRayTracing, Ray},
     app::{gfx::GpuContext, gui::VgonioEvent},
-    msurf::mesh::MicroSurfaceTriMesh,
 };
 #[cfg(feature = "embree")]
 use embree::Config;

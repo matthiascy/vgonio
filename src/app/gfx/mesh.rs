@@ -1,15 +1,15 @@
 use crate::{
     app::gfx::VertexLayout,
     isect::Aabb,
-    msurf::{mesh::MicroSurfaceTriMesh, regular_triangulation, MicroSurface},
+    msurf::{regular_triangulation, MicroSurface, MicroSurfaceTriMesh},
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
 use wgpu::{util::DeviceExt, PrimitiveTopology, VertexFormat};
 
-/// Surface mesh which contains only triangles.
+/// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
-pub struct MeshView {
+pub struct RenderableMesh {
     pub vertices_count: u32,
     pub indices_count: u32,
     pub extent: Aabb,
@@ -21,11 +21,11 @@ pub struct MeshView {
 }
 
 // TODO: create a separate method to extract face normals of an heightfield
-impl MeshView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &MicroSurface) -> Self {
+impl RenderableMesh {
+    pub fn from_micro_surface_tri_mesh(device: &wgpu::Device, surf: &MicroSurface) -> Self {
         // Number of triangles = 2 * rows * cols
-        let (cols, rows) = (hf.cols, hf.rows);
-        let (positions, extent) = hf.generate_vertices();
+        let (cols, rows) = (surf.cols, surf.rows);
+        let (positions, extent) = surf.generate_vertices();
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
 
@@ -101,7 +101,7 @@ impl MeshView {
     }
 }
 
-impl MeshView {
+impl RenderableMesh {
     pub fn new<V: Pod + Zeroable + Index<usize, Output = f32>, I: Pod + Zeroable>(
         device: &wgpu::Device,
         layout: VertexLayout,

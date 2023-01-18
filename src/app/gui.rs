@@ -22,29 +22,29 @@ use std::{
     sync::Arc,
     time::Instant,
 };
+
 #[cfg(feature = "embree")]
 pub(crate) use tools::trace_ray_standard_dbg;
+
 pub(crate) use tools::{trace_ray_grid_dbg, VisualDebugger};
 pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    acq::{GridRayTracing, MicroSurfaceView, OcclusionEstimationPass},
+    acq::{GridRayTracing, MicroSurfaceMeshView, OcclusionEstimationPass},
     app::{
         cache::Cache,
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
-            GpuContext, MeshView, RdrPass, Texture, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
+            GpuContext, RdrPass, RenderableMesh, Texture, WgpuConfig,
+            DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::state::{
             camera::CameraState, DebugState, DepthMap, GuiState, InputState, AZIMUTH_BIN_SIZE_RAD,
             NUM_AZIMUTH_BINS, NUM_ZENITH_BINS, ZENITH_BIN_SIZE_RAD,
         },
     },
-    msurf::{
-        mesh::{MicroSurfaceTriMesh, TriangulationMethod},
-        AxisAlignment, MicroSurface,
-    },
+    msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
 };
 use winit::{
     dpi::PhysicalSize,
@@ -152,11 +152,14 @@ pub fn launch(config: Config) -> Result<(), Error> {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 
-                        WindowEvent::Resized(new_size) => vgonio.resize(*new_size),
-
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            vgonio.resize(**new_inner_size);
+                        WindowEvent::Resized(new_size) => {
+                            vgonio.resize(*new_size, Some(window.scale_factor() as f32))
                         }
+
+                        WindowEvent::ScaleFactorChanged {
+                            new_inner_size,
+                            scale_factor,
+                        } => vgonio.resize(**new_inner_size, Some(*scale_factor as f32)),
 
                         _ => {}
                     }
@@ -220,8 +223,8 @@ pub struct VgonioApp {
 
     surface: Option<Rc<MicroSurface>>,
     surface_mesh: Option<Rc<MicroSurfaceTriMesh>>,
-    surface_mesh_view: Option<MeshView>,
-    surface_mesh_micro_view: Option<MicroSurfaceView>,
+    surface_mesh_view: Option<RenderableMesh>,
+    surface_mesh_micro_view: Option<MicroSurfaceMeshView>,
     surface_scale_factor: f32,
 
     opened_surfaces: Vec<PathBuf>,
@@ -262,8 +265,8 @@ impl VgonioApp {
                 0.1,
                 100.0,
                 60.0f32.to_radians(),
-                gpu_ctx.surface_config.width,
-                gpu_ctx.surface_config.height,
+                gpu_ctx.surface().unwrap().width(),
+                gpu_ctx.surface().unwrap().height(),
             );
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
@@ -286,7 +289,7 @@ impl VgonioApp {
         let mut gui_ctx = GuiState::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
-            gpu_ctx.surface_config.format,
+            gpu_ctx.surface().unwrap().format(),
             event_loop,
             1,
         );
@@ -346,19 +349,18 @@ impl VgonioApp {
     }
 
     #[inline]
-    pub fn surface_width(&self) -> u32 { self.gpu_ctx.surface_config.width }
+    pub fn surface_width(&self) -> u32 { self.gpu_ctx.surface().unwrap().width() }
 
     #[inline]
-    pub fn surface_height(&self) -> u32 { self.gpu_ctx.surface_config.height }
+    pub fn surface_height(&self) -> u32 { self.gpu_ctx.surface().unwrap().height() }
 
-    pub fn reconfigure_surface(&mut self) {
-        self.gpu_ctx
-            .surface
-            .configure(&self.gpu_ctx.device, &self.gpu_ctx.surface_config);
-    }
+    pub fn reconfigure_surface(&mut self) { self.gpu_ctx.reconfigure_surface(); }
 
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        if self.gpu_ctx.resize(new_size.width, new_size.height) {
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
+        if self
+            .gpu_ctx
+            .resize(new_size.width, new_size.height, scale_factor)
+        {
             self.depth_map.resize(&self.gpu_ctx);
             self.camera
                 .projection
@@ -498,7 +500,7 @@ impl VgonioApp {
     /// Render the frame to the surface.
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
-        let output_frame = self.gpu_ctx.surface.get_current_texture()?;
+        let output_frame = self.gpu_ctx.surface().unwrap().get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
         let output_view = output_frame
             .texture
@@ -595,7 +597,7 @@ impl VgonioApp {
         // UI render pass recoding.
         let ui_render_output = self.gui_state.render(
             window,
-            self.gpu_ctx.screen_desc(window),
+            self.gpu_ctx.surface().unwrap().screen_descriptor(),
             &output_view,
             |ctx| {
                 // self.demos.ui(ctx);
@@ -652,7 +654,7 @@ impl VgonioApp {
                         &self.gui_state,
                         &self.depth_map.depth_attachment_storage,
                         self.depth_map.width,
-                        self.gpu_ctx.surface_config.height,
+                        self.gpu_ctx.surface().unwrap().height(),
                     );
             }
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
@@ -789,9 +791,9 @@ impl VgonioApp {
                     hf.dv
                 );
                 hf.fill_holes();
-                let mesh = hf.triangulate(TriangulationMethod::Regular);
-                let mesh_view = MeshView::from_triangle_mesh(&self.gpu_ctx.device, &mesh);
-                let micro_view = MicroSurfaceView::from_height_field(&self.gpu_ctx.device, &hf);
+                let mesh = hf.triangulate();
+                let mesh_view = RenderableMesh::from_triangle_mesh(&self.gpu_ctx.device, &mesh);
+                let micro_view = MicroSurfaceMeshView::from_height_field(&self.gpu_ctx.device, &hf);
                 self.surface = Some(Rc::new(hf));
                 self.surface_mesh = Some(Rc::new(mesh));
                 self.surface_mesh_view = Some(mesh_view);
@@ -909,7 +911,7 @@ impl VgonioApp {
                             &mesh.vertex_buffer,
                             index_buffer,
                             indices_count,
-                            MicroSurfaceView::INDEX_FORMAT,
+                            MicroSurfaceMeshView::INDEX_FORMAT,
                         );
 
                         // self.occlusion_estimation_pass
@@ -1057,7 +1059,7 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
                 module: &shader_module,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: ctx.surface_config.format,
+                    format: ctx.surface().unwrap().format(),
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -1144,7 +1146,7 @@ fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
                 module: &grid_shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: ctx.surface_config.format,
+                    format: ctx.surface().unwrap().format(),
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     // blend: Some(wgpu::BlendState {
                     //     color: wgpu::BlendComponent {

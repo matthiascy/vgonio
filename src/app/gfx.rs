@@ -16,6 +16,8 @@ pub use shadow_pass::ShadowPass;
 pub use texture::Texture;
 pub use vertex::*;
 
+pub use mesh::RenderableMesh;
+
 /// Enum for selecting the right buffer type.
 #[derive(Debug)]
 pub enum BufferType {

@@ -210,5 +210,6 @@ pub fn measure_microfacet_shadowing_masking(
     surfaces: &[MicroSurfaceHandle],
     cache: &Cache,
 ) -> Vec<MicrofacetShadowingMaskingFunction> {
+    // TODO(yang):
     vec![]
 }

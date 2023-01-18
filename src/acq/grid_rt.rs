@@ -1,7 +1,7 @@
 use crate::{
     acq::{ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     isect::{ray_tri_intersect_woop, RayTriIsect},
-    msurf::{mesh::MicroSurfaceTriMesh, AxisAlignment, MicroSurface},
+    msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 

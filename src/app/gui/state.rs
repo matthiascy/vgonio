@@ -100,15 +100,15 @@ impl DepthMap {
     pub fn new(ctx: &GpuContext) -> Self {
         let depth_attachment = Texture::create_depth_texture(
             &ctx.device,
-            ctx.surface_config.width,
-            ctx.surface_config.height,
+            ctx.surface().unwrap().width(),
+            ctx.surface().unwrap().height(),
             None,
             Some("depth-texture"),
         );
         // Manually align the width to 256 bytes.
-        let width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
+        let width = (ctx.surface().unwrap().width() as f32 * 4.0 / 256.0).ceil() as u32 * 64;
         let depth_attachment_storage_size = (std::mem::size_of::<f32>()
-            * (width * ctx.surface_config.height) as usize)
+            * (width * ctx.surface().unwrap().height()) as usize)
             as wgpu::BufferAddress;
         let depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -127,14 +127,14 @@ impl DepthMap {
     pub fn resize(&mut self, ctx: &GpuContext) {
         self.depth_attachment = Texture::create_depth_texture(
             &ctx.device,
-            ctx.surface_config.width,
-            ctx.surface_config.height,
+            ctx.surface().unwrap().width(),
+            ctx.surface().unwrap().height(),
             None,
             Some("depth-texture"),
         );
-        self.width = (ctx.surface_config.width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
+        self.width = (ctx.surface().unwrap().width() as f32 * 4.0 / 256.0).ceil() as u32 * 64;
         let depth_map_storage_size = (std::mem::size_of::<f32>()
-            * (self.width * ctx.surface_config.height) as usize)
+            * (self.width * ctx.surface().unwrap().height()) as usize)
             as wgpu::BufferAddress;
         self.depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -162,12 +162,12 @@ impl DepthMap {
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: NonZeroU32::new(std::mem::size_of::<f32>() as u32 * self.width),
-                    rows_per_image: NonZeroU32::new(ctx.surface_config.height),
+                    rows_per_image: NonZeroU32::new(ctx.surface().unwrap().height()),
                 },
             },
             wgpu::Extent3d {
-                width: ctx.surface_config.width,
-                height: ctx.surface_config.height,
+                width: ctx.surface().unwrap().width(),
+                height: ctx.surface().unwrap().height(),
                 depth_or_array_layers: 1,
             },
         );
@@ -176,7 +176,7 @@ impl DepthMap {
 
     /// Save current depth buffer content to a PNG file.
     pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path) {
-        let mut image = image::GrayImage::new(self.width, ctx.surface_config.height);
+        let mut image = image::GrayImage::new(self.width, ctx.surface().unwrap().height());
         {
             let buffer_slice = self.depth_attachment_storage.slice(..);
 
@@ -317,7 +317,7 @@ impl DebugState {
                             module: &shader_module,
                             entry_point: "fs_main",
                             targets: &[Some(wgpu::ColorTargetState {
-                                format: ctx.surface_config.format,
+                                format: ctx.surface().unwrap().format(),
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: wgpu::ColorWrites::ALL,
                             })],
@@ -366,7 +366,7 @@ impl DebugState {
                         module: &prim_shader_module,
                         entry_point: "fs_main",
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: ctx.surface_config.format,
+                            format: ctx.surface().unwrap().format(),
                             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
