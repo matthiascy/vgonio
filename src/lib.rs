@@ -26,16 +26,8 @@ pub fn run() -> Result<(), Error> {
     use app::args::CliArgs;
     use clap::Parser;
 
-    let launch_time = std::time::SystemTime::now();
-
-    println!(
-        "Vgonio launched at {} on {}.",
-        chrono::DateTime::<chrono::Utc>::from(launch_time),
-        std::env::consts::OS
-    );
-
     let args = CliArgs::parse();
-    let config = app::init(&args, launch_time)?;
+    let config = app::init(&args, std::time::SystemTime::now())?;
 
     match args.command {
         None => app::gui::launch(config),

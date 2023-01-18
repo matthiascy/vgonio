@@ -64,13 +64,33 @@ pub enum SubCommand {
     /// Measures micro-geometry level light transport related metrics.
     Measure(MeasureOptions),
 
-    /// Prints the current configuration and default parameters for different
-    /// measurements.
-    Info,
+    /// Prints related information about the current vgonio instance.
+    #[clap(name = "info")]
+    PrintInfo(PrintInfoOptions),
+}
+
+#[derive(clap::Args, Debug)]
+#[clap(about = "Print information about vgonio.")]
+pub struct PrintInfoOptions {
+    #[clap(
+        help = "Type of information to print. If not specified, all information\nwill be printed."
+    )]
+    pub kind: Option<PrintInfoKind>,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrintInfoKind {
+    /// Print the current configuration.
+    Config,
+    /// Print the default parameters for the `measure` command.
+    Defaults,
+    /// Print an example measurement description file.
+    #[clap(name = "meas-desc")]
+    MeasurementDescription,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
-pub enum MeasurementKind {
+pub enum FastMeasurementKind {
     #[clap(name = "bsdf")]
     /// Bidirectional reflectance distribution function.
     Bsdf,
@@ -90,18 +110,18 @@ pub struct MeasureOptions {
         short,
         long,
         num_args(1..),
-        help = "The measurement description file. If option '--f, --fast'\nis specified, inputs \
-                will be interpreted as micro-surface\nprofiles instead of measurement description \
-                file."
+        help = "The measurement description files. If option '-f, --fast-measurement' is\n\
+                specified, inputs will be interpreted as micro-surface profiles instead of\n\
+                measurement description file."
     )]
     pub inputs: Vec<PathBuf>,
 
     #[clap(
         short,
         long,
-        help = "The path where stores the simulation data. Use //\nat the start of the path to \
-                set the output path\nrelative to the input file location. Output path\ncan also \
-                be specified in configuration file."
+        help = "The path where stores the simulation data. Use // at the start of the path\nto \
+                set the output path relative to the input file location. Output path can\nalso be \
+                specified in configuration file."
     )]
     pub output: Option<PathBuf>,
 
@@ -109,9 +129,10 @@ pub struct MeasureOptions {
         short,
         long,
         num_args(1..),
-        help = "Quickly measure the micro-surface with default\nparameters(check with 'info' command).\n"
+        help = "Quickly measure the micro-surface with default parameters.\n\
+                Check with 'info' command."
     )]
-    pub fast: Option<Vec<MeasurementKind>>,
+    pub fast_measurement: Option<Vec<FastMeasurementKind>>,
 
     #[clap(
         short,

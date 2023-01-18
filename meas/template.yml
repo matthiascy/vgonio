@@ -1,27 +1,40 @@
----
-kind: !bsdf in-plane-brdf
-sim_kind: wave_optics
-incident_medium: air
-transmitted_medium: al
+--- # separator of multiple measurements
+type: !microfacet-distribution # microfacet distribution function (NDF)
+  azimuth: 0 rad ~ 6.2831855 rad / 0.087266475 rad
+  zenith: 0 rad ~ 1.5707964 rad / 0.03490659 rad
 surfaces:
-  - user://surfaces/Aluminium65bar100.txt
-emitter:
-  num_rays: 10
-  max_bounces: 4
-  radius: auto
-  zenith: 0deg ~ 90 deg / 10deg
-  azimuth: 0deg ~ 360deg / 120deg
-  shape: !disk
-    zenith: 0 rad
-  spectrum: 380 nm ~ 780 nm / 10 nm
-collector:
-  radius: auto
-  scheme: !partitioned
-    domain: upper_hemisphere
-    partition: !equal_area
-      zenith: 0 rad ~ 90deg, 6
-      azimuth: 0rad ~ 90deg / 120 deg
----
-type: !microfacet-distribution
-  zenith: 0deg ~ 90deg / 2 deg
-  azimuth: 0deg ~ 360deg / 5 deg
+- path/to/surface1
+- path/to/surface2
+--- # separator of multiple measurements
+type: !microfacet-shadowing-masking # microfacet shadowing-masking function
+  azimuth: 0 rad ~ 6.2831855 rad / 0.087266475 rad
+  zenith: 0 rad ~ 1.5707964 rad / 0.03490659 rad
+surfaces:
+- path/to/surface1
+- path/to/surface2
+--- # separator of multiple measurements
+type: !bsdf # bsdf measurement
+  bsdf_kind: in-plane-brdf # type of bsdf
+  sim_kind: !geom-optics
+    method: grid
+  incident_medium: air
+  transmitted_medium: air
+  emitter:
+    num_rays: 1000
+    max_bounces: 10
+    radius: auto
+    zenith: 0 rad ~ 1.5707965 rad / 0.087266475 rad
+    azimuth: 0 rad ~ 6.283186 rad / 2.0943954 rad
+    shape: !disk
+      zenith: 0.087266475 rad
+    spectrum: 400 nm ~ 700 nm / 1 nm
+  collector:
+    radius: auto
+    scheme: !partitioned
+      domain: upper_hemisphere
+      partition: !equal_area
+        zenith: 0 rad ~ 1.5707965 rad, 0
+        azimuth: 0 rad ~ 0 rad / 0 rad
+surfaces:
+- path/to/surface1
+- path/to/surface2

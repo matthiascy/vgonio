@@ -4,20 +4,22 @@ use crate::{
     acq::{
         self,
         measurement::{
-            BsdfMeasurement, Measurement, MeasurementDetails, MicrofacetDistributionMeasurement,
+            BsdfMeasurement, Measurement, MeasurementKind, MicrofacetDistributionMeasurement,
             MicrofacetShadowingMaskingMeasurement, SimulationKind,
         },
         util::SphericalPartition,
         CollectorScheme, RtcMethod,
     },
     app::{
-        args::{MeasureOptions, MeasurementKind, SubCommand},
+        args::{FastMeasurementKind, MeasureOptions, PrintInfoKind, SubCommand},
         cache::{resolve_path, Cache, MicroSurfaceHandle},
         Config,
     },
     msurf::AxisAlignment,
     Error,
 };
+
+use super::args::PrintInfoOptions;
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_RED: &str = "\u{001b}[31m";
@@ -29,7 +31,7 @@ pub const RESET: &str = "\u{001b}[0m";
 pub fn execute(cmd: SubCommand, config: Config) -> Result<(), Error> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
-        SubCommand::Info => print_info(config),
+        SubCommand::PrintInfo(opts) => print_info(opts, config),
     }
 }
 
@@ -51,7 +53,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     let mut cache = Cache::new(config.cache_dir());
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
     let measurements = {
-        match opts.fast {
+        match opts.fast_measurement {
             None => opts
                 .inputs
                 .iter()
@@ -70,18 +72,18 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
             Some(kinds) => kinds
                 .iter()
                 .map(|kind| match kind {
-                    MeasurementKind::Bsdf => Measurement {
-                        details: MeasurementDetails::Bsdf(BsdfMeasurement::default()),
+                    FastMeasurementKind::Bsdf => Measurement {
+                        kind: MeasurementKind::Bsdf(BsdfMeasurement::default()),
                         surfaces: opts.inputs.clone(),
                     },
-                    MeasurementKind::MicrofacetDistribution => Measurement {
-                        details: MeasurementDetails::MicrofacetDistribution(
+                    FastMeasurementKind::MicrofacetDistribution => Measurement {
+                        kind: MeasurementKind::MicrofacetDistribution(
                             MicrofacetDistributionMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
-                    MeasurementKind::MicrofacetShadowingMasking => Measurement {
-                        details: MeasurementDetails::MicrofacetShadowMasking(
+                    FastMeasurementKind::MicrofacetShadowingMasking => Measurement {
+                        kind: MeasurementKind::MicrofacetShadowingMasking(
                             MicrofacetShadowingMaskingMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
@@ -95,7 +97,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         measurements.len()
     );
 
-    if measurements.iter().any(|meas| meas.details.is_bsdf()) {
+    if measurements.iter().any(|meas| meas.kind.is_bsdf()) {
         // Load data files: refractive indices, spd etc.
         println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
         cache.load_ior_database(&config);
@@ -117,8 +119,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         cache.num_micro_surfaces()
     );
     for (measurement, surfaces) in tasks {
-        match measurement.details {
-            MeasurementDetails::Bsdf(measurement) => {
+        match measurement.kind {
+            MeasurementKind::Bsdf(measurement) => {
                 let start = std::time::SystemTime::now();
                 let collector_info = match measurement.collector.scheme {
                     CollectorScheme::Partitioned { domain, partition } => match partition {
@@ -256,7 +258,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     start.elapsed().unwrap().as_secs_f32()
                 );
             }
-            MeasurementDetails::MicrofacetDistribution(measurement) => {
+            MeasurementKind::MicrofacetDistribution(measurement) => {
                 measure_microfacet_distribution(
                     measurement,
                     &surfaces,
@@ -269,7 +271,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     err
                 })?;
             }
-            MeasurementDetails::MicrofacetShadowMasking(measurement) => {
+            MeasurementKind::MicrofacetShadowingMasking(measurement) => {
                 measure_microfacet_shadowing_masking(
                     measurement,
                     &surfaces,
@@ -289,8 +291,74 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
 
 /// Prints Vgonio's current configurations.
 /// TODO: print default parameters for each measurement
-fn print_info(config: Config) -> Result<(), Error> {
-    println!("\n{config}");
+fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
+    let mut prints = [false, false, false];
+    match opts.kind {
+        Some(kind) => match kind {
+            PrintInfoKind::Config => {
+                prints[0] = true;
+            }
+            PrintInfoKind::Defaults => {
+                prints[1] = true;
+            }
+            PrintInfoKind::MeasurementDescription => {
+                prints[2] = true;
+            }
+        },
+        None => {
+            prints = [true, true, true];
+        }
+    };
+
+    if prints[0] {
+        println!("Current configurations: {config}");
+    }
+
+    if prints[1] {
+        println!(
+            "Microfacet distribution default parameters: {:?}",
+            MicrofacetDistributionMeasurement::default()
+        );
+        println!(
+            "Microfacet shadowing and masking default parameters: {:?}",
+            MicrofacetShadowingMaskingMeasurement::default()
+        );
+    }
+
+    if prints[2] {
+        [
+            Measurement {
+                kind: MeasurementKind::MicrofacetDistribution(
+                    MicrofacetDistributionMeasurement::default(),
+                ),
+                surfaces: vec![
+                    PathBuf::from("path/to/surface1"),
+                    PathBuf::from("path/to/surface2"),
+                ],
+            },
+            Measurement {
+                kind: MeasurementKind::MicrofacetShadowingMasking(
+                    MicrofacetShadowingMaskingMeasurement::default(),
+                ),
+                surfaces: vec![
+                    PathBuf::from("path/to/surface1"),
+                    PathBuf::from("path/to/surface2"),
+                ],
+            },
+            Measurement {
+                kind: MeasurementKind::Bsdf(BsdfMeasurement::default()),
+                surfaces: vec![
+                    PathBuf::from("path/to/surface1"),
+                    PathBuf::from("path/to/surface2"),
+                ],
+            },
+        ]
+        .into_iter()
+        .for_each(|m| {
+            print!("---\n{}", serde_yaml::to_string(&m).unwrap());
+        });
+    }
+
     Ok(())
 }
 

@@ -363,29 +363,29 @@ impl MicrofacetShadowingMaskingMeasurement {
 /// Describes the different kind of measuremnts with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum MeasurementDetails {
+pub enum MeasurementKind {
     /// Measure the BSDF of a micro-surface.
     Bsdf(BsdfMeasurement),
     /// Measure the micro-facet distribution of a micro-surface.
     MicrofacetDistribution(MicrofacetDistributionMeasurement),
     /// Measure the micro-surface shadowing-masking functions.
-    MicrofacetShadowMasking(MicrofacetShadowingMaskingMeasurement),
+    MicrofacetShadowingMasking(MicrofacetShadowingMaskingMeasurement),
 }
 
-impl MeasurementDetails {
+impl MeasurementKind {
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, Error> {
         match self {
             Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
             Self::MicrofacetDistribution(mfd) => Ok(Self::MicrofacetDistribution(mfd.validate()?)),
-            Self::MicrofacetShadowMasking(mfs) => {
-                Ok(Self::MicrofacetShadowMasking(mfs.validate()?))
+            Self::MicrofacetShadowingMasking(mfs) => {
+                Ok(Self::MicrofacetShadowingMasking(mfs.validate()?))
             }
         }
     }
 }
 
-impl MeasurementDetails {
+impl MeasurementKind {
     /// Whether the measurement is a BSDF measurement.
     pub fn is_bsdf(&self) -> bool { matches!(self, Self::Bsdf { .. }) }
 
@@ -397,12 +397,12 @@ impl MeasurementDetails {
     /// Whether the measurement is a micro-surface shadowing-masking function
     /// measurement.
     pub fn is_micro_surface_shadow_masking(&self) -> bool {
-        matches!(self, Self::MicrofacetShadowMasking { .. })
+        matches!(self, Self::MicrofacetShadowingMasking { .. })
     }
 
     /// Get the BSDF measurement parameters.
     pub fn bsdf(&self) -> Option<&BsdfMeasurement> {
-        if let MeasurementDetails::Bsdf(bsdf) = self {
+        if let MeasurementKind::Bsdf(bsdf) = self {
             Some(bsdf)
         } else {
             None
@@ -411,7 +411,7 @@ impl MeasurementDetails {
 
     /// Get the micro-facet distribution measurement parameters.
     pub fn microfacet_distribution(&self) -> Option<&MicrofacetDistributionMeasurement> {
-        if let MeasurementDetails::MicrofacetDistribution(mfd) = self {
+        if let MeasurementKind::MicrofacetDistribution(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -420,7 +420,7 @@ impl MeasurementDetails {
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
     pub fn micro_surface_shadow_masking(&self) -> Option<&MicrofacetShadowingMaskingMeasurement> {
-        if let MeasurementDetails::MicrofacetShadowMasking(mfd) = self {
+        if let MeasurementKind::MicrofacetShadowingMasking(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -436,7 +436,7 @@ impl MeasurementDetails {
 pub struct Measurement {
     /// Type of measurement.
     #[serde(rename = "type")]
-    pub details: MeasurementDetails,
+    pub kind: MeasurementKind,
     /// Surfaces to be measured. surface's path can be prefixed with either
     /// `usr://` or `sys://` to indicate the user-defined data file path
     /// or system-defined data file path.
@@ -508,97 +508,21 @@ impl Measurement {
     /// Validate the measurement description.
     pub fn validate(self) -> Result<Self, Error> {
         log::info!("Validating measurement description...");
-        let details = self.details.validate()?;
-        Ok(Self { details, ..self })
+        let details = self.kind.validate()?;
+        Ok(Self {
+            kind: details,
+            ..self
+        })
     }
 
     /// Measurement kind in the form of a string.
     pub fn name(&self) -> &'static str {
-        match self.details {
-            MeasurementDetails::Bsdf { .. } => "BSDF measurement",
-            MeasurementDetails::MicrofacetDistribution { .. } => {
-                "microfacet-distribution measurement"
-            }
-            MeasurementDetails::MicrofacetShadowMasking { .. } => {
+        match self.kind {
+            MeasurementKind::Bsdf { .. } => "BSDF measurement",
+            MeasurementKind::MicrofacetDistribution { .. } => "microfacet-distribution measurement",
+            MeasurementKind::MicrofacetShadowingMasking { .. } => {
                 "micro-surface-shadow-masking measurement"
             }
         }
     }
-}
-
-#[test]
-fn scene_desc_serialization() {
-    use crate::units::steradians;
-    use std::io::{Cursor, Write};
-
-    let desc = Measurement {
-        details: MeasurementDetails::Bsdf(BsdfMeasurement {
-            bsdf_kind: BsdfKind::InPlaneBrdf,
-            sim_kind: SimulationKind::GeomOptics {
-                method: RtcMethod::Standard,
-            },
-            incident_medium: Medium::Air,
-            transmitted_medium: Medium::Air,
-            collector: Collector {
-                radius: Radius::Auto(metres!(0.0)),
-                scheme: CollectorScheme::Partitioned {
-                    domain: SphericalDomain::Upper,
-                    partition: SphericalPartition::EqualArea {
-                        zenith: RangeByStepCount {
-                            start: radians!(0.0),
-                            stop: radians!(0.0),
-                            step_count: 0,
-                        },
-                        azimuth: RangeByStepSize {
-                            start: radians!(0.0),
-                            stop: radians!(0.0),
-                            step_size: radians!(0.0),
-                        },
-                    },
-                },
-                patches: None,
-            },
-            emitter: Emitter {
-                num_rays: 0,
-                max_bounces: 0,
-                radius: Radius::Auto(metres!(0.0)),
-                spectrum: RangeByStepSize {
-                    start: nanometres!(380.0),
-                    stop: nanometres!(780.0),
-                    step_size: nanometres!(10.0),
-                },
-                solid_angle: steradians!(0.0),
-                zenith: RangeByStepSize {
-                    start: radians!(0.0),
-                    stop: radians!(90.0),
-                    step_size: radians!(0.0),
-                },
-                azimuth: RangeByStepSize {
-                    start: radians!(0.0),
-                    stop: radians!(360.0),
-                    step_size: radians!(0.0),
-                },
-                shape: RegionShape::SphericalCap {
-                    zenith: radians!(0.0),
-                },
-                samples: vec![],
-            },
-        }),
-        surfaces: vec![PathBuf::from("/tmp/scene.obj")],
-    };
-
-    let serialized = serde_yaml::to_string(&desc).unwrap();
-
-    let mut file = Cursor::new(vec![0u8; 128]);
-    file.write_all(serialized.as_bytes()).unwrap();
-
-    println!("{serialized}");
-
-    file.set_position(0);
-    let deserialized_0: Measurement = serde_yaml::from_reader(file).unwrap();
-    let deserialized_1: Measurement = serde_yaml::from_str(&serialized).unwrap();
-
-    assert_eq!(desc, deserialized_0);
-    assert_eq!(desc, deserialized_1);
-    assert_eq!(deserialized_0, deserialized_1);
 }

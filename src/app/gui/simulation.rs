@@ -91,9 +91,7 @@ impl SimulationPanel {
     pub fn new(cache: Arc<RefCell<Cache>>) -> Self {
         Self {
             desc: Measurement {
-                details: crate::acq::measurement::MeasurementDetails::Bsdf(
-                    BsdfMeasurement::default(),
-                ),
+                kind: crate::acq::measurement::MeasurementKind::Bsdf(BsdfMeasurement::default()),
                 surfaces: vec![],
             },
             selected_surface_index: 0,

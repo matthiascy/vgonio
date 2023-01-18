@@ -126,11 +126,11 @@ impl Config {
         };
 
         log::info!(
-            "Default configuration directory: {}",
+            "  - Sys configuration directory: {}",
             sys_config_dir.display()
         );
-        log::info!("Default cache directory: {}", sys_cache_dir.display());
-        log::info!("Default data files directory: {}", sys_data_dir.display());
+        log::info!("  - Sys cache directory: {}", sys_cache_dir.display());
+        log::info!("  - Sys data files directory: {}", sys_data_dir.display());
 
         // Create the default directories if they don't exist.
         if !sys_config_dir.exists() {
@@ -149,20 +149,23 @@ impl Config {
 
         let user_config = if filepath.is_some_and(|p| p.exists()) {
             let user_config_path = filepath.unwrap();
-            log::info!("Loading configuration from {}", user_config_path.display());
+            log::info!(
+                "  Load user specified configuration from {}",
+                user_config_path.display()
+            );
             UserConfig::load(user_config_path)?
         } else {
             // No configuration file specified, try to load from CWD
             let config_in_cwd = cwd.join("vgonio.toml");
             if config_in_cwd.exists() {
-                log::info!("Loading configuration from {}", config_in_cwd.display());
+                log::info!("  Load configuration in CWD: {}", config_in_cwd.display());
                 UserConfig::load(&config_in_cwd)?
             } else {
                 // No configuration file exists in CWD, try load from system
                 // configuration folder.
                 let config_in_sys = sys_config_dir.join("vgonio.toml");
                 if config_in_sys.exists() {
-                    log::info!("Loading configuration from {}", config_in_sys.display());
+                    log::info!("  Loading configuration from {}", config_in_sys.display());
                     UserConfig::load(&config_in_sys)?
                 } else {
                     // No configuration file in system level, create one and
@@ -316,7 +319,11 @@ pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<Config
         .filter_level(log_filter_from_level(log_level))
         .init();
 
-    log::info!("Initialising...");
+    log::info!(
+        "Vgonio launched at {} on {}.",
+        chrono::DateTime::<chrono::Utc>::from(launch_time),
+        std::env::consts::OS
+    );
 
     Config::load_config(args.config.as_deref())
 }
