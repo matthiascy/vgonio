@@ -22,15 +22,25 @@ use super::gfx::RenderableMesh;
 pub trait Asset: Send + Sync + 'static {}
 
 /// Handle referencing loaded assets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Handle<T>
 where
     T: Asset,
 {
     id: Uuid,
-    _phantom: std::marker::PhantomData<T>,
+    _phantom: std::marker::PhantomData<fn() -> T>,
 }
 
+impl<T: Asset> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<T: Asset> Copy for Handle<T> {}
 impl<T> Handle<T>
 where
     T: Asset,
@@ -98,7 +108,7 @@ impl Cache {
             .collect()
     }
 
-    pub fn get_micro_surface_path(&self, handle: &Handle<MicroSurface>) -> Option<&Path> {
+    pub fn get_micro_surface_path(&self, handle: Handle<MicroSurface>) -> Option<&Path> {
         if self.msurfs.contains_key(&handle.id) {
             self.msurfs[&handle.id].path.as_deref()
         } else {
@@ -109,7 +119,7 @@ impl Cache {
     pub fn get_micro_surface_paths(&self, handles: &[Handle<MicroSurface>]) -> Option<Vec<&Path>> {
         handles
             .iter()
-            .map(|handle| self.get_micro_surface_path(handle))
+            .map(|handle| self.get_micro_surface_path(*handle))
             .collect()
     }
 

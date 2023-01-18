@@ -394,7 +394,7 @@ fn measure_microfacet_distribution(
         let filename = format!(
             "microfacet-distribution-{}.txt",
             cache
-                .get_micro_surface_path(surface)
+                .get_micro_surface_path(*surface)
                 .unwrap()
                 .file_stem()
                 .unwrap()
@@ -454,7 +454,7 @@ fn measure_microfacet_shadowing_masking(
         let filename = format!(
             "microfacet-shdowing-masking-{}.txt",
             cache
-                .get_micro_surface_path(surface)
+                .get_micro_surface_path(*surface)
                 .unwrap()
                 .file_stem()
                 .unwrap()
