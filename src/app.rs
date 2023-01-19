@@ -9,6 +9,7 @@ pub mod cli;
 pub mod gfx;
 pub(crate) mod gui;
 
+use crate::app::cache::resolve_path;
 use args::CliArgs;
 
 /// Vgonio configuration.
@@ -49,16 +50,17 @@ pub struct UserConfig {
 impl UserConfig {
     /// Load [`UserConfig`] from a .toml file.
     pub fn load(path: &Path) -> Result<Self, Error> {
+        let base = path.parent().unwrap_or_else(|| Path::new("."));
         let string = std::fs::read_to_string(path)?;
         let mut config: UserConfig = toml::from_str(&string)?;
         if let Some(cache_dir) = config.cache_dir {
-            config.cache_dir = Some(cache_dir.canonicalize()?);
+            config.cache_dir = Some(resolve_path(base, Some(&cache_dir)));
         }
         if let Some(output_dir) = config.output_dir {
-            config.output_dir = Some(output_dir.canonicalize()?);
+            config.output_dir = Some(resolve_path(base, Some(&output_dir)));
         }
         if let Some(data_dir) = config.data_dir {
-            config.data_dir = Some(data_dir.canonicalize()?);
+            config.data_dir = Some(resolve_path(base, Some(&data_dir)));
         }
         Ok(config)
     }
@@ -148,12 +150,12 @@ impl Config {
         let cwd = std::env::current_dir()?;
 
         let user_config = if filepath.is_some_and(|p| p.exists()) {
-            let user_config_path = filepath.unwrap();
+            let user_config_path = filepath.unwrap().canonicalize().unwrap();
             log::info!(
                 "  Load user specified configuration from {}",
                 user_config_path.display()
             );
-            UserConfig::load(user_config_path)?
+            UserConfig::load(&user_config_path)?
         } else {
             // No configuration file specified, try to load from CWD
             let config_in_cwd = cwd.join("vgonio.toml");

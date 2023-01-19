@@ -1,9 +1,6 @@
-use crate::{
-    acq::remap_depth,
-    app::{
-        gfx::GpuContext,
-        gui::{state::GuiState, VgonioEvent},
-    },
+use crate::app::{
+    gfx::{remap_depth, GpuContext},
+    gui::{state::GuiState, VgonioEvent},
 };
 use egui::{Sense, TextureFilter};
 use winit::event_loop::EventLoopProxy;

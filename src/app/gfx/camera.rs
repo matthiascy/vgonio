@@ -73,6 +73,19 @@ impl Projection {
         }
     }
 
+    pub fn orthographic_matrix(near: f32, far: f32, width: f32, height: f32) -> Mat4 {
+        let half_width = width / 2.0;
+        let half_height = height / 2.0;
+        Mat4::orthographic_rh(
+            -half_width,
+            half_width,
+            -half_height,
+            half_height,
+            near,
+            far,
+        )
+    }
+
     pub fn matrix(&self, kind: ProjectionKind) -> Mat4 {
         let scale_depth = Mat4::from_cols(
             Vec4::new(1.0, 0.0, 0.0, 0.0),

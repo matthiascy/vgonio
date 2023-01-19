@@ -324,6 +324,8 @@ pub struct MicrofacetShadowingMaskingMeasurement {
     pub azimuth: RangeByStepSize<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSize<Radians>,
+    /// Discritization resolution during the measurement (area estimation).
+    pub resolution: u32,
 }
 
 impl Default for MicrofacetShadowingMaskingMeasurement {
@@ -331,6 +333,7 @@ impl Default for MicrofacetShadowingMaskingMeasurement {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
             zenith: DEFAULT_ZENITH_RANGE,
+            resolution: 512,
         }
     }
 }

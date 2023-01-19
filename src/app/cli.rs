@@ -8,7 +8,7 @@ use crate::{
             MicrofacetShadowingMaskingMeasurement, SimulationKind,
         },
         util::SphericalPartition,
-        CollectorScheme, RtcMethod,
+        CollectorScheme, Handedness, RtcMethod,
     },
     app::{
         args::{FastMeasurementKind, MeasureOptions, PrintInfoKind, SubCommand},
@@ -441,40 +441,44 @@ fn measure_microfacet_shadowing_masking(
         measurement.zenith.step_size.prettified()
     );
     let start_time = Instant::now();
-    let distributions =
-        acq::microfacet::measure_microfacet_shadowing_masking(measurement, surfaces, cache);
-    let duration = Instant::now() - start_time;
-    println!(
-        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
-        duration.as_secs_f32()
+    let distributions = acq::microfacet::measure_microfacet_shadowing_masking(
+        measurement,
+        surfaces,
+        cache,
+        Handedness::RightHandedYUp,
     );
-    let output_dir = resolve_output_dir(config, output)?;
-    println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-    for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
-        let filename = format!(
-            "microfacet-shdowing-masking-{}.txt",
-            cache
-                .get_micro_surface_path(*surface)
-                .unwrap()
-                .file_stem()
-                .unwrap()
-                .to_ascii_lowercase()
-                .to_str()
-                .unwrap()
-        );
-        let filepath = output_dir.join(filename);
-        println!(
-            "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
-            filepath.display()
-        );
-        distrib.save_ascii(&filepath).unwrap_or_else(|err| {
-            eprintln!(
-                "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-                filepath.display(),
-                err
-            );
-        })
-    }
+    // let duration = Instant::now() - start_time;
+    // println!(
+    //     "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+    //     duration.as_secs_f32()
+    // );
+    // let output_dir = resolve_output_dir(config, output)?;
+    // println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+    // for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
+    //     let filename = format!(
+    //         "microfacet-shdowing-masking-{}.txt",
+    //         cache
+    //             .get_micro_surface_path(*surface)
+    //             .unwrap()
+    //             .file_stem()
+    //             .unwrap()
+    //             .to_ascii_lowercase()
+    //             .to_str()
+    //             .unwrap()
+    //     );
+    //     let filepath = output_dir.join(filename);
+    //     println!(
+    //         "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
+    //         filepath.display()
+    //     );
+    //     distrib.save_ascii(&filepath).unwrap_or_else(|err| {
+    //         eprintln!(
+    //             "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+    //             filepath.display(),
+    //             err
+    //         );
+    //     })
+    // }
     println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     Ok(())
 }

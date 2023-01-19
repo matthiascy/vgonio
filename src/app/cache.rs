@@ -69,7 +69,7 @@ pub struct Cache {
     msurf_path_to_uuid: HashMap<PathBuf, Uuid>,
 
     /// Micro-surface cache, indexed by micro-surface uuid.
-    pub msurfs: HashMap<Uuid, MicroSurface>,
+    msurfs: HashMap<Uuid, MicroSurface>,
 
     /// Micro-surface triangle mesh cache, indexed by micro-surface uuid.
     msurf_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,

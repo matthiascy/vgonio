@@ -10,7 +10,6 @@ mod grid_rt;
 pub mod ior;
 pub mod measurement;
 pub mod microfacet;
-mod occlusion;
 pub mod scattering;
 pub mod util;
 
@@ -20,7 +19,6 @@ pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 pub use grid_rt::GridRayTracing;
 
-pub use occlusion::*;
 use std::str::FromStr;
 
 use crate::{
@@ -249,6 +247,7 @@ impl MicroSurfaceMeshView {
 }
 
 /// Coordinate system handedness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Handedness {
     /// Right-handed, Z-up coordinate system.
     RightHandedZUp,

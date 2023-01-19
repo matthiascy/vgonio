@@ -31,7 +31,7 @@ pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    acq::{GridRayTracing, MicroSurfaceMeshView, OcclusionEstimationPass},
+    acq::{GridRayTracing, MicroSurfaceMeshView},
     app::{
         cache::Cache,
         gfx::{
@@ -113,7 +113,7 @@ pub enum VgonioEvent {
 
 use self::tools::SamplingDebugger;
 
-use super::Config;
+use super::{gfx::WindowSurface, Config};
 
 /// Launches Vgonio GUI application.
 pub fn launch(config: Config) -> Result<(), Error> {
@@ -194,6 +194,9 @@ pub struct VgonioApp {
     /// GPU context for rendering.
     gpu_ctx: GpuContext,
 
+    /// Surface for presenting rendered frames.
+    win_surf: WindowSurface,
+
     /// GUI context and state for rendering.
     gui_state: GuiState,
 
@@ -219,8 +222,7 @@ pub struct VgonioApp {
 
     // Shadow pass used for measurement of shadowing and masking function.
     //shadow_pass: ShadowPass,
-    occlusion_estimation_pass: OcclusionEstimationPass,
-
+    //occlusion_estimation_pass: OcclusionEstimationPass,
     surface: Option<Rc<MicroSurface>>,
     surface_mesh: Option<Rc<MicroSurfaceTriMesh>>,
     surface_mesh_view: Option<RenderableMesh>,
@@ -244,20 +246,18 @@ impl VgonioApp {
         window: &Window,
         event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, Error> {
-        let gpu_ctx = GpuContext::new(
-            window,
-            WgpuConfig {
-                device_descriptor: wgpu::DeviceDescriptor {
-                    label: Some("wgpu-default-device"),
-                    features: wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
-                    limits: wgpu::Limits::default(),
-                },
-                ..Default::default()
+        let wgpu_config = WgpuConfig {
+            device_descriptor: wgpu::DeviceDescriptor {
+                label: Some("wgpu-default-device"),
+                features: wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
+                limits: wgpu::Limits::default(),
             },
-        )
-        .await;
+            ..Default::default()
+        };
+        let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
+        let win_surf = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
 
-        let depth_map = DepthMap::new(&gpu_ctx);
+        let depth_map = DepthMap::new(&gpu_ctx, win_surf.width(), win_surf.height());
         // Camera
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
@@ -265,14 +265,14 @@ impl VgonioApp {
                 0.1,
                 100.0,
                 60.0f32.to_radians(),
-                gpu_ctx.surface().unwrap().width(),
-                gpu_ctx.surface().unwrap().height(),
+                win_surf.width(),
+                win_surf.height(),
             );
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
 
-        let heightfield_pass = create_heightfield_pass(&gpu_ctx);
-        let visual_grid_pass = create_visual_grid_pass(&gpu_ctx);
+        let heightfield_pass = create_heightfield_pass(&gpu_ctx, win_surf.format());
+        let visual_grid_pass = create_visual_grid_pass(&gpu_ctx, win_surf.format());
 
         let mut passes = HashMap::new();
         passes.insert("visual_grid", visual_grid_pass);
@@ -289,7 +289,7 @@ impl VgonioApp {
         let mut gui_ctx = GuiState::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
-            gpu_ctx.surface().unwrap().format(),
+            win_surf.format(),
             event_loop,
             1,
         );
@@ -317,8 +317,9 @@ impl VgonioApp {
             cursor_pos: [0.0, 0.0],
         };
 
-        let occlusion_estimation_pass = OcclusionEstimationPass::new(&gpu_ctx, 512, 512);
-        let debug_drawing = DebugState::new(&gpu_ctx);
+        //let occlusion_estimation_pass = OcclusionEstimationPass::new(&gpu_ctx, 512,
+        // 512);
+        let debug_drawing = DebugState::new(&gpu_ctx, win_surf.format());
 
         Ok(Self {
             gpu_ctx,
@@ -332,7 +333,7 @@ impl VgonioApp {
             // shadow_pass,
             debug_drawing,
             debug_drawing_enabled: true,
-            occlusion_estimation_pass,
+            // occlusion_estimation_pass,
             surface: None,
             surface_mesh: None,
             surface_mesh_view: None,
@@ -345,23 +346,27 @@ impl VgonioApp {
             surface_scale_factor: 1.0,
             opened_surfaces: vec![],
             surface_visible: true,
+            win_surf,
         })
     }
 
     #[inline]
-    pub fn surface_width(&self) -> u32 { self.gpu_ctx.surface().unwrap().width() }
+    pub fn surface_width(&self) -> u32 { self.win_surf.width() }
 
     #[inline]
-    pub fn surface_height(&self) -> u32 { self.gpu_ctx.surface().unwrap().height() }
+    pub fn surface_height(&self) -> u32 { self.win_surf.height() }
 
-    pub fn reconfigure_surface(&mut self) { self.gpu_ctx.reconfigure_surface(); }
+    pub fn reconfigure_surface(&mut self) { self.win_surf.reconfigure(&self.gpu_ctx.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
-        if self
-            .gpu_ctx
-            .resize(new_size.width, new_size.height, scale_factor)
-        {
-            self.depth_map.resize(&self.gpu_ctx);
+        if self.win_surf.resize(
+            &self.gpu_ctx.device,
+            new_size.width,
+            new_size.height,
+            scale_factor,
+        ) {
+            self.depth_map
+                .resize(&self.gpu_ctx, new_size.width, new_size.height);
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
@@ -384,15 +389,15 @@ impl VgonioApp {
                     ..
                 } => {
                     self.input.update_key_map(*keycode, *state);
-                    if self.input.is_key_pressed(VirtualKeyCode::K) {
-                        println!("Measuring geometric term ...");
-                        let now = Instant::now();
-                        self.measure_micro_surface_geometric_term();
-                        println!(
-                            "Geometric term measurement finished in {} secs",
-                            (Instant::now() - now).as_secs_f32()
-                        );
-                    }
+                    // if self.input.is_key_pressed(VirtualKeyCode::K) {
+                    //     println!("Measuring geometric term ...");
+                    //     let now = Instant::now();
+                    //     //self.measure_micro_surface_geometric_term();
+                    //     println!(
+                    //         "Geometric term measurement finished in {} secs",
+                    //         (Instant::now() - now).as_secs_f32()
+                    //     );
+                    // }
                     EventResponse::Consumed
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
@@ -500,7 +505,7 @@ impl VgonioApp {
     /// Render the frame to the surface.
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
-        let output_frame = self.gpu_ctx.surface().unwrap().get_current_texture()?;
+        let output_frame = self.win_surf.get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
         let output_view = output_frame
             .texture
@@ -597,7 +602,7 @@ impl VgonioApp {
         // UI render pass recoding.
         let ui_render_output = self.gui_state.render(
             window,
-            self.gpu_ctx.surface().unwrap().screen_descriptor(),
+            self.win_surf.screen_descriptor(),
             &output_view,
             |ctx| {
                 // self.demos.ui(ctx);
@@ -616,7 +621,8 @@ impl VgonioApp {
             ),
         );
 
-        self.depth_map.copy_to_buffer(&self.gpu_ctx);
+        self.depth_map
+            .copy_to_buffer(&self.gpu_ctx, self.win_surf.width(), self.win_surf.height());
 
         // Present the frame to the screen.
         output_frame.present();
@@ -643,7 +649,11 @@ impl VgonioApp {
                 self.visual_grid_enabled = !self.visual_grid_enabled;
             }
             VgonioEvent::UpdateDepthMap => {
-                self.depth_map.copy_to_buffer(&self.gpu_ctx);
+                self.depth_map.copy_to_buffer(
+                    &self.gpu_ctx,
+                    self.win_surf.width(),
+                    self.win_surf.height(),
+                );
                 self.ui
                     .tools
                     .get_tool::<VisualDebugger>("Visual Debugger")
@@ -654,7 +664,7 @@ impl VgonioApp {
                         &self.gui_state,
                         &self.depth_map.depth_attachment_storage,
                         self.depth_map.width,
-                        self.gpu_ctx.surface().unwrap().height(),
+                        self.win_surf.height(),
                     );
             }
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
@@ -805,163 +815,140 @@ impl VgonioApp {
         }
     }
 
-    /// Measure the geometric masking/shadowing function of a micro-surface.
-    fn measure_micro_surface_geometric_term(&mut self) {
-        if let Some(mesh) = &self.surface_mesh_micro_view {
-            let radius = (mesh.extent.max - mesh.extent.min).max_element();
-            let near = 0.1f32;
-            let far = radius * 2.0;
-
-            // let cs_module = self.gpu_ctx.device.create_shader_module(
-            //     &wgpu::include_spirv!("../assets/shaders/spirv/visibility.comp.spv"),
-            // );
-            //
-            // let faces_visibility = vec![0u32; mesh.faces.len()];
-            // let faces_visibility_buffer = self
-            //     .gpu_ctx
-            //     .device
-            //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            //         label: None,
-            //         contents: faces_visibility.as_bytes(),
-            //         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            //     });
-            //
-            // let normals_buffer = self
-            //     .gpu_ctx
-            //     .device
-            //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            //         label: None,
-            //         contents: bytemuck::cast_slice(&mesh.facet_normals),
-            //         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            //     });
-            //
-            // let uniform_buffer =
-            // self.gpu_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            //     label: None,
-            //     contents: bytemuck::cast_slice(&[0.0f32; 4]),
-            //     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            // });
-
-            let proj = {
-                let projection = Projection::new(
-                    near,
-                    far,
-                    70.0f32.to_radians(),
-                    (radius * 1.414) as u32,
-                    (radius * 1.414) as u32,
-                );
-                projection.matrix(ProjectionKind::Orthographic)
-            };
-
-            let file = std::fs::File::create("measured_geometric_term_v2.txt").unwrap();
-            let writer = &mut BufWriter::new(file);
-            writer.write_all("phi theta ratio\n".as_bytes()).unwrap();
-
-            // self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
-
-            for i in 0..NUM_AZIMUTH_BINS {
-                for j in 0..NUM_ZENITH_BINS {
-                    // Camera is located at the center of each bin.
-                    let phi = ((2 * i + 1) as f32) * AZIMUTH_BIN_SIZE_RAD * 0.5; // azimuth
-                    let theta = ((2 * j + 1) as f32) * ZENITH_BIN_SIZE_RAD * 0.5; // zenith
-                    let (sin_theta, cos_theta) = theta.sin_cos();
-                    let (sin_phi, cos_phi) = phi.sin_cos();
-                    let view_pos = Vec3::new(
-                        radius * sin_theta * cos_phi,
-                        radius * cos_theta,
-                        radius * sin_theta * sin_phi,
-                    );
-                    let view_dir = view_pos.normalize();
-                    let camera = Camera::new(view_pos, Vec3::ZERO, Vec3::Y);
-                    let visible_facets = mesh
-                        .facets
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, f)| {
-                            if mesh.facet_normals[i].dot(view_dir) > 0.0 {
-                                Some(*f)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    let ratio = if visible_facets.is_empty() {
-                        0.0
-                    } else {
-                        self.occlusion_estimation_pass.update_uniforms(
-                            &self.gpu_ctx.queue,
-                            Mat4::IDENTITY,
-                            proj * camera.matrix(),
-                        );
-
-                        let index_buffer = &self.gpu_ctx.device.create_buffer_init(
-                            &wgpu::util::BufferInitDescriptor {
-                                label: Some("measurement_vertex_buffer"),
-                                contents: bytemuck::cast_slice(&visible_facets),
-                                usage: wgpu::BufferUsages::INDEX,
-                            },
-                        );
-
-                        let indices_count = visible_facets.len() as u32 * 3;
-
-                        self.occlusion_estimation_pass.run_once(
-                            &self.gpu_ctx.device,
-                            &self.gpu_ctx.queue,
-                            &mesh.vertex_buffer,
-                            index_buffer,
-                            indices_count,
-                            MicroSurfaceMeshView::INDEX_FORMAT,
-                        );
-
-                        // self.occlusion_estimation_pass
-                        //     .save_depth_attachment(
-                        //         &self.gpu_ctx.device,
-                        //         near,
-                        //         far,
-                        //         format!(
-                        //             "occ_pass_depth_{:.2}_{:.2}.png",
-                        //             phi.to_degrees(),
-                        //             theta.to_degrees()
-                        //         )
-                        //         .as_ref(),
-                        //     )
-                        //     .unwrap();
-                        //
-                        // self.occlusion_estimation_pass
-                        //     .save_color_attachment(
-                        //         &self.gpu_ctx.device,
-                        //         format!(
-                        //             "occ_pass_color_{:.2}_{:.2}.png",
-                        //             phi.to_degrees(),
-                        //             theta.to_degrees()
-                        //         )
-                        //         .as_ref(),
-                        //     )
-                        //     .unwrap();
-
-                        self.occlusion_estimation_pass
-                            .calculate_ratio(&self.gpu_ctx.device)
-                    };
-
-                    writer
-                        .write_all(
-                            format!(
-                                "{:<6.2} {:<5.2} {:.6}\n",
-                                phi.to_degrees(),
-                                theta.to_degrees(),
-                                ratio
-                            )
-                            .as_bytes(),
-                        )
-                        .unwrap();
-                }
-            }
-        }
-    }
+    ///// Measure the geometric masking/shadowing function of a micro-surface.
+    // fn measure_micro_surface_geometric_term(&mut self) {
+    //     if let Some(mesh) = &self.surface_mesh_micro_view {
+    //         let radius = (mesh.extent.max - mesh.extent.min).max_element();
+    //         let near = 0.1f32;
+    //         let far = radius * 2.0;
+    //
+    //         // let cs_module = self.gpu_ctx.device.create_shader_module(
+    //         //
+    // &wgpu::include_spirv!("../assets/shaders/spirv/visibility.comp.spv"),
+    //         // );
+    //         //
+    //         // let faces_visibility = vec![0u32; mesh.faces.len()];
+    //         // let faces_visibility_buffer = self
+    //         //     .gpu_ctx
+    //         //     .device
+    //         //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //         //         label: None,
+    //         //         contents: faces_visibility.as_bytes(),
+    //         //         usage: wgpu::BufferUsages::MAP_READ |
+    // wgpu::BufferUsages::COPY_DST,         //     });
+    //         //
+    //         // let normals_buffer = self
+    //         //     .gpu_ctx
+    //         //     .device
+    //         //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //         //         label: None,
+    //         //         contents: bytemuck::cast_slice(&mesh.facet_normals),
+    //         //         usage: wgpu::BufferUsages::MAP_READ |
+    // wgpu::BufferUsages::COPY_DST,         //     });
+    //         //
+    //         // let uniform_buffer =
+    //         //
+    // self.gpu_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    //         //     label: None,
+    //         //     contents: bytemuck::cast_slice(&[0.0f32; 4]),
+    //         //     usage: wgpu::BufferUsages::MAP_READ |
+    // wgpu::BufferUsages::COPY_DST,         // });
+    //
+    //         let proj = {
+    //             let projection = Projection::new(
+    //                 near,
+    //                 far,
+    //                 70.0f32.to_radians(),
+    //                 (radius * 1.414) as u32,
+    //                 (radius * 1.414) as u32,
+    //             );
+    //             projection.matrix(ProjectionKind::Orthographic)
+    //         };
+    //
+    //         let file =
+    // std::fs::File::create("measured_geometric_term_v2.txt").unwrap();
+    //         let writer = &mut BufWriter::new(file);
+    //         writer.write_all("phi theta ratio\n".as_bytes()).unwrap();
+    //
+    //         // self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
+    //
+    //         for i in 0..NUM_AZIMUTH_BINS {
+    //             for j in 0..NUM_ZENITH_BINS {
+    //                 // Camera is located at the center of each bin.
+    //                 let phi = ((2 * i + 1) as f32) * AZIMUTH_BIN_SIZE_RAD * 0.5;
+    // // azimuth                 let theta = ((2 * j + 1) as f32) *
+    // ZENITH_BIN_SIZE_RAD * 0.5; // zenith                 let (sin_theta,
+    // cos_theta) = theta.sin_cos();                 let (sin_phi, cos_phi) =
+    // phi.sin_cos();                 let view_pos = Vec3::new(
+    //                     radius * sin_theta * cos_phi,
+    //                     radius * cos_theta,
+    //                     radius * sin_theta * sin_phi,
+    //                 );
+    //                 let view_dir = view_pos.normalize();
+    //                 let camera = Camera::new(view_pos, Vec3::ZERO, Vec3::Y);
+    //                 let visible_facets = mesh
+    //                     .facets
+    //                     .iter()
+    //                     .enumerate()
+    //                     .filter_map(|(i, f)| {
+    //                         if mesh.facet_normals[i].dot(view_dir) > 0.0 {
+    //                             Some(*f)
+    //                         } else {
+    //                             None
+    //                         }
+    //                     })
+    //                     .collect::<Vec<_>>();
+    //
+    //                 let ratio = if visible_facets.is_empty() {
+    //                     0.0
+    //                 } else {
+    //                     self.occlusion_estimation_pass.update_uniforms(
+    //                         &self.gpu_ctx.queue,
+    //                         Mat4::IDENTITY,
+    //                         proj * camera.matrix(),
+    //                     );
+    //
+    //                     let index_buffer =
+    // &self.gpu_ctx.device.create_buffer_init(                         
+    // &wgpu::util::BufferInitDescriptor {                             label:
+    // Some("measurement_vertex_buffer"),                             contents:
+    // bytemuck::cast_slice(&visible_facets),                             usage:
+    // wgpu::BufferUsages::INDEX,                         },
+    //                     );
+    //
+    //                     let indices_count = visible_facets.len() as u32 * 3;
+    //
+    //                     self.occlusion_estimation_pass.run_once(
+    //                         &self.gpu_ctx.device,
+    //                         &self.gpu_ctx.queue,
+    //                         &mesh.vertex_buffer,
+    //                         index_buffer,
+    //                         indices_count,
+    //                         MicroSurfaceMeshView::INDEX_FORMAT,
+    //                     );
+    //
+    //                     self.occlusion_estimation_pass
+    //                         .calculate_ratio(&self.gpu_ctx.device)
+    //                 };
+    //
+    //                 writer
+    //                     .write_all(
+    //                         format!(
+    //                             "{:<6.2} {:<5.2} {:.6}\n",
+    //                             phi.to_degrees(),
+    //                             theta.to_degrees(),
+    //                             ratio
+    //                         )
+    //                         .as_bytes(),
+    //                     )
+    //                     .unwrap();
+    //             }
+    //         }
+    //     }
+    // }
 }
 
-fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
+fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RdrPass {
     // Load shader
     let shader_module = ctx
         .device
@@ -1059,7 +1046,7 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
                 module: &shader_module,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: ctx.surface().unwrap().format(),
+                    format: target_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -1074,7 +1061,7 @@ fn create_heightfield_pass(ctx: &GpuContext) -> RdrPass {
     }
 }
 
-fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
+fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RdrPass {
     // let grid_vert_shader = ctx
     //     .device
     //     .create_shader_module(wgpu::include_spirv!("../assets/shaders/spirv/grid.
@@ -1146,7 +1133,7 @@ fn create_visual_grid_pass(ctx: &GpuContext) -> RdrPass {
                 module: &grid_shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: ctx.surface().unwrap().format(),
+                    format: target_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     // blend: Some(wgpu::BlendState {
                     //     color: wgpu::BlendComponent {

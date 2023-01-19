@@ -11,12 +11,13 @@ pub use input::InputState;
 pub use renderer::GuiRenderer;
 
 use crate::app::{
-    gfx::{GpuContext, RdrPass, Texture, VertexLayout},
+    gfx::{GpuContext, RdrPass, Texture, VertexLayout, WindowSurface},
     gui::VgonioEvent,
 };
 
-use crate::acq::{remap_depth, Ray};
+use crate::acq::Ray;
 
+use crate::app::gfx::remap_depth;
 use std::{default::Default, num::NonZeroU32, path::Path, sync::Arc};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
@@ -97,19 +98,13 @@ pub struct DepthMap {
 }
 
 impl DepthMap {
-    pub fn new(ctx: &GpuContext) -> Self {
-        let depth_attachment = Texture::create_depth_texture(
-            &ctx.device,
-            ctx.surface().unwrap().width(),
-            ctx.surface().unwrap().height(),
-            None,
-            Some("depth-texture"),
-        );
+    pub fn new(ctx: &GpuContext, width: u32, height: u32) -> Self {
+        let depth_attachment =
+            Texture::create_depth_texture(&ctx.device, width, height, None, Some("depth-texture"));
         // Manually align the width to 256 bytes.
-        let width = (ctx.surface().unwrap().width() as f32 * 4.0 / 256.0).ceil() as u32 * 64;
-        let depth_attachment_storage_size = (std::mem::size_of::<f32>()
-            * (width * ctx.surface().unwrap().height()) as usize)
-            as wgpu::BufferAddress;
+        let width = (width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
+        let depth_attachment_storage_size =
+            (std::mem::size_of::<f32>() * (width * height) as usize) as wgpu::BufferAddress;
         let depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: depth_attachment_storage_size,
@@ -124,18 +119,12 @@ impl DepthMap {
         }
     }
 
-    pub fn resize(&mut self, ctx: &GpuContext) {
-        self.depth_attachment = Texture::create_depth_texture(
-            &ctx.device,
-            ctx.surface().unwrap().width(),
-            ctx.surface().unwrap().height(),
-            None,
-            Some("depth-texture"),
-        );
-        self.width = (ctx.surface().unwrap().width() as f32 * 4.0 / 256.0).ceil() as u32 * 64;
-        let depth_map_storage_size = (std::mem::size_of::<f32>()
-            * (self.width * ctx.surface().unwrap().height()) as usize)
-            as wgpu::BufferAddress;
+    pub fn resize(&mut self, ctx: &GpuContext, width: u32, height: u32) {
+        self.depth_attachment =
+            Texture::create_depth_texture(&ctx.device, width, height, None, Some("depth-texture"));
+        self.width = (width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
+        let depth_map_storage_size =
+            (std::mem::size_of::<f32>() * (self.width * height) as usize) as wgpu::BufferAddress;
         self.depth_attachment_storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: depth_map_storage_size,
@@ -144,7 +133,7 @@ impl DepthMap {
         });
     }
 
-    pub fn copy_to_buffer(&mut self, ctx: &GpuContext) {
+    pub fn copy_to_buffer(&mut self, ctx: &GpuContext, width: u32, height: u32) {
         let mut encoder = ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -162,12 +151,12 @@ impl DepthMap {
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: NonZeroU32::new(std::mem::size_of::<f32>() as u32 * self.width),
-                    rows_per_image: NonZeroU32::new(ctx.surface().unwrap().height()),
+                    rows_per_image: NonZeroU32::new(height),
                 },
             },
             wgpu::Extent3d {
-                width: ctx.surface().unwrap().width(),
-                height: ctx.surface().unwrap().height(),
+                width,
+                height,
                 depth_or_array_layers: 1,
             },
         );
@@ -175,8 +164,8 @@ impl DepthMap {
     }
 
     /// Save current depth buffer content to a PNG file.
-    pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path) {
-        let mut image = image::GrayImage::new(self.width, ctx.surface().unwrap().height());
+    pub fn save_to_image(&mut self, ctx: &GpuContext, path: &Path, surface: &WindowSurface) {
+        let mut image = image::GrayImage::new(self.width, surface.height());
         {
             let buffer_slice = self.depth_attachment_storage.slice(..);
 
@@ -224,7 +213,7 @@ pub struct DebugState {
 }
 
 impl DebugState {
-    pub fn new(ctx: &GpuContext) -> Self {
+    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
         use wgpu::util::DeviceExt;
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
@@ -317,7 +306,7 @@ impl DebugState {
                             module: &shader_module,
                             entry_point: "fs_main",
                             targets: &[Some(wgpu::ColorTargetState {
-                                format: ctx.surface().unwrap().format(),
+                                format: target_format,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: wgpu::ColorWrites::ALL,
                             })],
@@ -366,7 +355,7 @@ impl DebugState {
                         module: &prim_shader_module,
                         entry_point: "fs_main",
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: ctx.surface().unwrap().format(),
+                            format: target_format,
                             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
