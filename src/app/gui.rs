@@ -16,7 +16,6 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     default::Default,
-    io::{BufWriter, Write},
     path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
@@ -36,19 +35,16 @@ use crate::{
         cache::Cache,
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
-            GpuContext, RdrPass, RenderableMesh, Texture, WgpuConfig,
+            GpuContext, RenderPass, RenderableMesh, Texture, WgpuConfig,
             DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
-        gui::state::{
-            camera::CameraState, DebugState, DepthMap, GuiState, InputState, AZIMUTH_BIN_SIZE_RAD,
-            NUM_AZIMUTH_BINS, NUM_ZENITH_BINS, ZENITH_BIN_SIZE_RAD,
-        },
+        gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{Event, KeyboardInput, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Window, WindowBuilder},
 };
@@ -214,7 +210,7 @@ pub struct VgonioApp {
     camera: CameraState,
 
     /// Different pipelines with its binding groups used for rendering.
-    passes: HashMap<&'static str, RdrPass>,
+    passes: HashMap<&'static str, RenderPass>,
 
     depth_map: DepthMap,
     debug_drawing: DebugState,
@@ -909,7 +905,7 @@ impl VgonioApp {
     //                     );
     //
     //                     let index_buffer =
-    // &self.gpu_ctx.device.create_buffer_init(                         
+    // &self.gpu_ctx.device.create_buffer_init(
     // &wgpu::util::BufferInitDescriptor {                             label:
     // Some("measurement_vertex_buffer"),                             contents:
     // bytemuck::cast_slice(&visible_facets),                             usage:
@@ -948,7 +944,7 @@ impl VgonioApp {
     // }
 }
 
-fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RdrPass {
+fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
     // Load shader
     let shader_module = ctx
         .device
@@ -1054,14 +1050,14 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
             multiview: None,
         });
 
-    RdrPass {
+    RenderPass {
         pipeline,
         bind_groups: vec![bind_group],
         uniform_buffer: Some(uniform_buffer),
     }
 }
 
-fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RdrPass {
+fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
     // let grid_vert_shader = ctx
     //     .device
     //     .create_shader_module(wgpu::include_spirv!("../assets/shaders/spirv/grid.
@@ -1153,7 +1149,7 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
             multiview: None,
         });
 
-    RdrPass {
+    RenderPass {
         pipeline,
         bind_groups: vec![bind_group],
         uniform_buffer: Some(uniform_buffer),

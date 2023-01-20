@@ -11,7 +11,7 @@ pub use input::InputState;
 pub use renderer::GuiRenderer;
 
 use crate::app::{
-    gfx::{GpuContext, RdrPass, Texture, VertexLayout, WindowSurface},
+    gfx::{GpuContext, RenderPass, Texture, VertexLayout, WindowSurface},
     gui::VgonioEvent,
 };
 
@@ -99,8 +99,14 @@ pub struct DepthMap {
 
 impl DepthMap {
     pub fn new(ctx: &GpuContext, width: u32, height: u32) -> Self {
-        let depth_attachment =
-            Texture::create_depth_texture(&ctx.device, width, height, None, Some("depth-texture"));
+        let depth_attachment = Texture::create_depth_texture(
+            &ctx.device,
+            width,
+            height,
+            None,
+            None,
+            Some("depth-texture"),
+        );
         // Manually align the width to 256 bytes.
         let width = (width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
         let depth_attachment_storage_size =
@@ -120,8 +126,14 @@ impl DepthMap {
     }
 
     pub fn resize(&mut self, ctx: &GpuContext, width: u32, height: u32) {
-        self.depth_attachment =
-            Texture::create_depth_texture(&ctx.device, width, height, None, Some("depth-texture"));
+        self.depth_attachment = Texture::create_depth_texture(
+            &ctx.device,
+            width,
+            height,
+            None,
+            None,
+            Some("depth-texture"),
+        );
         self.width = (width as f32 * 4.0 / 256.0).ceil() as u32 * 64;
         let depth_map_storage_size =
             (std::mem::size_of::<f32>() * (self.width * height) as usize) as wgpu::BufferAddress;
@@ -203,7 +215,7 @@ pub struct DebugState {
     pub rays: Vec<Ray>,
 
     /// Render pass for rays drawing.
-    pub render_pass_rd: RdrPass,
+    pub render_pass_rd: RenderPass,
 
     pub prim_pipeline: wgpu::RenderPipeline,
     pub prim_bind_group: wgpu::BindGroup,
@@ -274,7 +286,7 @@ impl DebugState {
             }),
             vert_count: 0,
             rays: vec![],
-            render_pass_rd: RdrPass {
+            render_pass_rd: RenderPass {
                 pipeline: ctx
                     .device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {

@@ -29,7 +29,7 @@ pub enum BufferType {
 
 /// Represents a rendering pipeline and its associated bind group (shader
 /// input).
-pub struct RdrPass {
+pub struct RenderPass {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_groups: Vec<wgpu::BindGroup>,
     pub uniform_buffer: Option<wgpu::Buffer>,

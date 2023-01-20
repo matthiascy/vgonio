@@ -59,6 +59,7 @@ impl Texture {
         device: &wgpu::Device,
         width: u32,
         height: u32,
+        format: Option<wgpu::TextureFormat>,
         sampler: Option<Arc<wgpu::Sampler>>,
         label: Option<&str>,
     ) -> Self {
@@ -73,7 +74,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
+            format: format.unwrap_or(Self::DEPTH_FORMAT),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,

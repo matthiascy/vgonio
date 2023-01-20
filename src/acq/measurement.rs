@@ -340,13 +340,20 @@ impl Default for MicrofacetShadowingMaskingMeasurement {
 
 impl MicrofacetShadowingMaskingMeasurement {
     pub fn validate(self) -> Result<Self, Error> {
-        if !(self.azimuth.start >= Radians::ZERO && self.azimuth.stop <= Radians::TWO_PI) {
+        if !(self.azimuth.start >= Radians::ZERO
+            && self.azimuth.stop
+                <= (Radians::TWO_PI + radians!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+        {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: azimuth angle must be in the range \
                  [0°, 360°]",
             ));
         }
-        if !(self.zenith.start >= Radians::ZERO && self.zenith.start <= Radians::HALF_PI) {
+        if !(self.zenith.start >= Radians::ZERO
+            && self.zenith.start
+                <= (Radians::HALF_PI
+                    + radians!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+        {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: zenith angle must be in the range [0°, \
                  90°]",

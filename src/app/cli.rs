@@ -432,13 +432,16 @@ fn measure_microfacet_shadowing_masking(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet shadowing-masking function:
     • parameters:
       + azimuth: {} ~ {} per {}
-      + zenith: {} ~ {} per {}",
+      + zenith: {} ~ {} per {}
+      + resolution: {} x {}",
         measurement.azimuth.start.prettified(),
         measurement.azimuth.stop.prettified(),
         measurement.azimuth.step_size.prettified(),
         measurement.zenith.start.prettified(),
         measurement.zenith.stop.prettified(),
-        measurement.zenith.step_size.prettified()
+        measurement.zenith.step_size.prettified(),
+        measurement.resolution,
+        measurement.resolution
     );
     let start_time = Instant::now();
     let distributions = acq::microfacet::measure_microfacet_shadowing_masking(
@@ -447,11 +450,11 @@ fn measure_microfacet_shadowing_masking(
         cache,
         Handedness::RightHandedYUp,
     );
-    // let duration = Instant::now() - start_time;
-    // println!(
-    //     "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
-    //     duration.as_secs_f32()
-    // );
+    let duration = Instant::now() - start_time;
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+        duration.as_secs_f32()
+    );
     // let output_dir = resolve_output_dir(config, output)?;
     // println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     // for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {

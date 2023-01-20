@@ -155,6 +155,7 @@ impl SamplingDebugger {
             &gpu.device,
             256,
             256,
+            None,
             Some(sampler),
             Some("sampling-debugger-depth-attachment"),
         );

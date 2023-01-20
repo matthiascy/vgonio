@@ -1,0 +1,6 @@
+type: !microfacet-shadowing-masking
+  azimuth: 0 rad ~ 360 deg / 120 deg
+  zenith: 0 rad ~ 90 deg / 30 deg
+  resolution: 128
+surfaces:
+  - usr://surfaces/4x4.txt

@@ -1,5 +1,5 @@
 use crate::{
-    app::gfx::{remap_depth, GpuContext, RdrPass, Texture},
+    app::gfx::{remap_depth, GpuContext, RenderPass, Texture},
     Error,
 };
 use bytemuck::{Pod, Zeroable};
@@ -10,7 +10,7 @@ use std::{num::NonZeroU32, sync::Arc};
 /// mapping.
 pub struct ShadowPass {
     /// Pipeline and corresponding shader inputs.
-    inner: RdrPass,
+    inner: RenderPass,
 
     /// Depth attachment of the render pass.
     depth_attachment: Texture,
@@ -113,6 +113,7 @@ impl ShadowPass {
             &ctx.device,
             width,
             height,
+            None,
             sampler,
             Some("shadow_pass_depth_attachment"),
         );
@@ -158,7 +159,7 @@ impl ShadowPass {
                 fragment: None,
                 multiview: None,
             });
-        let pass = RdrPass {
+        let pass = RenderPass {
             pipeline,
             bind_groups: vec![bind_group],
             uniform_buffer: Some(uniform_buffer),
@@ -203,7 +204,8 @@ impl ShadowPass {
         self.width = width;
         self.height = height;
         self.size = (std::mem::size_of::<f32>() * (width * height) as usize) as u64;
-        self.depth_attachment = Texture::create_depth_texture(device, width, height, None, None);
+        self.depth_attachment =
+            Texture::create_depth_texture(device, width, height, None, None, None);
         self.depth_attachment_storage = if self.depth_attachment_storage.is_some() {
             Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("shadow_pass_depth_attachment_storage"),
