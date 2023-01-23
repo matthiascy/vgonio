@@ -706,9 +706,8 @@ pub enum GridTraversal {
 
 #[test]
 fn test_grid_traversal() {
-    use crate::mesh::TriangulationMethod;
     let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
-    let triangle_mesh = heightfield.triangulate(TriangulationMethod::Regular);
+    let triangle_mesh = heightfield.triangulate();
     let grid = GridRayTracing::new(&heightfield, &triangle_mesh);
     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
     println!("{:?}", result);

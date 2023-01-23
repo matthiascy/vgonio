@@ -187,7 +187,7 @@ impl OcclusionEstimator {
                     layout: Some(&pipeline_layout),
                     vertex: wgpu::VertexState {
                         module: &&shader_module,
-                        entry_point: "vs_main_common",
+                        entry_point: "vs_depth_pass",
                         buffers: &[wgpu::VertexBufferLayout {
                             array_stride: 12,
                             step_mode: wgpu::VertexStepMode::Vertex,
@@ -299,7 +299,7 @@ impl OcclusionEstimator {
                     layout: Some(&pipeline_layout),
                     vertex: wgpu::VertexState {
                         module: &&shader_module,
-                        entry_point: "vs_main_common",
+                        entry_point: "vs_render_pass",
                         buffers: &[wgpu::VertexBufferLayout {
                             array_stride: 12,
                             step_mode: wgpu::VertexStepMode::Vertex,
@@ -327,18 +327,24 @@ impl OcclusionEstimator {
                     },
                     fragment: Some(wgpu::FragmentState {
                         module: &&shader_module,
-                        entry_point: "fs_main",
+                        entry_point: "fs_render_pass",
                         targets: &[Some(ColorTargetState {
                             format: Self::COLOR_ATTACHMENT_FORMAT,
+                            // blend: Some(wgpu::BlendState {
+                            //     color: wgpu::BlendComponent {
+                            //         src_factor: wgpu::BlendFactor::One,
+                            //         dst_factor: wgpu::BlendFactor::One,
+                            //         operation: wgpu::BlendOperation::Add,
+                            //     },
+                            //     alpha: wgpu::BlendComponent::REPLACE,
+                            // }),
+                            // write_mask: wgpu::ColorWrites::RED,
+                            // for debugging purposes
                             blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::One,
-                                    dst_factor: wgpu::BlendFactor::One,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
+                                color: wgpu::BlendComponent::REPLACE,
                                 alpha: wgpu::BlendComponent::REPLACE,
                             }),
-                            write_mask: wgpu::ColorWrites::RED,
+                            write_mask: wgpu::ColorWrites::ALL,
                         })],
                     }),
                     multiview: None,
@@ -394,9 +400,10 @@ impl OcclusionEstimator {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        facets_verts_buf: &wgpu::Buffer, // entire microfacets vertex buffer
-        facets_verts_num: u32,
-        visible_facets_index_buf: &wgpu::Buffer, // visible microfacets index buffer
+        facets_verts_buf: &wgpu::Buffer,
+        facets_indices_buf: &wgpu::Buffer,
+        facets_indices_num: u32,
+        visible_facets_index_buf: &wgpu::Buffer,
         visible_facets_index_num: u32,
         index_format: wgpu::IndexFormat,
     ) {
@@ -405,6 +412,7 @@ impl OcclusionEstimator {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         encoder.push_debug_group("oc_depth_pass");
         {
+            // compute depth buffer
             encoder.insert_debug_marker("render entire micro-surface to depth buffer");
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("oc_depth_pass"),
@@ -422,7 +430,8 @@ impl OcclusionEstimator {
             render_pass.set_pipeline(&self.depth_pass.pipeline);
             render_pass.set_bind_group(0, &self.depth_pass.bind_groups[0], &[]);
             render_pass.set_vertex_buffer(0, facets_verts_buf.slice(..));
-            render_pass.draw(0..facets_verts_num, 0..1);
+            render_pass.set_index_buffer(facets_indices_buf.slice(..), index_format);
+            render_pass.draw_indexed(0..facets_indices_num, 0, 0..1);
         }
         encoder.pop_debug_group();
 
@@ -454,6 +463,7 @@ impl OcclusionEstimator {
 
         encoder.push_debug_group("oc_render_pass");
         {
+            // compute occulusions
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("occlusion_pass_compute_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -475,8 +485,11 @@ impl OcclusionEstimator {
             render_pass.set_pipeline(&self.render_pass.pipeline);
             render_pass.set_bind_group(0, &self.render_pass.bind_groups[0], &[]);
             render_pass.set_vertex_buffer(0, facets_verts_buf.slice(..));
-            render_pass.set_index_buffer(visible_facets_index_buf.slice(..), index_format);
-            render_pass.draw_indexed(0..visible_facets_index_num, 0, 0..1);
+            // render_pass.set_index_buffer(visible_facets_index_buf.slice(..),
+            // index_format); render_pass.draw_indexed(0..
+            // visible_facets_index_num, 0, 0..1);
+            render_pass.set_index_buffer(facets_indices_buf.slice(..), index_format);
+            render_pass.draw_indexed(0..facets_indices_num, 0, 0..1);
         }
         encoder.pop_debug_group();
 
@@ -533,14 +546,33 @@ impl OcclusionEstimator {
                 .collect::<Vec<_>>();
 
             if as_image {
-                use image::{ImageBuffer, Luma};
-                ImageBuffer::<Luma<u8>, _>::from_raw(
+                use image::{ImageBuffer, Luma, Rgb};
+                let rgb_values = values
+                    .iter()
+                    .flat_map(|&v| {
+                        vec![
+                            (v & 0x03FF) as u8,
+                            (v >> 10 & 0x03FF) as u8,
+                            (v >> 20 & 0x03FF) as u8,
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                // ImageBuffer::<Luma<u8>, _>::from_raw(
+                //     self.attachment_width,
+                //     self.attachment_height,
+                //     // values
+                //     //     .iter()
+                //     //     .map(|&v| if v == 0 { 0 } else { 255 })
+                //     //     .collect::<Vec<_>>(),
+                //     values
+                //         .iter()
+                //         .map(|&v| (v * 255.0) as u8)
+                //         .collect::<Vec<_>>(),
+                // )
+                ImageBuffer::<Rgb<u8>, _>::from_raw(
                     self.attachment_width,
                     self.attachment_height,
-                    values
-                        .iter()
-                        .map(|&v| if v == 0 { 0 } else { 255 })
-                        .collect::<Vec<_>>(),
+                    rgb_values,
                 )
                 .ok_or_else(|| {
                     Error::Any(
@@ -753,10 +785,17 @@ pub fn measure_microfacet_shadowing_masking(
                 contents: bytemuck::cast_slice(&surface.verts),
                 usage: wgpu::BufferUsages::VERTEX,
             });
+        let facets_indices_buf = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("index buffer"),
+                contents: bytemuck::cast_slice(&surface.facets),
+                usage: wgpu::BufferUsages::INDEX,
+            });
         let radius =
             (surface.extent.max - surface.extent.min).max_element() * std::f32::consts::SQRT_2;
         let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
-        let projection = Projection::orthographic_matrix(0.1, radius * 2.0, radius, radius);
+        let projection = Projection::orthographic_matrix(0.1, radius * 1.5, radius, radius);
         for azimuth_idx in 0..desc.azimuth.step_count() {
             for zenith_idx in 0..desc.zenith.step_count() + 1 {
                 let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
@@ -808,7 +847,8 @@ pub fn measure_microfacet_shadowing_masking(
                     &gpu.device,
                     &gpu.queue,
                     &facets_verts_buf,
-                    surface.verts.len() as u32,
+                    &facets_indices_buf,
+                    surface.facets.len() as u32,
                     &visible_facets_index_buffer,
                     visible_facets_indices.len() as u32,
                     wgpu::IndexFormat::Uint32,
@@ -819,7 +859,7 @@ pub fn measure_microfacet_shadowing_masking(
                     .unwrap();
                 let filename = format!("{index:06}_roi_depth");
                 estimator
-                    .save_depth_attachment(&gpu.device, &filename, false)
+                    .save_depth_attachment(&gpu.device, &filename, true)
                     .unwrap();
                 let result = estimator.calculate_areas(&gpu.device);
                 log::trace!(

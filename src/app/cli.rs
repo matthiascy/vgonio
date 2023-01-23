@@ -118,6 +118,12 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         "    {BRIGHT_CYAN}✓{RESET} {} micro-surface(s) loaded",
         cache.num_micro_surfaces()
     );
+
+    if cache.num_micro_surfaces() == 0 {
+        println!("  {BRIGHT_RED}✗{RESET} No micro-surface to measure. Exiting...");
+        return Ok(());
+    }
+
     cache
         .get_loaded_surface_paths()
         .unwrap()

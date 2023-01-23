@@ -12,7 +12,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::{Components, Path, PathBuf},
     str::FromStr,
 };
 use uuid::Uuid;
@@ -39,7 +39,6 @@ impl<T: Asset> Clone for Handle<T> {
         }
     }
 }
-
 impl<T: Asset> Copy for Handle<T> {}
 impl<T> Handle<T>
 where
@@ -335,14 +334,53 @@ impl Cache {
 ///
 ///      Returns the `path` as is.
 pub(crate) fn resolve_path(base: &Path, path: Option<&Path>) -> PathBuf {
-    path.map_or_else(
-        || base.to_path_buf(),
-        |path| {
-            if path.is_absolute() {
-                path.canonicalize().unwrap()
-            } else {
-                base.join(path).canonicalize().unwrap()
+    path.map_or(base.to_path_buf(), |path| {
+        let path = if path.is_relative() {
+            base.join(path)
+        } else {
+            path.to_path_buf()
+        };
+
+        if !path.exists() {
+            normalise_path(&path)
+        } else {
+            path.canonicalize().unwrap()
+        }
+    })
+}
+
+/// Resolves the path to canonical form even if the path does not exist.
+pub(crate) fn normalise_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
             }
-        },
-    )
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
+#[test]
+fn test_normalise_path() {
+    let path = Path::new("/a/b/c/../../d");
+    let normalised = normalise_path(path);
+    assert_eq!(normalised, Path::new("/a/d"));
 }
