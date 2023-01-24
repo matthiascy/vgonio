@@ -73,7 +73,17 @@ pub struct OcclusionEstimator {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 struct Uniforms {
-    projection_matrix: [f32; 16],
+    proj_view_matrix: [f32; 16],
+    viewport_resolution: [f32; 4],
+}
+
+impl Default for Uniforms {
+    fn default() -> Self {
+        Self {
+            proj_view_matrix: Mat4::IDENTITY.to_cols_array(),
+            viewport_resolution: [1.0, 1.0, 0.0, 0.0],
+        }
+    }
 }
 
 /// Occlusion estimation result.
@@ -95,7 +105,7 @@ impl OcclusionEstimationResult {
 }
 
 impl OcclusionEstimator {
-    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
+    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
     pub const DEPTH_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     /// Creates a new `OcclusionEstimator` with the given attachment size.
@@ -113,6 +123,12 @@ impl OcclusionEstimator {
     /// * `width` - Width of the color and depth attachment.
     /// * `height` - Height of the color and depth attachment.
     pub fn new(ctx: &GpuContext, width: u32, height: u32) -> Self {
+        log::info!(
+            "Initialising occlusion estimator with attachment size {}x{} and format {:?}",
+            width,
+            height,
+            Self::COLOR_ATTACHMENT_FORMAT
+        );
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::include_wgsl!("./occlusion.wgsl"));
@@ -146,7 +162,7 @@ impl OcclusionEstimator {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("oc_uniform_buffer"),
-                contents: bytemuck::cast_slice(&[0.0f32; 32]),
+                contents: bytemuck::cast_slice(&[Uniforms::default()]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
         let depth_pass = {
@@ -210,8 +226,7 @@ impl OcclusionEstimator {
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Texture::DEPTH_FORMAT,
                         depth_write_enabled: true,
-                        // depth_compare: wgpu::CompareFunction::LessEqual,
-                        depth_compare: wgpu::CompareFunction::Always,
+                        depth_compare: wgpu::CompareFunction::LessEqual,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState::default(),
                     }),
@@ -239,7 +254,8 @@ impl OcclusionEstimator {
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
-                                visibility: wgpu::ShaderStages::VERTEX,
+                                visibility: wgpu::ShaderStages::VERTEX
+                                    | wgpu::ShaderStages::FRAGMENT,
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Uniform,
                                     has_dynamic_offset: false,
@@ -392,8 +408,17 @@ impl OcclusionEstimator {
         self.depth_pass.uniform_buffer.as_ref()
     }
 
-    pub fn update_uniforms(&self, queue: &wgpu::Queue, proj_mat: Mat4) {
-        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[proj_mat]));
+    pub fn update_uniforms(&self, queue: &wgpu::Queue, proj_view_mat: Mat4) {
+        let uniform = Uniforms {
+            proj_view_matrix: proj_view_mat.to_cols_array(),
+            viewport_resolution: [
+                self.attachment_width as f32,
+                self.attachment_height as f32,
+                0.0,
+                0.0,
+            ],
+        };
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
     }
 
     pub fn estimate(
@@ -540,39 +565,33 @@ impl OcclusionEstimator {
             });
 
             let buffer_view = slice.get_mapped_range();
-            let values = buffer_view
-                .chunks(4)
-                .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-                .collect::<Vec<_>>();
 
             if as_image {
-                use image::{ImageBuffer, Luma, Rgb};
-                let rgb_values = values
-                    .iter()
-                    .flat_map(|&v| {
-                        vec![
-                            (v & 0x03FF) as u8,
-                            (v >> 10 & 0x03FF) as u8,
-                            (v >> 20 & 0x03FF) as u8,
-                        ]
-                    })
-                    .collect::<Vec<_>>();
-                // ImageBuffer::<Luma<u8>, _>::from_raw(
-                //     self.attachment_width,
-                //     self.attachment_height,
-                //     // values
-                //     //     .iter()
-                //     //     .map(|&v| if v == 0 { 0 } else { 255 })
-                //     //     .collect::<Vec<_>>(),
-                //     values
-                //         .iter()
-                //         .map(|&v| (v * 255.0) as u8)
-                //         .collect::<Vec<_>>(),
-                // )
-                ImageBuffer::<Rgb<u8>, _>::from_raw(
+                use image::{ImageBuffer, Rgba};
+                let values = if Self::COLOR_ATTACHMENT_FORMAT == wgpu::TextureFormat::Rgb10a2Unorm {
+                    let ratio = 255.0 / 1023.0;
+                    buffer_view
+                        .chunks(4)
+                        .flat_map(|chunk| {
+                            let v = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                            [
+                                ((v & 0x03FF) as f32 * ratio) as u8,             // r
+                                (((v >> 10 & 0x03FF) as f32) * ratio) as u8,     // g
+                                (((v >> 20 & 0x03FF) as f32) * ratio) as u8,     // b
+                                (((v >> 30 & 0x03) as f32) * 255.0 / 3.0) as u8, // a
+                            ]
+                        })
+                        .collect::<Vec<_>>()
+                } else if Self::COLOR_ATTACHMENT_FORMAT == wgpu::TextureFormat::Rgba8Unorm {
+                    buffer_view.to_vec()
+                } else {
+                    vec![]
+                };
+
+                ImageBuffer::<Rgba<u8>, _>::from_raw(
                     self.attachment_width,
                     self.attachment_height,
-                    rgb_values,
+                    values,
                 )
                 .ok_or_else(|| {
                     Error::Any(
@@ -584,6 +603,10 @@ impl OcclusionEstimator {
                 .and_then(|img| img.save(format!("{filename}.png")).map_err(Error::from))?;
             } else {
                 use std::io::Write;
+                let values = buffer_view
+                    .chunks(4)
+                    .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                    .collect::<Vec<_>>();
                 let mut file = File::create(format!("{filename}.txt"))?;
                 for (i, val) in values.iter().enumerate() {
                     if i as u32 % self.attachment_width == 0 {
@@ -760,7 +783,7 @@ pub fn measure_microfacet_shadowing_masking(
     let wgpu_config = WgpuConfig {
         device_descriptor: wgpu::DeviceDescriptor {
             label: Some("occlusion-measurement-device"),
-            features: wgpu::Features::TEXTURE_FORMAT_16BIT_NORM,
+            features: wgpu::Features::TEXTURE_FORMAT_16BIT_NORM | wgpu::Features::POLYGON_MODE_LINE,
             limits: if cfg!(target_arch = "wasm32") {
                 wgpu::Limits::downlevel_webgl2_defaults()
             } else {
@@ -792,17 +815,17 @@ pub fn measure_microfacet_shadowing_masking(
                 contents: bytemuck::cast_slice(&surface.facets),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        let radius =
+        let diagnal =
             (surface.extent.max - surface.extent.min).max_element() * std::f32::consts::SQRT_2;
-        let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
-        let projection = Projection::orthographic_matrix(0.1, radius * 1.5, radius, radius);
+        // let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
+        let projection = Projection::orthographic_matrix(0.1, diagnal * 1.5, diagnal, diagnal);
         for azimuth_idx in 0..desc.azimuth.step_count() {
             for zenith_idx in 0..desc.zenith.step_count() + 1 {
                 let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
                 let zenith = zenith_idx as f32 * desc.zenith.step_size;
                 let index = azimuth_idx * (desc.zenith.step_count() + 1) + zenith_idx;
                 let view_matrix = Camera::new(
-                    acq::spherical_to_cartesian(radius, zenith, azimuth, handedness),
+                    acq::spherical_to_cartesian(diagnal, zenith, azimuth, handedness),
                     Vec3::ZERO,
                     Vec3::Y,
                 )

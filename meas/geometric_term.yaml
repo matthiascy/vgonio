@@ -1,6 +1,6 @@
 type: !microfacet-shadowing-masking
   azimuth: 0 rad ~ 360 deg / 120 deg
   zenith: 0 rad ~ 90 deg / 30 deg
-  resolution:  512
+  resolution: 1024
 surfaces:
-  - usr://surfaces/measured/Aluminium65bar100.txt
+  - usr://surfaces/Aluminium65bar100.txt
