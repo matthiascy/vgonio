@@ -308,6 +308,24 @@ impl OcclusionEstimator {
                         bind_group_layouts: &[&bind_group_layout],
                         push_constant_ranges: &[],
                     });
+            let (blend, write_mask) =
+                if Self::COLOR_ATTACHMENT_FORMAT == wgpu::TextureFormat::Rgb10a2Unorm {
+                    // For capturing.
+                    (
+                        Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::One,
+                                dst_factor: wgpu::BlendFactor::One,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha: wgpu::BlendComponent::REPLACE,
+                        }),
+                        Some(wgpu::ColorWrite::RED),
+                    )
+                } else {
+                    // For debug purposes.
+                    (Some(wgpu::BlendState::REPLACE), Some(wgpu::ColorWrite::ALL))
+                };
             let pipeline = ctx
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -346,21 +364,8 @@ impl OcclusionEstimator {
                         entry_point: "fs_render_pass",
                         targets: &[Some(ColorTargetState {
                             format: Self::COLOR_ATTACHMENT_FORMAT,
-                            // blend: Some(wgpu::BlendState {
-                            //     color: wgpu::BlendComponent {
-                            //         src_factor: wgpu::BlendFactor::One,
-                            //         dst_factor: wgpu::BlendFactor::One,
-                            //         operation: wgpu::BlendOperation::Add,
-                            //     },
-                            //     alpha: wgpu::BlendComponent::REPLACE,
-                            // }),
-                            // write_mask: wgpu::ColorWrites::RED,
-                            // for debugging purposes
-                            blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent::REPLACE,
-                                alpha: wgpu::BlendComponent::REPLACE,
-                            }),
-                            write_mask: wgpu::ColorWrites::ALL,
+                            blend,
+                            write_mask,
                         })],
                     }),
                     multiview: None,
@@ -602,11 +607,33 @@ impl OcclusionEstimator {
                 })
                 .and_then(|img| img.save(format!("{filename}.png")).map_err(Error::from))?;
             } else {
+                let values = if Self::COLOR::ATTACHMENT_FORMAT == wgpu::TextureFormat::Rbg10a2Unorm
+                {
+                    let values = buffer_view
+                        .chunks(4)
+                        .map(|chunk| {
+                            let val = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                            // Only take the last 10 bits which is the R channel.
+                            val & 0x03FF
+                        })
+                        .collect::<Vec<_>>();
+                } else if Self::COLOR_ATTACHMENT_FORMAT == wgpu::TextureFormat::Rgba8Unorm {
+                    // Debug only, not used in the actual program.
+                    buffer_view
+                        .chunks(4)
+                        .flat_map(|chunk| {
+                            [
+                                chunk[0], // r
+                                chunk[1], // g
+                                chunk[2], // b
+                                chunk[3], // a
+                            ]
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![]
+                };
                 use std::io::Write;
-                let values = buffer_view
-                    .chunks(4)
-                    .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-                    .collect::<Vec<_>>();
                 let mut file = File::create(format!("{filename}.txt"))?;
                 for (i, val) in values.iter().enumerate() {
                     if i as u32 % self.attachment_width == 0 {
