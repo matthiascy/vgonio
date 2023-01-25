@@ -12,7 +12,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    path::{Components, Path, PathBuf},
+    path::{Path, PathBuf},
     str::FromStr,
 };
 use uuid::Uuid;

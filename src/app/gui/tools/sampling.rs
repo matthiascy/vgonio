@@ -157,6 +157,7 @@ impl SamplingDebugger {
             256,
             None,
             Some(sampler),
+            None,
             Some("sampling-debugger-depth-attachment"),
         );
         // let uniform_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {

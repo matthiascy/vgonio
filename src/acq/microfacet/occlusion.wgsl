@@ -32,10 +32,17 @@ fn vs_render_pass(@location(0) position: vec3<f32>) -> VertexOutput {
     return output;
 }
 
+// @group(0) @binding(1)
+// var depth_map : texture_2d<f32>;
+// @group(0) @binding(2)
+// var depth_sampler : sampler;
+
 @group(0) @binding(1)
-var depth_texture : texture_depth_2d;
+var depth_map : texture_depth_2d;
 @group(0) @binding(2)
 var depth_sampler : sampler_comparison;
+
+let epsilon: f32 = 1.1920929E-7;
 
 @fragment
 fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
@@ -49,15 +56,26 @@ fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
     // ndc coordinates, y-up, x-right.
     // let uv = vert.ndc.xy * tex_coord_flip + vec2<f32>(0.5, 0.5);
 
-    let depth = textureSampleCompare(depth_texture, depth_sampler, vert.uv, vert.ndc.z);
+    // Test if the fragment is in front of the depth texture.
+    let depth_cmp = textureSampleCompare(depth_map, depth_sampler, vert.uv, vert.ndc.z);
 
-    //return vec4<f32>(uv.x, uv.y, 0.0, 1.0);
-    if (depth == 0.0) {
+    // let depth = textureSample(depth_map, depth_sampler, uv).x;
+    //
+    // Debug depth texture.
+    //
+    // if (depth_cmp > 0.0) {
+    //      return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    // } else  {
+    //      return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+    // }
+
+    if (depth_cmp > 0.0) {
+        // RGB10A2_UNORM
+        //return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
+        // RGBA8_UNORM
+        //return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
         return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-    } else if (depth == 1.0) {
-        return vec4<f32>(0.0, 1.0, 0.0, 1.0);
     } else {
-        return vec4<f32>(depth, depth, depth, 1.0);
+        discard;
     }
-
 }

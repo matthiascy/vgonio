@@ -115,6 +115,7 @@ impl ShadowPass {
             height,
             None,
             sampler,
+            None,
             Some("shadow_pass_depth_attachment"),
         );
         let pipeline = ctx
@@ -205,7 +206,7 @@ impl ShadowPass {
         self.height = height;
         self.size = (std::mem::size_of::<f32>() * (width * height) as usize) as u64;
         self.depth_attachment =
-            Texture::create_depth_texture(device, width, height, None, None, None);
+            Texture::create_depth_texture(device, width, height, None, None, None, None);
         self.depth_attachment_storage = if self.depth_attachment_storage.is_some() {
             Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("shadow_pass_depth_attachment_storage"),

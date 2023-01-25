@@ -58,7 +58,8 @@ pub fn linearize_depth(depth: f32, near: f32, far: f32) -> f32 {
     (2.0 * near * far) / (far + near - depth * (far - near))
 }
 
-pub fn bytes_per_pixel(format: wgpu::TextureFormat) -> usize {
+/// Returns the texture format's pixel size in bytes.
+pub const fn tex_fmt_bpp(format: wgpu::TextureFormat) -> u32 {
     match format {
         TextureFormat::R8Unorm
         | TextureFormat::R8Snorm

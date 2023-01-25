@@ -105,6 +105,7 @@ impl DepthMap {
             height,
             None,
             None,
+            None,
             Some("depth-texture"),
         );
         // Manually align the width to 256 bytes.
@@ -130,6 +131,7 @@ impl DepthMap {
             &ctx.device,
             width,
             height,
+            None,
             None,
             None,
             Some("depth-texture"),
