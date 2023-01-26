@@ -496,7 +496,7 @@ impl MicroSurface {
         let faces = regular_triangulation(&verts, self.cols, self.rows);
         let num_tris = faces.len() / 3;
 
-        let mut normals = vec![glam::Vec3::ZERO; num_tris];
+        let mut normals = vec![Vec3::ZERO; num_tris];
         let mut areas = vec![0.0; num_tris];
 
         for i in 0..num_tris {

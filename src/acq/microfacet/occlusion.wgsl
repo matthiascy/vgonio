@@ -1,6 +1,6 @@
 struct Uniforms {
-    proj_view: mat4x4<f32>,
-    resolution: vec4<f32>, // used for screen space calculations
+    proj_view_matrix: mat4x4<f32>,
+    meas_point_index: vec4<u32>,
 }
 
 @group(0) @binding(0)
@@ -8,7 +8,7 @@ var<uniform> uniforms: Uniforms;
 
 @vertex
 fn vs_depth_pass(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
-    return uniforms.proj_view * vec4<f32>(position, 1.0);
+    return uniforms.proj_view_matrix * vec4<f32>(position, 1.0);
 }
 
 struct VertexOutput {
@@ -25,24 +25,17 @@ let tex_coord_flip: vec2<f32> = vec2<f32>(0.5, -0.5);
 @vertex
 fn vs_render_pass(@location(0) position: vec3<f32>) -> VertexOutput {
     var output: VertexOutput;
-    let clip_pos = uniforms.proj_view * vec4<f32>(position, 1.0);
+    let clip_pos = uniforms.proj_view_matrix * vec4<f32>(position, 1.0);
     output.position = clip_pos;
     output.ndc = clip_pos / clip_pos.w;
     output.uv = output.ndc.xy * tex_coord_flip + vec2<f32>(0.5, 0.5);
     return output;
 }
 
-// @group(0) @binding(1)
-// var depth_map : texture_2d<f32>;
-// @group(0) @binding(2)
-// var depth_sampler : sampler;
-
 @group(0) @binding(1)
-var depth_map : texture_depth_2d;
+var depth_map : texture_depth_2d_array;
 @group(0) @binding(2)
 var depth_sampler : sampler_comparison;
-
-let epsilon: f32 = 1.1920929E-7;
 
 @fragment
 fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
@@ -56,8 +49,10 @@ fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
     // ndc coordinates, y-up, x-right.
     // let uv = vert.ndc.xy * tex_coord_flip + vec2<f32>(0.5, 0.5);
 
+    let index = i32(uniforms.meas_point_index.x);
+
     // Test if the fragment is in front of the depth texture.
-    let depth_cmp = textureSampleCompare(depth_map, depth_sampler, vert.uv, vert.ndc.z);
+    let depth_cmp = textureSampleCompare(depth_map, depth_sampler, vert.uv, index, vert.ndc.z);
 
     // let depth = textureSample(depth_map, depth_sampler, uv).x;
     //
@@ -69,13 +64,18 @@ fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
     //      return vec4<f32>(0.0, 1.0, 0.0, 1.0);
     // }
 
-    if (depth_cmp > 0.0) {
-        // RGB10A2_UNORM
-        //return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
-        // RGBA8_UNORM
-        //return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
-        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-    } else {
-        discard;
-    }
+    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+
+//    if (depth_cmp > 0.0) {
+//        // RGB10A2_UNORM
+//        //return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
+//
+//        // RGBA8_UNORM
+//        //return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+//
+//        // Debug
+//        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+//    } else {
+//        discard;
+//    }
 }

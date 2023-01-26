@@ -120,7 +120,7 @@ impl SamplingDebugger {
         );
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);
         let proj_mat = projection.matrix(crate::app::gfx::camera::ProjectionKind::Perspective);
-        let view_mat = camera.matrix();
+        let view_mat = camera.view_matrix();
         let matrix = proj_mat * view_mat;
         let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sampling-debugger-sampler"),

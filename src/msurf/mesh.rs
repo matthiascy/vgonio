@@ -19,7 +19,7 @@ pub struct MicroSurfaceTriMesh {
     /// Vertex indices forming the facets which are triangles.
     pub facets: Vec<u32>,
 
-    /// Normal vectors of each triangle.
+    /// Normal vectors of each facet.
     pub facet_normals: Vec<Vec3>,
 
     /// Surface area of each facet.

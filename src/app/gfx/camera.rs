@@ -147,7 +147,7 @@ impl Camera {
         }
     }
 
-    pub fn matrix(&self) -> Mat4 {
+    pub fn view_matrix(&self) -> Mat4 {
         // let right = forward.cross(Vec3::Z);
         // let up = right.cross(forward);
         //
@@ -196,9 +196,9 @@ impl CameraUniform {
     pub fn new(camera: &Camera, projection: &Projection, kind: ProjectionKind) -> Self {
         let proj_matrix = projection.matrix(kind);
         Self {
-            view_matrix: camera.matrix(),
+            view_matrix: camera.view_matrix(),
             proj_matrix,
-            view_inv_matrix: camera.matrix().inverse(),
+            view_inv_matrix: camera.view_matrix().inverse(),
             proj_inv_matrix: proj_matrix.inverse(),
         }
     }

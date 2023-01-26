@@ -255,6 +255,15 @@ pub enum Handedness {
     RightHandedYUp,
 }
 
+impl Handedness {
+    pub const fn up(self) -> Vec3 {
+        match self {
+            Self::RightHandedZUp => Vec3::Z,
+            Self::RightHandedYUp => Vec3::Y,
+        }
+    }
+}
+
 /// Conversion from spherical coordinate system to cartesian coordinate system.
 ///
 /// # Arguments
