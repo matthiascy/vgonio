@@ -102,9 +102,7 @@ impl Tool for SamplingDebugger {
     fn as_any(&self) -> &dyn std::any::Any { self }
 }
 
-struct Vertex {
-    position: [f32; 3],
-}
+struct Vertex([f32; 30]);
 
 impl SamplingDebugger {
     pub fn new(

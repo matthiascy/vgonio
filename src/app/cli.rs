@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 
 use crate::{
     acq::{
@@ -19,7 +19,10 @@ use crate::{
     Error,
 };
 
-use super::{args::PrintInfoOptions, cache::Handle};
+use super::{
+    args::{GenerateOptions, PrintInfoOptions},
+    cache::Handle,
+};
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_RED: &str = "\u{001b}[31m";
@@ -32,6 +35,7 @@ pub fn execute(cmd: SubCommand, config: Config) -> Result<(), Error> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
         SubCommand::PrintInfo(opts) => print_info(opts, config),
+        SubCommand::Generate(opts) => generate(opts, config),
     }
 }
 
@@ -365,6 +369,60 @@ fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
     Ok(())
 }
 
+/// Generates a micro-surface using 2D gaussian distribution.
+fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
+    let mut data: Vec<f32> = Vec::with_capacity((opts.res_x * opts.res_y) as usize);
+    for i in 0..opts.res_y {
+        for j in 0..opts.res_x {
+            let x = ((i as f32 / opts.res_x as f32) * 2.0 - 1.0) * opts.sigma_x * 4.0;
+            let y = ((j as f32 / opts.res_y as f32) * 2.0 - 1.0) * opts.sigma_y * 4.0;
+            data.push(
+                opts.amplitude
+                    * (-(x - opts.mean_x) * (x - opts.mean_x)
+                        / (2.0 * opts.sigma_x * opts.sigma_x)
+                        - (y - opts.mean_y) * (y - opts.mean_y)
+                            / (2.0 * opts.sigma_y * opts.sigma_y))
+                        .exp(),
+            );
+        }
+    }
+
+    let path = {
+        let p = if let Some(path) = opts.output {
+            path
+        } else {
+            PathBuf::from("micro-surface.txt")
+        };
+        resolve_path(&config.cwd, Some(&p))
+    };
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(&path)
+        .map_err(|err| {
+            eprintln!("  {BRIGHT_RED}✗{RESET} Failed to open file: {err}");
+            err
+        })?;
+
+    use std::io::Write;
+
+    writeln!(file, "AsciiMatrix {} {} 0.5 0.5", opts.res_x, opts.res_y).map_err(|err| {
+        eprintln!("  {BRIGHT_RED}✗{RESET} Failed to write to file: {err}");
+        err
+    })?;
+
+    for i in 0..opts.res_y {
+        for j in 0..opts.res_x {
+            write!(file, "{} ", data[(i * opts.res_x + j) as usize])?;
+        }
+        writeln!(file)?;
+    }
+
+    Ok(())
+}
+
 /// Measures the microfacet distribution of the given micro-surface and saves
 /// the result to the given output directory.
 fn measure_microfacet_distribution(
@@ -461,33 +519,33 @@ fn measure_microfacet_shadowing_masking(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
         duration.as_secs_f32()
     );
-    // let output_dir = resolve_output_dir(config, output)?;
-    // println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-    // for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
-    //     let filename = format!(
-    //         "microfacet-shdowing-masking-{}.txt",
-    //         cache
-    //             .get_micro_surface_path(*surface)
-    //             .unwrap()
-    //             .file_stem()
-    //             .unwrap()
-    //             .to_ascii_lowercase()
-    //             .to_str()
-    //             .unwrap()
-    //     );
-    //     let filepath = output_dir.join(filename);
-    //     println!(
-    //         "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
-    //         filepath.display()
-    //     );
-    //     distrib.save_ascii(&filepath).unwrap_or_else(|err| {
-    //         eprintln!(
-    //             "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-    //             filepath.display(),
-    //             err
-    //         );
-    //     })
-    // }
+    let output_dir = resolve_output_dir(config, output)?;
+    println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+    for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
+        let filename = format!(
+            "microfacet-shdowing-masking-{}.txt",
+            cache
+                .get_micro_surface_path(*surface)
+                .unwrap()
+                .file_stem()
+                .unwrap()
+                .to_ascii_lowercase()
+                .to_str()
+                .unwrap()
+        );
+        let filepath = output_dir.join(filename);
+        println!(
+            "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
+            filepath.display()
+        );
+        distrib.save_ascii(&filepath).unwrap_or_else(|err| {
+            eprintln!(
+                "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                filepath.display(),
+                err
+            );
+        })
+    }
     println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     Ok(())
 }

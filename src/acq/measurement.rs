@@ -339,6 +339,7 @@ impl Default for MicrofacetShadowingMaskingMeasurement {
 }
 
 impl MicrofacetShadowingMaskingMeasurement {
+    /// Counts the number of samples (on hemisphere) that will be taken during the measurement.
     pub fn measurement_location_count(&self) -> usize {
         let azimuth_count = self.azimuth.step_count();
         let zenith_count = self.zenith.step_count() + 1;
@@ -360,6 +361,7 @@ impl MicrofacetShadowingMaskingMeasurement {
     /// azimuth angle of 0°.
     pub fn azimuth_step_count(&self) -> usize { self.azimuth.step_count() }
 
+    /// Validate the parameters when reading from a file.
     pub fn validate(self) -> Result<Self, Error> {
         if !(self.azimuth.start >= Radians::ZERO
             && self.azimuth.stop

@@ -256,6 +256,7 @@ pub enum Handedness {
 }
 
 impl Handedness {
+    /// Returns the up vector of the reference coordinate system.
     pub const fn up(self) -> Vec3 {
         match self {
             Self::RightHandedZUp => Vec3::Z,

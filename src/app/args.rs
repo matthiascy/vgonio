@@ -48,6 +48,9 @@ pub struct CliArgs {
     #[clap(long, help = "Enable debug messages from `winit`")]
     pub debug_winit: bool,
 
+    #[clap(long, help = "Enable debug outputs files.")]
+    pub debug_output: bool,
+
     /// Command to execute.
     #[clap(subcommand)]
     pub command: Option<SubCommand>,
@@ -61,6 +64,9 @@ pub struct CliArgs {
 /// Vgonio command.
 #[derive(clap::Subcommand, Debug)]
 pub enum SubCommand {
+    /// Generates a new micro-geometry level surface.
+    Generate(GenerateOptions),
+
     /// Measures micro-geometry level light transport related metrics.
     Measure(MeasureOptions),
 
@@ -100,6 +106,64 @@ pub enum FastMeasurementKind {
     #[clap(name = "mfs")]
     /// Micro-facet shadowing-masking function.
     MicrofacetShadowingMasking,
+}
+
+#[derive(clap::Args, Debug)]
+#[clap(about = "Generate a micro-geometry level surface using Gaussian distribution.")]
+pub struct GenerateOptions {
+    #[clap(
+        help = "Horizontal resolution of the generated micro-geometry profile (height map).",
+        default_value_t = 512
+    )]
+    pub res_x: u32,
+
+    #[clap(
+        help = "Vertical resolution of the generated micro-geometry profile (height map).",
+        default_value_t = 512
+    )]
+    pub res_y: u32,
+
+    #[clap(
+        long = "amp",
+        help = "Amplitude of the 2D gaussian.",
+        default_value_t = 1.0
+    )]
+    pub amplitude: f32,
+
+    #[clap(
+        long = "sx",
+        help = "Standard deviation of the 2D gaussian distribution in horizontal direction.",
+        default_value_t = 1.0
+    )]
+    pub sigma_x: f32,
+
+    #[clap(
+        long = "sy",
+        help = "Standard deviation of the 2D gaussian distribution in vertical direction.",
+        default_value_t = 1.0
+    )]
+    pub sigma_y: f32,
+
+    #[clap(
+        long = "mx",
+        help = "Mean of 2D gaussian distribution on horizontal axis.",
+        default_value_t = 0.0
+    )]
+    pub mean_x: f32,
+
+    #[clap(
+        long = "my",
+        help = "Mean of 2D gaussian distribution on vertical axis.",
+        default_value_t = 0.0
+    )]
+    pub mean_y: f32,
+
+    #[clap(
+        short,
+        long,
+        help = "Path to the file where to save the generated micro-geometry profile."
+    )]
+    pub output: Option<PathBuf>,
 }
 
 /// Options for the `measure` command.

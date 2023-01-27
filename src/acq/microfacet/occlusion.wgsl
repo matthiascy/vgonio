@@ -39,43 +39,20 @@ var depth_sampler : sampler_comparison;
 
 @fragment
 fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
-    // Screen-space texture coordinates calculation: y-down, x-right
-    // let uv = (vert.position.xy / uniforms.resolution.xy);
-
     // Texture coordinates calculated in vertex shader.
     let uv = vert.uv;
-
-    // Texture coordinates calculated in fragment shader, using
-    // ndc coordinates, y-up, x-right.
-    // let uv = vert.ndc.xy * tex_coord_flip + vec2<f32>(0.5, 0.5);
-
     let index = i32(uniforms.meas_point_index.x);
-
     // Test if the fragment is in front of the depth texture.
     let depth_cmp = textureSampleCompare(depth_map, depth_sampler, vert.uv, index, vert.ndc.z);
 
-    // let depth = textureSample(depth_map, depth_sampler, uv).x;
-    //
-    // Debug depth texture.
-    //
-    // if (depth_cmp > 0.0) {
-    //      return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-    // } else  {
-    //      return vec4<f32>(0.0, 1.0, 0.0, 1.0);
-    // }
+   if (depth_cmp > 0.0) {
+       // RGB10A2_UNORM
+       return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
 
-    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
-
-//    if (depth_cmp > 0.0) {
-//        // RGB10A2_UNORM
-//        //return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
-//
-//        // RGBA8_UNORM
-//        //return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
-//
-//        // Debug
-//        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-//    } else {
-//        discard;
-//    }
+       // RGBA8_UNORM
+       //return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+   } else {
+       // return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+       discard;
+   }
 }

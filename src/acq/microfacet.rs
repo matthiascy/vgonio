@@ -58,6 +58,7 @@ impl MicrofacetDistribution {
         let file = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(filepath)?;
         let mut writter = BufWriter::new(file);
         let header = format!(

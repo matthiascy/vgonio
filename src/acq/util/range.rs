@@ -210,6 +210,7 @@ macro impl_step_count_for_range_by_step_size($self:ident) {{
 }}
 
 impl RangeByStepSize<f32> {
+    /// Returns the number of steps in this range.
     pub fn step_count(&self) -> usize {
         #[cfg(debug_assertions)]
         assert!(
@@ -226,10 +227,12 @@ impl RangeByStepSize<f32> {
 }
 
 impl<A: AngleUnit> RangeByStepSize<Angle<A>> {
+    /// Returns the number of steps in this range of angles.
     pub fn step_count(&self) -> usize { impl_step_count_for_range_by_step_size!(self) }
 }
 
 impl<A: LengthUnit> RangeByStepSize<Length<A>> {
+    /// Returns the number of steps in this range of lengths.
     pub fn step_count(&self) -> usize { impl_step_count_for_range_by_step_size!(self) }
 }
 
