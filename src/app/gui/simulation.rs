@@ -1,9 +1,9 @@
 use crate::{
-    acq::measurement::{BsdfMeasurement, Measurement},
     app::{
         cache::Cache,
         gui::{gizmo::VgonioGizmo, VgonioEvent},
     },
+    measure::measurement::{BsdfMeasurement, Measurement},
 };
 use egui_gizmo::{GizmoMode, GizmoOrientation};
 use glam::Mat4;
@@ -91,7 +91,7 @@ impl SimulationPanel {
     pub fn new(cache: Arc<RefCell<Cache>>) -> Self {
         Self {
             desc: Measurement {
-                kind: crate::acq::measurement::MeasurementKind::Bsdf(BsdfMeasurement::default()),
+                kind: crate::measure::measurement::MeasurementKind::Bsdf(BsdfMeasurement::default()),
                 surfaces: vec![],
             },
             selected_surface_index: 0,

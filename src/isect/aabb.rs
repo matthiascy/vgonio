@@ -5,7 +5,7 @@ use core::arch::x86_64::*;
 use core::arch::x86::*;
 use glam::Vec3;
 
-use crate::acq::{util::gamma_f32, Ray};
+use crate::{common::gamma_f32, measure::Ray};
 use serde::{Deserialize, Serialize};
 
 /// Axis-aligned bounding box.

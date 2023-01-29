@@ -2,35 +2,26 @@
 
 pub mod bsdf;
 mod collector;
-#[cfg(feature = "embree")]
-mod embree_rt;
 pub(crate) mod emitter; // TODO: maybe make private
-pub mod fresnel;
-mod grid_rt;
-pub mod ior;
 pub mod measurement;
 pub mod microfacet;
+pub mod rtc;
 pub mod scattering;
-pub mod util;
 
 pub use collector::{Collector, CollectorScheme, Patch};
 #[cfg(feature = "embree")]
 pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
-pub use grid_rt::GridRayTracing;
 
 use std::str::FromStr;
 
 use crate::{
     app::gfx::camera::{Projection, ProjectionKind},
-    isect::Aabb,
-    msurf::{regular_triangulation, MicroSurface},
     units::Radians,
     Error,
 };
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
-use wgpu::util::DeviceExt;
 
 /// Representation of a ray.
 #[derive(Debug, Copy, Clone)]
@@ -162,87 +153,6 @@ impl LightSource {
         let view = glam::Mat4::look_at_rh(self.pos, Vec3::ZERO, up);
         let proj = self.proj.matrix(self.proj_kind);
         LightSourceRaw((proj * view).to_cols_array())
-    }
-}
-
-/// Micro-surface mesh used to measure geometric masking/shadowing function.
-/// Position is the only attribute that a vertex possesses. See
-/// [`Self::VERTEX_FORMAT`]. Indices are stored as `u32`. See
-/// [`Self::INDEX_FORMAT`]. The mesh is constructed from a height field.
-///
-/// Indices are generated in the following order: azimuthal angle first then
-/// polar angle.
-pub struct MicroSurfaceMeshView {
-    /// Dimension of the micro-surface.
-    pub extent: Aabb,
-
-    /// Buffer stores all the vertices.
-    pub vertex_buffer: wgpu::Buffer,
-
-    pub facets: Vec<[u32; 3]>,
-
-    pub facet_normals: Vec<Vec3>,
-}
-
-impl MicroSurfaceMeshView {
-    /// Data type used for vertex buffer.
-    pub const VERTEX_FORMAT: wgpu::VertexFormat = wgpu::VertexFormat::Float32;
-
-    /// Vertex buffer layout.
-    pub const VERTEX_BUFFER_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
-        array_stride: Self::VERTEX_FORMAT.size(),
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[wgpu::VertexAttribute {
-            format: Self::VERTEX_FORMAT,
-            offset: 0,
-            shader_location: 0,
-        }],
-    };
-
-    /// Data type used for index buffer.
-    pub const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint32;
-}
-
-impl MicroSurfaceMeshView {
-    pub fn from_height_field(device: &wgpu::Device, hf: &MicroSurface) -> Self {
-        let (rows, cols) = (hf.cols, hf.rows);
-        let (positions, extent) = hf.generate_vertices();
-        let indices: Vec<u32> = regular_triangulation(&positions, rows, cols);
-        let facets = (0..indices.len())
-            .step_by(3)
-            .map(|i| [indices[i], indices[i + 1], indices[i + 2]])
-            .collect();
-        let facets_count = indices.len() / 3;
-
-        // Generate triangles' normals
-        let mut normals: Vec<Vec3> = vec![];
-        normals.resize(facets_count, Vec3::ZERO);
-
-        for i in 0..facets_count {
-            let i0 = indices[3 * i] as usize;
-            let i1 = indices[3 * i + 1] as usize;
-            let i2 = indices[3 * i + 2] as usize;
-
-            let v0 = positions[i0];
-            let v1 = positions[i1];
-            let v2 = positions[i2];
-
-            let n = (v1 - v0).cross(v2 - v0).normalize();
-            normals[i] = n;
-        }
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_vertex_buffer"),
-            contents: bytemuck::cast_slice(&positions),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        Self {
-            extent,
-            vertex_buffer,
-            facets,
-            facet_normals: normals,
-        }
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::acq::util::RangeByStepSize;
+use crate::common::RangeByStepSize;
 
 pub fn range_ui<T: Copy + egui::emath::Numeric>(
     ui: &mut egui::Ui,

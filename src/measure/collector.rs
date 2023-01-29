@@ -1,11 +1,6 @@
 use crate::{
-    acq::{
-        bsdf::BsdfKind,
-        emitter::RegionShape,
-        measurement::Radius,
-        util::{RangeByStepSize, SphericalDomain, SphericalPartition},
-        RtcRecord,
-    },
+    common::{RangeByStepSize, SphericalDomain, SphericalPartition},
+    measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius, RtcRecord},
     units::{Radians, SolidAngle},
 };
 

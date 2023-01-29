@@ -88,6 +88,10 @@ impl MicroSurface {
                 _ => Err(Error::UnrecognizedFile),
             }
         }
+        .map(|mut ms| {
+            ms.fill_holes();
+            ms
+        })
     }
 }
 

@@ -1,7 +1,8 @@
 use crate::{
-    acq::{ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     isect::{ray_tri_intersect_woop, RayTriIsect},
+    measure::{scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
+    optics::RefractiveIndex,
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
@@ -637,7 +638,12 @@ impl<'hf> GridRayTracing<'hf> {
         }
     }
 
-    pub fn trace_one_ray(&self, ray: Ray, max_bounces: u32, ior_t: &[Ior]) -> Option<RtcRecord> {
+    pub fn trace_one_ray(
+        &self,
+        ray: Ray,
+        max_bounces: u32,
+        ior_t: &[RefractiveIndex],
+    ) -> Option<RtcRecord> {
         // self.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut output);
         // output
         todo!()

@@ -1,6 +1,4 @@
 use crate::{
-    acq,
-    acq::{measurement::MicrofacetShadowingMaskingMeasurement, Handedness},
     app::{
         cache::{Cache, Handle},
         gfx::{
@@ -9,6 +7,8 @@ use crate::{
             GpuContext, RenderPass, Texture, WgpuConfig,
         },
     },
+    measure,
+    measure::{measurement::MicrofacetShadowingMaskingMeasurement, Handedness},
     msurf::MicroSurface,
     units::Radians,
     Error,
@@ -110,14 +110,12 @@ impl OcclusionEstimator {
     pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
 
     /// Bytes per pixel of the color attachment.
-    pub const COLOR_ATTACHMENT_FORMAT_BPP: u32 =
-        gfx::tex_fmt_bpp(Self::COLOR_ATTACHMENT_FORMAT);
+    pub const COLOR_ATTACHMENT_FORMAT_BPP: u32 = gfx::tex_fmt_bpp(Self::COLOR_ATTACHMENT_FORMAT);
 
     /// Texture format used for the depth attachment.
     pub const DEPTH_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     /// Bytes per pixel of the depth attachment.
-    pub const DEPTH_ATTACHMENT_FORMAT_BPP: u32 =
-        gfx::tex_fmt_bpp(Self::DEPTH_ATTACHMENT_FORMAT);
+    pub const DEPTH_ATTACHMENT_FORMAT_BPP: u32 = gfx::tex_fmt_bpp(Self::DEPTH_ATTACHMENT_FORMAT);
     /// Index buffer format.
     pub const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint32;
 
@@ -302,9 +300,7 @@ impl OcclusionEstimator {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(
-                            depth_attachment.whole_view(),
-                        ),
+                        resource: wgpu::BindingResource::TextureView(depth_attachment.whole_view()),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
@@ -572,29 +568,25 @@ impl OcclusionEstimator {
                         layer
                             .par_iter()
                             .chunks(4)
-                            .fold(
-                                VisibilityEstimation::default,
-                                |acc, chunk| {
-                                    let value = *chunk[0] as u32;
-                                    if value == 0 {
-                                        acc
-                                    } else {
-                                        VisibilityEstimation {
-                                            area_sans_occlusion: acc.area_sans_occlusion + value,
-                                            area_avec_occlusion: acc.area_avec_occlusion + 1,
-                                        }
+                            .fold(VisibilityEstimation::default, |acc, chunk| {
+                                let value = *chunk[0] as u32;
+                                if value == 0 {
+                                    acc
+                                } else {
+                                    VisibilityEstimation {
+                                        area_sans_occlusion: acc.area_sans_occlusion + value,
+                                        area_avec_occlusion: acc.area_avec_occlusion + 1,
                                     }
-                                },
-                            )
-                            .reduce(
-                                VisibilityEstimation::default,
-                                |acc1, acc2| VisibilityEstimation {
+                                }
+                            })
+                            .reduce(VisibilityEstimation::default, |acc1, acc2| {
+                                VisibilityEstimation {
                                     area_sans_occlusion: acc1.area_sans_occlusion
                                         + acc2.area_sans_occlusion,
                                     area_avec_occlusion: acc1.area_avec_occlusion
                                         + acc2.area_avec_occlusion,
-                                },
-                            )
+                                }
+                            })
                     })
                     .collect::<Vec<_>>()
             } else {
@@ -604,32 +596,28 @@ impl OcclusionEstimator {
                         layer
                             .par_iter()
                             .chunks(4)
-                            .fold(
-                                VisibilityEstimation::default,
-                                |acc, chunk| {
-                                    let rgba = u32::from_le_bytes([
-                                        *chunk[0], *chunk[1], *chunk[2], *chunk[3],
-                                    ]);
-                                    let value = rgba & 0x03FF;
-                                    if value == 0 {
-                                        acc
-                                    } else {
-                                        VisibilityEstimation {
-                                            area_sans_occlusion: acc.area_sans_occlusion + value,
-                                            area_avec_occlusion: acc.area_avec_occlusion + 1,
-                                        }
+                            .fold(VisibilityEstimation::default, |acc, chunk| {
+                                let rgba = u32::from_le_bytes([
+                                    *chunk[0], *chunk[1], *chunk[2], *chunk[3],
+                                ]);
+                                let value = rgba & 0x03FF;
+                                if value == 0 {
+                                    acc
+                                } else {
+                                    VisibilityEstimation {
+                                        area_sans_occlusion: acc.area_sans_occlusion + value,
+                                        area_avec_occlusion: acc.area_avec_occlusion + 1,
                                     }
-                                },
-                            )
-                            .reduce(
-                                VisibilityEstimation::default,
-                                |acc1, acc2| VisibilityEstimation {
+                                }
+                            })
+                            .reduce(VisibilityEstimation::default, |acc1, acc2| {
+                                VisibilityEstimation {
                                     area_sans_occlusion: acc1.area_sans_occlusion
                                         + acc2.area_sans_occlusion,
                                     area_avec_occlusion: acc1.area_avec_occlusion
                                         + acc2.area_avec_occlusion,
-                                },
-                            )
+                                }
+                            })
                     })
                     .collect::<Vec<_>>()
             }
@@ -1191,7 +1179,7 @@ pub fn measure_microfacet_shadowing_masking(
                 let azimuth = desc.azimuth.step_size * (i / desc.zenith_step_count()) as f32;
                 let zenith = desc.zenith.step_size * (i % desc.zenith_step_count()) as f32;
                 let view_dir =
-                    acq::spherical_to_cartesian(1.0, zenith, azimuth, handedness).normalize();
+                    measure::spherical_to_cartesian(1.0, zenith, azimuth, handedness).normalize();
                 let pos = view_dir * diagonal;
                 let proj_view_mat = {
                     let view_mat = Camera::new(pos, Vec3::ZERO, handedness.up()).view_matrix();

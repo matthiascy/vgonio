@@ -3,11 +3,11 @@ mod sampling;
 mod scratch;
 mod visual_debug;
 #[cfg(feature = "embree")]
-use crate::acq::EmbreeRayTracing;
+use crate::measure::EmbreeRayTracing;
 
 use crate::{
-    acq::{GridRayTracing, Ray},
     app::{gfx::GpuContext, gui::VgonioEvent},
+    measure::{rtc::GridRayTracing, Ray},
 };
 #[cfg(feature = "embree")]
 use embree::Config;

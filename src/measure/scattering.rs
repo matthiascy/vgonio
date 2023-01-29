@@ -1,4 +1,4 @@
-use crate::acq::{fresnel, ior::Ior, Ray};
+use crate::{measure::Ray, optics, optics::RefractiveIndex};
 use glam::Vec3;
 
 /// Light scattering result.
@@ -26,7 +26,7 @@ pub struct ScatteringSpectrum {
 pub fn scatter_air_conductor(ray: Ray, p: Vec3, n: Vec3, eta_t: f32, k_t: f32) -> Scattering {
     let reflected_dir = reflect(ray.d, n);
     let refracted_dir = refract(ray.d, n, 1.0, eta_t);
-    let reflectance = fresnel::reflectance_air_conductor(ray.d.dot(n).abs(), eta_t, k_t);
+    let reflectance = optics::reflectance_air_conductor(ray.d.dot(n).abs(), eta_t, k_t);
 
     Scattering {
         reflected: Ray {
@@ -44,7 +44,7 @@ pub fn scatter_air_conductor_spectrum(
     ray: Ray,
     p: Vec3,
     n: Vec3,
-    iors: &[Ior],
+    iors: &[RefractiveIndex],
 ) -> ScatteringSpectrum {
     let reflected_dir = reflect(ray.d, n);
     let refracted = iors
@@ -52,7 +52,7 @@ pub fn scatter_air_conductor_spectrum(
         .map(|ior| refract(ray.d, n, 1.0, ior.eta).map(|d| Ray { o: p, d }))
         .collect::<Vec<_>>();
 
-    let reflectance = fresnel::reflectance_air_conductor_spectrum(ray.d.dot(n).abs(), iors);
+    let reflectance = optics::reflectance_air_conductor_spectrum(ray.d.dot(n).abs(), iors);
 
     ScatteringSpectrum {
         reflected: Ray {

@@ -2,7 +2,7 @@
 // embree api calls to the same object are not thread safe in general.
 
 use crate::{
-    acq::{fresnel, ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
+    measure::{fresnel, ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
     msurf,
 };
 use embree::{

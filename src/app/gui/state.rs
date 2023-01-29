@@ -15,7 +15,7 @@ use crate::app::{
     gui::VgonioEvent,
 };
 
-use crate::acq::Ray;
+use crate::measure::Ray;
 
 use crate::app::gfx::remap_depth;
 use std::{default::Default, num::NonZeroU32, path::Path, sync::Arc};

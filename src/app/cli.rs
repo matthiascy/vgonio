@@ -1,19 +1,19 @@
 use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 
 use crate::{
-    acq::{
+    app::{
+        args::{FastMeasurementKind, MeasureOptions, PrintInfoKind, SubCommand},
+        cache::{resolve_path, Cache},
+        Config,
+    },
+    common::SphericalPartition,
+    measure::{
         self,
         measurement::{
             BsdfMeasurement, Measurement, MeasurementKind, MicrofacetDistributionMeasurement,
             MicrofacetShadowingMaskingMeasurement, SimulationKind,
         },
-        util::SphericalPartition,
         CollectorScheme, Handedness, RtcMethod,
-    },
-    app::{
-        args::{FastMeasurementKind, MeasureOptions, PrintInfoKind, SubCommand},
-        cache::{resolve_path, Cache},
-        Config,
     },
     msurf::{AxisAlignment, MicroSurface},
     Error,
@@ -239,10 +239,14 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         match method {
                             #[cfg(feature = "embree")]
                             RtcMethod::Standard => {
-                                acq::bsdf::measure_bsdf_embree_rt(measurement, &cache, &surfaces);
+                                measure::bsdf::measure_bsdf_embree_rt(
+                                    measurement,
+                                    &cache,
+                                    &surfaces,
+                                );
                             }
                             RtcMethod::Grid => {
-                                acq::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
+                                measure::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
                             }
                         }
                     }
@@ -446,7 +450,7 @@ fn measure_microfacet_distribution(
     );
     let start_time = Instant::now();
     let distributions =
-        acq::microfacet::measure_microfacet_distribution(measurement, surfaces, cache);
+        measure::microfacet::measure_microfacet_distribution(measurement, surfaces, cache);
     let duration = Instant::now() - start_time;
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
@@ -508,7 +512,7 @@ fn measure_microfacet_shadowing_masking(
         measurement.resolution
     );
     let start_time = Instant::now();
-    let distributions = acq::microfacet::measure_microfacet_shadowing_masking(
+    let distributions = measure::microfacet::measure_microfacet_shadowing_masking(
         measurement,
         surfaces,
         cache,

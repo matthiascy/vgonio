@@ -1,10 +1,8 @@
 use crate::{
-    acq::{
-        bsdf::BsdfKind,
-        collector::CollectorScheme,
-        emitter::RegionShape,
-        util::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
-        Collector, Emitter, Medium, RtcMethod,
+    common::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
+    measure::{
+        bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
+        Medium, RtcMethod,
     },
     units::{degrees, metres, nanometres, radians, Metres, Radians, SolidAngle},
     Error,
@@ -339,7 +337,8 @@ impl Default for MicrofacetShadowingMaskingMeasurement {
 }
 
 impl MicrofacetShadowingMaskingMeasurement {
-    /// Counts the number of samples (on hemisphere) that will be taken during the measurement.
+    /// Counts the number of samples (on hemisphere) that will be taken during
+    /// the measurement.
     pub fn measurement_location_count(&self) -> usize {
         let azimuth_count = self.azimuth.step_count();
         let zenith_count = self.zenith.step_count() + 1;

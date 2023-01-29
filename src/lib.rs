@@ -9,15 +9,16 @@
 
 extern crate core;
 
-pub mod acq;
 mod app;
+mod common;
 mod error;
 mod io;
 pub mod isect;
 mod math;
+pub mod measure;
 pub mod msurf;
+pub mod optics;
 pub mod units;
-mod util;
 
 use crate::error::Error;
 

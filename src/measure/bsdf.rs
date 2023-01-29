@@ -1,9 +1,10 @@
 use crate::{
-    acq::{measurement::Radius, util::RangeByStepSize, Collector, Emitter, Patch},
     app::{
         cache::{Cache, Handle},
         cli::{BRIGHT_YELLOW, RESET},
     },
+    common::RangeByStepSize,
+    measure::{measurement::Radius, rtc::GridRayTracing, Collector, Emitter, Patch},
     msurf::MicroSurface,
     units::{metres, Nanometres},
 };
@@ -131,7 +132,7 @@ pub fn measure_bsdf_embree_rt(
     cache: &Cache,
     surfaces: &[MicroSurfaceHandle],
 ) {
-    use crate::acq::EmbreeRayTracing;
+    use crate::measure::EmbreeRayTracing;
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
@@ -223,8 +224,6 @@ pub fn measure_bsdf_grid_rt(
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
-    use crate::acq::GridRayTracing;
-
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
     collector.init();

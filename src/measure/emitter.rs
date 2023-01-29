@@ -1,9 +1,6 @@
 use crate::{
-    acq::{
-        measurement::Radius,
-        util::{RangeByStepSize, SphericalCoord},
-        Handedness, Ray,
-    },
+    common::{RangeByStepSize, SphericalCoord},
+    measure::{measurement::Radius, Handedness, Ray},
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
 };
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,5 @@
 use crate::{
-    acq::Medium,
+    measure::Medium,
     units::{nanometres, Length, LengthUnit, Nanometres},
 };
 use std::{cmp::Ordering, collections::HashMap, path::Path};
@@ -10,7 +10,7 @@ use std::{cmp::Ordering, collections::HashMap, path::Path};
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
 /// is constant over all the wavelengths.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Ior {
+pub struct RefractiveIndex {
     /// corresponding wavelength in nanometres.
     pub wavelength: Nanometres,
 
@@ -21,7 +21,7 @@ pub struct Ior {
     pub k: f32,
 }
 
-impl PartialOrd for Ior {
+impl PartialOrd for RefractiveIndex {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.wavelength.partial_cmp(&other.wavelength)
     }
@@ -29,19 +29,19 @@ impl PartialOrd for Ior {
 
 /// Refractive index database.
 #[derive(Debug)]
-pub struct IorDatabase(pub(crate) HashMap<Medium, Vec<Ior>>);
+pub struct RefractiveIndexDatabase(pub(crate) HashMap<Medium, Vec<RefractiveIndex>>);
 
-impl Default for IorDatabase {
+impl Default for RefractiveIndexDatabase {
     fn default() -> Self { Self::new() }
 }
 
-impl IorDatabase {
+impl RefractiveIndexDatabase {
     /// Create an empty database.
-    pub fn new() -> IorDatabase { IorDatabase(HashMap::new()) }
+    pub fn new() -> RefractiveIndexDatabase { RefractiveIndexDatabase(HashMap::new()) }
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
-    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<Ior> {
+    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndex> {
         let refractive_indices = self.0.get(&medium).expect("unknown medium");
         // Search for the position of the first wavelength equal or greater than the
         // given one in refractive indices.
@@ -65,7 +65,7 @@ impl IorDatabase {
             let diff_k = ior_after.k - ior_before.k;
             let t = (wavelength - ior_before.wavelength)
                 / (ior_after.wavelength - ior_before.wavelength);
-            Some(Ior {
+            Some(RefractiveIndex {
                 wavelength,
                 eta: ior_before.eta + t * diff_eta,
                 k: ior_before.k + t * diff_k,
@@ -79,7 +79,7 @@ impl IorDatabase {
         &self,
         medium: Medium,
         wavelengths: &[Length<A>],
-    ) -> Option<Vec<Ior>> {
+    ) -> Option<Vec<RefractiveIndex>> {
         wavelengths
             .iter()
             .map(|wavelength| self.ior_of(medium, wavelength.in_nanometres()))
@@ -87,7 +87,7 @@ impl IorDatabase {
     }
 }
 
-impl Ior {
+impl RefractiveIndex {
     /// Refractive index of vacuum.
     pub const VACUUM: Self = Self {
         wavelength: nanometres!(0.0),
@@ -103,14 +103,16 @@ impl Ior {
     };
 
     /// Creates a new refractive index.
-    pub fn new(wavelength: Nanometres, eta: f32, k: f32) -> Ior { Ior { wavelength, eta, k } }
+    pub fn new(wavelength: Nanometres, eta: f32, k: f32) -> RefractiveIndex {
+        RefractiveIndex { wavelength, eta, k }
+    }
 
     /// Whether the refractive index represents dielectric material.
     pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
 
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"
-    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Vec<Ior>> {
+    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Vec<RefractiveIndex>> {
         std::fs::File::open(path)
             .map(|f| {
                 let mut rdr = csv::Reader::from_reader(f);
@@ -133,7 +135,7 @@ impl Ior {
                             let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                             let eta = record[1].parse::<f32>().unwrap();
                             let k = record[2].parse::<f32>().unwrap();
-                            Some(Ior::new(wavelength.into(), eta, k))
+                            Some(RefractiveIndex::new(wavelength.into(), eta, k))
                         }
                         Err(_) => None,
                     })

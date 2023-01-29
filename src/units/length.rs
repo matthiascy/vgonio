@@ -1,4 +1,4 @@
-use crate::{error::Error, util::ulp_eq};
+use crate::{common::ulp_eq, error::Error};
 use core::fmt::Debug;
 use std::{cmp::Ordering, str::FromStr};
 
@@ -385,7 +385,7 @@ super::impl_ops_assign!(AddAssign, SubAssign for Length where A, B: LengthUnit);
 #[cfg(test)]
 mod length_unit_tests {
     use super::*;
-    use crate::util::ulp_eq;
+    use crate::common::ulp_eq;
     use paste::paste;
 
     macro_rules! test_conversion {

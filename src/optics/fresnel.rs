@@ -116,7 +116,7 @@
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::acq::ior::Ior;
+use crate::optics::RefractiveIndex;
 
 /// Computes the Schlick's approximation of the Fresnel specular (reflection)
 /// factor.
@@ -281,7 +281,11 @@ pub fn reflectance_dielectric_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t:
 ///
 /// * `cos` - cosine of the angle between normal and incident light (should be
 ///   positive).
-pub fn reflectance_dielectric_conductor_spectrum(cos: f32, eta_i: f32, ior_t: &[Ior]) -> Vec<f32> {
+pub fn reflectance_dielectric_conductor_spectrum(
+    cos: f32,
+    eta_i: f32,
+    ior_t: &[RefractiveIndex],
+) -> Vec<f32> {
     let mut output = vec![1.0; ior_t.len()];
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_dielectric_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
@@ -306,7 +310,7 @@ pub fn reflectance_air_conductor(cos_i: f32, eta_t: f32, k_t: f32) -> f32 {
 /// the air and a conductor medium for rays with different wavelengths.
 ///
 /// See [`reflectance_air_conductor`] for details.
-pub fn reflectance_air_conductor_spectrum(cos: f32, ior_t: &[Ior]) -> Vec<f32> {
+pub fn reflectance_air_conductor_spectrum(cos: f32, ior_t: &[RefractiveIndex]) -> Vec<f32> {
     reflectance_dielectric_conductor_spectrum(cos, 1.0, ior_t)
 }
 

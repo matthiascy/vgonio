@@ -1,9 +1,9 @@
 use crate::{
-    acq::{Ray, RtcMethod},
     app::gui::{
         widgets::{input3_spherical, input3_xyz},
         VgonioEvent,
     },
+    measure::{Ray, RtcMethod},
 };
 use glam::{IVec2, Vec3};
 use winit::event_loop::EventLoopProxy;

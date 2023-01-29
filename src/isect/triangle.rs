@@ -1,4 +1,4 @@
-use crate::{acq::Ray, isect::RayTriIsect, util::gamma};
+use crate::{common::gamma, isect::RayTriIsect, measure::Ray};
 use glam::Vec3;
 
 pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
@@ -344,7 +344,7 @@ pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIs
 #[cfg(test)]
 mod tests {
     use super::ray_tri_intersect_woop;
-    use crate::acq::Ray;
+    use crate::measure::Ray;
     use glam::Vec3;
 
     #[test]

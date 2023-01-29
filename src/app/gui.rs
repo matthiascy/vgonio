@@ -7,8 +7,8 @@ mod ui;
 mod widgets;
 
 use crate::{
-    acq::{Handedness, Ray, RtcMethod},
     error::Error,
+    measure::{Handedness, Ray, RtcMethod},
     units::degrees,
 };
 use glam::{IVec2, Mat4, Vec3};
@@ -30,7 +30,6 @@ pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    acq::{GridRayTracing, MicroSurfaceMeshView},
     app::{
         cache::Cache,
         gfx::{
@@ -40,6 +39,7 @@ use crate::{
         },
         gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
     },
+    measure::rtc::GridRayTracing,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
 };
 use winit::{
@@ -222,7 +222,6 @@ pub struct VgonioApp {
     surface: Option<Rc<MicroSurface>>,
     surface_mesh: Option<Rc<MicroSurfaceTriMesh>>,
     surface_mesh_view: Option<RenderableMesh>,
-    surface_mesh_micro_view: Option<MicroSurfaceMeshView>,
     surface_scale_factor: f32,
 
     opened_surfaces: Vec<PathBuf>,
@@ -333,7 +332,6 @@ impl VgonioApp {
             surface: None,
             surface_mesh: None,
             surface_mesh_view: None,
-            surface_mesh_micro_view: None,
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
@@ -760,7 +758,7 @@ impl VgonioApp {
                 azimuth,
                 zenith,
             } => {
-                let samples = crate::acq::emitter::uniform_sampling_on_unit_sphere(
+                let samples = crate::measure::emitter::uniform_sampling_on_unit_sphere(
                     count as usize,
                     degrees!(zenith.0).into(),
                     degrees!(zenith.1).into(),
@@ -796,152 +794,15 @@ impl VgonioApp {
                     hf.du,
                     hf.dv
                 );
-                hf.fill_holes();
                 let mesh = hf.triangulate();
-                let mesh_view = RenderableMesh::from_triangle_mesh(&self.gpu_ctx.device, &mesh);
-                let micro_view = MicroSurfaceMeshView::from_height_field(&self.gpu_ctx.device, &hf);
                 self.surface = Some(Rc::new(hf));
                 self.surface_mesh = Some(Rc::new(mesh));
-                self.surface_mesh_view = Some(mesh_view);
-                self.surface_mesh_micro_view = Some(micro_view);
             }
             Err(err) => {
                 log::error!("HeightField loading error: {}", err);
             }
         }
     }
-
-    ///// Measure the geometric masking/shadowing function of a micro-surface.
-    // fn measure_micro_surface_geometric_term(&mut self) {
-    //     if let Some(mesh) = &self.surface_mesh_micro_view {
-    //         let radius = (mesh.extent.max - mesh.extent.min).max_element();
-    //         let near = 0.1f32;
-    //         let far = radius * 2.0;
-    //
-    //         // let cs_module = self.gpu_ctx.device.create_shader_module(
-    //         //
-    // &wgpu::include_spirv!("../assets/shaders/spirv/visibility.comp.spv"),
-    //         // );
-    //         //
-    //         // let faces_visibility = vec![0u32; mesh.faces.len()];
-    //         // let faces_visibility_buffer = self
-    //         //     .gpu_ctx
-    //         //     .device
-    //         //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-    //         //         label: None,
-    //         //         contents: faces_visibility.as_bytes(),
-    //         //         usage: wgpu::BufferUsages::MAP_READ |
-    // wgpu::BufferUsages::COPY_DST,         //     });
-    //         //
-    //         // let normals_buffer = self
-    //         //     .gpu_ctx
-    //         //     .device
-    //         //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-    //         //         label: None,
-    //         //         contents: bytemuck::cast_slice(&mesh.facet_normals),
-    //         //         usage: wgpu::BufferUsages::MAP_READ |
-    // wgpu::BufferUsages::COPY_DST,         //     });
-    //         //
-    //         // let uniform_buffer =
-    //         //
-    // self.gpu_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-    //         //     label: None,
-    //         //     contents: bytemuck::cast_slice(&[0.0f32; 4]),
-    //         //     usage: wgpu::BufferUsages::MAP_READ |
-    // wgpu::BufferUsages::COPY_DST,         // });
-    //
-    //         let proj = {
-    //             let projection = Projection::new(
-    //                 near,
-    //                 far,
-    //                 70.0f32.to_radians(),
-    //                 (radius * 1.414) as u32,
-    //                 (radius * 1.414) as u32,
-    //             );
-    //             projection.matrix(ProjectionKind::Orthographic)
-    //         };
-    //
-    //         let file =
-    // std::fs::File::create("measured_geometric_term_v2.txt").unwrap();
-    //         let writer = &mut BufWriter::new(file);
-    //         writer.write_all("phi theta ratio\n".as_bytes()).unwrap();
-    //
-    //         // self.shadow_pass.resize(&self.gpu_ctx.device, 512, 512);
-    //
-    //         for i in 0..NUM_AZIMUTH_BINS {
-    //             for j in 0..NUM_ZENITH_BINS {
-    //                 // Camera is located at the center of each bin.
-    //                 let phi = ((2 * i + 1) as f32) * AZIMUTH_BIN_SIZE_RAD * 0.5;
-    // // azimuth                 let theta = ((2 * j + 1) as f32) *
-    // ZENITH_BIN_SIZE_RAD * 0.5; // zenith                 let (sin_theta,
-    // cos_theta) = theta.sin_cos();                 let (sin_phi, cos_phi) =
-    // phi.sin_cos();                 let view_pos = Vec3::new(
-    //                     radius * sin_theta * cos_phi,
-    //                     radius * cos_theta,
-    //                     radius * sin_theta * sin_phi,
-    //                 );
-    //                 let view_dir = view_pos.normalize();
-    //                 let camera = Camera::new(view_pos, Vec3::ZERO, Vec3::Y);
-    //                 let visible_facets = mesh
-    //                     .facets
-    //                     .iter()
-    //                     .enumerate()
-    //                     .filter_map(|(i, f)| {
-    //                         if mesh.facet_normals[i].dot(view_dir) > 0.0 {
-    //                             Some(*f)
-    //                         } else {
-    //                             None
-    //                         }
-    //                     })
-    //                     .collect::<Vec<_>>();
-    //
-    //                 let ratio = if visible_facets.is_empty() {
-    //                     0.0
-    //                 } else {
-    //                     self.occlusion_estimation_pass.update_uniforms(
-    //                         &self.gpu_ctx.queue,
-    //                         Mat4::IDENTITY,
-    //                         proj * camera.matrix(),
-    //                     );
-    //
-    //                     let index_buffer =
-    // &self.gpu_ctx.device.create_buffer_init(
-    // &wgpu::util::BufferInitDescriptor {                             label:
-    // Some("measurement_vertex_buffer"),                             contents:
-    // bytemuck::cast_slice(&visible_facets),                             usage:
-    // wgpu::BufferUsages::INDEX,                         },
-    //                     );
-    //
-    //                     let indices_count = visible_facets.len() as u32 * 3;
-    //
-    //                     self.occlusion_estimation_pass.run_once(
-    //                         &self.gpu_ctx.device,
-    //                         &self.gpu_ctx.queue,
-    //                         &mesh.vertex_buffer,
-    //                         index_buffer,
-    //                         indices_count,
-    //                         MicroSurfaceMeshView::INDEX_FORMAT,
-    //                     );
-    //
-    //                     self.occlusion_estimation_pass
-    //                         .calculate_ratio(&self.gpu_ctx.device)
-    //                 };
-    //
-    //                 writer
-    //                     .write_all(
-    //                         format!(
-    //                             "{:<6.2} {:<5.2} {:.6}\n",
-    //                             phi.to_degrees(),
-    //                             theta.to_degrees(),
-    //                             ratio
-    //                         )
-    //                         .as_bytes(),
-    //                     )
-    //                     .unwrap();
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {

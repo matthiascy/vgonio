@@ -1,4 +1,4 @@
-use crate::util::ulp_eq;
+use crate::common::ulp_eq;
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
 
@@ -339,7 +339,7 @@ super::impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
 #[cfg(test)]
 mod angle_unit_tests {
     use super::*;
-    use crate::util::ulp_eq;
+    use crate::common::ulp_eq;
 
     #[test]
     fn conversion() {

@@ -1,13 +1,11 @@
 use crate::{
-    acq::{
-        ior::{Ior, IorDatabase},
-        Medium,
-    },
     app::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
+    measure::Medium,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
+    optics::{RefractiveIndex, RefractiveIndexDatabase},
     Error,
 };
 use std::{
@@ -62,7 +60,7 @@ pub struct Cache {
     pub dir: std::path::PathBuf,
 
     /// Refractive index database.
-    pub iors: IorDatabase,
+    pub iors: RefractiveIndexDatabase,
 
     /// Lookup table for micro-surface's path to its corresponding uuid.
     msurf_path_to_uuid: HashMap<PathBuf, Uuid>,
@@ -92,7 +90,7 @@ impl Cache {
             msurf_meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
-            iors: IorDatabase::default(),
+            iors: RefractiveIndexDatabase::default(),
             renderables: Default::default(),
             msurf_path_to_uuid: Default::default(),
         }
@@ -269,7 +267,7 @@ impl Cache {
 
     /// Load the refractive index database from the given path.
     /// Returns the number of files loaded.
-    fn load_refractive_indices(iors: &mut IorDatabase, path: &Path) -> u32 {
+    fn load_refractive_indices(iors: &mut RefractiveIndexDatabase, path: &Path) -> u32 {
         let mut n_files = 0;
         if path.is_file() {
             log::debug!("Loading refractive index database from {:?}", path);
@@ -283,7 +281,7 @@ impl Cache {
                     .unwrap(),
             )
             .unwrap();
-            let refractive_indices = Ior::read_iors_from_file(path).unwrap();
+            let refractive_indices = RefractiveIndex::read_iors_from_file(path).unwrap();
             let iors = iors.0.entry(medium).or_insert(Vec::new());
             for ior in refractive_indices {
                 if !iors.contains(&ior) {

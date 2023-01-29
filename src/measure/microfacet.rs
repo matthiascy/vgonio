@@ -3,9 +3,9 @@ mod occlusion;
 pub use occlusion::*;
 
 use crate::{
-    acq,
     app::cache::{Cache, Handle},
     error::Error,
+    measure,
     msurf::MicroSurface,
     units::{self, Radians},
 };
@@ -16,7 +16,7 @@ use std::{
 
 use super::measurement::MicrofacetDistributionMeasurement;
 
-use crate::acq::Handedness;
+use crate::measure::Handedness;
 use rayon::prelude::*;
 
 // NOTE(yang): The number of bins is determined by the bin size and the range of
@@ -103,7 +103,7 @@ pub fn measure_microfacet_distribution(
                     (0..desc.zenith.step_count() + 1).map(move |zenith_idx| {
                         let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
                         let zenith = zenith_idx as f32 * desc.zenith.step_size;
-                        let dir = acq::spherical_to_cartesian(
+                        let dir = measure::spherical_to_cartesian(
                             1.0,
                             zenith,
                             azimuth,
