@@ -65,7 +65,7 @@ def convert_to_xyz(data, azimuth_bins, zenith_bins):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Plot the microfacet distribution.")
+    parser = argparse.ArgumentParser(description="Microfacet distribution plotting")
     parser.add_argument("filename", help="The file to read the data from.")
     parser.add_argument("-t", "--in-3d", action="store_true", help="Plot the data in 3D.")
     parser.add_argument("-s", "--save", action="store_true", help="Save the plots to file.")

@@ -291,6 +291,21 @@ impl Default for MicrofacetDistributionMeasurement {
 }
 
 impl MicrofacetDistributionMeasurement {
+    /// Returns the number of samples that will be taken along the zenith angle.
+    ///
+    /// Here one is added to the zenith step count to account for the zenith
+    /// angle of 90°.
+    pub fn zenith_step_count(&self) -> usize { self.zenith.step_count() + 1 }
+
+    /// Returns the number of samples that will be taken along the azimuth
+    /// angle.
+    ///
+    /// Here no additional step is added to the azimuth step count due to that
+    /// in most cases the azimuth angle sampling range will be [0°, 360°] and
+    /// thus the azimuth angle of 360° will be sampled as it is the same as the
+    /// azimuth angle of 0°.
+    pub fn azimuth_step_count(&self) -> usize { self.azimuth.step_count() }
+
     /// Validate the parameters.
     pub fn validate(self) -> Result<Self, Error> {
         if !(self.azimuth.start >= Radians::ZERO && self.azimuth.stop <= Radians::TWO_PI) {

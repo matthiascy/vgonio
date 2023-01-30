@@ -29,11 +29,13 @@ pub const BRIGHT_RED: &str = "\u{001b}[31m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
 pub const RESET: &str = "\u{001b}[0m";
 
+mod info;
+
 /// Entry point of vgonio CLI.
 pub fn run(cmd: SubCommand, config: Config) -> Result<(), Error> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
-        SubCommand::PrintInfo(opts) => print_info(opts, config),
+        SubCommand::PrintInfo(opts) => info::print(opts, config),
         SubCommand::Generate(opts) => generate(opts, config),
     }
 }
@@ -296,79 +298,6 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
             }
         }
     }
-    Ok(())
-}
-
-/// Prints Vgonio's current configurations.
-/// TODO: print default parameters for each measurement
-fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
-    let mut prints = [false, false, false];
-    match opts.kind {
-        Some(kind) => match kind {
-            PrintInfoKind::Config => {
-                prints[0] = true;
-            }
-            PrintInfoKind::Defaults => {
-                prints[1] = true;
-            }
-            PrintInfoKind::MeasurementDescription => {
-                prints[2] = true;
-            }
-        },
-        None => {
-            prints = [true, true, true];
-        }
-    };
-
-    if prints[0] {
-        println!("Current configurations: {config}");
-    }
-
-    if prints[1] {
-        println!(
-            "Microfacet distribution default parameters: {:?}",
-            MicrofacetDistributionMeasurement::default()
-        );
-        println!(
-            "Microfacet shadowing and masking default parameters: {:?}",
-            MicrofacetShadowingMaskingMeasurement::default()
-        );
-    }
-
-    if prints[2] {
-        [
-            Measurement {
-                kind: MeasurementKind::MicrofacetDistribution(
-                    MicrofacetDistributionMeasurement::default(),
-                ),
-                surfaces: vec![
-                    PathBuf::from("path/to/surface1"),
-                    PathBuf::from("path/to/surface2"),
-                ],
-            },
-            Measurement {
-                kind: MeasurementKind::MicrofacetShadowingMasking(
-                    MicrofacetShadowingMaskingMeasurement::default(),
-                ),
-                surfaces: vec![
-                    PathBuf::from("path/to/surface1"),
-                    PathBuf::from("path/to/surface2"),
-                ],
-            },
-            Measurement {
-                kind: MeasurementKind::Bsdf(BsdfMeasurement::default()),
-                surfaces: vec![
-                    PathBuf::from("path/to/surface1"),
-                    PathBuf::from("path/to/surface2"),
-                ],
-            },
-        ]
-        .into_iter()
-        .for_each(|m| {
-            print!("---\n{}", serde_yaml::to_string(&m).unwrap());
-        });
-    }
-
     Ok(())
 }
 
