@@ -1,6 +1,12 @@
-mod occlusion;
+//! Microfacet related measurement.
+//!
+//! This module contains the code for measuring the microfacet distribution
+//! (NDF, normal distribution function) and the shadowing-masking function (G,
+//! geometric attenuation function).
 
-pub use occlusion::*;
+mod visibility;
+
+pub use visibility::*;
 
 use crate::{
     app::cache::{Cache, Handle},
@@ -85,7 +91,7 @@ pub fn measure_microfacet_distribution(
     cache: &Cache,
 ) -> Vec<MicrofacetDistribution> {
     log::info!("Measuring micro facet distribution...");
-    let surfaces = cache.get_micro_surface_meshes(surfaces);
+    let surfaces = cache.micro_surface_meshes_by_surface_ids(surfaces);
     surfaces
         .iter()
         .map(|surface| {

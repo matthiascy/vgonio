@@ -31,7 +31,7 @@ pub fn run() -> Result<(), Error> {
     let config = app::init(&args, std::time::SystemTime::now())?;
 
     match args.command {
-        None => app::gui::launch(config),
-        Some(cmd) => app::cli::execute(cmd, config),
+        None => app::gui::run(config),
+        Some(cmd) => app::cli::run(cmd, config),
     }
 }

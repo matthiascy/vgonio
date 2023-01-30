@@ -10,7 +10,7 @@ use glam::Mat4;
 use std::{
     cell::RefCell,
     fmt::{Display, Formatter},
-    path::PathBuf,
+    path::Path,
     sync::Arc,
 };
 use winit::event_loop::EventLoopProxy;
@@ -512,11 +512,12 @@ impl SimulationWorkspace {
             .show(ctx, &mut self.simulation_pane_opened);
     }
 
-    pub fn update_surface_list(&mut self, list: &Vec<PathBuf>) {
+    pub fn update_surface_list(&mut self, list: &Vec<&Path>) {
         if !list.is_empty() {
-            for surface in list {
-                if !self.simulation_panel.desc.surfaces.contains(surface) {
-                    self.simulation_panel.desc.surfaces.push(surface.clone());
+            for &surface in list {
+                let buf = surface.to_owned();
+                if !self.simulation_panel.desc.surfaces.contains(&buf) {
+                    self.simulation_panel.desc.surfaces.push(buf);
                 }
             }
         }

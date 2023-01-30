@@ -36,7 +36,7 @@ use wgpu::{util::DeviceExt, ColorTargetState};
 ///
 /// Render all visible facets. Each fragment outputs value of 1/1024, then at
 /// the blending stage, sum up; later stores inside of a texture.
-pub struct OcclusionEstimator {
+pub struct VisibilityEstimator {
     /// Depth pass to generate depth buffer for the entire micro-surface.
     depth_pass: RenderPass,
 
@@ -61,7 +61,7 @@ pub struct OcclusionEstimator {
     depth_attachment: DepthAttachment,
 }
 
-/// Uniforms used by the `OcclusionPass`.
+/// Uniforms used by the `VisibilityEstimator`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 struct Uniforms {
@@ -78,7 +78,7 @@ impl Default for Uniforms {
     }
 }
 
-/// Occlusion estimation result.
+/// Visibility estimation result.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VisibilityEstimation {
     /// Micro-facets area without occlusion. This is the total area of all
@@ -105,7 +105,7 @@ impl VisibilityEstimation {
 
 /// Structure that holds the necessary gpu resources for the shadowing/masking
 /// function estimation.
-impl OcclusionEstimator {
+impl VisibilityEstimator {
     /// Texture format used for the color attachment.
     pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
 
@@ -149,7 +149,7 @@ impl OcclusionEstimator {
         });
         let shader_module = ctx
             .device
-            .create_shader_module(wgpu::include_wgsl!("./occlusion.wgsl"));
+            .create_shader_module(wgpu::include_wgsl!("./visibility.wgsl"));
         let color_attachment = ColorAttachment::new(
             &ctx.device,
             width,
@@ -396,7 +396,7 @@ impl OcclusionEstimator {
             meas_points.len() as u32,
             self.num_measurement_points,
             "The number of measurement points must be the same as the number of measurement \
-             points used to create the `OcclusionEstimator`."
+             points used to create the `VisibilityEstimator`."
         );
         let data = meas_points
             .iter()
@@ -421,7 +421,7 @@ impl OcclusionEstimator {
         facets_idx_num: u32,
     ) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("occlusion_pass_bake_depth_maps_encoder"),
+            label: Some("ve_bake_depth_maps_encoder"),
         });
 
         encoder.push_debug_group("oc_depth_maps_bake");
@@ -438,7 +438,7 @@ impl OcclusionEstimator {
             encoder.insert_debug_marker("bake all facets");
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("occlusion_pass_bake_depth_maps_pass"),
+                    label: Some("ve_bake_depth_maps_pass"),
                     color_attachments: &[],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: self.depth_attachment.layer_view(i),
@@ -463,7 +463,7 @@ impl OcclusionEstimator {
         queue.submit(Some(encoder.finish()));
     }
 
-    /// Estimate the occlusion for visible facets.
+    /// Estimate the visibility percentage for visible facets.
     ///
     /// The `bake` method must be called before this method.
     pub fn estimate(
@@ -475,7 +475,7 @@ impl OcclusionEstimator {
         visible_facets_idx_num: u32,
     ) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("occlusion_estimation_render_encoder"),
+            label: Some("visibility_estimation_render_encoder"),
         });
 
         encoder.push_debug_group("oc_render_pass");
@@ -491,7 +491,7 @@ impl OcclusionEstimator {
             encoder.insert_debug_marker("render all visible facets");
             {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("occlusion_pass_compute_render_pass"),
+                    label: Some("visibility_pass_compute_render_pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: self.color_attachment.layer_view(i),
                         resolve_target: None,
@@ -522,7 +522,7 @@ impl OcclusionEstimator {
         queue.submit(Some(encoder.finish()));
     }
 
-    /// Saves the occlusion estimation outputs to the given directory.
+    /// Saves the visibility estimation outputs to the given directory.
     pub fn save_color_attachment(
         &self,
         device: &wgpu::Device,
@@ -1140,18 +1140,18 @@ pub fn measure_microfacet_shadowing_masking(
                 wgpu::Limits::default()
             },
         },
-        target_format: Some(OcclusionEstimator::COLOR_ATTACHMENT_FORMAT),
+        target_format: Some(VisibilityEstimator::COLOR_ATTACHMENT_FORMAT),
         backends: wgpu::Backends::VULKAN,
         ..Default::default()
     };
     let gpu = pollster::block_on(GpuContext::offscreen(&wgpu_config));
-    let mut estimator = OcclusionEstimator::new(
+    let mut estimator = VisibilityEstimator::new(
         &gpu,
         desc.resolution,
         desc.resolution,
         desc.measurement_location_count() as u32,
     );
-    let surfaces = cache.get_micro_surface_meshes(surfaces);
+    let surfaces = cache.micro_surface_meshes_by_surface_ids(surfaces);
     let mut results = Vec::with_capacity(surfaces.len());
     surfaces.iter().for_each(|surface| {
         let facets_vtx_buf = gpu

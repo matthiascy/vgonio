@@ -138,8 +138,8 @@ pub fn measure_bsdf_embree_rt(
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let (surfaces, meshes) = {
         (
-            cache.get_micro_surfaces(surfaces).unwrap(),
-            cache.get_micro_surface_meshes(surfaces),
+            cache.micro_surfaces(surfaces).unwrap(),
+            cache.micro_surface_meshes(surfaces),
         )
     };
 
@@ -231,8 +231,8 @@ pub fn measure_bsdf_grid_rt(
 
     let (surfaces, meshes) = {
         (
-            cache.get_micro_surfaces(surfaces).unwrap(),
-            cache.get_micro_surface_meshes(surfaces),
+            cache.micro_surfaces(surfaces).unwrap(),
+            cache.micro_surface_meshes_by_surface_ids(surfaces),
         )
     };
 

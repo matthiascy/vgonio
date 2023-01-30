@@ -29,9 +29,8 @@ pub const BRIGHT_RED: &str = "\u{001b}[31m";
 pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
 pub const RESET: &str = "\u{001b}[0m";
 
-/// Execute the given command.
-/// This function is the entry point of vgonio CLI.
-pub fn execute(cmd: SubCommand, config: Config) -> Result<(), Error> {
+/// Entry point of vgonio CLI.
+pub fn run(cmd: SubCommand, config: Config) -> Result<(), Error> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
         SubCommand::PrintInfo(opts) => print_info(opts, config),
@@ -129,7 +128,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     }
 
     cache
-        .get_loaded_surface_paths()
+        .loaded_micro_surface_paths()
         .unwrap()
         .iter()
         .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
@@ -462,7 +461,7 @@ fn measure_microfacet_distribution(
         let filename = format!(
             "microfacet-distribution-{}.txt",
             cache
-                .get_micro_surface_path(*surface)
+                .micro_surface_path(*surface)
                 .unwrap()
                 .file_stem()
                 .unwrap()
@@ -529,7 +528,7 @@ fn measure_microfacet_shadowing_masking(
         let filename = format!(
             "microfacet-shdowing-masking-{}.txt",
             cache
-                .get_micro_surface_path(*surface)
+                .micro_surface_path(*surface)
                 .unwrap()
                 .file_stem()
                 .unwrap()

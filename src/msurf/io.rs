@@ -9,9 +9,13 @@ use std::{
     path::Path,
 };
 
+/// Origin of the micro-geometry height field.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum HeightFieldOrigin {
+pub enum MicroSurfaceOrigin {
+    /// Micro-geometry height field from Predicting Appearance from Measured
+    /// Microgeometry of Metal Surfaces.
     Dong2015,
+    /// Micro-geometry height field from µsurf confocal microscope system.
     Usurf,
 }
 
@@ -27,7 +31,7 @@ impl MicroSurface {
     /// *.dccc).
     pub fn from_file(
         path: &Path,
-        origin: Option<HeightFieldOrigin>,
+        origin: Option<MicroSurfaceOrigin>,
         alignment: Option<AxisAlignment>,
     ) -> Result<MicroSurface, Error> {
         let file = File::open(path)?;
@@ -36,8 +40,8 @@ impl MicroSurface {
         if let Some(origin) = origin {
             // If origin is specified, call directly corresponding loading function.
             match origin {
-                HeightFieldOrigin::Dong2015 => read_ascii_dong2015(reader, true, alignment, path),
-                HeightFieldOrigin::Usurf => read_ascii_usurf(reader, true, alignment, path),
+                MicroSurfaceOrigin::Dong2015 => read_ascii_dong2015(reader, true, alignment, path),
+                MicroSurfaceOrigin::Usurf => read_ascii_usurf(reader, true, alignment, path),
             }
         } else {
             // Otherwise, try to figure out the file format by reading first several bytes.

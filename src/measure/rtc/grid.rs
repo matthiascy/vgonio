@@ -1,7 +1,7 @@
 use crate::{
     isect::{ray_tri_intersect_woop, RayTriIsect},
     measure::{scattering::reflect, Ray, RtcRecord, TrajectoryNode},
-    msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
+    msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::RefractiveIndex,
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
@@ -23,7 +23,7 @@ pub struct GridRayTracing<'hf> {
     surface: &'hf MicroSurface,
 
     /// Corresponding `TriangleMesh` of the surface.
-    surface_mesh: &'hf MicroSurfaceTriMesh,
+    surface_mesh: &'hf MicroSurfaceMesh,
 
     /// Minimum coordinates of the grid.
     pub min: IVec2,
@@ -35,9 +35,9 @@ pub struct GridRayTracing<'hf> {
     pub origin: Vec2,
 }
 
-impl<'hf> GridRayTracing<'hf> {
+impl<'ms> GridRayTracing<'ms> {
     /// Creates a new grid ray tracing object.
-    pub fn new(surface: &'hf MicroSurface, mesh: &'hf MicroSurfaceTriMesh) -> Self {
+    pub fn new(surface: &'ms MicroSurface, mesh: &'ms MicroSurfaceMesh) -> Self {
         let max = IVec2::new(surface.cols as i32 - 2, surface.rows as i32 - 2);
         let origin = Vec2::new(
             -surface.du * (surface.cols / 2) as f32,

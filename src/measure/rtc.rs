@@ -1,3 +1,5 @@
+//! Ray tracing measurement module.
+
 #[cfg(feature = "embree")]
 mod embree;
 

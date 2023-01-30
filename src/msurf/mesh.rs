@@ -1,9 +1,9 @@
-use crate::isect::Aabb;
+use crate::{app::cache::Asset, isect::Aabb};
 use glam::Vec3;
 
 /// Triangle representation of the surface mesh.
 #[derive(Debug)]
-pub struct MicroSurfaceTriMesh {
+pub struct MicroSurfaceMesh {
     /// Axis-aligned bounding box of the mesh.
     pub extent: Aabb,
 
@@ -26,7 +26,9 @@ pub struct MicroSurfaceTriMesh {
     pub facet_areas: Vec<f32>,
 }
 
-impl MicroSurfaceTriMesh {
+impl Asset for MicroSurfaceMesh {}
+
+impl MicroSurfaceMesh {
     /// Returns the surface area of a facet.
     ///
     /// # Arguments

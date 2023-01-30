@@ -4,7 +4,7 @@ use crate::{
         Config,
     },
     measure::Medium,
-    msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
+    msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::{RefractiveIndex, RefractiveIndexDatabase},
     Error,
 };
@@ -50,6 +50,20 @@ where
     }
 
     pub fn id(&self) -> Uuid { self.id }
+
+    pub fn is_null(&self) -> bool { self.id == Uuid::default() }
+}
+
+/// Default handle is a null handle.
+impl<T: Asset> Default for Handle<T> {
+    fn default() -> Self { Self::new(Uuid::default()) }
+}
+
+#[derive(Debug)]
+struct MicroSurfaceRecord {
+    path: PathBuf,
+    mesh: Handle<MicroSurfaceMesh>,
+    renderable: Option<Handle<RenderableMesh>>,
 }
 
 /// Structure for caching intermediate results and data.
@@ -57,29 +71,28 @@ where
 #[derive(Debug)]
 pub struct Cache {
     /// Path to the cache directory.
-    pub dir: std::path::PathBuf,
+    pub dir: PathBuf,
 
     /// Refractive index database.
     pub iors: RefractiveIndexDatabase,
 
-    /// Lookup table for micro-surface's path to its corresponding uuid.
-    msurf_path_to_uuid: HashMap<PathBuf, Uuid>,
+    /// Micro-surface record cache, indexed by micro-surface uuid.
+    records: HashMap<Uuid, MicroSurfaceRecord>,
 
     /// Micro-surface cache, indexed by micro-surface uuid.
     msurfs: HashMap<Uuid, MicroSurface>,
 
-    /// Micro-surface triangle mesh cache, indexed by micro-surface uuid.
-    msurf_meshes: HashMap<Uuid, MicroSurfaceTriMesh>,
+    /// Micro-surface triangle mesh cache, indexed by micro-surface mesh uuid.
+    meshes: HashMap<Uuid, MicroSurfaceMesh>,
 
-    /// Cache for `RenderableMesh`s. TODO: usage?
-    #[allow(dead_code)]
+    /// Cache for `RenderableMesh`s, indexed by renderable mesh uuid.
     renderables: HashMap<Uuid, RenderableMesh>,
 
     /// Cache for recently opened files.
-    pub recent_opened_files: Option<Vec<std::path::PathBuf>>,
+    pub recent_opened_files: Option<Vec<PathBuf>>,
 
     /// Cache for recently opened directory.
-    pub last_opened_dir: Option<std::path::PathBuf>,
+    pub last_opened_dir: Option<PathBuf>,
 }
 
 impl Cache {
@@ -87,25 +100,102 @@ impl Cache {
         Self {
             dir: cache_dir.to_path_buf(),
             msurfs: Default::default(),
-            msurf_meshes: Default::default(),
+            meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
             iors: RefractiveIndexDatabase::default(),
             renderables: Default::default(),
-            msurf_path_to_uuid: Default::default(),
+            records: Default::default(),
         }
     }
 
-    pub fn num_micro_surfaces(&self) -> usize { self.msurfs.len() }
-
-    pub fn get_loaded_surface_paths(&self) -> Option<Vec<&Path>> {
+    /// Returns a micro-surface profile [`MicroSurface`] from the cache given
+    /// its handle.
+    pub fn micro_surface(&self, handle: Handle<MicroSurface>) -> Result<&MicroSurface, Error> {
         self.msurfs
-            .keys()
-            .map(|uuid| self.msurfs.get(uuid).unwrap().path.as_deref())
-            .collect()
+            .get(&handle.id())
+            .ok_or_else(|| Error::Any("Surface not exist!".to_string()))
     }
 
-    pub fn get_micro_surface_path(&self, handle: Handle<MicroSurface>) -> Option<&Path> {
+    /// Returns a micro-surface profile [`MicroSurfaceMesh`] from the cache
+    /// given handle to the micro-surface profile.
+    pub fn micro_surface_mesh_by_surface_id(
+        &self,
+        handle: Handle<MicroSurface>,
+    ) -> Result<&MicroSurfaceMesh, Error> {
+        let record = self
+            .records
+            .get(&handle.id())
+            .ok_or_else(|| Error::Any("Surface record not exist!".to_string()))?;
+        self.meshes
+            .get(&record.mesh.id())
+            .ok_or_else(|| Error::Any("Surface mesh not exist!".to_string()))
+    }
+
+    /// Returns a micro-surface profile [`MicroSurfaceMesh`] from the cache
+    /// given its handle.
+    pub fn micro_surface_mesh(
+        &self,
+        handle: Handle<MicroSurfaceMesh>,
+    ) -> Result<&MicroSurfaceMesh, Error> {
+        self.meshes
+            .get(&handle.id())
+            .ok_or_else(|| Error::Any("Surface mesh not exist!".to_string()))
+    }
+
+    /// Creates a micro-surface renderable mesh for the given micro-surface
+    /// handle.
+    pub fn create_micro_surface_renderable_mesh(
+        &mut self,
+        device: &wgpu::Device,
+        msurf: Handle<MicroSurface>,
+    ) -> Result<Handle<RenderableMesh>, Error> {
+        let record = self
+            .records
+            .get(&msurf.id())
+            .ok_or_else(|| Error::Any(format!("{BRIGHT_RED}Surface record not exist!{RESET}")))?;
+        if record.renderable.is_some() {
+            Ok(record.renderable.unwrap())
+        } else {
+            let mesh = self
+                .meshes
+                .get(&record.mesh.id)
+                .ok_or_else(|| Error::Any(format!("{BRIGHT_RED}Surface mesh not exist!{RESET}")))?;
+            let mut renderable = RenderableMesh::from_micro_surface_mesh(device, mesh);
+            let handle = Handle::new(Uuid::new_v4());
+            self.renderables.insert(handle.id(), renderable);
+            Ok(handle)
+        }
+    }
+
+    /// Returns a micro-surface profile [`RenderableMesh`] from the cache
+    /// given handle to the micro-surface profile.
+    pub fn micro_surface_renderable_mesh_by_surface_id(
+        &self,
+        handle: Handle<MicroSurface>,
+    ) -> Result<&RenderableMesh, Error> {
+        let record = self
+            .records
+            .get(&handle.id())
+            .ok_or_else(|| Error::Any("Surface record not exist!".to_string()))?;
+        self.renderables
+            .get(&record.renderable.as_ref().unwrap().id())
+            .ok_or_else(|| Error::Any("Surface renderable not exist!".to_string()))
+    }
+
+    /// Returns a micro-surface profile [`RenderableMesh`] from the cache
+    /// given its handle.
+    pub fn micro_surface_renderable_mesh(
+        &self,
+        handle: Handle<RenderableMesh>,
+    ) -> Result<&RenderableMesh, Error> {
+        self.renderables
+            .get(&handle.id())
+            .ok_or_else(|| Error::Any("Surface renderable not exist!".to_string()))
+    }
+
+    /// Returns the file path to the micro-surface profile given its handle.
+    pub fn micro_surface_path(&self, handle: Handle<MicroSurface>) -> Option<&Path> {
         if self.msurfs.contains_key(&handle.id) {
             self.msurfs[&handle.id].path.as_deref()
         } else {
@@ -113,11 +203,130 @@ impl Cache {
         }
     }
 
-    pub fn get_micro_surface_paths(&self, handles: &[Handle<MicroSurface>]) -> Option<Vec<&Path>> {
+    /// Returns the number of loaded micro-surface profiles.
+    pub fn num_micro_surfaces(&self) -> usize { self.msurfs.len() }
+
+    /// Returns a list of micro-surface profiles [`MicroSurface`] from the
+    /// cache.
+    pub fn micro_surfaces(
+        &self,
+        handles: &[Handle<MicroSurface>],
+    ) -> Result<Vec<&MicroSurface>, Error> {
+        let mut surfaces = vec![];
+        for handle in handles {
+            let surface = self
+                .msurfs
+                .get(&handle.id())
+                .ok_or_else(|| Error::Any("Surface not exist!".to_string()))?;
+            surfaces.push(surface)
+        }
+
+        Ok(surfaces)
+    }
+
+    /// Returns a list of micro-surface meshes [`MicroSurfaceMesh`] from the
+    /// cache given a list of handles to the micro-surface profiles.
+    pub fn micro_surface_meshes_by_surface_ids(
+        &self,
+        handles: &[Handle<MicroSurface>],
+    ) -> Vec<&MicroSurfaceMesh> {
+        let mut meshes = vec![];
+        for handle in handles {
+            let record = self.records.get(&handle.id()).unwrap();
+            meshes.push(self.meshes.get(&record.mesh.id()).unwrap());
+        }
+        meshes
+    }
+
+    /// Returns a list of micro-surface meshes [`MicroSurfaceMesh`] from the
+    /// cache given its handles.
+    pub fn micro_surface_meshes(
+        &self,
+        handles: &[Handle<MicroSurfaceMesh>],
+    ) -> Vec<&MicroSurfaceMesh> {
+        let mut meshes = vec![];
+        for handle in handles {
+            meshes.push(self.meshes.get(&handle.id()).unwrap());
+        }
+        meshes
+    }
+
+    /// Returns a list of micro-surface profiles' file paths from the cache
+    /// given a list of handles to the micro-surface profiles.
+    pub fn micro_surface_paths(&self, handles: &[Handle<MicroSurface>]) -> Option<Vec<&Path>> {
         handles
             .iter()
-            .map(|handle| self.get_micro_surface_path(*handle))
+            .map(|handle| self.micro_surface_path(*handle))
             .collect()
+    }
+
+    /// Returns a list of loaded micro-surface profiles' file paths from the
+    /// cache.
+    pub fn loaded_micro_surface_paths(&self) -> Option<Vec<&Path>> {
+        self.msurfs
+            .keys()
+            .map(|uuid| self.msurfs.get(uuid).unwrap().path.as_deref())
+            .collect()
+    }
+
+    /// Loads a surface from its relevant place and returns its cache handle.
+    pub fn load_micro_surface(
+        &mut self,
+        config: &Config,
+        paths: &PathBuf,
+        alignment: Option<AxisAlignment>,
+    ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), Error> {
+        self.resolve_path(paths, config)
+            .map(|filepath| {
+                if let Some((msurf_id, record)) = self
+                    .records
+                    .iter()
+                    .find(|(_, record)| record.path == filepath)
+                {
+                    log::debug!("-- already loaded: {}", filepath.display());
+                    (Handle::new(*msurf_id), record.mesh)
+                } else {
+                    log::debug!("-- loading: {}", filepath.display());
+                    let msurf = MicroSurface::from_file(&filepath, None, alignment).unwrap(); // TODO: handle error
+                    let msurf_id = msurf.uuid;
+                    let mesh = msurf.triangulate();
+                    let mesh_id = Uuid::new_v4();
+                    self.msurfs.insert(msurf_id, msurf);
+                    self.meshes.insert(mesh_id, mesh);
+                    self.records.insert(
+                        msurf_id,
+                        MicroSurfaceRecord {
+                            path: filepath,
+                            mesh: Handle::new(mesh_id),
+                            renderable: None,
+                        },
+                    );
+                    (Handle::new(msurf_id), Handle::new(mesh_id))
+                }
+            })
+            .ok_or(Error::Any(
+                "Failed to load micro surface profile!".to_string(),
+            ))
+    }
+
+    /// Resolves a path to a file.
+    fn resolve_path(&self, path: &PathBuf, config: &Config) -> Option<PathBuf> {
+        if let Ok(stripped) = path.strip_prefix("usr://") {
+            if config.user_data_dir().is_some() {
+                config.user_data_dir().map(|p| p.join(stripped))
+            } else {
+                log::warn!(
+                    "The file path begins with `usr://`: {}, but the user data directory is not \
+                     configured.",
+                    path.display()
+                );
+                None
+            }
+        } else if let Ok(stripped) = path.strip_prefix("sys://") {
+            Some(config.sys_data_dir().join(stripped))
+        } else {
+            Some(resolve_path(&config.cwd, Some(path)))
+        }
     }
 
     /// Loads surfaces from their relevant places and returns
@@ -142,24 +351,7 @@ impl Cache {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
             .iter()
-            .filter_map(|s| {
-                if let Ok(stripped) = s.strip_prefix("usr://") {
-                    if config.user_data_dir().is_some() {
-                        config.user_data_dir().map(|p| p.join(stripped))
-                    } else {
-                        log::warn!(
-                            "The file path begins with `usr://`: {}, but the user data directory \
-                             is not configured.",
-                            s.display()
-                        );
-                        None
-                    }
-                } else if let Ok(stripped) = s.strip_prefix("sys://") {
-                    Some(config.sys_data_dir().join(stripped))
-                } else {
-                    Some(resolve_path(&config.cwd, Some(s)))
-                }
-            })
+            .filter_map(|s| self.resolve_path(s, config))
             .collect::<Vec<_>>();
         log::debug!("-- canonical paths: {:?}", canonical_paths);
         let mut loaded = vec![];
@@ -176,16 +368,30 @@ impl Cache {
                     }
                 };
                 for filepath in files_to_load {
-                    if let Some(uuid) = self.msurf_path_to_uuid.get(&filepath) {
+                    if let Some((msurf_id, _)) = self
+                        .records
+                        .iter()
+                        .find(|(_, record)| record.path == filepath)
+                    {
                         log::debug!("-- already loaded: {}", filepath.display());
-                        loaded.push(Handle::new(*uuid));
+                        loaded.push(Handle::new(*msurf_id));
                     } else {
                         log::debug!("-- loading: {}", filepath.display());
-                        let msurf = MicroSurface::from_file(&filepath, None, alignment)?;
-                        let uuid = msurf.uuid;
-                        self.msurfs.insert(uuid, msurf);
-                        self.msurf_path_to_uuid.insert(filepath, uuid);
-                        loaded.push(Handle::new(uuid));
+                        let msurf = MicroSurface::from_file(&filepath, None, alignment).unwrap(); // TODO: handle error
+                        let msurf_id = msurf.uuid;
+                        let mesh = msurf.triangulate();
+                        let mesh_id = Uuid::new_v4();
+                        self.msurfs.insert(msurf_id, msurf);
+                        self.meshes.insert(mesh_id, mesh);
+                        self.records.insert(
+                            msurf_id,
+                            MicroSurfaceRecord {
+                                path: filepath,
+                                mesh: Handle::new(mesh_id),
+                                renderable: None,
+                            },
+                        );
+                        loaded.push(Handle::new(msurf_id));
                     }
                 }
             } else {
@@ -196,51 +402,7 @@ impl Cache {
             }
         }
         log::debug!("- loaded micro surfaces: {:?}", loaded);
-        self.triangulate_surfaces(&loaded);
         Ok(loaded)
-    }
-
-    pub fn get_micro_surfaces(
-        &self,
-        handles: &[Handle<MicroSurface>],
-    ) -> Result<Vec<&MicroSurface>, Error> {
-        let mut surfaces = vec![];
-        for handle in handles {
-            let surface = self
-                .msurfs
-                .get(&handle.id())
-                .ok_or_else(|| Error::Any("Surface not exist!".to_string()))?;
-            surfaces.push(surface)
-        }
-
-        Ok(surfaces)
-    }
-
-    /// Triangulates the given micro-surface handles.
-    fn triangulate_surfaces(&mut self, handles: &[Handle<MicroSurface>]) {
-        use std::collections::hash_map::Entry;
-        handles.iter().for_each(|handle| {
-            let uuid = handle.id();
-            // Surface must exist.
-            if self.msurfs.contains_key(&uuid) {
-                // Has not been triangulated.
-                if let Entry::Vacant(entry) = self.msurf_meshes.entry(uuid) {
-                    // Triangulate the surface.
-                    entry.insert(self.msurfs.get(&uuid).unwrap().triangulate());
-                }
-            }
-        })
-    }
-
-    pub fn get_micro_surface_meshes(
-        &self,
-        handles: &[Handle<MicroSurface>],
-    ) -> Vec<&MicroSurfaceTriMesh> {
-        let mut meshes = vec![];
-        for handle in handles {
-            meshes.push(self.msurf_meshes.get(&handle.id()).unwrap())
-        }
-        meshes
     }
 
     /// Loads the refractive index database from the paths specified in the

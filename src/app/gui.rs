@@ -13,12 +13,7 @@ use crate::{
 };
 use glam::{IVec2, Mat4, Vec3};
 use std::{
-    cell::RefCell,
-    collections::HashMap,
-    default::Default,
-    path::{Path, PathBuf},
-    rc::Rc,
-    sync::Arc,
+    cell::RefCell, collections::HashMap, default::Default, ops::Deref, path::PathBuf, sync::Arc,
     time::Instant,
 };
 
@@ -31,7 +26,7 @@ use wgpu::util::DeviceExt;
 
 use crate::{
     app::{
-        cache::Cache,
+        cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
             GpuContext, RenderPass, RenderableMesh, Texture, WgpuConfig,
@@ -40,7 +35,7 @@ use crate::{
         gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
     },
     measure::rtc::GridRayTracing,
-    msurf::{AxisAlignment, MicroSurface, MicroSurfaceTriMesh},
+    msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
 };
 use winit::{
     dpi::PhysicalSize,
@@ -112,7 +107,7 @@ use self::tools::SamplingDebugger;
 use super::{gfx::WindowSurface, Config};
 
 /// Launches Vgonio GUI application.
-pub fn launch(config: Config) -> Result<(), Error> {
+pub fn run(config: Config) -> Result<(), Error> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -128,10 +123,10 @@ pub fn launch(config: Config) -> Result<(), Error> {
 
     let mut vgonio = pollster::block_on(VgonioApp::new(config, &window, &event_loop))?;
 
-    let mut last_frame_time = std::time::Instant::now();
+    let mut last_frame_time = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         let dt = now - last_frame_time;
         last_frame_time = now;
 
@@ -185,6 +180,21 @@ pub fn launch(config: Config) -> Result<(), Error> {
     })
 }
 
+/// Micro-surface presentation view.
+#[derive(Debug)]
+struct MicroSurfaceView {
+    /// Handle to the micro-surface.
+    surf: Handle<MicroSurface>,
+    /// Handle to the micro-surface mesh.
+    mesh: Handle<MicroSurfaceMesh>,
+    /// Handle to the micro-surface's renderable mesh.
+    renderable: Handle<RenderableMesh>,
+    /// Scale factor when rendering the micro-surface.
+    scale_factor: f32,
+    /// Visibility of the micro-surface in the scene.
+    visible: bool,
+}
+
 /// Vgonio client application with GUI.
 pub struct VgonioApp {
     /// GPU context for rendering.
@@ -216,22 +226,19 @@ pub struct VgonioApp {
     debug_drawing: DebugState,
     debug_drawing_enabled: bool,
 
-    // Shadow pass used for measurement of shadowing and masking function.
-    //shadow_pass: ShadowPass,
-    //occlusion_estimation_pass: OcclusionEstimationPass,
-    surface: Option<Rc<MicroSurface>>,
-    surface_mesh: Option<Rc<MicroSurfaceTriMesh>>,
-    surface_mesh_view: Option<RenderableMesh>,
-    surface_scale_factor: f32,
+    msurf: Option<MicroSurfaceView>,
 
-    opened_surfaces: Vec<PathBuf>,
-
+    // surface: Option<Rc<MicroSurface>>,
+    // surface_mesh: Option<Rc<MicroSurfaceMesh>>,
+    // surface_mesh_view: Option<RenderableMesh>,
+    // surface_scale_factor: f32,
+    // opened_surfaces: Vec<PathBuf>,
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
 
     pub demos: egui_demo_lib::DemoWindows,
     pub visual_grid_enabled: bool,
-    pub surface_visible: bool,
+    // pub surface_visible: bool,
 }
 
 impl VgonioApp {
@@ -243,7 +250,7 @@ impl VgonioApp {
     ) -> Result<Self, Error> {
         let wgpu_config = WgpuConfig {
             device_descriptor: wgpu::DeviceDescriptor {
-                label: Some("wgpu-default-device"),
+                label: Some("vgonio-wgpu-device"),
                 features: wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
                 limits: wgpu::Limits::default(),
             },
@@ -251,9 +258,7 @@ impl VgonioApp {
         };
         let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
         let win_surf = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
-
         let depth_map = DepthMap::new(&gpu_ctx, win_surf.width(), win_surf.height());
-        // Camera
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
@@ -273,15 +278,7 @@ impl VgonioApp {
         passes.insert("visual_grid", visual_grid_pass);
         passes.insert("heightfield", heightfield_pass);
 
-        // let shadow_pass = ShadowPass::new(
-        //     &gpu_ctx,
-        //     gpu_ctx.surface_config.width,
-        //     gpu_ctx.surface_config.height,
-        //     true,
-        //     true,
-        // );
-
-        let mut gui_ctx = GuiState::new(
+        let mut gui_state = GuiState::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             win_surf.format(),
@@ -301,7 +298,7 @@ impl VgonioApp {
             config.clone(),
             cache.clone(),
             &gpu_ctx,
-            &mut gui_ctx.renderer,
+            &mut gui_state.renderer,
         );
 
         let input = InputState {
@@ -312,34 +309,30 @@ impl VgonioApp {
             cursor_pos: [0.0, 0.0],
         };
 
-        //let occlusion_estimation_pass = OcclusionEstimationPass::new(&gpu_ctx, 512,
-        // 512);
         let debug_drawing = DebugState::new(&gpu_ctx, win_surf.format());
 
         Ok(Self {
             gpu_ctx,
-            gui_state: gui_ctx,
+            gui_state,
             config,
             ui: gui,
             cache,
             input,
             passes,
             depth_map,
-            // shadow_pass,
             debug_drawing,
             debug_drawing_enabled: true,
-            // occlusion_estimation_pass,
-            surface: None,
-            surface_mesh: None,
-            surface_mesh_view: None,
+            // surface: None,
+            // surface_mesh: None,
+            // surface_mesh_view: None,
+            msurf: None,
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
             demos: egui_demo_lib::DemoWindows::default(),
             visual_grid_enabled: true,
-            surface_scale_factor: 1.0,
-            opened_surfaces: vec![],
-            surface_visible: true,
+            // opened_surfaces: vec![],
+            // surface_visible: true,
             win_surf,
         })
     }
@@ -364,9 +357,6 @@ impl VgonioApp {
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
-            // self.shadow_pass
-            //     .resize(&self.gpu_ctx.device, new_size.width,
-            // new_size.height);
         }
     }
 
@@ -383,15 +373,6 @@ impl VgonioApp {
                     ..
                 } => {
                     self.input.update_key_map(*keycode, *state);
-                    // if self.input.is_key_pressed(VirtualKeyCode::K) {
-                    //     println!("Measuring geometric term ...");
-                    //     let now = Instant::now();
-                    //     //self.measure_micro_surface_geometric_term();
-                    //     println!(
-                    //         "Geometric term measurement finished in {} secs",
-                    //         (Instant::now() - now).as_secs_f32()
-                    //     );
-                    // }
                     EventResponse::Consumed
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
@@ -443,16 +424,15 @@ impl VgonioApp {
             ]),
         );
 
-        // self.shadow_pass
-        //     .update_uniforms(&self.gpu_ctx.queue, Mat4::IDENTITY, view, proj);
-
-        if let Some(hf) = &self.surface {
+        if let Some(msurf_view) = &self.msurf {
+            let cache = self.cache.deref().borrow();
+            let msurf = cache.micro_surface(msurf_view.surf).unwrap();
             let mut uniform = [0.0f32; 16 * 3 + 4];
             // Displace visually the heightfield.
             uniform[0..16].copy_from_slice(
                 &Mat4::from_translation(Vec3::new(
                     0.0,
-                    -(hf.max + hf.min) * 0.5 * self.surface_scale_factor,
+                    -(msurf.max + msurf.min) * 0.5 * msurf_view.scale_factor,
                     0.0,
                 ))
                 .to_cols_array(),
@@ -460,10 +440,10 @@ impl VgonioApp {
             uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
             uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
             uniform[48..52].copy_from_slice(&[
-                hf.min,
-                hf.max,
-                hf.max - hf.min,
-                self.surface_scale_factor,
+                msurf.min,
+                msurf.max,
+                msurf.max - msurf.min,
+                msurf_view.scale_factor,
             ]);
             self.gpu_ctx.queue.write_buffer(
                 self.passes
@@ -498,6 +478,7 @@ impl VgonioApp {
 
     /// Render the frame to the surface.
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
+        let cache = self.cache.deref().borrow();
         // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.win_surf.get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
@@ -550,14 +531,21 @@ impl VgonioApp {
                 }),
             });
 
-            if self.surface_visible {
-                if let Some(mesh) = &self.surface_mesh_view {
+            if let Some(ref msurf_view) = self.msurf {
+                if msurf_view.visible {
+                    let renderable = cache
+                        .micro_surface_renderable_mesh(msurf_view.renderable)
+                        .expect("Failed to get renderable mesh");
+
                     let pass = self.passes.get("heightfield").unwrap();
                     render_pass.set_pipeline(&pass.pipeline);
                     render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
-                    render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(mesh.index_buffer.slice(..), mesh.index_format);
-                    render_pass.draw_indexed(0..mesh.indices_count, 0, 0..1);
+                    render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        renderable.index_buffer.slice(..),
+                        renderable.index_format,
+                    );
+                    render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
                 }
             }
 
@@ -628,16 +616,28 @@ impl VgonioApp {
         match event {
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFile(handle) => {
-                // TODO: maybe not use the String here?
-                let path = handle.path().to_owned();
                 // TODO: deal with different file types
-                self.load_height_field(&path, Some(AxisAlignment::XZ));
-                if !self.opened_surfaces.contains(&path) {
-                    self.opened_surfaces.push(path);
-                }
+                let path: PathBuf = handle.into();
+                log::debug!("Opening file: {:?}", path);
+                let cache = self.cache.deref();
+                let (surf, mesh) = cache
+                    .borrow_mut()
+                    .load_micro_surface(&self.config, &path, Some(AxisAlignment::XZ))
+                    .unwrap();
                 self.ui
                     .simulation_workspace
-                    .update_surface_list(&self.opened_surfaces);
+                    .update_surface_list(&cache.borrow().loaded_micro_surface_paths().unwrap());
+                let renderable = cache
+                    .borrow_mut()
+                    .create_micro_surface_renderable_mesh(&self.gpu_ctx.device, surf)
+                    .unwrap();
+                self.msurf = Some(MicroSurfaceView {
+                    surf,
+                    mesh,
+                    renderable,
+                    scale_factor: 1.0,
+                    visible: true,
+                });
             }
             VgonioEvent::ToggleGrid => {
                 self.visual_grid_enabled = !self.visual_grid_enabled;
@@ -662,25 +662,28 @@ impl VgonioApp {
                     );
             }
             VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
-                self.surface_scale_factor = factor;
+                if let Some(msurf_view) = &mut self.msurf {
+                    msurf_view.scale_factor = factor;
+                }
             }
             VgonioEvent::UpdateDebugT(t) => {
                 self.debug_drawing.ray_t = t;
             }
             VgonioEvent::UpdatePrimId(prim_id) => {
-                if let Some(mesh) = &self.surface_mesh {
+                if let Some(msurf_view) = &self.msurf {
+                    let cache = self.cache.deref().borrow();
+                    let msurf = cache.micro_surface_mesh(msurf_view.mesh).unwrap();
                     let id = prim_id as usize;
-                    if id < mesh.facets.len() {
+                    if id < msurf.facets.len() {
                         let indices = [
-                            mesh.facets[id * 3],
-                            mesh.facets[id * 3 + 1],
-                            mesh.facets[id * 3 + 2],
+                            msurf.facets[id * 3],
+                            msurf.facets[id * 3 + 1],
+                            msurf.facets[id * 3 + 2],
                         ];
-                        //let indices = mesh.faces[id];
                         let vertices = [
-                            mesh.verts[indices[0] as usize],
-                            mesh.verts[indices[1] as usize],
-                            mesh.verts[indices[2] as usize],
+                            msurf.verts[indices[0] as usize],
+                            msurf.verts[indices[1] as usize],
+                            msurf.verts[indices[2] as usize],
                         ];
                         log::debug!(
                             "query prim {}: {:?}\n    p0: {:?}\n    p1: {:?}\n    p2: {:?}",
@@ -704,8 +707,8 @@ impl VgonioApp {
                 max_bounces,
             } => {
                 log::debug!("= = = = [Debug Ray Tracing] = = = =\n  => {:?}", ray);
-                if self.surface.is_none() {
-                    log::warn!("No heightfield loaded, can't trace ray!");
+                if self.msurf.is_none() {
+                    log::warn!("No micro-surface loaded, can't trace ray!");
                 } else {
                     match method {
                         #[cfg(feature = "embree")]
@@ -719,9 +722,14 @@ impl VgonioApp {
                         }
                         RtcMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
+                            let cache = self.cache.deref().borrow();
                             let grid_rt = GridRayTracing::new(
-                                self.surface.as_ref().unwrap(),
-                                self.surface_mesh.as_ref().unwrap(),
+                                cache
+                                    .micro_surface(self.msurf.as_ref().unwrap().surf)
+                                    .unwrap(),
+                                cache
+                                    .micro_surface_mesh(self.msurf.as_ref().unwrap().mesh)
+                                    .unwrap(),
                             );
                             self.debug_drawing.rays =
                                 trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
@@ -751,7 +759,9 @@ impl VgonioApp {
                 println!("Debug drawing: {}", self.debug_drawing_enabled);
             }
             VgonioEvent::ToggleSurfaceVisibility => {
-                self.surface_visible = !self.surface_visible;
+                if let Some(msurf_view) = &mut self.msurf {
+                    msurf_view.visible = !msurf_view.visible;
+                }
             }
             VgonioEvent::UpdateSamplingDebugger {
                 count,
@@ -783,26 +793,26 @@ impl VgonioApp {
         }
     }
 
-    fn load_height_field(&mut self, path: &Path, alignment: Option<AxisAlignment>) {
-        match MicroSurface::from_file(path, None, alignment) {
-            Ok(mut hf) => {
-                log::info!(
-                    "Heightfield loaded: {}, rows = {}, cols = {}, du = {}, dv = {}",
-                    path.display(),
-                    hf.rows,
-                    hf.cols,
-                    hf.du,
-                    hf.dv
-                );
-                let mesh = hf.triangulate();
-                self.surface = Some(Rc::new(hf));
-                self.surface_mesh = Some(Rc::new(mesh));
-            }
-            Err(err) => {
-                log::error!("HeightField loading error: {}", err);
-            }
-        }
-    }
+    // fn load_height_field(&mut self, path: &Path, alignment:
+    // Option<AxisAlignment>) {     match MicroSurface::from_file(path, None,
+    // alignment) {         Ok(mut hf) => {
+    //             log::info!(
+    //                 "Heightfield loaded: {}, rows = {}, cols = {}, du = {}, dv =
+    // {}",                 path.display(),
+    //                 hf.rows,
+    //                 hf.cols,
+    //                 hf.du,
+    //                 hf.dv
+    //             );
+    //             let mesh = hf.triangulate();
+    //             self.surface = Some(Rc::new(hf));
+    //             self.surface_mesh = Some(Rc::new(mesh));
+    //         }
+    //         Err(err) => {
+    //             log::error!("HeightField loading error: {}", err);
+    //         }
+    //     }
+    // }
 }
 
 fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {

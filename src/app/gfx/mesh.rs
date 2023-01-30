@@ -1,11 +1,10 @@
 use crate::{
-    app::gfx::VertexLayout,
+    app::{cache::Asset, gfx::VertexLayout},
     isect::Aabb,
-    msurf::{regular_triangulation, MicroSurface, MicroSurfaceTriMesh},
+    msurf::{regular_triangulation, MicroSurface, MicroSurfaceMesh},
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
-use wgpu::{util::DeviceExt, PrimitiveTopology, VertexFormat};
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
@@ -20,9 +19,12 @@ pub struct RenderableMesh {
     pub topology: wgpu::PrimitiveTopology,
 }
 
+impl Asset for RenderableMesh {}
+
 // TODO: create a separate method to extract face normals of an heightfield
 impl RenderableMesh {
-    pub fn from_micro_surface_tri_mesh(device: &wgpu::Device, surf: &MicroSurface) -> Self {
+    pub fn from_micro_surface(device: &wgpu::Device, surf: &MicroSurface) -> Self {
+        use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (surf.cols, surf.rows);
         let (positions, extent) = surf.generate_vertices();
@@ -52,7 +54,7 @@ impl RenderableMesh {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let vertex_layout = VertexLayout::new(&[VertexFormat::Float32x3], None);
+        let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
         Self {
             vertices_count: vertices_count as u32,
@@ -62,11 +64,12 @@ impl RenderableMesh {
             vertex_buffer,
             index_buffer,
             index_format: wgpu::IndexFormat::Uint32,
-            topology: PrimitiveTopology::TriangleList,
+            topology: wgpu::PrimitiveTopology::TriangleList,
         }
     }
 
-    pub fn from_triangle_mesh(device: &wgpu::Device, mesh: &MicroSurfaceTriMesh) -> Self {
+    pub fn from_micro_surface_mesh(device: &wgpu::Device, mesh: &MicroSurfaceMesh) -> Self {
+        use wgpu::util::DeviceExt;
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("mesh_view_vertex_buffer"),
             contents: bytemuck::cast_slice(&mesh.verts),
@@ -79,7 +82,7 @@ impl RenderableMesh {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let vertex_layout = VertexLayout::new(&[VertexFormat::Float32x3], None);
+        let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
         log::debug!(
             "TriangleMesh --> MeshView, num verts: {}, num faces: {}, num indices: {}",
@@ -96,7 +99,7 @@ impl RenderableMesh {
             vertex_buffer,
             index_buffer,
             index_format: wgpu::IndexFormat::Uint32,
-            topology: PrimitiveTopology::TriangleList,
+            topology: wgpu::PrimitiveTopology::TriangleList,
         }
     }
 }
@@ -110,6 +113,7 @@ impl RenderableMesh {
         topology: wgpu::PrimitiveTopology,
         index_format: wgpu::IndexFormat,
     ) -> Self {
+        use wgpu::util::DeviceExt;
         let mut extent = Aabb::default();
         for v in vertices.iter() {
             for k in 0..3 {

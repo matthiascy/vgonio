@@ -137,12 +137,13 @@ pub struct LightSource {
     pub proj_kind: ProjectionKind,
 }
 
-/// Light space matrix used for generation of depth map.
+/// Light space matrix data uploaded to GPU during generation of depth map.
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct LightSourceRaw([f32; 16]);
 
 impl LightSource {
+    /// Returns the GPU data of the light source.
     pub fn to_raw(&self) -> LightSourceRaw {
         let forward = -self.pos;
         let up = if forward == -Vec3::Y {

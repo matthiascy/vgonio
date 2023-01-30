@@ -8,7 +8,7 @@ use std::path::PathBuf;
 mod io;
 mod mesh;
 
-pub use mesh::MicroSurfaceTriMesh;
+pub use mesh::MicroSurfaceMesh;
 
 /// Static variable used to generate height field name.
 static mut MICRO_SURFACE_COUNTER: u32 = 0;
@@ -491,7 +491,7 @@ impl MicroSurface {
     }
 
     /// Triangulate the heightfield into a [`TriangleMesh`].
-    pub fn triangulate(&self) -> MicroSurfaceTriMesh {
+    pub fn triangulate(&self) -> MicroSurfaceMesh {
         let (verts, extent) = self.generate_vertices();
         let faces = regular_triangulation(&verts, self.cols, self.rows);
         let num_tris = faces.len() / 3;
@@ -508,7 +508,7 @@ impl MicroSurface {
             areas[i] = 0.5 * cross.length();
         }
 
-        MicroSurfaceTriMesh {
+        MicroSurfaceMesh {
             num_facets: num_tris,
             num_verts: verts.len(),
             extent,
