@@ -5,6 +5,7 @@
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
 #![feature(is_some_and)]
+#![feature(vec_push_within_capacity)]
 #![warn(missing_docs)]
 
 extern crate core;

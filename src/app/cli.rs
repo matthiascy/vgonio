@@ -2,7 +2,7 @@ use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 
 use crate::{
     app::{
-        args::{FastMeasurementKind, MeasureOptions, PrintInfoKind, SubCommand},
+        args::{FastMeasurementKind, MeasureOptions, SubCommand},
         cache::{resolve_path, Cache},
         Config,
     },
@@ -19,10 +19,7 @@ use crate::{
     Error,
 };
 
-use super::{
-    args::{GenerateOptions, PrintInfoOptions},
-    cache::Handle,
-};
+use super::{args::GenerateOptions, cache::Handle};
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_RED: &str = "\u{001b}[31m";

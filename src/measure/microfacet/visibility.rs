@@ -15,7 +15,7 @@ use crate::{
 };
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use std::{num::NonZeroU32, ops::Deref, path::Path};
+use std::{num::NonZeroU32, path::Path};
 use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of
@@ -66,14 +66,22 @@ pub struct VisibilityEstimator {
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 struct Uniforms {
     proj_view_matrix: [f32; 16],
-    meas_point_index: [u32; 4],
+    meas_point_index: [u32; 2],
+    /// Number of measurement stored inside of one layered texture.
+    /// Same as number of [`DepthAttachment::layers_per_texture`].
+    meas_point_per_depth_map: [u32; 2],
+}
+
+impl Uniforms {
+    const SIZE_IN_BYTES: wgpu::BufferAddress = std::mem::size_of::<Self>() as u64;
 }
 
 impl Default for Uniforms {
     fn default() -> Self {
         Self {
             proj_view_matrix: Mat4::IDENTITY.to_cols_array(),
-            meas_point_index: [0, 0, 0, 0],
+            meas_point_index: [0, 0],
+            meas_point_per_depth_map: [0, 0],
         }
     }
 }
@@ -107,7 +115,7 @@ impl VisibilityEstimation {
 /// function estimation.
 impl VisibilityEstimator {
     /// Texture format used for the color attachment.
-    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
+    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
     /// Bytes per pixel of the color attachment.
     pub const COLOR_ATTACHMENT_FORMAT_BPP: u32 = gfx::tex_fmt_bpp(Self::COLOR_ATTACHMENT_FORMAT);
@@ -143,7 +151,7 @@ impl VisibilityEstimator {
         );
         let measurement_points_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("occlusion-estimator-measurement-points"),
-            size: MeasurementPointGpuData::SIZE_IN_BYTES * meas_count as u64,
+            size: Uniforms::SIZE_IN_BYTES * meas_count as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
@@ -254,24 +262,28 @@ impl VisibilityEstimator {
         };
 
         let render_pass = {
-            let bind_group_layout =
+            let uniform_bind_group_layout =
                 ctx.device
                     .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: Some("oc_render_pass_bind_group_layout"),
+                        label: Some("oc_render_pass_uniform_bind_group_layout"),
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: wgpu::BufferSize::new(uniform_buffer_size),
+                            },
+                            count: None,
+                        }],
+                    });
+            let depth_map_bind_group_layout =
+                ctx.device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("oc_render_pass_depth_map_bind_group_layout"),
                         entries: &[
                             wgpu::BindGroupLayoutEntry {
                                 binding: 0,
-                                visibility: wgpu::ShaderStages::VERTEX
-                                    | wgpu::ShaderStages::FRAGMENT,
-                                ty: wgpu::BindingType::Buffer {
-                                    ty: wgpu::BufferBindingType::Uniform,
-                                    has_dynamic_offset: false,
-                                    min_binding_size: wgpu::BufferSize::new(uniform_buffer_size),
-                                },
-                                count: None,
-                            },
-                            wgpu::BindGroupLayoutEntry {
-                                binding: 1,
                                 visibility: wgpu::ShaderStages::FRAGMENT,
                                 ty: wgpu::BindingType::Texture {
                                     sample_type: wgpu::TextureSampleType::Depth,
@@ -281,7 +293,7 @@ impl VisibilityEstimator {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 2,
+                                binding: 1,
                                 visibility: wgpu::ShaderStages::FRAGMENT,
                                 ty: wgpu::BindingType::Sampler(
                                     wgpu::SamplerBindingType::Comparison,
@@ -290,29 +302,57 @@ impl VisibilityEstimator {
                             },
                         ],
                     });
-            let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("oc_render_pass_bind_group"),
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
+            let mut bind_groups = Vec::with_capacity(1 + depth_attachment.textures.len());
+            log::debug!(
+                "Creating {} bind groups for render pass",
+                bind_groups.capacity()
+            );
+            bind_groups
+                .push_within_capacity(ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("oc_render_pass_uniform_bind_group"),
+                    layout: &uniform_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
                         binding: 0,
                         resource: uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(depth_attachment.whole_view()),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&depth_attachment.sampler),
-                    },
-                ],
-            });
+                    }],
+                }))
+                .unwrap();
+            depth_attachment
+                .textures
+                .iter()
+                .enumerate()
+                .for_each(|(i, texture)| {
+                    bind_groups
+                        .push_within_capacity(ctx.device.create_bind_group(
+                            &wgpu::BindGroupDescriptor {
+                                label: Some(&format!("oc_render_pass_depth_map_bind_group_{i}")),
+                                layout: &depth_map_bind_group_layout,
+                                entries: &[
+                                    wgpu::BindGroupEntry {
+                                        binding: 0,
+                                        resource: wgpu::BindingResource::TextureView(
+                                            texture.whole_view(),
+                                        ),
+                                    },
+                                    wgpu::BindGroupEntry {
+                                        binding: 1,
+                                        resource: wgpu::BindingResource::Sampler(
+                                            &depth_attachment.sampler,
+                                        ),
+                                    },
+                                ],
+                            },
+                        ))
+                        .unwrap();
+                });
             let pipeline_layout =
                 ctx.device
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some("oc_render_pass_pipeline_layout"),
-                        bind_group_layouts: &[&bind_group_layout],
+                        bind_group_layouts: &[
+                            &uniform_bind_group_layout,
+                            &depth_map_bind_group_layout,
+                        ],
                         push_constant_ranges: &[],
                     });
             let pipeline = ctx
@@ -368,7 +408,7 @@ impl VisibilityEstimator {
                 });
             RenderPass {
                 pipeline,
-                bind_groups: vec![bind_group],
+                bind_groups,
                 uniform_buffer: None,
             }
         };
@@ -400,8 +440,8 @@ impl VisibilityEstimator {
         );
         let data = meas_points
             .iter()
-            .map(|mp| (*mp).into())
-            .collect::<Vec<MeasurementPointGpuData>>();
+            .map(|mp| mp.to_shader_uniforms(self.depth_attachment.layers_per_texture))
+            .collect::<Vec<Uniforms>>();
         queue.write_buffer(
             &self.measurement_points_buffer,
             0,
@@ -430,10 +470,10 @@ impl VisibilityEstimator {
             encoder.push_debug_group(&format!("oc_depth_maps_bake_{i}"));
             encoder.copy_buffer_to_buffer(
                 &self.measurement_points_buffer,
-                i as u64 * MeasurementPointGpuData::SIZE_IN_BYTES,
+                i as u64 * Uniforms::SIZE_IN_BYTES,
                 &self.uniform_buffer,
                 0,
-                MeasurementPointGpuData::SIZE_IN_BYTES,
+                Uniforms::SIZE_IN_BYTES,
             );
             encoder.insert_debug_marker("bake all facets");
             {
@@ -483,10 +523,10 @@ impl VisibilityEstimator {
             encoder.push_debug_group(&format!("oc_render_pass_{i}"));
             encoder.copy_buffer_to_buffer(
                 &self.measurement_points_buffer,
-                i as u64 * MeasurementPointGpuData::SIZE_IN_BYTES,
+                i as u64 * Uniforms::SIZE_IN_BYTES,
                 &self.uniform_buffer,
                 0,
-                MeasurementPointGpuData::SIZE_IN_BYTES,
+                Uniforms::SIZE_IN_BYTES,
             );
             encoder.insert_debug_marker("render all visible facets");
             {
@@ -508,8 +548,16 @@ impl VisibilityEstimator {
                     depth_stencil_attachment: None,
                 });
 
+                let depth_map_idx = self.depth_attachment.texture_index_of_layer(i);
+                log::trace!("layer {} in texture {}", i, depth_map_idx);
+
                 render_pass.set_pipeline(&self.render_pass.pipeline);
                 render_pass.set_bind_group(0, &self.render_pass.bind_groups[0], &[]);
+                render_pass.set_bind_group(
+                    1,
+                    &self.render_pass.bind_groups[depth_map_idx as usize + 1],
+                    &[],
+                );
                 render_pass.set_vertex_buffer(0, facets_vtx_buf.slice(..));
                 render_pass.set_index_buffer(visible_facets_idx_buf.slice(..), Self::INDEX_FORMAT);
                 render_pass.draw_indexed(0..visible_facets_idx_num, 0, 0..1);
@@ -529,6 +577,7 @@ impl VisibilityEstimator {
         dir: &Path,
         as_image: bool,
     ) -> Result<(), Error> {
+        log::info!("Saving color attachment to {:?}", dir);
         self.color_attachment.save(device, dir, as_image)
     }
 
@@ -539,6 +588,7 @@ impl VisibilityEstimator {
         dir: &Path,
         as_image: bool,
     ) -> Result<(), Error> {
+        log::info!("Saving depth attachment to {:?}", dir);
         self.depth_attachment.save(device, dir, as_image)
     }
 
@@ -546,89 +596,99 @@ impl VisibilityEstimator {
     ///
     /// The `bake` and `estimate` methods must be called before this method.
     pub fn compute_visibility(&self, device: &wgpu::Device) -> Vec<VisibilityEstimation> {
+        log::info!("Computing visibility...");
         use rayon::{
             prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
             slice::ParallelSlice,
         };
-        let results = {
-            let buffer = self.color_attachment.storage.slice(..);
-            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-            buffer.map_async(wgpu::MapMode::Read, move |result| {
-                sender.send(result).unwrap();
-            });
-            device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async {
-                receiver.receive().await.unwrap().unwrap();
-            });
-            let buffer_view = buffer.get_mapped_range();
-            if self.color_attachment.is_8bit() {
-                buffer_view
-                    .par_chunks_exact(self.color_attachment.inner.layer_size_in_bytes as usize)
-                    .map(|layer| {
-                        layer
-                            .par_iter()
-                            .chunks(4)
-                            .fold(VisibilityEstimation::default, |acc, chunk| {
-                                let value = *chunk[0] as u32;
-                                if value == 0 {
-                                    acc
-                                } else {
-                                    VisibilityEstimation {
-                                        area_sans_occlusion: acc.area_sans_occlusion + value,
-                                        area_avec_occlusion: acc.area_avec_occlusion + 1,
-                                    }
-                                }
+        self.color_attachment
+            .storage_buffers
+            .iter()
+            .zip(self.color_attachment.textures.iter())
+            .flat_map(|(storage, texture)| {
+                let estimations = {
+                    let buffer = storage.slice(..);
+                    let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+                    buffer.map_async(wgpu::MapMode::Read, move |result| {
+                        sender.send(result).unwrap();
+                    });
+                    device.poll(wgpu::Maintain::Wait);
+                    pollster::block_on(async {
+                        receiver.receive().await.unwrap().unwrap();
+                    });
+                    let buffer_view = buffer.get_mapped_range();
+                    if self.color_attachment.is_8bit() {
+                        buffer_view
+                            .par_chunks_exact(texture.layer_size_in_bytes as usize)
+                            .map(|layer| {
+                                layer
+                                    .par_iter()
+                                    .chunks(4)
+                                    .fold(VisibilityEstimation::default, |acc, chunk| {
+                                        let value = *chunk[0] as u32;
+                                        if value == 0 {
+                                            acc
+                                        } else {
+                                            VisibilityEstimation {
+                                                area_sans_occlusion: acc.area_sans_occlusion
+                                                    + value,
+                                                area_avec_occlusion: acc.area_avec_occlusion + 1,
+                                            }
+                                        }
+                                    })
+                                    .reduce(VisibilityEstimation::default, |acc1, acc2| {
+                                        VisibilityEstimation {
+                                            area_sans_occlusion: acc1.area_sans_occlusion
+                                                + acc2.area_sans_occlusion,
+                                            area_avec_occlusion: acc1.area_avec_occlusion
+                                                + acc2.area_avec_occlusion,
+                                        }
+                                    })
                             })
-                            .reduce(VisibilityEstimation::default, |acc1, acc2| {
-                                VisibilityEstimation {
-                                    area_sans_occlusion: acc1.area_sans_occlusion
-                                        + acc2.area_sans_occlusion,
-                                    area_avec_occlusion: acc1.area_avec_occlusion
-                                        + acc2.area_avec_occlusion,
-                                }
+                            .collect::<Vec<_>>()
+                    } else {
+                        buffer_view
+                            .par_chunks_exact(texture.layer_size_in_bytes as usize)
+                            .map(|layer| {
+                                layer
+                                    .par_iter()
+                                    .chunks(4)
+                                    .fold(VisibilityEstimation::default, |acc, chunk| {
+                                        let rgba = u32::from_le_bytes([
+                                            *chunk[0], *chunk[1], *chunk[2], *chunk[3],
+                                        ]);
+                                        let value = rgba & 0x03FF;
+                                        if value == 0 {
+                                            acc
+                                        } else {
+                                            VisibilityEstimation {
+                                                area_sans_occlusion: acc.area_sans_occlusion
+                                                    + value,
+                                                area_avec_occlusion: acc.area_avec_occlusion + 1,
+                                            }
+                                        }
+                                    })
+                                    .reduce(VisibilityEstimation::default, |acc1, acc2| {
+                                        VisibilityEstimation {
+                                            area_sans_occlusion: acc1.area_sans_occlusion
+                                                + acc2.area_sans_occlusion,
+                                            area_avec_occlusion: acc1.area_avec_occlusion
+                                                + acc2.area_avec_occlusion,
+                                        }
+                                    })
                             })
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                buffer_view
-                    .par_chunks_exact(self.color_attachment.inner.layer_size_in_bytes as usize)
-                    .map(|layer| {
-                        layer
-                            .par_iter()
-                            .chunks(4)
-                            .fold(VisibilityEstimation::default, |acc, chunk| {
-                                let rgba = u32::from_le_bytes([
-                                    *chunk[0], *chunk[1], *chunk[2], *chunk[3],
-                                ]);
-                                let value = rgba & 0x03FF;
-                                if value == 0 {
-                                    acc
-                                } else {
-                                    VisibilityEstimation {
-                                        area_sans_occlusion: acc.area_sans_occlusion + value,
-                                        area_avec_occlusion: acc.area_avec_occlusion + 1,
-                                    }
-                                }
-                            })
-                            .reduce(VisibilityEstimation::default, |acc1, acc2| {
-                                VisibilityEstimation {
-                                    area_sans_occlusion: acc1.area_sans_occlusion
-                                        + acc2.area_sans_occlusion,
-                                    area_avec_occlusion: acc1.area_avec_occlusion
-                                        + acc2.area_avec_occlusion,
-                                }
-                            })
-                    })
-                    .collect::<Vec<_>>()
-            }
-        };
-        self.color_attachment.storage.unmap();
-        results
+                            .collect::<Vec<_>>()
+                    }
+                };
+                storage.unmap();
+                estimations
+            })
+            .collect::<Vec<_>>()
     }
 }
 
 /// An array of 2D textures.
-pub struct LayeredAttachment {
+pub struct LayeredTexture {
     /// The type of texture used for the depth attachment.
     pub format: wgpu::TextureFormat,
     /// The texture.
@@ -640,9 +700,11 @@ pub struct LayeredAttachment {
     pub extent: wgpu::Extent3d,
     /// The number of bytes of each layer of the texture.
     pub layer_size_in_bytes: u64,
+    /// The number of bytes of the whole texture.
+    pub size_in_bytes: u64,
 }
 
-impl LayeredAttachment {
+impl LayeredTexture {
     /// Creates a new layered texture.
     ///
     /// # Arguments
@@ -677,7 +739,15 @@ impl LayeredAttachment {
                 | wgpu::TextureUsages::COPY_SRC,
         });
         let mut views = Vec::with_capacity(layers as usize + 1);
-        views.push(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+        views.push(texture.create_view(&wgpu::TextureViewDescriptor {
+            label,
+            format: Some(format),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            aspect: wgpu::TextureAspect::All,
+            base_array_layer: 0,
+            array_layer_count: Some(NonZeroU32::new(layers).unwrap()),
+            ..Default::default()
+        }));
         for i in 0..layers {
             views.push(texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some("oc_depth_texture_layer_view"),
@@ -697,11 +767,17 @@ impl LayeredAttachment {
             views,
             extent,
             layer_size_in_bytes,
+            size_in_bytes: layer_size_in_bytes * layers as u64,
         }
     }
 
     /// Copies the texture data to the storage.
-    pub fn copy_to_buffer(&self, encoder: &mut wgpu::CommandEncoder, buffer: &wgpu::Buffer) {
+    pub fn copy_to_buffer(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        buffer: &wgpu::Buffer,
+        offset: u64,
+    ) {
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
                 texture: &self.texture,
@@ -712,7 +788,7 @@ impl LayeredAttachment {
             wgpu::ImageCopyBuffer {
                 buffer,
                 layout: wgpu::ImageDataLayout {
-                    offset: 0,
+                    offset,
                     bytes_per_row: NonZeroU32::new(
                         self.extent.width * gfx::tex_fmt_bpp(self.format),
                     ),
@@ -736,36 +812,22 @@ impl LayeredAttachment {
 /// Depth attachment used for occlusion estimation, which is a layered texture
 /// with the same size as the color attachment; each layer is a depth
 /// map of the micro-surface at a specific angle.
+///
+/// Because of hardware limitations, the depth attachment is an array of layered
+/// textures.
 struct DepthAttachment {
     /// The texture used for the depth attachment.
-    inner: LayeredAttachment,
+    textures: Vec<LayeredTexture>,
+    /// Number of layers of all the textures.
+    layers: u32,
+    /// Maximum number of layers per texture.
+    layers_per_texture: u32,
     /// The sampler used to sample the depth map in the shader.
     sampler: wgpu::Sampler,
     /// The storage of the texture data in case the data need to be saved.
-    storage: wgpu::Buffer,
-}
-
-impl Deref for DepthAttachment {
-    type Target = LayeredAttachment;
-
-    fn deref(&self) -> &Self::Target { &self.inner }
-}
-
-/// Color attachment used for occlusion estimation, which is a texture with the
-/// same size as the depth attachment. The number of non-zero pixels is the area
-/// of micro-facets together with the occlusion. The sum of values of all pixels
-/// is the area of micro-facets in total without occlusion.
-struct ColorAttachment {
-    /// The texture used for the color attachment.
-    inner: LayeredAttachment,
-    /// The storage of the texture data in case the data need to be saved.
-    storage: wgpu::Buffer,
-}
-
-impl Deref for ColorAttachment {
-    type Target = LayeredAttachment;
-
-    fn deref(&self) -> &Self::Target { &self.inner }
+    /// Each texture is stored in a separate buffer. It has the same length
+    /// as the textures array.
+    storage_buffers: Vec<wgpu::Buffer>,
 }
 
 impl DepthAttachment {
@@ -776,7 +838,7 @@ impl DepthAttachment {
     /// * `device` - The wgpu device.
     /// * `width` - The width of the texture.
     /// * `height` - The height of the texture.
-    /// * `layers` - The number of layers of the texture.
+    /// * `layers` - The number of layers in total.
     /// * `format` - The format of the depth texture.
     pub fn new(
         device: &wgpu::Device,
@@ -796,82 +858,161 @@ impl DepthAttachment {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
-        let inner = LayeredAttachment::new(
-            device,
-            width,
-            height,
+        let layers_per_texture = device.limits().max_texture_array_layers;
+        let mut textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
+        log::debug!(
+            "Creating depth attachment with {} layers, {} textures, {} layers per texture",
             layers,
-            format,
-            Some("oc_depth_texture"),
+            textures_count,
+            layers_per_texture
         );
-        let storage = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("oc_depth_texture_storage"),
-            size: inner.layer_size_in_bytes * layers as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        Self {
-            inner,
-            sampler,
-            storage,
+        let mut textures = Vec::with_capacity(textures_count as usize);
+        let mut layers_left = layers;
+        while layers_left > 0 {
+            let layers_in_this_texture = layers_left.min(layers_per_texture);
+            textures.push(LayeredTexture::new(
+                device,
+                width,
+                height,
+                layers_in_this_texture,
+                format,
+                Some(&format!("oc_depth_texture_part_{}", textures.len())),
+            ));
+            layers_left -= layers_in_this_texture;
         }
+
+        let storage_buffers = textures
+            .iter()
+            .enumerate()
+            .map(|(i, texture)| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(&format!("oc_depth_texture_storage_buffer_{i}")),
+                    size: texture.size_in_bytes,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                })
+            })
+            .collect();
+        Self {
+            textures,
+            sampler,
+            storage_buffers,
+            layers,
+            layers_per_texture,
+        }
+    }
+
+    /// Number of layers in total.
+    pub fn layers(&self) -> u32 { self.layers }
+
+    /// Returns the texture view of the specified layer of the whole attachment.
+    pub fn layer_view(&self, layer: u32) -> &wgpu::TextureView {
+        assert!(layer < self.layers, "Layer index out of range");
+        let texture_index = layer / self.layers_per_texture;
+        let layer_in_texture = layer % self.layers_per_texture;
+        self.textures[texture_index as usize].layer_view(layer_in_texture)
+    }
+
+    /// Returns the texture index of the specified layer.
+    pub fn texture_index_of_layer(&self, layer: u32) -> u32 {
+        assert!(layer < self.layers, "Layer index out of range");
+        layer / self.layers_per_texture
     }
 
     /// Copies the texture data to the storage.
     pub fn copy_to_storage(&self, encoder: &mut wgpu::CommandEncoder) {
-        self.inner.copy_to_buffer(encoder, &self.storage);
+        self.textures
+            .iter()
+            .zip(self.storage_buffers.iter())
+            .for_each(|(texture, storage)| {
+                texture.copy_to_buffer(encoder, storage, 0);
+            });
     }
 
     /// Save the attachment data to files.
     pub fn save(&self, device: &wgpu::Device, dir: &Path, as_image: bool) -> Result<(), Error> {
-        {
-            let buffer = self.storage.slice(..);
-            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-            buffer.map_async(wgpu::MapMode::Read, move |result| {
-                sender.send(result).unwrap();
-            });
-            device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async {
-                receiver.receive().await.unwrap().unwrap();
-            });
-            let buffer_view = buffer.get_mapped_range();
-            let (_, data, _) = unsafe { buffer_view.align_to::<f32>() };
-
-            if !dir.exists() {
-                std::fs::create_dir_all(dir).unwrap();
-            }
-
-            let num_pixels = (self.extent.width * self.extent.height) as usize;
-
-            if as_image {
-                use image::{ImageBuffer, Luma};
-                for (i, layer) in data.chunks_exact(num_pixels).enumerate() {
-                    let mut img = ImageBuffer::new(self.extent.width, self.extent.height);
-                    for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let index = (y * self.extent.width + x) as usize;
-                        *pixel = Luma([(layer[index] * 255.0) as u8]);
+        self.textures
+            .iter()
+            .zip(self.storage_buffers.iter())
+            .enumerate()
+            .for_each(|(storage_texture_index, (texture, storage))| {
+                {
+                    let buffer = storage.slice(..);
+                    let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+                    buffer.map_async(wgpu::MapMode::Read, move |result| {
+                        sender.send(result).unwrap();
+                    });
+                    device.poll(wgpu::Maintain::Wait);
+                    pollster::block_on(async {
+                        receiver.receive().await.unwrap().unwrap();
+                    });
+                    let buffer_view = buffer.get_mapped_range();
+                    let (_, data, _) = unsafe { buffer_view.align_to::<f32>() };
+                    if !dir.exists() {
+                        std::fs::create_dir_all(dir).unwrap();
                     }
-                    let path = dir.join(format!("depth_layer_{i:04}.png"));
-                    img.save(path)?;
-                }
-            } else {
-                use std::io::Write;
-                for (i, layer) in data.chunks_exact(num_pixels).enumerate() {
-                    let mut file =
-                        std::fs::File::create(dir.join(format!("depth_layer_{i:04}.txt"))).unwrap();
-                    for (j, val) in layer.iter().enumerate() {
-                        if j % self.extent.width as usize == 0 {
-                            writeln!(file, "{val}")?;
-                        } else {
-                            write!(file, "{val} ")?;
+                    let width = texture.extent.width;
+                    let height = texture.extent.height;
+
+                    let num_pixels = (width * height) as usize;
+
+                    if as_image {
+                        use image::{ImageBuffer, Luma};
+                        for (i, layer) in data.chunks_exact(num_pixels).enumerate() {
+                            let mut img = ImageBuffer::new(width, height);
+                            for (x, y, pixel) in img.enumerate_pixels_mut() {
+                                let index = (y * width + x) as usize;
+                                *pixel = Luma([(layer[index] * 255.0) as u8]);
+                            }
+                            let path = dir.join(format!(
+                                "depth_layer_{:04}.png",
+                                storage_texture_index * self.layers_per_texture as usize + i
+                            ));
+                            img.save(path).expect("Failed to save image");
+                        }
+                    } else {
+                        use std::io::Write;
+                        for (i, layer) in data.chunks_exact(num_pixels).enumerate() {
+                            let mut file = std::fs::File::create(dir.join(format!(
+                                "depth_layer_{:04}.txt",
+                                storage_texture_index * self.layers_per_texture as usize + i
+                            )))
+                            .unwrap();
+                            for (j, val) in layer.iter().enumerate() {
+                                if j % width as usize == 0 {
+                                    writeln!(file, "{val}").unwrap();
+                                } else {
+                                    write!(file, "{val} ").unwrap();
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
-        self.storage.unmap();
+                storage.unmap();
+            });
         Ok(())
     }
+}
+
+/// Color attachment used for occlusion estimation, which is a texture with the
+/// same size as the depth attachment. The number of non-zero pixels is the area
+/// of micro-facets together with the occlusion. The sum of values of all pixels
+/// is the area of micro-facets in total without occlusion.
+///
+/// Because of underlying hardware's limitation of maximum image array layers of
+/// a single texture, the color attachment may contain multipl layered textures.
+/// Each layer of the texture is a color map of the micro-surface at a
+/// specific angle.
+struct ColorAttachment {
+    /// The texture used for the color attachment.
+    textures: Vec<LayeredTexture>,
+    /// Number of layers of all the textures.
+    layers: u32,
+    /// Maximum number of layers per texture.
+    layers_per_texture: u32,
+    /// The storage of the texture data in case the data need to be saved.
+    /// Each texture has a corresponding storage buffer.
+    storage_buffers: Vec<wgpu::Buffer>,
 }
 
 impl ColorAttachment {
@@ -896,116 +1037,188 @@ impl ColorAttachment {
                 || format == wgpu::TextureFormat::Rgb10a2Unorm,
             "Unsupported color texture format. Only Rgba8Unorm and Rgb10a2Unorm are supported."
         );
-        let inner = LayeredAttachment::new(
-            device,
-            width,
-            height,
+        let layers_per_texture = device.limits().max_texture_array_layers;
+        let mut textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
+        log::debug!(
+            "Creating color attachment with {} layers, {} textures, {} layers per texture",
             layers,
-            format,
-            Some("oc_color_texture"),
+            textures_count,
+            layers_per_texture
         );
-        let storage = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("oc_color_texture_storage"),
-            size: inner.layer_size_in_bytes * layers as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        Self { inner, storage }
+        let mut textures = Vec::with_capacity(textures_count as usize);
+        let mut layers_left = layers;
+        while layers_left > 0 {
+            let layers_in_this_texture = layers_left.min(layers_per_texture);
+            textures.push(LayeredTexture::new(
+                device,
+                width,
+                height,
+                layers_in_this_texture,
+                format,
+                Some(&format!("oc_color_texture_part_{}", textures.len())),
+            ));
+            layers_left -= layers_in_this_texture;
+        }
+        let storage_buffers = textures
+            .iter()
+            .enumerate()
+            .map(|(i, texture)| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(&format!("oc_color_texture_storage_part_{}", i)),
+                    size: texture.layer_size_in_bytes * texture.layers() as u64,
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            })
+            .collect();
+
+        Self {
+            textures,
+            storage_buffers,
+            layers,
+            layers_per_texture,
+        }
+    }
+
+    /// Number of layers in total.
+    pub fn layers(&self) -> u32 { self.layers }
+
+    /// Returns the texture view of the specified layer of the whole attachment.
+    pub fn layer_view(&self, layer: u32) -> &wgpu::TextureView {
+        assert!(layer < self.layers, "Layer index out of range");
+        let texture_index = layer / self.layers_per_texture;
+        let layer_in_texture = layer % self.layers_per_texture;
+        log::debug!(
+            "Getting color attach. view of {} which is located in texture {}, layer {}",
+            layer,
+            texture_index,
+            layer_in_texture,
+        );
+        self.textures[texture_index as usize].layer_view(layer_in_texture)
+    }
+
+    /// Returns the texture index of the specified layer.
+    pub fn texture_index(&self, layer: u32) -> u32 {
+        assert!(layer < self.layers, "Layer index out of range");
+        layer / self.layers_per_texture
     }
 
     /// Copies the texture data to the storage.
+    ///
+    /// # Note
+    ///
+    /// Only records the command to the encoder. The command won't be executed
+    /// until the encoder is submitted.
     pub fn copy_to_storage(&self, encoder: &mut wgpu::CommandEncoder) {
-        self.inner.copy_to_buffer(encoder, &self.storage);
+        for (i, texture) in self.textures.iter().enumerate() {
+            texture.copy_to_buffer(encoder, &self.storage_buffers[i], 0);
+        }
     }
 
     /// Save the color attachment data to files.
     pub fn save(&self, device: &wgpu::Device, dir: &Path, as_image: bool) -> Result<(), Error> {
-        {
-            let is_8bit = self.inner.format == wgpu::TextureFormat::Rgba8Unorm;
-
-            let buffer = self.storage.slice(..);
-            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-            buffer.map_async(wgpu::MapMode::Read, move |result| {
-                sender.send(result).unwrap();
-            });
-            device.poll(wgpu::Maintain::Wait);
-            pollster::block_on(async {
-                receiver.receive().await.unwrap().unwrap();
-            });
-            let buffer_view = buffer.get_mapped_range();
-
-            if !dir.exists() {
-                std::fs::create_dir_all(dir).unwrap();
-            }
-
-            if as_image {
-                use image::{ImageBuffer, Rgba};
-                for (i, layer) in buffer_view
-                    .chunks_exact(self.inner.layer_size_in_bytes as usize)
-                    .enumerate()
+        self.textures
+            .iter()
+            .zip(self.storage_buffers.iter())
+            .enumerate()
+            .for_each(|(storage_texture_index, (texture, storage))| {
                 {
-                    if !is_8bit {
-                        panic!("Saving 10-bit color textures as images is not supported.");
+                    let is_8bit = texture.format == wgpu::TextureFormat::Rgba8Unorm;
+
+                    let buffer = storage.slice(..);
+                    let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+                    buffer.map_async(wgpu::MapMode::Read, move |result| {
+                        sender.send(result).unwrap();
+                    });
+                    device.poll(wgpu::Maintain::Wait);
+                    pollster::block_on(async {
+                        receiver.receive().await.unwrap().unwrap();
+                    });
+                    let buffer_view = buffer.get_mapped_range();
+
+                    if !dir.exists() {
+                        std::fs::create_dir_all(dir).unwrap();
                     }
-                    let img = ImageBuffer::<Rgba<u8>, _>::from_raw(
-                        self.extent.width,
-                        self.extent.height,
-                        layer,
-                    )
-                    .ok_or(Error::Any("Failed to create image buffer".to_string()))?;
-                    img.save(dir.join(format!("color_layer_{i:04}.png")))?;
-                }
-            } else {
-                // Only write R channel.
-                use std::io::Write;
-                for (i, layer) in buffer_view
-                    .chunks_exact(self.inner.layer_size_in_bytes as usize)
-                    .enumerate()
-                {
-                    let mut file =
-                        std::fs::File::create(dir.join(format!("color_layer_{i:04}.txt"))).unwrap();
-                    if is_8bit {
-                        layer
-                            .chunks(4)
-                            .map(|chunk| chunk[0])
+
+                    let width = texture.extent.width;
+                    let height = texture.extent.height;
+
+                    if as_image {
+                        use image::{ImageBuffer, Rgba};
+                        for (i, layer) in buffer_view
+                            .chunks_exact(texture.layer_size_in_bytes as usize)
                             .enumerate()
-                            .for_each(|(j, val)| {
-                                if j % self.extent.width as usize == 0 {
-                                    writeln!(file, "{val}")
-                                } else {
-                                    write!(file, "{val} ")
-                                }
-                                .expect("Failed to write to file");
-                            });
+                        {
+                            if !is_8bit {
+                                panic!("Saving 10-bit color textures as images is not supported.");
+                            } else {
+                                let img =
+                                    ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, layer)
+                                        .ok_or(Error::Any(
+                                            "Failed to create image buffer".to_string(),
+                                        ))
+                                        .unwrap();
+                                img.save(dir.join(format!(
+                                    "color_layer_{:04}.png",
+                                    storage_texture_index * self.layers_per_texture as usize + i
+                                )))
+                                .unwrap()
+                            }
+                        }
                     } else {
-                        layer
-                            .chunks(4)
-                            .map(|chunk| {
-                                let rgba =
-                                    u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                                rgba & 0x3ff
-                            })
+                        // Only write R channel.
+                        use std::io::Write;
+                        for (i, layer) in buffer_view
+                            .chunks_exact(texture.layer_size_in_bytes as usize)
                             .enumerate()
-                            .for_each(|(j, val)| {
-                                if j % self.extent.width as usize == 0 {
-                                    writeln!(file, "{val}")
-                                } else {
-                                    write!(file, "{val} ")
-                                }
-                                .expect("Failed to write to file");
-                            });
+                        {
+                            let mut file = std::fs::File::create(dir.join(format!(
+                                "color_layer_{:04}.txt",
+                                storage_texture_index * self.layers_per_texture as usize + i
+                            )))
+                            .unwrap();
+                            if is_8bit {
+                                layer.chunks(4).map(|chunk| chunk[0]).enumerate().for_each(
+                                    |(j, val)| {
+                                        if j % width as usize == 0 {
+                                            writeln!(file, "{val}")
+                                        } else {
+                                            write!(file, "{val} ")
+                                        }
+                                        .expect("Failed to write to file");
+                                    },
+                                );
+                            } else {
+                                layer
+                                    .chunks(4)
+                                    .map(|chunk| {
+                                        let rgba = u32::from_le_bytes([
+                                            chunk[0], chunk[1], chunk[2], chunk[3],
+                                        ]);
+                                        rgba & 0x3ff
+                                    })
+                                    .enumerate()
+                                    .for_each(|(j, val)| {
+                                        if j % width as usize == 0 {
+                                            writeln!(file, "{val}")
+                                        } else {
+                                            write!(file, "{val} ")
+                                        }
+                                        .expect("Failed to write to file");
+                                    });
+                            }
+                        }
                     }
                 }
-            }
-        }
-        self.storage.unmap();
+                storage.unmap();
+            });
         Ok(())
     }
 
     /// Returns true if the color attachment is 8-bit.
     /// Otherwise, it is 10-bit. This is used to determine how to save the data.
     /// Also, 8-bit color attachment is used for debugging.
-    pub fn is_8bit(&self) -> bool { self.inner.format == wgpu::TextureFormat::Rgba8Unorm }
+    pub fn is_8bit(&self) -> bool { self.textures[0].format == wgpu::TextureFormat::Rgba8Unorm }
 }
 
 /// Information about measurement location.
@@ -1023,25 +1236,14 @@ pub struct MeasurementPoint {
     pub index: u32, // y, z, w are unused, just for alignment
 }
 
-/// Information about measurement location.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct MeasurementPointGpuData {
-    proj_view_mat: [f32; 16],
-    index: [u32; 4],
-}
-
-impl From<MeasurementPoint> for MeasurementPointGpuData {
-    fn from(point: MeasurementPoint) -> Self {
-        Self {
-            proj_view_mat: point.proj_view_mat.to_cols_array(),
-            index: [point.index, 0, 0, 0],
+impl MeasurementPoint {
+    fn to_shader_uniforms(&self, layers_per_texture: u32) -> Uniforms {
+        Uniforms {
+            proj_view_matrix: self.proj_view_mat.to_cols_array(),
+            meas_point_index: [self.index, 0],
+            meas_point_per_depth_map: [layers_per_texture, 0],
         }
     }
-}
-
-impl MeasurementPointGpuData {
-    const SIZE_IN_BYTES: wgpu::BufferAddress = std::mem::size_of::<Self>() as u64;
 }
 
 impl MeasurementPoint {
@@ -1249,7 +1451,7 @@ pub fn measure_microfacet_shadowing_masking(
                         mp.zenith.prettified()
                     );
                     estimator
-                        .save_color_attachment(&gpu.device, Path::new(&dir), false)
+                        .save_color_attachment(&gpu.device, Path::new(&dir), true)
                         .expect("Failed to save color attachment");
                 }
 

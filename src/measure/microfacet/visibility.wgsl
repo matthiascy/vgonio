@@ -1,6 +1,7 @@
 struct Uniforms {
     proj_view_matrix: mat4x4<f32>,
-    meas_point_index: vec4<u32>,
+    meas_point_index: vec2<u32>,
+    meas_point_per_depth_map: vec2<u32>,
 }
 
 @group(0) @binding(0)
@@ -32,27 +33,28 @@ fn vs_render_pass(@location(0) position: vec3<f32>) -> VertexOutput {
     return output;
 }
 
-@group(0) @binding(1)
+@group(1) @binding(0)
 var depth_map : texture_depth_2d_array;
-@group(0) @binding(2)
+@group(1) @binding(1)
 var depth_sampler : sampler_comparison;
 
 @fragment
 fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
     // Texture coordinates calculated in vertex shader.
     let uv = vert.uv;
-    let index = i32(uniforms.meas_point_index.x);
+
+    let index = i32(uniforms.meas_point_index.x) % i32(uniforms.meas_point_per_depth_map.x);
+
     // Test if the fragment is in front of the depth texture.
     let depth_cmp = textureSampleCompare(depth_map, depth_sampler, vert.uv, index, vert.ndc.z);
 
    if (depth_cmp > 0.0) {
        // RGB10A2_UNORM
-       return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
+       // return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
 
        // RGBA8_UNORM
-       //return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+       return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
    } else {
-       // return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-       discard;
+       return vec4<f32>(0.0, 0.0, 0.0, 1.0);
    }
 }

@@ -203,11 +203,33 @@ impl GpuContext {
                 )
             });
 
+        let adapter_limits = adapter.limits();
+
+        let limits = if config
+            .device_descriptor
+            .limits
+            .check_limits(&adapter_limits)
+        {
+            config.device_descriptor.limits.clone()
+        } else {
+            log::warn!(
+                "Requested limits are not supported by the adapter, using adapter limits instead."
+            );
+            adapter_limits
+        };
+
         log::trace!("GPU supported features: {:?}", adapter.features());
 
         // Logical device and command queue
         let (device, queue) = adapter
-            .request_device(&config.device_descriptor, None)
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: config.device_descriptor.label,
+                    features: config.device_descriptor.features,
+                    limits,
+                },
+                None,
+            )
             .await
             .unwrap_or_else(|_| {
                 panic!(
@@ -229,6 +251,7 @@ impl GpuContext {
         )
     }
 
+    /// Offscreen rendering context.
     pub async fn offscreen(config: &WgpuConfig) -> Self {
         let instance = wgpu::Instance::new(wgpu::Backends::all());
         let adapter = instance
@@ -245,11 +268,33 @@ impl GpuContext {
                 )
             });
 
+        let adapter_limits = adapter.limits();
+
         log::trace!("GPU supported features: {:?}", adapter.features());
+
+        let limits = if config
+            .device_descriptor
+            .limits
+            .check_limits(&adapter_limits)
+        {
+            config.device_descriptor.limits.clone()
+        } else {
+            log::warn!(
+                "Requested limits are not supported by the adapter, using adapter limits instead."
+            );
+            adapter_limits
+        };
 
         // Logical device and command queue
         let (device, queue) = adapter
-            .request_device(&config.device_descriptor, None)
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: config.device_descriptor.label,
+                    features: config.device_descriptor.features,
+                    limits,
+                },
+                None,
+            )
             .await
             .unwrap_or_else(|_| {
                 panic!(
