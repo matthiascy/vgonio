@@ -72,13 +72,13 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--phi", nargs='*', type=float, help="The azimuth angles to plot, in degrees.")
     args = parser.parse_args()
     sb.set_theme(context="paper", style="whitegrid", palette="deep", font_scale=1.5)
-    data, azimuth_bin_size, zenith_bin_size = read_data(sys.argv[1])
+    data, azimuth_bin_size, zenith_bin_size = read_data(args.filename)
     azimuth_bins = np.arange(0, 360, azimuth_bin_size)
     zenith_bins = np.arange(0, 90 + zenith_bin_size, zenith_bin_size)
     xs, ys, zs = convert_to_xyz(data, azimuth_bins, zenith_bins)
 
     basename = os.path.basename(args.filename)
-    out_dir = f"{basename.split('.')[0]}_plots"
+    output_dir = f"{basename.split('.')[0]}_plots"
 
     figures = []
     if args.in_3d:
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     if not args.save:
         plt.show()
     else:
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
         for fig, filename in figures:
-            fig.savefig(os.path.join(out_dir, filename))
+            fig.savefig(os.path.join(output_dir, filename))
