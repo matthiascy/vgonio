@@ -68,7 +68,7 @@ impl WindowSurface {
         }
     }
 
-    /// Resizes the surface to the given size (phiscal pixels).
+    /// Resizes the surface to the given size (physical pixels).
     ///
     /// # Arguments
     ///
@@ -105,7 +105,7 @@ impl WindowSurface {
     /// Returns the TextureFormat of the surface.
     pub fn format(&self) -> wgpu::TextureFormat { self.config.format }
 
-    /// Returns the presentiation mode of the window surface.
+    /// Returns the presentation mode of the window surface.
     pub fn present_mode(&self) -> wgpu::PresentMode { self.config.present_mode }
 
     /// Returns the aspect ratio of the window surface.
@@ -117,6 +117,7 @@ impl WindowSurface {
     }
 }
 
+/// Aggregates all the wgpu objects needed to use the GPU.
 pub struct GpuContext {
     /// Context for wgpu objects.
     pub instance: wgpu::Instance,
@@ -131,6 +132,7 @@ pub struct GpuContext {
     pub queue: Arc<wgpu::Queue>,
 }
 
+/// Configuration for the [`GpuContext`].
 pub struct WgpuConfig {
     /// Device requirements for requesting a device.
     pub device_descriptor: wgpu::DeviceDescriptor<'static>,
@@ -205,40 +207,30 @@ impl GpuContext {
 
         let adapter_limits = adapter.limits();
 
-        let limits = if config
+        // Logical device and command queue
+        let (device, queue) = if config
             .device_descriptor
             .limits
             .check_limits(&adapter_limits)
         {
-            config.device_descriptor.limits.clone()
+            adapter.request_device(&config.device_descriptor, None)
         } else {
-            log::warn!(
-                "Requested limits are not supported by the adapter, using adapter limits instead."
-            );
-            adapter_limits
-        };
-
-        log::trace!("GPU supported features: {:?}", adapter.features());
-
-        // Logical device and command queue
-        let (device, queue) = adapter
-            .request_device(
+            adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     label: config.device_descriptor.label,
                     features: config.device_descriptor.features,
-                    limits,
+                    limits: adapter_limits,
                 },
                 None,
             )
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to request logical device! {}",
-                    concat!(file!(), ":", line!())
-                )
-            });
-
-        log::trace!("GPU limits: {:?}", device.limits());
+        }
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed to request logical device! {}",
+                concat!(file!(), ":", line!())
+            )
+        });
 
         (
             Self {
@@ -270,40 +262,30 @@ impl GpuContext {
 
         let adapter_limits = adapter.limits();
 
-        log::trace!("GPU supported features: {:?}", adapter.features());
-
-        let limits = if config
+        // Logical device and command queue
+        let (device, queue) = if config
             .device_descriptor
             .limits
             .check_limits(&adapter_limits)
         {
-            config.device_descriptor.limits.clone()
+            adapter.request_device(&config.device_descriptor, None)
         } else {
-            log::warn!(
-                "Requested limits are not supported by the adapter, using adapter limits instead."
-            );
-            adapter_limits
-        };
-
-        // Logical device and command queue
-        let (device, queue) = adapter
-            .request_device(
+            adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     label: config.device_descriptor.label,
                     features: config.device_descriptor.features,
-                    limits,
+                    limits: adapter_limits,
                 },
                 None,
             )
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to request logical device! {}",
-                    concat!(file!(), ":", line!())
-                )
-            });
-
-        log::trace!("GPU limits: {:?}", device.limits());
+        }
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed to request logical device! {}",
+                concat!(file!(), ":", line!())
+            )
+        });
 
         Self {
             instance,

@@ -440,7 +440,7 @@ impl VisibilityEstimator {
         );
         let data = meas_points
             .iter()
-            .map(|mp| mp.to_shader_uniforms(self.depth_attachment.layers_per_texture))
+            .map(|mp| mp.shader_uniforms(self.depth_attachment.layers_per_texture))
             .collect::<Vec<Uniforms>>();
         queue.write_buffer(
             &self.measurement_points_buffer,
@@ -1064,7 +1064,7 @@ impl ColorAttachment {
             .enumerate()
             .map(|(i, texture)| {
                 device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some(&format!("oc_color_texture_storage_part_{}", i)),
+                    label: Some(&format!("oc_color_texture_storage_part_{i}")),
                     size: texture.layer_size_in_bytes * texture.layers() as u64,
                     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
@@ -1237,7 +1237,7 @@ pub struct MeasurementPoint {
 }
 
 impl MeasurementPoint {
-    fn to_shader_uniforms(&self, layers_per_texture: u32) -> Uniforms {
+    fn shader_uniforms(&self, layers_per_texture: u32) -> Uniforms {
         Uniforms {
             proj_view_matrix: self.proj_view_mat.to_cols_array(),
             meas_point_index: [self.index, 0],
