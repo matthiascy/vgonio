@@ -19,7 +19,7 @@ def read_data(filename):
             azimuth_res = re.match(pattern, lines[1]).groups()
             zenith_res = re.match(pattern, lines[2]).groups()
             return np.genfromtxt(StringIO(lines[3]), dtype=np.float32, delimiter=' ') \
-                .reshape((int(zenith_res[1]), int(azimuth_res[1]), int(zenith_res[1]), int(azimuth_res[1]))), \
+                .reshape((int(azimuth_res[1]), int(zenith_res[1]), int(azimuth_res[1]), int(zenith_res[1]))), \
                 float(azimuth_res[0]), float(zenith_res[0])
         else:
             raise ValueError("The file is not a valid shadowing-masking data file.")
@@ -28,8 +28,8 @@ def read_data(filename):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Microfacet shadowing/masking term plotting")
     parser.add_argument("filename", help="The file to read the data from.")
-    parser.add_argument("-z", "--zenith", type=float, help="The zenith angle of the micro-facet normal.")
-    parser.add_argument("-a", "--azimuth", type=float, help="The azimuthal angle of the micro-facet normal.")
+    parser.add_argument("-mt", "--m-theta", type=float, help="The zenith angle (theta) of the micro-facet normal (m).")
+    parser.add_argument("-mp", "--m-phi", type=float, help="The azimuthal angle (phi) of the micro-facet normal (m).")
     parser.add_argument("-p", "--phi", nargs="*", type=float, help="The azimuthal angle to plot.")
     args = parser.parse_args()
     sb.set_theme(context="paper", style="whitegrid", palette="deep", font_scale=1.5)

@@ -1,3 +1,4 @@
+use crate::common::DataEncoding;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -188,6 +189,14 @@ pub struct MeasureOptions {
                 specified in configuration file."
     )]
     pub output: Option<PathBuf>,
+
+    #[clap(
+        short,
+        long,
+        default_value_t = DataEncoding::Binary,
+        help = "Data format for the measurement output."
+    )]
+    pub encoding: DataEncoding,
 
     #[clap(
         short,

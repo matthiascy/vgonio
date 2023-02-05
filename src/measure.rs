@@ -17,6 +17,7 @@ use std::str::FromStr;
 
 use crate::{
     app::gfx::camera::{Projection, ProjectionKind},
+    common::Handedness,
     units::Radians,
     Error,
 };
@@ -154,25 +155,6 @@ impl LightSource {
         let view = glam::Mat4::look_at_rh(self.pos, Vec3::ZERO, up);
         let proj = self.proj.matrix(self.proj_kind);
         LightSourceRaw((proj * view).to_cols_array())
-    }
-}
-
-/// Coordinate system handedness.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Handedness {
-    /// Right-handed, Z-up coordinate system.
-    RightHandedZUp,
-    /// Right-handed, Y-up coordinate system.
-    RightHandedYUp,
-}
-
-impl Handedness {
-    /// Returns the up vector of the reference coordinate system.
-    pub const fn up(self) -> Vec3 {
-        match self {
-            Self::RightHandedZUp => Vec3::Z,
-            Self::RightHandedYUp => Vec3::Y,
-        }
     }
 }
 

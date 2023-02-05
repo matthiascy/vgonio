@@ -6,14 +6,14 @@ use crate::{
         cache::{resolve_path, Cache},
         Config,
     },
-    common::SphericalPartition,
+    common::{DataEncoding, Handedness, SphericalPartition},
     measure::{
         self,
         measurement::{
             BsdfMeasurement, Measurement, MeasurementKind, MicrofacetDistributionMeasurement,
             MicrofacetShadowingMaskingMeasurement, SimulationKind,
         },
-        CollectorScheme, Handedness, RtcMethod,
+        CollectorScheme, RtcMethod,
     },
     msurf::{AxisAlignment, MicroSurface},
     Error,
@@ -274,6 +274,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     &cache,
                     &config,
                     &opts.output,
+                    opts.encoding,
                 )
                 .map_err(|err| {
                     eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
@@ -287,6 +288,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     &cache,
                     &config,
                     &opts.output,
+                    opts.encoding,
                 )
                 .map_err(|err| {
                     eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
@@ -360,6 +362,7 @@ fn measure_microfacet_distribution(
     cache: &Cache,
     config: &Config,
     output: &Option<PathBuf>,
+    encoding: DataEncoding,
 ) -> Result<(), Error> {
     println!(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet distribution:
@@ -385,7 +388,7 @@ fn measure_microfacet_distribution(
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
-            "microfacet-distribution-{}.txt",
+            "microfacet-distribution-{}.vgmo",
             cache
                 .micro_surface_path(*surface)
                 .unwrap()
@@ -400,7 +403,7 @@ fn measure_microfacet_distribution(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        distrib.save_ascii(&filepath).unwrap_or_else(|err| {
+        distrib.save(&filepath, encoding).unwrap_or_else(|err| {
             eprintln!(
                 "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
                 filepath.display(),
@@ -420,6 +423,7 @@ fn measure_microfacet_shadowing_masking(
     cache: &Cache,
     config: &Config,
     output: &Option<PathBuf>,
+    encoding: DataEncoding,
 ) -> Result<(), Error> {
     println!(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet shadowing-masking function:
@@ -467,7 +471,7 @@ fn measure_microfacet_shadowing_masking(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        distrib.save_ascii(&filepath).unwrap_or_else(|err| {
+        distrib.save(&filepath, encoding).unwrap_or_else(|err| {
             eprintln!(
                 "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
                 filepath.display(),

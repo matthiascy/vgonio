@@ -430,9 +430,7 @@ impl MeasurementKind {
             }
         }
     }
-}
 
-impl MeasurementKind {
     /// Whether the measurement is a BSDF measurement.
     pub fn is_bsdf(&self) -> bool { matches!(self, Self::Bsdf { .. }) }
 

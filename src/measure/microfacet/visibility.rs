@@ -7,8 +7,9 @@ use crate::{
             GpuContext, RenderPass, Texture, WgpuConfig,
         },
     },
+    common::{DataEncoding, Handedness},
     measure,
-    measure::{measurement::MicrofacetShadowingMaskingMeasurement, Handedness},
+    measure::measurement::MicrofacetShadowingMaskingMeasurement,
     msurf::MicroSurface,
     units::Radians,
     Error,
@@ -1294,19 +1295,53 @@ pub struct MicrofacetShadowingMaskingFunction {
 }
 
 impl MicrofacetShadowingMaskingFunction {
-    /// Saves the microfacet shadowing and masking function in ascii format.
-    pub fn save_ascii(&self, filepath: &Path) -> Result<(), std::io::Error> {
+    /// Saves the microfacet shadowing and masking function.
+    pub fn save(&self, filepath: &Path, encoding: DataEncoding) -> Result<(), std::io::Error> {
         use std::io::{BufWriter, Write};
-        log::info!(
-            "Saving microfacet shadowing and masking distribution in ascii format to {}",
-            filepath.display()
-        );
+        assert!(self.samples.len() == (self.azimuth_bins_count * self.zenith_bins_count).pow(2));
         let file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
             .open(filepath)?;
         let mut writter = BufWriter::new(file);
+        match encoding {
+            DataEncoding::Ascii => {
+                log::info!("Saving microfacet shadowing and masking function as plain text.");
+                writter.write_all(b"VGMO#\x02")?; // 6 bytes
+                writter.write_all(&self.azimuth_bin_size.to_degree().value.to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.azimuth_bins_count as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(&self.zenith_bin_size.to_degree().value.to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.zenith_bins_count as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(b"\x20\x20\x20\x20\x20\x20\x20\x20\x20\n")?; // 10 bytes
+                self.samples.iter().enumerate().for_each(|(i, s)| {
+                    let val = if i % self.zenith_bins_count == self.zenith_bins_count - 1 {
+                        format!("{s}\n")
+                    } else {
+                        format!("{s} ")
+                    };
+                    writter.write_all(val.as_bytes()).unwrap();
+                });
+            }
+            DataEncoding::Binary => {
+                log::info!("Saving microfacet shadowing and masking function as binary.");
+                writter.write_all(b"VGMO!\x02")?; // 6 bytes
+                writter.write_all(&self.azimuth_bin_size.to_degree().value.to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.azimuth_bins_count as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(&self.zenith_bin_size.to_degree().value.to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.zenith_bins_count as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(b"\x20\x20\x20\x20\x20\x20\x20\x20\x20\n")?; // 10 bytes
+                writter.write_all(
+                    &self
+                        .samples
+                        .iter()
+                        .map(|x| x.to_le_bytes())
+                        .flatten()
+                        .collect::<Vec<_>>(),
+                )?;
+            }
+        }
+
         let header = format!(
             "microfacet shadowing and masking function\nazimuth - bin size: {}, bins count: \
              {}\nzenith - bin size: {}, bins count: {}\n",

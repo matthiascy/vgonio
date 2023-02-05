@@ -7,8 +7,9 @@ mod ui;
 mod widgets;
 
 use crate::{
+    common::Handedness,
     error::Error,
-    measure::{Handedness, Ray, RtcMethod},
+    measure::{Ray, RtcMethod},
     units::degrees,
 };
 use glam::{IVec2, Mat4, Vec3};

@@ -2,14 +2,12 @@
 The normal distribution function (microfacet distribution)
 """
 import os.path
-import sys
-from io import StringIO
+import struct
 
 import argparse
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
-import re
 
 
 def read_data(filename):
@@ -28,18 +26,29 @@ def read_data(filename):
     azimuth bin size : float (degrees)
     zenith bin size : float (degrees)
     """
-    with open(filename, 'r') as f:
-        lines = f.readlines()
-        # first group is the bin size, second group is the bin count
-        pattern = re.compile(r"^.*:\s([\d|.]+)°.*:\s(\d+)$")
-        if lines[0] == "microfacet distribution\n":
-            azimuth_result = re.match(pattern, lines[1]).groups()
-            zenith_result = re.match(pattern, lines[2]).groups()
-            return np.genfromtxt(StringIO(lines[3]), dtype=np.float32, delimiter=' ')\
-                .reshape(int(azimuth_result[1]), int(zenith_result[1])), \
-                float(azimuth_result[0]), float(zenith_result[0])
+    with open(filename, 'rb') as f:
+        header = f.read(40)
+        if header[0:4] != b'VGMO' or header[4] != ord(b'\x01'):
+            raise Exception('Invalid file format, the file does not contain the correct data: microfacet distribution required.')
+        is_binary = header[5] == ord('!')
+        [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("fff", header[6:18]))
+        azimuth_bin_count = int.from_bytes(header[18:22], byteorder='little')
+        [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("fff", header[22:34]))
+        zenith_bin_count = int.from_bytes(header[34:38], byteorder='little')
+        print('azimuth_start = {}, azimuth_stop = {}, azimuth_bin_size = {}, azimuth_bin_count = {}'
+              .format(azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count))
+        print('zenith_start = {}, zenith_stop = {}, zenith_bin_size = {}, zenith_bin_count = {}'
+                .format(zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count))
+        if is_binary:
+            print('read binary file')
+            data = np.fromfile(f, dtype=('<f'), count=azimuth_bin_count * zenith_bin_count)
         else:
-            raise ValueError("The file does not contain the correct data: microfacet distribution required.")
+            print('read text file')
+            data = np.fromfile(f, dtype=np.float32, count=azimuth_bin_count * zenith_bin_count, sep=' ')
+
+        data = data.reshape((azimuth_bin_count, zenith_bin_count))
+
+        return data, azimuth_start, azimuth_stop, azimuth_bin_size, zenith_start, zenith_stop, zenith_bin_size
 
 
 def convert_to_xyz(data, azimuth_bins, zenith_bins):
@@ -72,9 +81,9 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--phi", nargs='*', type=float, help="The azimuth angles to plot, in degrees.")
     args = parser.parse_args()
     sb.set_theme(context="paper", style="whitegrid", palette="deep", font_scale=1.5)
-    data, azimuth_bin_size, zenith_bin_size = read_data(args.filename)
-    azimuth_bins = np.arange(0, 360, azimuth_bin_size)
-    zenith_bins = np.arange(0, 90 + zenith_bin_size, zenith_bin_size)
+    data, azimuth_start, azimuth_stop, azimuth_bin_size, zenith_start, zenith_stop, zenith_bin_size = read_data(args.filename)
+    azimuth_bins = np.arange(azimuth_start, azimuth_stop, azimuth_bin_size)
+    zenith_bins = np.arange(zenith_start, zenith_stop + zenith_bin_size, zenith_bin_size)
     xs, ys, zs = convert_to_xyz(data, azimuth_bins, zenith_bins)
 
     basename = os.path.basename(args.filename)

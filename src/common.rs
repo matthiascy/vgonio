@@ -1,3 +1,5 @@
+use glam::Vec3;
+
 use rand_distr::num_traits::abs;
 
 /// Machine epsilon for double precision floating point numbers.
@@ -366,6 +368,63 @@ impl SphericalPartition {
 pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
 
 pub const fn gamma_f32(n: f32) -> f32 { (n * MACHINE_EPSILON) / (1.0 - n * MACHINE_EPSILON) }
+
+/// Data encoding while storing the data to the disk.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum, serde::Serialize, serde::Deserialize,
+)]
+pub enum DataEncoding {
+    /// The data is encoded as ascii text (plain text).
+    Ascii,
+    /// The data is encoded as binary data.
+    Binary,
+}
+
+impl Display for DataEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataEncoding::Ascii => write!(f, "ascii"),
+            DataEncoding::Binary => write!(f, "binary"),
+        }
+    }
+}
+
+impl DataEncoding {
+    /// Returns true if the data is encoded as ascii text.
+    pub fn is_ascii(&self) -> bool {
+        match self {
+            DataEncoding::Ascii => true,
+            DataEncoding::Binary => false,
+        }
+    }
+
+    /// Returns true if the data is encoded as binary data.
+    pub fn is_binary(&self) -> bool {
+        match self {
+            DataEncoding::Ascii => false,
+            DataEncoding::Binary => true,
+        }
+    }
+}
+
+/// Coordinate system handedness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum Handedness {
+    /// Right-handed, Z-up coordinate system.
+    RightHandedZUp,
+    /// Right-handed, Y-up coordinate system.
+    RightHandedYUp,
+}
+
+impl Handedness {
+    /// Returns the up vector of the reference coordinate system.
+    pub const fn up(self) -> Vec3 {
+        match self {
+            Self::RightHandedZUp => Vec3::Z,
+            Self::RightHandedYUp => Vec3::Y,
+        }
+    }
+}
 
 #[test]
 fn spherical_domain_clamp() {
