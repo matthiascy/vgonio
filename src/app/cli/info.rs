@@ -5,8 +5,8 @@ use crate::{
     },
     error::Error,
     measure::measurement::{
-        BsdfMeasurement, Measurement, MeasurementKind, MicrofacetDistributionMeasurement,
-        MicrofacetShadowingMaskingMeasurement,
+        BsdfMeasurement, Measurement, MeasurementKind, MicrofacetMaskingShadowingMeasurement,
+        MicrofacetNormalDistributionMeasurement,
     },
 };
 use std::{
@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
 };
 
-impl Display for MicrofacetDistributionMeasurement {
+impl Display for MicrofacetNormalDistributionMeasurement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -23,16 +23,16 @@ impl Display for MicrofacetDistributionMeasurement {
             self.azimuth.start.prettified(),
             self.azimuth.stop.prettified(),
             self.azimuth.step_size.prettified(),
-            self.azimuth_step_count(),
+            self.azimuth_step_count_inclusive(),
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
             self.zenith.step_size.prettified(),
-            self.zenith_step_count()
+            self.zenith_step_count_inclusive()
         )
     }
 }
 
-impl Display for MicrofacetShadowingMaskingMeasurement {
+impl Display for MicrofacetMaskingShadowingMeasurement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -41,11 +41,11 @@ impl Display for MicrofacetShadowingMaskingMeasurement {
             self.azimuth.start.prettified(),
             self.azimuth.stop.prettified(),
             self.azimuth.step_size.prettified(),
-            self.azimuth_step_count(),
+            self.azimuth_step_count_inclusive(),
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
             self.zenith.step_size.prettified(),
-            self.zenith_step_count(),
+            self.zenith_step_count_inclusive(),
             self.resolution,
             self.resolution
         )
@@ -80,29 +80,25 @@ pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
     if prints[1] {
         println!(
             "Microfacet distribution default parameters:\n\n{}",
-            MicrofacetDistributionMeasurement::default()
+            MicrofacetNormalDistributionMeasurement::default()
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
-            MicrofacetShadowingMaskingMeasurement::default()
+            MicrofacetMaskingShadowingMeasurement::default()
         );
     }
 
     if prints[2] {
         [
             Measurement {
-                kind: MeasurementKind::MicrofacetDistribution(
-                    MicrofacetDistributionMeasurement::default(),
-                ),
+                kind: MeasurementKind::Mndf(MicrofacetNormalDistributionMeasurement::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                kind: MeasurementKind::MicrofacetShadowingMasking(
-                    MicrofacetShadowingMaskingMeasurement::default(),
-                ),
+                kind: MeasurementKind::Mmsf(MicrofacetMaskingShadowingMeasurement::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

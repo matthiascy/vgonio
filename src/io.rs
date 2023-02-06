@@ -88,3 +88,24 @@ impl MsHeader {
         writer.write_all(&buf).map(|_| Ok(()))?
     }
 }
+
+// /// VGonio measurement output file.
+// pub struct Vgmo<T: MicroSurfaceMeasurement> {
+//     pub header: VgmoHeader,
+//     pub measurement: T,
+// }
+
+// pub struct VgmoHeader {
+//     pub magic: [u8; 4],
+//     pub measurement_type: u8,
+//     pub encoding: u8,
+// }
+
+// /// Metadata for micro-facet normal distribution function and
+// masking/shadowing /// function
+// pub struct VgmoHeaderMndfAndMmsf {}
+
+// impl VgmoHeader {
+//     /// Size of the header in bytes.
+//     pub const SIZE_IN_BYTES: usize = std::mem::size_of::<Self>();
+// }

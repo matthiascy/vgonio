@@ -27,7 +27,7 @@ def read_data(filename):
     zenith bin size : float (degrees)
     """
     with open(filename, 'rb') as f:
-        header = f.read(40)
+        header = f.read(48)
         if header[0:4] != b'VGMO' or header[4] != ord(b'\x01'):
             raise Exception('Invalid file format, the file does not contain the correct data: microfacet distribution required.')
         is_binary = header[5] == ord('!')
@@ -35,20 +35,25 @@ def read_data(filename):
         azimuth_bin_count = int.from_bytes(header[18:22], byteorder='little')
         [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("fff", header[22:34]))
         zenith_bin_count = int.from_bytes(header[34:38], byteorder='little')
+        sample_count = int.from_bytes(header[38:42], byteorder='little')
+
+        if sample_count != azimuth_bin_count * zenith_bin_count:
+            raise Exception('Invalid file format, {} samples expected, but {} samples found.'.format(azimuth_bin_count * zenith_bin_count, sample_count))
+
         print('azimuth_start = {}, azimuth_stop = {}, azimuth_bin_size = {}, azimuth_bin_count = {}'
               .format(azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count))
         print('zenith_start = {}, zenith_stop = {}, zenith_bin_size = {}, zenith_bin_count = {}'
                 .format(zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count))
         if is_binary:
             print('read binary file')
-            data = np.fromfile(f, dtype=('<f'), count=azimuth_bin_count * zenith_bin_count)
+            data = np.fromfile(f, dtype=('<f'), count=sample_count)
         else:
             print('read text file')
-            data = np.fromfile(f, dtype=np.float32, count=azimuth_bin_count * zenith_bin_count, sep=' ')
+            data = np.fromfile(f, dtype=np.float32, count=sample_count, sep=' ')
 
         data = data.reshape((azimuth_bin_count, zenith_bin_count))
 
-        return data, azimuth_start, azimuth_stop, azimuth_bin_size, zenith_start, zenith_stop, zenith_bin_size
+        return data, azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count, zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count
 
 
 def convert_to_xyz(data, azimuth_bins, zenith_bins):
@@ -81,34 +86,50 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--phi", nargs='*', type=float, help="The azimuth angles to plot, in degrees.")
     args = parser.parse_args()
     sb.set_theme(context="paper", style="whitegrid", palette="deep", font_scale=1.5)
-    data, azimuth_start, azimuth_stop, azimuth_bin_size, zenith_start, zenith_stop, zenith_bin_size = read_data(args.filename)
-    azimuth_bins = np.arange(azimuth_start, azimuth_stop, azimuth_bin_size)
-    zenith_bins = np.arange(zenith_start, zenith_stop + zenith_bin_size, zenith_bin_size)
+    data, azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count, zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count = read_data(args.filename)
+    azimuth_bins = np.zeros(azimuth_bin_count, dtype=np.float32)
+    zenith_bins = np.zeros(zenith_bin_count, dtype=np.float32)
+    for i in range(azimuth_bin_count):
+        azimuth_bins[i] = azimuth_start + i * azimuth_bin_size
+    for i in range(zenith_bin_count):
+        zenith_bins[i] = zenith_start + i * zenith_bin_size
+    if len(azimuth_bins) != data.shape[0] or len(zenith_bins) != data.shape[1]:
+        raise Exception('The data step size does not match the data shape.')
+
     xs, ys, zs = convert_to_xyz(data, azimuth_bins, zenith_bins)
 
     basename = os.path.basename(args.filename)
     output_dir = f"{basename.split('.')[0]}_plots"
 
+    micro_surface_name = basename.split('-')[-1].split('.')[0]
+
     figures = []
     if args.in_3d:
-        figures.append((plt.figure(), "microfacet_distribution_3D.png"))
+        figures.append((plt.figure(), "microfacet_normal_distribution_3d.png"))
         ax = figures[-1][0].add_subplot(projection='3d')
-        ax.set_title(f"Microfacet distribution of {basename.split('-')[-1]}")
+        ax.set_title(f"Microfacet NDF - {micro_surface_name}")
         ax.plot_trisurf(xs, ys, zs, cmap='viridis', edgecolor='none')
     for phi in args.phi:
-        figures.append((plt.figure(), f"microfacet_distribution_phi={phi:.2f}.png"))
+        figures.append((plt.figure(), f"ndf_phi={phi:.2f}.png"))
         ax = figures[-1][0].add_subplot()
-        ax.set_title(f"Microfacet distribution of {basename.split('-')[-1]}, azimuth angle {phi:.2f}°")
-        phi_idx_right = int(phi / azimuth_bin_size)
-        phi_idx_left = int(((phi + 180.0) % 360.0) / azimuth_bin_size)
-        zenith_bins_full = np.arange(-90, 90 + zenith_bin_size, zenith_bin_size)
+        ax.set_title(f"Microfacet NDF - {micro_surface_name}")
+        phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)
+        phi_idx_left = int(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size)
+        zenith_bins_full_range = np.concatenate([np.flip(zenith_bins[1:]) * -1.0, zenith_bins])
         ticks = np.arange(-90, 90 + zenith_bin_size, 15)
         ax.tick_params(axis='x', which='major', labelsize=10)
-        ax.set_xticks(ticks, labels=map(lambda x: f"{x}°", ticks))
-        ax.set_xlabel("polar angle")
-        ax.set_ylabel("per steradian")
-        ax.plot(zenith_bins_full,
+        ax.set_xticks(ticks, labels=map(lambda x: f"{x:.0f}°", ticks))
+        ax.set_xlabel(r"$\theta$")
+        ax.set_ylabel(r"$sr^{-1}$")
+        ax.plot(zenith_bins_full_range,
                 np.concatenate((data[phi_idx_left, :][::-1], data[phi_idx_right, 1:])))
+        phi_right = azimuth_bins[phi_idx_right]
+        phi_left = azimuth_bins[phi_idx_left]
+        ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
+                    bbox=dict(boxstyle="round", fc="none", ec="gray"))
+        ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),
+                    bbox=dict(boxstyle="round", fc="none", ec="gray"))
+
     if not args.save:
         plt.show()
     else:

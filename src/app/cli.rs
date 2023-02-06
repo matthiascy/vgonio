@@ -10,8 +10,8 @@ use crate::{
     measure::{
         self,
         measurement::{
-            BsdfMeasurement, Measurement, MeasurementKind, MicrofacetDistributionMeasurement,
-            MicrofacetShadowingMaskingMeasurement, SimulationKind,
+            BsdfMeasurement, Measurement, MeasurementKind, MicrofacetMaskingShadowingMeasurement,
+            MicrofacetNormalDistributionMeasurement, SimulationKind,
         },
         CollectorScheme, RtcMethod,
     },
@@ -78,15 +78,15 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         kind: MeasurementKind::Bsdf(BsdfMeasurement::default()),
                         surfaces: opts.inputs.clone(),
                     },
-                    FastMeasurementKind::MicrofacetDistribution => Measurement {
-                        kind: MeasurementKind::MicrofacetDistribution(
-                            MicrofacetDistributionMeasurement::default(),
+                    FastMeasurementKind::MicrofacetNormalDistribution => Measurement {
+                        kind: MeasurementKind::Mndf(
+                            MicrofacetNormalDistributionMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
-                    FastMeasurementKind::MicrofacetShadowingMasking => Measurement {
-                        kind: MeasurementKind::MicrofacetShadowingMasking(
-                            MicrofacetShadowingMaskingMeasurement::default(),
+                    FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {
+                        kind: MeasurementKind::Mmsf(
+                            MicrofacetMaskingShadowingMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
@@ -267,8 +267,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     start.elapsed().unwrap().as_secs_f32()
                 );
             }
-            MeasurementKind::MicrofacetDistribution(measurement) => {
-                measure_microfacet_distribution(
+            MeasurementKind::Mndf(measurement) => {
+                measure_microfacet_normal_distribution(
                     measurement,
                     &surfaces,
                     &cache,
@@ -281,8 +281,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     err
                 })?;
             }
-            MeasurementKind::MicrofacetShadowingMasking(measurement) => {
-                measure_microfacet_shadowing_masking(
+            MeasurementKind::Mmsf(measurement) => {
+                measure_microfacet_masking_shadowing(
                     measurement,
                     &surfaces,
                     &cache,
@@ -354,10 +354,10 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
     Ok(())
 }
 
-/// Measures the microfacet distribution of the given micro-surface and saves
-/// the result to the given output directory.
-fn measure_microfacet_distribution(
-    measurement: MicrofacetDistributionMeasurement,
+/// Measures the microfacet normal distribution of the given micro-surface and
+/// saves the result to the given output directory.
+fn measure_microfacet_normal_distribution(
+    measurement: MicrofacetNormalDistributionMeasurement,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -365,7 +365,7 @@ fn measure_microfacet_distribution(
     encoding: DataEncoding,
 ) -> Result<(), Error> {
     println!(
-        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet distribution:
+        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet normal distribution:
     • parameters:
       + azimuth: {} ~ {} per {}
       + zenith: {} ~ {} per {}",
@@ -378,7 +378,7 @@ fn measure_microfacet_distribution(
     );
     let start_time = Instant::now();
     let distributions =
-        measure::microfacet::measure_microfacet_distribution(measurement, surfaces, cache);
+        measure::microfacet::measure_normal_distribution(measurement, surfaces, cache);
     let duration = Instant::now() - start_time;
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
@@ -388,7 +388,7 @@ fn measure_microfacet_distribution(
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
-            "microfacet-distribution-{}.vgmo",
+            "microfacet-normal-distribution-{}.vgmo",
             cache
                 .micro_surface_path(*surface)
                 .unwrap()
@@ -415,10 +415,10 @@ fn measure_microfacet_distribution(
     Ok(())
 }
 
-/// Measures the microfacet shadowing-masking function of the given
+/// Measures the microfacet masking-shadowing function of the given
 /// micro-surface and saves the result to the given output directory.
-fn measure_microfacet_shadowing_masking(
-    measurement: MicrofacetShadowingMaskingMeasurement,
+fn measure_microfacet_masking_shadowing(
+    measurement: MicrofacetMaskingShadowingMeasurement,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -426,7 +426,7 @@ fn measure_microfacet_shadowing_masking(
     encoding: DataEncoding,
 ) -> Result<(), Error> {
     println!(
-        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet shadowing-masking function:
+        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
     • parameters:
       + azimuth: {} ~ {} per {}
       + zenith: {} ~ {} per {}
@@ -441,7 +441,7 @@ fn measure_microfacet_shadowing_masking(
         measurement.resolution
     );
     let start_time = Instant::now();
-    let distributions = measure::microfacet::measure_microfacet_shadowing_masking(
+    let distributions = measure::microfacet::measure_masking_shadowing(
         measurement,
         surfaces,
         cache,
@@ -456,7 +456,7 @@ fn measure_microfacet_shadowing_masking(
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
-            "microfacet-shdowing-masking-{}.txt",
+            "microfacet-masking-shadowing-{}.vgmo",
             cache
                 .micro_surface_path(*surface)
                 .unwrap()

@@ -11,19 +11,19 @@ use crate::{
     app::cache::{Cache, Handle},
     common::{DataEncoding, Handedness},
     error::Error,
-    measure::{self, measurement::MicrofacetDistributionMeasurement},
+    measure::{self, measurement::MicrofacetNormalDistributionMeasurement},
     msurf::MicroSurface,
     units::{self, Radians},
 };
 
-/// Structure holding the data for micro facet distribution measurement.
+/// Structure holding the data for micro-facet normal distribution measurement.
 ///
-/// D(m) is the micro facet distribution function, which gives the relative
-/// number of facets oriented in any given direction, or, more precisely, the
-/// relative total facet surface area per unit solid angle of surface normals
-/// pointed in any given direction.
+/// D(m) is the micro-facet normal distribution function, which gives the
+/// relative number of facets oriented in any given direction, or, more
+/// precisely, the relative total facet surface area per unit solid angle of
+/// surface normals pointed in any given direction.
 #[derive(Debug, Clone)]
-pub struct MicrofacetDistribution {
+pub struct MicrofacetNormalDistribution {
     /// Start angle of the azimuth.
     pub azimuth_start: Radians,
     /// End angle of the azimuth.
@@ -31,6 +31,8 @@ pub struct MicrofacetDistribution {
     /// The bin size of azimuthal angle when sampling the microfacet
     /// distribution.
     pub azimuth_bin_size: Radians,
+    /// The number of bins in the azimuthal angle including the start and stop.
+    pub azimuth_bins_count_inclusive: usize,
     /// Start angle of the zenith.
     pub zenith_start: Radians,
     /// End angle of the zenith.
@@ -38,21 +40,19 @@ pub struct MicrofacetDistribution {
     /// The bin size of zenith angle when sampling the microfacet
     /// distribution.
     pub zenith_bin_size: Radians,
-    /// The number of bins in the azimuthal angle.
-    pub azimuth_bins_count: usize,
-    /// The number of bins in the zenith angle.
-    pub zenith_bins_count: usize,
+    /// The number of bins in the zenith angle including the start and stop.
+    pub zenith_bins_count_inclusive: usize,
     /// The distribution data. The first index is the azimuthal angle, and the
     /// second index is the zenith angle.
     pub samples: Vec<f32>,
 }
 
-impl MicrofacetDistribution {
+impl MicrofacetNormalDistribution {
     /// Save the microfacet distribution to a file
     pub fn save(&self, filepath: &Path, encoding: DataEncoding) -> Result<(), Error> {
         assert_eq!(
             self.samples.len(),
-            self.azimuth_bins_count * self.zenith_bins_count,
+            self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive,
             "The number of samples does not match the number of bins."
         );
         let file = std::fs::OpenOptions::new()
@@ -68,14 +68,17 @@ impl MicrofacetDistribution {
                 writter.write_all(&self.azimuth_start.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.azimuth_stop.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.azimuth_bins_count as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.azimuth_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.zenith_start.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.zenith_stop.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.zenith_bins_count as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(b"\x20\n")?; // 2 bytes
+                writter.write_all(&(self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.samples.len() as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes
                 self.samples.iter().enumerate().for_each(|(i, s)| {
-                    let val = if i % self.zenith_bins_count == self.zenith_bins_count - 1 {
+                    let val = if i % self.zenith_bins_count_inclusive
+                        == self.zenith_bins_count_inclusive - 1
+                    {
                         format!("{s}\n")
                     } else {
                         format!("{s} ")
@@ -89,12 +92,13 @@ impl MicrofacetDistribution {
                 writter.write_all(&self.azimuth_start.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.azimuth_stop.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.azimuth_bins_count as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.azimuth_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.zenith_start.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.zenith_stop.value.to_le_bytes())?; // 4 bytes
                 writter.write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.zenith_bins_count as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(b"\x20\n")?; // 2 bytes
+                writter.write_all(&(self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(&(self.samples.len() as u32).to_le_bytes())?; // 4 bytes
+                writter.write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes
                 writter.write_all(
                     &self
                         .samples
@@ -110,14 +114,16 @@ impl MicrofacetDistribution {
 }
 
 /// Measure the microfacet distribution of a list of micro surfaces.
-pub fn measure_microfacet_distribution(
-    desc: MicrofacetDistributionMeasurement,
+pub fn measure_normal_distribution(
+    desc: MicrofacetNormalDistributionMeasurement,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
-) -> Vec<MicrofacetDistribution> {
+) -> Vec<MicrofacetNormalDistribution> {
     use rayon::prelude::*;
-    log::info!("Measuring micro facet distribution...");
+    log::info!("Measuring microfacet normal distribution...");
     let surfaces = cache.micro_surface_meshes_by_surface_ids(surfaces);
+    let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
+    let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
     surfaces
         .iter()
         .map(|surface| {
@@ -127,12 +133,12 @@ pub fn measure_microfacet_distribution(
             let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
             log::debug!("-- macro surface area: {}", macro_area);
             log::debug!("-- solid angle per measurement: {}", solid_angle);
-            let samples = (0..desc.azimuth.step_count())
+            let samples = (0..azimuth_step_count_inclusive)
                 .flat_map(move |azimuth_idx| {
                     // NOTE: the zenith angle is measured from the top of the
                     // hemisphere. The center of the zenith/azimuth bin are at the zenith/azimuth
                     // angle calculated below.
-                    (0..desc.zenith.step_count() + 1).map(move |zenith_idx| {
+                    (0..zenith_step_count_inclusive).map(move |zenith_idx| {
                         let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
                         let zenith = zenith_idx as f32 * desc.zenith.step_size;
                         let dir = measure::spherical_to_cartesian(
@@ -170,11 +176,11 @@ pub fn measure_microfacet_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            MicrofacetDistribution {
+            MicrofacetNormalDistribution {
                 azimuth_bin_size: desc.azimuth.step_size,
                 zenith_bin_size: desc.zenith.step_size,
-                azimuth_bins_count: desc.azimuth.step_count(),
-                zenith_bins_count: desc.zenith.step_count() + 1,
+                azimuth_bins_count_inclusive: desc.azimuth.step_count(),
+                zenith_bins_count_inclusive: desc.zenith.step_count() + 1,
                 samples,
                 azimuth_start: desc.azimuth.start,
                 azimuth_stop: desc.azimuth.stop,

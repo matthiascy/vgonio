@@ -101,12 +101,12 @@ pub enum FastMeasurementKind {
     #[clap(name = "bsdf")]
     /// Bidirectional reflectance distribution function.
     Bsdf,
-    #[clap(name = "mfd")]
-    /// Micro-facet distribution function.
-    MicrofacetDistribution,
-    #[clap(name = "mfs")]
-    /// Micro-facet shadowing-masking function.
-    MicrofacetShadowingMasking,
+    #[clap(name = "mndf")]
+    /// Micro-facet normal distribution function.
+    MicrofacetNormalDistribution,
+    #[clap(name = "mmsf")]
+    /// Micro-facet masking-shadowing function.
+    MicrofacetMaskingShadowing,
 }
 
 #[derive(clap::Args, Debug)]

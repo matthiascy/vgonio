@@ -6,6 +6,8 @@ use std::{
     str::FromStr,
 };
 
+// TODO: inclusive range
+
 /// Defines a left inclusive, right exclusive range [a, b) of values with a
 /// given step.
 #[derive(Debug, Copy, Clone)]

@@ -274,14 +274,14 @@ const DEFAULT_ZENITH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
 
 /// Parameters for microfacet distribution measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetDistributionMeasurement {
+pub struct MicrofacetNormalDistributionMeasurement {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSize<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSize<Radians>,
 }
 
-impl Default for MicrofacetDistributionMeasurement {
+impl Default for MicrofacetNormalDistributionMeasurement {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -290,12 +290,12 @@ impl Default for MicrofacetDistributionMeasurement {
     }
 }
 
-impl MicrofacetDistributionMeasurement {
+impl MicrofacetNormalDistributionMeasurement {
     /// Returns the number of samples that will be taken along the zenith angle.
     ///
     /// Here one is added to the zenith step count to account for the zenith
     /// angle of 90°.
-    pub fn zenith_step_count(&self) -> usize { self.zenith.step_count() + 1 }
+    pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count() + 1 }
 
     /// Returns the number of samples that will be taken along the azimuth
     /// angle.
@@ -304,11 +304,20 @@ impl MicrofacetDistributionMeasurement {
     /// in most cases the azimuth angle sampling range will be [0°, 360°] and
     /// thus the azimuth angle of 360° will be sampled as it is the same as the
     /// azimuth angle of 0°.
-    pub fn azimuth_step_count(&self) -> usize { self.azimuth.step_count() }
+    pub fn azimuth_step_count_inclusive(&self) -> usize {
+        if self.azimuth.start == Radians::ZERO && self.azimuth.stop == Radians::TWO_PI {
+            self.azimuth.step_count()
+        } else {
+            self.azimuth.step_count() + 1
+        }
+    }
 
     /// Validate the parameters.
     pub fn validate(self) -> Result<Self, Error> {
-        if !(self.azimuth.start >= Radians::ZERO && self.azimuth.stop <= Radians::TWO_PI) {
+        if !(self.azimuth.start >= Radians::ZERO
+            && self.azimuth.stop
+                <= (Radians::TWO_PI + radians!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+        {
             return Err(Error::InvalidParameter(
                 "Microfacet distribution measurement: azimuth angle must be in the range [0°, \
                  360°]",
@@ -332,7 +341,7 @@ impl MicrofacetDistributionMeasurement {
 
 /// Parameters for microfacet shadowing masking measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetShadowingMaskingMeasurement {
+pub struct MicrofacetMaskingShadowingMeasurement {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSize<Radians>,
     /// Polar angle sampling range.
@@ -341,7 +350,7 @@ pub struct MicrofacetShadowingMaskingMeasurement {
     pub resolution: u32,
 }
 
-impl Default for MicrofacetShadowingMaskingMeasurement {
+impl Default for MicrofacetMaskingShadowingMeasurement {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -351,11 +360,17 @@ impl Default for MicrofacetShadowingMaskingMeasurement {
     }
 }
 
-impl MicrofacetShadowingMaskingMeasurement {
+impl MicrofacetMaskingShadowingMeasurement {
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
     pub fn measurement_location_count(&self) -> usize {
-        let azimuth_count = self.azimuth.step_count();
+        let azimuth_count =
+            if self.azimuth.start == Radians::ZERO && self.azimuth.stop == Radians::TWO_PI {
+                self.azimuth.step_count()
+            } else {
+                self.azimuth.step_count() + 1
+            };
+        self.azimuth.step_count();
         let zenith_count = self.zenith.step_count() + 1;
         azimuth_count * zenith_count
     }
@@ -364,7 +379,7 @@ impl MicrofacetShadowingMaskingMeasurement {
     ///
     /// Here one is added to the zenith step count to account for the zenith
     /// angle of 90°.
-    pub fn zenith_step_count(&self) -> usize { self.zenith.step_count() + 1 }
+    pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count() + 1 }
 
     /// Returns the number of samples that will be taken along the azimuth
     /// angle.
@@ -373,7 +388,13 @@ impl MicrofacetShadowingMaskingMeasurement {
     /// in most cases the azimuth angle sampling range will be [0°, 360°] and
     /// thus the azimuth angle of 360° will be sampled as it is the same as the
     /// azimuth angle of 0°.
-    pub fn azimuth_step_count(&self) -> usize { self.azimuth.step_count() }
+    pub fn azimuth_step_count_inclusive(&self) -> usize {
+        if self.azimuth.start == Radians::ZERO && self.azimuth.stop == Radians::TWO_PI {
+            self.azimuth.step_count()
+        } else {
+            self.azimuth.step_count() + 1
+        }
+    }
 
     /// Validate the parameters when reading from a file.
     pub fn validate(self) -> Result<Self, Error> {
@@ -413,10 +434,12 @@ impl MicrofacetShadowingMaskingMeasurement {
 pub enum MeasurementKind {
     /// Measure the BSDF of a micro-surface.
     Bsdf(BsdfMeasurement),
-    /// Measure the micro-facet distribution of a micro-surface.
-    MicrofacetDistribution(MicrofacetDistributionMeasurement),
-    /// Measure the micro-surface shadowing-masking functions.
-    MicrofacetShadowingMasking(MicrofacetShadowingMaskingMeasurement),
+    /// Measure the micro-facet normal distribution function of a micro-surface.
+    #[serde(alias = "microfacet-normal-distribution-function")]
+    Mndf(MicrofacetNormalDistributionMeasurement),
+    /// Measure the micro-facet masking/shadowing function.
+    #[serde(alias = "microfacet-masking-shadowing-function")]
+    Mmsf(MicrofacetMaskingShadowingMeasurement),
 }
 
 impl MeasurementKind {
@@ -424,10 +447,8 @@ impl MeasurementKind {
     pub fn validate(self) -> Result<Self, Error> {
         match self {
             Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
-            Self::MicrofacetDistribution(mfd) => Ok(Self::MicrofacetDistribution(mfd.validate()?)),
-            Self::MicrofacetShadowingMasking(mfs) => {
-                Ok(Self::MicrofacetShadowingMasking(mfs.validate()?))
-            }
+            Self::Mndf(mfd) => Ok(Self::Mndf(mfd.validate()?)),
+            Self::Mmsf(mfs) => Ok(Self::Mmsf(mfs.validate()?)),
         }
     }
 
@@ -435,15 +456,11 @@ impl MeasurementKind {
     pub fn is_bsdf(&self) -> bool { matches!(self, Self::Bsdf { .. }) }
 
     /// Whether the measurement is a micro-facet distribution measurement.
-    pub fn is_microfacet_distribution(&self) -> bool {
-        matches!(self, Self::MicrofacetDistribution { .. })
-    }
+    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Mndf { .. }) }
 
     /// Whether the measurement is a micro-surface shadowing-masking function
     /// measurement.
-    pub fn is_micro_surface_shadow_masking(&self) -> bool {
-        matches!(self, Self::MicrofacetShadowingMasking { .. })
-    }
+    pub fn is_micro_surface_shadow_masking(&self) -> bool { matches!(self, Self::Mmsf { .. }) }
 
     /// Get the BSDF measurement parameters.
     pub fn bsdf(&self) -> Option<&BsdfMeasurement> {
@@ -455,8 +472,8 @@ impl MeasurementKind {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MicrofacetDistributionMeasurement> {
-        if let MeasurementKind::MicrofacetDistribution(mfd) = self {
+    pub fn microfacet_distribution(&self) -> Option<&MicrofacetNormalDistributionMeasurement> {
+        if let MeasurementKind::Mndf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -464,8 +481,8 @@ impl MeasurementKind {
     }
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
-    pub fn micro_surface_shadow_masking(&self) -> Option<&MicrofacetShadowingMaskingMeasurement> {
-        if let MeasurementKind::MicrofacetShadowingMasking(mfd) = self {
+    pub fn micro_surface_shadow_masking(&self) -> Option<&MicrofacetMaskingShadowingMeasurement> {
+        if let MeasurementKind::Mmsf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -564,10 +581,8 @@ impl Measurement {
     pub fn name(&self) -> &'static str {
         match self.kind {
             MeasurementKind::Bsdf { .. } => "BSDF measurement",
-            MeasurementKind::MicrofacetDistribution { .. } => "microfacet-distribution measurement",
-            MeasurementKind::MicrofacetShadowingMasking { .. } => {
-                "micro-surface-shadow-masking measurement"
-            }
+            MeasurementKind::Mndf { .. } => "microfacet-distribution measurement",
+            MeasurementKind::Mmsf { .. } => "micro-surface-shadow-masking measurement",
         }
     }
 }
