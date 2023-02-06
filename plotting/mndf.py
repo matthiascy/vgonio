@@ -110,7 +110,7 @@ if __name__ == "__main__":
         ax.set_title(f"Microfacet NDF - {micro_surface_name}")
         ax.plot_trisurf(xs, ys, zs, cmap='viridis', edgecolor='none')
     for phi in args.phi:
-        figures.append((plt.figure(), f"ndf_phi={phi:.2f}.png"))
+        figures.append((plt.figure(), f"mndf_phi={phi:.2f}.png"))
         ax = figures[-1][0].add_subplot()
         ax.set_title(f"Microfacet NDF - {micro_surface_name}")
         phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)

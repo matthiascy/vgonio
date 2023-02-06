@@ -19,10 +19,6 @@ def read_data(filename):
         azimuth_bin_count = int.from_bytes(header[18:22], byteorder='little')
         [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("fff", header[22:34]))
         zenith_bin_count = int.from_bytes(header[34:38], byteorder='little')
-        print('azimuth_start = {}, azimuth_stop = {}, azimuth_bin_size = {}, azimuth_bin_count = {}'
-              .format(azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count))
-        print('zenith_start = {}, zenith_stop = {}, zenith_bin_size = {}, zenith_bin_count = {}'
-              .format(zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count))
         sample_count = int.from_bytes(header[38:42], byteorder='little')
         if sample_count != (azimuth_bin_count * zenith_bin_count) ** 2:
             raise Exception('Invalid file format, sample count does not match the number of bins.')
@@ -62,7 +58,7 @@ def convert_to_xyz(data, azimuth_m_idx, zenith_m_idx, azimuth_bins, zenith_bins)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Microfacet shadowing/masking term plotting")
-    parser.add_argument("filename", help="The file to read the data from.")
+    parser.add_argument("-f", "--filename", help="The file to read the data from.")
     parser.add_argument("-mt", "--m-theta", type=float, help="The zenith angle (theta) of the micro-facet normal (m).")
     parser.add_argument("-mp", "--m-phi", type=float, help="The azimuthal angle (phi) of the micro-facet normal (m).")
     parser.add_argument("-p", "--phi", nargs="*", type=float, help="The azimuthal angle to plot.")
@@ -103,6 +99,32 @@ if __name__ == "__main__":
         ax.set_xlabel(r"$x$")
         ax.set_ylabel(r"$y$")
         ax.set_zlabel(r"$z$")
+
+    for phi in args.phi:
+        figures.append((plt.figure(), f"mmsf_m({zenith_m:.2f},{azimuth_m:.2f})_phi={phi:.2f}.png"))
+        ax = figures[-1][0].add_subplot()
+        ax.set_title(r"$G_1(\mathbf{{i}},\mathbf{{m}})$ - {}".format(micro_surface_name))
+        ax.set_xlabel(r"$\theta$")
+        ax.set_ylabel(r"ratio")
+
+        phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)
+        phi_idx_left = int(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size)
+
+        zenith_bins_full_range = np.concatenate([np.flip(zenith_bins[1:]) * -1.0, zenith_bins])
+        ticks = np.arange(-90, 90 + zenith_bin_size, 15)
+        ax.tick_params(axis='x', which='major', labelsize=10)
+        ax.set_xticks(ticks, labels=[f"{t:.0f}°" for t in ticks])
+        ax.plot(zenith_bins_full_range, np.concatenate(
+            (
+                data[azimuth_m_idx, zenith_m_idx, phi_idx_left, :][::-1],
+                data[azimuth_m_idx, zenith_m_idx, phi_idx_right, 1:]
+            )))
+        phi_right = azimuth_bins[phi_idx_right]
+        phi_left = azimuth_bins[phi_idx_left]
+        ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
+                    bbox=dict(boxstyle="round", fc="none", ec="gray"))
+        ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),
+                    bbox=dict(boxstyle="round", fc="none", ec="gray"))
 
     if not args.save:
         plt.show()
