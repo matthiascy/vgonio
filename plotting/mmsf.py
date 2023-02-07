@@ -96,40 +96,43 @@ if __name__ == "__main__":
         ax.annotate(r"$m = (\phi={:.2f}, \theta={:.2f})$".format(azimuth_m, zenith_m), xy=(0.05, 1.0),
                     xycoords='axes fraction', xytext=(-0.32, -0.1),
                     bbox=dict(boxstyle="round", fc="none", ec="gray"))
+        ax.set_zlim(0.0, 1.0)
         ax.set_xlabel(r"$x$")
         ax.set_ylabel(r"$y$")
         ax.set_zlabel(r"$z$")
 
-    for phi in args.phi:
-        figures.append((plt.figure(), f"mmsf_m({zenith_m:.2f},{azimuth_m:.2f})_phi={phi:.2f}.png"))
-        ax = figures[-1][0].add_subplot()
-        ax.set_title(r"$G_1(\mathbf{{i}},\mathbf{{m}})$ - {}".format(micro_surface_name))
-        ax.set_xlabel(r"$\theta$")
-        ax.set_ylabel(r"ratio")
+    if args.phi is not None:
+        for phi in args.phi:
+            figures.append((plt.figure(), f"mmsf_m({zenith_m:.2f},{azimuth_m:.2f})_phi={phi:.2f}.png"))
+            ax = figures[-1][0].add_subplot()
+            ax.set_title(r"$G_1(\mathbf{{i}},\mathbf{{m}})$ - {}".format(micro_surface_name))
+            ax.set_xlabel(r"$\theta$")
+            ax.set_ylabel(r"ratio")
 
-        phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)
-        phi_idx_left = int(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size)
+            phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)
+            phi_idx_left = int(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size)
 
-        zenith_bins_full_range = np.concatenate([np.flip(zenith_bins[1:]) * -1.0, zenith_bins])
-        ticks = np.arange(-90, 90 + zenith_bin_size, 15)
-        ax.tick_params(axis='x', which='major', labelsize=10)
-        ax.set_xticks(ticks, labels=[f"{t:.0f}°" for t in ticks])
-        ax.plot(zenith_bins_full_range, np.concatenate(
-            (
-                data[azimuth_m_idx, zenith_m_idx, phi_idx_left, :][::-1],
-                data[azimuth_m_idx, zenith_m_idx, phi_idx_right, 1:]
-            )))
-        phi_right = azimuth_bins[phi_idx_right]
-        phi_left = azimuth_bins[phi_idx_left]
-        ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
-                    bbox=dict(boxstyle="round", fc="none", ec="gray"))
-        ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),
-                    bbox=dict(boxstyle="round", fc="none", ec="gray"))
+            zenith_bins_full_range = np.concatenate([np.flip(zenith_bins[1:]) * -1.0, zenith_bins])
+            ticks = np.arange(-90, 90 + zenith_bin_size, 15)
+            ax.tick_params(axis='x', which='major', labelsize=10)
+            ax.set_xticks(ticks, labels=[f"{t:.0f}°" for t in ticks])
+            ax.plot(zenith_bins_full_range, np.concatenate(
+                (
+                    data[azimuth_m_idx, zenith_m_idx, phi_idx_left, :][::-1],
+                    data[azimuth_m_idx, zenith_m_idx, phi_idx_right, 1:]
+                )))
+            phi_right = azimuth_bins[phi_idx_right]
+            phi_left = azimuth_bins[phi_idx_left]
+            ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
+                        bbox=dict(boxstyle="round", fc="none", ec="gray"))
+            ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),
+                        bbox=dict(boxstyle="round", fc="none", ec="gray"))
 
-    if not args.save:
-        plt.show()
-    else:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        for fig, name in figures:
-            fig.savefig(os.path.join(output_dir, name))
+    if len(figures) > 0:
+        if not args.save:
+            plt.show()
+        else:
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            for fig, name in figures:
+                fig.savefig(os.path.join(output_dir, name))
