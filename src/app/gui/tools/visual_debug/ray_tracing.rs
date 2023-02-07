@@ -49,7 +49,9 @@ impl egui::Widget for &mut RayTracingPane {
         ui.horizontal_wrapped(|ui| {
             ui.label("method");
             #[cfg(feature = "embree")]
-            ui.selectable_value(&mut self.method, RtcMethod::Standard, "Standard");
+            ui.selectable_value(&mut self.method, RtcMethod::Embree, "Embree");
+            #[cfg(feature = "optix")]
+            ui.selectable_value(&mut self.method, RtcMethod::Embree, "OptiX");
             ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
         });
 

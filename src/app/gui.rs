@@ -713,13 +713,17 @@ impl VgonioApp {
                 } else {
                     match method {
                         #[cfg(feature = "embree")]
-                        RtcMethod::Standard => {
+                        RtcMethod::Embree => {
                             log::debug!("  => [Standard Ray Tracing]");
                             self.debug_drawing.rays = trace_ray_standard_dbg(
                                 ray,
                                 max_bounces,
                                 self.surface_mesh.as_ref().unwrap(),
                             );
+                        }
+                        #[cfg(feature = "optix")]
+                        RtcMethod::Optix => {
+                            todo!()
                         }
                         RtcMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");

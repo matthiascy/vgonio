@@ -42,8 +42,9 @@ winit = "0.27"
 wgpu = { version = "0.14", features = ["spirv"] }
 
 [features]
-default = []
+default = ["embree", "optix"]
 embree = ["dep:embree"]
+optix = []
 
 [build-dependencies]
 shaderc = "0.8"

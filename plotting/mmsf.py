@@ -102,6 +102,7 @@ if __name__ == "__main__":
         ax.set_zlabel(r"$z$")
 
     if args.phi is not None:
+        print(azimuth_bins)
         for phi in args.phi:
             figures.append((plt.figure(), f"mmsf_m({zenith_m:.2f},{azimuth_m:.2f})_phi={phi:.2f}.png"))
             ax = figures[-1][0].add_subplot()
@@ -123,6 +124,7 @@ if __name__ == "__main__":
                 )))
             phi_right = azimuth_bins[phi_idx_right]
             phi_left = azimuth_bins[phi_idx_left]
+            print(f"phi_right {phi_idx_right}: {phi_right:.2f}, phi_left {phi_idx_left}: {phi_left:.2f}")
             ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
                         bbox=dict(boxstyle="round", fc="none", ec="gray"))
             ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),

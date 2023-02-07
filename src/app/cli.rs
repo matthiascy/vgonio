@@ -236,12 +236,16 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         );
                         match method {
                             #[cfg(feature = "embree")]
-                            RtcMethod::Standard => {
+                            RtcMethod::Embree => {
                                 measure::bsdf::measure_bsdf_embree_rt(
                                     measurement,
                                     &cache,
                                     &surfaces,
                                 );
+                            }
+                            #[cfg(feature = "optix")]
+                            RtcMethod::Optix => {
+                                todo!()
                             }
                             RtcMethod::Grid => {
                                 measure::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);

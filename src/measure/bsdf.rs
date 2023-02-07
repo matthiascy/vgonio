@@ -118,7 +118,6 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
     pub hist_reflections_energy: [f32; N_BOUNCE],
 }
 
-#[cfg(feature = "embree")]
 /// Measurement of the BSDF (bidirectional scattering distribution function) of
 /// a microfacet surface.
 ///
@@ -127,12 +126,13 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 /// incident angle and outgoing angle are on the same plane.
 ///
 /// TODO: add support for complete BSDF measurement.
+#[cfg(feature = "embree")]
 pub fn measure_bsdf_embree_rt(
     desc: BsdfMeasurement,
     cache: &Cache,
-    surfaces: &[MicroSurfaceHandle],
+    surfaces: &[Handle<MicroSurface>],
 ) {
-    use crate::measure::EmbreeRayTracing;
+    use crate::measure::rtc::EmbreeRayTracing;
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
     let mut embree_rt = EmbreeRayTracing::new(Config::default());

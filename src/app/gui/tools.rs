@@ -3,11 +3,13 @@ mod sampling;
 mod scratch;
 mod visual_debug;
 #[cfg(feature = "embree")]
-use crate::measure::EmbreeRayTracing;
+use crate::measure::rtc::EmbreeRayTracing;
+
+use crate::msurf::MicroSurfaceMesh;
 
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
-    measure::{rtc::GridRayTracing, Ray},
+    measure::{rtc::GridRayTracing, Ray, TrajectoryNode},
 };
 #[cfg(feature = "embree")]
 use embree::Config;
@@ -33,7 +35,7 @@ pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTr
 pub(crate) fn trace_ray_standard_dbg(
     ray: Ray,
     max_bounces: u32,
-    surface: &MicroSurfaceTriMesh,
+    surface: &MicroSurfaceMesh,
 ) -> Vec<Ray> {
     let mut embree_rt = EmbreeRayTracing::new(Config::default());
     let scn_id = embree_rt.create_scene();

@@ -2,8 +2,10 @@
 // embree api calls to the same object are not thread safe in general.
 
 use crate::{
-    measure::{fresnel, ior::Ior, scattering::reflect, Ray, RtcRecord, TrajectoryNode},
-    msurf,
+    measure::{scattering::reflect, Ray, RtcRecord, TrajectoryNode},
+    msurf::MicroSurfaceMesh,
+    optics,
+    optics::RefractiveIndex,
 };
 use embree::{
     Config, Device, Geometry, Hit, IntersectContext, RayHit, RayHitN, RayN, Scene, SceneFlags,
@@ -54,7 +56,7 @@ impl EmbreeRayTracing {
     pub fn scene(&self, id: usize) -> &Scene { &self.scenes[id] }
 
     /// Uploads a triangle mesh to embree.
-    pub fn create_triangle_mesh(&self, mesh: &msurf::mesh::MicroSurfaceMesh) -> Arc<TriangleMesh> {
+    pub fn create_triangle_mesh(&self, mesh: &MicroSurfaceMesh) -> Arc<TriangleMesh> {
         let mut embree_mesh =
             TriangleMesh::unanimated(self.device.clone(), mesh.num_facets, mesh.num_verts);
         {
@@ -144,7 +146,7 @@ impl EmbreeRayTracing {
         scene_id: usize,
         ray: Ray,
         max_bounces: u32,
-        ior_t: &[Ior],
+        ior_t: &[RefractiveIndex],
     ) -> Option<RtcRecord> {
         let mut context = IntersectContext::incoherent();
         let scene = self.scene_mut(scene_id);
@@ -170,7 +172,7 @@ impl EmbreeRayTracing {
             log::debug!("energy_each_bounce: {:?}", energy_each_bounce);
             for i in 0..trajectory.len() - 1 {
                 let node = &trajectory[i];
-                let reflectance = fresnel::reflectance_air_conductor_spectrum(node.cos, ior_t);
+                let reflectance = optics::reflectance_air_conductor_spectrum(node.cos, ior_t);
                 log::debug!("calculated reflectance: {:?}", reflectance);
                 for (j, energy) in reflectance.iter().enumerate().take(ior_t.len()) {
                     energy_each_bounce[i + 1][j] = energy_each_bounce[i][j] * energy;

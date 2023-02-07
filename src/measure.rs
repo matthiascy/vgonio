@@ -9,8 +9,6 @@ pub mod rtc;
 pub mod scattering;
 
 pub use collector::{Collector, CollectorScheme, Patch};
-#[cfg(feature = "embree")]
-pub use embree_rt::EmbreeRayTracing;
 pub use emitter::Emitter;
 
 use std::str::FromStr;
@@ -62,12 +60,15 @@ impl From<Ray> for embree::Ray {
 
 /// Enumeration of the different ways to trace rays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")] // todo: case_insensitive
+#[serde(rename_all = "lowercase")]
 pub enum RtcMethod {
+    /// Ray tracing using Intel's Embree library.
     #[cfg(feature = "embree")]
-    /// Standard ray tracing using embree.
-    Standard,
-    /// Customised grid tracing method.
+    Embree,
+    /// Ray traincing using Nvidia's OptiX library.
+    #[cfg(feature = "optix")]
+    Optix,
+    /// Customised grid ray tracing method.
     Grid,
 }
 
