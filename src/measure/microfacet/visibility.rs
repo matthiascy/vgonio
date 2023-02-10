@@ -54,9 +54,14 @@ pub struct VisibilityEstimator {
     /// Number of measurement points.
     num_measurement_points: u32,
 
-    /// Color attachment used to compute the projected area of all visible
+    /// Color attachments used to compute the ratio of visible projected area
+    /// over whole area of all visible facets at each measurement point.
+    /// Each color attachment is a 2D texture array with one layer per
+    /// measurement point. First color attachment is used to store the visible
+    /// projected area (area of visible facets respecting other facets), second
+    /// color attachment is used to store the whole area of all visible
     /// facets.
-    color_attachment: ColorAttachment,
+    color_attachments: [ColorAttachment; 2],
 
     /// Depth buffers of all micro-facets at all possible measurement points.
     depth_attachment: DepthAttachment,
@@ -96,20 +101,20 @@ pub struct VisibilityEstimation {
     /// visible micro-facets; this is the denominator of the visibility
     /// function. This is the sum of all values in the color attachment (R
     /// channel).
-    area_sans_occlusion: u32,
+    total_area: u32,
     /// Micro-facets area with occlusion. This is the total area of all visible
     /// micro-facets minus the occluded area; calculated by summing up the
     /// number of fragments that are covered by other micro-facets.
-    area_avec_occlusion: u32,
+    visible_area: u32,
 }
 
 impl VisibilityEstimation {
     /// Returns the visibility value.
     pub fn visibility(&self) -> f32 {
-        if self.area_sans_occlusion == 0 {
+        if self.total_area == 0 {
             0.0
         } else {
-            self.area_avec_occlusion as f32 / self.area_sans_occlusion as f32
+            self.visible_area as f32 / self.total_area as f32
         }
     }
 }
@@ -161,13 +166,22 @@ impl VisibilityEstimator {
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::include_wgsl!("./visibility.wgsl"));
-        let color_attachment = ColorAttachment::new(
-            &ctx.device,
-            width,
-            height,
-            meas_count,
-            Self::COLOR_ATTACHMENT_FORMAT,
-        );
+        let color_attachments = [
+            ColorAttachment::new(
+                &ctx.device,
+                width,
+                height,
+                meas_count,
+                Self::COLOR_ATTACHMENT_FORMAT,
+            ),
+            ColorAttachment::new(
+                &ctx.device,
+                width,
+                height,
+                meas_count,
+                Self::COLOR_ATTACHMENT_FORMAT,
+            ),
+        ];
         let depth_attachment = DepthAttachment::new(
             &ctx.device,
             width,
@@ -394,18 +408,32 @@ impl VisibilityEstimator {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader_module,
                         entry_point: "fs_render_pass",
-                        targets: &[Some(ColorTargetState {
-                            format: Self::COLOR_ATTACHMENT_FORMAT,
-                            blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent {
-                                    src_factor: wgpu::BlendFactor::One,
-                                    dst_factor: wgpu::BlendFactor::One,
-                                    operation: wgpu::BlendOperation::Add,
-                                },
-                                alpha: wgpu::BlendComponent::REPLACE,
+                        targets: &[
+                            Some(ColorTargetState {
+                                format: Self::COLOR_ATTACHMENT_FORMAT,
+                                blend: Some(wgpu::BlendState {
+                                    color: wgpu::BlendComponent {
+                                        src_factor: wgpu::BlendFactor::One,
+                                        dst_factor: wgpu::BlendFactor::One,
+                                        operation: wgpu::BlendOperation::Add,
+                                    },
+                                    alpha: wgpu::BlendComponent::REPLACE,
+                                }),
+                                write_mask: wgpu::ColorWrites::ALL,
                             }),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
+                            Some(ColorTargetState {
+                                format: Self::COLOR_ATTACHMENT_FORMAT,
+                                blend: Some(wgpu::BlendState {
+                                    color: wgpu::BlendComponent {
+                                        src_factor: wgpu::BlendFactor::One,
+                                        dst_factor: wgpu::BlendFactor::One,
+                                        operation: wgpu::BlendOperation::Add,
+                                    },
+                                    alpha: wgpu::BlendComponent::REPLACE,
+                                }),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            }),
+                        ],
                     }),
                     multiview: None,
                 });
@@ -420,7 +448,7 @@ impl VisibilityEstimator {
             depth_pass,
             render_pass,
             uniform_buffer,
-            color_attachment,
+            color_attachments,
             depth_attachment,
             measurement_points_buffer,
             num_measurement_points: meas_count,
@@ -535,19 +563,36 @@ impl VisibilityEstimator {
             {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("visibility_pass_compute_render_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: self.color_attachment.layer_view(i),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0,
-                            }),
-                            store: true,
-                        },
-                    })],
+                    color_attachments: &[
+                        // Visible projected area
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: self.color_attachments[0].layer_view(i),
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.0,
+                                    g: 0.0,
+                                    b: 0.0,
+                                    a: 1.0,
+                                }),
+                                store: true,
+                            },
+                        }),
+                        // Whole projected area
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: self.color_attachments[1].layer_view(i),
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.0,
+                                    g: 0.0,
+                                    b: 0.0,
+                                    a: 1.0,
+                                }),
+                                store: true,
+                            },
+                        }),
+                    ],
                     depth_stencil_attachment: None,
                 });
 
@@ -569,7 +614,8 @@ impl VisibilityEstimator {
         }
         encoder.pop_debug_group();
 
-        self.color_attachment.copy_to_storage(&mut encoder);
+        self.color_attachments[0].copy_to_storage(&mut encoder);
+        self.color_attachments[1].copy_to_storage(&mut encoder);
         queue.submit(Some(encoder.finish()));
     }
 
@@ -581,7 +627,8 @@ impl VisibilityEstimator {
         as_image: bool,
     ) -> Result<(), Error> {
         log::info!("Saving color attachment to {:?}", dir);
-        self.color_attachment.save(device, dir, as_image)
+        self.color_attachments[0].save(device, &dir.join("visible_projected_area"), as_image)?;
+        self.color_attachments[1].save(device, &dir.join("projected_area"), as_image)
     }
 
     /// Saves the depth estimation outputs to the given directory.
@@ -595,98 +642,78 @@ impl VisibilityEstimator {
         self.depth_attachment.save(device, dir, as_image)
     }
 
-    /// Computes the visibility.
-    ///
-    /// The `bake` and `estimate` methods must be called before this method.
-    pub fn compute_visibility(&self, device: &wgpu::Device) -> Vec<VisibilityEstimation> {
-        log::info!("Computing visibility...");
+    fn compute_area(&self, device: &wgpu::Device, color_attachment: &ColorAttachment) -> Vec<u32> {
         use rayon::{
             prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
             slice::ParallelSlice,
         };
-        self.color_attachment
+        let layer_size_in_bytes = color_attachment.layer_size_in_bytes();
+        let is_8bit = color_attachment.is_8bit();
+        color_attachment
             .storage_buffers
             .iter()
-            .zip(self.color_attachment.textures.iter())
-            .flat_map(|(storage, texture)| {
-                let estimations = {
-                    let buffer = storage.slice(..);
-                    let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-                    buffer.map_async(wgpu::MapMode::Read, move |result| {
-                        sender.send(result).unwrap();
-                    });
-                    device.poll(wgpu::Maintain::Wait);
-                    pollster::block_on(async {
-                        receiver.receive().await.unwrap().unwrap();
-                    });
-                    let buffer_view = buffer.get_mapped_range();
-                    if self.color_attachment.is_8bit() {
-                        buffer_view
-                            .par_chunks_exact(texture.layer_size_in_bytes as usize)
+            .flat_map(|storage| {
+                let area = {
+                    let buf_view = {
+                        let buf_slice = storage.slice(..);
+                        let (sender, receiver) =
+                            futures_intrusive::channel::shared::oneshot_channel();
+                        buf_slice.map_async(wgpu::MapMode::Read, move |result| {
+                            sender.send(result).unwrap();
+                        });
+                        device.poll(wgpu::Maintain::Wait);
+                        pollster::block_on(async {
+                            receiver.receive().await.unwrap().unwrap();
+                        });
+                        buf_slice.get_mapped_range()
+                    };
+                    if is_8bit {
+                        buf_view
+                            .par_chunks_exact(layer_size_in_bytes as usize)
                             .map(|layer| {
-                                layer
-                                    .par_iter()
-                                    .chunks(4)
-                                    .fold(VisibilityEstimation::default, |acc, chunk| {
-                                        let value = *chunk[0] as u32;
-                                        if value == 0 {
-                                            acc
-                                        } else {
-                                            VisibilityEstimation {
-                                                area_sans_occlusion: acc.area_sans_occlusion
-                                                    + value,
-                                                area_avec_occlusion: acc.area_avec_occlusion + 1,
-                                            }
-                                        }
-                                    })
-                                    .reduce(VisibilityEstimation::default, |acc1, acc2| {
-                                        VisibilityEstimation {
-                                            area_sans_occlusion: acc1.area_sans_occlusion
-                                                + acc2.area_sans_occlusion,
-                                            area_avec_occlusion: acc1.area_avec_occlusion
-                                                + acc2.area_avec_occlusion,
-                                        }
-                                    })
+                                layer.chunks(4).fold(0, |acc, chunk| {
+                                    let value = chunk[0] as u32;
+                                    acc + value
+                                })
                             })
                             .collect::<Vec<_>>()
                     } else {
-                        buffer_view
-                            .par_chunks_exact(texture.layer_size_in_bytes as usize)
+                        buf_view
+                            .par_chunks_exact(layer_size_in_bytes as usize)
                             .map(|layer| {
-                                layer
-                                    .par_iter()
-                                    .chunks(4)
-                                    .fold(VisibilityEstimation::default, |acc, chunk| {
-                                        let rgba = u32::from_le_bytes([
-                                            *chunk[0], *chunk[1], *chunk[2], *chunk[3],
-                                        ]);
-                                        let value = rgba & 0x03FF;
-                                        if value == 0 {
-                                            acc
-                                        } else {
-                                            VisibilityEstimation {
-                                                area_sans_occlusion: acc.area_sans_occlusion
-                                                    + value,
-                                                area_avec_occlusion: acc.area_avec_occlusion + 1,
-                                            }
-                                        }
-                                    })
-                                    .reduce(VisibilityEstimation::default, |acc1, acc2| {
-                                        VisibilityEstimation {
-                                            area_sans_occlusion: acc1.area_sans_occlusion
-                                                + acc2.area_sans_occlusion,
-                                            area_avec_occlusion: acc1.area_avec_occlusion
-                                                + acc2.area_avec_occlusion,
-                                        }
-                                    })
+                                layer.chunks(4).fold(0, |acc, chunk| {
+                                    let rgba = u32::from_le_bytes([
+                                        chunk[0], chunk[1], chunk[2], chunk[3],
+                                    ]);
+                                    let value = rgba & 0x03FF;
+                                    acc + value
+                                })
                             })
                             .collect::<Vec<_>>()
                     }
                 };
                 storage.unmap();
-                estimations
+                area
             })
-            .collect::<Vec<_>>()
+            .collect()
+    }
+
+    /// Computes the visibility.
+    ///
+    /// The `bake` and `estimate` methods must be called before this method.
+    pub fn compute_visibility(&self, device: &wgpu::Device) -> Vec<VisibilityEstimation> {
+        log::info!("Computing visibility...");
+        let layer_size = self.color_attachments[0].layer_size_in_bytes();
+        let visible_area = self.compute_area(device, &self.color_attachments[0]);
+        let total_area = self.compute_area(device, &self.color_attachments[1]);
+        visible_area
+            .iter()
+            .zip(total_area.iter())
+            .map(|(&visible_area, &total_area)| VisibilityEstimation {
+                total_area,
+                visible_area,
+            })
+            .collect()
     }
 }
 
@@ -1100,6 +1127,9 @@ impl ColorAttachment {
         self.textures[texture_index as usize].layer_view(layer_in_texture)
     }
 
+    /// Returns the size of one layer in bytes.
+    pub fn layer_size_in_bytes(&self) -> u64 { self.textures[0].layer_size_in_bytes }
+
     /// Returns the texture index of the specified layer.
     pub fn texture_index(&self, layer: u32) -> u32 {
         assert!(layer < self.layers, "Layer index out of range");
@@ -1305,13 +1335,15 @@ pub struct MicrofacetMaskingShadowing {
 }
 
 impl MicrofacetMaskingShadowing {
+    /// Returns the number of measurement bins.
+    pub fn bins_count(&self) -> usize {
+        (self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive).pow(2)
+    }
+
     /// Saves the microfacet shadowing and masking function.
     pub fn save(&self, filepath: &Path, encoding: DataEncoding) -> Result<(), std::io::Error> {
         use std::io::{BufWriter, Write};
-        assert!(
-            self.samples.len()
-                == (self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive).pow(2)
-        );
+        assert!(self.samples.len() == self.bins_count());
         let file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)

@@ -38,8 +38,15 @@ var depth_map : texture_depth_2d_array;
 @group(1) @binding(1)
 var depth_sampler : sampler_comparison;
 
+struct FragOutput {
+    @location(0) visible_area: vec4<f32>,
+    @location(1) total_area: vec4<f32>,
+}
+
 @fragment
-fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_render_pass(vert: VertexOutput) -> FragOutput {
+    var output: FragOutput;
+
     // Texture coordinates calculated in vertex shader.
     let uv = vert.uv;
 
@@ -48,13 +55,16 @@ fn fs_render_pass(vert: VertexOutput) -> @location(0) vec4<f32> {
     // Test if the fragment is in front of the depth texture.
     let depth_cmp = textureSampleCompare(depth_map, depth_sampler, vert.uv, index, vert.ndc.z);
 
-   if (depth_cmp > 0.0) {
+    if (depth_cmp > 0.0) {
        // RGB10A2_UNORM
        // return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
 
        // RGBA8_UNORM
-       return vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
-   } else {
-       return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-   }
+       output.visible_area = vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+    } else {
+        output.visible_area = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    }
+    output.total_area = vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+
+    return output;
 }

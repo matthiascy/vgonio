@@ -77,6 +77,9 @@ if __name__ == "__main__":
     if len(azimuth_bins) != data.shape[0] or len(zenith_bins) != data.shape[1]:
         raise Exception('The data step size does not match the data shape.')
 
+    print('azimuth bins: ', azimuth_bins)
+    print('zenith bins: ', zenith_bins)
+
     azimuth_m = args.m_phi
     zenith_m = args.m_theta
     azimuth_m_idx = int((azimuth_m - azimuth_start) / azimuth_bin_size)
@@ -110,13 +113,13 @@ if __name__ == "__main__":
             ax.set_xlabel(r"$\theta$")
             ax.set_ylabel(r"ratio")
 
-            phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)
-            phi_idx_left = int(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size)
+            phi_idx_right = int(np.ceil((phi - azimuth_start) / azimuth_bin_size))
+            phi_idx_left = int(np.ceil(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size))
 
             zenith_bins_full_range = np.concatenate([np.flip(zenith_bins[1:]) * -1.0, zenith_bins])
             ticks = np.arange(-90, 90 + zenith_bin_size, 15)
             ax.tick_params(axis='x', which='major', labelsize=10)
-            ax.set_xticks(ticks, labels=[f"{t:.0f}°" for t in ticks])
+            ax.set_xticks(ticks, labels=[f"{np.abs(t):.0f}°" for t in ticks])
             ax.plot(zenith_bins_full_range, np.concatenate(
                 (
                     data[azimuth_m_idx, zenith_m_idx, phi_idx_left, :][::-1],
@@ -125,9 +128,14 @@ if __name__ == "__main__":
             phi_right = azimuth_bins[phi_idx_right]
             phi_left = azimuth_bins[phi_idx_left]
             print(f"phi_right {phi_idx_right}: {phi_right:.2f}, phi_left {phi_idx_left}: {phi_left:.2f}")
-            ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
+            ax.annotate(r"$\mathbf{{i}}_{{\phi}} = {:.2f}^\circ$".format(phi_left), xy=(0.05, 0.95), xycoords='axes fraction', xytext=(0.05, 0.3),
                         bbox=dict(boxstyle="round", fc="none", ec="gray"))
-            ax.annotate(r"$\phi = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),
+            ax.annotate(r"$\mathbf{{i}}_{{\phi}} = {:.2f}^\circ$".format(phi_right), xy=(0.0, 0.0), xycoords='axes fraction', xytext=(0.75, 0.3),
+                        bbox=dict(boxstyle="round", fc="none", ec="gray"))
+            ax.annotate(r"$\mathbf{{m}}_{{(\theta, \phi)}} = ({:.2f}^\circ, {:.2f}^\circ)$".format(zenith_m, azimuth_m),
+                        xy=(0.5, 0.5),
+                        xycoords='axes fraction',
+                        xytext=(0.27, 0.05),
                         bbox=dict(boxstyle="round", fc="none", ec="gray"))
 
     if len(figures) > 0:

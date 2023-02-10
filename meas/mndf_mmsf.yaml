@@ -1,17 +1,17 @@
----
-type: !mndf # or microfacet-normal-distribution-function
-  azimuth: 0 rad ~ 360 deg / 5 deg
-  zenith: 0 rad ~ 90 deg / 2 deg
-surfaces:
-  - usr://surfaces/Aluminium65bar100.txt
-  - usr://surfaces/AluminiumMirror.txt
-  - usr://surfaces/8x8_flat.txt
 # ---
-# type: !mmsf # or microfacet-masking-shadowing-function
-#   azimuth: 0 rad ~ 360 deg / 10 deg
+# type: !mndf # or microfacet-normal-distribution-function
+#   azimuth: 0 rad ~ 360 deg / 5 deg
 #   zenith: 0 rad ~ 90 deg / 2 deg
-#   resolution: 512
 # surfaces:
 #   - usr://surfaces/Aluminium65bar100.txt
 #   - usr://surfaces/AluminiumMirror.txt
 #   - usr://surfaces/8x8_flat.txt
+---
+type: !mmsf # or microfacet-masking-shadowing-function
+  azimuth: 0 rad ~ 360 deg / 60 deg
+  zenith: 0 rad ~ 90 deg / 2 deg
+  resolution: 512
+surfaces:
+  - usr://surfaces/Aluminium65bar100.txt
+  # - usr://surfaces/AluminiumMirror.txt
+  # - usr://surfaces/8x8_flat.txt
