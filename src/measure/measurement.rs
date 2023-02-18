@@ -1,3 +1,4 @@
+//! Measurement parameters.
 use crate::{
     common::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
     measure::{

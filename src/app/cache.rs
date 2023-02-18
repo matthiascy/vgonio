@@ -161,7 +161,7 @@ impl Cache {
                 .meshes
                 .get(&record.mesh.id)
                 .ok_or_else(|| Error::Any(format!("{BRIGHT_RED}Surface mesh not exist!{RESET}")))?;
-            let mut renderable = RenderableMesh::from_micro_surface_mesh(device, mesh);
+            let renderable = RenderableMesh::from_micro_surface_mesh(device, mesh);
             let handle = Handle::new(Uuid::new_v4());
             self.renderables.insert(handle.id(), renderable);
             Ok(handle)

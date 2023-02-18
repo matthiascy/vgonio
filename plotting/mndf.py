@@ -69,7 +69,7 @@ def convert_to_xyz(data, azimuth_bins, zenith_bins):
     zs = np.empty(count, dtype=np.float32)
     for i, azimuth in enumerate(azimuth_bins):
         for j, zenith in enumerate(zenith_bins):
-            n = i * zenith_bin_count + j;
+            n = i * zenith_bin_count + j
             theta = np.radians(zenith)
             phi = np.radians(azimuth)
             xs[n] = np.sin(theta) * np.cos(phi)

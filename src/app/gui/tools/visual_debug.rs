@@ -1,11 +1,13 @@
 use crate::app::gui::VgonioEvent;
-use std::any::Any;
+use std::{any::Any, default::Default};
 use winit::event_loop::EventLoopProxy;
 
+mod microfacet;
 mod ray_tracing;
 mod shadow_map;
 
 use crate::app::gui::{tools::Tool, widgets::toggle_ui};
+use microfacet::MicrofacetMeasurementPane;
 use ray_tracing::RayTracingPane;
 use shadow_map::ShadowMapPane;
 
@@ -14,6 +16,7 @@ use shadow_map::ShadowMapPane;
 enum PaneKind {
     ShadowMap,
     RayTracing,
+    Microfacet,
 }
 
 impl Default for PaneKind {
@@ -27,6 +30,7 @@ pub(crate) struct VisualDebugger {
     event_loop: EventLoopProxy<VgonioEvent>,
     pub(crate) shadow_map_pane: ShadowMapPane,
     pub(crate) ray_tracing_pane: RayTracingPane,
+    pub(crate) microfacet_pane: MicrofacetMeasurementPane,
 }
 
 impl Tool for VisualDebugger {
@@ -55,6 +59,7 @@ impl Tool for VisualDebugger {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.opened_pane, PaneKind::ShadowMap, "Shadow Map");
             ui.selectable_value(&mut self.opened_pane, PaneKind::RayTracing, "Ray Tracing");
+            ui.selectable_value(&mut self.opened_pane, PaneKind::Microfacet, "Microfacet");
         });
         ui.separator();
 
@@ -64,6 +69,9 @@ impl Tool for VisualDebugger {
             }
             PaneKind::RayTracing => {
                 ui.add(&mut self.ray_tracing_pane);
+            }
+            PaneKind::Microfacet => {
+                ui.add(&mut self.microfacet_pane);
             }
         }
     }
@@ -80,7 +88,8 @@ impl VisualDebugger {
             debug_drawing_enabled: true,
             event_loop: event_loop.clone(),
             shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
-            ray_tracing_pane: RayTracingPane::new(event_loop),
+            ray_tracing_pane: RayTracingPane::new(event_loop.clone()),
+            microfacet_pane: MicrofacetMeasurementPane::new(event_loop),
         }
     }
 }

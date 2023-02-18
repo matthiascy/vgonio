@@ -103,8 +103,7 @@ impl MicrofacetNormalDistribution {
                     &self
                         .samples
                         .iter()
-                        .map(|x| x.to_le_bytes())
-                        .flatten()
+                        .flat_map(|x| x.to_le_bytes())
                         .collect::<Vec<_>>(),
                 )?;
             }

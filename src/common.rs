@@ -152,6 +152,7 @@ impl SphericalDomain {
 }
 
 /// Partition of the collector spherical shape, each patch served as a detector.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SphericalPartition {

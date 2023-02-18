@@ -209,21 +209,19 @@ impl DepthMap {
 
 pub struct DebugState {
     /// Vertex buffer storing all vertices.
-    pub vert_buffer: wgpu::Buffer,
-
-    pub vert_count: u32,
-
+    pub rays_vertex_buf: wgpu::Buffer,
+    pub rays_vertex_count: u32,
     // pub embree_rays: Vec<Ray>,
     pub rays: Vec<Ray>,
-
     /// Render pass for rays drawing.
-    pub render_pass_rd: RenderPass,
-
-    pub prim_pipeline: wgpu::RenderPipeline,
-    pub prim_bind_group: wgpu::BindGroup,
-    pub prim_uniform_buffer: wgpu::Buffer,
-    pub prim_vert_buffer: wgpu::Buffer,
+    pub rays_rp: RenderPass,
     pub ray_t: f32,
+
+    pub msurf_prim_rp: RenderPass,
+    pub msurf_prim_index_buf: wgpu::Buffer,
+    pub msurf_prim_index_count: u32,
+    pub multiple_prims: bool,
+    pub drawing_msurf_prims: bool,
 }
 
 impl DebugState {
@@ -262,23 +260,30 @@ impl DebugState {
                         count: None,
                     }],
                 });
-        let uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("debug-drawing-rays-uniform-buffer"),
-                contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-        let prim_uniform_buffer =
+        let rays_rp_uniform_buffer =
             ctx.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("debug-drawing-prim-uniform-buffer"),
+                    label: Some("debug-drawing-rays-uniform-buffer"),
                     contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
-
+        let msurf_prim_rp_uniform_buffer =
+            ctx.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("debug-drawing-msurf-uniform-buffer"),
+                    contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+        let msurf_prim_index_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-msurf-prim-index-buffer"),
+            size: std::mem::size_of::<u32>() as u64 * 1024, // initial capacity of 1024 rays
+            usage: wgpu::BufferUsages::INDEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
         Self {
-            vert_buffer: ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-rays-vert-buffer"),
                 size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays
                 usage: wgpu::BufferUsages::VERTEX
@@ -286,9 +291,9 @@ impl DebugState {
                     | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }),
-            vert_count: 0,
+            rays_vertex_count: 0,
             rays: vec![],
-            render_pass_rd: RenderPass {
+            rays_rp: RenderPass {
                 pipeline: ctx
                     .device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -332,89 +337,91 @@ impl DebugState {
                     layout: &bind_group_layout,
                     entries: &[wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
+                        resource: rays_rp_uniform_buffer.as_entire_binding(),
                     }],
                 })],
-                uniform_buffer: Some(uniform_buffer),
+                uniform_buffer: Some(rays_rp_uniform_buffer),
             },
-            prim_pipeline: ctx
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("debug-prim-pipeline"),
-                    layout: Some(&ctx.device.create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("debug-prim-pipeline-layout"),
-                            bind_group_layouts: &[&bind_group_layout],
-                            push_constant_ranges: &[],
-                        },
-                    )),
-                    vertex: wgpu::VertexState {
-                        module: &prim_shader_module,
-                        entry_point: "vs_main",
-                        buffers: &[VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None)
-                            .buffer_layout(wgpu::VertexStepMode::Vertex)],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,
-                        unclipped_depth: false,
-                        polygon_mode: wgpu::PolygonMode::Line,
-                        conservative: false,
-                    },
-                    depth_stencil: None,
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &prim_shader_module,
-                        entry_point: "fs_main",
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: target_format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    multiview: None,
-                }),
-            prim_bind_group: ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("debug-prim-bind-group"),
-                layout: &ctx
+            ray_t: 0.0,
+            msurf_prim_rp: RenderPass {
+                pipeline: ctx
                     .device
-                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: Some("debug-drawing-prim-bind-group-layout"),
-                        entries: &[wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("debug-msurf-prim-pipeline"),
+                        layout: Some(&ctx.device.create_pipeline_layout(
+                            &wgpu::PipelineLayoutDescriptor {
+                                label: Some("debug-prim-pipeline-layout"),
+                                bind_group_layouts: &[&bind_group_layout],
+                                push_constant_ranges: &[],
                             },
-                            count: None,
-                        }],
+                        )),
+                        vertex: wgpu::VertexState {
+                            module: &prim_shader_module,
+                            entry_point: "vs_main",
+                            buffers: &[VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None)
+                                .buffer_layout(wgpu::VertexStepMode::Vertex)],
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: None,
+                            unclipped_depth: false,
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            conservative: false,
+                        },
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &prim_shader_module,
+                            entry_point: "fs_main",
+                            targets: &[Some(wgpu::ColorTargetState {
+                                format: target_format,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })],
+                        }),
+                        multiview: None,
                     }),
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: prim_uniform_buffer.as_entire_binding(),
-                }],
-            }),
-            prim_uniform_buffer,
-            prim_vert_buffer: ctx
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("debug-drawing-prim-vert-buffer"),
-                    contents: bytemuck::cast_slice(&[0.0f32; std::mem::size_of::<f32>() * 3 * 3]),
-                    usage: wgpu::BufferUsages::VERTEX
-                        | wgpu::BufferUsages::COPY_DST
-                        | wgpu::BufferUsages::COPY_SRC,
-                }),
-            ray_t: 10.0,
+                bind_groups: vec![ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("debug-prim-bind-group"),
+                    layout: &ctx.device.create_bind_group_layout(
+                        &wgpu::BindGroupLayoutDescriptor {
+                            label: Some("debug-drawing-prim-bind-group-layout"),
+                            entries: &[wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            }],
+                        },
+                    ),
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: msurf_prim_rp_uniform_buffer.as_entire_binding(),
+                    }],
+                })],
+                uniform_buffer: Some(msurf_prim_rp_uniform_buffer),
+            },
+            msurf_prim_index_buf,
+            msurf_prim_index_count: 0,
+            multiple_prims: false,
+            drawing_msurf_prims: false,
         }
     }
 
     pub fn update_uniform_buffer(&mut self, ctx: &GpuContext, uniform: &[f32; 16 * 3 + 4]) {
         ctx.queue.write_buffer(
-            self.render_pass_rd.uniform_buffer.as_ref().unwrap(),
+            self.rays_rp.uniform_buffer.as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(uniform),
+        );
+        ctx.queue.write_buffer(
+            self.msurf_prim_rp.uniform_buffer.as_ref().unwrap(),
             0,
             bytemuck::cast_slice(uniform),
         );

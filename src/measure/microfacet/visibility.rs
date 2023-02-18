@@ -35,8 +35,9 @@ use wgpu::{util::DeviceExt, ColorTargetState};
 /// Render view-dependent micro-facet shadowing/masking function using the
 /// depth buffer from the depth pass.
 ///
-/// Render all visible facets. Each fragment outputs value of 1/1024, then at
-/// the blending stage, sum up; later stores inside of a texture.
+/// Render all visible facets. Each fragment outputs value of 1/ 256 or 1/1024
+/// depending on the format of the color attachment used. At the blending
+/// stage, values will be summed up; later stores inside of a texture.
 pub struct VisibilityEstimator {
     /// Depth pass to generate depth buffer for the entire micro-surface.
     depth_pass: RenderPass,
@@ -57,8 +58,8 @@ pub struct VisibilityEstimator {
     /// Color attachments used to compute the ratio of visible projected area
     /// over whole area of all visible facets at each measurement point.
     /// Each color attachment is a 2D texture array with one layer per
-    /// measurement point. First color attachment is used to store the visible
-    /// projected area (area of visible facets respecting other facets), second
+    /// measurement point. 1st color attachment is used to store the visible
+    /// projected area (area of visible facets respecting each other), 2nd
     /// color attachment is used to store the whole area of all visible
     /// facets.
     color_attachments: [ColorAttachment; 2],
@@ -628,7 +629,7 @@ impl VisibilityEstimator {
     ) -> Result<(), Error> {
         log::info!("Saving color attachment to {:?}", dir);
         self.color_attachments[0].save(device, &dir.join("visible_projected_area"), as_image)?;
-        self.color_attachments[1].save(device, &dir.join("projected_area"), as_image)
+        self.color_attachments[1].save(device, &dir.join("total_projected_area"), as_image)
     }
 
     /// Saves the depth estimation outputs to the given directory.
@@ -643,10 +644,7 @@ impl VisibilityEstimator {
     }
 
     fn compute_area(&self, device: &wgpu::Device, color_attachment: &ColorAttachment) -> Vec<u32> {
-        use rayon::{
-            prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
-            slice::ParallelSlice,
-        };
+        use rayon::{prelude::ParallelIterator, slice::ParallelSlice};
         let layer_size_in_bytes = color_attachment.layer_size_in_bytes();
         let is_8bit = color_attachment.is_8bit();
         color_attachment
@@ -703,15 +701,23 @@ impl VisibilityEstimator {
     /// The `bake` and `estimate` methods must be called before this method.
     pub fn compute_visibility(&self, device: &wgpu::Device) -> Vec<VisibilityEstimation> {
         log::info!("Computing visibility...");
-        let layer_size = self.color_attachments[0].layer_size_in_bytes();
         let visible_area = self.compute_area(device, &self.color_attachments[0]);
         let total_area = self.compute_area(device, &self.color_attachments[1]);
         visible_area
             .iter()
             .zip(total_area.iter())
-            .map(|(&visible_area, &total_area)| VisibilityEstimation {
-                total_area,
-                visible_area,
+            .enumerate()
+            .map(|(i, (&visible_area, &total_area))| {
+                if total_area == 0 {
+                    eprintln!(
+                        "WARNING: total area is zero! (visible_area: {}) -- index: {}",
+                        visible_area, i
+                    );
+                }
+                VisibilityEstimation {
+                    total_area,
+                    visible_area,
+                }
             })
             .collect()
     }
@@ -1068,7 +1074,7 @@ impl ColorAttachment {
             "Unsupported color texture format. Only Rgba8Unorm and Rgb10a2Unorm are supported."
         );
         let layers_per_texture = device.limits().max_texture_array_layers;
-        let mut textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
+        let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
         log::debug!(
             "Creating color attachment with {} layers, {} textures, {} layers per texture",
             layers,
@@ -1343,7 +1349,7 @@ impl MicrofacetMaskingShadowing {
     /// Saves the microfacet shadowing and masking function.
     pub fn save(&self, filepath: &Path, encoding: DataEncoding) -> Result<(), std::io::Error> {
         use std::io::{BufWriter, Write};
-        assert!(self.samples.len() == self.bins_count());
+        assert_eq!(self.samples.len(), self.bins_count());
         let file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -1392,8 +1398,7 @@ impl MicrofacetMaskingShadowing {
                     &self
                         .samples
                         .iter()
-                        .map(|x| x.to_le_bytes())
-                        .flatten()
+                        .flat_map(|x| x.to_le_bytes())
                         .collect::<Vec<_>>(),
                 )?;
             }
