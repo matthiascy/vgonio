@@ -1,6 +1,6 @@
 [package]
 name = "vgonio"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
 edition = "2021"
 build = "build.rs"
