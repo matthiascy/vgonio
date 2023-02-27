@@ -18,7 +18,7 @@ use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 /// TODO: deal with axis alignment of the heightfield, currently XY alignment is
 /// assumed. (with its own transformation matrix).
 #[derive(Debug)]
-pub struct GridRayTracing<'hf> {
+pub struct GridRT<'hf> {
     /// The heightfield where the grid is defined.
     surface: &'hf MicroSurface,
 
@@ -35,7 +35,7 @@ pub struct GridRayTracing<'hf> {
     pub origin: Vec2,
 }
 
-impl<'ms> GridRayTracing<'ms> {
+impl<'ms> GridRT<'ms> {
     /// Creates a new grid ray tracing object.
     pub fn new(surface: &'ms MicroSurface, mesh: &'ms MicroSurfaceMesh) -> Self {
         let max = IVec2::new(surface.cols as i32 - 2, surface.rows as i32 - 2);
@@ -43,7 +43,7 @@ impl<'ms> GridRayTracing<'ms> {
             -surface.du * (surface.cols / 2) as f32,
             -surface.dv * (surface.rows / 2) as f32,
         );
-        GridRayTracing {
+        GridRT {
             surface,
             surface_mesh: mesh,
             min: IVec2::ZERO,
@@ -714,7 +714,7 @@ pub enum GridTraversal {
 fn test_grid_traversal() {
     let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
     let triangle_mesh = heightfield.triangulate();
-    let grid = GridRayTracing::new(&heightfield, &triangle_mesh);
+    let grid = GridRT::new(&heightfield, &triangle_mesh);
     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
     println!("{:?}", result);
 }

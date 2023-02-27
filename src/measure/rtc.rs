@@ -9,6 +9,6 @@ mod optix;
 mod grid;
 
 #[cfg(feature = "embree")]
-pub use crate::measure::rtc::embree::EmbreeRayTracing;
-pub use grid::GridRayTracing;
-pub use optix::OptiXRayTracing;
+pub use crate::measure::rtc::embree::EmbreeRT;
+pub use grid::GridRT;
+pub use optix::OptixRT;

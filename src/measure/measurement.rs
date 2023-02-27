@@ -241,7 +241,7 @@ impl BsdfMeasurement {
                     "zenith and azimuth's start and stop must not be equal",
                 ),
             },
-            CollectorScheme::Individual { shape, .. } => match shape {
+            CollectorScheme::SingleRegion { shape, .. } => match shape {
                 RegionShape::SphericalCap { zenith } => {
                     if !zenith.is_positive() {
                         (false, "collector's zenith angle must be positive")

@@ -10,8 +10,11 @@
 type: !mmsf # or microfacet-masking-shadowing-function
   azimuth: 0 rad ~ 360 deg / 60 deg
   zenith: 0 rad ~ 90 deg / 5 deg
-  resolution: 512
+  resolution: 1024
 surfaces:
-  - usr://surfaces/measured/Aluminium65bar100.txt
+  # - usr://surfaces/measured/Aluminium65bar100.txt
+  - usr://surfaces/generated/pyramid/poisson.txt
+  - usr://surfaces/generated/pyramid/random.txt
+  - usr://surfaces/generated/pyramid/regular.txt
   # - usr://surfaces/AluminiumMirror.txt
   # - usr://surfaces/generated/8x8_flat.txt

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 mod io;
 mod mesh;
 
+use crate::units::Nanometres;
 pub use mesh::MicroSurfaceMesh;
 
 /// Static variable used to generate height field name.
@@ -71,13 +72,10 @@ pub struct MicroSurface {
     pub cols: usize,
 
     /// The space between sample points in horizontal direction.
-    pub du: f32,
+    pub du: Nanometres,
 
     /// The space between sample points in vertical direction.
-    pub dv: f32,
-
-    /// Height field's center position in world space.
-    pub center: [f32; 3],
+    pub dv: Nanometres,
 
     /// Minimum height of the height field.
     pub min: f32,

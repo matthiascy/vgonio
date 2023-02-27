@@ -20,15 +20,15 @@ egui = { version = "0.20", features = ["bytemuck"] }
 egui_demo_lib = "0.20.0"
 egui-winit = { version = "0.20", default-features = false }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "main" }
-embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true}
+embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true }
 env_logger = "0.10"
 futures-intrusive = "0.5"
-glam = { version = "0.22", features = ["serde", "bytemuck"] }
+glam = { version = "0.23", features = ["serde", "bytemuck"] }
 image = "0.24"
 log = "0.4"
 paste = "1.0"
-pollster = "0.2"
-rfd = { version = "0.10", features = ["file-handle-inner"] }
+pollster = "0.3"
+rfd = { version = "0.11", features = ["file-handle-inner"] }
 rayon = "1.6"
 rand = "0.8"
 rand_distr = "0.4"
@@ -42,7 +42,7 @@ winit = "0.27"
 wgpu = { version = "0.14", features = ["spirv"] }
 
 [features]
-default = ["optix"]
+default = ["optix", "embree"]
 embree = ["dep:embree"]
 optix = []
 

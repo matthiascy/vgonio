@@ -226,16 +226,27 @@ impl Cache {
 
     /// Returns a list of micro-surface meshes [`MicroSurfaceMesh`] from the
     /// cache given a list of handles to the micro-surface profiles.
-    pub fn micro_surface_meshes_by_surface_ids(
+    pub fn micro_surface_meshes_by_surfaces(
         &self,
         handles: &[Handle<MicroSurface>],
-    ) -> Vec<&MicroSurfaceMesh> {
+    ) -> Result<Vec<&MicroSurfaceMesh>, Error> {
         let mut meshes = vec![];
         for handle in handles {
-            let record = self.records.get(&handle.id()).unwrap();
-            meshes.push(self.meshes.get(&record.mesh.id()).unwrap());
+            match self.records.get(&handle.id()) {
+                Some(record) => match self.meshes.get(&record.mesh.id()) {
+                    Some(mesh) => {
+                        meshes.push(mesh);
+                    }
+                    None => {
+                        return Err(Error::Any("Surface mesh not exist!".to_string()));
+                    }
+                },
+                None => {
+                    return Err(Error::Any("Surface record not exist!".to_string()));
+                }
+            }
         }
-        meshes
+        Ok(meshes)
     }
 
     /// Returns a list of micro-surface meshes [`MicroSurfaceMesh`] from the

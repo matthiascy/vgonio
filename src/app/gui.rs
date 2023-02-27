@@ -35,7 +35,7 @@ use crate::{
         },
         gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
     },
-    measure::rtc::GridRayTracing,
+    measure::rtc::GridRT,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     units::Degrees,
 };
@@ -732,11 +732,12 @@ impl VgonioApp {
                         #[cfg(feature = "embree")]
                         RtcMethod::Embree => {
                             log::debug!("  => [Standard Ray Tracing]");
-                            self.debug_drawing.rays = trace_ray_standard_dbg(
-                                ray,
-                                max_bounces,
-                                self.surface_mesh.as_ref().unwrap(),
-                            );
+                            todo!();
+                            // self.debug_drawing.rays = trace_ray_standard_dbg(
+                            //     ray,
+                            //     max_bounces,
+                            //     self.surface_mesh.as_ref().unwrap(),
+                            // );
                         }
                         #[cfg(feature = "optix")]
                         RtcMethod::Optix => {
@@ -745,7 +746,7 @@ impl VgonioApp {
                         RtcMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
                             let cache = self.cache.deref().borrow();
-                            let grid_rt = GridRayTracing::new(
+                            let grid_rt = GridRT::new(
                                 cache
                                     .micro_surface(self.msurf.as_ref().unwrap().surf)
                                     .unwrap(),

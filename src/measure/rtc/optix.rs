@@ -1,2 +1,2 @@
 /// OptiX ray tracing.
-pub struct OptiXRayTracing;
+pub struct OptixRT;

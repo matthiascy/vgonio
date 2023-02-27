@@ -41,7 +41,7 @@ pub enum CollectorScheme {
     },
     /// The collector is represented by a single shape on the surface of the
     /// sphere.
-    Individual {
+    SingleRegion {
         /// Spherical domain of the collector.
         domain: SphericalDomain,
         /// Shape of the collector.
@@ -64,7 +64,7 @@ impl Collector {
             CollectorScheme::Partitioned { domain, partition } => {
                 Some(partition.generate_patches_over_domain(&domain))
             }
-            CollectorScheme::Individual { .. } => None,
+            CollectorScheme::SingleRegion { .. } => None,
         };
     }
 

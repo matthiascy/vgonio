@@ -3,13 +3,13 @@ mod sampling;
 mod scratch;
 mod visual_debug;
 #[cfg(feature = "embree")]
-use crate::measure::rtc::EmbreeRayTracing;
+use crate::measure::rtc::EmbreeRT;
 
 use crate::msurf::MicroSurfaceMesh;
 
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
-    measure::{rtc::GridRayTracing, Ray, TrajectoryNode},
+    measure::{rtc::GridRT, Ray, TrajectoryNode},
 };
 #[cfg(feature = "embree")]
 use embree::Config;
@@ -23,7 +23,7 @@ pub(crate) use visual_debug::VisualDebugger;
 
 use super::state::GuiRenderer;
 
-pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRayTracing) -> Vec<Ray> {
+pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &GridRT) -> Vec<Ray> {
     log::debug!("trace_ray_grid_dbg: {:?}", ray);
     let mut rays = vec![];
     grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut rays);
@@ -37,7 +37,7 @@ pub(crate) fn trace_ray_standard_dbg(
     max_bounces: u32,
     surface: &MicroSurfaceMesh,
 ) -> Vec<Ray> {
-    let mut embree_rt = EmbreeRayTracing::new(Config::default());
+    let mut embree_rt = EmbreeRT::new(Config::default());
     let scn_id = embree_rt.create_scene();
     let mesh = embree_rt.create_triangle_mesh(surface);
     embree_rt.attach_geometry(scn_id, mesh);
