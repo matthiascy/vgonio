@@ -773,6 +773,7 @@ impl LayeredTexture {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
         });
         let mut views = Vec::with_capacity(layers as usize + 1);
         views.push(texture.create_view(&wgpu::TextureViewDescriptor {

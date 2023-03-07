@@ -34,11 +34,11 @@ impl WindowSurface {
         config: &WgpuConfig,
         surface: wgpu::Surface,
     ) -> Self {
-        let formats = surface.get_supported_formats(&gpu.adapter);
-        log::info!("Supported surface formats: {:?}", formats);
+        let capabilities = surface.get_capabilities(&gpu.adapter);
+        log::info!("Supported surface formats: {:?}", &capabilities.formats);
         let format = config
             .target_format
-            .unwrap_or_else(|| config.preferred_surface_format(&formats));
+            .unwrap_or_else(|| config.preferred_surface_format(&capabilities.formats));
         log::info!("-- choose surface format: {:?}", format);
         let win_size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
@@ -48,6 +48,7 @@ impl WindowSurface {
             height: win_size.height,
             present_mode: config.present_mode,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
         };
         let window_scale_factor = window.scale_factor() as f32;
         surface.configure(&gpu.device, &config);
@@ -189,8 +190,15 @@ impl GpuContext {
     /// Creates a new context and requests necessary resources to use the GPU
     /// for presenting to a window.
     pub async fn new(window: &Window, config: &WgpuConfig) -> (Self, wgpu::Surface) {
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            dx12_shader_compiler: Default::default(),
+        });
+        let surface = unsafe {
+            instance
+                .create_surface(window)
+                .expect("Unable to create a window surface!")
+        };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: config.power_preference,
@@ -245,7 +253,10 @@ impl GpuContext {
 
     /// Offscreen rendering context.
     pub async fn offscreen(config: &WgpuConfig) -> Self {
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            dx12_shader_compiler: Default::default(),
+        });
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: config.power_preference,

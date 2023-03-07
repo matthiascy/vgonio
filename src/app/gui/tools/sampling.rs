@@ -141,6 +141,7 @@ impl SamplingDebugger {
                 format: output_format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
             },
             Some(sampler.clone()),
         );

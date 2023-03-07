@@ -499,6 +499,7 @@ impl GuiRenderer {
                                                               * emulation is WebGL2, so this
                                                               * should always be supported */
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
             });
             let sampler = self
                 .samplers

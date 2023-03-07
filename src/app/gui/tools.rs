@@ -5,8 +5,6 @@ mod visual_debug;
 #[cfg(feature = "embree")]
 use crate::measure::rtc::EmbreeRayTracing;
 
-use crate::msurf::MicroSurfaceMesh;
-
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
     measure::{rtc::GridRayTracing, Ray, TrajectoryNode},
