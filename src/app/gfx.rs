@@ -64,7 +64,8 @@ pub const fn tex_fmt_bpp(format: wgpu::TextureFormat) -> u32 {
         TextureFormat::R8Unorm
         | TextureFormat::R8Snorm
         | TextureFormat::R8Uint
-        | TextureFormat::R8Sint => 1,
+        | TextureFormat::R8Sint
+        | TextureFormat::Stencil8 => 1,
         TextureFormat::R16Uint
         | TextureFormat::R16Sint
         | TextureFormat::R16Unorm

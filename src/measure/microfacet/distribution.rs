@@ -120,7 +120,8 @@ pub fn measure_normal_distribution(
 ) -> Vec<MicrofacetNormalDistribution> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet normal distribution...");
-    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces);
+    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces)
+        .unwrap();
     let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
     let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
     surfaces

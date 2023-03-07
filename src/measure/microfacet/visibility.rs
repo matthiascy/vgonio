@@ -776,6 +776,7 @@ impl LayeredTexture {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
         });
         let mut views = Vec::with_capacity(layers as usize + 1);
         views.push(texture.create_view(&wgpu::TextureViewDescriptor {
@@ -1439,7 +1440,8 @@ pub fn measure_masking_shadowing(
         desc.resolution,
         desc.measurement_location_count() as u32,
     );
-    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces);
+    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces)
+        .unwrap();
     let mut results = Vec::with_capacity(surfaces.len());
     surfaces.iter().for_each(|surface| {
         let facets_vtx_buf = gpu

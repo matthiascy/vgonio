@@ -192,7 +192,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         format!(
                             "        - domain: {domain}\n- shape: {shape:?}\n- polar angle: \
                              {zenith:?}\n- azimuthal angle {azimuth:?}\n",
-                        );
+                        )
                     }
                 };
 

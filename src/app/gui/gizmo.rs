@@ -95,7 +95,7 @@ impl VgonioGizmo {
                 self.last_gizmo_response = gizmo.interact(ui);
 
                 if let Some(gizmo_response) = self.last_gizmo_response {
-                    self.model_matrix = Mat4::from_cols_array_2d(&gizmo_response.transform);
+                    self.model_matrix = gizmo_response.transform();
                 }
             });
         // });

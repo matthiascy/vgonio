@@ -5,8 +5,6 @@ mod visual_debug;
 #[cfg(feature = "embree")]
 use crate::measure::rtc::EmbreeRT;
 
-use crate::msurf::MicroSurfaceMesh;
-
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
     measure::{rtc::GridRT, Ray, TrajectoryNode},
@@ -20,6 +18,7 @@ pub(crate) use plotting::Plotting;
 pub(crate) use sampling::SamplingDebugger;
 pub(crate) use scratch::Scratch;
 pub(crate) use visual_debug::VisualDebugger;
+use crate::msurf::MicroSurfaceMesh;
 
 use super::state::GuiRenderer;
 

@@ -16,14 +16,14 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1"
 dirs = "4.0"
-egui = { version = "0.20", features = ["bytemuck"] }
-egui_demo_lib = "0.20.0"
-egui-winit = { version = "0.20", default-features = false }
-egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "main" }
-embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true }
+egui = { version = "0.21", features = ["bytemuck"] }
+egui_demo_lib = "0.21"
+egui-winit = { version = "0.21", default-features = false }
+egui-gizmo = "0.10"
+embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true}
 env_logger = "0.10"
 futures-intrusive = "0.5"
-glam = { version = "0.23", features = ["serde", "bytemuck"] }
+glam = { version = "0.22", features = ["serde", "bytemuck"] }
 image = "0.24"
 log = "0.4"
 paste = "1.0"
@@ -38,11 +38,11 @@ serde_json = "1.0"
 toml = "0.7"
 type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
-winit = "0.27"
-wgpu = { version = "0.14", features = ["spirv"] }
+winit = "0.28"
+wgpu = { version = "0.15", features = ["spirv"] }
 
 [features]
-default = ["optix", "embree"]
+default = ["optix"]
 embree = ["dep:embree"]
 optix = []
 

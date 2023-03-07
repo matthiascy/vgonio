@@ -8,7 +8,7 @@ use std::path::PathBuf;
 mod io;
 mod mesh;
 
-use crate::units::Nanometres;
+use crate::units::{LengthUnit, Nanometres};
 pub use mesh::MicroSurfaceMesh;
 
 /// Static variable used to generate height field name.
@@ -88,7 +88,7 @@ pub struct MicroSurface {
 
     /// Height values of sample points on the height field (values are stored in
     /// row major order).
-    pub samples: Vec<f32>,
+    pub samples: Vec<Nanometres>,
 }
 
 impl Asset for MicroSurface {}
@@ -488,7 +488,7 @@ impl MicroSurface {
         (positions, extent)
     }
 
-    /// Triangulate the heightfield into a [`TriangleMesh`].
+    /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
     pub fn triangulate(&self) -> MicroSurfaceMesh {
         let (verts, extent) = self.generate_vertices();
         let faces = regular_triangulation(&verts, self.cols, self.rows);

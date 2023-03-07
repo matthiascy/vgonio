@@ -9,8 +9,7 @@ use crate::{
     units::{metres, Nanometres},
 };
 #[cfg(feature = "embree")]
-use embree::Config;
-use embree::{Device, SceneFlags};
+use embree::{Config, Device, SceneFlags};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -236,7 +235,7 @@ pub fn measure_bsdf_grid_rt(
     let (surfaces, meshes) = {
         (
             cache.micro_surfaces(surfaces).unwrap(),
-            cache.micro_surface_meshes_by_surfaces(surfaces),
+            cache.micro_surface_meshes_by_surfaces(surfaces).unwrap(),
         )
     };
 
