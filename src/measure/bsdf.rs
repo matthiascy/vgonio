@@ -4,12 +4,12 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     common::RangeByStepSize,
-    measure::{measurement::Radius, rtc::GridRayTracing, Collector, Emitter, Patch},
+    measure::{measurement::Radius, rtc::GridRT, Collector, Emitter, Patch},
     msurf::MicroSurface,
     units::{metres, Nanometres},
 };
 #[cfg(feature = "embree")]
-use embree::Config;
+use embree::{Config, Device, SceneFlags};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -132,38 +132,41 @@ pub fn measure_bsdf_embree_rt(
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
-    use crate::measure::rtc::EmbreeRayTracing;
+    use crate::measure::rtc::EmbreeRT;
     let mut collector: Collector = desc.collector;
     let mut emitter: Emitter = desc.emitter;
-    let mut embree_rt = EmbreeRayTracing::new(Config::default());
-    let (surfaces, meshes) = {
-        (
-            cache.micro_surfaces(surfaces).unwrap(),
-            cache.micro_surface_meshes(surfaces),
-        )
-    };
-
     collector.init();
     emitter.init();
 
-    // Iterate over every surface.
+    let mut device = Device::with_config(Config::default()).unwrap();
+    let (surfaces, meshes) = {
+        (
+            cache.micro_surfaces(surfaces).unwrap(),
+            cache.micro_surface_meshes_by_surfaces(surfaces).unwrap(),
+        )
+    };
+
     for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
         );
-        let scene_id = embree_rt.create_scene();
+        let mut scene = device.create_scene().unwrap();
+        scene.set_flags(SceneFlags::ROBUST);
+
         // Update emitter's radius to match the surface's dimensions.
         if emitter.radius().is_auto() {
             // TODO: use surface's physical size
             emitter.set_radius(Radius::Auto(metres!(mesh.extent.max_edge() * 2.5)));
         }
+
         log::debug!("mesh extent: {:?}", mesh.extent);
         log::debug!("emitter radius: {:?}", emitter.radius());
 
         // Upload the surface's mesh to the Embree scene.
-        let embree_mesh = embree_rt.create_triangle_mesh(mesh);
-        let _surface_id = embree_rt.attach_geometry(scene_id, embree_mesh);
+        let embree_mesh = mesh.as_embree_geometry(&mut device);
+        scene.attach_geometry(&embree_mesh);
+
         let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
         log::debug!("spectrum samples: {:?}", spectrum);
 
@@ -174,7 +177,7 @@ pub fn measure_bsdf_embree_rt(
             .expect("transmitted medium IOR not found");
 
         // Iterate over every incident direction.
-        for pos in emitter.positions() {
+        for pos in emitter.meas_points() {
             let rays = emitter.emit_rays(pos);
             log::debug!(
                 "emitted {} rays with direction {} from position {}° {}°",
@@ -185,15 +188,15 @@ pub fn measure_bsdf_embree_rt(
             );
 
             // Populate embree ray stream with generated rays.
-            let mut ray_stream = embree::RayN::new(rays.len());
-            for (i, mut ray) in ray_stream.iter_mut().enumerate() {
+            let mut rays = embree::RayNp::new(rays.len());
+            for (i, mut ray) in rays.iter_mut().enumerate() {
                 ray.set_origin(rays[i].o.into());
                 ray.set_dir(rays[i].d.into());
             }
 
             // Trace primary rays with coherent context
             let mut coherent_ctx = embree::IntersectContext::coherent();
-            let ray_hit = embree_rt.intersect_stream_soa(scene_id, ray_stream, &mut coherent_ctx);
+            let ray_hit = embree_rt.intersect_stream_soa(scene_id, rays, &mut coherent_ctx);
 
             // Filter out primary rays (index) that hit the surface.
             let filtered: Vec<_> = ray_hit
@@ -232,12 +235,12 @@ pub fn measure_bsdf_grid_rt(
     let (surfaces, meshes) = {
         (
             cache.micro_surfaces(surfaces).unwrap(),
-            cache.micro_surface_meshes_by_surface_ids(surfaces),
+            cache.micro_surface_meshes_by_surfaces(surfaces).unwrap(),
         )
     };
 
     for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
-        let grid_rt = GridRayTracing::new(surface, mesh);
+        let grid_rt = GridRT::new(surface, mesh);
         println!(
             "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()

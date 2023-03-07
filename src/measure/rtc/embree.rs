@@ -8,35 +8,61 @@ use crate::{
     optics::RefractiveIndex,
 };
 use embree::{
-    Config, Device, Geometry, Hit, IntersectContext, RayHit, RayHitN, RayN, Scene, SceneFlags,
-    TriangleMesh,
+    BufferUsage, Config, Device, Format, Geometry, GeometryKind, Hit, IntersectContext, RayHit,
+    RayHitN, RayN, Scene, SceneFlags, TriangleMesh,
 };
 use glam::Vec3;
 use std::sync::Arc;
 
-/// Struct managing the ray/geometry intersection with the help of embree.
-pub struct EmbreeRayTracing {
-    device: Arc<Device>,
-    scenes: Vec<Arc<Scene>>,
+impl MicroSurfaceMesh {
+    /// Constructs an embree geometry from the `MicroSurfaceMesh`.
+    pub fn as_embree_geometry(&self, device: &Device) -> Geometry {
+        let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
+        geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
+            .unwrap()
+            .view_mut::<[f32; 4]>()
+            .unwrap()
+            .iter_mut()
+            .zip(mesh.verts.iter())
+            .for_each(|(vert, pos)| {
+                vert[0] = pos.x;
+                vert[1] = pos.y;
+                vert[2] = pos.z;
+                vert[3] = 1.0;
+            });
+        geom.set_new_buffer(BufferUsage::INDEX, 0, Format::UINT3, 12, self.num_facets)
+            .unwrap()
+            .view_mut::<u32>()
+            .unwrap()
+            .copy_from_slice(&mesh.facets);
+        geom.commit();
+        geom
+    }
 }
 
-impl Default for EmbreeRayTracing {
+/// Struct managing the ray/geometry intersection with the help of embree.
+pub struct EmbreeRT {
+    device: Device,
+    scenes: Vec<Scene<'static>>,
+}
+
+impl Default for EmbreeRT {
     fn default() -> Self {
         Self {
-            device: Device::with_config(Config::default()),
+            device: Device::with_config(Config::default()).unwrap(),
             scenes: Vec::new(),
         }
     }
 }
 
-impl EmbreeRayTracing {
+impl EmbreeRT {
     /// Amount to add to the ray origin to avoid self-intersection.
     pub const NUDGE_AMOUNT: f32 = f32::EPSILON * 10.0;
 
     /// Initialise embree framework.
     pub fn new(config: Config) -> Self {
         Self {
-            device: Device::with_config(config),
+            device: Device::with_config(config).unwrap(),
             scenes: vec![],
         }
     }
@@ -54,32 +80,6 @@ impl EmbreeRayTracing {
 
     /// Returns the reference of a scene according to it's id.
     pub fn scene(&self, id: usize) -> &Scene { &self.scenes[id] }
-
-    /// Uploads a triangle mesh to embree.
-    pub fn create_triangle_mesh(&self, mesh: &MicroSurfaceMesh) -> Arc<TriangleMesh> {
-        let mut embree_mesh =
-            TriangleMesh::unanimated(self.device.clone(), mesh.num_facets, mesh.num_verts);
-        {
-            let mesh_ref_mut = Arc::get_mut(&mut embree_mesh).unwrap();
-            {
-                let mut verts_buffer = mesh_ref_mut.vertex_buffer.map();
-                let mut indxs_buffer = mesh_ref_mut.index_buffer.map();
-                for (i, vert) in mesh.verts.iter().enumerate() {
-                    verts_buffer[i] = [vert.x, vert.y, vert.z, 1.0];
-                }
-                // TODO: replace with slice::as_chunks when it's stable.
-                (0..mesh.num_facets).for_each(|tri| {
-                    indxs_buffer[tri] = [
-                        mesh.facets[tri * 3],
-                        mesh.facets[tri * 3 + 1],
-                        mesh.facets[tri * 3 + 2],
-                    ];
-                })
-            }
-            mesh_ref_mut.commit()
-        }
-        embree_mesh
-    }
 
     /// Attach a geometry onto a embree scene.
     pub fn attach_geometry(&mut self, scene_id: usize, geometry: Arc<dyn Geometry>) -> u32 {
@@ -235,7 +235,7 @@ fn trace_one_ray_inner(
                 );
                 // nudge more
                 let nudged_times = prev.nudged_times + 1;
-                let amount = nudged_times as f32 * EmbreeRayTracing::NUDGE_AMOUNT;
+                let amount = nudged_times as f32 * EmbreeRT::NUDGE_AMOUNT;
                 let new_hit_point = prev.hit_point + prev.normal * amount; // update intersection record
                 let new_isect = EmbreeIsectRecord {
                     hit_point: new_hit_point,
@@ -258,8 +258,7 @@ fn trace_one_ray_inner(
         // Not hitting the same primitive.
         let normal = Vec3::new(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z).normalize();
         // let dir = Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z).normalize();
-        let hit_point =
-            compute_hit_point(scn, &ray_hit.hit) + normal * EmbreeRayTracing::NUDGE_AMOUNT;
+        let hit_point = compute_hit_point(scn, &ray_hit.hit) + normal * EmbreeRT::NUDGE_AMOUNT;
         let reflected_dir = reflect(ray.d, normal).normalize();
         let new_ray = Ray::new(hit_point, reflected_dir);
         trajectory.last_mut().unwrap().cos = ray.d.dot(normal).abs();
@@ -307,9 +306,9 @@ pub fn compute_hit_point(scene: &Scene, record: &Hit) -> Vec3 {
     let prim_id = record.primID as isize;
     let points = unsafe {
         let vertices: *const f32 =
-            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::VERTEX, 0) as _;
+            embree::sys::rtcGetGeometryBufferData(geom, BufferUsage::VERTEX, 0) as _;
         let indices: *const u32 =
-            embree::sys::rtcGetGeometryBufferData(geom, embree::BufferType::INDEX, 0) as _;
+            embree::sys::rtcGetGeometryBufferData(geom, BufferUsage::INDEX, 0) as _;
 
         let mut points = [Vec3::ZERO; 3];
         log::debug!(

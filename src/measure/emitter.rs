@@ -146,8 +146,8 @@ impl Emitter {
     /// Updates the radius of the emitter.
     pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
 
-    /// All possible positions of the emitter.
-    pub fn positions(&self) -> Vec<SphericalCoord> {
+    /// All possible measurement positions of the emitter.
+    pub fn meas_points(&self) -> Vec<SphericalCoord> {
         let n_zenith =
             ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
         let n_azimuth =

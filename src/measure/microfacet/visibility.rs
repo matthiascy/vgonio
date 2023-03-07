@@ -708,11 +708,14 @@ impl VisibilityEstimator {
             .zip(total_area.iter())
             .enumerate()
             .map(|(i, (&visible_area, &total_area))| {
-                if total_area == 0 {
-                    eprintln!(
-                        "WARNING: total area is zero! (visible_area: {}) -- index: {}",
-                        visible_area, i
-                    );
+                #[cfg(debug_assertions)]
+                {
+                    if total_area == 0 {
+                        eprintln!(
+                            "WARNING: total area is zero! (visible_area: {}) -- index: {}",
+                            visible_area, i
+                        );
+                    }
                 }
                 VisibilityEstimation {
                     total_area,
@@ -1437,7 +1440,8 @@ pub fn measure_masking_shadowing(
         desc.resolution,
         desc.measurement_location_count() as u32,
     );
-    let surfaces = cache.micro_surface_meshes_by_surface_ids(surfaces);
+    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces)
+        .unwrap();
     let mut results = Vec::with_capacity(surfaces.len());
     surfaces.iter().for_each(|surface| {
         let facets_vtx_buf = gpu

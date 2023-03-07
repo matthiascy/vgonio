@@ -16,9 +16,10 @@ use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 ///
 /// TODO: deal with the case where the grid is not aligned with the world axes.
 /// TODO: deal with axis alignment of the heightfield, currently XY alignment is
+/// TODO: deal with surface unit
 /// assumed. (with its own transformation matrix).
 #[derive(Debug)]
-pub struct GridRayTracing<'hf> {
+pub struct GridRT<'hf> {
     /// The heightfield where the grid is defined.
     surface: &'hf MicroSurface,
 
@@ -35,15 +36,16 @@ pub struct GridRayTracing<'hf> {
     pub origin: Vec2,
 }
 
-impl<'ms> GridRayTracing<'ms> {
+// TODO:
+impl<'ms> GridRT<'ms> {
     /// Creates a new grid ray tracing object.
     pub fn new(surface: &'ms MicroSurface, mesh: &'ms MicroSurfaceMesh) -> Self {
         let max = IVec2::new(surface.cols as i32 - 2, surface.rows as i32 - 2);
         let origin = Vec2::new(
-            -surface.du * (surface.cols / 2) as f32,
-            -surface.dv * (surface.rows / 2) as f32,
+            -surface.du.value * (surface.cols / 2) as f32,
+            -surface.dv.value * (surface.rows / 2) as f32,
         );
-        GridRayTracing {
+        GridRT {
             surface,
             surface_mesh: mesh,
             min: IVec2::ZERO,
@@ -73,17 +75,18 @@ impl<'ms> GridRayTracing<'ms> {
             AxisAlignment::ZY => (world_pos.z, world_pos.y),
         };
 
+        // TODO:
         IVec2::new(
-            ((x - self.origin.x) / self.surface.du) as i32,
-            ((y - self.origin.y) / self.surface.dv) as i32,
+            ((x - self.origin.x) / self.surface.du.value) as i32,
+            ((y - self.origin.y) / self.surface.dv.value) as i32,
         )
     }
 
     /// Convert a world space position into a grid space position.
     pub fn world_to_grid_2d(&self, world_pos: Vec2) -> IVec2 {
         IVec2::new(
-            ((world_pos.x - self.origin.x) / self.surface.du) as i32,
-            ((world_pos.y - self.origin.y) / self.surface.dv) as i32,
+            ((world_pos.x - self.origin.x) / self.surface.du.value) as i32,
+            ((world_pos.y - self.origin.y) / self.surface.dv.value) as i32,
         )
     }
 
@@ -203,13 +206,13 @@ impl<'ms> GridRayTracing<'ms> {
             let (dir, initial_dist, num_cells) = if ray_dir.x < 0.0 {
                 (
                     -1,
-                    ray_org_grid.x - ray_org_cell.x as f32 * self.surface.du,
+                    ray_org_grid.x - ray_org_cell.x as f32 * self.surface.du.value,
                     ray_org_cell.x - self.min.x + 1,
                 )
             } else {
                 (
                     1,
-                    (ray_org_cell.x + 1) as f32 * self.surface.du - ray_org_grid.x,
+                    (ray_org_cell.x + 1) as f32 * self.surface.du.value - ray_org_grid.x,
                     self.max.x - ray_org_cell.x + 1,
                 )
             };
@@ -218,7 +221,7 @@ impl<'ms> GridRayTracing<'ms> {
             let mut dists = vec![0.0; num_cells as usize + 1];
             for i in 0..num_cells {
                 cells[i as usize] = ray_org_cell + IVec2::new(dir * i, 0);
-                dists[i as usize + 1] = initial_dist + (i as f32 * self.surface.du);
+                dists[i as usize + 1] = initial_dist + (i as f32 * self.surface.du.value);
             }
             GridTraversal::Traversed { cells, dists }
         } else if is_parallel_to_y_axis && !is_parallel_to_x_axis {
@@ -226,13 +229,13 @@ impl<'ms> GridRayTracing<'ms> {
             let (dir, initial_dist, num_cells) = if ray_dir.y < 0.0 {
                 (
                     -1,
-                    ray_org_grid.y - ray_org_cell.y as f32 * self.surface.dv,
+                    ray_org_grid.y - ray_org_cell.y as f32 * self.surface.dv.value,
                     ray_org_cell.y - self.min.y + 1,
                 )
             } else {
                 (
                     1,
-                    (ray_org_cell.y + 1) as f32 * self.surface.dv - ray_org_grid.y,
+                    (ray_org_cell.y + 1) as f32 * self.surface.dv.value - ray_org_grid.y,
                     self.max.y - ray_org_cell.y + 1,
                 )
             };
@@ -241,7 +244,7 @@ impl<'ms> GridRayTracing<'ms> {
             // March along the ray direction until the ray hits the grid boundary.
             for i in 0..num_cells {
                 cells[i as usize] = ray_org_cell + IVec2::new(0, dir * i);
-                dists[i as usize + 1] = initial_dist + (i as f32 * self.surface.dv);
+                dists[i as usize + 1] = initial_dist + (i as f32 * self.surface.dv.value);
             }
             GridTraversal::Traversed { cells, dists }
         } else {
@@ -254,8 +257,8 @@ impl<'ms> GridRayTracing<'ms> {
             // Calculate the distance along the direction of the ray when moving
             // a unit distance (size of the cell) along the x-axis and y-axis.
             let unit = Vec2::new(
-                (1.0 + m * m).sqrt() * self.surface.du,
-                (1.0 + m_recip * m_recip).sqrt() * self.surface.dv,
+                (1.0 + m * m).sqrt() * self.surface.du.value,
+                (1.0 + m_recip * m_recip).sqrt() * self.surface.dv.value,
             )
             .abs();
 
@@ -714,7 +717,7 @@ pub enum GridTraversal {
 fn test_grid_traversal() {
     let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
     let triangle_mesh = heightfield.triangulate();
-    let grid = GridRayTracing::new(&heightfield, &triangle_mesh);
+    let grid = GridRT::new(&heightfield, &triangle_mesh);
     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
     println!("{:?}", result);
 }

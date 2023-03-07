@@ -99,8 +99,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         measurements.len()
     );
 
+    // Load data files: refractive indices, spd etc. if needed.
     if measurements.iter().any(|meas| meas.kind.is_bsdf()) {
-        // Load data files: refractive indices, spd etc.
         println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
         cache.load_ior_database(&config);
         println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
@@ -183,7 +183,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                             )
                         }
                     },
-                    CollectorScheme::Individual {
+                    CollectorScheme::SingleRegion {
                         domain,
                         shape,
                         zenith,
@@ -245,7 +245,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                             }
                             #[cfg(feature = "optix")]
                             RtcMethod::Optix => {
-                                todo!()
+                                todo!("optix");
                             }
                             RtcMethod::Grid => {
                                 measure::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
@@ -257,7 +257,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                             "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
                             measurement.bsdf_kind
                         );
-                        // TODO: implement
+                        todo!("wave optics");
                     }
                 }
                 println!("  {BRIGHT_YELLOW}>{RESET} Saving results...");
