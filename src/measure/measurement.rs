@@ -103,7 +103,7 @@ pub struct BsdfMeasurement {
 impl Default for BsdfMeasurement {
     fn default() -> Self {
         Self {
-            bsdf_kind: BsdfKind::InPlaneBrdf,
+            bsdf_kind: BsdfKind::Brdf,
             sim_kind: SimulationKind::GeomOptics {
                 method: RtcMethod::Grid,
             },

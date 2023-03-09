@@ -74,7 +74,7 @@ pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
     };
 
     if prints[0] {
-        println!("Current configurations:\n{config}");
+        println!("Current configurations:\n\n{config}\n");
     }
 
     if prints[1] {
@@ -86,6 +86,8 @@ pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
             "Microfacet shadowing and masking default parameters:\n\n{}",
             MicrofacetMaskingShadowingMeasurement::default()
         );
+        // TODO: print default parameters for brdf measurement (prettified
+        // version)
     }
 
     if prints[2] {

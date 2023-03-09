@@ -20,9 +20,6 @@ use super::measurement::BsdfMeasurement;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")] // TODO: use case_insensitive in the future
 pub enum BsdfKind {
-    /// In-plane BRDF.
-    InPlaneBrdf,
-
     /// Bidirectional reflectance distribution function.
     Brdf,
 
@@ -42,9 +39,6 @@ pub enum BsdfKind {
 impl Display for BsdfKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BsdfKind::InPlaneBrdf => {
-                write!(f, "in-plane brdf")
-            }
             BsdfKind::Brdf => {
                 write!(f, "brdf")
             }

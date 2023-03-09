@@ -55,7 +55,7 @@ pub struct Emitter {
 #[serde(rename_all = "snake_case")]
 pub enum RegionShape {
     /// A patch has a disk shape on the surface of the sphere.
-    #[serde(rename = "disk")]
+    #[serde(rename = "cap")]
     SphericalCap {
         /// Maximum zenith angle of the spherical cap.
         zenith: Radians,
