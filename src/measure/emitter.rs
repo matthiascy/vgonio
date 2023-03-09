@@ -39,11 +39,13 @@ pub struct Emitter {
     /// Light source's spectrum.
     pub spectrum: RangeByStepSize<Nanometres>,
 
-    /// Solid angle subtended by the emitter.
+    /// Solid angle subtended by emitter's region.
     #[serde(skip)]
     pub(crate) solid_angle: SolidAngle,
 
-    /// Samples generated for the patch.
+    /// Generated samples inside emitter's region.
+    /// Samples are generated uniformly distributed on the surface of the
+    /// sphere using rejection sampling.
     #[serde(skip)]
     pub(crate) samples: Vec<glam::Vec3>,
 }
@@ -173,7 +175,7 @@ impl Emitter {
         self.samples
             .iter()
             .map(|sample| {
-                let origin = mat * *sample * r.value;
+                let origin = mat * *sample * r.as_f32();
                 Ray { o: origin, d: dir }
             })
             .collect()

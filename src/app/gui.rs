@@ -633,7 +633,7 @@ impl VgonioApp {
                 let cache = self.cache.deref();
                 let (surf, mesh) = cache
                     .borrow_mut()
-                    .load_micro_surface(&self.config, &path, Some(AxisAlignment::XZ))
+                    .load_micro_surface(&self.config, &path, AxisAlignment::XZ)
                     .unwrap();
                 self.ui
                     .simulation_workspace

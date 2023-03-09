@@ -91,13 +91,13 @@ macro impl_ops_assign($($op:ident),* for $t:ident where A, B: $unit_trait:ident)
     }
 }
 
-macro forward_f32_methods($($name:ident, $doc:expr),+) {
+macro forward_f32_methods($($name:ident, $doc:expr);+) {
     $(
         #[doc = $doc]
         #[inline(always)]
         pub fn $name(self) -> Self {
             Self {
-                value: self.value.$name(),
+                value: self.value().$name(),
                 unit: core::marker::PhantomData,
             }
         }

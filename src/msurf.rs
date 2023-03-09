@@ -3,12 +3,15 @@
 use crate::{app::cache::Asset, isect::Aabb};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 mod io;
 mod mesh;
 
-use crate::units::{LengthUnit, Nanometres};
+use crate::{
+    app::gfx::RenderableMesh,
+    units::{nm, um, Length, LengthUnit, Micrometres, Nanometres},
+};
 pub use mesh::MicroSurfaceMesh;
 
 /// Static variable used to generate height field name.
@@ -48,6 +51,8 @@ pub enum AxisAlignment {
 }
 
 /// Representation of the micro-surface.
+///
+/// All measurements are in micrometers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MicroSurface {
     /// Generated unique identifier.
@@ -59,10 +64,6 @@ pub struct MicroSurface {
     /// Location where the heightfield is loaded from.
     pub path: Option<PathBuf>,
 
-    /// The initial axis alignment in world space. The default is XY, aligned
-    /// with the "ground" plane.
-    pub alignment: AxisAlignment,
-
     /// Number of sample points in vertical direction (first axis of
     /// alignment).
     pub rows: usize,
@@ -72,10 +73,10 @@ pub struct MicroSurface {
     pub cols: usize,
 
     /// The space between sample points in horizontal direction.
-    pub du: Nanometres,
+    pub du: f32,
 
     /// The space between sample points in vertical direction.
-    pub dv: Nanometres,
+    pub dv: f32,
 
     /// Minimum height of the height field.
     pub min: f32,
@@ -88,7 +89,7 @@ pub struct MicroSurface {
 
     /// Height values of sample points on the height field (values are stored in
     /// row major order).
-    pub samples: Vec<Nanometres>,
+    pub samples: Vec<f32>,
 }
 
 impl Asset for MicroSurface {}
@@ -100,40 +101,38 @@ impl MicroSurface {
     ///
     /// * `cols` - the number of sample points in horizontal dimension
     /// * `rows` - the number of sample points in vertical dimension
-    /// * `du` - horizontal spacing between samples points
-    /// * `dv` - vertical spacing between samples points
-    /// * `height` - the initial value of the height
-    /// * `alignment` - axis alignment of height field
+    /// * `du` - horizontal spacing between samples points in micrometers
+    /// * `dv` - vertical spacing between samples points in micrometers
+    /// * `height` - the initial value of the height in micrometers
     ///
     /// # Examples
     ///
     /// ```
     /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
-    /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, Default::default());
+    /// # use vgonio::units::um;
+    /// let height_field = MicroSurface::new(10, 10, um!(0.11), um!(0.11), um!(0.12));
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
     pub fn new(
         cols: usize,
         rows: usize,
-        du: f32,
-        dv: f32,
-        height: f32,
-        alignment: AxisAlignment,
+        du: Micrometres,
+        dv: Micrometres,
+        height: Micrometres,
     ) -> Self {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
+        let height = height.as_f32();
         samples.resize(cols * rows, height);
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             name: gen_micro_surface_name(),
             path: None,
-            alignment,
             rows,
             cols,
-            du,
-            dv,
-            center: [0.0, 0.0, 0.0],
+            du: du.as_f32(),
+            dv: dv.as_f32(),
             min: height,
             max: height,
             median: height,
@@ -148,9 +147,8 @@ impl MicroSurface {
     ///
     /// * `cols` - the number of sample points in dimension x
     /// * `rows` - the number of sample points in dimension y
-    /// * `du` - horizontal spacing
-    /// * `dv` - vertical spacing
-    /// * `alignment` - axis alignment of height field
+    /// * `du` - horizontal spacing between samples points in micrometers
+    /// * `dv` - vertical spacing between samples points in micrometers
     /// * `setter` - the setting function, this function will be invoked with
     ///   the row number and column number as parameters.
     ///
@@ -158,32 +156,30 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
-    /// let msurface = MicroSurface::new_by(4, 4, 0.1, 0.1, AxisAlignment::XZ, |row, col| {
-    ///     (row + col) as f32
-    /// });
-    /// assert_eq!(msurface.samples_count(), 16);
-    /// assert_eq!(msurface.max, 6.0);
-    /// assert_eq!(msurface.min, 0.0);
-    /// assert_eq!(msurface.samples[0], 0.0);
-    /// assert_eq!(msurface.samples[2], 2.0);
-    /// assert_eq!(msurface.sample_at(2, 3), 5.0);
+    /// # use vgonio::units::um;
+    /// let msurf = MicroSurface::new_by(4, 4, um!(0.1), um!(0.1), |row, col| um!((row + col) as f32));
+    /// assert_eq!(msurf.samples_count(), 16);
+    /// assert_eq!(msurf.max, 6.0);
+    /// assert_eq!(msurf.min, 0.0);
+    /// assert_eq!(msurf.samples[0], 0.0);
+    /// assert_eq!(msurf.samples[2], 2.0);
+    /// assert_eq!(msurf.sample_at(2, 3), 5.0);
     /// ```
     pub fn new_by<F>(
         cols: usize,
         rows: usize,
-        du: f32,
-        dv: f32,
-        alignment: AxisAlignment,
+        du: Micrometres,
+        dv: Micrometres,
         setter: F,
     ) -> MicroSurface
     where
-        F: Fn(usize, usize) -> f32,
+        F: Fn(usize, usize) -> Micrometres,
     {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::with_capacity(cols * rows);
         for r in 0..rows {
             for c in 0..cols {
-                samples.push(setter(r, c));
+                samples.push(setter(r, c).as_f32());
             }
         }
         let max = *samples
@@ -199,12 +195,10 @@ impl MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             name: gen_micro_surface_name(),
             path: None,
-            alignment,
             cols,
             rows,
-            du,
-            dv,
-            center: [0.0, 0.0, 0.0],
+            du: du.as_f32(),
+            dv: dv.as_f32(),
             max,
             min,
             samples,
@@ -229,35 +223,46 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
+    /// # use vgonio::units::{um, UMicrometre};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = MicroSurface::from_samples(3, 3, 0.5, 0.5, samples, Default::default());
+    /// let height_field =
+    ///     MicroSurface::from_samples::<UMicrometre>(3, 3, um!(0.5), um!(0.5), samples, None);
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
     /// assert_eq!(height_field.rows, 3);
     /// ```
-    pub fn from_samples(
+    pub fn from_samples<U: LengthUnit>(
         cols: usize,
         rows: usize,
-        du: f32,
-        dv: f32,
+        du: Micrometres,
+        dv: Micrometres,
         samples: Vec<f32>,
-        alignment: AxisAlignment,
         path: Option<PathBuf>,
     ) -> MicroSurface {
-        assert!(cols > 0 && rows > 0 && samples.len() >= cols * rows);
-        let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x));
-        let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x));
+        debug_assert!(cols > 0 && rows > 0 && samples.len() == cols * rows);
+        let to_micrometre_factor = U::FACTOR_TO_MICROMETRE;
+        let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x)) * to_micrometre_factor;
+        let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x)) * to_micrometre_factor;
+
+        let samples = if to_micrometre_factor == 1.0 {
+            samples
+        } else {
+            let mut _samples = samples;
+            for s in _samples.iter_mut() {
+                *s *= to_micrometre_factor;
+            }
+            _samples
+        };
+
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             name: gen_micro_surface_name(),
             path,
-            alignment,
             rows,
             cols,
-            du,
-            dv,
-            center: [0.0, 0.0, 0.0],
+            du: du.as_f32(),
+            dv: dv.as_f32(),
             max,
             min,
             samples,
@@ -265,7 +270,7 @@ impl MicroSurface {
         }
     }
 
-    /// Returns the dimension of the surface [rows * du, cols * dv]
+    /// Returns the dimension of the surface (rows * du, cols * dv)
     /// # Examples
     ///
     /// ```
@@ -273,8 +278,11 @@ impl MicroSurface {
     /// let height_field = HeightField::new(100, 100, 0.1, 0.1, 0.1, Default::default());
     /// assert_eq!(height_field.dimension(), (10.0, 10.0));
     /// ```
-    pub fn dimension(&self) -> (f32, f32) {
-        (self.rows as f32 * self.du, self.cols as f32 * self.dv)
+    pub fn dimension(&self) -> (Micrometres, Micrometres) {
+        (
+            um!(self.rows as f32 * self.du),
+            um!(self.cols as f32 * self.dv),
+        )
     }
 
     /// Returns the number of samples of height field.
@@ -329,10 +337,10 @@ impl MicroSurface {
     /// let height_field = HeightField::from_samples(3, 3, 0.2, 0.3, samples, Default::default());
     /// let h = height_field.sample_at(4, 4);
     /// ```
-    pub fn sample_at(&self, col: usize, row: usize) -> f32 {
+    pub fn sample_at(&self, col: usize, row: usize) -> Micrometres {
         assert!(col < self.cols);
         assert!(row < self.rows);
-        self.samples[row * self.cols + col]
+        um!(self.samples[row * self.cols + col])
     }
 
     /// Fill holes on the height field.
@@ -401,8 +409,8 @@ impl MicroSurface {
                     // direction y
                     let mut prev_idx_y = j;
                     let mut next_idx_y = j;
-                    let prev_y: f32;
-                    let next_y: f32;
+                    let prev_y;
+                    let next_y;
 
                     for n in j..self.rows {
                         if !self.samples[n * self.cols + i].is_nan() {
@@ -442,13 +450,55 @@ impl MicroSurface {
         }
     }
 
+    /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
+    pub fn as_micro_surface_mesh(&self, alignment: AxisAlignment) -> MicroSurfaceMesh {
+        let (verts, extent) = self.generate_vertices(alignment);
+        let tri_faces = grid_triangulation_regular(self.cols, self.rows);
+        let num_faces = tri_faces.len() / 3;
+
+        let mut normals = vec![Vec3::ZERO; num_faces];
+        let mut areas = vec![0.0; num_faces];
+
+        for i in 0..num_faces {
+            let p0 = verts[tri_faces[i * 3] as usize];
+            let p1 = verts[tri_faces[i * 3 + 1] as usize];
+            let p2 = verts[tri_faces[i * 3 + 2] as usize];
+            let cross = (p1 - p0).cross(p2 - p0);
+            normals[i] = cross.normalize();
+            areas[i] = 0.5 * cross.length();
+        }
+
+        MicroSurfaceMesh {
+            uuid: uuid::Uuid::new_v4(),
+            num_facets: num_faces,
+            num_verts: verts.len(),
+            extent,
+            alignment,
+            verts,
+            facets: tri_faces,
+            facet_normals: normals,
+            facet_areas: areas,
+            msurf: self.uuid,
+        }
+    }
+
+    /// Triangulate the heightfield then convert it into a [`RenderableMesh`].
+    pub fn as_renderable_mesh(
+        &self,
+        device: &wgpu::Device,
+        alignment: AxisAlignment,
+    ) -> RenderableMesh {
+        RenderableMesh::from_micro_surface(device, self, alignment)
+    }
+
     /// Generate vertices from the height values.
+    ///
     /// The vertices are generated following the order from left to right, top
     /// to bottom.
-    pub fn generate_vertices(&self) -> (Vec<Vec3>, Aabb) {
+    pub(crate) fn generate_vertices(&self, alignment: AxisAlignment) -> (Vec<Vec3>, Aabb) {
         log::info!(
             "Generating height field vertices with {:?} alignment",
-            self.alignment
+            alignment
         );
         let (rows, cols, half_rows, half_cols, du, dv) = (
             self.rows,
@@ -458,14 +508,14 @@ impl MicroSurface {
             self.du,
             self.dv,
         );
-        let mut positions: Vec<Vec3> = vec![];
+        let mut positions: Vec<Vec3> = Vec::with_capacity(rows * cols);
         let mut extent = Aabb::default();
         for r in 0..rows {
             for c in 0..cols {
                 let u = (c as f32 - half_cols as f32) * du;
                 let v = (r as f32 - half_rows as f32) * dv;
                 let h = self.samples[r * cols + c];
-                let p = match self.alignment {
+                let p = match alignment {
                     AxisAlignment::XY => Vec3::new(u, v, h),
                     AxisAlignment::XZ => Vec3::new(u, h, v),
                     AxisAlignment::YX => Vec3::new(v, u, h),
@@ -487,39 +537,11 @@ impl MicroSurface {
 
         (positions, extent)
     }
-
-    /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
-    pub fn triangulate(&self) -> MicroSurfaceMesh {
-        let (verts, extent) = self.generate_vertices();
-        let faces = regular_triangulation(&verts, self.cols, self.rows);
-        let num_tris = faces.len() / 3;
-
-        let mut normals = vec![Vec3::ZERO; num_tris];
-        let mut areas = vec![0.0; num_tris];
-
-        for i in 0..num_tris {
-            let p0 = verts[faces[i * 3] as usize];
-            let p1 = verts[faces[i * 3 + 1] as usize];
-            let p2 = verts[faces[i * 3 + 2] as usize];
-            let cross = (p1 - p0).cross(p2 - p0);
-            normals[i] = cross.normalize();
-            areas[i] = 0.5 * cross.length();
-        }
-
-        MicroSurfaceMesh {
-            num_facets: num_tris,
-            num_verts: verts.len(),
-            extent,
-            verts,
-            facets: faces,
-            facet_normals: normals,
-            facet_areas: areas,
-        }
-    }
 }
 
-/// Generate a triangle mesh from heightfield. Triangle winding is
-/// counter-clockwise.
+/// Generate triangle indices for grid triangulation.
+///
+/// Triangle winding is counter-clockwise.
 /// 0  <-- 1
 /// |   /  |
 /// |  /   |
@@ -528,12 +550,7 @@ impl MicroSurface {
 /// # Returns
 ///
 /// Vec<u32>: An array of vertex indices forming triangles.
-pub(crate) fn regular_triangulation(positions: &[Vec3], cols: usize, rows: usize) -> Vec<u32> {
-    assert_eq!(
-        positions.len(),
-        cols * rows,
-        "triangulation: positions.len() != rows * cols"
-    );
+pub(crate) fn grid_triangulation_regular(cols: usize, rows: usize) -> Vec<u32> {
     let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
     let mut tri = 0;
     for i in 0..cols * rows {

@@ -121,18 +121,18 @@ impl<A: AngleUnit> Angle<A> {
 
     super::forward_f32_methods!(
         abs,
-        "Returns the absolute value of the angle.",
+        "Returns the absolute value of the angle.";
         ceil,
-        "Returns the smallest angle greater than or equal to `self`.",
+        "Returns the smallest angle greater than or equal to `self`.";
         round,
-        "Returns the nearest value to `self`. Round half-way cases away from 0.0.",
+        "Returns the nearest value to `self`. Round half-way cases away from 0.0.";
         trunc,
         "Returns the integer part of `self`. Non-integer numbers are always truncated towards \
-         zero.",
+         zero.";
         fract,
-        "Returns the fractional part of `self`.",
+        "Returns the fractional part of `self`.";
         sqrt,
-        "Returns the square root of the angle.",
+        "Returns the square root of the angle.";
         cbrt,
         "returns the cube root of the angle."
     );

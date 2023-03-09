@@ -1,11 +1,21 @@
-use crate::{app::cache::Asset, isect::Aabb};
+use crate::{app::cache::Asset, isect::Aabb, msurf::AxisAlignment};
 use glam::Vec3;
+use uuid::Uuid;
 
 /// Triangle representation of the surface mesh.
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
+    /// Unique identifier.
+    pub uuid: Uuid,
+
+    /// Uuid of the [`MicroSurface`] from which the mesh is generated.
+    pub msurf: Uuid,
+
     /// Axis-aligned bounding box of the mesh.
     pub extent: Aabb,
+
+    /// Axis alignment of the mesh.
+    pub alignment: AxisAlignment,
 
     /// Number of triangles in the mesh.
     pub num_facets: usize,

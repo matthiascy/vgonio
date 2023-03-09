@@ -2,6 +2,7 @@ use crate::{
     error::Error,
     io::{CacheHeader, CacheKind, MsHeader},
     msurf::{AxisAlignment, MicroSurface},
+    units::{micrometres, nm, um, UMicrometre},
 };
 use std::{
     fs::File,
@@ -29,10 +30,9 @@ impl MicroSurface {
     /// 2. Micro-surface height field file (binary format, ends with *.dcms).
     /// 3. Micro-surface height field cache file (binary format, ends with
     /// *.dccc).
-    pub fn from_file(
+    pub fn load_from_file(
         path: &Path,
         origin: Option<MicroSurfaceOrigin>,
-        alignment: Option<AxisAlignment>,
     ) -> Result<MicroSurface, Error> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
@@ -40,8 +40,8 @@ impl MicroSurface {
         if let Some(origin) = origin {
             // If origin is specified, call directly corresponding loading function.
             match origin {
-                MicroSurfaceOrigin::Dong2015 => read_ascii_dong2015(reader, true, alignment, path),
-                MicroSurfaceOrigin::Usurf => read_ascii_usurf(reader, true, alignment, path),
+                MicroSurfaceOrigin::Dong2015 => read_ascii_dong2015(reader, true, path),
+                MicroSurfaceOrigin::Usurf => read_ascii_usurf(reader, true, path),
             }
         } else {
             // Otherwise, try to figure out the file format by reading first several bytes.
@@ -49,46 +49,47 @@ impl MicroSurface {
             reader.read_exact(&mut buf)?;
 
             match std::str::from_utf8(&buf)? {
-                "Asci" => read_ascii_dong2015(reader, false, alignment, path),
-                "DATA" => read_ascii_usurf(reader, false, alignment, path),
-                "DCCC" => {
-                    let header = {
-                        let mut buf = [0_u8; 6];
-                        reader.read_exact(&mut buf)?;
-                        CacheHeader::new(buf)
-                    };
-
-                    if header.kind != CacheKind::HeightField {
-                        Err(Error::FileError("Not a valid height field cache!"))
-                    } else if header.binary {
-                        Ok(bincode::deserialize_from(reader)?)
-                    } else {
-                        Ok(serde_yaml::from_reader(reader)?)
-                    }
-                }
-                "DCMS" => {
-                    let header = {
-                        let mut buf = [0_u8; 23];
-                        reader.read_exact(&mut buf)?;
-                        MsHeader::new(buf)
-                    };
-
-                    let samples = if header.binary {
-                        read_binary_samples(reader, (header.size / 4) as usize)
-                    } else {
-                        read_ascii_samples(reader)
-                    };
-
-                    Ok(MicroSurface::from_samples(
-                        header.extent[0] as usize,
-                        header.extent[1] as usize,
-                        header.spacing[0],
-                        header.spacing[1],
-                        samples,
-                        alignment.unwrap_or_default(),
-                        Some(path.into()),
-                    ))
-                }
+                "Asci" => read_ascii_dong2015(reader, false, path),
+                "DATA" => read_ascii_usurf(reader, false, path),
+                // TODO: fix DCCC and DCMS
+                // "DCCC" => {
+                //     let header = {
+                //         let mut buf = [0_u8; 6];
+                //         reader.read_exact(&mut buf)?;
+                //         CacheHeader::new(buf)
+                //     };
+                //
+                //     if header.kind != CacheKind::HeightField {
+                //         Err(Error::FileError("Not a valid height field cache!"))
+                //     } else if header.binary {
+                //         Ok(bincode::deserialize_from(reader)?)
+                //     } else {
+                //         Ok(serde_yaml::from_reader(reader)?)
+                //     }
+                // }
+                // "DCMS" => {
+                //     let header = {
+                //         let mut buf = [0_u8; 23];
+                //         reader.read_exact(&mut buf)?;
+                //         MsHeader::new(buf)
+                //     };
+                //
+                //     let samples = if header.binary {
+                //         read_binary_samples(reader, (header.size / 4) as usize)
+                //     } else {
+                //         read_ascii_samples(reader)
+                //     };
+                //
+                //     Ok(MicroSurface::from_samples(
+                //         header.extent[0] as usize,
+                //         header.extent[1] as usize,
+                //         um!(header.spacing[0]),
+                //         um!(header.spacing[1]),
+                //         samples,
+                //         alignment.unwrap_or_default(),
+                //         Some(path.into()),
+                //     ))
+                // }
                 _ => Err(Error::UnrecognizedFile),
             }
         }
@@ -100,14 +101,14 @@ impl MicroSurface {
 }
 
 /// Read micro-surface height field following the convention specified in the
-/// paper: > Zhao Dong, Bruce Walter, Steve Marschner, and Donald P. Greenberg.
-/// 2016. > Predicting Appearance from Measured Microgeometry of Metal Surfaces.
-/// > <i>ACM Trans. Graph.</i> 35, 1, Article 9 (December 2015), 13 pages.
-/// > DOI:https://doi-org.tudelft.idm.oclc.org/10.1145/2815618
+/// paper:
+///
+/// [`Predicting Appearance from Measured Microgeometry of Metal Surfaces. Zhao Dong, Bruce Walter, Steve Marschner, and Donald P. Greenberg. 2016.`](https://dl.acm.org/doi/10.1145/2815618)
+///
+/// Unit used during the measurement is micrometre.
 fn read_ascii_dong2015<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
-    orientation: Option<AxisAlignment>,
     path: &Path,
 ) -> Result<MicroSurface, Error> {
     if read_first_4_bytes {
@@ -138,13 +139,12 @@ fn read_ascii_dong2015<R: BufRead>(
         }
     };
     let samples = read_ascii_samples(reader);
-    Ok(MicroSurface::from_samples(
+    Ok(MicroSurface::from_samples::<UMicrometre>(
         cols,
         rows,
-        du,
-        dv,
+        um!(du),
+        um!(dv),
         samples,
-        orientation.unwrap_or_default(),
         Some(path.into()),
     ))
 }
@@ -153,7 +153,6 @@ fn read_ascii_dong2015<R: BufRead>(
 fn read_ascii_usurf<R: BufRead>(
     mut reader: R,
     read_first_4_bytes: bool,
-    orientation: Option<AxisAlignment>,
     path: &Path,
 ) -> Result<MicroSurface, Error> {
     let mut line = String::new();
@@ -185,13 +184,12 @@ fn read_ascii_usurf<R: BufRead>(
     let dv = y_coords[1] - y_coords[0];
     let samples: Vec<f32> = values.into_iter().flatten().collect();
 
-    Ok(MicroSurface::from_samples(
+    Ok(MicroSurface::from_samples::<UMicrometre>(
         x_coords.len(),
         y_coords.len(),
-        du,
-        dv,
+        um!(du),
+        um!(dv),
         samples,
-        orientation.unwrap_or_default(),
         Some(path.into()),
     ))
 }

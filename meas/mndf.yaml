@@ -1,0 +1,7 @@
+---
+type: !mndf
+  azimuth: 0 rad ~ 360 deg / 5 deg
+  zenith: 0 rad ~ 90 deg / 2 deg
+surfaces:
+  - usr://surfaces/Aluminium65bar100.txt
+  - usr://surfaces/AluminiumMirror.txt

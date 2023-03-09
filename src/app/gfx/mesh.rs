@@ -1,14 +1,17 @@
 use crate::{
     app::{cache::Asset, gfx::VertexLayout},
     isect::Aabb,
-    msurf::{regular_triangulation, MicroSurface, MicroSurfaceMesh},
+    msurf::{grid_triangulation_regular, AxisAlignment, MicroSurface, MicroSurfaceMesh},
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
+use uuid::Uuid;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
 pub struct RenderableMesh {
+    pub uuid: Uuid,
+    pub msurf: Option<Uuid>,
     pub vertices_count: u32,
     pub indices_count: u32,
     pub extent: Aabb,
@@ -23,18 +26,19 @@ impl Asset for RenderableMesh {}
 
 // TODO: create a separate method to extract face normals of an heightfield
 impl RenderableMesh {
-    pub fn from_micro_surface(device: &wgpu::Device, surf: &MicroSurface) -> Self {
+    pub fn from_micro_surface(
+        device: &wgpu::Device,
+        surf: &MicroSurface,
+        alignment: AxisAlignment,
+    ) -> Self {
         use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (surf.cols, surf.rows);
-        let (positions, extent) = surf.generate_vertices();
+        let (positions, extent) = surf.generate_vertices(alignment);
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-
-        let indices: Vec<u32> = regular_triangulation(&positions, cols, rows);
-
-        assert_eq!(indices.len(), indices_count);
-
+        let indices: Vec<u32> = grid_triangulation_regular(cols, rows);
+        debug_assert_eq!(indices.len(), indices_count);
         log::debug!(
             "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",
             vertices_count,
@@ -57,6 +61,8 @@ impl RenderableMesh {
         let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
         Self {
+            uuid: Uuid::new_v4(),
+            msurf: Some(surf.uuid),
             vertices_count: vertices_count as u32,
             indices_count: indices_count as u32,
             extent,
@@ -92,6 +98,8 @@ impl RenderableMesh {
         );
 
         Self {
+            uuid: Uuid::new_v4(),
+            msurf: Some(mesh.msurf),
             vertices_count: mesh.num_verts as u32,
             indices_count: mesh.facets.len() as u32,
             extent: mesh.extent,
@@ -138,6 +146,8 @@ impl RenderableMesh {
         });
 
         Self {
+            uuid: Uuid::new_v4(),
+            msurf: None,
             vertices_count: vertices.len() as _,
             indices_count: indices.len() as _,
             extent,

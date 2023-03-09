@@ -898,7 +898,14 @@ impl DepthAttachment {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
-        let layers_per_texture = device.limits().max_texture_array_layers;
+        let max_layers_per_texture = device.limits().max_texture_array_layers;
+        let max_buffer_size = device.limits().max_buffer_size;
+
+        let layers_per_texture = max_layers_per_texture.min(
+            (max_buffer_size / ((width * height * format.describe().block_size as u32) as u64))
+                as u32,
+        );
+
         let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
         log::debug!(
             "Creating depth attachment with {} layers, {} textures, {} layers per texture",
@@ -1077,7 +1084,15 @@ impl ColorAttachment {
                 || format == wgpu::TextureFormat::Rgb10a2Unorm,
             "Unsupported color texture format. Only Rgba8Unorm and Rgb10a2Unorm are supported."
         );
-        let layers_per_texture = device.limits().max_texture_array_layers;
+        let max_layers_per_texture = device.limits().max_texture_array_layers;
+
+        let max_buffer_size = device.limits().max_buffer_size;
+
+        let layers_per_texture = max_layers_per_texture.min(
+            (max_buffer_size / ((width * height * format.describe().block_size as u32) as u64))
+                as u32,
+        );
+
         let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
         log::debug!(
             "Creating color attachment with {} layers, {} textures, {} layers per texture",
@@ -1440,8 +1455,7 @@ pub fn measure_masking_shadowing(
         desc.resolution,
         desc.measurement_location_count() as u32,
     );
-    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces)
-        .unwrap();
+    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
     let mut results = Vec::with_capacity(surfaces.len());
     surfaces.iter().for_each(|surface| {
         let facets_vtx_buf = gpu

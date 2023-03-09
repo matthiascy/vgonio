@@ -112,6 +112,7 @@ impl LengthUnit for UNanometre {
 }
 
 /// Length with a unit.
+#[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct Length<A: LengthUnit> {
     pub(crate) value: f32,
@@ -163,23 +164,29 @@ impl<A: LengthUnit> Length<A> {
     /// Returns the value of the length.
     pub const fn value(&self) -> f32 { self.value }
 
+    /// Returns the value of the length without the unit.
+    pub const fn as_f32(&self) -> f32 { self.value }
+
     super::forward_f32_methods!(
         abs,
-        "Returns the absolute value of the length.",
+        "Returns the absolute value of the length.";
         ceil,
-        "Returns the smallest length greater than or equal to `self`.",
+        "Returns the smallest length greater than or equal to `self`.";
         round,
-        "Returns the nearest value to `self`. Round half-way cases away from 0.0.",
+        "Returns the nearest value to `self`. Round half-way cases away from 0.0.";
         trunc,
         "Returns the integer part of `self`. Non-integer numbers are always truncated towards \
-         zero.",
+         zero.";
         fract,
-        "Returns the fractional part of `self`.",
+        "Returns the fractional part of `self`.";
         sqrt,
-        "Returns the square root of the length.",
+        "Returns the square root of the length.";
         cbrt,
         "returns the cube root of the length."
     );
+
+    /// Tests if the value of length is not a number.
+    pub fn is_nan(&self) -> bool { self.value.is_nan() }
 
     /// Tests if the two lengths are approximately equal using the absolute
     /// difference.
@@ -313,8 +320,18 @@ pub macro centimetres($val:expr) {
     $crate::units::Length::<$crate::units::UCentimetre>::new($val)
 }
 
+/// Macro for creating a new length type in centimetres.
+pub macro cm($val:expr) {
+    $crate::units::Length::<$crate::units::UCentimetre>::new($val)
+}
+
 /// Macro for creating a new length type in millimetres.
 pub macro millimetres($val:expr) {
+    $crate::units::Length::<$crate::units::UMillimetre>::new($val)
+}
+
+/// Macro for creating a new length type in millimetres.
+pub macro mm($val:expr) {
     $crate::units::Length::<$crate::units::UMillimetre>::new($val)
 }
 
@@ -323,8 +340,18 @@ pub macro micrometres($val:expr) {
     $crate::units::Length::<$crate::units::UMicrometre>::new($val)
 }
 
+/// Macro for creating a new length type in micrometres.
+pub macro um($val:expr) {
+    $crate::units::Length::<$crate::units::UMicrometre>::new($val)
+}
+
 /// Macro for creating a new length type in nanometres.
 pub macro nanometres($val:expr) {
+    $crate::units::Length::<$crate::units::UNanometre>::new($val)
+}
+
+/// Macro for creating a new length type in nanometres.
+pub macro nm($val:expr) {
     $crate::units::Length::<$crate::units::UNanometre>::new($val)
 }
 
@@ -493,7 +520,7 @@ mod length_unit_tests {
 
     #[test]
     fn de_serialization() {
-        let a: Metres = metres!(100.2);
+        let a: Millimetres = metres!(100.2);
         let serialized = serde_yaml::to_string(&a).unwrap();
         assert_eq!(serialized, "100.2 m\n");
 

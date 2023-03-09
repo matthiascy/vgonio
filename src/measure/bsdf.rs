@@ -6,7 +6,7 @@ use crate::{
     common::RangeByStepSize,
     measure::{measurement::Radius, rtc::GridRT, Collector, Emitter, Patch},
     msurf::MicroSurface,
-    units::{metres, Nanometres},
+    units::{metres, mm, Nanometres},
 };
 #[cfg(feature = "embree")]
 use embree::{Config, Device, SceneFlags};
@@ -248,7 +248,7 @@ pub fn measure_bsdf_grid_rt(
         if emitter.radius().is_auto() {
             // fixme: use surface's physical size
             // TODO: get real size of the surface
-            emitter.set_radius(Radius::Auto(metres!(mesh.extent.max_edge() * 2.5)));
+            emitter.set_radius(Radius::Auto(mm!(mesh.extent.max_edge() * 2.5)));
         }
         let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
         let ior_t = cache

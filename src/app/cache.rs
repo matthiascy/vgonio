@@ -285,7 +285,7 @@ impl Cache {
         &mut self,
         config: &Config,
         paths: &PathBuf,
-        alignment: Option<AxisAlignment>,
+        alignment: AxisAlignment,
     ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), Error> {
         self.resolve_path(paths, config)
             .map(|filepath| {
@@ -298,9 +298,9 @@ impl Cache {
                     (Handle::new(*msurf_id), record.mesh)
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
-                    let msurf = MicroSurface::from_file(&filepath, None, alignment).unwrap(); // TODO: handle error
+                    let msurf = MicroSurface::load_from_file(&filepath, None).unwrap();
                     let msurf_id = msurf.uuid;
-                    let mesh = msurf.triangulate();
+                    let mesh = msurf.as_micro_surface_mesh(alignment);
                     let mesh_id = Uuid::new_v4();
                     self.msurfs.insert(msurf_id, msurf);
                     self.meshes.insert(mesh_id, mesh);
@@ -357,7 +357,7 @@ impl Cache {
         &mut self,
         config: &Config,
         paths: &[PathBuf],
-        alignment: Option<AxisAlignment>,
+        alignment: AxisAlignment,
     ) -> Result<Vec<Handle<MicroSurface>>, Error> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
@@ -388,9 +388,9 @@ impl Cache {
                         loaded.push(Handle::new(*msurf_id));
                     } else {
                         log::debug!("-- loading: {}", filepath.display());
-                        let msurf = MicroSurface::from_file(&filepath, None, alignment).unwrap(); // TODO: handle error
+                        let msurf = MicroSurface::load_from_file(&filepath, None).unwrap();
                         let msurf_id = msurf.uuid;
-                        let mesh = msurf.triangulate();
+                        let mesh = msurf.as_micro_surface_mesh(alignment);
                         let mesh_id = Uuid::new_v4();
                         self.msurfs.insert(msurf_id, msurf);
                         self.meshes.insert(mesh_id, mesh);

@@ -1,0 +1,9 @@
+---
+type: !mmsf
+  azimuth: 0 rad ~ 360 deg / 60 deg
+  zenith: 0 rad ~ 90 deg / 5 deg
+  resolution: 2048
+surfaces:
+  - usr://surfaces/measured/Aluminium65bar100.txt
+  # - usr://surfaces/AluminiumMirror.txt
+  # - usr://surfaces/generated/8x8_flat.txt

@@ -111,7 +111,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         .into_iter()
         .filter_map(|meas| {
             cache
-                .load_micro_surfaces(&config, &meas.surfaces, Some(AxisAlignment::XZ))
+                .load_micro_surfaces(&config, &meas.surfaces, AxisAlignment::XZ)
                 .ok()
                 .map(|surfaces| (meas, surfaces))
         })

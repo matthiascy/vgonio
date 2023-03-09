@@ -5,7 +5,7 @@ use crate::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         Medium, RtcMethod,
     },
-    units::{degrees, metres, nanometres, radians, Metres, Radians, SolidAngle},
+    units::{degrees, metres, mm, nanometres, radians, Millimetres, Radians, SolidAngle},
     Error,
 };
 use serde::{Deserialize, Serialize};
@@ -22,10 +22,10 @@ use std::{
 pub enum Radius {
     /// Radius is dynamically deduced from the dimension of the surface.
     /// Note: This value will be updated before each measurement.
-    Auto(#[serde(skip)] Metres),
+    Auto(#[serde(skip)] Millimetres),
 
     /// Radius is given explicitly.
-    Fixed(Metres),
+    Fixed(Millimetres),
 }
 
 impl Display for Radius {
@@ -56,7 +56,7 @@ impl Radius {
     }
 
     /// Get the radius value.
-    pub fn value(&self) -> Metres {
+    pub fn value(&self) -> Millimetres {
         match self {
             Radius::Auto(value) => *value,
             Radius::Fixed(value) => *value,
@@ -112,7 +112,7 @@ impl Default for BsdfMeasurement {
             emitter: Emitter {
                 num_rays: 1000,
                 max_bounces: 10,
-                radius: Radius::Auto(metres!(0.0)),
+                radius: Radius::Auto(mm!(0.0)),
                 zenith: RangeByStepSize::<Radians> {
                     start: degrees!(0.0).in_radians(),
                     stop: degrees!(90.0).in_radians(),
@@ -138,7 +138,7 @@ impl Default for BsdfMeasurement {
                 samples: vec![],
             },
             collector: Collector {
-                radius: Radius::Auto(metres!(0.0)),
+                radius: Radius::Auto(mm!(0.0)),
                 scheme: CollectorScheme::Partitioned {
                     domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualArea {
