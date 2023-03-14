@@ -3,8 +3,12 @@ use crate::{
     measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius, RtcRecord},
     units::{Radians, SolidAngle},
 };
+use rayon::prelude::IntoParallelIterator;
 
-use crate::units::LengthUnit;
+use crate::{
+    measure::{bsdf::BsdfStats, rtc::embr::RayStatsPerStream},
+    units::LengthUnit,
+};
 use serde::{Deserialize, Serialize};
 
 /// Description of a collector.
@@ -69,14 +73,24 @@ impl Collector {
         };
     }
 
-    pub fn collect<R>(&mut self, _records: R, _kind: BsdfKind)
-    where
-        R: IntoIterator<Item = RtcRecord>,
-        <<R as IntoIterator>::IntoIter as Iterator>::Item: core::fmt::Debug,
-    {
-        // TODO:
+    /// Collects the ray-tracing data.
+    #[cfg(feature = "embree")]
+    pub fn collect_embree_rt<S>(
+        &mut self,
+        kind: BsdfKind,
+        stats: &[RayStatsPerStream],
+    ) -> BsdfStats<BounceEnergyPerPatch> {
+        // TODO: try to parallelise
+        for stats_per_stream in stats {
+            log::debug!("Stats per stream: {:?}", stats_per_stream);
+            for status in stats_per_stream.iter() {
+                log::debug!("Status: {:?}", status);
+            }
+        }
         todo!("Collector::collect")
     }
+
+    // todo: pub fn collect_grid_rt
 
     pub fn save_stats(&self, _path: &str) { todo!("Collector::save_stats") }
 }
@@ -92,6 +106,12 @@ pub struct Patch {
 
     /// Solid angle of the patch (in radians).
     pub solid_angle: SolidAngle,
+}
+
+/// Bounce and energy of a patch.
+pub struct BounceEnergyPerPatch {
+    pub bounce: Vec<u32>,
+    pub energy: Vec<f32>,
 }
 
 impl Patch {

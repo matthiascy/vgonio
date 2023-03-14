@@ -56,40 +56,53 @@ impl Display for BsdfKind {
     }
 }
 
-/// Measurement statistics for a single incident direction.
-pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
-    /// Wavelength of emitted rays.
-    pub wavelength: f32,
+#[derive(Debug)]
+pub struct PerWavelengthData<T>(pub Vec<T>);
 
+impl<T> Clone for PerWavelengthData<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self { Self(self.0.clone()) }
+}
+
+/// Measurement statistics for a single emitter position.
+pub struct BsdfStats<PatchData> {
     /// Incident polar angle in radians.
     pub zenith: f32,
 
     /// Incident azimuth angle in radians.
     pub azimuth: f32,
 
-    /// Number of emitted rays.
+    /// Number of emitted rays; invariant over wavelength.
     pub n_emitted: u32,
 
-    /// Number of emitted rays that hit the surface.
-    pub n_received: u32,
+    /// Number of emitted rays that hit the surface; invariant over wavelength.
+    pub n_received: f32,
 
-    /// Number of emitted rays that hit the surface and were reflected.
-    pub n_reflected: u32,
+    /// Wavelength of emitted rays.
+    pub wavelengths: Vec<f32>,
 
-    /// Number of emitted rays that hit the surface and were transmitted.
-    pub n_transmitted: u32,
+    /// Number of emitted rays that hit the surface and were reflected; variant
+    /// over wavelength.
+    pub n_reflected: PerWavelengthData<u32>,
 
-    /// Number of emitted rays captured by the collector.
-    pub n_captured: u32,
+    /// Number of emitted rays that hit the surface and were transmitted;
+    /// variant over wavelength.
+    pub n_transmitted: PerWavelengthData<u32>,
 
-    /// Energy of emitted rays.
-    pub energy_emitted: f32,
+    /// Number of emitted rays captured by the collector; variant over
+    /// wavelength.
+    pub n_captured: PerWavelengthData<u32>,
 
-    /// Energy of emitted rays that hit the surface.
-    pub energy_received: f32,
+    /// Initial energy of emitted rays; variant over wavelength.
+    pub sum_energy_emitted: PerWavelengthData<f32>,
 
-    /// Energy captured by the collector.
-    pub energy_captured: f32,
+    /// Energy of emitted rays that hit the surface, variant over wavelength.
+    pub sum_energy_received: PerWavelengthData<f32>,
+
+    /// Energy captured by the collector; variant over wavelength.
+    pub sum_energy_captured: PerWavelengthData<f32>,
 
     /// Patch's zenith angle span in radians.
     pub zenith_span: f32,
@@ -97,17 +110,19 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
     /// Patch's azimuth angle span in radians.
     pub azimuth_span: f32,
 
-    /// Patches of the collector.
-    pub patches: [Patch; N_PATCH],
+    /// Histogram of reflected rays by number of bounces, variant over
+    /// wavelength.
+    pub hist_reflections: PerWavelengthData<Vec<u32>>,
 
-    /// Per patch data.
-    pub patches_data: [PatchData; N_PATCH],
+    /// Histogram of energy of reflected rays by number of bounces, variant
+    /// over wavelength.
+    pub hist_reflections_energy: PerWavelengthData<Vec<f32>>,
 
-    /// Histogram of reflected rays by number of bounces.
-    pub hist_reflections: [u32; N_BOUNCE],
-
-    /// Histogram of energy of reflected rays by number of bounces.
-    pub hist_reflections_energy: [f32; N_BOUNCE],
+    /// Per patch data. This is used to either store the measured data for each
+    /// patch in case the collector is partitioned or for the collector's
+    /// region at different places in the scene. You need to check the collector
+    /// to know which one is the case and how to interpret the data.
+    pub patches_data: Vec<PerWavelengthData<PatchData>>,
 }
 
 /// Measurement of the BSDF (bidirectional scattering distribution function) of

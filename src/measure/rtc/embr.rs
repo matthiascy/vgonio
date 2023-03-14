@@ -65,24 +65,151 @@ struct TrajectoryNode {
     pub dir: Vec3A,
 }
 
+#[derive(Debug, Clone, Copy)]
+/// The status of a ray after it has been traced.
+pub enum TracingStatus {
+    /// The ray did not hit anything.
+    Missed,
+    /// The ray hit a micro-surface.
+    Reflected { ending: TrajectoryNode },
+    /// The ray hit a micro-surface and was absorbed.
+    Absorbed { ending: TrajectoryNode },
+}
+
 #[derive(Debug, Clone)]
-pub struct RayStreamData<'a> {
-    /// The micro-surface geometry.
-    msurf: Arc<Geometry<'a>>,
-    /// Final energy of each ray.
+pub struct RayStatsPerStream {
+    /// The last ray exiting the micro-surface.
+    status: Vec<TracingStatus>,
+    /// Final energy of the ray.
     energy: Vec<f32>,
     /// Number of bounces for each ray.
     bounce: Vec<u32>,
+}
+
+impl RayStatsPerStream {
+    pub fn into_iter(self) -> RayStatsPerStreamIntoIter {
+        RayStatsPerStreamIntoIter {
+            stats: self,
+            index: 0,
+        }
+    }
+
+    pub fn iter(&self) -> RayStatsPerStreamIter {
+        RayStatsPerStreamIter {
+            stats: self,
+            index: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RayStatus {
+    /// The last ray exiting the micro-surface.
+    pub status: TracingStatus,
+    /// Final energy of the ray.
+    pub energy: f32,
+    /// Number of bounces for each ray.
+    pub bounce: u32,
+}
+
+pub struct RayStatsPerStreamIntoIter {
+    stats: RayStatsPerStream,
+    index: usize,
+}
+
+pub struct RayStatsPerStreamIter<'a> {
+    stats: &'a RayStatsPerStream,
+    index: usize,
+}
+
+impl Iterator for RayStatsPerStreamIntoIter {
+    type Item = RayStatus;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.stats.status.len() {
+            let status = self.stats.status[self.index];
+            let energy = self.stats.energy[self.index];
+            let bounce = self.stats.bounce[self.index];
+            self.index += 1;
+            Some(RayStatus {
+                status,
+                energy,
+                bounce,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Iterator for RayStatsPerStreamIter<'a> {
+    type Item = &'a RayStatus;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.stats.status.len() {
+            let status = &self.stats.status[self.index];
+            let energy = &self.stats.energy[self.index];
+            let bounce = &self.stats.bounce[self.index];
+            self.index += 1;
+            Some(&RayStatus {
+                status: *status,
+                energy: *energy,
+                bounce: *bounce,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RayStreamExtra<'a> {
+    /// The micro-surface geometry.
+    msurf: Arc<Geometry<'a>>,
     /// The last hit for each ray.
     last_hit: Vec<HitData>,
     /// The trajectory of each ray.
     trajectory: Vec<Vec<TrajectoryNode>>,
+    /// Final energy of each ray.
+    energy: Vec<f32>,
+    /// Number of bounces for each ray.
+    bounce: Vec<u32>,
 }
 
-unsafe impl Send for RayStreamData<'_> {}
-unsafe impl Sync for RayStreamData<'_> {}
+unsafe impl Send for RayStreamExtra<'_> {}
+unsafe impl Sync for RayStreamExtra<'_> {}
 
-type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamData<'a>>;
+impl<'a> From<RayStreamExtra<'a>> for RayStatsPerStream {
+    fn from(value: RayStreamExtra<'a>) -> Self {
+        debug_assert_eq!(value.trajectory.len(), value.energy.len());
+        debug_assert_eq!(value.trajectory.len(), value.bounce.len());
+        Self {
+            status: value
+                .trajectory
+                .into_iter()
+                .enumerate()
+                .map(|(i, mut traj)| {
+                    debug_assert!(traj.len() > 0);
+                    if traj.len() == 1 {
+                        TracingStatus::Missed
+                    } else if value.energy[i] <= 0.0 {
+                        TracingStatus::Absorbed {
+                            ending: traj.pop().unwrap(),
+                        }
+                    } else {
+                        TracingStatus::Reflected {
+                            ending: traj.pop().unwrap(),
+                        }
+                    }
+                })
+                .collect(),
+            energy: value.energy,
+            bounce: value.bounce,
+        }
+    }
+}
+
+type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamExtra<'a>>;
 
 fn intersect_filter_stream<'a, 'b>(
     rays: RayN<'a>,
@@ -242,10 +369,8 @@ pub fn measure_bsdf(
         };
 
         let mut stream_data = vec![
-            RayStreamData {
+            RayStreamExtra {
                 msurf: arc_geom.clone(),
-                energy: vec![0.0; stream_size],
-                bounce: vec![0; stream_size],
                 last_hit: vec![
                     HitData {
                         geom_id: INVALID_ID,
@@ -255,6 +380,8 @@ pub fn measure_bsdf(
                     stream_size
                 ],
                 trajectory: vec![Vec::with_capacity(max_bounces as usize); stream_size],
+                energy: vec![1.0; stream_size],
+                bounce: vec![0; stream_size],
             };
             n_streams
         ];
@@ -351,5 +478,10 @@ pub fn measure_bsdf(
                     validities
                 );
             });
+        let stats = stream_data
+            .into_iter()
+            .map(|d| d.into())
+            .collect::<Vec<_>>();
+        collector.collect_embree_rt(desc.kind, &stats);
     }
 }
