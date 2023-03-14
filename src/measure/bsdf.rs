@@ -150,54 +150,37 @@ pub fn measure_bsdf_embree_rt(
     }
 }
 
-/// Brdf measurement.
+/// Brdf measurement of a microfacet surface using the grid ray tracing.
 pub fn measure_bsdf_grid_rt(
     desc: BsdfMeasurement,
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
-    let mut collector: Collector = desc.collector;
-    let mut emitter: Emitter = desc.emitter;
-    collector.init();
-    emitter.init();
+    let msurfs = cache.micro_surfaces(surfaces).unwrap();
+    let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
 
-    let (surfaces, meshes) = {
-        (
-            cache.micro_surfaces(surfaces).unwrap(),
-            cache.micro_surface_meshes_by_surfaces(surfaces).unwrap(),
-        )
-    };
-
-    for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
-        let grid_rt = GridRT::new(surface, mesh);
+    for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
         println!(
-            "        {BRIGHT_YELLOW}>{RESET} Measure surface {}",
-            surface.path.as_ref().unwrap().display()
+            "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+            surf.path.as_ref().unwrap().display()
         );
-        if emitter.radius().is_auto() {
-            // fixme: use surface's physical size
-            // TODO: get real size of the surface
-            emitter.set_radius(Radius::Auto(mm!(mesh.extent.max_edge() * 2.5)));
-        }
-        let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
-        let ior_t = cache
-            .iors
-            .ior_of_spectrum(desc.transmitted_medium, &spectrum)
-            .expect("transmitted medium IOR not found");
-
-        // for pos in emitter.positions() {
-        //     let rays = emitter.emit_rays(pos);
-        //     let records = rays.iter().filter_map(|ray| {
-        //         grid_rt.trace_one_ray_dbg()
-        //         grid_rt.trace_one_ray(ray, desc.emitter.max_bounces, &ior_t)
-        //     });
-        //     collector.collect(records, BsdfKind::InPlaneBrdf);
-        // }
-        use crate::app::cli::BRIGHT_CYAN;
-        println!("        {BRIGHT_CYAN}✓{RESET} Done!");
+        let t = std::time::Instant::now();
+        crate::measure::rtc::grid::measure_bsdf(&desc, surf, mesh, cache);
+        println!(
+            "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
+            t.elapsed().as_secs_f32()
+        );
     }
-    // log::debug!("Emitter has {} patches.", emitter.patches.len());
-    // let mut grid_rt = GridRayTracing::new(Config::default());
+}
+
+/// Brdf measurement of a microfacet surface using the OptiX ray tracing.
+#[cfg(feature = "optix")]
+pub fn measure_bsdf_optix_rt(
+    _desc: BsdfMeasurement,
+    _cache: &Cache,
+    _surfaces: &[Handle<MicroSurface>],
+) {
+    todo!()
 }
 
 // pub fn measure_in_plane_brdf_grid(
