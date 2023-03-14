@@ -4,6 +4,7 @@ use crate::{
     units::{Radians, SolidAngle},
 };
 
+use crate::units::LengthUnit;
 use serde::{Deserialize, Serialize};
 
 /// Description of a collector.
@@ -23,7 +24,7 @@ pub struct Collector {
     pub scheme: CollectorScheme,
 
     /// Partitioned patches of the collector, generated only if the
-    /// `scheme` is `CollectorScheme::Partitioned`.
+    /// `scheme` is [`CollectorScheme::Partitioned`].
     #[serde(skip)]
     pub patches: Option<Vec<Patch>>,
 }

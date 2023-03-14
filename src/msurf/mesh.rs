@@ -3,6 +3,9 @@ use glam::Vec3;
 use uuid::Uuid;
 
 /// Triangle representation of the surface mesh.
+///
+/// It has the same length unit as the [`MicroSurface`] from which it is
+/// generated.
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
     /// Unique identifier.

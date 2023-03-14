@@ -4,8 +4,6 @@ use crate::{
 };
 use std::{cmp::Ordering, collections::HashMap, path::Path};
 
-// todo: merge ior db into vgonio db
-
 /// Material's complex refractive index which varies with wavelength of the
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
 /// is constant over all the wavelengths.

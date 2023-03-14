@@ -1,8 +1,15 @@
 use crate::{
     common::{Handedness, RangeByStepSize, SphericalCoord},
     measure::{measurement::Radius, Ray},
-    units::{radians, steradians, Nanometres, Radians, SolidAngle},
+    units::{radians, steradians, LengthUnit, Nanometres, Radians, SolidAngle},
 };
+use embree::RayNp;
+use rand::{
+    distributions::{Distribution, Uniform},
+    SeedableRng,
+};
+use rand_chacha::ChaCha8Rng;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Light emitter of the virtual gonio-photometer.
@@ -132,6 +139,7 @@ impl Emitter {
             azimuth_stop.in_degrees().value
         );
 
+        let t = std::time::Instant::now();
         self.samples = uniform_sampling_on_unit_sphere(
             num_samples,
             zenith_start,
@@ -140,6 +148,8 @@ impl Emitter {
             azimuth_stop,
             Handedness::RightHandedYUp,
         );
+        log::trace!("  - Samples: {:?}", self.samples);
+        log::info!("  - Done in {} ms", t.elapsed().as_millis());
     }
 
     /// Accesses the radius of the emitter.
@@ -167,18 +177,21 @@ impl Emitter {
 
     /// Emits rays from the patch located at `pos`.
     pub fn emit_rays(&self, pos: SphericalCoord) -> Vec<Ray> {
-        let r = self.radius.value();
+        let r = self.radius.value().in_micrometres();
+        log::trace!("Emitting rays from position {:?} with radius: {}", pos, r);
         let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
         let dir = -pos.into_cartesian();
 
-        self.samples
-            .iter()
+        let rays = self
+            .samples
+            .par_iter()
             .map(|sample| {
                 let origin = mat * *sample * r.as_f32();
                 Ray { o: origin, d: dir }
             })
-            .collect()
+            .collect();
+        rays
     }
 }
 
@@ -206,50 +219,65 @@ pub fn uniform_sampling_on_unit_sphere(
     phi_stop: Radians,
     handedness: Handedness,
 ) -> Vec<glam::Vec3> {
-    use rand_distr::Distribution;
     use std::f32::consts::PI;
 
-    let mut rng = rand::thread_rng();
-    let uniform = rand_distr::Uniform::new(0.0, 1.0);
+    const SEED: u64 = 0;
+
+    let range = Uniform::new(0.0, 1.0);
     let mut samples = Vec::with_capacity(num_samples);
     samples.resize(num_samples, glam::Vec3::ZERO);
+    log::trace!("  - Generating samples following {:?}", handedness);
 
     match handedness {
         Handedness::RightHandedZUp => {
-            let mut i = 0;
-            while i < num_samples {
-                let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
-                let theta = radians!((1.0 - 2.0 * uniform.sample(&mut rng)).acos());
+            samples
+                .par_chunks_mut(8192)
+                .enumerate()
+                .for_each(|(i, chunks)| {
+                    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
+                    rng.set_stream(i as u64);
 
-                if (theta_start..theta_stop).contains(&theta)
-                    && (phi_start..phi_stop).contains(&phi)
-                {
-                    samples[i] = glam::Vec3::new(
-                        theta.sin() * phi.cos(),
-                        theta.sin() * phi.sin(),
-                        theta.cos(),
-                    );
-                    i += 1;
-                }
-            }
+                    let mut j = 0;
+                    while j < chunks.len() {
+                        let phi = radians!(range.sample(&mut rng) * PI * 2.0);
+                        let theta = radians!((1.0 - 2.0 * range.sample(&mut rng)).acos());
+                        if (theta_start..theta_stop).contains(&theta)
+                            && (phi_start..phi_stop).contains(&phi)
+                        {
+                            chunks[j] = glam::Vec3::new(
+                                theta.sin() * phi.cos(),
+                                theta.sin() * phi.sin(),
+                                theta.cos(),
+                            );
+                            j += 1;
+                        }
+                    }
+                });
         }
         Handedness::RightHandedYUp => {
-            let mut i = 0;
-            while i < num_samples {
-                let phi = radians!(uniform.sample(&mut rng) * PI * 2.0);
-                let theta = radians!((1.0 - 2.0 * uniform.sample(&mut rng)).acos());
+            samples
+                .par_chunks_mut(8192)
+                .enumerate()
+                .for_each(|(i, chunks)| {
+                    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
+                    rng.set_stream(i as u64);
 
-                if (theta_start..theta_stop).contains(&theta)
-                    && (phi_start..phi_stop).contains(&phi)
-                {
-                    samples[i] = glam::Vec3::new(
-                        theta.sin() * phi.cos(),
-                        theta.cos(),
-                        theta.sin() * phi.sin(),
-                    );
-                    i += 1;
-                }
-            }
+                    let mut j = 0;
+                    while j < chunks.len() {
+                        let phi = radians!(range.sample(&mut rng) * PI * 2.0);
+                        let theta = radians!((1.0 - 2.0 * range.sample(&mut rng)).acos());
+                        if (theta_start..theta_stop).contains(&theta)
+                            && (phi_start..phi_stop).contains(&phi)
+                        {
+                            chunks[j] = glam::Vec3::new(
+                                theta.sin() * phi.cos(),
+                                theta.cos(),
+                                theta.sin() * phi.sin(),
+                            );
+                            j += 1;
+                        }
+                    }
+                })
         }
     }
 

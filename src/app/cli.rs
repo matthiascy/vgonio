@@ -229,14 +229,15 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     collector_info
                 );
                 match measurement.sim_kind {
-                    SimulationKind::GeomOptics { method } => {
+                    SimulationKind::GeomOptics(method) => {
                         println!(
                             "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
-                            measurement.bsdf_kind
+                            measurement.kind
                         );
                         match method {
                             #[cfg(feature = "embree")]
                             RtcMethod::Embree => {
+                                println!("      {BRIGHT_YELLOW}>{RESET} Using Embree ray tracing");
                                 measure::bsdf::measure_bsdf_embree_rt(
                                     measurement,
                                     &cache,
@@ -245,9 +246,14 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                             }
                             #[cfg(feature = "optix")]
                             RtcMethod::Optix => {
+                                println!("      {BRIGHT_YELLOW}>{RESET} Using OptiX ray tracing");
                                 todo!("optix");
                             }
                             RtcMethod::Grid => {
+                                println!(
+                                    "      {BRIGHT_YELLOW}>{RESET} Using customised grid ray \
+                                     tracing"
+                                );
                                 measure::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
                             }
                         }
@@ -255,15 +261,15 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     SimulationKind::WaveOptics => {
                         println!(
                             "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
-                            measurement.bsdf_kind
+                            measurement.kind
                         );
                         todo!("wave optics");
                     }
                 }
-                println!("  {BRIGHT_YELLOW}>{RESET} Saving results...");
+                println!("    {BRIGHT_YELLOW}>{RESET} Saving results...");
                 // todo: save to file
                 println!(
-                    "    {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
+                    "      {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
                     config.output_dir().display()
                 );
                 println!(

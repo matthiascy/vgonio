@@ -1,14 +1,9 @@
 //! Ray tracing measurement module.
 
 #[cfg(feature = "embree")]
-mod embree;
+pub mod embr;
 
 #[cfg(feature = "optix")]
-mod optix;
+pub mod optix;
 
-mod grid;
-
-#[cfg(feature = "embree")]
-pub use crate::measure::rtc::embree::EmbreeRT;
-pub use grid::GridRT;
-pub use optix::OptixRT;
+pub mod grid;

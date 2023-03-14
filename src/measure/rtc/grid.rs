@@ -495,10 +495,10 @@ impl<'ms> GridRT<'ms> {
                             let n = intersections[0].1.n;
                             log::debug!("    n: {:?}", n);
                             log::debug!("    p: {:?}", p);
-                            let d = reflect(ray.d, n).normalize();
+                            let d = reflect(ray.d.into(), n.into()).normalize();
                             log::debug!("    r: {:?}", d);
                             self.trace_one_ray_dbg(
-                                Ray::new(p, d),
+                                Ray::new(p, d.into()),
                                 max_bounces,
                                 curr_bounces + 1,
                                 Some(intersections[0].0),
@@ -570,7 +570,8 @@ impl<'ms> GridRT<'ms> {
                                     log::debug!("  - p: {:?}", p);
                                     // Avoid backface hitting.
                                     if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
-                                        let d = reflect(ray.d, prim_intersections[0].1.n);
+                                        let d =
+                                            reflect(ray.d.into(), prim_intersections[0].1.n.into());
                                         intersections[i] = Some((p, d, prim))
                                     }
                                 }
@@ -589,7 +590,7 @@ impl<'ms> GridRT<'ms> {
                                                 log::debug!("    n: {:?}", n);
                                                 log::debug!("    p: {:?}", p);
                                                 if ray.d.dot(prim0.1.n) < 0.0 {
-                                                    let d = reflect(ray.d, n);
+                                                    let d = reflect(ray.d.into(), n.into());
                                                     log::debug!("    r: {:?}", d);
                                                     intersections[i] = Some((p, d, prim))
                                                 }
@@ -617,7 +618,7 @@ impl<'ms> GridRT<'ms> {
 
                     if let Some(Some((p, d, prim))) = intersections.iter().find(|i| i.is_some()) {
                         self.trace_one_ray_dbg(
-                            Ray::new(*p, *d),
+                            Ray::new(*p, (*d).into()),
                             max_bounces,
                             curr_bounces + 1,
                             Some(*prim),
@@ -703,11 +704,11 @@ pub enum GridTraversal {
     },
 }
 
-#[test]
-fn test_grid_traversal() {
-    let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0, AxisAlignment::XY);
-    let triangle_mesh = heightfield.triangulate();
-    let grid = GridRT::new(&heightfield, &triangle_mesh);
-    let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
-    println!("{:?}", result);
-}
+// #[test]
+// fn test_grid_traversal() {
+//     let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0,
+// AxisAlignment::XY);     let triangle_mesh = heightfield.triangulate();
+//     let grid = GridRT::new(&heightfield, &triangle_mesh);
+//     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
+//     println!("{:?}", result);
+// }

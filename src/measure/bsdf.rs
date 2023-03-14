@@ -1,15 +1,13 @@
 use crate::{
     app::{
         cache::{Cache, Handle},
-        cli::{BRIGHT_YELLOW, RESET},
+        cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     common::RangeByStepSize,
-    measure::{measurement::Radius, rtc::GridRT, Collector, Emitter, Patch},
+    measure::{measurement::Radius, rtc::grid::GridRT, Collector, Emitter, Patch},
     msurf::MicroSurface,
     units::{metres, mm, Nanometres},
 };
-#[cfg(feature = "embree")]
-use embree::{Config, Device, SceneFlags};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -114,104 +112,26 @@ pub struct Stats<PatchData: Copy, const N_PATCH: usize, const N_BOUNCE: usize> {
 
 /// Measurement of the BSDF (bidirectional scattering distribution function) of
 /// a microfacet surface.
-///
-/// # Notes
-/// For the moment, the measurement is limited to the in-plane BRDF where the
-/// incident angle and outgoing angle are on the same plane.
-///
-/// TODO: add support for complete BSDF measurement.
 #[cfg(feature = "embree")]
 pub fn measure_bsdf_embree_rt(
     desc: BsdfMeasurement,
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
-    use crate::measure::rtc::EmbreeRT;
-    let mut collector: Collector = desc.collector;
-    let mut emitter: Emitter = desc.emitter;
-    collector.init();
-    emitter.init();
+    let msurfs = cache.micro_surfaces(surfaces).unwrap();
+    let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
 
-    let mut device = Device::with_config(Config::default()).unwrap();
-    let (surfaces, meshes) = {
-        (
-            cache.micro_surfaces(surfaces).unwrap(),
-            cache.micro_surface_meshes_by_surfaces(surfaces).unwrap(),
-        )
-    };
-
-    for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
+    for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
-            surface.path.as_ref().unwrap().display()
+            surf.path.as_ref().unwrap().display()
         );
-        let mut scene = device.create_scene().unwrap();
-        scene.set_flags(SceneFlags::ROBUST);
-
-        // Update emitter's radius to match the surface's dimensions.
-        if emitter.radius().is_auto() {
-            // TODO: use surface's physical size
-            emitter.set_radius(Radius::Auto(metres!(mesh.extent.max_edge() * 2.5)));
-        }
-
-        log::debug!("mesh extent: {:?}", mesh.extent);
-        log::debug!("emitter radius: {:?}", emitter.radius());
-
-        // Upload the surface's mesh to the Embree scene.
-        let embree_mesh = mesh.as_embree_geometry(&mut device);
-        scene.attach_geometry(&embree_mesh);
-
-        let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
-        log::debug!("spectrum samples: {:?}", spectrum);
-
-        // Load the surface's reflectance data.
-        let ior_t = cache
-            .iors
-            .ior_of_spectrum(desc.transmitted_medium, &spectrum)
-            .expect("transmitted medium IOR not found");
-
-        // Iterate over every incident direction.
-        for pos in emitter.meas_points() {
-            let rays = emitter.emit_rays(pos);
-            log::debug!(
-                "emitted {} rays with direction {} from position {}° {}°",
-                rays.len(),
-                rays[0].d,
-                pos.zenith.in_degrees().value(),
-                pos.azimuth.in_degrees().value()
-            );
-
-            // Populate embree ray stream with generated rays.
-            let mut rays = embree::RayNp::new(rays.len());
-            for (i, mut ray) in rays.iter_mut().enumerate() {
-                ray.set_origin(rays[i].o.into());
-                ray.set_dir(rays[i].d.into());
-            }
-
-            // Trace primary rays with coherent context
-            let mut coherent_ctx = embree::IntersectContext::coherent();
-            let ray_hit = embree_rt.intersect_stream_soa(scene_id, rays, &mut coherent_ctx);
-
-            // Filter out primary rays (index) that hit the surface.
-            let filtered: Vec<_> = ray_hit
-                .iter()
-                .enumerate()
-                .filter_map(|(i, (_, h))| h.hit().then_some(i))
-                .collect();
-
-            println!("first hit count: {}", filtered.len());
-
-            /*
-            TODO:
-            let records = filtered.iter().filter_map(|i| {
-                let ray = Ray::new(ray_hit.ray.org(*i).into(),
-            ray_hit.ray.dir(*i).into());     embree_rt.
-            trace_one_ray(scene_id, ray, desc.emitter.max_bounces, &ior_t)
-            });
-            */
-
-            // collector.collect(records, BsdfKind::InPlaneBrdf);
-        }
+        let t = std::time::Instant::now();
+        crate::measure::rtc::embr::measure_bsdf(&desc, surf, mesh, cache);
+        println!(
+            "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
+            t.elapsed().as_secs_f32()
+        );
     }
 }
 
@@ -236,7 +156,7 @@ pub fn measure_bsdf_grid_rt(
     for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
         let grid_rt = GridRT::new(surface, mesh);
         println!(
-            "    {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+            "        {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surface.path.as_ref().unwrap().display()
         );
         if emitter.radius().is_auto() {
@@ -258,6 +178,8 @@ pub fn measure_bsdf_grid_rt(
         //     });
         //     collector.collect(records, BsdfKind::InPlaneBrdf);
         // }
+        use crate::app::cli::BRIGHT_CYAN;
+        println!("        {BRIGHT_CYAN}✓{RESET} Done!");
     }
     // log::debug!("Emitter has {} patches.", emitter.patches.len());
     // let mut grid_rt = GridRayTracing::new(Config::default());

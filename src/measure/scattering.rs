@@ -1,5 +1,5 @@
 use crate::{measure::Ray, optics, optics::RefractiveIndex};
-use glam::Vec3;
+use glam::Vec3A;
 
 /// Light scattering result.
 #[derive(Debug, Copy, Clone)]
@@ -23,17 +23,20 @@ pub struct ScatteringSpectrum {
 }
 
 /// Scattering happens between the air and the conductor.
-pub fn scatter_air_conductor(ray: Ray, p: Vec3, n: Vec3, eta_t: f32, k_t: f32) -> Scattering {
-    let reflected_dir = reflect(ray.d, n);
-    let refracted_dir = refract(ray.d, n, 1.0, eta_t);
-    let reflectance = optics::reflectance_air_conductor(ray.d.dot(n).abs(), eta_t, k_t);
+pub fn scatter_air_conductor(ray: Ray, p: Vec3A, n: Vec3A, eta_t: f32, k_t: f32) -> Scattering {
+    let reflected_dir = reflect(ray.d.into(), n);
+    let refracted_dir = refract(ray.d.into(), n, 1.0, eta_t);
+    let reflectance = optics::reflectance_air_conductor(ray.d.dot(n.into()).abs(), eta_t, k_t);
 
     Scattering {
         reflected: Ray {
-            o: p,
-            d: reflected_dir,
+            o: p.into(),
+            d: reflected_dir.into(),
         },
-        refracted: refracted_dir.map(|d| Ray { o: p, d }),
+        refracted: refracted_dir.map(|d| Ray {
+            o: p.into(),
+            d: d.into(),
+        }),
         reflectance,
     }
 }
@@ -42,22 +45,27 @@ pub fn scatter_air_conductor(ray: Ray, p: Vec3, n: Vec3, eta_t: f32, k_t: f32) -
 /// wavelengths.
 pub fn scatter_air_conductor_spectrum(
     ray: Ray,
-    p: Vec3,
-    n: Vec3,
+    p: Vec3A,
+    n: Vec3A,
     iors: &[RefractiveIndex],
 ) -> ScatteringSpectrum {
-    let reflected_dir = reflect(ray.d, n);
+    let reflected_dir = reflect(ray.d.into(), n);
     let refracted = iors
         .iter()
-        .map(|ior| refract(ray.d, n, 1.0, ior.eta).map(|d| Ray { o: p, d }))
+        .map(|ior| {
+            refract(ray.d.into(), n, 1.0, ior.eta).map(|d| Ray {
+                o: p.into(),
+                d: d.into(),
+            })
+        })
         .collect::<Vec<_>>();
 
-    let reflectance = optics::reflectance_air_conductor_spectrum(ray.d.dot(n).abs(), iors);
+    let reflectance = optics::reflectance_air_conductor_spectrum(ray.d.dot(n.into()).abs(), iors);
 
     ScatteringSpectrum {
         reflected: Ray {
-            o: p,
-            d: reflected_dir,
+            o: p.into(),
+            d: reflected_dir.into(),
         },
         refracted,
         reflectance,
@@ -75,7 +83,7 @@ pub fn scatter_air_conductor_spectrum(
 ///
 /// The direction of the incident ray `w_i` is determined from the ray's origin
 /// rather than the point of intersection.
-pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 { w_i - 2.0 * w_i.dot(n) * n }
+pub fn reflect(w_i: Vec3A, n: Vec3A) -> Vec3A { w_i - 2.0 * w_i.dot(n) * n }
 
 /// Compute refraction direction using Snell's law.
 ///
@@ -95,7 +103,7 @@ pub fn reflect(w_i: Vec3, n: Vec3) -> Vec3 { w_i - 2.0 * w_i.dot(n) * n }
 ///
 /// The refracted direction if the total internal reflection is not occurring,
 /// otherwise None.
-pub fn refract(w_i: Vec3, n: Vec3, eta_i: f32, eta_t: f32) -> Option<Vec3> {
+pub fn refract(w_i: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> Option<Vec3A> {
     let dot = w_i.dot(n);
 
     let (cos_i, eta_i, eta_t, n) = if dot < 0.0 {

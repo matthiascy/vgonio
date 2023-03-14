@@ -45,6 +45,11 @@ pub macro steradians($value:expr) {
     $crate::units::SolidAngle::new($value)
 }
 
+/// Helper macro to create a new `SolidAngle` from a value in `sr`.
+pub macro sr($value:expr) {
+    $crate::units::SolidAngle::new($value)
+}
+
 /// Calculates the solid angle subtended by a region delimited by zenith and
 /// azimuth angles.
 pub fn solid_angle_of_region(

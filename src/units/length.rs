@@ -315,6 +315,11 @@ pub macro metres($val:expr) {
     $crate::units::Length::<$crate::units::UMetre>::new($val)
 }
 
+/// Macro for creating a new length type in metres.
+pub macro m($val:expr) {
+    $crate::units::Length::<$crate::units::UMetre>::new($val)
+}
+
 /// Macro for creating a new length type in centimetres.
 pub macro centimetres($val:expr) {
     $crate::units::Length::<$crate::units::UCentimetre>::new($val)
@@ -520,7 +525,7 @@ mod length_unit_tests {
 
     #[test]
     fn de_serialization() {
-        let a: Millimetres = metres!(100.2);
+        let a: Millimetres = metres!(100.2).into();
         let serialized = serde_yaml::to_string(&a).unwrap();
         assert_eq!(serialized, "100.2 m\n");
 

@@ -32,6 +32,7 @@ rfd = { version = "0.11", features = ["file-handle-inner"] }
 rayon = "1.6"
 rand = "0.8"
 rand_distr = "0.4"
+rand_chacha = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
@@ -42,7 +43,7 @@ winit = "0.28"
 wgpu = { version = "0.15", features = ["spirv"] }
 
 [features]
-default = ["optix"]
+default = ["optix", "embree"]
 embree = ["dep:embree"]
 optix = []
 
@@ -54,12 +55,13 @@ quickcheck = "1"
 
 [profile.dev]
 split-debuginfo = "unpacked"
-
 [profile.dev.build-override]
 opt-level = 3
 
 [profile.release]
 strip = "debuginfo"  # Remove unnecessary debug info from release builds.
+lto = true  # Enable link-time optimization.
+# debug = 1  # Keep debug info in release builds for profiling.
 
 # Compile build-dependencies in release mode with
 # the same settings as regular dependencies.

@@ -5,7 +5,7 @@ use crate::{
     },
     measure::{Ray, RtcMethod},
 };
-use glam::{IVec2, Vec3};
+use glam::{IVec2, Vec3, Vec3A};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -165,8 +165,10 @@ impl egui::Widget for &mut RayTracingPane {
             if ui.button("Trace").clicked() {
                 let ray = match self.ray_mode {
                     RayMode::Cartesian => Ray {
-                        o: self.ray_origin_cartesian,
-                        d: (self.ray_target - self.ray_origin_cartesian).normalize(),
+                        o: self.ray_origin_cartesian.into(),
+                        d: (self.ray_target - self.ray_origin_cartesian)
+                            .normalize()
+                            .into(),
                     },
                     RayMode::Spherical => {
                         let r = self.ray_origin_spherical.x;
@@ -178,8 +180,8 @@ impl egui::Widget for &mut RayTracingPane {
                             r * theta.sin() * phi.sin(),
                         );
                         Ray {
-                            o: origin,
-                            d: (self.ray_target - origin).normalize(),
+                            o: origin.into(),
+                            d: (self.ray_target - origin).normalize().into(),
                         }
                     }
                 };

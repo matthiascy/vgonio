@@ -20,7 +20,7 @@ use crate::{
     Error,
 };
 use bytemuck::{Pod, Zeroable};
-use glam::Vec3;
+use glam::{Vec3, Vec3A};
 
 /// Representation of a ray.
 #[derive(Debug, Copy, Clone)]
@@ -44,20 +44,6 @@ impl Ray {
     }
 }
 
-#[cfg(feature = "embree")]
-impl From<embree::Ray> for Ray {
-    fn from(ray: embree::Ray) -> Self {
-        let o = Vec3::new(ray.org_x, ray.org_y, ray.org_z);
-        let d = Vec3::new(ray.dir_x, ray.dir_y, ray.dir_z);
-        Self { o, d }
-    }
-}
-
-#[cfg(feature = "embree")]
-impl From<Ray> for embree::Ray {
-    fn from(ray: Ray) -> Self { Self::new(ray.o.into(), ray.d.into()) }
-}
-
 /// Enumeration of the different ways to trace rays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -65,7 +51,7 @@ pub enum RtcMethod {
     /// Ray tracing using Intel's Embree library.
     #[cfg(feature = "embree")]
     Embree,
-    /// Ray traincing using Nvidia's OptiX library.
+    /// Ray tracing using Nvidia's OptiX library.
     #[cfg(feature = "optix")]
     Optix,
     /// Customised grid ray tracing method.
@@ -132,7 +118,7 @@ impl FromStr for Medium {
 /// Light source used for acquisition of shadowing and masking function.
 pub struct LightSource {
     /// Position of the light source.
-    pub pos: Vec3,
+    pub pos: Vec3A,
     /// Parameters of projection.
     pub proj: Projection,
     /// Type of projection.
@@ -148,12 +134,12 @@ impl LightSource {
     /// Returns the GPU data of the light source.
     pub fn to_raw(&self) -> LightSourceRaw {
         let forward = -self.pos;
-        let up = if forward == -Vec3::Y {
-            Vec3::new(1.0, 1.0, 0.0).normalize()
+        let up = if forward == -Vec3A::Y {
+            Vec3A::new(1.0, 1.0, 0.0).normalize()
         } else {
-            Vec3::Y
+            Vec3A::Y
         };
-        let view = glam::Mat4::look_at_rh(self.pos, Vec3::ZERO, up);
+        let view = glam::Mat4::look_at_rh(self.pos.into(), Vec3::ZERO, up.into());
         let proj = self.proj.matrix(self.proj_kind);
         LightSourceRaw((proj * view).to_cols_array())
     }

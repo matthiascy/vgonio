@@ -35,7 +35,7 @@ use crate::{
         },
         gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
     },
-    measure::rtc::GridRT,
+    measure::rtc::grid::GridRT,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     units::Degrees,
 };

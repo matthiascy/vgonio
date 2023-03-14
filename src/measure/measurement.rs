@@ -5,7 +5,9 @@ use crate::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         Medium, RtcMethod,
     },
-    units::{degrees, metres, mm, nanometres, radians, Millimetres, Radians, SolidAngle},
+    units::{
+        deg, metres, mm, nanometres, rad, Length, LengthUnit, Millimetres, Radians, SolidAngle,
+    },
     Error,
 };
 use serde::{Deserialize, Serialize};
@@ -55,7 +57,7 @@ impl Radius {
         }
     }
 
-    /// Get the radius value.
+    /// Get the radius value without the unit.
     pub fn value(&self) -> Millimetres {
         match self {
             Radius::Auto(value) => *value,
@@ -69,10 +71,7 @@ impl Radius {
 #[serde(rename_all = "kebab-case")]
 pub enum SimulationKind {
     /// Ray optics is used during the simulation.
-    GeomOptics {
-        /// Method used to trace rays.
-        method: RtcMethod,
-    },
+    GeomOptics(RtcMethod),
 
     /// Wave optics is used during the simulation.
     WaveOptics,
@@ -82,7 +81,7 @@ pub enum SimulationKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BsdfMeasurement {
     /// The measurement kind.
-    pub bsdf_kind: BsdfKind,
+    pub kind: BsdfKind,
 
     /// The simulation kind.
     pub sim_kind: SimulationKind,
@@ -103,10 +102,8 @@ pub struct BsdfMeasurement {
 impl Default for BsdfMeasurement {
     fn default() -> Self {
         Self {
-            bsdf_kind: BsdfKind::Brdf,
-            sim_kind: SimulationKind::GeomOptics {
-                method: RtcMethod::Grid,
-            },
+            kind: BsdfKind::Brdf,
+            sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
             incident_medium: Medium::Air,
             transmitted_medium: Medium::Air,
             emitter: Emitter {
@@ -114,21 +111,21 @@ impl Default for BsdfMeasurement {
                 max_bounces: 10,
                 radius: Radius::Auto(mm!(0.0)),
                 zenith: RangeByStepSize::<Radians> {
-                    start: degrees!(0.0).in_radians(),
-                    stop: degrees!(90.0).in_radians(),
-                    step_size: degrees!(5.0).in_radians(),
+                    start: deg!(0.0).in_radians(),
+                    stop: deg!(90.0).in_radians(),
+                    step_size: deg!(5.0).in_radians(),
                 },
                 azimuth: RangeByStepSize::<Radians> {
-                    start: degrees!(0.0).in_radians(),
-                    stop: degrees!(360.0).in_radians(),
-                    step_size: degrees!(120.0).in_radians(),
+                    start: deg!(0.0).in_radians(),
+                    stop: deg!(360.0).in_radians(),
+                    step_size: deg!(120.0).in_radians(),
                 },
                 shape: RegionShape::SphericalCap {
-                    zenith: degrees!(5.0).in_radians(),
+                    zenith: deg!(5.0).in_radians(),
                 },
                 solid_angle: SolidAngle::from_angle_ranges(
-                    (radians!(0.0), degrees!(5.0).in_radians()),
-                    (radians!(0.0), radians!(2.0 * std::f32::consts::PI)),
+                    (rad!(0.0), deg!(5.0).in_radians()),
+                    (rad!(0.0), rad!(2.0 * std::f32::consts::PI)),
                 ),
                 spectrum: RangeByStepSize {
                     start: nanometres!(400.0),
@@ -143,14 +140,14 @@ impl Default for BsdfMeasurement {
                     domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualArea {
                         zenith: RangeByStepCount {
-                            start: degrees!(0.0).in_radians(),
-                            stop: degrees!(90.0).in_radians(),
-                            step_count: 0,
+                            start: deg!(0.0).in_radians(),
+                            stop: deg!(90.0).in_radians(),
+                            step_count: 1,
                         },
                         azimuth: RangeByStepSize {
-                            start: degrees!(0.0).in_radians(),
-                            stop: degrees!(0.0).in_radians(),
-                            step_size: degrees!(0.0).in_radians(),
+                            start: deg!(0.0).in_radians(),
+                            stop: deg!(360.0).in_radians(),
+                            step_size: deg!(10.0).in_radians(),
                         },
                     },
                 },
@@ -176,8 +173,8 @@ impl BsdfMeasurement {
         }
 
         if !(emitter.radius().is_valid()
-            && emitter.zenith.step_size > radians!(0.0)
-            && emitter.azimuth.step_size > radians!(0.0))
+            && emitter.zenith.step_size > rad!(0.0)
+            && emitter.azimuth.step_size > rad!(0.0))
         {
             return Err(Error::InvalidEmitter(
                 "emitter's radius, zenith step size and azimuth step size must be positive",
@@ -186,20 +183,20 @@ impl BsdfMeasurement {
 
         match emitter.shape {
             RegionShape::SphericalCap { zenith } => {
-                if zenith <= radians!(0.0) || zenith > degrees!(360.0) {
+                if zenith <= rad!(0.0) || zenith > deg!(360.0) {
                     return Err(Error::InvalidEmitter(
                         "emitter's zenith angle must be in the range [0°, 360°]",
                     ));
                 }
             }
             RegionShape::SphericalRect { zenith, azimuth } => {
-                if zenith.0 <= radians!(0.0) || zenith.1 > degrees!(360.0) {
+                if zenith.0 <= rad!(0.0) || zenith.1 > deg!(360.0) {
                     return Err(Error::InvalidEmitter(
                         "emitter's zenith angle must be in the range [0°, 360°]",
                     ));
                 }
 
-                if azimuth.0 <= radians!(0.0) || azimuth.1 > degrees!(360.0) {
+                if azimuth.0 <= rad!(0.0) || azimuth.1 > deg!(360.0) {
                     return Err(Error::InvalidEmitter(
                         "emitter's azimuth angle must be in the range [0°, 360°]",
                     ));
@@ -264,13 +261,13 @@ impl BsdfMeasurement {
 const DEFAULT_AZIMUTH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
     start: Radians::ZERO,
     stop: Radians::TWO_PI,
-    step_size: degrees!(5.0).in_radians(),
+    step_size: deg!(5.0).in_radians(),
 };
 
 const DEFAULT_ZENITH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
     start: Radians::ZERO,
     stop: Radians::HALF_PI,
-    step_size: degrees!(2.0).in_radians(),
+    step_size: deg!(2.0).in_radians(),
 };
 
 /// Parameters for microfacet distribution measurement.
@@ -317,7 +314,7 @@ impl MicrofacetNormalDistributionMeasurement {
     pub fn validate(self) -> Result<Self, Error> {
         if !(self.azimuth.start >= Radians::ZERO
             && self.azimuth.stop
-                <= (Radians::TWO_PI + radians!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+                <= (Radians::TWO_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
         {
             return Err(Error::InvalidParameter(
                 "Microfacet distribution measurement: azimuth angle must be in the range [0°, \
@@ -329,7 +326,7 @@ impl MicrofacetNormalDistributionMeasurement {
                 "Microfacet distribution measurement: zenith angle must be in the range [0°, 90°]",
             ));
         }
-        if !(self.azimuth.step_size > radians!(0.0) && self.zenith.step_size > radians!(0.0)) {
+        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
             return Err(Error::InvalidParameter(
                 "Microfacet distribution measurement: azimuth and zenith step sizes must be \
                  positive!",
@@ -401,7 +398,7 @@ impl MicrofacetMaskingShadowingMeasurement {
     pub fn validate(self) -> Result<Self, Error> {
         if !(self.azimuth.start >= Radians::ZERO
             && self.azimuth.stop
-                <= (Radians::TWO_PI + radians!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+                <= (Radians::TWO_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
         {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: azimuth angle must be in the range \
@@ -410,15 +407,14 @@ impl MicrofacetMaskingShadowingMeasurement {
         }
         if !(self.zenith.start >= Radians::ZERO
             && self.zenith.start
-                <= (Radians::HALF_PI
-                    + radians!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+                <= (Radians::HALF_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
         {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: zenith angle must be in the range [0°, \
                  90°]",
             ));
         }
-        if !(self.azimuth.step_size > radians!(0.0) && self.zenith.step_size > radians!(0.0)) {
+        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: azimuth and zenith step sizes must be \
                  positive!",

@@ -74,10 +74,12 @@ pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
     };
 
     if prints[0] {
-        println!("Current configurations:\n\n{config}\n");
+        println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
+        println!("Current configurations:\n\n{config}");
     }
 
     if prints[1] {
+        println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         println!(
             "Microfacet distribution default parameters:\n\n{}",
             MicrofacetNormalDistributionMeasurement::default()
@@ -91,6 +93,7 @@ pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
     }
 
     if prints[2] {
+        println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
                 kind: MeasurementKind::Mndf(MicrofacetNormalDistributionMeasurement::default()),

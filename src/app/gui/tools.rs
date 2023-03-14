@@ -2,23 +2,21 @@ mod plotting;
 mod sampling;
 mod scratch;
 mod visual_debug;
-#[cfg(feature = "embree")]
-use crate::measure::rtc::EmbreeRT;
 
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
-    measure::{rtc::GridRT, Ray, TrajectoryNode},
+    measure::{Ray, TrajectoryNode},
 };
 #[cfg(feature = "embree")]
 use embree::Config;
 
 use winit::event_loop::EventLoopProxy;
 
+use crate::{measure::rtc::grid::GridRT, msurf::MicroSurfaceMesh};
 pub(crate) use plotting::Plotting;
 pub(crate) use sampling::SamplingDebugger;
 pub(crate) use scratch::Scratch;
 pub(crate) use visual_debug::VisualDebugger;
-use crate::msurf::MicroSurfaceMesh;
 
 use super::state::GuiRenderer;
 
@@ -36,13 +34,14 @@ pub(crate) fn trace_ray_standard_dbg(
     max_bounces: u32,
     surface: &MicroSurfaceMesh,
 ) -> Vec<Ray> {
-    let mut embree_rt = EmbreeRT::new(Config::default());
-    let scn_id = embree_rt.create_scene();
-    let mesh = embree_rt.create_triangle_mesh(surface);
-    embree_rt.attach_geometry(scn_id, mesh);
-    let mut nodes: Vec<TrajectoryNode> = vec![];
-    embree_rt.trace_one_ray_dbg(scn_id, ray, max_bounces, 0, None, &mut nodes);
-    nodes.into_iter().map(|n| n.ray).collect()
+    // let mut embree_rt = EmbreeRT::new(Config::default());
+    // let scn_id = embree_rt.create_scene();
+    // let mesh = embree_rt.create_triangle_mesh(surface);
+    // embree_rt.attach_geometry(scn_id, mesh);
+    // let mut nodes: Vec<TrajectoryNode> = vec![];
+    // embree_rt.trace_one_ray_dbg(scn_id, ray, max_bounces, 0, None, &mut nodes);
+    // nodes.into_iter().map(|n| n.ray).collect()
+    todo!("trace_ray_standard_dbg")
 }
 
 pub trait Tool {

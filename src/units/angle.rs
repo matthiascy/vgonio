@@ -284,8 +284,18 @@ pub macro radians($value:expr) {
     $crate::units::Angle::<$crate::units::URadian>::new($value)
 }
 
+/// Helper creating a new `Angle<Radian>`.
+pub macro rad($value:expr) {
+    $crate::units::Angle::<$crate::units::URadian>::new($value)
+}
+
 /// Helper creating a new `Angle<Degree>`.
 pub macro degrees($value:expr) {
+    $crate::units::Angle::<$crate::units::UDegree>::new($value)
+}
+
+/// Helper creating a new `Angle<Degree>`.
+pub macro deg($value:expr) {
     $crate::units::Angle::<$crate::units::UDegree>::new($value)
 }
 
