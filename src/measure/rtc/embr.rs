@@ -1,5 +1,4 @@
-// rtcIntersect/rtcOccluded calls can be invoked from multiple threads.
-// embree api calls to the same object are not thread safe in general.
+//! Embree ray tracing.
 
 use crate::{
     app::{
@@ -10,25 +9,21 @@ use crate::{
         bsdf::SpectrumSampler,
         measurement::{BsdfMeasurement, Radius},
         scattering::reflect,
-        Collector, Emitter, Ray, RtcRecord,
     },
-    msurf::{MicroSurface, MicroSurfaceMesh},
-    optics,
-    optics::RefractiveIndex,
-    units::{metres, mm, um},
+    msurf::{MicroSurfaceMesh},
+    units::{um},
 };
 use embree::{
-    BufferUsage, Config, Device, Format, Geometry, GeometryKind, Hit, HitN, IntersectContext,
-    IntersectContextExt, IntersectContextFlags, Ray as EmbreeRay, RayHit, RayHitN, RayHitNp, RayN,
-    RayNp, Scene, SceneFlags, SoAHit, SoARay, TriangleMesh, ValidMask, ValidityN, INVALID_ID,
+    BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
+    IntersectContextExt, IntersectContextFlags, RayHitNp, RayN,
+    RayNp, SceneFlags, SoAHit, SoARay, ValidMask, ValidityN, INVALID_ID,
 };
-use glam::{Vec3, Vec3A};
-use rayon::prelude::*;
+use glam::{Vec3A};
 use std::{sync::Arc, time::Instant};
 
 impl MicroSurfaceMesh {
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
-    pub fn as_embree_geometry<'a, 'b, 'g>(&'a self, device: &'b Device) -> Geometry<'g> {
+    pub fn as_embree_geometry<'g>(&self, device: &Device) -> Geometry<'g> {
         let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
         geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
             .unwrap()
@@ -59,9 +54,12 @@ struct HitData {
     pub normal: Vec3A,
 }
 
+/// Records the status of a traced ray.
 #[derive(Debug, Clone, Copy)]
-struct TrajectoryNode {
+pub struct TrajectoryNode {
+    /// The ray's new origin after the hit.
     pub org: Vec3A,
+    /// The ray's new direction after the hit.
     pub dir: Vec3A,
 }
 
@@ -71,11 +69,18 @@ pub enum TracingStatus {
     /// The ray did not hit anything.
     Missed,
     /// The ray hit a micro-surface.
-    Reflected { ending: TrajectoryNode },
+    Reflected {
+        /// The last ray exiting the micro-surface.
+        ending: TrajectoryNode
+    },
     /// The ray hit a micro-surface and was absorbed.
-    Absorbed { ending: TrajectoryNode },
+    Absorbed {
+        /// The last ray exiting the micro-surface.
+        ending: TrajectoryNode
+    },
 }
 
+/// Records the status of a traced ray stream.
 #[derive(Debug, Clone)]
 pub struct RayStatsPerStream {
     /// The last ray exiting the micro-surface.
@@ -86,15 +91,23 @@ pub struct RayStatsPerStream {
     bounce: Vec<u32>,
 }
 
-impl RayStatsPerStream {
-    pub fn into_iter(self) -> RayStatsPerStreamIntoIter {
+impl IntoIterator for RayStatsPerStream {
+    type Item = RayStatus;
+    type IntoIter = RayStatsPerStreamIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
         RayStatsPerStreamIntoIter {
             stats: self,
             index: 0,
         }
     }
+}
 
-    pub fn iter(&self) -> RayStatsPerStreamIter {
+impl<'a> IntoIterator for &'a RayStatsPerStream {
+    type Item = RayStatus;
+    type IntoIter = RayStatsPerStreamIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
         RayStatsPerStreamIter {
             stats: self,
             index: 0,
@@ -102,6 +115,7 @@ impl RayStatsPerStream {
     }
 }
 
+/// Records the status of a traced ray.
 #[derive(Debug, Clone, Copy)]
 pub struct RayStatus {
     /// The last ray exiting the micro-surface.
@@ -112,11 +126,13 @@ pub struct RayStatus {
     pub bounce: u32,
 }
 
+/// Into iterator for `RayStatsPerStream`.
 pub struct RayStatsPerStreamIntoIter {
     stats: RayStatsPerStream,
     index: usize,
 }
 
+/// Iterator for `RayStatsPerStream`.
 pub struct RayStatsPerStreamIter<'a> {
     stats: &'a RayStatsPerStream,
     index: usize,
@@ -143,7 +159,7 @@ impl Iterator for RayStatsPerStreamIntoIter {
 }
 
 impl<'a> Iterator for RayStatsPerStreamIter<'a> {
-    type Item = &'a RayStatus;
+    type Item = RayStatus;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.stats.status.len() {
@@ -151,7 +167,7 @@ impl<'a> Iterator for RayStatsPerStreamIter<'a> {
             let energy = &self.stats.energy[self.index];
             let bounce = &self.stats.bounce[self.index];
             self.index += 1;
-            Some(&RayStatus {
+            Some(RayStatus {
                 status: *status,
                 energy: *energy,
                 bounce: *bounce,
@@ -162,6 +178,10 @@ impl<'a> Iterator for RayStatsPerStreamIter<'a> {
     }
 }
 
+/// Extra data associated with a ray stream.
+///
+/// This is used to record the trajectory, energy, last hit info and bounce count of each ray.
+/// It will be attached to the intersection context to be used by the intersection filter.
 #[derive(Debug, Clone)]
 pub struct RayStreamExtra<'a> {
     /// The micro-surface geometry.
@@ -189,7 +209,7 @@ impl<'a> From<RayStreamExtra<'a>> for RayStatsPerStream {
                 .into_iter()
                 .enumerate()
                 .map(|(i, mut traj)| {
-                    debug_assert!(traj.len() > 0);
+                    debug_assert!(!traj.is_empty());
                     if traj.len() == 1 {
                         TracingStatus::Missed
                     } else if value.energy[i] <= 0.0 {
@@ -211,11 +231,11 @@ impl<'a> From<RayStreamExtra<'a>> for RayStatsPerStream {
 
 type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamExtra<'a>>;
 
-fn intersect_filter_stream<'a, 'b>(
+fn intersect_filter_stream<'a,>(
     rays: RayN<'a>,
     hits: HitN<'a>,
     mut valid: ValidityN,
-    ctx: &'b mut QueryContext,
+    ctx: &mut QueryContext,
     _user_data: Option<&mut ()>,
 ) {
     let n = rays.len();
@@ -239,7 +259,7 @@ fn intersect_filter_stream<'a, 'b>(
                 // the last hit point and re-tracing the ray.
                 valid[i] = ValidMask::Valid as i32;
                 let traj_node = ctx.ext.trajectory[ray_id as usize].last_mut().unwrap();
-                traj_node.org = traj_node.org + last_hit.normal * 1e-4;
+                traj_node.org += last_hit.normal * 1e-4;
                 continue;
             } else {
                 // calculate the intersection point using the u,v coordinates
@@ -272,12 +292,17 @@ fn intersect_filter_stream<'a, 'b>(
                 };
                 let point = v0 * (1.0 - u - v) + v1 * u + v2 * v;
                 // spawn a new ray from the intersection point
-                let new_dir = reflect(rays.unit_dir(i).into(), hits.unit_normal(i).into());
+                let normal = hits.unit_normal(i).into();
+                let new_dir = reflect(rays.unit_dir(i).into(), normal);
                 ctx.ext.bounce[ray_id as usize] += 1;
                 ctx.ext.trajectory[ray_id as usize].push(TrajectoryNode {
                     org: point,
                     dir: new_dir,
                 });
+                let last_hit = &mut ctx.ext.last_hit[ray_id as usize];
+                last_hit.geom_id = hits.geom_id(i);
+                last_hit.prim_id = prim_id;
+                last_hit.normal = normal;
             }
         } else {
             // if the ray didn't hit anything, mark it as invalid
@@ -289,40 +314,41 @@ fn intersect_filter_stream<'a, 'b>(
 
 const MAX_RAY_STREAM_SIZE: usize = 1024;
 
+/// Measures the BSDF of a micro-surface.
+///
+/// # Arguments
+///
+/// * `desc` - The BSDF measurement description.
+/// * `surf` - The micro-surface to measure.
+/// * `mesh` - The micro-surface's mesh.
+/// * `cache` - The cache to use.
 pub fn measure_bsdf(
     desc: &BsdfMeasurement,
-    surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     cache: &Cache,
 ) {
-    let mut collector: Collector = desc.collector.clone();
-    let mut emitter: Emitter = desc.emitter.clone();
-    collector.init();
-    emitter.init();
-
-    let mut device = Device::with_config(Config::default()).unwrap();
+    let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
 
-    // Update emitter's radius to match the surface's dimensions.
-    if emitter.radius().is_auto() {
-        emitter.set_radius(Radius::Auto(
-            um!(mesh.extent.max_edge() * 2.5).in_millimetres(),
-        ));
-    }
+    // Calculate emitter's radius to match the surface's dimensions.
+    let radius = match desc.emitter.radius() {
+        Radius::Auto(_) => um!(mesh.extent.max_edge() * 2.5),
+        Radius::Fixed(r) => r.in_micrometres(),
+    };
 
     log::debug!("mesh extent: {:?}", mesh.extent);
-    log::debug!("emitter radius: {}", emitter.radius());
+    log::debug!("emitter radius: {}", radius);
 
     // Upload the surface's mesh to the Embree scene.
-    let mut geometry = mesh.as_embree_geometry(&mut device);
+    let mut geometry = mesh.as_embree_geometry(&device);
     geometry.set_intersect_filter_function(intersect_filter_stream);
     geometry.commit();
 
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
+    let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
     log::debug!("spectrum samples: {:?}", spectrum);
 
     // Load the surface's reflectance data.
@@ -331,10 +357,8 @@ pub fn measure_bsdf(
         .ior_of_spectrum(desc.transmitted_medium, &spectrum)
         .expect("transmitted medium IOR not found");
 
-    let total_num_rays = emitter.num_rays;
-
     // Iterate over every incident direction.
-    for pos in emitter.meas_points() {
+    for pos in desc.emitter.meas_points() {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
             pos.zenith.in_degrees().value(),
@@ -342,11 +366,11 @@ pub fn measure_bsdf(
         );
 
         let t = Instant::now();
-        let emitted_rays = emitter.emit_rays(pos);
+        let emitted_rays = desc.emitter.emit_rays_with_radius(pos, radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 
-        let max_bounces = emitter.max_bounces;
+        let max_bounces = desc.emitter.max_bounces;
 
         log::debug!(
             "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
@@ -359,7 +383,6 @@ pub fn measure_bsdf(
 
         let arc_geom = Arc::new(geometry.clone());
         let n_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
-
         // In case the number of rays is less than one stream, we need to
         // adjust the stream size to match the number of rays.
         let stream_size = if n_streams == 1 {
@@ -411,11 +434,11 @@ pub fn measure_bsdf(
                     ray.set_tfar(f32::INFINITY);
                 }
 
-                for i in 0..chunk_size {
-                    data.trajectory[i].push(TrajectoryNode {
-                        org: rays[i].o.into(),
-                        dir: rays[i].d.into(),
-                    });
+                for ray in rays {
+                    data.trajectory.push(vec![TrajectoryNode {
+                        org: ray.o.into(),
+                        dir: ray.d.into(),
+                    }]);
                 }
 
                 // Trace primary rays with coherent context
@@ -482,6 +505,6 @@ pub fn measure_bsdf(
             .into_iter()
             .map(|d| d.into())
             .collect::<Vec<_>>();
-        collector.collect_embree_rt(desc.kind, &stats);
+        desc.collector.collect_embree_rt(desc.kind, &stats);
     }
 }

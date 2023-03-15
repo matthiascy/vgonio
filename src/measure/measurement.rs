@@ -133,6 +133,7 @@ impl Default for BsdfMeasurement {
                     step_size: nanometres!(1.0),
                 },
                 samples: vec![],
+                init: false,
             },
             collector: Collector {
                 radius: Radius::Auto(mm!(0.0)),
@@ -152,6 +153,7 @@ impl Default for BsdfMeasurement {
                     },
                 },
                 patches: None,
+                init: false,
             },
         }
     }

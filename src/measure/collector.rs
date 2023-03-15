@@ -31,6 +31,10 @@ pub struct Collector {
     /// `scheme` is [`CollectorScheme::Partitioned`].
     #[serde(skip)]
     pub patches: Option<Vec<Patch>>,
+
+    #[serde(skip)]
+    /// Initialised flag.
+    pub(crate) init: bool,
 }
 
 /// Strategy for data collection.
@@ -71,19 +75,21 @@ impl Collector {
             }
             CollectorScheme::SingleRegion { .. } => None,
         };
+        self.init = true;
     }
 
     /// Collects the ray-tracing data.
     #[cfg(feature = "embree")]
-    pub fn collect_embree_rt<S>(
-        &mut self,
+    pub fn collect_embree_rt(
+        &self,
         kind: BsdfKind,
         stats: &[RayStatsPerStream],
     ) -> BsdfStats<BounceEnergyPerPatch> {
+        debug_assert!(self.init, "Collector not initialised");
         // TODO: try to parallelise
         for stats_per_stream in stats {
             log::debug!("Stats per stream: {:?}", stats_per_stream);
-            for status in stats_per_stream.iter() {
+            for status in stats_per_stream {
                 log::debug!("Status: {:?}", status);
             }
         }
@@ -92,7 +98,9 @@ impl Collector {
 
     // todo: pub fn collect_grid_rt
 
-    pub fn save_stats(&self, _path: &str) { todo!("Collector::save_stats") }
+    pub fn save_stats(&self, _path: &str) {
+        debug_assert!(self.init, "Collector not initialised");
+        todo!("Collector::save_stats") }
 }
 
 /// Represents a patch on the spherical [`Collector`].

@@ -1,3 +1,4 @@
+//! Customised grid ray tracing for micro-surface measurements.
 use crate::{
     app::cache::Cache,
     isect::{ray_tri_intersect_woop, RayTriIsect},
@@ -23,29 +24,24 @@ pub fn measure_bsdf(
     collector.init();
     emitter.init();
 
-    let (surfaces, meshes) = {
-        (
-            cache.micro_surfaces(surfaces).unwrap(),
-            cache.micro_surface_meshes_by_surfaces(surfaces).unwrap(),
-        )
-    };
+    todo!()
 
-    for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
-        let grid_rt = GridRT::new(surface, mesh);
-        println!(
-            "        {BRIGHT_YELLOW}>{RESET} Measure surface {}",
-            surface.path.as_ref().unwrap().display()
-        );
-        if emitter.radius().is_auto() {
-            // fixme: use surface's physical size
-            // TODO: get real size of the surface
-            emitter.set_radius(Radius::Auto(mm!(mesh.extent.max_edge() * 2.5)));
-        }
-        let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
-        let ior_t = cache
-            .iors
-            .ior_of_spectrum(desc.transmitted_medium, &spectrum)
-            .expect("transmitted medium IOR not found");
+    // for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
+        // let grid_rt = GridRT::new(surface, mesh);
+        // println!(
+        //     "        {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+        //     surface.path.as_ref().unwrap().display()
+        // );
+        // if emitter.radius().is_auto() {
+        //     // fixme: use surface's physical size
+        //     // TODO: get real size of the surface
+        //     emitter.set_radius(Radius::Auto(mm!(mesh.extent.max_edge() * 2.5)));
+        // }
+        // let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
+        // let ior_t = cache
+        //     .iors
+        //     .ior_of_spectrum(desc.transmitted_medium, &spectrum)
+        //     .expect("transmitted medium IOR not found");
 
         // for pos in emitter.positions() {
         //     let rays = emitter.emit_rays(pos);
@@ -55,9 +51,9 @@ pub fn measure_bsdf(
         //     });
         //     collector.collect(records, BsdfKind::InPlaneBrdf);
         // }
-        use crate::app::cli::BRIGHT_CYAN;
-        println!("        {BRIGHT_CYAN}✓{RESET} Done!");
-    }
+        // use crate::app::cli::BRIGHT_CYAN;
+        // println!("        {BRIGHT_CYAN}✓{RESET} Done!");
+    // }
     // log::debug!("Emitter has {} patches.", emitter.patches.len());
     // let mut grid_rt = GridRayTracing::new(Config::default());
 }

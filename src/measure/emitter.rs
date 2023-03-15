@@ -11,6 +11,7 @@ use rand::{
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use crate::units::Micrometres;
 
 /// Light emitter of the virtual gonio-photometer.
 ///
@@ -55,6 +56,10 @@ pub struct Emitter {
     /// sphere using rejection sampling.
     #[serde(skip)]
     pub(crate) samples: Vec<glam::Vec3>,
+
+    /// Initialised flag.
+    #[serde(skip)]
+    pub(crate) init: bool,
 }
 
 /// Represents the shape of a region on the surface of a sphere.
@@ -150,6 +155,7 @@ impl Emitter {
         );
         log::trace!("  - Samples: {:?}", self.samples);
         log::info!("  - Done in {} ms", t.elapsed().as_millis());
+        self.init = true;
     }
 
     /// Accesses the radius of the emitter.
@@ -176,9 +182,9 @@ impl Emitter {
     }
 
     /// Emits rays from the patch located at `pos`.
-    pub fn emit_rays(&self, pos: SphericalCoord) -> Vec<Ray> {
-        let r = self.radius.value().in_micrometres();
-        log::trace!("Emitting rays from position {:?} with radius: {}", pos, r);
+    pub fn emit_rays_with_radius(&self, pos: SphericalCoord, radius: Micrometres) -> Vec<Ray> {
+        debug_assert!(self.init, "Emitter not initialised yet! Call init() first.");
+        log::trace!("Emitting rays from position {:?} with radius: {}", pos, radius);
         let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
         let dir = -pos.into_cartesian();
@@ -187,7 +193,7 @@ impl Emitter {
             .samples
             .par_iter()
             .map(|sample| {
-                let origin = mat * *sample * r.as_f32();
+                let origin = mat * *sample * radius.as_f32();
                 Ray { o: origin, d: dir }
             })
             .collect();

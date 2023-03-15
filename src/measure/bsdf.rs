@@ -129,12 +129,14 @@ pub struct BsdfStats<PatchData> {
 /// a microfacet surface.
 #[cfg(feature = "embree")]
 pub fn measure_bsdf_embree_rt(
-    desc: BsdfMeasurement,
+    mut desc: BsdfMeasurement,
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
     let msurfs = cache.micro_surfaces(surfaces).unwrap();
     let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
+    desc.collector.init();
+    desc.emitter.init();
 
     for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
         println!(
@@ -142,7 +144,7 @@ pub fn measure_bsdf_embree_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::embr::measure_bsdf(&desc, surf, mesh, cache);
+        crate::measure::rtc::embr::measure_bsdf(&desc, mesh, cache);
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()
