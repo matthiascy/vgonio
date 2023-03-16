@@ -72,44 +72,44 @@ pub fn scatter_air_conductor_spectrum(
     }
 }
 
-/// Compute refraction direction using Snell's law.
-///
-/// # Arguments
-///
-/// * `w_i` - direction of the ray (normalised).
-/// * `n` - normal of the surface (normalised).
-/// * `eta_t` - index of refraction of the incident medium.
-/// * `eta_t` - index of refraction of the transmitted medium.
-///
-/// # Notes
-///
-/// The direction of the incident ray `w_i` is determined from the ray's origin
-/// rather than the point of intersection.
-///
-/// # Returns
-///
-/// The refracted direction if the total internal reflection is not occurring,
-/// otherwise None.
-pub fn refract(w_i: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> Option<Vec3A> {
-    let dot = w_i.dot(n);
-
-    let (cos_i, eta_i, eta_t, n) = if dot < 0.0 {
-        // Ray is on the outside of the interface, `cos_i` needs to be positive.
-        (-dot, eta_i, eta_t, n)
-    } else {
-        // Ray is on the inside of the interface, normal and refractive indices need to
-        // be swapped.
-        (dot, eta_t, eta_i, -n)
-    };
-
-    let eta = eta_i / eta_t;
-    let sin_i_sqr = 1.0 - cos_i * cos_i;
-    let t0 = 1.0 - eta * eta * sin_i_sqr;
-
-    if t0 < 0.0 {
-        // Total internal reflection.
-        None
-    } else {
-        Some(w_i * eta + (eta * cos_i - t0.sqrt()) * n)
-    }
-}
+// /// Compute refraction direction using Snell's law.
+// ///
+// /// # Arguments
+// ///
+// /// * `w_i` - direction of the ray (normalised).
+// /// * `n` - normal of the surface (normalised).
+// /// * `eta_t` - index of refraction of the incident medium.
+// /// * `eta_t` - index of refraction of the transmitted medium.
+// ///
+// /// # Notes
+// ///
+// /// The direction of the incident ray `w_i` is determined from the ray's origin
+// /// rather than the point of intersection.
+// ///
+// /// # Returns
+// ///
+// /// The refracted direction if the total internal reflection is not occurring,
+// /// otherwise None.
+// pub fn refract(w_i: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> Option<Vec3A> {
+//     let dot = w_i.dot(n);
+//
+//     let (cos_i, eta_i, eta_t, n) = if dot < 0.0 {
+//         // Ray is on the outside of the interface, `cos_i` needs to be positive.
+//         (-dot, eta_i, eta_t, n)
+//     } else {
+//         // Ray is on the inside of the interface, normal and refractive indices need to
+//         // be swapped.
+//         (dot, eta_t, eta_i, -n)
+//     };
+//
+//     let eta = eta_i / eta_t;
+//     let sin_i_sqr = 1.0 - cos_i * cos_i;
+//     let t0 = 1.0 - eta * eta * sin_i_sqr;
+//
+//     if t0 < 0.0 {
+//         // Total internal reflection.
+//         None
+//     } else {
+//         Some(w_i * eta + (eta * cos_i - t0.sqrt()) * n)
+//     }
+// }
