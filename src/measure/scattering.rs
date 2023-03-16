@@ -72,19 +72,6 @@ pub fn scatter_air_conductor_spectrum(
     }
 }
 
-/// Compute reflection direction.
-///
-/// # Arguments
-///
-/// * `w_i` - direction of the ray (normalised).
-/// * `n` - normal of the surface (normalised).
-///
-/// # Notes
-///
-/// The direction of the incident ray `w_i` is determined from the ray's origin
-/// rather than the point of intersection.
-pub fn reflect(w_i: Vec3A, n: Vec3A) -> Vec3A { w_i - 2.0 * w_i.dot(n) * n }
-
 /// Compute refraction direction using Snell's law.
 ///
 /// # Arguments
