@@ -5,11 +5,10 @@ use crate::{
     measure::{
         bsdf::SpectrumSampler,
         measurement::{BsdfMeasurement, Radius},
-        scattering::reflect,
         Collector, Emitter, Ray, RtcRecord, TrajectoryNode,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
-    optics::RefractiveIndex,
+    optics::{fresnel::reflect, ior::RefractiveIndex},
 };
 use glam::{IVec2, Vec2, Vec3, Vec3Swizzles};
 
@@ -27,32 +26,32 @@ pub fn measure_bsdf(
     todo!()
 
     // for (surface, mesh) in surfaces.iter().zip(meshes.iter()) {
-        // let grid_rt = GridRT::new(surface, mesh);
-        // println!(
-        //     "        {BRIGHT_YELLOW}>{RESET} Measure surface {}",
-        //     surface.path.as_ref().unwrap().display()
-        // );
-        // if emitter.radius().is_auto() {
-        //     // fixme: use surface's physical size
-        //     // TODO: get real size of the surface
-        //     emitter.set_radius(Radius::Auto(mm!(mesh.extent.max_edge() * 2.5)));
-        // }
-        // let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
-        // let ior_t = cache
-        //     .iors
-        //     .ior_of_spectrum(desc.transmitted_medium, &spectrum)
-        //     .expect("transmitted medium IOR not found");
+    // let grid_rt = GridRT::new(surface, mesh);
+    // println!(
+    //     "        {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+    //     surface.path.as_ref().unwrap().display()
+    // );
+    // if emitter.radius().is_auto() {
+    //     // fixme: use surface's physical size
+    //     // TODO: get real size of the surface
+    //     emitter.set_radius(Radius::Auto(mm!(mesh.extent.max_edge() * 2.5)));
+    // }
+    // let spectrum = SpectrumSampler::from(emitter.spectrum).samples();
+    // let ior_t = cache
+    //     .iors
+    //     .ior_of_spectrum(desc.transmitted_medium, &spectrum)
+    //     .expect("transmitted medium IOR not found");
 
-        // for pos in emitter.positions() {
-        //     let rays = emitter.emit_rays(pos);
-        //     let records = rays.iter().filter_map(|ray| {
-        //         grid_rt.trace_one_ray_dbg()
-        //         grid_rt.trace_one_ray(ray, desc.emitter.max_bounces, &ior_t)
-        //     });
-        //     collector.collect(records, BsdfKind::InPlaneBrdf);
-        // }
-        // use crate::app::cli::BRIGHT_CYAN;
-        // println!("        {BRIGHT_CYAN}✓{RESET} Done!");
+    // for pos in emitter.positions() {
+    //     let rays = emitter.emit_rays(pos);
+    //     let records = rays.iter().filter_map(|ray| {
+    //         grid_rt.trace_one_ray_dbg()
+    //         grid_rt.trace_one_ray(ray, desc.emitter.max_bounces, &ior_t)
+    //     });
+    //     collector.collect(records, BsdfKind::InPlaneBrdf);
+    // }
+    // use crate::app::cli::BRIGHT_CYAN;
+    // println!("        {BRIGHT_CYAN}✓{RESET} Done!");
     // }
     // log::debug!("Emitter has {} patches.", emitter.patches.len());
     // let mut grid_rt = GridRayTracing::new(Config::default());

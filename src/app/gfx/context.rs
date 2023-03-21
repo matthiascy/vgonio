@@ -39,7 +39,7 @@ impl WindowSurface {
         let format = config
             .target_format
             .unwrap_or_else(|| config.preferred_surface_format(&capabilities.formats));
-        log::info!("-- choose surface format: {:?}", format);
+        log::info!("  - Selected surface format: {:?}", format);
         let win_size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

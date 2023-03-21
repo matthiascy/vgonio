@@ -7,6 +7,7 @@
 #![feature(is_some_and)]
 #![feature(vec_push_within_capacity)]
 #![warn(missing_docs)]
+#![feature(stdsimd)] // to enable _mm_rcp14_ss
 
 extern crate core;
 

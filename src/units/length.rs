@@ -527,7 +527,7 @@ mod length_unit_tests {
     fn de_serialization() {
         let a: Millimetres = metres!(100.2).into();
         let serialized = serde_yaml::to_string(&a).unwrap();
-        assert_eq!(serialized, "100.2 m\n");
+        assert_eq!(serialized, "100200 mm\n");
 
         let deserialized: Centimetres = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(a, deserialized);

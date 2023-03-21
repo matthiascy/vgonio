@@ -163,7 +163,7 @@ impl MicroSurface {
     /// assert_eq!(msurf.min, 0.0);
     /// assert_eq!(msurf.samples[0], 0.0);
     /// assert_eq!(msurf.samples[2], 2.0);
-    /// assert_eq!(msurf.sample_at(2, 3), 5.0);
+    /// assert_eq!(msurf.sample_at(2, 3), um!(5.0));
     /// ```
     pub fn new_by<F>(
         cols: usize,
@@ -274,9 +274,10 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::HeightField;
-    /// let height_field = HeightField::new(100, 100, 0.1, 0.1, 0.1, Default::default());
-    /// assert_eq!(height_field.dimension(), (10.0, 10.0));
+    /// # use vgonio::msurf::MicroSurface;
+    /// use vgonio::units::um;
+    /// let msurf = MicroSurface::new(100, 100, um!(0.1), um!(0.1), um!(0.1));
+    /// assert_eq!(msurf.dimension(), (um!(10.0), um!(10.0)));
     /// ```
     pub fn dimension(&self) -> (Micrometres, Micrometres) {
         (
@@ -290,10 +291,12 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::HeightField;
+    /// # use vgonio::msurf::MicroSurface;
+    /// # use vgonio::units::{um, UMetre};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = HeightField::from_samples(3, 3, 0.2, 0.2, samples, Default::default());
-    /// assert_eq!(height_field.samples_count(), 9);
+    /// let msurf =
+    ///     MicroSurface::from_samples::<UMetre>(3, 3, um!(0.2), um!(0.2), samples, Default::default());
+    /// assert_eq!(msurf.samples_count(), 9);
     /// ```
     pub fn samples_count(&self) -> usize { self.cols * self.rows }
 
@@ -302,10 +305,18 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::HeightField;
+    /// # use vgonio::msurf::MicroSurface;
+    /// # use vgonio::units::{um, UMicrometre};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = HeightField::from_samples(3, 3, 0.2, 0.2, samples, Default::default());
-    /// assert_eq!(height_field.cells_count(), 4);
+    /// let msurf = MicroSurface::from_samples::<UMicrometre>(
+    ///     3,
+    ///     3,
+    ///     um!(0.2),
+    ///     um!(0.2),
+    ///     samples,
+    ///     Default::default(),
+    /// );
+    /// assert_eq!(msurf.cells_count(), 4);
     /// ```
     pub fn cells_count(&self) -> usize {
         if self.cols == 0 || self.rows == 0 {
@@ -325,17 +336,33 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::height_field::HeightField;
+    /// # use vgonio::msurf::MicroSurface;
+    /// # use vgonio::units::{um, UMillimetre};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = HeightField::from_samples(3, 3, 0.2, 0.2, samples, Default::default());
-    /// assert_eq!(height_field.sample_at(2, 2), 0.1);
+    /// let msurf = MicroSurface::from_samples::<UMillimetre>(
+    ///     3,
+    ///     3,
+    ///     um!(0.2),
+    ///     um!(0.2),
+    ///     samples,
+    ///     Default::default(),
+    /// );
+    /// assert_eq!(msurf.sample_at(2, 2), um!(0.1 * 1000.0));
     /// ```
     ///
     /// ```should_panic
-    /// # use vgonio::height_field::HeightField;
+    /// # use vgonio::msurf::MicroSurface;
+    /// # use vgonio::units::{um, UMillimetre};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = HeightField::from_samples(3, 3, 0.2, 0.3, samples, Default::default());
-    /// let h = height_field.sample_at(4, 4);
+    /// let msurf = MicroSurface::from_samples::<UMillimetre>(
+    ///     3,
+    ///     3,
+    ///     um!(0.2),
+    ///     um!(0.3),
+    ///     samples,
+    ///     Default::default(),
+    /// );
+    /// let h = msurf.sample_at(4, 4);
     /// ```
     pub fn sample_at(&self, col: usize, row: usize) -> Micrometres {
         assert!(col < self.cols);

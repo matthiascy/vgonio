@@ -1,5 +1,14 @@
-use crate::{measure::Ray, optics, optics::RefractiveIndex};
+use crate::{
+    measure::Ray,
+    optics,
+    optics::{
+        fresnel::{reflect, refract2, RefractionResult},
+        ior::RefractiveIndex,
+    },
+};
 use glam::Vec3A;
+
+// TODO: to be removed
 
 /// Light scattering result.
 #[derive(Debug, Copy, Clone)]
@@ -25,18 +34,26 @@ pub struct ScatteringSpectrum {
 /// Scattering happens between the air and the conductor.
 pub fn scatter_air_conductor(ray: Ray, p: Vec3A, n: Vec3A, eta_t: f32, k_t: f32) -> Scattering {
     let reflected_dir = reflect(ray.d.into(), n);
-    let refracted_dir = refract(ray.d.into(), n, 1.0, eta_t);
-    let reflectance = optics::reflectance_air_conductor(ray.d.dot(n.into()).abs(), eta_t, k_t);
+    let refracted = refract2(ray.d.into(), n, 1.0, eta_t);
+    let reflectance = optics::fresnel::reflectance_insulator_conductor(
+        ray.d.dot(n.into()).abs(),
+        1.0,
+        eta_t,
+        k_t,
+    );
 
     Scattering {
         reflected: Ray {
             o: p.into(),
             d: reflected_dir.into(),
         },
-        refracted: refracted_dir.map(|d| Ray {
-            o: p.into(),
-            d: d.into(),
-        }),
+        refracted: match refracted {
+            RefractionResult::TotalInternalReflection => None,
+            RefractionResult::Refraction { dir_t, .. } => Some(Ray {
+                o: p.into(),
+                d: dir_t.into(),
+            }),
+        },
         reflectance,
     }
 }
@@ -52,15 +69,20 @@ pub fn scatter_air_conductor_spectrum(
     let reflected_dir = reflect(ray.d.into(), n);
     let refracted = iors
         .iter()
-        .map(|ior| {
-            refract(ray.d.into(), n, 1.0, ior.eta).map(|d| Ray {
+        .map(|ior| match refract2(ray.d.into(), n, 1.0, ior.eta) {
+            RefractionResult::TotalInternalReflection => None,
+            RefractionResult::Refraction { dir_t, .. } => Some(Ray {
                 o: p.into(),
-                d: d.into(),
-            })
+                d: dir_t.into(),
+            }),
         })
         .collect::<Vec<_>>();
 
-    let reflectance = optics::reflectance_air_conductor_spectrum(ray.d.dot(n.into()).abs(), iors);
+    let reflectance = optics::fresnel::reflectance_insulator_conductor_spectrum(
+        ray.d.dot(n.into()).abs(),
+        1.0,
+        iors,
+    );
 
     ScatteringSpectrum {
         reflected: Ray {
@@ -71,45 +93,3 @@ pub fn scatter_air_conductor_spectrum(
         reflectance,
     }
 }
-
-// /// Compute refraction direction using Snell's law.
-// ///
-// /// # Arguments
-// ///
-// /// * `w_i` - direction of the ray (normalised).
-// /// * `n` - normal of the surface (normalised).
-// /// * `eta_t` - index of refraction of the incident medium.
-// /// * `eta_t` - index of refraction of the transmitted medium.
-// ///
-// /// # Notes
-// ///
-// /// The direction of the incident ray `w_i` is determined from the ray's origin
-// /// rather than the point of intersection.
-// ///
-// /// # Returns
-// ///
-// /// The refracted direction if the total internal reflection is not occurring,
-// /// otherwise None.
-// pub fn refract(w_i: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> Option<Vec3A> {
-//     let dot = w_i.dot(n);
-//
-//     let (cos_i, eta_i, eta_t, n) = if dot < 0.0 {
-//         // Ray is on the outside of the interface, `cos_i` needs to be positive.
-//         (-dot, eta_i, eta_t, n)
-//     } else {
-//         // Ray is on the inside of the interface, normal and refractive indices need to
-//         // be swapped.
-//         (dot, eta_t, eta_i, -n)
-//     };
-//
-//     let eta = eta_i / eta_t;
-//     let sin_i_sqr = 1.0 - cos_i * cos_i;
-//     let t0 = 1.0 - eta * eta * sin_i_sqr;
-//
-//     if t0 < 0.0 {
-//         // Total internal reflection.
-//         None
-//     } else {
-//         Some(w_i * eta + (eta * cos_i - t0.sqrt()) * n)
-//     }
-// }

@@ -1,3 +1,36 @@
+//! Fresnel equations and related functions.
+//!
+//! # Reflection
+#![doc = include_str!("../../misc/imgs/reflect.svg")]
+//!
+//! See [`reflect`] and [`reflect_cos`] for computing the reflection of a
+//! vector with respect to a surface normal.
+//!
+//! ## Angle of Incidence
+//!
+//! The angle of incidence of a ray to a surface is measured as the difference
+//! in angle between the ray and the normal vector of the surface at the point
+//! of incidence.
+//!
+//! ## Angle of Reflection
+//!
+//! The angle of reflection of a ray from a surface is measured as the
+//! difference in angle between the reflected ray and the normal vector of the
+//! surface at the point of reflection.
+//!
+//! # Refraction
+#![doc = include_str!("../../misc/imgs/refract.svg")]
+//!
+//! See [`refract`] for computing the refraction of a vector with respect to a
+//! surface normal without knowing if the ray is located outside the surface.
+//!
+//! See [`refract2`] for computing the refraction of a vector with respect to a
+//! surface normal knowing that the ray is located outside the surface.
+//!
+//! See [`refract_cos`] for computing the refraction of a vector with respect to
+//! a surface normal knowing the cosine of the incident angle, the relative
+//! index of refraction and that the ray is located outside the surface.
+//!
 //! # Fresnel equations
 //!
 //! Fresnel equations describe the amount of light reflected from a surface;
@@ -11,82 +44,90 @@
 //!
 //! Given the index of refraction and the angle which the incident ray makes
 //! with the surface normal, the Fresnel equations specify the materials'
-//! corresponding reflectance for two different polarization states of the
+//! corresponding reflectance for two different polarisation states of the
 //! incident light.
 //!
 //! If the we make the assumption that light is un-polarized (randomly oriented
 //! with respect to the light wave), the `Fresnel reflectance` is the average of
-//! the squares of the _parallel_ and _perpendicular_ polarization terms.
+//! the squares of the _parallel_ and _perpendicular_ polarisation terms.
 //!
-//! ## "S" and "P" polarization
+//! ## "S" polarisation
 //!
-//! "S" polarization (electric field) is the perpendicular polarization, and it
+//! "S" polarisation (electric field) is the perpendicular polarisation, and it
 //! sticks up out of the plane of incidence (the plane that contains the
 //! incident and reflected rays). "S" comes from senkrecht, German for
 //! perpendicular.
 //!
 //! + reflection and transmission coefficients for perpendicularly polarized
-//! light at the interface of two *dielectric* media:
+//!   light at the interface of two *dielectric* media:
 //!
-//!   $r_\perp=\frac{\eta_i\cos\theta_i - \eta_t\cos\theta_t}{\eta_i\cos\theta_i
-//! + \eta_t\cos\theta_t}$
+//!   $$r_\perp=
+//! \frac{\eta_i\cos\theta_i -
+//! \eta_t\cos\theta_t}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}$$
 //!
-//!   $t_\perp=\frac{2\eta_i\cos\theta_i}{\eta_i\cos\theta_i +
-//! \eta_t\cos\theta_t}$
+//!   $$t_\perp=\frac{2\eta_i\cos\theta_i}{\eta_i\cos\theta_i +
+//! \eta_t\cos\theta_t}$$
 //!
 //! + reflection and transmission coefficients for perpendicularly polarized
-//! light at the interface between a *conductor* and a *dielectric* medium:
+//!   light at the interface between a *conductor* and a *dielectric* medium:
 //!
-//!   $r_\perp=\frac{a^2+b^2-2a\cos\theta+\cos^2\theta}{a^2+b^2+2a\cos\theta+\
-//! cos^2\theta}$
+//!   $$r_\perp=\frac{a^2+b^2-2a\cos\theta+\cos^2\theta}{a^2+b^2+2a\cos\theta+\
+//! cos^2\theta}$$
 //!
-//! "P" polarization (electric field) is the parallel polarization, and it lies
+//!   where
+//!
+//!   $$a^2 + b^2 = \sqrt{(\eta^2-k^2-\sin^2\theta)^2+4\eta^2k^2}$$
+//!
+//! ## "P" polarisation
+//!
+//! "P" polarisation (electric field) is the parallel polarisation, and it lies
 //! parallel to the plane of incidence.
 //!
 //! + reflection and transmission coefficients for parallel polarized light at
 //! the interface of two *dielectric* media are related by the formula:
 //!
-//!   $r_\parallel =
+//!   $$r_\parallel =
 //! \frac{\eta_t\cos\theta_i-\eta_i\cos\theta_t}{\eta_t\cos\theta_i +
-//! \eta_i\cos\theta_t}$
+//! \eta_i\cos\theta_t}$$
 //!
-//!   $t_\parallel = \frac{2\eta_i\cos\theta_i}{\eta_t\cos\theta_i +
-//! \eta_i\cos\theta_t}$
+//!   $$t_\parallel = \frac{2\eta_i\cos\theta_i}{\eta_t\cos\theta_i +
+//! \eta_i\cos\theta_t}$$
 //!
 //! + reflection and transmission coefficients for parallel polarized
-//! light at the interface between a *conductor* and a *dielectric* medium:
+//!   light at the interface between a *conductor* and a *dielectric* medium:
 //!
-//!   $r_\parallel=r_\perp\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\
-//! sin^4\theta}{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\sin^4\theta}$
+//!   $$r_\parallel=r_\perp\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\
+//! theta+\ sin^4\theta}{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\sin^4\
+//! theta}$$
 //!
-//! where
+//!   where
 //!
-//!   $a^2 + b^2 = \sqrt{(\eta^2-k^2-\sin^2\theta)^2+4\eta^2k^2}$
+//!   $$a^2 + b^2 = \sqrt{(\eta^2-k^2-\sin^2\theta)^2+4\eta^2k^2}$$
 //!
 //! and $\eta + ik = \eta_t / \eta_i$ is the relative index of refraction
 //! computed using a complex division operation. Generally $\eta_i$ will be a
 //! dielectric so that a normal real division can be used instead.
-//! See [`reflectance_dielectric_conductor`] for details.
+//! See [`reflectance_insulator_conductor`] for details.
 //!
-//! For both polarizations: $\eta_i\sin\theta_i = \eta_t\sin\theta_t$.
+//! For both polarisations: $\eta_i\sin\theta_i = \eta_t\sin\theta_t$.
 //!
 //! The cosine terms should all be greater than or equal to zero; for the
 //! purposes of computing these values, the geometric normal should be flipped
 //! to be on the same side as $\omega_i$ and $\omega_t$ when computing
 //! $\cos\theta_i$ and $\cos\theta_t$ respectively.
 //!
-//! For unpolarized light, the reflectance is the average of the squares of the
+//! For unpolarised light, the reflectance is the average of the squares of the
 //! parallel and perpendicular terms:
 //!
 //! $F_r = \frac{1}{2}(r_\parallel^2 + r_\perp^2)$
 //!
-//! Due to conservation of energy, the energy transmitted by a dielectric is $1
-//! - F_r$.
+//! Due to conservation of energy, the energy transmitted by a dielectric is
+//! $1 - F_r$.
 //!
 //! The cosine terms should all be greater than or equal to zero;
 //! for the purpose of computation, the geometric normal should be
-//! flipped to be on the same side as w_i and w_t when computing
-//! cos_theta_i and cos_theta_t.
+//! flipped to be on the same side as $w_i$ and $w_t$ when computing
+//! $cos_{\theta_i}$ and $cos_{\theta_t}$.
 //!
 //! ## refractive indices
 //!
@@ -106,17 +147,193 @@
 //!
 //! Schlick proposes the following equation for reflectance:
 //!
-//! $R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5$
+//! $$R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5$$
 //!
-//! $R_0 = (\frac{\eta_i - \eta_t}{\eta_i + \eta_t})^2$
+//! where
 //!
-//! However, this approximation fails to model the reflectance when $\eta_i >
-//! \eta_t$. This can be fixed by using $\cos\theta_t$ instead of
+//! $$R_0 = (\frac{\eta_i - \eta_t}{\eta_i + \eta_t})^2$$
+//!
+//! However, this approximation fails to model the reflectance when
+//! $\eta_i > \eta_t$. This can be fixed by using $\cos\theta_t$ instead of
 //! $\cos\theta_i$.
+//!
+//! See [`reflectance_schlick_approx`].
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::optics::RefractiveIndex;
+use crate::{math::rcp, optics::ior::RefractiveIndex};
+use glam::Vec3A;
+
+/// Reflects a vector `wi` with respect to surface normal `n`.
+///
+/// # Arguments
+///
+/// * `wi` - Incident direction (normalised), ends up on the point of incidence.
+/// * `n` - Normal vector (normalised).
+///
+/// # Notes
+///
+/// The direction of the incident ray `wi` is determined from ray's origin
+/// rather than intersection point.
+#[inline(always)]
+pub fn reflect(wi: Vec3A, n: Vec3A) -> Vec3A {
+    debug_assert!(
+        wi.dot(n) <= 0.0,
+        "wi should point towards the point of incidence"
+    );
+    wi - 2.0 * wi.dot(n) * n
+}
+
+/// Reflects a vector `wi` about a normal `n` with the cosine of incident angle
+/// already known.
+///
+/// # Arguments
+///
+/// * `wi` - Vector to be reflected (normalised), ends up on the point of
+///   incidence.
+/// * `n` - Normal vector (normalised).
+/// * `cos` - Cosine of the incident angle, should always be positive; this is
+///   *NOT* the angle between the two vectors. It should be the absolute value
+///   of the cosine of the angle between `wi` and `n`.
+///
+/// # Notes
+///
+/// The direction of the incident ray `i` is determined from ray's origin rather
+/// than the point of intersection.
+#[inline(always)]
+pub fn reflect_cos(wi: Vec3A, n: Vec3A, cos: f32) -> Vec3A {
+    debug_assert!(cos >= 0.0 && cos <= 1.0);
+    wi + 2.0 * cos * n
+}
+
+/// Result of a refraction computation.
+pub enum RefractionResult {
+    /// Total internal reflection, the ray is reflected.
+    TotalInternalReflection,
+    /// Refraction, the ray is partially reflected and partially refracted.
+    Refraction {
+        /// Direction of the refracted ray. It's the direction of the
+        /// transmitted ray. In the case of total internal reflection,
+        /// this will be the reflected direction.
+        dir_t: Vec3A,
+        /// Cosine of the transmitted angle. It's the angle between the
+        /// refracted direction and the inverse of the normal. This will
+        /// always be positive.
+        cos_t: f32,
+    },
+}
+
+/// Refracts an incident vector `wi` at the surface with a normal `n` using the
+/// relative refraction index.
+///
+/// Use this function when you are sure that the incident vector `wi` is at the
+/// same side of the surface as the normal `n`; the relative refraction index
+/// should be the ratio of the refractive indices of the incident medium
+/// (outside of transmitted medium) over the transmitted medium (inside of
+/// transmitted medium).
+///
+/// # Arguments
+///
+/// * `wi` - Incident vector (normalised), ends up on the point of incidence.
+/// * `n` - Normal vector (normalised), always points towards the outside of the
+///   incident medium.
+/// * `eta` - Relative refraction index, the refractive index of outside medium
+///   (where `n` is pointing, primary medium or incident medium) divided by the
+///   refractive index of the inside medium (secondary medium, transmitted
+///   medium), i.e. `eta = eta_i / eta_t`, where `eta_i` is the refractive index
+///   of the incident medium and `eta_t` is the refractive index of the
+///   transmitted medium.
+/// * `cos_i` - Cosine of the incident angle, NOT the angle between `wi` and
+///   `n`. Should always be positive.
+///
+/// # Notes
+///
+/// The vectors `wi` and `n` are at the same side of the boundary.
+/// The cosine of the incident angle, equals to the negative of the
+/// cosine between `wi` and `n` is given as input and the cosine of `-n` and
+/// transmission ray (angle of transmittance) is computed as output.
+pub fn refract_cos(wi: Vec3A, n: Vec3A, eta: f32, cos: f32) -> RefractionResult {
+    debug_assert!(
+        cos >= 0.0 && cos <= 1.0,
+        "cos_i should be the cosine of the incident angle and should be positive."
+    );
+    let cos_t_sqr = 1.0 - eta * eta * (1.0 - cos * cos);
+
+    if cos_t_sqr < 0.0 {
+        RefractionResult::TotalInternalReflection
+    } else {
+        // Refraction.
+        let cos_t = cos_t_sqr.sqrt();
+        let dir_t = (eta * cos - cos_t) * n + eta * wi;
+        RefractionResult::Refraction { dir_t, cos_t }
+    }
+}
+
+/// Refracts `wi` with respect to a given surface normal `n` and the refractive
+/// indices of the incident and transmitted media.
+///
+/// This function assumes that the incident vector `wi` is at the same side of
+/// the surface as the normal `n`, i.e. the incident vector `wi` is pointing
+/// towards the inside of the incident medium. Hence, the `eta_i` is the
+/// refractive index of the incident medium and `eta_t` is the refractive index
+/// of the transmitted medium. If you are not sure about the side of the
+/// incident vector `wi`, use [`refract`].
+///
+/// # Arguments
+///
+/// * `wi` - Incident vector (normalised), ends up on the point of incidence.
+/// * `n` - Normal vector (normalised), always points towards the outside of the
+///  incident medium.
+/// * `eta_i` - Refractive index of the incident medium.
+/// * `eta_t` - Refractive index of the transmitted medium.
+pub fn refract2(wi: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> RefractionResult {
+    debug_assert!(
+        n.dot(wi) <= 0.0,
+        "The incident vector `i` should point towards the opposite side of the surface as the \
+         normal `n`."
+    );
+    debug_assert!(
+        eta_i > 0.0 && eta_t > 0.0,
+        "The refractive indices should be positive and non-zero."
+    );
+    let cos_i = -n.dot(wi);
+    refract_cos(wi, n, eta_i / eta_t, cos_i)
+}
+
+/// Refracts an incident vector `wi` at the boundary of two
+/// media with the given refractive indices.
+///
+/// Use this function when you are NOT sure at which side of the surface the
+/// incident vector `i` lies.
+///
+/// # Arguments
+///
+/// * `wi` - Incident vector (normalised), ends up on the point of incidence.
+/// * `n` - Normal vector (normalised), always pointing towards the outside of
+///   the incident medium (surface).
+/// * `eta_o` - Refractive index of the outside medium of the interface.
+/// * `eta_i` - Refractive index of the inside medium of the interface.
+///
+/// # Notes
+///
+/// The normal vector `n` is not necessarily pointing towards the outside of the
+/// incident medium. Thus we need to check the dot product of `i` and `n` to
+/// determine which side of the surface the incident vector is pointing to.
+pub fn refract(wi: Vec3A, n: Vec3A, eta_o: f32, eta_i: f32) -> RefractionResult {
+    debug_assert!(
+        eta_o > 0.0 && eta_i > 0.0,
+        "Refractive indices should be positive and non-zero."
+    );
+    let cos_i = n.dot(wi);
+    if cos_i < 0.0 {
+        // The ray is on the outside of the interface, `cos_i` is negative.
+        refract_cos(wi, n, eta_o / eta_i, -cos_i)
+    } else {
+        // The ray is on the inside of the interface, normal and refractive indices need
+        // to be flipped.
+        refract_cos(wi, -n, eta_i / eta_o, cos_i)
+    }
+}
 
 /// Computes the Schlick's approximation of the Fresnel specular (reflection)
 /// factor.
@@ -131,6 +348,7 @@ use crate::optics::RefractiveIndex;
 /// * `eta_i` - refractive index of incident medium.
 /// * `eta_t` - refractive index of transmitted medium.
 pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
+    debug_assert!(cos_i >= 0.0 && cos_i <= 1.0, "cos_i must be in [0, 1]");
     let mut r0 = (eta_i - eta_t) / (eta_i + eta_t);
 
     r0 *= r0;
@@ -157,11 +375,12 @@ pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// The length of the slices must be the same.
 pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f32]) -> Vec<f32> {
-    assert_eq!(
+    debug_assert_eq!(
         eta_i.len(),
         eta_t.len(),
         "eta_i and eta_t must have the same length"
     );
+    debug_assert!(cos_i >= 0.0 && cos_i <= 1.0, "cos_i must be in [0, 1]");
 
     let mut output = vec![1.0; eta_i.len()];
 
@@ -175,31 +394,87 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 /// Computes the unpolarised Fresnel reflection coefficient at a planar
 /// interface between two dielectric materials.
 ///
+/// This function does *NOT* assume that the incident ray is located on the
+/// outside of the interface (same side as the normal). The sign of the cosine
+/// of the angle between the incident ray and the normal indicates on which side
+/// of the interface the incident ray is located. If the cosine is between -1
+/// and 0, the ray is on the outside (same as the normal), and if the cosine is
+/// between 0 and 1, the ray is on the inside (opposite to the normal).
+///
+/// If you are sure that the incident ray is always on the outside of the
+/// interface, use [`reflectance_insulator2`] instead.
+///
 /// # Arguments
 ///
 /// * `cos_i` - cosine of the angle between the normal and the incident
-///   direction.
+///   direction (originated from the ray's origin).
 /// * `eta_i` - refractive index of the incident medium.
 /// * `eta_t` - refractive index of the transmitted medium.
 ///
 /// # Note
 ///
-/// The incident direction is not originated from the intersection point.
-pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
-    // The sign of the cosine of the incident angle indicates on which side of the
-    // medium the incident ray lines. If the cosine is between -1 and 0, the ray
-    // is on the outside, and if the cosine is between 0 and 1, the ray is on
-    // the inside. `eta_i` and `eta_t` are adjusted such that `eta_i`
-    // has the refractive index of the incident medium and thus makes sure that
-    // `cos_i` is non-negative.
-    let (eta_i, eta_t) = if cos_i >= 0.0 {
-        (eta_t, eta_i)
+/// The incident direction is always originated from the ray's origin. The sign
+/// of the cosine of the incident angle indicates on which side of the medium
+/// the incident ray lines. If the cosine is between -1 and 0, the ray is on
+/// the outside (same as the normal), and if the cosine is between 0 and 1, the
+/// ray is on the inside (opposite to the normal).
+pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
+    debug_assert!(cos_i >= -1.0 && cos_i <= 1.0, "cos_i must be in [-1, 1]");
+    let cos_i = cos_i.clamp(-1.0, 1.0);
+    // let (eta_i, eta_t) = if !entering {
+    //     (eta_t, eta_i)
+    // } else {
+    //     cos_i = -cos_i;
+    //     (eta_i, eta_t)
+    // };
+    //
+    // // Compute the angle between the normal and the transmitted direction.
+    // let sin_i = (1.0 - cos_i * cos_i).sqrt();
+    // let sin_t = eta_i / eta_t * sin_i;
+    //
+    // // Handle total internal reflection.
+    // if sin_t >= 1.0 {
+    //     return 1.0;
+    // }
+    //
+    // let cos_t = (1.0 - sin_t * sin_t).sqrt();
+    // let r_parl = (eta_t * cos_i - eta_i * cos_t) * rcp(eta_t * cos_i + eta_i *
+    // cos_t); let r_perp = (eta_i * cos_i - eta_t * cos_t) * rcp(eta_i * cos_i
+    // + eta_t * cos_t);
+    //
+    // // No polarisation.
+    // 0.5 * (r_parl * r_parl + r_perp * r_perp)
+    if cos_i < 0.0 {
+        // The incident ray is on the outside of the interface entering the medium.
+        reflectance_insulator2(-cos_i, eta_i, eta_t)
     } else {
-        (eta_i, eta_t)
-    };
+        // The incident ray is on the inside of the interface leaving the medium.
+        reflectance_insulator2(cos_i, eta_t, eta_i)
+    }
+}
+
+/// Computes the unpolarised Fresnel reflection coefficient at a planar
+/// interface between two dielectric materials.
+///
+/// This function assumes that the incident ray is located on the outside of
+/// the interface (same side as the normal). If you are not sure about the
+/// location of the incident ray, use [`reflectance_insulator`] instead.
+///
+/// # Arguments
+///
+/// * `cos_i` - cosine of the incident angle, should always be positive; this is
+///   *NOT* the angle between the two vectors. It should be the absolute value
+///   of the cosine of the angle between `wi` and `n`.
+/// * `eta_i` - refractive index of the incident medium (outside).
+/// * `eta_t` - refractive index of the transmitted medium (inside).
+pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
+    debug_assert!(
+        cos_i_abs >= 0.0 && cos_i_abs <= 1.0,
+        "cos_i_abs must be in [0, 1]"
+    );
 
     // Compute the angle between the normal and the transmitted direction.
-    let sin_i = (1.0 - cos_i * cos_i).sqrt();
+    let sin_i = (1.0 - cos_i_abs * cos_i_abs).sqrt();
     let sin_t = eta_i / eta_t * sin_i;
 
     // Handle total internal reflection.
@@ -208,11 +483,10 @@ pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
     }
 
     let cos_t = (1.0 - sin_t * sin_t).sqrt();
+    let r_parl = (eta_t * cos_i_abs - eta_i * cos_t) * rcp(eta_t * cos_i_abs + eta_i * cos_t);
+    let r_perp = (eta_i * cos_i_abs - eta_t * cos_t) * rcp(eta_i * cos_i_abs + eta_t * cos_t);
 
-    let r_parl = (eta_t * cos_i - eta_i * cos_t) / (eta_t * cos_i + eta_i * cos_t);
-    let r_perp = (eta_i * cos_i - eta_t * cos_t) / (eta_i * cos_i + eta_t * cos_t);
-
-    // No polarization.
+    // No polarisation.
     0.5 * (r_parl * r_parl + r_perp * r_perp)
 }
 
@@ -220,17 +494,18 @@ pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 /// interface between two dielectric materials for rays with different
 /// wavelengths.
 ///
-/// See [`reflectance_dielectric`] for details.
+/// See [`reflectance_insulator`] for details.
 ///
 /// # Arguments
 ///
 /// * `cos_i` - cosine of the angle between the normal and the incident
-///   direction.
+///   direction (originated from the ray's origin).
 /// * `eta_i` - slice of refractive index of incident medium.
-pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
+pub fn reflectance_insulator_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
+    debug_assert!(cos_i >= -1.0 && cos_i <= 1.0, "cos_i must be in [-1, 1]");
     let mut output = vec![1.0; eta.len()];
     for (i, r) in output.iter_mut().enumerate() {
-        *r = reflectance_dielectric(cos_i, eta[i], eta[i]);
+        *r = reflectance_insulator(cos_i, eta[i], eta[i]);
     }
     output
 }
@@ -246,7 +521,7 @@ pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
 /// * `eta_i` - refractive index of the incident medium.
 /// * `eta_t` - refractive index of the transmitted medium.
 /// * `k` - absorption coefficient of the transmitted medium.
-pub fn reflectance_dielectric_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
+pub fn reflectance_insulator_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
     assert!(
         cos_i >= 0.0,
         "the angle between normal and incident light should be positive"
@@ -275,43 +550,22 @@ pub fn reflectance_dielectric_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t:
 /// Computes the unpolarised Fresnel reflectance of unpolarised light between
 /// dielectric and conductor medium for rays with different wavelengths.
 ///
-/// See [`reflectance_dielectric_conductor`] for details.
+/// See [`reflectance_insulator_conductor`] for details.
 ///
 /// # Arguments
 ///
 /// * `cos` - cosine of the angle between normal and incident light (should be
 ///   positive).
-pub fn reflectance_dielectric_conductor_spectrum(
+pub fn reflectance_insulator_conductor_spectrum(
     cos: f32,
     eta_i: f32,
     ior_t: &[RefractiveIndex],
 ) -> Vec<f32> {
     let mut output = vec![1.0; ior_t.len()];
     for (i, r) in output.iter_mut().enumerate() {
-        *r = reflectance_dielectric_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
+        *r = reflectance_insulator_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
     }
     output
-}
-
-/// Computes the unpolarised Fresnel reflectance of unpolarised light between
-/// the air and a conductor medium.
-///
-/// # Arguments
-///
-/// * `cos_i` - cosine of the angle between normal and incident light (should be
-///   positive).
-/// * `eta_t` - refractive index of the transmitted medium.
-/// * `k_t` - absorption coefficient of the transmitted medium.
-pub fn reflectance_air_conductor(cos_i: f32, eta_t: f32, k_t: f32) -> f32 {
-    reflectance_dielectric_conductor(cos_i, 1.0, eta_t, k_t)
-}
-
-/// Computes the unpolarised Fresnel reflectance of unpolarised light between
-/// the air and a conductor medium for rays with different wavelengths.
-///
-/// See [`reflectance_air_conductor`] for details.
-pub fn reflectance_air_conductor_spectrum(cos: f32, ior_t: &[RefractiveIndex]) -> Vec<f32> {
-    reflectance_dielectric_conductor_spectrum(cos, 1.0, ior_t)
 }
 
 #[cfg(test)]
@@ -319,26 +573,83 @@ mod tests {
     use std::{fs::OpenOptions, io::Write};
 
     #[test]
-    fn reflectance_dielectric_test() {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open("./reflectance_dielectric.csv")
-            .unwrap();
-        file.write_all(b"angle,reflectance\n").unwrap();
-        for i in 0..1000 {
-            let cos_i = (1000 - i) as f32 / 1000.0;
-            let angle = cos_i.acos();
-            let eta_i = 1.0; // air
-            let eta_t = 1.5; // glass
-            let r = super::reflectance_dielectric(cos_i, eta_i, eta_t);
-            file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+    fn reflectance_insulator_test() {
+        {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("./reflectance_air_to_glass.csv")
                 .unwrap();
+            file.write_all(b"angle,reflectance\n").unwrap();
+            for i in 0..1000 {
+                let cos_i = (1000 - i) as f32 / 1000.0;
+                let angle = cos_i.acos();
+                let eta_i = 1.0; // air
+                let eta_t = 1.5; // glass
+                let r = super::reflectance_insulator2(cos_i, eta_i, eta_t);
+                file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+                    .unwrap();
+            }
+        }
+        {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("./reflectance_air_to_glass_inv.csv")
+                .unwrap();
+            file.write_all(b"angle,reflectance\n").unwrap();
+            for i in 0..1000 {
+                let cos_i = (1000 - i) as f32 / 1000.0;
+                let angle = cos_i.acos();
+                let eta_i = 1.0; // air
+                let eta_t = 1.5; // glass
+                let r = super::reflectance_insulator(cos_i, eta_i, eta_t);
+                file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+                    .unwrap();
+            }
+        }
+        {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("./reflectance_glass_to_air.csv")
+                .unwrap();
+            file.write_all(b"angle,reflectance\n").unwrap();
+            for i in 0..1000 {
+                let cos_i = (1000 - i) as f32 / 1000.0;
+                let angle = cos_i.acos();
+                let eta_t = 1.0; // air
+                let eta_i = 1.5; // glass
+                let r = super::reflectance_insulator2(cos_i, eta_i, eta_t);
+                file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+                    .unwrap();
+            }
+        }
+        {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("./reflectance_glass_to_air_inv.csv")
+                .unwrap();
+            file.write_all(b"angle,reflectance\n").unwrap();
+            for i in 0..1000 {
+                let cos_i = (1000 - i) as f32 / 1000.0;
+                let angle = cos_i.acos();
+                let eta_t = 1.0; // air
+                let eta_i = 1.5; // glass
+                let r = super::reflectance_insulator(cos_i, eta_i, eta_t);
+                file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
+                    .unwrap();
+            }
         }
     }
 
     #[test]
-    fn reflectance_dielectric_conductor_test() {
+    fn reflectance_insulator_conductor_test() {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -351,7 +662,7 @@ mod tests {
             let eta_i = 1.0; // air
             let eta_t = 1.1978; // al, 587.6nm
             let k_t = 7.0488;
-            let r = super::reflectance_dielectric_conductor(cos_i, eta_i, eta_t, k_t);
+            let r = super::reflectance_insulator_conductor(cos_i, eta_i, eta_t, k_t);
             file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                 .unwrap();
         }

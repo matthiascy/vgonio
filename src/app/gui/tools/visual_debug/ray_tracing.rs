@@ -5,7 +5,7 @@ use crate::{
     },
     measure::{Ray, RtcMethod},
 };
-use glam::{IVec2, Vec3, Vec3A};
+use glam::{IVec2, Vec3};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

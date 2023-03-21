@@ -5,7 +5,7 @@ use crate::{
     },
     measure::Medium,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
-    optics::{RefractiveIndex, RefractiveIndexDatabase},
+    optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Error,
 };
 use std::{

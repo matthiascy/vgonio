@@ -114,6 +114,10 @@ mod test {
 
     quickcheck! {
         fn mutable_test(a: f32, b: f32, c: f32) -> bool {
+            if a.is_nan() || b.is_nan() || c.is_nan() {
+                return true;
+            }
+
             let mut v = [a, b, c];
             v[Axis::X] *= 2.0;
             v[Axis::Y] *= 1.1;

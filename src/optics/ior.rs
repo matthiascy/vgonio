@@ -1,3 +1,5 @@
+//! Index of refraction.
+
 use crate::{
     measure::Medium,
     units::{nanometres, Length, LengthUnit, Nanometres},

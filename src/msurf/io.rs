@@ -275,12 +275,12 @@ mod tests {
     use crate::msurf::io::read_line_ascii_usurf;
 
     #[test]
+    #[rustfmt::skip]
     fn test_read_line_ascii_surf0() {
         let lines = [
             "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
             "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
-            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\\
-             t\t\t\t\n",
+            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
         ];
 
         assert_eq!(read_line_ascii_usurf(lines[0]).len(), 16);
@@ -289,13 +289,13 @@ mod tests {
     }
 
     #[test]
+    #[rustfmt::skip]
     fn test_read_line_ascii_surf1() {
         let lines = [
             "0.00\t12.65\t\t12.63\t12.70\t12.73\t\t12.85\t\n",
             "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
             "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
-            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\\
-             t\t\t\t\n",
+            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
         ];
 
         fn _read_line(line: &str) -> Vec<&str> {

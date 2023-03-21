@@ -1,38 +1,35 @@
-use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_sub_ss};
-use cfg_if::cfg_if;
 pub use glam::*;
 
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
 ];
 
-/// Returns the reciprocal of the given value.
+/// Returns the accurate reciprocal of the given value.
+///
+/// Newton-Raphson iteration is used to compute the reciprocal.
 #[inline(always)]
 pub fn rcp(x: f32) -> f32 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        use std::arch::x86_64::{_mm_rcp_ss, _mm_set_ss};
+    if cfg!(target_arch = "x86_64") {
+        use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rcp_ss, _mm_set_ss, _mm_sub_ss};
         unsafe {
             let a = _mm_set_ss(x);
 
-            let r = {
-                cfg_if! {
-                    if #[cfg(target_feature = "avx512vl")] {
-                        _mm_rcp14_ss(_mm_set_ss(0.0), a)
-                    } else {
-                        _mm_rcp_ss(a)
-                    }
-                }
+            let r = if is_x86_feature_detected!("avx512vl") {
+                use std::arch::x86_64::_mm_rcp14_ss;
+                _mm_rcp14_ss(_mm_set_ss(0.0), a) // error is less than 2^-14
+            } else {
+                _mm_rcp_ss(a) // error is less than 1.5 * 2^-12
             };
 
-            cfg_if! {
-                if #[cfg(target_feature = "avx512vl")] {
-                    _mm_cvtss_f32(_mm_mul_ss(r,_mm_fnmadd_ss(r, a, _mm_set_ss(2.0))))
-                } else {
-                    _mm_cvtss_f32(_mm_mul_ss(r,_mm_sub_ss(_mm_set_ss(2.0), _mm_mul_ss(r, a))))
-                }
+            if is_x86_feature_detected!("fma") {
+                use std::arch::x86_64::_mm_fnmadd_ss;
+                _mm_cvtss_f32(_mm_mul_ss(r, _mm_fnmadd_ss(r, a, _mm_set_ss(2.0))))
+            } else {
+                _mm_cvtss_f32(_mm_mul_ss(r, _mm_sub_ss(_mm_set_ss(2.0), _mm_mul_ss(r, a))))
             }
         }
+    } else {
+        1.0 / x
     }
 }
 
@@ -62,4 +59,94 @@ fn test_rcp() {
     assert_eq!(rcp(2097152.0), 4.76837158203125e-07);
     assert_eq!(rcp(4194304.0), 2.384185791015625e-07);
     assert_eq!(rcp(8388608.0), 1.1920928955078125e-07);
+
+    assert_eq!(rcp(3.0), 1.0 / 3.0);
+}
+
+/// Returns the fused multiply-subtract of the given values.
+///
+/// This is equivalent to `a * b - c`. However, this function may fall back to
+/// a non-fused multiply-subtract on some platforms.
+#[inline(always)]
+pub fn msub(a: f32, b: f32, c: f32) -> f32 {
+    if cfg!(target_arch = "x86_64") && cfg!(target_feature = "fma") {
+        use std::arch::x86_64::{_mm_cvtss_f32, _mm_fmsub_ss, _mm_set_ss};
+        unsafe { _mm_cvtss_f32(_mm_fmsub_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
+    } else {
+        a * b - c
+    }
+}
+
+#[test]
+fn test_msub() {
+    assert_eq!(msub(1.0, 2.0, 3.0), -1.0);
+    assert_eq!(msub(2.0, 3.0, 4.0), 2.0);
+    assert_eq!(msub(3.0, 4.0, 5.0), 7.0);
+    assert_eq!(msub(4.0, 5.0, 6.0), 14.0);
+}
+
+/// Returns the fused multiply-add of the given values.
+///
+/// This is equivalent to `a * b + c`. However, this function may fall back to
+/// a non-fused multiply-add on some platforms.
+#[inline(always)]
+pub fn madd(a: f32, b: f32, c: f32) -> f32 {
+    if cfg!(target_arch = "x86_64") && cfg!(target_feature = "fma") {
+        use std::arch::x86_64::{_mm_cvtss_f32, _mm_fmadd_ss, _mm_set_ss};
+        unsafe { _mm_cvtss_f32(_mm_fmadd_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
+    } else {
+        a * b + c
+    }
+}
+
+#[test]
+fn test_madd() {
+    assert_eq!(madd(1.0, 2.0, 3.0), 5.0);
+    assert_eq!(madd(2.0, 4.0, 6.0), 14.0);
+    assert_eq!(madd(3.0, 6.0, 9.0), 27.0);
+    assert_eq!(madd(4.0, 8.0, 12.0), 44.0);
+}
+
+/// Returns the fused negated multiply-subtract of the given values.
+///
+/// This is equivalent to `-a * b - c`. However, this function may fall back to
+/// a non-fused negative multiply-subtract on some platforms.
+#[inline(always)]
+pub fn nmsub(a: f32, b: f32, c: f32) -> f32 {
+    if cfg!(target_arch = "x86_64") && cfg!(target_feature = "fma") {
+        use std::arch::x86_64::{_mm_cvtss_f32, _mm_fnmsub_ss, _mm_set_ss};
+        unsafe { _mm_cvtss_f32(_mm_fnmsub_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
+    } else {
+        -a * b - c
+    }
+}
+
+#[test]
+fn test_nmsub() {
+    assert_eq!(nmsub(1.0, 2.0, 3.0), -5.0);
+    assert_eq!(nmsub(2.0, 4.0, 6.0), -14.0);
+    assert_eq!(nmsub(3.0, 6.0, 9.0), -27.0);
+    assert_eq!(nmsub(4.0, 8.0, 12.0), -44.0);
+}
+
+/// Returns the fused negated multiply-add of the given values.
+///
+/// This is equivalent to `-a * b + c`. However, this function may fall back to
+/// a non-fused negative multiply-add on some platforms.
+#[inline(always)]
+pub fn nmadd(a: f32, b: f32, c: f32) -> f32 {
+    if cfg!(target_arch = "x86_64") && cfg!(target_feature = "fma") {
+        use std::arch::x86_64::{_mm_cvtss_f32, _mm_fnmadd_ss, _mm_set_ss};
+        unsafe { _mm_cvtss_f32(_mm_fnmadd_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
+    } else {
+        -a * b + c
+    }
+}
+
+#[test]
+fn test_nmadd() {
+    assert_eq!(nmadd(1.0, 2.0, 3.0), 1.0);
+    assert_eq!(nmadd(2.0, 4.0, 6.0), -2.0);
+    assert_eq!(nmadd(3.0, 6.0, 9.0), -9.0);
+    assert_eq!(nmadd(4.0, 8.0, 12.0), -20.0);
 }

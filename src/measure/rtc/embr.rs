@@ -8,17 +8,17 @@ use crate::{
     measure::{
         bsdf::SpectrumSampler,
         measurement::{BsdfMeasurement, Radius},
-        scattering::reflect,
     },
-    msurf::{MicroSurfaceMesh},
-    units::{um},
+    msurf::MicroSurfaceMesh,
+    optics::fresnel::reflect,
+    units::um,
 };
 use embree::{
     BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
-    IntersectContextExt, IntersectContextFlags, RayHitNp, RayN,
-    RayNp, SceneFlags, SoAHit, SoARay, ValidMask, ValidityN, INVALID_ID,
+    IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, SceneFlags, SoAHit, SoARay,
+    ValidMask, ValidityN, INVALID_ID,
 };
-use glam::{Vec3A};
+use glam::Vec3A;
 use std::{sync::Arc, time::Instant};
 
 impl MicroSurfaceMesh {
@@ -71,12 +71,12 @@ pub enum TracingStatus {
     /// The ray hit a micro-surface.
     Reflected {
         /// The last ray exiting the micro-surface.
-        ending: TrajectoryNode
+        ending: TrajectoryNode,
     },
     /// The ray hit a micro-surface and was absorbed.
     Absorbed {
         /// The last ray exiting the micro-surface.
-        ending: TrajectoryNode
+        ending: TrajectoryNode,
     },
 }
 
@@ -180,8 +180,9 @@ impl<'a> Iterator for RayStatsPerStreamIter<'a> {
 
 /// Extra data associated with a ray stream.
 ///
-/// This is used to record the trajectory, energy, last hit info and bounce count of each ray.
-/// It will be attached to the intersection context to be used by the intersection filter.
+/// This is used to record the trajectory, energy, last hit info and bounce
+/// count of each ray. It will be attached to the intersection context to be
+/// used by the intersection filter.
 #[derive(Debug, Clone)]
 pub struct RayStreamExtra<'a> {
     /// The micro-surface geometry.
@@ -231,7 +232,7 @@ impl<'a> From<RayStreamExtra<'a>> for RayStatsPerStream {
 
 type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamExtra<'a>>;
 
-fn intersect_filter_stream<'a,>(
+fn intersect_filter_stream<'a>(
     rays: RayN<'a>,
     hits: HitN<'a>,
     mut valid: ValidityN,
@@ -322,11 +323,7 @@ const MAX_RAY_STREAM_SIZE: usize = 1024;
 /// * `surf` - The micro-surface to measure.
 /// * `mesh` - The micro-surface's mesh.
 /// * `cache` - The cache to use.
-pub fn measure_bsdf(
-    desc: &BsdfMeasurement,
-    mesh: &MicroSurfaceMesh,
-    cache: &Cache,
-) {
+pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cache) {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);

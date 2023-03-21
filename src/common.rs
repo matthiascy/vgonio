@@ -438,6 +438,6 @@ fn spherical_domain_clamp() {
 
     let domain = SphericalDomain::Lower;
     let angle = degrees!(191.0);
-    let clamped = domain.clamp_azimuth(angle.into());
+    let clamped = domain.clamp_zenith(angle.into());
     assert_eq!(clamped, degrees!(180.0));
 }
