@@ -421,29 +421,6 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
     debug_assert!(cos_i >= -1.0 && cos_i <= 1.0, "cos_i must be in [-1, 1]");
     let cos_i = cos_i.clamp(-1.0, 1.0);
-    // let (eta_i, eta_t) = if !entering {
-    //     (eta_t, eta_i)
-    // } else {
-    //     cos_i = -cos_i;
-    //     (eta_i, eta_t)
-    // };
-    //
-    // // Compute the angle between the normal and the transmitted direction.
-    // let sin_i = (1.0 - cos_i * cos_i).sqrt();
-    // let sin_t = eta_i / eta_t * sin_i;
-    //
-    // // Handle total internal reflection.
-    // if sin_t >= 1.0 {
-    //     return 1.0;
-    // }
-    //
-    // let cos_t = (1.0 - sin_t * sin_t).sqrt();
-    // let r_parl = (eta_t * cos_i - eta_i * cos_t) * rcp(eta_t * cos_i + eta_i *
-    // cos_t); let r_perp = (eta_i * cos_i - eta_t * cos_t) * rcp(eta_i * cos_i
-    // + eta_t * cos_t);
-    //
-    // // No polarisation.
-    // 0.5 * (r_parl * r_parl + r_perp * r_perp)
     if cos_i < 0.0 {
         // The incident ray is on the outside of the interface entering the medium.
         reflectance_insulator2(-cos_i, eta_i, eta_t)
@@ -660,8 +637,8 @@ mod tests {
             let cos_i = (1000 - i) as f32 / 1000.0;
             let angle = cos_i.acos();
             let eta_i = 1.0; // air
-            let eta_t = 1.1978; // al, 587.6nm
-            let k_t = 7.0488;
+            let eta_t = 1.1893; // al, 600nm
+            let k_t = 6.9762; // al, 600nm
             let r = super::reflectance_insulator_conductor(cos_i, eta_i, eta_t, k_t);
             file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                 .unwrap();

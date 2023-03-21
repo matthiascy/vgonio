@@ -10,7 +10,7 @@ use crate::{
         measurement::{BsdfMeasurement, Radius},
     },
     msurf::MicroSurfaceMesh,
-    optics::fresnel::reflect,
+    optics::{fresnel, fresnel::reflect},
     units::um,
 };
 use embree::{
