@@ -1,13 +1,11 @@
 use crate::{
     common::{RangeByStepSize, SphericalDomain, SphericalPartition},
-    measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius, RtcRecord},
+    measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
 };
-use rayon::prelude::IntoParallelIterator;
 
 use crate::{
-    measure::{bsdf::BsdfStats, rtc::embr::RayStatsPerStream},
-    units::LengthUnit,
+    measure::{bsdf::BsdfStats, rtc::embr::RayStreamStats},
 };
 use serde::{Deserialize, Serialize};
 
@@ -83,7 +81,7 @@ impl Collector {
     pub fn collect_embree_rt(
         &self,
         kind: BsdfKind,
-        stats: &[RayStatsPerStream],
+        stats: &[RayStreamStats],
     ) -> BsdfStats<BounceEnergyPerPatch> {
         debug_assert!(self.init, "Collector not initialised");
         // TODO: try to parallelise

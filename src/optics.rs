@@ -14,11 +14,3 @@ pub fn face_forward(n: Vec3A, i: Vec3A) -> Vec3A {
         -n
     }
 }
-
-/// Describes the kind of material.
-pub enum MaterialKind {
-    /// Material is a conductor.
-    Conductor,
-    /// Material is a dielectric.
-    Insulator,
-}

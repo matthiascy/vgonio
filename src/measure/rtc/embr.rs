@@ -10,7 +10,7 @@ use crate::{
         measurement::{BsdfMeasurement, Radius},
     },
     msurf::MicroSurfaceMesh,
-    optics::{fresnel, fresnel::reflect},
+    optics::fresnel,
     units::um,
 };
 use embree::{
@@ -18,8 +18,9 @@ use embree::{
     IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, SceneFlags, SoAHit, SoARay,
     ValidMask, ValidityN, INVALID_ID,
 };
-use glam::Vec3A;
+use glam::{Vec3A};
 use std::{sync::Arc, time::Instant};
+use crate::optics::ior::RefractiveIndex;
 
 impl MicroSurfaceMesh {
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
@@ -57,10 +58,13 @@ struct HitData {
 /// Records the status of a traced ray.
 #[derive(Debug, Clone, Copy)]
 pub struct TrajectoryNode {
-    /// The ray's new origin after the hit.
+    /// The origin of the ray.
     pub org: Vec3A,
-    /// The ray's new direction after the hit.
+    /// The direction of the ray.
     pub dir: Vec3A,
+    /// The cosine of the incident angle (always positive),
+    /// only has value if the ray has hit the micro-surface.
+    pub cos: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,98 +72,56 @@ pub struct TrajectoryNode {
 pub enum TracingStatus {
     /// The ray did not hit anything.
     Missed,
-    /// The ray hit a micro-surface.
-    Reflected {
-        /// The last ray exiting the micro-surface.
-        ending: TrajectoryNode,
-    },
-    /// The ray hit a micro-surface and was absorbed.
-    Absorbed {
-        /// The last ray exiting the micro-surface.
-        ending: TrajectoryNode,
-    },
+    /// The ray hit the micro-surface or was absorbed.
+    /// Stores the last ray exiting the micro-surface.
+    Reflected(TrajectoryNode),
+    /// The ray hit the micro-surface or was absorbed.
+    /// Stores the last ray entering the micro-surface.
+    Absorbed(TrajectoryNode),
 }
 
 /// Records the status of a traced ray stream.
 #[derive(Debug, Clone)]
-pub struct RayStatsPerStream {
-    /// The last ray exiting the micro-surface.
-    status: Vec<TracingStatus>,
-    /// Final energy of the ray.
-    energy: Vec<f32>,
-    /// Number of bounces for each ray.
-    bounce: Vec<u32>,
+pub struct RayStreamStats {
+    /// The last ray exiting/entering the micro-surface for each wavelength.
+    status: Vec<Vec<TracingStatus>>,
+    /// Final energy per wavelength for each ray in the stream.
+    energy: Vec<Vec<f32>>,
+    /// Number of bounces per wavelength for each ray in the stream.
+    bounce: Vec<Vec<u32>>,
 }
 
-impl IntoIterator for RayStatsPerStream {
-    type Item = RayStatus;
-    type IntoIter = RayStatsPerStreamIntoIter;
+impl<'a> IntoIterator for &'a RayStreamStats {
+    type Item = RayStatus<'a>;
+    type IntoIter = RayStreamStatsIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        RayStatsPerStreamIntoIter {
+        RayStreamStatsIter {
             stats: self,
             index: 0,
         }
     }
 }
 
-impl<'a> IntoIterator for &'a RayStatsPerStream {
-    type Item = RayStatus;
-    type IntoIter = RayStatsPerStreamIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        RayStatsPerStreamIter {
-            stats: self,
-            index: 0,
-        }
-    }
-}
-
-/// Records the status of a traced ray.
-#[derive(Debug, Clone, Copy)]
-pub struct RayStatus {
+/// Records the status per wavelength of a traced ray.
+#[derive(Debug, Clone)]
+pub struct RayStatus<'a> {
     /// The last ray exiting the micro-surface.
-    pub status: TracingStatus,
+    pub status: &'a [TracingStatus],
     /// Final energy of the ray.
-    pub energy: f32,
+    pub energy: &'a [f32],
     /// Number of bounces for each ray.
-    pub bounce: u32,
-}
-
-/// Into iterator for `RayStatsPerStream`.
-pub struct RayStatsPerStreamIntoIter {
-    stats: RayStatsPerStream,
-    index: usize,
+    pub bounce: &'a [u32],
 }
 
 /// Iterator for `RayStatsPerStream`.
-pub struct RayStatsPerStreamIter<'a> {
-    stats: &'a RayStatsPerStream,
+pub struct RayStreamStatsIter<'a> {
+    stats: &'a RayStreamStats,
     index: usize,
 }
 
-impl Iterator for RayStatsPerStreamIntoIter {
-    type Item = RayStatus;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.stats.status.len() {
-            let status = self.stats.status[self.index];
-            let energy = self.stats.energy[self.index];
-            let bounce = self.stats.bounce[self.index];
-            self.index += 1;
-            Some(RayStatus {
-                status,
-                energy,
-                bounce,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-impl<'a> Iterator for RayStatsPerStreamIter<'a> {
-    type Item = RayStatus;
+impl<'a> Iterator for RayStreamStatsIter<'a> {
+    type Item = RayStatus<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.stats.status.len() {
@@ -168,9 +130,9 @@ impl<'a> Iterator for RayStatsPerStreamIter<'a> {
             let bounce = &self.stats.bounce[self.index];
             self.index += 1;
             Some(RayStatus {
-                status: *status,
-                energy: *energy,
-                bounce: *bounce,
+                status,
+                energy,
+                bounce,
             })
         } else {
             None
@@ -184,53 +146,75 @@ impl<'a> Iterator for RayStatsPerStreamIter<'a> {
 /// count of each ray. It will be attached to the intersection context to be
 /// used by the intersection filter.
 #[derive(Debug, Clone)]
-pub struct RayStreamExtra<'a> {
+pub struct RayStreamData<'a> {
     /// The micro-surface geometry.
     msurf: Arc<Geometry<'a>>,
     /// The last hit for each ray.
     last_hit: Vec<HitData>,
-    /// The trajectory of each ray.
+    /// The trajectory of each ray. Each ray's trajectory is started with the
+    /// initial ray and then followed by the rays after each bounce. The cosine
+    /// of the incident angle at each bounce is also recorded.
     trajectory: Vec<Vec<TrajectoryNode>>,
-    /// Final energy of each ray.
-    energy: Vec<f32>,
-    /// Number of bounces for each ray.
-    bounce: Vec<u32>,
+    // /// Final energy of each ray.
+    // energy: Vec<f32>,
+    // /// Number of bounces for each ray.
+    // bounce: Vec<u32>,
 }
 
-unsafe impl Send for RayStreamExtra<'_> {}
-unsafe impl Sync for RayStreamExtra<'_> {}
+unsafe impl Send for RayStreamData<'_> {}
+unsafe impl Sync for RayStreamData<'_> {}
 
-impl<'a> From<RayStreamExtra<'a>> for RayStatsPerStream {
-    fn from(value: RayStreamExtra<'a>) -> Self {
-        debug_assert_eq!(value.trajectory.len(), value.energy.len());
-        debug_assert_eq!(value.trajectory.len(), value.bounce.len());
-        Self {
-            status: value
-                .trajectory
-                .into_iter()
-                .enumerate()
-                .map(|(i, mut traj)| {
-                    debug_assert!(!traj.is_empty());
-                    if traj.len() == 1 {
-                        TracingStatus::Missed
-                    } else if value.energy[i] <= 0.0 {
-                        TracingStatus::Absorbed {
-                            ending: traj.pop().unwrap(),
+impl<'a> RayStreamData<'a> {
+    /// Converts the ray stream data used during tracing into the final ray stats.
+    pub fn collect_into_stats(self, iors_i: &[RefractiveIndex], iors_t: &[RefractiveIndex]) -> RayStreamStats {
+        debug_assert_eq!(self.trajectory.len(), self.last_hit.len(), "number of trajectories and last hits must be the same");
+        debug_assert_eq!(iors_i.len(), iors_t.len(), "number of incident and transmitted iors must be the same");
+        let spectrum_len = iors_t.len();
+        let (status, (energy, bounce)) = self.trajectory
+            .into_iter()
+            .map(|traj| {
+                debug_assert!(!traj.is_empty());
+                // Calculate the final energy of the ray.
+                match traj.len() {
+                    0 => unreachable!("trajectory cannot be empty since we have the original ray as the first element"),
+                    1 => {
+                        (vec![TracingStatus::Missed; spectrum_len], (vec![1.0; spectrum_len], vec![0; spectrum_len]))
+                    },
+                    n => {
+                        let mut energy = vec![1.0; spectrum_len];
+                        let mut bounce = vec![0u32; spectrum_len];
+                        let last_ray = traj[n - 1];
+                        let mut status = (0..spectrum_len)
+                            .map(|_| TracingStatus::Reflected(last_ray)).collect::<Vec<_>>();
+                        for node in traj.iter().take(n - 1) {
+                            for i in 0..spectrum_len {
+                                if energy[i] <= 0.0 {
+                                    status[i] = TracingStatus::Absorbed(last_ray);
+                                    continue;
+                                }
+                                let cos = node.cos.unwrap_or(1.0);
+                                energy[i] *= fresnel::reflectance(
+                                    cos,
+                                    iors_i[i],
+                                    iors_t[i]
+                                );
+                                bounce[i] += 1;
+                            }
                         }
-                    } else {
-                        TracingStatus::Reflected {
-                            ending: traj.pop().unwrap(),
-                        }
+                        (status, (energy, bounce))
                     }
-                })
-                .collect(),
-            energy: value.energy,
-            bounce: value.bounce,
+                }
+            })
+            .unzip();
+        RayStreamStats {
+            status,
+            energy,
+            bounce,
         }
     }
 }
 
-type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamExtra<'a>>;
+type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamData<'a>>;
 
 fn intersect_filter_stream<'a>(
     rays: RayN<'a>,
@@ -294,11 +278,14 @@ fn intersect_filter_stream<'a>(
                 let point = v0 * (1.0 - u - v) + v1 * u + v2 * v;
                 // spawn a new ray from the intersection point
                 let normal = hits.unit_normal(i).into();
-                let new_dir = reflect(rays.unit_dir(i).into(), normal);
-                ctx.ext.bounce[ray_id as usize] += 1;
+                let ray_dir = rays.unit_dir(i).into();
+                let new_dir = fresnel::reflect(ray_dir, normal);
+                let last_id = ctx.ext.trajectory[ray_id as usize].len() - 1;
+                ctx.ext.trajectory[ray_id as usize][last_id].cos = Some(ray_dir.dot(normal));
                 ctx.ext.trajectory[ray_id as usize].push(TrajectoryNode {
                     org: point,
                     dir: new_dir,
+                    cos: None,
                 });
                 let last_hit = &mut ctx.ext.last_hit[ray_id as usize];
                 last_hit.geom_id = hits.geom_id(i);
@@ -348,8 +335,12 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
     let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
     log::debug!("spectrum samples: {:?}", spectrum);
 
-    // Load the surface's reflectance data.
-    let ior_t = cache
+    // Load the refractive indices of the incident and transmitted media.
+    let iors_i = cache
+        .iors
+        .ior_of_spectrum(desc.incident_medium, &spectrum)
+        .expect("incident medium IOR not found");
+    let iors_t = cache
         .iors
         .ior_of_spectrum(desc.transmitted_medium, &spectrum)
         .expect("transmitted medium IOR not found");
@@ -389,7 +380,7 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
         };
 
         let mut stream_data = vec![
-            RayStreamExtra {
+            RayStreamData {
                 msurf: arc_geom.clone(),
                 last_hit: vec![
                     HitData {
@@ -400,8 +391,6 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
                     stream_size
                 ],
                 trajectory: vec![Vec::with_capacity(max_bounces as usize); stream_size],
-                energy: vec![1.0; stream_size],
-                bounce: vec![0; stream_size],
             };
             n_streams
         ];
@@ -435,6 +424,7 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
                     data.trajectory.push(vec![TrajectoryNode {
                         org: ray.o.into(),
                         dir: ray.d.into(),
+                        cos: None,
                     }]);
                 }
 
@@ -457,7 +447,7 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
                         bounces,
                         active_rays,
                         ctx.ext.trajectory,
-                        ctx.ext.bounce
+                        ctx.ext.trajectory.len() - 1,
                     );
                     log::trace!("validities: {:?}", validities);
 
@@ -494,13 +484,16 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
                     bounces,
                     active_rays,
                     data.trajectory,
-                    data.bounce,
+                    data.trajectory.len() - 1,
                     validities
                 );
             });
         let stats = stream_data
             .into_iter()
-            .map(|d| d.into())
+            .map(|d| d.collect_into_stats(
+                &iors_i,
+                &iors_t
+            ))
             .collect::<Vec<_>>();
         desc.collector.collect_embree_rt(desc.kind, &stats);
     }

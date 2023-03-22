@@ -3,7 +3,7 @@
 //! # Reflection
 #![doc = include_str!("../../misc/imgs/reflect.svg")]
 //!
-//! See [`reflect`] and [`reflect_cos`] for computing the reflection of a
+//! See [`reflect`] and [`reflect_cos_abs`] for computing the reflection of a
 //! vector with respect to a surface normal.
 //!
 //! ## Angle of Incidence
@@ -201,9 +201,9 @@ pub fn reflect(wi: Vec3A, n: Vec3A) -> Vec3A {
 /// The direction of the incident ray `i` is determined from ray's origin rather
 /// than the point of intersection.
 #[inline(always)]
-pub fn reflect_cos(wi: Vec3A, n: Vec3A, cos: f32) -> Vec3A {
-    debug_assert!(cos >= 0.0 && cos <= 1.0);
-    wi + 2.0 * cos * n
+pub fn reflect_cos_abs(wi: Vec3A, n: Vec3A, cos_abs: f32) -> Vec3A {
+    debug_assert!((0.0..=1.0).contains(&cos_abs));
+    wi + 2.0 * cos_abs * n
 }
 
 /// Result of a refraction computation.
@@ -254,7 +254,7 @@ pub enum RefractionResult {
 /// transmission ray (angle of transmittance) is computed as output.
 pub fn refract_cos(wi: Vec3A, n: Vec3A, eta: f32, cos: f32) -> RefractionResult {
     debug_assert!(
-        cos >= 0.0 && cos <= 1.0,
+        (0.0..=1.0).contains(&cos),
         "cos_i should be the cosine of the incident angle and should be positive."
     );
     let cos_t_sqr = 1.0 - eta * eta * (1.0 - cos * cos);
@@ -348,7 +348,7 @@ pub fn refract(wi: Vec3A, n: Vec3A, eta_o: f32, eta_i: f32) -> RefractionResult 
 /// * `eta_i` - refractive index of incident medium.
 /// * `eta_t` - refractive index of transmitted medium.
 pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
-    debug_assert!(cos_i >= 0.0 && cos_i <= 1.0, "cos_i must be in [0, 1]");
+    debug_assert!((0.0..=1.0).contains(&cos_i), "cos_i must be in [0, 1]");
     let mut r0 = (eta_i - eta_t) / (eta_i + eta_t);
 
     r0 *= r0;
@@ -380,7 +380,7 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
         eta_t.len(),
         "eta_i and eta_t must have the same length"
     );
-    debug_assert!(cos_i >= 0.0 && cos_i <= 1.0, "cos_i must be in [0, 1]");
+    debug_assert!((0.0..=1.0).contains(&cos_i), "cos_i must be in [0, 1]");
 
     let mut output = vec![1.0; eta_i.len()];
 
@@ -419,7 +419,7 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 /// the outside (same as the normal), and if the cosine is between 0 and 1, the
 /// ray is on the inside (opposite to the normal).
 pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
-    debug_assert!(cos_i >= -1.0 && cos_i <= 1.0, "cos_i must be in [-1, 1]");
+    debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
     let cos_i = cos_i.clamp(-1.0, 1.0);
     if cos_i < 0.0 {
         // The incident ray is on the outside of the interface entering the medium.
@@ -446,7 +446,7 @@ pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 /// * `eta_t` - refractive index of the transmitted medium (inside).
 pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
     debug_assert!(
-        cos_i_abs >= 0.0 && cos_i_abs <= 1.0,
+        (0.0..=1.0).contains(&cos_i_abs),
         "cos_i_abs must be in [0, 1]"
     );
 
@@ -479,7 +479,7 @@ pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///   direction (originated from the ray's origin).
 /// * `eta_i` - slice of refractive index of incident medium.
 pub fn reflectance_insulator_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
-    debug_assert!(cos_i >= -1.0 && cos_i <= 1.0, "cos_i must be in [-1, 1]");
+    debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
     let mut output = vec![1.0; eta.len()];
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_insulator(cos_i, eta[i], eta[i]);
@@ -487,27 +487,28 @@ pub fn reflectance_insulator_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
     output
 }
 
+// TODO: from conductor to insulator
+
 /// Fresnel reflectance of unpolarised light between dielectric and conductor.
 ///
 /// Modified from "Optics" by K.D. Moeller, University Science Books, 1988
 ///
 /// # Arguments
 ///
-/// * `cos_i` - cosine of the angle between normal and incident light (should be
-///   positive).
+/// * `cos_i` - cosine of the incident angle (should always be positive).
 /// * `eta_i` - refractive index of the incident medium.
 /// * `eta_t` - refractive index of the transmitted medium.
 /// * `k` - absorption coefficient of the transmitted medium.
-pub fn reflectance_insulator_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
+pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
     assert!(
-        cos_i >= 0.0,
-        "the angle between normal and incident light should be positive"
+        (0.0..=1.0).contains(&cos_i_abs),
+        "the cosine of the incident angle should always be positive"
     );
     // Computes relative index of refraction.
     let eta = eta_t / eta_i;
     let k = k_t / eta_i;
 
-    let cos_i_2 = cos_i * cos_i;
+    let cos_i_2 = cos_i_abs * cos_i_abs;
     let sin_i_2 = 1.0 - cos_i_2;
     let eta_2 = eta * eta;
     let k_2 = k * k;
@@ -515,13 +516,47 @@ pub fn reflectance_insulator_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: 
     let a2_plus_b2 = (t0 * t0 + 4.0 * k_t * k_t * eta_t * eta_t).sqrt();
     let t1 = a2_plus_b2 + cos_i_2;
     let a = (0.5 * (a2_plus_b2 + t0)).sqrt();
-    let t2 = 2.0 * a * cos_i;
+    let t2 = 2.0 * a * cos_i_abs;
     let rs = (t1 - t2) / (t1 + t2);
     let t3 = a2_plus_b2 * cos_i_2 + sin_i_2 * sin_i_2;
     let t4 = t2 * sin_i_2;
     let rp = rs * (t3 - t4) / (t3 + t4);
 
     0.5 * (rp + rs)
+}
+
+/// Computes the unpolarised Fresnel reflection coefficient at a planar interface
+/// between two unknown media.
+///
+/// This function is a wrapper around [`reflectance_insulator`] and
+/// [`reflectance_insulator_conductor`].
+///
+/// # Arguments
+///
+/// * `cos_i` - cosine of the angle between the normal and the incident
+///  direction (originated from the ray's origin).
+/// * `ior_i` - refractive index of the outside medium.
+/// * `ior_t` - refractive index of the inside medium.
+///
+/// # Notes
+///
+/// Because reflectance from a conductor to a dielectric is not implemented yet,
+/// `cos_i` must be positive in this case.
+pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -> f32 {
+    debug_assert!(
+        (-1.0..=1.0).contains(&cos_i),
+        "cos_i must be in [-1, 1]"
+    );
+    match (ior_i.is_insulator(), ior_t.is_insulator()) {
+        // Both are dielectrics.
+        (true, true) => reflectance_insulator(cos_i, ior_i.eta, ior_t.eta),
+        // One is a dielectric and the other is a conductor (entering the conductor).
+        (true, false) => reflectance_insulator_conductor(cos_i.abs(), ior_i.eta, ior_t.eta, ior_t.k),
+        // One is a conductor and the other is a dielectric.
+        (false, true) => unimplemented!("reflectance from a conductor to a dielectric is not implemented"),
+        // Both are conductors.
+        (false, false) => unimplemented!("reflectance between two conductors is not implemented"),
+    }
 }
 
 /// Computes the unpolarised Fresnel reflectance of unpolarised light between
@@ -531,13 +566,15 @@ pub fn reflectance_insulator_conductor(cos_i: f32, eta_i: f32, eta_t: f32, k_t: 
 ///
 /// # Arguments
 ///
-/// * `cos` - cosine of the angle between normal and incident light (should be
-///   positive).
+/// * `cos` - cosine of the incident angle (should always be positive).
 pub fn reflectance_insulator_conductor_spectrum(
     cos: f32,
     eta_i: f32,
     ior_t: &[RefractiveIndex],
 ) -> Vec<f32> {
+    assert!(
+        (0.0..=1.0).contains(&cos),
+        "the angle between normal and incident light should be positive");
     let mut output = vec![1.0; ior_t.len()];
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_insulator_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
@@ -548,6 +585,8 @@ pub fn reflectance_insulator_conductor_spectrum(
 #[cfg(test)]
 mod tests {
     use std::{fs::OpenOptions, io::Write};
+    use crate::optics::ior::RefractiveIndex;
+    use crate::units::nm;
 
     #[test]
     fn reflectance_insulator_test() {
@@ -642,6 +681,24 @@ mod tests {
             let r = super::reflectance_insulator_conductor(cos_i, eta_i, eta_t, k_t);
             file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                 .unwrap();
+        }
+    }
+
+    #[test]
+    fn reflectance_no_output() {
+        let ior_vacuum = RefractiveIndex::VACUUM;
+        let ior_al = RefractiveIndex::new(nm!(600.0), 1.1893, 6.9762);
+        let ior_glass = RefractiveIndex::new(nm!(600.0), 1.5, 0.0);
+        for i in 0..1000 {
+            let cos_i = (1000 - i) as f32 / 1000.0;
+            let angle = cos_i.acos();
+            let r0 = super::reflectance_insulator_conductor(cos_i, ior_vacuum.eta, ior_al.eta, ior_al.k);
+            let r1 = super::reflectance(cos_i, ior_vacuum, ior_al);
+            assert!((r0 - r1).abs() < 0.0001, "angle: {}, r0: {}, r1: {}", angle, r0, r1);
+
+            let r2 = super::reflectance(cos_i, ior_vacuum, ior_glass);
+            let r3 = super::reflectance_insulator(cos_i, ior_vacuum.eta, ior_glass.eta);
+            assert!((r2 - r3).abs() < 0.0001, "angle: {}, r2: {}, r3: {}", angle, r2, r3);
         }
     }
 }

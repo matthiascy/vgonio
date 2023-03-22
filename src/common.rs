@@ -1,6 +1,50 @@
 use glam::Vec3;
 
-use rand_distr::num_traits::abs;
+/// Medium of the surface.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Medium {
+    /// Air.
+    Air,
+    /// Vacuum.
+    Vacuum,
+    /// Aluminium.
+    Aluminium,
+    /// Copper.
+    Copper,
+}
+
+/// Describes the kind of material.
+pub enum MaterialKind {
+    /// Material is a conductor.
+    Conductor,
+    /// Material is a dielectric.
+    Insulator,
+}
+
+impl Medium {
+    pub fn kind(&self) -> MaterialKind {
+        match self {
+            Self::Air | Self::Vacuum => MaterialKind::Insulator,
+            Self::Aluminium | Self::Copper => MaterialKind::Conductor,
+        }
+    }
+}
+
+impl FromStr for Medium {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "air" => Ok(Self::Air),
+            "vacuum" => Ok(Self::Vacuum),
+            "al" => Ok(Self::Aluminium),
+            "cu" => Ok(Self::Copper),
+            &_ => Err(Error::Any("unknown medium".to_string())),
+        }
+    }
+}
 
 /// Machine epsilon for double precision floating point numbers.
 pub const MACHINE_EPSILON_F64: f64 = f64::EPSILON * 0.5;
@@ -23,9 +67,9 @@ pub const fn gamma(n: u32) -> f32 {
 ///
 /// returns: bool
 pub fn ulp_eq(a: f32, b: f32) -> bool {
-    let diff = abs(a - b);
-    let a_abs = abs(a);
-    let b_abs = abs(b);
+    let diff = (a - b).abs();
+    let a_abs = a.abs();
+    let b_abs = b.abs();
     if a == b {
         true
     } else if a == 0.0 || b == 0.0 || a_abs + b_abs < f32::MIN_POSITIVE {
@@ -51,9 +95,11 @@ mod range;
 pub use numeric::*;
 pub use range::*;
 use std::fmt::Display;
+use std::str::FromStr;
 
 use crate::{measure::Patch, units::Radians};
 use serde::{Deserialize, Serialize};
+use crate::error::Error;
 
 /// Spherical coordinate in radians.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]

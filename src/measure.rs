@@ -86,35 +86,6 @@ impl RtcRecord {
     pub fn bounces(&self) -> usize { self.trajectory.len() - 1 }
 }
 
-/// Medium of the surface.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")] // TODO: use case_insensitive in the future
-pub enum Medium {
-    /// Air.
-    Air,
-    /// Vacuum.
-    Vacuum,
-    /// Aluminium.
-    Aluminium,
-    /// Copper.
-    Copper,
-}
-
-impl FromStr for Medium {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
-            "air" => Ok(Self::Air),
-            "vacuum" => Ok(Self::Vacuum),
-            "al" => Ok(Self::Aluminium),
-            "cu" => Ok(Self::Copper),
-            &_ => Err(Error::Any("unknown medium".to_string())),
-        }
-    }
-}
-
 /// Light source used for acquisition of shadowing and masking function.
 pub struct LightSource {
     /// Position of the light source.

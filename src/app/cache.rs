@@ -3,7 +3,6 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    measure::Medium,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Error,
@@ -11,9 +10,10 @@ use crate::{
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    str::FromStr,
 };
+use std::str::FromStr;
 use uuid::Uuid;
+use crate::common::Medium;
 
 use super::gfx::RenderableMesh;
 

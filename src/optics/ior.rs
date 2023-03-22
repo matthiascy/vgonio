@@ -1,10 +1,10 @@
 //! Index of refraction.
 
 use crate::{
-    measure::Medium,
     units::{nanometres, Length, LengthUnit, Nanometres},
 };
 use std::{cmp::Ordering, collections::HashMap, path::Path};
+use crate::common::{MaterialKind, Medium};
 
 /// Material's complex refractive index which varies with wavelength of the
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
@@ -95,20 +95,25 @@ impl RefractiveIndex {
         k: 0.0,
     };
 
-    /// Refractive index of air.
-    pub const AIR: Self = Self {
-        wavelength: nanometres!(0.0),
-        eta: 1.00029,
-        k: 0.0,
-    };
-
     /// Creates a new refractive index.
     pub fn new(wavelength: Nanometres, eta: f32, k: f32) -> RefractiveIndex {
         RefractiveIndex { wavelength, eta, k }
     }
 
-    /// Whether the refractive index represents dielectric material.
-    pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
+    /// Returns the kind of material (insulator or conductor).
+    pub fn material_kind(&self) -> MaterialKind {
+        if self.k == 0.0 {
+            MaterialKind::Insulator
+        } else {
+            MaterialKind::Conductor
+        }
+    }
+
+    /// Whether the refractive index represents insulator material.
+    pub fn is_insulator(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
+
+    /// Whether the refractive index represents conductor material.
+    pub fn is_conductor(&self) -> bool { !self.is_insulator() }
 
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"

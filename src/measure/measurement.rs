@@ -3,7 +3,7 @@ use crate::{
     common::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
-        Medium, RtcMethod,
+        RtcMethod,
     },
     units::{
         deg, metres, mm, nanometres, rad, Length, LengthUnit, Millimetres, Radians, SolidAngle,
@@ -17,6 +17,7 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
 };
+use crate::common::Medium;
 
 /// Describes the radius of measurement.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
