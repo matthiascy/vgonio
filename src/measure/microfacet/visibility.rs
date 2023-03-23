@@ -1,19 +1,11 @@
-use crate::{
-    app::{
-        cache::{Cache, Handle},
-        gfx::{
-            self,
-            camera::{Camera, Projection},
-            GpuContext, RenderPass, Texture, WgpuConfig,
-        },
+use crate::{app::{
+    cache::{Cache, Handle},
+    gfx::{
+        self,
+        camera::{Camera, Projection},
+        GpuContext, RenderPass, Texture, WgpuConfig,
     },
-    common::{DataEncoding, Handedness},
-    measure,
-    measure::measurement::MicrofacetMaskingShadowingMeasurement,
-    msurf::MicroSurface,
-    units::Radians,
-    Error,
-};
+}, common::{DataEncoding, Handedness}, measure, measure::measurement::MicrofacetMaskingShadowingMeasurement, msurf::MicroSurface, units::Radians, Error, math};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use std::{num::NonZeroU32, path::Path};
@@ -1295,6 +1287,7 @@ pub struct MeasurementPoint {
 }
 
 impl MeasurementPoint {
+    /// Returns the uniforms for the measurement point used in the shader.
     fn shader_uniforms(&self, layers_per_texture: u32) -> Uniforms {
         Uniforms {
             proj_view_matrix: self.proj_view_mat.to_cols_array(),
@@ -1485,7 +1478,7 @@ pub fn measure_masking_shadowing(
                 let zenith =
                     desc.zenith.step_size * (i % desc.zenith_step_count_inclusive()) as f32;
                 let view_dir =
-                    measure::spherical_to_cartesian(1.0, zenith, azimuth, handedness).normalize();
+                    math::spherical_to_cartesian(1.0, zenith, azimuth, handedness).normalize();
                 let pos = view_dir * diagonal;
                 let proj_view_mat = {
                     let view_mat = Camera::new(pos, Vec3::ZERO, handedness.up()).view_matrix();

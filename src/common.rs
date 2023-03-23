@@ -104,6 +104,7 @@ use crate::error::Error;
 /// Spherical coordinate in radians.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct SphericalCoord {
+    pub radius: f32,
     /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the nadir.
     /// The zenith angle is the angle between the positive z-axis and the point
     /// on the sphere. The zenith angle is always between 0 and pi. 0 ~ pi/2 is
@@ -117,13 +118,13 @@ pub struct SphericalCoord {
 
 impl SphericalCoord {
     /// Convert to a cartesian coordinate.
-    pub fn into_cartesian(self) -> glam::Vec3 {
+    pub fn into_cartesian(self) -> Vec3 {
         let theta = self.zenith;
         let phi = self.azimuth;
-        glam::Vec3::new(
-            theta.sin() * phi.cos(),
-            theta.cos(),
-            theta.sin() * phi.sin(),
+        Vec3::new(
+            theta.sin() * phi.cos() * self.radius,
+            theta.cos() * self.radius,
+            theta.sin() * phi.sin() * self.radius,
         )
     }
 }

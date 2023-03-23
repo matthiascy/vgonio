@@ -135,8 +135,8 @@ pub fn measure_bsdf_embree_rt(
 ) {
     let msurfs = cache.micro_surfaces(surfaces).unwrap();
     let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
-    desc.collector.init();
-    desc.emitter.init();
+    let emitter_samples = desc.emitter.generate_samples();
+    let collector_patches = desc.collector.generate_patches();
 
     for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
         println!(
@@ -144,7 +144,7 @@ pub fn measure_bsdf_embree_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::embr::measure_bsdf(&desc, mesh, cache);
+        crate::measure::rtc::embr::measure_bsdf(&desc, mesh, cache, &emitter_samples, &collector_patches);
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()

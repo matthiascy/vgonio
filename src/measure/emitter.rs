@@ -3,7 +3,7 @@ use crate::{
     measure::{measurement::Radius, Ray},
     units::{radians, steradians, LengthUnit, Nanometres, Radians, SolidAngle},
 };
-use embree::RayNp;
+use glam::Vec3;
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
@@ -21,7 +21,7 @@ use crate::units::Micrometres;
 ///
 /// Note: need to update the radius for each surface before the measurement to
 /// make sure that the surface is covered by the patch.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emitter {
     /// Number of emitted rays.
     pub num_rays: u32,
@@ -50,16 +50,6 @@ pub struct Emitter {
     /// Solid angle subtended by emitter's region.
     #[serde(skip)]
     pub(crate) solid_angle: SolidAngle,
-
-    /// Generated samples inside emitter's region.
-    /// Samples are generated uniformly distributed on the surface of the
-    /// sphere using rejection sampling.
-    #[serde(skip)]
-    pub(crate) samples: Vec<glam::Vec3>,
-
-    /// Initialised flag.
-    #[serde(skip)]
-    pub(crate) init: bool,
 }
 
 /// Represents the shape of a region on the surface of a sphere.
@@ -110,9 +100,34 @@ impl RegionShape {
 }
 
 impl Emitter {
-    /// Initialises the emitter.
-    pub fn init(&mut self) {
-        log::info!("Initialising emitter...");
+    /// Accesses the radius of the emitter.
+    pub fn radius(&self) -> Radius { self.radius }
+
+    /// Updates the radius of the emitter.
+    pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
+
+    /// All possible measurement positions of the emitter.
+    pub fn meas_points(&self) -> Vec<SphericalCoord> {
+        let n_zenith =
+            ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
+        let n_azimuth =
+            ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step_size).ceil() as usize;
+
+        (0..n_zenith)
+            .flat_map(|i_theta| {
+                (0..n_azimuth).map(move |i_phi| SphericalCoord {
+                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
+                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
+                })
+            })
+            .collect()
+    }
+
+    /// Generated samples inside emitter's region.
+    ///
+    /// Samples are generated uniformly distributed on the surface of the
+    /// sphere.
+    pub fn generate_samples(&self) -> Vec<glam::Vec3> {
         let num_samples = self.num_rays as usize;
         // Generates uniformly distributed samples using rejection sampling.
         let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
@@ -145,7 +160,7 @@ impl Emitter {
         );
 
         let t = std::time::Instant::now();
-        self.samples = uniform_sampling_on_unit_sphere(
+        let samples = uniform_sampling_on_unit_sphere(
             num_samples,
             zenith_start,
             zenith_stop,
@@ -153,44 +168,19 @@ impl Emitter {
             azimuth_stop,
             Handedness::RightHandedYUp,
         );
-        log::trace!("  - Samples: {:?}", self.samples);
+        log::trace!("  - Samples: {:?}", samples);
         log::info!("  - Done in {} ms", t.elapsed().as_millis());
-        self.init = true;
-    }
-
-    /// Accesses the radius of the emitter.
-    pub fn radius(&self) -> Radius { self.radius }
-
-    /// Updates the radius of the emitter.
-    pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
-
-    /// All possible measurement positions of the emitter.
-    pub fn meas_points(&self) -> Vec<SphericalCoord> {
-        let n_zenith =
-            ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
-        let n_azimuth =
-            ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step_size).ceil() as usize;
-
-        (0..n_zenith)
-            .flat_map(|i_theta| {
-                (0..n_azimuth).map(move |i_phi| SphericalCoord {
-                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
-                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
-                })
-            })
-            .collect()
+        samples
     }
 
     /// Emits rays from the patch located at `pos`.
-    pub fn emit_rays_with_radius(&self, pos: SphericalCoord, radius: Micrometres) -> Vec<Ray> {
-        debug_assert!(self.init, "Emitter not initialised yet! Call init() first.");
+    pub fn emit_rays_with_radius(&self, samples: &[Vec3], pos: SphericalCoord, radius: Micrometres) -> Vec<Ray> {
         log::trace!("Emitting rays from position {:?} with radius: {}", pos, radius);
         let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
         let dir = -pos.into_cartesian();
 
-        let rays = self
-            .samples
+        let rays = samples
             .par_iter()
             .map(|sample| {
                 let origin = mat * *sample * radius.as_f32();

@@ -1,8 +1,34 @@
 pub use glam::*;
+use crate::common::Handedness;
+use crate::units::Radians;
 
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
 ];
+
+/// Conversion from spherical coordinate system to cartesian coordinate system.
+///
+/// # Arguments
+///
+/// * `r` - radius
+/// * `zenith` - polar angle
+/// * `azimuth` - azimuthal angle
+/// * `handedness` - handedness of the cartesian coordinate system
+pub fn spherical_to_cartesian(
+    r: f32,
+    zenith: Radians,
+    azimuth: Radians,
+    handedness: Handedness,
+) -> Vec3 {
+    let a = r * zenith.sin() * azimuth.cos();
+    let b = r * zenith.sin() * azimuth.sin();
+    let c = r * zenith.cos();
+
+    match handedness {
+        Handedness::RightHandedZUp => Vec3::new(a, b, c),
+        Handedness::RightHandedYUp => Vec3::new(a, c, b),
+    }
+}
 
 /// Returns the accurate reciprocal of the given value.
 ///

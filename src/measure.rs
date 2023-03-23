@@ -58,14 +58,14 @@ pub enum RtcMethod {
     Grid,
 }
 
-/// Struct used to record ray path.
+/// Struct used to record the trajectory of a ray.
 #[derive(Debug, Copy, Clone)]
 pub struct TrajectoryNode {
     /// The ray of the node.
     pub ray: Ray,
 
-    /// The cosine of the angle between the ray and the normal (always
-    /// positive).
+    /// The cosine of the incident angle between the ray and the normal (always
+    /// positive) of the surface where the ray hits.
     pub cos: f32,
 }
 
@@ -84,58 +84,4 @@ pub struct RtcRecord {
 impl RtcRecord {
     /// Returns the bounces of traced ray.
     pub fn bounces(&self) -> usize { self.trajectory.len() - 1 }
-}
-
-/// Light source used for acquisition of shadowing and masking function.
-pub struct LightSource {
-    /// Position of the light source.
-    pub pos: Vec3A,
-    /// Parameters of projection.
-    pub proj: Projection,
-    /// Type of projection.
-    pub proj_kind: ProjectionKind,
-}
-
-/// Light space matrix data uploaded to GPU during generation of depth map.
-#[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
-pub struct LightSourceRaw([f32; 16]);
-
-impl LightSource {
-    /// Returns the GPU data of the light source.
-    pub fn to_raw(&self) -> LightSourceRaw {
-        let forward = -self.pos;
-        let up = if forward == -Vec3A::Y {
-            Vec3A::new(1.0, 1.0, 0.0).normalize()
-        } else {
-            Vec3A::Y
-        };
-        let view = glam::Mat4::look_at_rh(self.pos.into(), Vec3::ZERO, up.into());
-        let proj = self.proj.matrix(self.proj_kind);
-        LightSourceRaw((proj * view).to_cols_array())
-    }
-}
-
-/// Conversion from spherical coordinate system to cartesian coordinate system.
-///
-/// # Arguments
-///
-/// * `r` - radius
-/// * `zenith` - polar angle
-/// * `azimuth` - azimuthal angle
-/// * `handedness` - handedness of the cartesian coordinate system
-pub fn spherical_to_cartesian(
-    r: f32,
-    zenith: Radians,
-    azimuth: Radians,
-    handedness: Handedness,
-) -> Vec3 {
-    let a = r * zenith.sin() * azimuth.cos();
-    let b = r * zenith.sin() * azimuth.sin();
-    let c = r * zenith.cos();
-
-    match handedness {
-        Handedness::RightHandedZUp => Vec3::new(a, b, c),
-        Handedness::RightHandedYUp => Vec3::new(a, c, b),
-    }
 }

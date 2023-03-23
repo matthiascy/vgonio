@@ -18,8 +18,9 @@ use embree::{
     IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, SceneFlags, SoAHit, SoARay,
     ValidMask, ValidityN, INVALID_ID,
 };
-use glam::{Vec3A};
+use glam::{Vec3, Vec3A};
 use std::{sync::Arc, time::Instant};
+use crate::measure::collector::CollectorPatches;
 use crate::optics::ior::RefractiveIndex;
 
 impl MicroSurfaceMesh {
@@ -107,7 +108,7 @@ impl<'a> IntoIterator for &'a RayStreamStats {
 #[derive(Debug, Clone)]
 pub struct RayStatus<'a> {
     /// The last ray exiting the micro-surface.
-    pub status: &'a [TracingStatus],
+    pub tracing_status: &'a [TracingStatus],
     /// Final energy of the ray.
     pub energy: &'a [f32],
     /// Number of bounces for each ray.
@@ -130,7 +131,7 @@ impl<'a> Iterator for RayStreamStatsIter<'a> {
             let bounce = &self.stats.bounce[self.index];
             self.index += 1;
             Some(RayStatus {
-                status,
+                tracing_status: status,
                 energy,
                 bounce,
             })
@@ -310,7 +311,7 @@ const MAX_RAY_STREAM_SIZE: usize = 1024;
 /// * `surf` - The micro-surface to measure.
 /// * `mesh` - The micro-surface's mesh.
 /// * `cache` - The cache to use.
-pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cache) {
+pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cache, emitter_samples: &[Vec3], collector_patches: &CollectorPatches) {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -354,7 +355,7 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
         );
 
         let t = Instant::now();
-        let emitted_rays = desc.emitter.emit_rays_with_radius(pos, radius);
+        let emitted_rays = desc.emitter.emit_rays_with_radius(&emitter_samples, pos, radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 
@@ -495,6 +496,6 @@ pub fn measure_bsdf(desc: &BsdfMeasurement, mesh: &MicroSurfaceMesh, cache: &Cac
                 &iors_t
             ))
             .collect::<Vec<_>>();
-        desc.collector.collect_embree_rt(desc.kind, &stats);
+        desc.collector.collect_embree_rt(desc.kind, spectrum.len(), &stats, &collector_patches);
     }
 }

@@ -7,14 +7,7 @@ use std::{
     path::Path,
 };
 
-use crate::{
-    app::cache::{Cache, Handle},
-    common::{DataEncoding, Handedness},
-    error::Error,
-    measure::{self, measurement::MicrofacetNormalDistributionMeasurement},
-    msurf::MicroSurface,
-    units::{self, Radians},
-};
+use crate::{app::cache::{Cache, Handle}, common::{DataEncoding, Handedness}, error::Error, math, measure::{self, measurement::MicrofacetNormalDistributionMeasurement}, msurf::MicroSurface, units::{self, Radians}};
 
 /// Structure holding the data for micro-facet normal distribution measurement.
 ///
@@ -141,7 +134,7 @@ pub fn measure_normal_distribution(
                     (0..zenith_step_count_inclusive).map(move |zenith_idx| {
                         let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
                         let zenith = zenith_idx as f32 * desc.zenith.step_size;
-                        let dir = measure::spherical_to_cartesian(
+                        let dir = math::spherical_to_cartesian(
                             1.0,
                             zenith,
                             azimuth,
