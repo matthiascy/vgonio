@@ -1,4 +1,5 @@
 use std::os::unix::process::parent_id;
+use glam::Vec3A;
 use crate::{
     common::{RangeByStepSize, SphericalDomain, SphericalPartition},
     measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius},
@@ -9,8 +10,11 @@ use crate::{
     measure::{bsdf::BsdfStats, rtc::embr::RayStreamStats},
 };
 use serde::{Deserialize, Serialize};
-use crate::common::SphericalCoord;
-use crate::measure::rtc::embr::{TracingStatus};
+use crate::app::cache::Cache;
+use crate::common::{Medium, SphericalCoord};
+use crate::measure::bsdf::SpectrumSampler;
+use crate::measure::rtc::embr::{TracingStatus, Trajectory};
+use crate::units::Nanometres;
 
 /// Description of a collector.
 ///
@@ -97,10 +101,48 @@ impl Collector {
     pub fn collect_embree_rt(
         &self,
         kind: BsdfKind,
-        spectrum_len: usize,
-        stats: &[RayStreamStats],
+        incident_medium: Medium,
+        transmitted_medium: Medium,
+        spectrum: RangeByStepSize<Nanometres>,
+        trajectories: &[Trajectory],
         patches: &CollectorPatches,
+        cache: &Cache,
     ) -> BsdfStats<BounceEnergyPerPatch> {
+        debug_assert!(patches.matches_scheme(&self.scheme), "Collector patches do not match the collector scheme");
+
+        let spectrum = SpectrumSampler::from(spectrum).samples();
+        log::debug!("spectrum samples: {:?}", spectrum);
+
+        // Load the refractive indices of the incident and transmitted media.
+        let iors_i = cache
+            .iors
+            .ior_of_spectrum(incident_medium, &spectrum)
+            .expect("incident medium IOR not found");
+        let iors_t = cache
+            .iors
+            .ior_of_spectrum(transmitted_medium, &spectrum)
+            .expect("transmitted medium IOR not found");
+
+        // Convert the last rays of the trajectories into a vector located
+        // at the collector's center.
+        let stats = trajectories
+            .iter()
+            .filter_map(|trajectory| {
+                trajectory.last().map(|last| {
+                    if kind == BsdfKind::Brdf && last.dir.dot(Vec3A::Y) < 0.0 {
+                        None
+                    } else {
+                        // 1. Calculate the intersection point of the last ray with the
+                        // collector's surface.
+                        // 2. Calculate the direction of the ray from the collector's center to the intersection
+                        // point.
+                        // 3. Calculate the angle between the ray and the normal of the collector's surface.
+                        None
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
         let mut num_missed = vec![0; spectrum_len];
         let mut num_reflected = vec![0; spectrum_len];
         let mut num_absorbed = vec![0; spectrum_len];
@@ -113,6 +155,7 @@ impl Collector {
                         TracingStatus::Missed => num_missed[i] += 1,
                         TracingStatus::Reflected(last_ray) => {
                             num_reflected[i] += 1;
+
                         },
                         TracingStatus::Absorbed(last_ray) => {
                             num_absorbed[i] += 1;
@@ -122,6 +165,7 @@ impl Collector {
                 log::debug!("Status: {:?}", ray_status);
             }
         }
+
         match kind {
             BsdfKind::Brdf => {
                 match self.scheme {
@@ -171,9 +215,20 @@ pub struct CollectedData {
 /// Represents patches on the surface of the spherical [`Collector`].
 ///
 /// The domain of the whole collector is defined by the [`Collector`].
+#[derive(Debug, Clone)]
 pub enum CollectorPatches {
     SingleRegion(Vec<SphericalCoord>),
     Partitioned(Vec<Patch>),
+}
+
+impl CollectorPatches {
+    pub fn matches_scheme(&self, scheme: &CollectorScheme) -> bool {
+        match (self, scheme) {
+            (Self::SingleRegion(_), CollectorScheme::SingleRegion { .. }) => true,
+            (Self::Partitioned(_), CollectorScheme::Partitioned { .. }) => true,
+            _ => false,
+        }
+    }
 }
 
 /// Represents a patch on the spherical [`Collector`].
