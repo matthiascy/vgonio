@@ -16,33 +16,12 @@ use std::str::FromStr;
 use crate::{
     app::gfx::camera::{Projection, ProjectionKind},
     common::Handedness,
+    measure::rtc::Ray,
     units::Radians,
     Error,
 };
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec3, Vec3A};
-
-/// Representation of a ray.
-#[derive(Debug, Copy, Clone)]
-pub struct Ray {
-    /// The origin of the ray.
-    pub o: Vec3,
-
-    /// The direction of the ray.
-    pub d: Vec3,
-}
-
-impl Ray {
-    /// Create a new ray (direction will be normalised).
-    pub fn new(o: Vec3, d: Vec3) -> Self {
-        let d = d.normalize();
-        // let inv_dir_z = 1.0 / d.z;
-        // let kz = Axis::max_axis(d.abs());
-        // let kx = kz.next_axis();
-        // let ky = kz.next_axis();
-        Self { o, d }
-    }
-}
 
 /// Enumeration of the different ways to trace rays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

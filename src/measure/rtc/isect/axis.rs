@@ -101,7 +101,7 @@ impl IndexMut<Axis> for Vec3 {
 // TODO: replace with proptest
 #[cfg(test)]
 mod test {
-    use crate::isect::axis::Axis;
+    use crate::measure::rtc::isect::Axis;
     use quickcheck::quickcheck;
 
     quickcheck! {

@@ -1,10 +1,10 @@
 //! Index of refraction.
 
 use crate::{
+    common::{MaterialKind, Medium},
     units::{nanometres, Length, LengthUnit, Nanometres},
 };
 use std::{cmp::Ordering, collections::HashMap, path::Path};
-use crate::common::{MaterialKind, Medium};
 
 /// Material's complex refractive index which varies with wavelength of the
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
@@ -42,7 +42,10 @@ impl RefractiveIndexDatabase {
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
     pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndex> {
-        let refractive_indices = self.0.get(&medium).expect("unknown medium");
+        let refractive_indices = self
+            .0
+            .get(&medium)
+            .expect(format!("unknown medium {:?}", medium).as_str());
         // Search for the position of the first wavelength equal or greater than the
         // given one in refractive indices.
         let i = refractive_indices
@@ -126,7 +129,10 @@ impl RefractiveIndex {
                 // wavelength.
                 let mut coefficient = 1.0f32;
 
+                let mut is_conductor = false;
+
                 if let Ok(header) = rdr.headers() {
+                    is_conductor = header.len() == 3;
                     match header.get(0).unwrap().split(' ').last().unwrap() {
                         "nm" => coefficient = 1.0,
                         "µm" => coefficient = 1e3,
@@ -134,17 +140,30 @@ impl RefractiveIndex {
                     }
                 }
 
-                rdr.records()
-                    .filter_map(|ior_record| match ior_record {
-                        Ok(record) => {
-                            let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
-                            let eta = record[1].parse::<f32>().unwrap();
-                            let k = record[2].parse::<f32>().unwrap();
-                            Some(RefractiveIndex::new(wavelength.into(), eta, k))
-                        }
-                        Err(_) => None,
-                    })
-                    .collect()
+                if is_conductor {
+                    rdr.records()
+                        .filter_map(|ior_record| match ior_record {
+                            Ok(record) => {
+                                let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
+                                let eta = record[1].parse::<f32>().unwrap();
+                                let k = record[2].parse::<f32>().unwrap();
+                                Some(RefractiveIndex::new(wavelength.into(), eta, k))
+                            }
+                            Err(_) => None,
+                        })
+                        .collect()
+                } else {
+                    rdr.records()
+                        .filter_map(|ior_record| match ior_record {
+                            Ok(record) => {
+                                let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
+                                let eta = record[1].parse::<f32>().unwrap();
+                                Some(RefractiveIndex::new(wavelength.into(), eta, 0.0))
+                            }
+                            Err(_) => None,
+                        })
+                        .collect()
+                }
             })
             .ok()
     }

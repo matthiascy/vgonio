@@ -9,7 +9,7 @@ mod widgets;
 use crate::{
     common::Handedness,
     error::Error,
-    measure::{Ray, RtcMethod},
+    measure::{rtc::Ray, RtcMethod},
     units::degrees,
 };
 use glam::{IVec2, Mat4, Vec3};

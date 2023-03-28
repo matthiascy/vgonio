@@ -3,7 +3,7 @@ use crate::{
         widgets::{input3_spherical, input3_xyz},
         VgonioEvent,
     },
-    measure::{Ray, RtcMethod},
+    measure::{rtc::Ray, RtcMethod},
 };
 use glam::{IVec2, Vec3};
 use winit::event_loop::EventLoopProxy;

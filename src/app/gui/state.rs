@@ -15,9 +15,7 @@ use crate::app::{
     gui::VgonioEvent,
 };
 
-use crate::measure::Ray;
-
-use crate::app::gfx::remap_depth;
+use crate::{app::gfx::remap_depth, measure::rtc::Ray};
 use std::{default::Default, num::NonZeroU32, path::Path, sync::Arc};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 

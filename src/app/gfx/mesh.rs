@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Asset, gfx::VertexLayout},
-    isect::Aabb,
+    measure::rtc::isect::Aabb,
     msurf::{grid_triangulation_regular, AxisAlignment, MicroSurface, MicroSurfaceMesh},
 };
 use bytemuck::{Pod, Zeroable};

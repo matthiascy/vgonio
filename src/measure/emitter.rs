@@ -1,7 +1,7 @@
 use crate::{
     common::{Handedness, RangeByStepSize, SphericalCoord},
-    measure::{measurement::Radius, Ray},
-    units::{radians, steradians, LengthUnit, Nanometres, Radians, SolidAngle},
+    measure::{measurement::Radius, rtc::Ray},
+    units::{radians, steradians, LengthUnit, Micrometres, Nanometres, Radians, SolidAngle},
 };
 use glam::Vec3;
 use rand::{
@@ -11,7 +11,6 @@ use rand::{
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::units::Micrometres;
 
 /// Light emitter of the virtual gonio-photometer.
 ///
@@ -89,11 +88,7 @@ impl RegionShape {
                 steradians!(solid_angle)
             }
             Self::SphericalRect { zenith, azimuth } => {
-                // TODO: calculate solid angle of the rectangular patch.
-                todo!()
-                // let solid_angle: f32 = (zenith.0.cos() - zenith.1.cos()) *
-                // (azimuth.1 - azimuth.0); steradians!
-                // (solid_angle)
+                todo!("calculate solid angle of the rectangular patch")
             }
         }
     }
@@ -116,6 +111,7 @@ impl Emitter {
         (0..n_zenith)
             .flat_map(|i_theta| {
                 (0..n_azimuth).map(move |i_phi| SphericalCoord {
+                    radius: 1.0,
                     zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
                     azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
                 })
@@ -174,11 +170,20 @@ impl Emitter {
     }
 
     /// Emits rays from the patch located at `pos`.
-    pub fn emit_rays_with_radius(&self, samples: &[Vec3], pos: SphericalCoord, radius: Micrometres) -> Vec<Ray> {
-        log::trace!("Emitting rays from position {:?} with radius: {}", pos, radius);
+    pub fn emit_rays_with_radius(
+        &self,
+        samples: &[Vec3],
+        pos: SphericalCoord,
+        radius: Micrometres,
+    ) -> Vec<Ray> {
+        log::trace!(
+            "Emitting rays from position {:?} with radius: {}",
+            pos,
+            radius
+        );
         let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
-        let dir = -pos.into_cartesian();
+        let dir = -pos.to_cartesian(Handedness::RightHandedYUp);
 
         let rays = samples
             .par_iter()

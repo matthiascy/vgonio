@@ -1,11 +1,14 @@
 //! Customised grid ray tracing for micro-surface measurements.
 use crate::{
     app::cache::Cache,
-    isect::{ray_tri_intersect_woop, RayTriIsect},
     measure::{
         bsdf::SpectrumSampler,
         measurement::{BsdfMeasurement, Radius},
-        Collector, Emitter, Ray, RtcRecord, TrajectoryNode,
+        rtc::{
+            isect::{ray_tri_intersect_woop, RayTriIsect},
+            Ray,
+        },
+        Collector, Emitter, RtcRecord, TrajectoryNode,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::{fresnel::reflect, ior::RefractiveIndex},
@@ -18,10 +21,8 @@ pub fn measure_bsdf(
     mesh: &MicroSurfaceMesh,
     cache: &Cache,
 ) {
-    let mut collector: Collector = desc.collector.clone();
-    let mut emitter: Emitter = desc.emitter.clone();
-    collector.init();
-    emitter.init();
+    // let mut collector: Collector = desc.collector;
+    // let mut emitter: Emitter = desc.emitter;
 
     todo!()
 

@@ -4,12 +4,15 @@ use crate::{
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     common::RangeByStepSize,
-    measure::{measurement::Radius, rtc::grid::GridRT, Collector, Emitter, Patch},
+    measure::{measurement::Radius, rtc::grid::GridRT, Collector, CollectorScheme, Emitter, Patch},
     msurf::MicroSurface,
     units::{metres, mm, Nanometres},
 };
-use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+use serde::{ser::SerializeTupleStruct, Deserialize, Serialize, Serializer};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    ops::{Deref, DerefMut},
+};
 
 use super::measurement::BsdfMeasurement;
 
@@ -57,72 +60,93 @@ impl Display for BsdfKind {
 }
 
 #[derive(Debug)]
-pub struct PerWavelengthData<T>(pub Vec<T>);
+pub struct PerWavelength<T>(pub Vec<T>);
 
-impl<T> Clone for PerWavelengthData<T>
+impl<T> Clone for PerWavelength<T>
 where
     T: Clone,
 {
     fn clone(&self) -> Self { Self(self.0.clone()) }
 }
 
-/// Measurement statistics for a single emitter position.
-pub struct BsdfStats<PatchData> {
-    /// Incident polar angle in radians.
-    pub zenith: f32,
+impl<T> PerWavelength<T> {
+    pub fn empty() -> Self { Self(Vec::new()) }
+}
 
-    /// Incident azimuth angle in radians.
-    pub azimuth: f32,
+impl<T> Deref for PerWavelength<T> {
+    type Target = [T];
 
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<T> DerefMut for PerWavelength<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
+#[derive(Debug, Clone)]
+pub struct BsdfStats {
     /// Number of emitted rays; invariant over wavelength.
     pub n_emitted: u32,
 
     /// Number of emitted rays that hit the surface; invariant over wavelength.
-    pub n_received: f32,
+    pub n_received: u32,
 
-    /// Wavelength of emitted rays.
-    pub wavelengths: Vec<f32>,
+    /// Wavelengths of emitted rays.
+    pub wavelength: Vec<Nanometres>,
 
-    /// Number of emitted rays that hit the surface and were reflected; variant
-    /// over wavelength.
-    pub n_reflected: PerWavelengthData<u32>,
+    /// Number of emitted rays that hit the surface and were absorbed;
+    pub n_absorbed: PerWavelength<u32>,
 
-    /// Number of emitted rays that hit the surface and were transmitted;
-    /// variant over wavelength.
-    pub n_transmitted: PerWavelengthData<u32>,
+    /// Number of emitted rays that hit the surface and were reflected.
+    pub n_reflected: PerWavelength<u32>,
 
-    /// Number of emitted rays captured by the collector; variant over
+    /// Number of emitted rays captured by the collector.
+    pub n_captured: PerWavelength<u32>,
+
+    /// Initial energy of emitted rays per wavelength; invariant over
     /// wavelength.
-    pub n_captured: PerWavelengthData<u32>,
-
-    /// Initial energy of emitted rays; variant over wavelength.
-    pub sum_energy_emitted: PerWavelengthData<f32>,
-
-    /// Energy of emitted rays that hit the surface, variant over wavelength.
-    pub sum_energy_received: PerWavelengthData<f32>,
+    pub total_energy_emitted: f32,
 
     /// Energy captured by the collector; variant over wavelength.
-    pub sum_energy_captured: PerWavelengthData<f32>,
-
-    /// Patch's zenith angle span in radians.
-    pub zenith_span: f32,
-
-    /// Patch's azimuth angle span in radians.
-    pub azimuth_span: f32,
+    pub total_energy_captured: PerWavelength<f32>,
 
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength.
-    pub hist_reflections: PerWavelengthData<Vec<u32>>,
+    pub num_rays_per_bounce: PerWavelength<Vec<u32>>,
 
     /// Histogram of energy of reflected rays by number of bounces, variant
     /// over wavelength.
-    pub hist_reflections_energy: PerWavelengthData<Vec<f32>>,
+    pub energy_per_bounce: PerWavelength<Vec<f32>>,
+}
+
+/// Bsdf measurement point and its data.
+pub struct BsdfMeasurementPoint<PerPatchData> {
+    /// Patch containing the measurement point.
+    pub patch: Patch,
 
     /// Per patch data. This is used to either store the measured data for each
     /// patch in case the collector is partitioned or for the collector's
     /// region at different places in the scene. You need to check the collector
     /// to know which one is the case and how to interpret the data.
-    pub patches_data: Vec<PerWavelengthData<PatchData>>,
+    pub data: PerWavelength<PerPatchData>,
+}
+
+impl<PerPatchData: Debug> Debug for BsdfMeasurementPoint<PerPatchData> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BsdfMeasurementPoint")
+            .field("patch", &self.patch)
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
+impl<PerPatchData: Clone> Clone for BsdfMeasurementPoint<PerPatchData> {
+    fn clone(&self) -> Self {
+        Self {
+            patch: self.patch.clone(),
+            data: self.data.clone(),
+        }
+    }
 }
 
 /// Measurement of the BSDF (bidirectional scattering distribution function) of
@@ -144,7 +168,13 @@ pub fn measure_bsdf_embree_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::embr::measure_bsdf(&desc, mesh, cache, &emitter_samples, &collector_patches);
+        crate::measure::rtc::embr::measure_bsdf(
+            &desc,
+            mesh,
+            cache,
+            &emitter_samples,
+            &collector_patches,
+        );
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()

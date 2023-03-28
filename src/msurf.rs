@@ -1,6 +1,6 @@
 //! Heightfield
 
-use crate::{app::cache::Asset, isect::Aabb};
+use crate::{app::cache::Asset, measure::rtc::isect::Aabb};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, path::PathBuf};

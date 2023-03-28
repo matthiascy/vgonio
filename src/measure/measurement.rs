@@ -1,6 +1,6 @@
 //! Measurement parameters.
 use crate::{
-    common::{RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
+    common::{Medium, RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
@@ -17,7 +17,6 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
 };
-use crate::common::Medium;
 
 /// Describes the radius of measurement.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -133,8 +132,6 @@ impl Default for BsdfMeasurement {
                     stop: nanometres!(700.0),
                     step_size: nanometres!(1.0),
                 },
-                samples: vec![],
-                init: false,
             },
             collector: Collector {
                 radius: Radius::Auto(mm!(0.0)),
@@ -153,8 +150,6 @@ impl Default for BsdfMeasurement {
                         },
                     },
                 },
-                patches: None,
-                init: false,
             },
         }
     }

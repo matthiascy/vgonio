@@ -15,7 +15,6 @@ mod app;
 mod common;
 mod error;
 mod io;
-pub mod isect;
 mod math;
 pub mod measure;
 pub mod msurf;

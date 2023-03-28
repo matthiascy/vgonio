@@ -8,6 +8,7 @@ description = "Microscopic level light transport simulation."
 publish = false
 
 [dependencies]
+approx = "0.5"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
 byteorder = "1"

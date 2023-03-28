@@ -1,4 +1,5 @@
 use crate::common::ulp_eq;
+use approx::{AbsDiffEq, RelativeEq};
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
 

@@ -1,4 +1,7 @@
-use crate::{common::gamma, isect::RayTriIsect, measure::Ray};
+use crate::{
+    common::gamma,
+    measure::rtc::{isect::RayTriIsect, Ray},
+};
 use glam::Vec3;
 
 pub const TOLERANCE: f32 = f32::EPSILON * 2.0;

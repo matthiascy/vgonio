@@ -94,16 +94,20 @@ mod range;
 
 pub use numeric::*;
 pub use range::*;
-use std::fmt::Display;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
-use crate::{measure::Patch, units::Radians};
+use crate::{
+    error::Error,
+    math::{cartesian_to_spherical, spherical_to_cartesian},
+    measure::Patch,
+    units::Radians,
+};
 use serde::{Deserialize, Serialize};
-use crate::error::Error;
 
 /// Spherical coordinate in radians.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct SphericalCoord {
+    /// Radius of the sphere.
     pub radius: f32,
     /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the nadir.
     /// The zenith angle is the angle between the positive z-axis and the point
@@ -117,15 +121,25 @@ pub struct SphericalCoord {
 }
 
 impl SphericalCoord {
+    /// Create a new spherical coordinate.
+    pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
+        Self {
+            radius,
+            zenith,
+            azimuth,
+        }
+    }
+
     /// Convert to a cartesian coordinate.
-    pub fn into_cartesian(self) -> Vec3 {
+    pub fn to_cartesian(&self, handedness: Handedness) -> Vec3 {
         let theta = self.zenith;
         let phi = self.azimuth;
-        Vec3::new(
-            theta.sin() * phi.cos() * self.radius,
-            theta.cos() * self.radius,
-            theta.sin() * phi.sin() * self.radius,
-        )
+        spherical_to_cartesian(self.radius, theta, phi, handedness)
+    }
+
+    /// Convert from a cartesian coordinate.
+    pub fn from_cartesian(cartesian: Vec3, handedness: Handedness) -> Self {
+        cartesian_to_spherical(cartesian, handedness)
     }
 }
 
@@ -295,7 +309,7 @@ impl SphericalPartition {
                 let mut patches = Vec::with_capacity(n_zenith * n_azimuth);
                 for i_theta in 0..n_zenith - 1 {
                     for i_phi in 0..n_azimuth - 1 {
-                        patches.push(Patch::new(
+                        patches.push(Patch::new_partitioned(
                             (
                                 i_theta as f32 * zenith.step_size + zenith.start,
                                 (i_theta + 1) as f32 * zenith.step_size + zenith.start,
@@ -304,6 +318,7 @@ impl SphericalPartition {
                                 i_phi as f32 * azimuth.step_size + azimuth.start,
                                 (i_phi + 1) as f32 * azimuth.step_size + azimuth.start,
                             ),
+                            Handedness::RightHandedYUp,
                         ));
                     }
                 }
@@ -338,7 +353,7 @@ impl SphericalPartition {
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
                 for i_theta in 0..n_theta {
                     for i_phi in 0..n_phi {
-                        patches.push(Patch::new(
+                        patches.push(Patch::new_partitioned(
                             (
                                 (1.0 - (h_step * i_theta as f32 + h_start)).acos().into(),
                                 (1.0 - (h_step * (i_theta + 1) as f32 + h_start))
@@ -349,6 +364,7 @@ impl SphericalPartition {
                                 *phi_start + i_phi as f32 * *phi_step,
                                 *phi_start + (i_phi + 1) as f32 * *phi_step,
                             ),
+                            Handedness::RightHandedYUp,
                         ));
                     }
                 }
@@ -398,12 +414,13 @@ impl SphericalPartition {
                     let theta = calc_theta(i);
                     let theta_next = calc_theta(i + 1);
                     for i_phi in 0..((*phi_stop - *phi_start) / *phi_step).ceil() as usize {
-                        patches.push(Patch::new(
+                        patches.push(Patch::new_partitioned(
                             (theta.into(), theta_next.into()),
                             (
                                 *phi_start + i_phi as f32 * *phi_step,
                                 *phi_start + (i_phi as f32 + 1.0) * *phi_step,
                             ),
+                            Handedness::RightHandedYUp,
                         ));
                     }
                 }

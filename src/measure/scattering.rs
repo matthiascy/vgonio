@@ -1,5 +1,5 @@
 use crate::{
-    measure::Ray,
+    measure::rtc::Ray,
     optics,
     optics::{
         fresnel::{reflect, refract2, RefractionResult},
