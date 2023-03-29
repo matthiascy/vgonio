@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// # Examples
 /// ```
-/// use vgonio::isect::Axis;
+/// # use vgonio::measure::rtc::isect::Axis;
 ///
 /// let mut pos = [0.1, 0.4, 0.6];
 /// pos[Axis::X] -= 0.1;

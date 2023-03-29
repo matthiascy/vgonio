@@ -35,7 +35,7 @@ use crate::{
         },
         gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
     },
-    measure::rtc::grid::GridRT,
+    measure::rtc::grid::Grid,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     units::Degrees,
 };
@@ -746,7 +746,7 @@ impl VgonioApp {
                         RtcMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
                             let cache = self.cache.deref().borrow();
-                            let grid_rt = GridRT::new(
+                            let grid_rt = Grid::new(
                                 cache
                                     .micro_surface(self.msurf.as_ref().unwrap().surf)
                                     .unwrap(),

@@ -6,8 +6,9 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::SpectrumSampler,
-        collector::CollectorPatches,
+        bsdf::{BsdfMeasurementPoint, BsdfStats, SpectrumSampler},
+        collector::{CollectorPatches, PatchBounceEnergy},
+        emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
     },
     msurf::MicroSurfaceMesh,
@@ -210,21 +211,22 @@ fn intersect_filter_stream<'a>(
 
 const MAX_RAY_STREAM_SIZE: usize = 1024;
 
-/// Measures the BSDF of a micro-surface.
+/// Measures the BSDF of a micro-surface mesh.
 ///
 /// # Arguments
 ///
 /// * `desc` - The BSDF measurement description.
-/// * `surf` - The micro-surface to measure.
 /// * `mesh` - The micro-surface's mesh.
 /// * `cache` - The cache to use.
+/// * `emitter_samples` - The emitter samples.
+/// * `collector_patches` - The collector patches.
 pub fn measure_bsdf(
     desc: &BsdfMeasurement,
     mesh: &MicroSurfaceMesh,
+    samples: &EmitterSamples,
+    patches: &CollectorPatches,
     cache: &Cache,
-    emitter_samples: &[Vec3],
-    collector_patches: &CollectorPatches,
-) {
+) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -246,6 +248,9 @@ pub fn measure_bsdf(
     scene.attach_geometry(&geometry);
     scene.commit();
 
+    let max_bounces = desc.emitter.max_bounces;
+
+    let mut result = vec![];
     // Iterate over every incident direction.
     for pos in desc.emitter.meas_points() {
         println!(
@@ -255,13 +260,9 @@ pub fn measure_bsdf(
         );
 
         let t = Instant::now();
-        let emitted_rays = desc
-            .emitter
-            .emit_rays_with_radius(&emitter_samples, pos, radius);
+        let emitted_rays = desc.emitter.emit_rays_with_radius(&samples, pos, radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
-
-        let max_bounces = desc.emitter.max_bounces;
 
         log::debug!(
             "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
@@ -396,9 +397,10 @@ pub fn measure_bsdf(
             .into_iter()
             .flat_map(|d| d.trajectory)
             .collect::<Vec<_>>();
-        let (a, b) =
+        result.push(
             desc.collector
-                .collect_embree_rt(desc, mesh, &trajectories, &collector_patches, &cache);
-        println!("Stats: {:?} | {:?}", a, b);
+                .collect_embree_rt(desc, mesh, &trajectories, &patches, &cache),
+        );
     }
+    result
 }

@@ -11,6 +11,7 @@ use rand::{
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
 
 /// Light emitter of the virtual gonio-photometer.
 ///
@@ -94,6 +95,19 @@ impl RegionShape {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct EmitterSamples(Vec<Vec3>);
+
+impl Deref for EmitterSamples {
+    type Target = Vec<Vec3>;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl DerefMut for EmitterSamples {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
 impl Emitter {
     /// Accesses the radius of the emitter.
     pub fn radius(&self) -> Radius { self.radius }
@@ -123,7 +137,7 @@ impl Emitter {
     ///
     /// Samples are generated uniformly distributed on the surface of the
     /// sphere.
-    pub fn generate_samples(&self) -> Vec<glam::Vec3> {
+    pub fn generate_samples(&self) -> EmitterSamples {
         let num_samples = self.num_rays as usize;
         // Generates uniformly distributed samples using rejection sampling.
         let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
@@ -166,13 +180,13 @@ impl Emitter {
         );
         log::trace!("  - Samples: {:?}", samples);
         log::info!("  - Done in {} ms", t.elapsed().as_millis());
-        samples
+        EmitterSamples(samples)
     }
 
     /// Emits rays from the patch located at `pos`.
     pub fn emit_rays_with_radius(
         &self,
-        samples: &[Vec3],
+        samples: &EmitterSamples,
         pos: SphericalCoord,
         radius: Micrometres,
     ) -> Vec<Ray> {

@@ -480,7 +480,7 @@ impl MicroSurface {
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
     pub fn as_micro_surface_mesh(&self, alignment: AxisAlignment) -> MicroSurfaceMesh {
         let (verts, extent) = self.generate_vertices(alignment);
-        let tri_faces = grid_triangulation_regular(self.cols, self.rows);
+        let tri_faces = regular_grid_triangulation(self.cols, self.rows);
         let num_faces = tri_faces.len() / 3;
 
         let mut normals = vec![Vec3::ZERO; num_faces];
@@ -568,6 +568,12 @@ impl MicroSurface {
 
 /// Generate triangle indices for grid triangulation.
 ///
+/// The grid is assumed to be a regular grid with `cols` columns and `rows`
+/// rows. The triangles are generated in counter-clockwise order. The
+/// triangulation starts from the first row, from left to right. Thus, the
+/// when using the indices, you need to provide the vertices in the same
+/// order.
+///
 /// Triangle winding is counter-clockwise.
 /// 0  <-- 1
 /// |   /  |
@@ -577,7 +583,7 @@ impl MicroSurface {
 /// # Returns
 ///
 /// Vec<u32>: An array of vertex indices forming triangles.
-pub(crate) fn grid_triangulation_regular(cols: usize, rows: usize) -> Vec<u32> {
+pub(crate) fn regular_grid_triangulation(cols: usize, rows: usize) -> Vec<u32> {
     let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
     let mut tri = 0;
     for i in 0..cols * rows {
@@ -611,4 +617,11 @@ pub(crate) fn grid_triangulation_regular(cols: usize, rows: usize) -> Vec<u32> {
     }
 
     indices
+}
+
+#[test]
+fn regular_grid_triangulation_test() {
+    let indices = regular_grid_triangulation(4, 3);
+    assert_eq!(indices.len(), 36);
+    println!("{:?}", indices);
 }

@@ -4,7 +4,7 @@ use crate::{
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     common::RangeByStepSize,
-    measure::{measurement::Radius, rtc::grid::GridRT, Collector, CollectorScheme, Emitter, Patch},
+    measure::{measurement::Radius, rtc::grid::Grid, Collector, CollectorScheme, Emitter, Patch},
     msurf::MicroSurface,
     units::{metres, mm, Nanometres},
 };
@@ -159,8 +159,8 @@ pub fn measure_bsdf_embree_rt(
 ) {
     let msurfs = cache.micro_surfaces(surfaces).unwrap();
     let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
-    let emitter_samples = desc.emitter.generate_samples();
-    let collector_patches = desc.collector.generate_patches();
+    let samples = desc.emitter.generate_samples();
+    let patches = desc.collector.generate_patches();
 
     for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
         println!(
@@ -168,13 +168,12 @@ pub fn measure_bsdf_embree_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::embr::measure_bsdf(
-            &desc,
-            mesh,
-            cache,
-            &emitter_samples,
-            &collector_patches,
-        );
+        let data_stats =
+            crate::measure::rtc::embr::measure_bsdf(&desc, mesh, &samples, &patches, cache);
+        for d in data_stats {
+            println!("Stats: {:?} | {:?}", d.0, d.1);
+        }
+        // TODO: Save data and stats to file.
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()
@@ -190,6 +189,8 @@ pub fn measure_bsdf_grid_rt(
 ) {
     let msurfs = cache.micro_surfaces(surfaces).unwrap();
     let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
+    let samples = desc.emitter.generate_samples();
+    let patches = desc.collector.generate_patches();
 
     for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
         println!(
@@ -197,7 +198,7 @@ pub fn measure_bsdf_grid_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::grid::measure_bsdf(&desc, surf, mesh, cache);
+        crate::measure::rtc::grid::measure_bsdf(&desc, surf, mesh, &samples, &patches, cache);
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()

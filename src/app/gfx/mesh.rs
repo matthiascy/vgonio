@@ -1,7 +1,7 @@
 use crate::{
     app::{cache::Asset, gfx::VertexLayout},
     measure::rtc::isect::Aabb,
-    msurf::{grid_triangulation_regular, AxisAlignment, MicroSurface, MicroSurfaceMesh},
+    msurf::{regular_grid_triangulation, AxisAlignment, MicroSurface, MicroSurfaceMesh},
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
@@ -37,7 +37,7 @@ impl RenderableMesh {
         let (positions, extent) = surf.generate_vertices(alignment);
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-        let indices: Vec<u32> = grid_triangulation_regular(cols, rows);
+        let indices: Vec<u32> = regular_grid_triangulation(cols, rows);
         debug_assert_eq!(indices.len(), indices_count);
         log::debug!(
             "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",

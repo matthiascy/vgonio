@@ -4,8 +4,10 @@ use uuid::Uuid;
 
 /// Triangle representation of the surface mesh.
 ///
-/// It has the same length unit as the [`MicroSurface`] from which it is
-/// generated.
+/// Created from [`MicroSurface`](`crate::msurf::MicroSurface`) using
+/// [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`),
+/// and has the same length unit ([`Micrometres`](`crate::units::Micrometres`))
+/// as the [`MicroSurface`](`crate::msurf::MicroSurface`).
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
     /// Unique identifier.
