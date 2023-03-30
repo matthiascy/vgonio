@@ -8,6 +8,8 @@ use glam::Vec3;
 use crate::{common::gamma_f32, measure::rtc::Ray};
 use serde::{Deserialize, Serialize};
 
+// TODO: test
+
 /// Axis-aligned bounding box.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Aabb {
@@ -110,7 +112,7 @@ impl Aabb {
         })
     }
 
-    /// Extend the bounding box.
+    /// Extend the bounding box with another bounding box.
     pub fn extend(&mut self, other: &Aabb) {
         let mut min = [0.0_f32; 4];
         let mut max = [0.0_f32; 4];
@@ -137,8 +139,40 @@ impl Aabb {
             self.max = Vec3::new(max[0], max[1], max[2]);
         }
 
-        #[cfg(target_arch = "wasm32")]
-        {}
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.min = self.min.min(other.min);
+            self.max = self.max.max(other.max);
+        }
+    }
+
+    /// Extend the bounding box with a point.
+    pub fn extend_point(&mut self, point: Vec3) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let mut min = [0.0_f32; 4];
+            let mut max = [0.0_f32; 4];
+            unsafe {
+                _mm_storeu_ps(
+                    min.as_mut_ptr(),
+                    _mm_min_ps(
+                        _mm_setr_ps(self.min.x, self.min.y, self.min.z, 0.0),
+                        _mm_setr_ps(point.x, point.y, point.z, 0.0),
+                    ),
+                );
+                _mm_storeu_ps(
+                    max.as_mut_ptr(),
+                    _mm_max_ps(
+                        _mm_setr_ps(self.max.x, self.max.y, self.max.z, 0.0),
+                        _mm_setr_ps(point.x, point.y, point.z, 0.0),
+                    ),
+                );
+            }
+            self.min = Vec3::new(min[0], min[1], min[2]);
+            self.max = Vec3::new(max[0], max[1], max[2]);
+        }
+        self.min = self.min.min(point);
+        self.max = self.max.max(point);
     }
 
     /// Maximum edge length.

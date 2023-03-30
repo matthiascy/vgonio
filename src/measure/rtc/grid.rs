@@ -93,15 +93,13 @@ enum Node {
     /// the axis-aligned bounding box of the node.
     Leaf {
         /// Minimum grid coordinate of the node.
-        grid_min: IVec2,
+        min: UVec2,
         /// Maximum grid coordinate of the node.
-        grid_max: IVec2,
+        max: UVec2,
         /// Minimum height of the node.
         min_height: f32,
         /// Maximum height of the node.
         max_height: f32,
-        /// Axis-aligned bounding box of the node.
-        aabb: Aabb,
     },
     /// Branch node of the kd-tree.
     /// The branch node contains two child nodes, and the axis at which the
@@ -113,18 +111,36 @@ enum Node {
         /// Axis at which the node is split.
         axis: Axis,
         /// Minimum grid coordinate contained in the node.
-        grid_min: UVec2,
+        min: UVec2,
         /// Maximum grid coordinate contained in the node.
-        grid_max: UVec2,
-        /// Index of the axis.
-        axis_index: u32,
+        max: UVec2,
+        /// Minimum height of the node.
+        min_height: f32,
+        /// Maximum height of the node.
+        max_height: f32,
         /// Index of the first child node.
-        child_0: u32,
+        child0: NodeIndex,
         /// Index of the second child node.
-        child_1: u32,
+        child1: NodeIndex,
         /// Axis-aligned bounding box of the node.
-        aabb: Aabb,
+        bounds: Aabb,
     },
+}
+
+/// Index of a node in the kd-tree.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+struct NodeIndex(u32);
+
+impl NodeIndex {
+    fn none() -> Self { Self(u32::MAX) }
+
+    fn some(index: u32) -> Self { Self(index) }
+
+    fn is_none(&self) -> bool { self.0 == u32::MAX }
+
+    fn is_some(&self) -> bool { self.0 != u32::MAX }
+
+    fn unwrap(self) -> u32 { self.0 }
 }
 
 impl Node {
@@ -139,15 +155,9 @@ impl<'ms> KdTree<'ms> {
 
     pub fn new(grid: &Grid<'ms>) -> Self {
         let mut nodes = Vec::new();
-        nodes.push(Node::Branch {
-            axis: Axis::Horizontal,
-            grid_min: UVec2::new(0, 0),
-            grid_max: UVec2::new(grid.width - 1, grid.height - 1),
-            axis_index: 0,
-            child_0: 0,
-            child_1: 0,
-            aabb: Default::default(),
-        });
+        let root = Self::build_branch(&mut nodes, Axis::Horizontal, UVec2::new(0, 0), UVec2::new(grid.width - 1, grid.height - 1),
+                           grid.surf.min, grid.surf.max, grid.mesh.aabb);
+        Self::build(grid, &mut nodes);
         Self {
             surf: grid.surf,
             mesh: grid.mesh,
@@ -157,38 +167,127 @@ impl<'ms> KdTree<'ms> {
     }
 
     /// Builds the kd-tree.
-    fn build(grid: &Grid<'ms>, root: &mut Node, nodes: &mut Vec<Node>) {
-        debug_assert!(root.is_branch(), "root node must be a branch node");
-        todo!("build kd-tree");
+    fn build(grid: &Grid<'ms>, nodes: &mut Vec<Node>) {
+        Self::build_recursive(grid, 0, nodes);
     }
 
-    fn build_node(
+    fn build_recursive(
         grid: &Grid<'ms>,
-        parent: Option<&Node>,
+        parent: u32,
         nodes: &mut Vec<Node>,
-        axis: Axis,
-    ) -> u32 {
+    ) {
+        let parent = &mut nodes[parent as usize];
+
+        if parent.is_leaf() {
+            return;
+        }
+
+        let Some(Node::Branch {min, max, axis, child0, child1, ..}) = parent;
+        let ((min0, max0), (min1, max1)) = match axis {
+            Axis::Horizontal => {
+                let min0 = UVec2::new(min.x, min.y);
+                let max0 = UVec2::new(max.x, max.y / 2);
+                let min1 = UVec2::new(min.x, max.y / 2 + 1);
+                let max1 = UVec2::new(max.x, max.y);
+                ((min0, max0), (min1, max1))
+            }
+            Axis::Vertical => {
+                let min0 = UVec2::new(min.x, min.y);
+                let max0 = UVec2::new(max.x / 2, max.y);
+                let min1 = UVec2::new(max.x / 2 + 1, min.y);
+                let max1 = UVec2::new(max.x, max.y);
+                ((min0, max0), (min1, max1))
+            }
+        };
+
+        {
+            // Creation of the first child node.
+            let grid_size = max0 - min0;
+            let (min_height, max_height) = grid.min_max_of_region(min0, max0);
+            // If the grid size is smaller than the maximum leaf size, create a
+            // leaf node.
+            if grid_size.x <= Self::MAX_LEAF_CELL_DIM
+                && grid_size.y <= Self::MAX_LEAF_CELL_DIM
+            {
+                let index = Self::build_leaf(nodes, min0, max0, min_height, max_height);
+                *child0 = NodeIndex::some(index);
+            } else {
+                // Otherwise, create a branch node.
+                let split_axis = if grid_size.x > grid_size.y {
+                    Axis::Horizontal
+                } else {
+                    Axis::Vertical
+                };
+                let index = Self::build_branch(
+                    nodes,
+                    split_axis,
+                    min0,
+                    max0,
+                    min_height,
+                    max_height,
+                    grid.bounds_of_region(min0, max0)
+                );
+                *child0 = NodeIndex::some(index);
+                Self::build_recursive(grid, index, nodes);
+            }
+        }
+
+        {
+            // Creation of the second child node.
+            let grid_size = max1 - min1;
+            let (min_height, max_height) = grid.min_max_of_region(min1, max1);
+            // If the grid size is smaller than the maximum leaf size, create a
+            // leaf node.
+            if grid_size.x <= Self::MAX_LEAF_CELL_DIM
+                && grid_size.y <= Self::MAX_LEAF_CELL_DIM
+            {
+                let index = Self::build_leaf(nodes, min1, max1, min_height, max_height);
+                *child1 = NodeIndex::some(index);
+            } else {
+                // Otherwise, create a branch node.
+                let split_axis = if grid_size.x > grid_size.y {
+                    Axis::Horizontal
+                } else {
+                    Axis::Vertical
+                };
+                let index = Self::build_branch(
+                    nodes,
+                    split_axis,
+                    min1,
+                    max1,
+                    min_height,
+                    max_height,
+                    grid.bounds_of_region(min1, max1)
+                );
+                *child1 = NodeIndex::some(index);
+                Self::build_recursive(grid, index, nodes);
+            }
+
+        }
+    }
+
+    fn build_leaf(nodes: &mut Vec<Node>, min: UVec2, max: UVec2, min_height: f32, max_height: f32) -> u32 {
         let node_index = nodes.len() as u32;
-        nodes.push(Node::Branch {
-            axis,
-            grid_min: Default::default(),
-            grid_max: Default::default(),
-            axis_index: 0,
-            child_0: 0,
-            child_1: 0,
-            aabb: Default::default(),
+        nodes.push(Node::Leaf {
+            min,
+            max,
+            min_height,
+            max_height,
         });
         node_index
     }
 
-    fn build_leaf(grid: &Grid<'ms>, nodes: &mut Vec<Node>, axis: Axis) -> u32 {
+    fn build_branch(nodes: &mut Vec<Node>, axis: Axis, min: UVec2, max: UVec2, min_height: f32, max_height: f32, bounds: Aabb) -> u32 {
         let node_index = nodes.len() as u32;
-        nodes.push(Node::Leaf {
-            grid_min: Default::default(),
-            grid_max: Default::default(),
-            min_height: 0.0,
-            max_height: 0.0,
-            aabb: Default::default(),
+        nodes.push(Node::Branch {
+            axis,
+            min,
+            max,
+            min_height,
+            max_height,
+            child0: NodeIndex::none(),
+            child1: NodeIndex::none(),
+            bounds,
         });
         node_index
     }
@@ -253,6 +352,10 @@ struct Cell {
     /// Vertical grid coordinate of the cell.
     y: u32,
     /// Index of 4 vertices of the cell, stored in counter-clockwise order.
+    /// a --- c
+    /// |     |
+    /// b --- d
+    /// The order is: a, b, c, d.
     verts: [u32; 4],
     /// Minimum height of the cell.
     min_height: f32,
@@ -315,6 +418,42 @@ impl<'ms> Grid<'ms> {
             height: grid_height as u32,
             cells,
         }
+    }
+
+    /// Returns the minimum and maximum height of the grid cells in the given
+    /// region defined by the minimum and maximum grid coordinates.
+    pub fn min_max_of_region(&self, min: UVec2, max: UVec2) -> (f32, f32) {
+        let mut min_height = f32::MAX;
+        let mut max_height = f32::MIN;
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                let cell = &self.cells[y as usize * self.width as usize + x as usize];
+                min_height = min_height.min(cell.min_height);
+                max_height = max_height.max(cell.max_height);
+            }
+        }
+        (min_height, max_height)
+    }
+
+    /// Returns the bounding box of the grid cells in the given region defined
+    /// by the minimum and maximum grid coordinates.
+    pub fn bounds_of_region(&self, min: UVec2, max: UVec2) -> Aabb {
+        let (min_height, max_height) = self.min_max_of_region(min, max);
+        let min_vert = self.mesh.verts[self.cell_at(min.x, min.y).verts[0] as usize];
+        let max_vert = self.mesh.verts[self.cell_at(max.x, max.y).verts[2] as usize];
+        // TODO: handedness
+        let min_horizontal = min_vert.x.min(max_vert.x);
+        let max_horizontal = min_vert.x.max(max_vert.x);
+        let min_vertical = min_vert.z.min(max_vert.z);
+        let max_vertical = min_vert.z.max(max_vert.z);
+        let min = Vec3::new(min_horizontal as f32, min_height, min_vertical);
+        let max = Vec3::new(max_horizontal as f32, max_height, max_vertical);
+        Aabb::new(min, max)
+    }
+
+    pub fn cell_at(&self, x: u32, y: u32) -> &Cell {
+        debug_assert!(x < self.width && y < self.height, "Cell index out of bounds: ({}, {})", x, y);
+        &self.cells[y as usize * self.width as usize + x as usize]
     }
 
     // /// Check if the given cell position is inside the grid.
