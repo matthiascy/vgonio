@@ -102,7 +102,7 @@ impl RenderableMesh {
             msurf: Some(mesh.msurf),
             vertices_count: mesh.num_verts as u32,
             indices_count: mesh.facets.len() as u32,
-            extent: mesh.extent,
+            extent: mesh.bounds,
             vertex_layout,
             vertex_buffer,
             index_buffer,

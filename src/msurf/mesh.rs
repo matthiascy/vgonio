@@ -17,7 +17,7 @@ pub struct MicroSurfaceMesh {
     pub msurf: Uuid,
 
     /// Axis-aligned bounding box of the mesh.
-    pub extent: Aabb,
+    pub bounds: Aabb,
 
     /// Axis alignment of the mesh.
     pub alignment: AxisAlignment,
@@ -59,6 +59,6 @@ impl MicroSurfaceMesh {
     /// right-handed Y up coordinate system.
     /// TODO(yang): unit of surface area
     pub fn macro_surface_area(&self) -> f32 {
-        (self.extent.max.x - self.extent.min.x) * (self.extent.max.z - self.extent.min.z)
+        (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.z - self.bounds.min.z)
     }
 }

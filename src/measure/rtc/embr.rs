@@ -233,11 +233,12 @@ pub fn measure_bsdf(
 
     // Calculate emitter's radius to match the surface's dimensions.
     let radius = match desc.emitter.radius() {
-        Radius::Auto(_) => um!(mesh.extent.max_edge() * 2.5),
+        // FIXME: max_extent() updated, thus 2.5 is not a good choice
+        Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
         Radius::Fixed(r) => r.in_micrometres(),
     };
 
-    log::debug!("mesh extent: {:?}", mesh.extent);
+    log::debug!("mesh extent: {:?}", mesh.bounds);
     log::debug!("emitter radius: {}", radius);
 
     // Upload the surface's mesh to the Embree scene.

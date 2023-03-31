@@ -34,7 +34,8 @@ pub fn measure_bsdf(
     cache: &Cache,
 ) {
     let radius = match desc.emitter.radius {
-        Radius::Auto(_) => um!(mesh.extent.max_edge() * 2.5),
+        // FIXME: max_extent() updated, thus 2.5 is not a good choice
+        Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
         Radius::Fixed(r) => r.in_micrometres(),
     };
     let max_bounces = desc.emitter.max_bounces;
@@ -127,6 +128,49 @@ enum Node {
     },
 }
 
+impl Node {
+    pub fn is_leaf(&self) -> bool { matches!(self, Node::Leaf { .. }) }
+
+    pub fn is_branch(&self) -> bool { matches!(self, Node::Branch { .. }) }
+
+    /// Returns the minimum grid coordinate of the node.
+    pub fn min(&self) -> UVec2 {
+        match self {
+            Node::Leaf { min, .. } => *min,
+            Node::Branch { min, .. } => *min,
+        }
+    }
+
+    /// Returns the maximum grid coordinate of the node.
+    pub fn max(&self) -> UVec2 {
+        match self {
+            Node::Leaf { max, .. } => *max,
+            Node::Branch { max, .. } => *max,
+        }
+    }
+
+    pub fn axis(&self) -> Option<Axis> {
+        match self {
+            Node::Leaf { .. } => None,
+            Node::Branch { axis, .. } => Some(*axis),
+        }
+    }
+
+    pub fn set_child0(&mut self, child0: NodeIndex) {
+        match self {
+            Node::Leaf { .. } => panic!("Leaf node has no children"),
+            Node::Branch { child0: c0, .. } => *c0 = child0,
+        }
+    }
+
+    pub fn set_child1(&mut self, child1: NodeIndex) {
+        match self {
+            Node::Leaf { .. } => panic!("Leaf node has no children"),
+            Node::Branch { child1: c1, .. } => *c1 = child1,
+        }
+    }
+}
+
 /// Index of a node in the kd-tree.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct NodeIndex(u32);
@@ -143,12 +187,6 @@ impl NodeIndex {
     fn unwrap(self) -> u32 { self.0 }
 }
 
-impl Node {
-    pub fn is_leaf(&self) -> bool { matches!(self, Node::Leaf { .. }) }
-
-    pub fn is_branch(&self) -> bool { matches!(self, Node::Branch { .. }) }
-}
-
 impl<'ms> KdTree<'ms> {
     /// Maximum number of grid cells in a leaf node in each dimension.
     pub const MAX_LEAF_CELL_DIM: u32 = 32;
@@ -156,7 +194,8 @@ impl<'ms> KdTree<'ms> {
     pub fn new(grid: &Grid<'ms>) -> Self {
         let mut nodes = Vec::new();
         let root = Self::build_branch(&mut nodes, Axis::Horizontal, UVec2::new(0, 0), UVec2::new(grid.width - 1, grid.height - 1),
-                           grid.surf.min, grid.surf.max, grid.mesh.aabb);
+                           grid.surf.min, grid.surf.max, grid.mesh.bounds
+        );
         Self::build(grid, &mut nodes);
         Self {
             surf: grid.surf,
@@ -176,13 +215,15 @@ impl<'ms> KdTree<'ms> {
         parent: u32,
         nodes: &mut Vec<Node>,
     ) {
-        let parent = &mut nodes[parent as usize];
-
-        if parent.is_leaf() {
+        if nodes[parent as usize].is_leaf() {
             return;
         }
 
-        let Some(Node::Branch {min, max, axis, child0, child1, ..}) = parent;
+        let (min, max, axis) = {
+            let parent = &nodes[parent as usize];
+            (parent.min(), parent.max(), parent.axis().unwrap())
+        };
+
         let ((min0, max0), (min1, max1)) = match axis {
             Axis::Horizontal => {
                 let min0 = UVec2::new(min.x, min.y);
@@ -210,7 +251,7 @@ impl<'ms> KdTree<'ms> {
                 && grid_size.y <= Self::MAX_LEAF_CELL_DIM
             {
                 let index = Self::build_leaf(nodes, min0, max0, min_height, max_height);
-                *child0 = NodeIndex::some(index);
+                nodes[parent as usize].set_child0(NodeIndex::some(index));
             } else {
                 // Otherwise, create a branch node.
                 let split_axis = if grid_size.x > grid_size.y {
@@ -227,7 +268,7 @@ impl<'ms> KdTree<'ms> {
                     max_height,
                     grid.bounds_of_region(min0, max0)
                 );
-                *child0 = NodeIndex::some(index);
+                nodes[parent as usize].set_child0(NodeIndex::some(index));
                 Self::build_recursive(grid, index, nodes);
             }
         }
@@ -242,7 +283,7 @@ impl<'ms> KdTree<'ms> {
                 && grid_size.y <= Self::MAX_LEAF_CELL_DIM
             {
                 let index = Self::build_leaf(nodes, min1, max1, min_height, max_height);
-                *child1 = NodeIndex::some(index);
+                nodes[parent as usize].set_child1(NodeIndex::some(index));
             } else {
                 // Otherwise, create a branch node.
                 let split_axis = if grid_size.x > grid_size.y {
@@ -259,7 +300,7 @@ impl<'ms> KdTree<'ms> {
                     max_height,
                     grid.bounds_of_region(min1, max1)
                 );
-                *child1 = NodeIndex::some(index);
+                nodes[parent as usize].set_child1(NodeIndex::some(index));
                 Self::build_recursive(grid, index, nodes);
             }
 
@@ -346,21 +387,21 @@ pub struct Grid<'ms> {
 
 /// A grid cell.
 #[derive(Debug, Copy, Clone)]
-struct Cell {
+pub struct Cell {
     /// Horizontal grid coordinate of the cell.
-    x: u32,
+    pub x: u32,
     /// Vertical grid coordinate of the cell.
-    y: u32,
+    pub y: u32,
     /// Index of 4 vertices of the cell, stored in counter-clockwise order.
     /// a --- c
     /// |     |
     /// b --- d
     /// The order is: a, b, c, d.
-    verts: [u32; 4],
+    pub verts: [u32; 4],
     /// Minimum height of the cell.
-    min_height: f32,
+    pub min_height: f32,
     /// Maximum height of the cell.
-    max_height: f32,
+    pub max_height: f32,
 }
 
 impl Default for Cell {
@@ -741,354 +782,354 @@ impl<'ms> Grid<'ms> {
     //         }
     //     }
     //}
-
-    /// Calculate the intersection test result of the ray with the triangles
-    /// inside of a cell.
-    ///
-    /// # Returns
-    ///
-    /// A vector of intersection information [`RayTriInt`] with corresponding
-    /// triangle index.
-    fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriIsect, Option<u32>)> {
-        let tris = self.triangles_at(cell);
-        tris.iter()
-            .filter_map(|(index, pts)| {
-                log::debug!("               - isect test with tri: {:?}", index);
-                ray_tri_intersect_woop(ray, pts)
-                    // ray_tri_intersect_moller_trumbore(ray, pts)
-                    .map(|isect| {
-                        let tris_per_row = (self.surf.cols - 1) * 2;
-                        let cells_per_row = self.surf.cols - 1;
-                        let tri_index = *index as usize;
-                        let is_tri_index_odd = tri_index % 2 != 0;
-                        let cell_index = tri_index / 2;
-                        let cell_row = cell_index / cells_per_row;
-                        let cell_col = cell_index % cells_per_row;
-                        let is_first_col = cell_col == 0;
-                        let is_last_col = cell_col == cells_per_row - 1;
-                        let is_first_row = cell_row == 0;
-                        let is_last_row = cell_row == self.surf.rows - 1;
-                        let adjacent: Option<(usize, Vec3)> = if isect.u.abs() < 2.0 * f32::EPSILON
-                        {
-                            // u == 0, intersection happens on the first edge of triangle
-                            // If the triangle index is odd or it's not located in the cell of the
-                            // 1st column
-                            if is_tri_index_odd || !is_first_col {
-                                log::debug!(
-                                    "              adjacent triangle of {} is {}",
-                                    tri_index,
-                                    tri_index - 1
-                                );
-                                Some((tri_index - 1, self.mesh.facet_normals[tri_index - 1]))
-                            } else {
-                                None
-                            }
-                        } else if isect.v.abs() < 2.0 * f32::EPSILON {
-                            // v == 0, intersection happens on the second edge of triangle
-                            if !is_tri_index_odd && !is_first_row {
-                                log::debug!(
-                                    "              adjacent triangle of {} is {}",
-                                    tri_index,
-                                    tri_index - (tris_per_row - 1)
-                                );
-                                Some((
-                                    tri_index - (tris_per_row - 1),
-                                    (self.mesh.facet_normals[tri_index - (tris_per_row - 1)]),
-                                ))
-                            } else if is_tri_index_odd && !is_last_col {
-                                log::debug!(
-                                    "              adjacent triangle of {} is {}",
-                                    tri_index,
-                                    tri_index + 1
-                                );
-                                Some((tri_index + 1, self.mesh.facet_normals[tri_index + 1]))
-                            } else {
-                                None
-                            }
-                        } else if (isect.u + isect.v - 1.0).abs() < f32::EPSILON {
-                            // u + v == 1, intersection happens on the third edge of triangle
-                            if !is_tri_index_odd {
-                                log::debug!(
-                                    "              adjacent triangle of {} is {}",
-                                    tri_index,
-                                    tri_index + 1
-                                );
-                                Some((tri_index + 1, self.mesh.facet_normals[tri_index + 1]))
-                            } else if is_tri_index_odd && !is_last_row {
-                                log::debug!(
-                                    "              adjacent triangle of {} is {}",
-                                    tri_index,
-                                    tri_index + (tris_per_row - 1)
-                                );
-                                Some((
-                                    tri_index + (tris_per_row - 1),
-                                    self.mesh.facet_normals[tri_index + (tris_per_row - 1)],
-                                ))
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                        match adjacent {
-                            None => (*index, isect, None),
-                            Some((adj_tri, adj_n)) => {
-                                let avg_n = (isect.n + adj_n).normalize();
-                                log::debug!(
-                                    "              -- hitting shared edge, use averaged normal: \
-                                     {:?}",
-                                    avg_n
-                                );
-                                (
-                                    *index,
-                                    RayTriIsect { n: avg_n, ..isect },
-                                    Some(adj_tri as u32),
-                                )
-                            }
-                        }
-                    })
-            })
-            .collect::<Vec<_>>()
-    }
-
-    pub fn trace_one_ray_dbg(
-        &self,
-        ray: Ray,
-        max_bounces: u32,
-        curr_bounces: u32,
-        last_prim: Option<u32>,
-        output: &mut Vec<Ray>,
-    ) {
-        log::debug!("[{curr_bounces}]");
-        log::debug!("Trace {:?}", ray);
-        output.push(ray);
-
-        let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
-            log::debug!(
-                "  - ray origin is outside of the grid, test if it intersects with the bounding \
-                 box"
-            );
-            // The ray origin is outside the grid, tests first with the bounding box.
-            self.mesh
-                .extent
-                .intersect_with_ray(ray, f32::EPSILON, f32::INFINITY)
-                .map(|point| {
-                    log::debug!("  - intersected with bounding box: {:?}", point);
-                    // Displace the hit point backwards along the ray direction.
-                    point - ray.d * 0.001
-                })
-        } else {
-            Some(ray.o)
-        };
-        log::debug!("  - entering point: {:?}", entering_point);
-
-        if let Some(start) = entering_point {
-            match self.traverse(start.xz(), ray.d.xz()) {
-                GridTraversal::FromTopOrBottom(cell) => {
-                    log::debug!("  - [top/bot] traversed cells: {:?}", cell);
-                    // The ray coming from the top or bottom of the grid, calculate the intersection
-                    // with the grid surface.
-                    let intersections = self.intersect_with_cell(ray, cell);
-                    log::debug!("  - [top/bot] intersections: {:?}", intersections);
-                    match intersections.len() {
-                        0 => {}
-                        1 | 2 => {
-                            log::debug!("  --> intersected with triangle {:?}", intersections[0].0);
-                            let p = intersections[0].1.p;
-                            let n = intersections[0].1.n;
-                            log::debug!("    n: {:?}", n);
-                            log::debug!("    p: {:?}", p);
-                            let d = reflect(ray.d.into(), n.into()).normalize();
-                            log::debug!("    r: {:?}", d);
-                            self.trace_one_ray_dbg(
-                                Ray::new(p, d.into()),
-                                max_bounces,
-                                curr_bounces + 1,
-                                Some(intersections[0].0),
-                                output,
-                            );
-                        }
-                        _ => {
-                            unreachable!(
-                                "Can't have more than 2 intersections with one cell of the grid."
-                            );
-                        }
-                    }
-                }
-                GridTraversal::Traversed { cells, dists } => {
-                    let displaced_ray = Ray::new(start, ray.d);
-                    log::debug!("      -- traversed cells: {:?}", cells);
-                    log::debug!("      -- traversed dists: {:?}", dists);
-                    // For the reason that the entering point is displaced backwards along the ray
-                    // direction, here we will skip the first cells if it is
-                    // outside of the grid.
-                    let first = cells.iter().position(|c| self.contains(c)).unwrap();
-                    let ray_dists = {
-                        let cos = ray.d.dot(Vec3::Y).abs();
-                        let sin = (1.0 - cos * cos).sqrt();
-                        dists
-                            .iter()
-                            .map(|d| displaced_ray.o.y + *d / sin * displaced_ray.d.y)
-                            .collect::<Vec<_>>()
-                    };
-                    log::debug!("      -- ray dists:       {:?}", ray_dists);
-
-                    let mut intersections = vec![None; cells.len()];
-                    for i in first..cells.len() {
-                        let cell = &cells[i];
-                        let entering = ray_dists[i];
-                        let exiting = ray_dists[i + 1];
-                        if self.intersections_happened_at(*cell, entering, exiting) {
-                            log::debug!("        ✓ intersected");
-                            log::debug!("          -> intersect with triangles in cell");
-                            let prim_intersections = match last_prim {
-                                Some(last_prim) => {
-                                    log::debug!("             has last prim");
-                                    self.intersect_with_cell(displaced_ray, cells[i])
-                                        .into_iter()
-                                        .filter(|(index, info, _)| {
-                                            log::debug!(
-                                                "            isect test with tri: {:?}, \
-                                                 last_prim: {:?}",
-                                                index,
-                                                last_prim
-                                            );
-                                            *index != last_prim
-                                        })
-                                        .collect::<Vec<_>>()
-                                }
-                                None => {
-                                    log::debug!("             no last prim");
-                                    self.intersect_with_cell(displaced_ray, cells[i])
-                                }
-                            };
-                            log::debug!("           intersections: {:?}", prim_intersections);
-                            match prim_intersections.len() {
-                                0 => {
-                                    intersections[i] = None;
-                                }
-                                1 => {
-                                    let p = prim_intersections[0].1.p;
-                                    let prim = prim_intersections[0].0;
-                                    log::debug!("  - p: {:?}", p);
-                                    // Avoid backface hitting.
-                                    if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
-                                        let d =
-                                            reflect(ray.d.into(), prim_intersections[0].1.n.into());
-                                        intersections[i] = Some((p, d, prim))
-                                    }
-                                }
-                                2 => {
-                                    // When the ray is intersected with two triangles inside of a
-                                    // cell, check if they are
-                                    // the same.
-                                    let prim0 = &prim_intersections[0];
-                                    let prim1 = &prim_intersections[1];
-                                    match (prim0.2, prim1.2) {
-                                        (Some(adj_0), Some(adj_1)) => {
-                                            if prim0.0 == adj_1 && prim1.0 == adj_0 {
-                                                let p = prim0.1.p;
-                                                let n = prim0.1.n;
-                                                let prim = prim0.0;
-                                                log::debug!("    n: {:?}", n);
-                                                log::debug!("    p: {:?}", p);
-                                                if ray.d.dot(prim0.1.n) < 0.0 {
-                                                    let d = reflect(ray.d.into(), n.into());
-                                                    log::debug!("    r: {:?}", d);
-                                                    intersections[i] = Some((p, d, prim))
-                                                }
-                                            }
-                                        }
-                                        _ => {
-                                            panic!(
-                                                "Intersected with two triangles but they are not \
-                                                 the same! {}, {}",
-                                                prim_intersections[0].1.p,
-                                                prim_intersections[1].1.p
-                                            );
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    unreachable!(
-                                        "Can't have more than 2 intersections with one cell of \
-                                         the grid."
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    if let Some(Some((p, d, prim))) = intersections.iter().find(|i| i.is_some()) {
-                        self.trace_one_ray_dbg(
-                            Ray::new(*p, (*d).into()),
-                            max_bounces,
-                            curr_bounces + 1,
-                            Some(*prim),
-                            output,
-                        );
-                    }
-                }
-            }
-        } else {
-            log::debug!("  - no starting point");
-        }
-    }
-
-    pub fn trace_one_ray(
-        &self,
-        ray: Ray,
-        max_bounces: u32,
-        ior_t: &[RefractiveIndex],
-    ) -> Option<RtcRecord> {
-        // self.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut output);
-        // output
-        todo!()
-    }
-
-    fn trace_one_ray_inner(
-        &self,
-        ray: Ray,
-        max_bounces: u32,
-        curr_bounces: u32,
-        prev_prim: Option<u32>,
-        trajectory: &mut Vec<TrajectoryNode>,
-    ) {
-        log::debug!("--- current bounce {} ----", curr_bounces);
-        trajectory.push(TrajectoryNode { ray, cos: 0.0 });
-        log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());
-
-        if curr_bounces >= max_bounces {
-            log::debug!("  > bounce limit reached");
-            return;
-        }
-
-        // todo: hierachical grid
-
-        let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
-            log::debug!(
-                "  > entering point outside of grid -- test if it intersects with the bounding box"
-            );
-            self.mesh
-                .extent
-                .intersect_with_ray(ray, f32::EPSILON, f32::INFINITY)
-                .map(|point| {
-                    log::debug!("    - intersected with bounding box: {:?}", point);
-                    // Displaces the hit point backwards along the ray direction.
-                    point - ray.d * 0.001
-                })
-        } else {
-            Some(ray.o)
-        };
-        log::debug!("  > entering point: {:?}", entering_point);
-
-        if let Some(start) = entering_point {
-            match self.traverse(start.xz(), ray.d.xz()) {
-                GridTraversal::FromTopOrBottom(_) => {}
-                GridTraversal::Traversed { .. } => {}
-            }
-        }
-    }
+    //
+    // /// Calculate the intersection test result of the ray with the triangles
+    // /// inside of a cell.
+    // ///
+    // /// # Returns
+    // ///
+    // /// A vector of intersection information [`RayTriInt`] with corresponding
+    // /// triangle index.
+    // fn intersect_with_cell(&self, ray: Ray, cell: IVec2) -> Vec<(u32, RayTriIsect, Option<u32>)> {
+    //     let tris = self.triangles_at(cell);
+    //     tris.iter()
+    //         .filter_map(|(index, pts)| {
+    //             log::debug!("               - isect test with tri: {:?}", index);
+    //             ray_tri_intersect_woop(ray, pts)
+    //                 // ray_tri_intersect_moller_trumbore(ray, pts)
+    //                 .map(|isect| {
+    //                     let tris_per_row = (self.surf.cols - 1) * 2;
+    //                     let cells_per_row = self.surf.cols - 1;
+    //                     let tri_index = *index as usize;
+    //                     let is_tri_index_odd = tri_index % 2 != 0;
+    //                     let cell_index = tri_index / 2;
+    //                     let cell_row = cell_index / cells_per_row;
+    //                     let cell_col = cell_index % cells_per_row;
+    //                     let is_first_col = cell_col == 0;
+    //                     let is_last_col = cell_col == cells_per_row - 1;
+    //                     let is_first_row = cell_row == 0;
+    //                     let is_last_row = cell_row == self.surf.rows - 1;
+    //                     let adjacent: Option<(usize, Vec3)> = if isect.u.abs() < 2.0 * f32::EPSILON
+    //                     {
+    //                         // u == 0, intersection happens on the first edge of triangle
+    //                         // If the triangle index is odd or it's not located in the cell of the
+    //                         // 1st column
+    //                         if is_tri_index_odd || !is_first_col {
+    //                             log::debug!(
+    //                                 "              adjacent triangle of {} is {}",
+    //                                 tri_index,
+    //                                 tri_index - 1
+    //                             );
+    //                             Some((tri_index - 1, self.mesh.facet_normals[tri_index - 1]))
+    //                         } else {
+    //                             None
+    //                         }
+    //                     } else if isect.v.abs() < 2.0 * f32::EPSILON {
+    //                         // v == 0, intersection happens on the second edge of triangle
+    //                         if !is_tri_index_odd && !is_first_row {
+    //                             log::debug!(
+    //                                 "              adjacent triangle of {} is {}",
+    //                                 tri_index,
+    //                                 tri_index - (tris_per_row - 1)
+    //                             );
+    //                             Some((
+    //                                 tri_index - (tris_per_row - 1),
+    //                                 (self.mesh.facet_normals[tri_index - (tris_per_row - 1)]),
+    //                             ))
+    //                         } else if is_tri_index_odd && !is_last_col {
+    //                             log::debug!(
+    //                                 "              adjacent triangle of {} is {}",
+    //                                 tri_index,
+    //                                 tri_index + 1
+    //                             );
+    //                             Some((tri_index + 1, self.mesh.facet_normals[tri_index + 1]))
+    //                         } else {
+    //                             None
+    //                         }
+    //                     } else if (isect.u + isect.v - 1.0).abs() < f32::EPSILON {
+    //                         // u + v == 1, intersection happens on the third edge of triangle
+    //                         if !is_tri_index_odd {
+    //                             log::debug!(
+    //                                 "              adjacent triangle of {} is {}",
+    //                                 tri_index,
+    //                                 tri_index + 1
+    //                             );
+    //                             Some((tri_index + 1, self.mesh.facet_normals[tri_index + 1]))
+    //                         } else if is_tri_index_odd && !is_last_row {
+    //                             log::debug!(
+    //                                 "              adjacent triangle of {} is {}",
+    //                                 tri_index,
+    //                                 tri_index + (tris_per_row - 1)
+    //                             );
+    //                             Some((
+    //                                 tri_index + (tris_per_row - 1),
+    //                                 self.mesh.facet_normals[tri_index + (tris_per_row - 1)],
+    //                             ))
+    //                         } else {
+    //                             None
+    //                         }
+    //                     } else {
+    //                         None
+    //                     };
+    //                     match adjacent {
+    //                         None => (*index, isect, None),
+    //                         Some((adj_tri, adj_n)) => {
+    //                             let avg_n = (isect.n + adj_n).normalize();
+    //                             log::debug!(
+    //                                 "              -- hitting shared edge, use averaged normal: \
+    //                                  {:?}",
+    //                                 avg_n
+    //                             );
+    //                             (
+    //                                 *index,
+    //                                 RayTriIsect { n: avg_n, ..isect },
+    //                                 Some(adj_tri as u32),
+    //                             )
+    //                         }
+    //                     }
+    //                 })
+    //         })
+    //         .collect::<Vec<_>>()
+    // }
+    //
+    // pub fn trace_one_ray_dbg(
+    //     &self,
+    //     ray: Ray,
+    //     max_bounces: u32,
+    //     curr_bounces: u32,
+    //     last_prim: Option<u32>,
+    //     output: &mut Vec<Ray>,
+    // ) {
+    //     log::debug!("[{curr_bounces}]");
+    //     log::debug!("Trace {:?}", ray);
+    //     output.push(ray);
+    //
+    //     let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
+    //         log::debug!(
+    //             "  - ray origin is outside of the grid, test if it intersects with the bounding \
+    //              box"
+    //         );
+    //         // The ray origin is outside the grid, tests first with the bounding box.
+    //         self.mesh
+    //             .extent
+    //             .ray_intersects(ray, f32::EPSILON, f32::INFINITY)
+    //             .map(|point| {
+    //                 log::debug!("  - intersected with bounding box: {:?}", point);
+    //                 // Displace the hit point backwards along the ray direction.
+    //                 point - ray.d * 0.001
+    //             })
+    //     } else {
+    //         Some(ray.o)
+    //     };
+    //     log::debug!("  - entering point: {:?}", entering_point);
+    //
+    //     if let Some(start) = entering_point {
+    //         match self.traverse(start.xz(), ray.d.xz()) {
+    //             GridTraversal::FromTopOrBottom(cell) => {
+    //                 log::debug!("  - [top/bot] traversed cells: {:?}", cell);
+    //                 // The ray coming from the top or bottom of the grid, calculate the intersection
+    //                 // with the grid surface.
+    //                 let intersections = self.intersect_with_cell(ray, cell);
+    //                 log::debug!("  - [top/bot] intersections: {:?}", intersections);
+    //                 match intersections.len() {
+    //                     0 => {}
+    //                     1 | 2 => {
+    //                         log::debug!("  --> intersected with triangle {:?}", intersections[0].0);
+    //                         let p = intersections[0].1.p;
+    //                         let n = intersections[0].1.n;
+    //                         log::debug!("    n: {:?}", n);
+    //                         log::debug!("    p: {:?}", p);
+    //                         let d = reflect(ray.d.into(), n.into()).normalize();
+    //                         log::debug!("    r: {:?}", d);
+    //                         self.trace_one_ray_dbg(
+    //                             Ray::new(p, d.into()),
+    //                             max_bounces,
+    //                             curr_bounces + 1,
+    //                             Some(intersections[0].0),
+    //                             output,
+    //                         );
+    //                     }
+    //                     _ => {
+    //                         unreachable!(
+    //                             "Can't have more than 2 intersections with one cell of the grid."
+    //                         );
+    //                     }
+    //                 }
+    //             }
+    //             GridTraversal::Traversed { cells, dists } => {
+    //                 let displaced_ray = Ray::new(start, ray.d);
+    //                 log::debug!("      -- traversed cells: {:?}", cells);
+    //                 log::debug!("      -- traversed dists: {:?}", dists);
+    //                 // For the reason that the entering point is displaced backwards along the ray
+    //                 // direction, here we will skip the first cells if it is
+    //                 // outside of the grid.
+    //                 let first = cells.iter().position(|c| self.contains(c)).unwrap();
+    //                 let ray_dists = {
+    //                     let cos = ray.d.dot(Vec3::Y).abs();
+    //                     let sin = (1.0 - cos * cos).sqrt();
+    //                     dists
+    //                         .iter()
+    //                         .map(|d| displaced_ray.o.y + *d / sin * displaced_ray.d.y)
+    //                         .collect::<Vec<_>>()
+    //                 };
+    //                 log::debug!("      -- ray dists:       {:?}", ray_dists);
+    //
+    //                 let mut intersections = vec![None; cells.len()];
+    //                 for i in first..cells.len() {
+    //                     let cell = &cells[i];
+    //                     let entering = ray_dists[i];
+    //                     let exiting = ray_dists[i + 1];
+    //                     if self.intersections_happened_at(*cell, entering, exiting) {
+    //                         log::debug!("        ✓ intersected");
+    //                         log::debug!("          -> intersect with triangles in cell");
+    //                         let prim_intersections = match last_prim {
+    //                             Some(last_prim) => {
+    //                                 log::debug!("             has last prim");
+    //                                 self.intersect_with_cell(displaced_ray, cells[i])
+    //                                     .into_iter()
+    //                                     .filter(|(index, info, _)| {
+    //                                         log::debug!(
+    //                                             "            isect test with tri: {:?}, \
+    //                                              last_prim: {:?}",
+    //                                             index,
+    //                                             last_prim
+    //                                         );
+    //                                         *index != last_prim
+    //                                     })
+    //                                     .collect::<Vec<_>>()
+    //                             }
+    //                             None => {
+    //                                 log::debug!("             no last prim");
+    //                                 self.intersect_with_cell(displaced_ray, cells[i])
+    //                             }
+    //                         };
+    //                         log::debug!("           intersections: {:?}", prim_intersections);
+    //                         match prim_intersections.len() {
+    //                             0 => {
+    //                                 intersections[i] = None;
+    //                             }
+    //                             1 => {
+    //                                 let p = prim_intersections[0].1.p;
+    //                                 let prim = prim_intersections[0].0;
+    //                                 log::debug!("  - p: {:?}", p);
+    //                                 // Avoid backface hitting.
+    //                                 if ray.d.dot(prim_intersections[0].1.n) < 0.0 {
+    //                                     let d =
+    //                                         reflect(ray.d.into(), prim_intersections[0].1.n.into());
+    //                                     intersections[i] = Some((p, d, prim))
+    //                                 }
+    //                             }
+    //                             2 => {
+    //                                 // When the ray is intersected with two triangles inside of a
+    //                                 // cell, check if they are
+    //                                 // the same.
+    //                                 let prim0 = &prim_intersections[0];
+    //                                 let prim1 = &prim_intersections[1];
+    //                                 match (prim0.2, prim1.2) {
+    //                                     (Some(adj_0), Some(adj_1)) => {
+    //                                         if prim0.0 == adj_1 && prim1.0 == adj_0 {
+    //                                             let p = prim0.1.p;
+    //                                             let n = prim0.1.n;
+    //                                             let prim = prim0.0;
+    //                                             log::debug!("    n: {:?}", n);
+    //                                             log::debug!("    p: {:?}", p);
+    //                                             if ray.d.dot(prim0.1.n) < 0.0 {
+    //                                                 let d = reflect(ray.d.into(), n.into());
+    //                                                 log::debug!("    r: {:?}", d);
+    //                                                 intersections[i] = Some((p, d, prim))
+    //                                             }
+    //                                         }
+    //                                     }
+    //                                     _ => {
+    //                                         panic!(
+    //                                             "Intersected with two triangles but they are not \
+    //                                              the same! {}, {}",
+    //                                             prim_intersections[0].1.p,
+    //                                             prim_intersections[1].1.p
+    //                                         );
+    //                                     }
+    //                                 }
+    //                             }
+    //                             _ => {
+    //                                 unreachable!(
+    //                                     "Can't have more than 2 intersections with one cell of \
+    //                                      the grid."
+    //                                 );
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //
+    //                 if let Some(Some((p, d, prim))) = intersections.iter().find(|i| i.is_some()) {
+    //                     self.trace_one_ray_dbg(
+    //                         Ray::new(*p, (*d).into()),
+    //                         max_bounces,
+    //                         curr_bounces + 1,
+    //                         Some(*prim),
+    //                         output,
+    //                     );
+    //                 }
+    //             }
+    //         }
+    //     } else {
+    //         log::debug!("  - no starting point");
+    //     }
+    // }
+    //
+    // pub fn trace_one_ray(
+    //     &self,
+    //     ray: Ray,
+    //     max_bounces: u32,
+    //     ior_t: &[RefractiveIndex],
+    // ) -> Option<RtcRecord> {
+    //     // self.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut output);
+    //     // output
+    //     todo!()
+    // }
+    //
+    // fn trace_one_ray_inner(
+    //     &self,
+    //     ray: Ray,
+    //     max_bounces: u32,
+    //     curr_bounces: u32,
+    //     prev_prim: Option<u32>,
+    //     trajectory: &mut Vec<TrajectoryNode>,
+    // ) {
+    //     log::debug!("--- current bounce {} ----", curr_bounces);
+    //     trajectory.push(TrajectoryNode { ray, cos: 0.0 });
+    //     log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());
+    //
+    //     if curr_bounces >= max_bounces {
+    //         log::debug!("  > bounce limit reached");
+    //         return;
+    //     }
+    //
+    //     // todo: hierachical grid
+    //
+    //     let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
+    //         log::debug!(
+    //             "  > entering point outside of grid -- test if it intersects with the bounding box"
+    //         );
+    //         self.mesh
+    //             .extent
+    //             .ray_intersects(ray, f32::EPSILON, f32::INFINITY)
+    //             .map(|point| {
+    //                 log::debug!("    - intersected with bounding box: {:?}", point);
+    //                 // Displaces the hit point backwards along the ray direction.
+    //                 point - ray.d * 0.001
+    //             })
+    //     } else {
+    //         Some(ray.o)
+    //     };
+    //     log::debug!("  > entering point: {:?}", entering_point);
+    //
+    //     if let Some(start) = entering_point {
+    //         match self.traverse(start.xz(), ray.d.xz()) {
+    //             GridTraversal::FromTopOrBottom(_) => {}
+    //             GridTraversal::Traversed { .. } => {}
+    //         }
+    //     }
+    // }
 }
 
 fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalize() }

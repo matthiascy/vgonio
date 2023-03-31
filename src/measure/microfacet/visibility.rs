@@ -1467,7 +1467,7 @@ pub fn measure_masking_shadowing(
             });
         let facets_idx_num = surface.facets.len() as u32;
         let diagonal =
-            (surface.extent.max - surface.extent.min).max_element() * std::f32::consts::SQRT_2;
+            (surface.bounds.max - surface.bounds.min).max_element() * std::f32::consts::SQRT_2;
         let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
         let proj_mat =
             Projection::orthographic_matrix(diagonal * 0.5, diagonal * 1.5, diagonal, diagonal);

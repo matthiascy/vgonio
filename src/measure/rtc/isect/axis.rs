@@ -101,29 +101,29 @@ impl IndexMut<Axis> for Vec3 {
 // TODO: replace with proptest
 #[cfg(test)]
 mod test {
+    use proptest::prelude::*;
     use crate::measure::rtc::isect::Axis;
-    use quickcheck::quickcheck;
 
-    quickcheck! {
-        fn immutable_test(a: u32, b: u32, c: u32) -> bool {
+    proptest! {
+        fn immutable_test(a: u32, b: u32, c: u32){
             let v = [a, b, c];
 
-            v[0] == v[Axis::X] && v[1] == v[Axis::Y] && v[2] == v[Axis::Z]
+            prop_assert_eq!(v[Axis::X], a);
+            prop_assert_eq!(v[Axis::Y], b);
+            prop_assert_eq!(v[Axis::Z], c);
         }
     }
 
-    quickcheck! {
-        fn mutable_test(a: f32, b: f32, c: f32) -> bool {
-            if a.is_nan() || b.is_nan() || c.is_nan() {
-                return true;
-            }
-
+    proptest! {
+        fn mutable_test(a: f32, b: f32, c: f32) {
             let mut v = [a, b, c];
             v[Axis::X] *= 2.0;
             v[Axis::Y] *= 1.1;
             v[Axis::Z] *= 0.6;
 
-            v[0] == a * 2.0 && v[1] == b * 1.1 && v[2] == c * 0.6
+            prop_assert_eq!(v[Axis::X], a * 2.0);
+            prop_assert_eq!(v[Axis::Y], b * 1.1);
+            prop_assert_eq!(v[Axis::Z], c * 0.6);
         }
     }
 }

@@ -23,7 +23,8 @@ use super::state::GuiRenderer;
 pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &Grid) -> Vec<Ray> {
     log::debug!("trace_ray_grid_dbg: {:?}", ray);
     let mut rays = vec![];
-    grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut rays);
+    // grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut rays);
+    // TODO: fix this
     log::debug!("traced rays: {:?}", rays);
     rays
 }

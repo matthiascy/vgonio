@@ -52,7 +52,7 @@ optix = []
 shaderc = "0.8"
 
 [dev-dependencies]
-quickcheck = "1"
+proptest = "1"
 
 [profile.dev]
 split-debuginfo = "unpacked"

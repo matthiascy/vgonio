@@ -499,7 +499,7 @@ impl MicroSurface {
             uuid: uuid::Uuid::new_v4(),
             num_facets: num_faces,
             num_verts: verts.len(),
-            extent,
+            bounds: extent,
             alignment,
             verts,
             facets: tri_faces,

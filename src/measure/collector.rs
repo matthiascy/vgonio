@@ -196,7 +196,8 @@ impl Collector {
 
         // Calculate the radius of the collector.
         let radius = match self.radius {
-            Radius::Auto(_) => um!(mesh.extent.max_edge() * 2.5),
+            // FIXME: max_extent() updated, thus 2.5 is not a good choice
+            Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
             Radius::Fixed(r) => r.in_micrometres(),
         };
 
