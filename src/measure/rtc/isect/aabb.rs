@@ -5,6 +5,7 @@ use cfg_if::cfg_if;
 #[cfg(target_arch = "x86")]
 use core::arch::x86::*;
 use glam::Vec3;
+use std::ops::{Index, IndexMut};
 
 use crate::{
     common::{gamma_f32, ulp_eq},
@@ -341,6 +342,34 @@ impl PartialEq for Aabb {
     }
 }
 
+macro impl_aabb_indexing($($t:ty)*) {
+    $(
+        impl Index<$t> for Aabb {
+            type Output = Vec3;
+
+            fn index(&self, index: $t) -> &Self::Output {
+                match index {
+                    0 => &self.min,
+                    1 => &self.max,
+                    _ => panic!("Invalid Aabb index: {}", index),
+                }
+            }
+        }
+
+        impl IndexMut<$t> for Aabb {
+            fn index_mut(&mut self, index: $t) -> &mut Self::Output {
+                match index {
+                    0 => &mut self.min,
+                    1 => &mut self.max,
+                    _ => panic!("Invalid Aabb index: {}", index),
+                }
+            }
+        }
+    )*
+}
+
+impl_aabb_indexing!(usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,6 +538,18 @@ mod tests {
             prop_assert!(!aabb2.intersects(&aabb3), "3. {:?} should not intersect {:?}", aabb2, aabb3);
             prop_assert_eq!(aabb2.intersection(&aabb3), None, "4. {:?} should not intersect {:?}", aabb2, aabb3);
         }
+
+        #[test]
+        fn aabb_indexing(a in MIN..QUARTER, b in MIN..QUARTER, c in MIN..QUARTER,
+            d in HALF..THREE_QUARTERS, e in HALF..THREE_QUARTERS, f in HALF..THREE_QUARTERS) {
+            let min = Vec3::new(a, b, c);
+            let max = Vec3::new(d, e, f);
+            let aabb = Aabb::new(min, max);
+            prop_assert_eq!(aabb[0u8], min);
+            prop_assert_eq!(aabb[1i32], max);
+            prop_assert_eq!(aabb[0usize], min);
+            prop_assert_eq!(aabb[1isize], max);
+        }
     }
 }
 
@@ -516,7 +557,6 @@ mod tests {
 // /// The idea is to treat the AABB as the space inside of three pairs of
 // /// parallel planes. The ray is clipped by each pair of parallel planes,
 // /// and if any portion of the ray remains, it intersects the box.
-// ///         // TODO: math library, component wise multiplication
 // pub fn ray_intersects_p(&self, ray: Ray, t_min: f32, t_max: f32) -> bool {
 //     let mut t_enter = t_min;
 //     let mut t_exit = t_max;
