@@ -1,15 +1,16 @@
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
+use cfg_if::cfg_if;
 #[cfg(target_arch = "x86")]
 use core::arch::x86::*;
-use cfg_if::cfg_if;
 use glam::Vec3;
 
-use crate::{common::gamma_f32, measure::rtc::Ray};
+use crate::{
+    common::{gamma_f32, ulp_eq},
+    measure::rtc::{isect::Axis, Ray},
+};
 use serde::{Deserialize, Serialize};
-use crate::common::ulp_eq;
-use crate::measure::rtc::isect::Axis;
 
 // TODO: test
 
@@ -59,9 +60,7 @@ impl Aabb {
     }
 
     /// Returns the surface area of the box.
-    pub fn area(&self) -> f32 {
-        self.half_area() * 2.0
-    }
+    pub fn area(&self) -> f32 { self.half_area() * 2.0 }
 
     /// Returns half the surface area of the box.
     pub fn half_area(&self) -> f32 {
@@ -83,18 +82,21 @@ impl Aabb {
                 unsafe {
                     _mm_storeu_ps(
                         center.as_mut_ptr(),
-                        _mm_mul_ps(
-                            _mm_add_ps(
+                        _mm_add_ps(
+                            _mm_mul_ps(
                                 _mm_setr_ps(self.min.x, self.min.y, self.min.z, 0.0),
-                                _mm_setr_ps(self.max.x, self.max.y, self.max.z, 0.0),
+                                _mm_set1_ps(0.5), // broadcast 0.5
                             ),
-                            _mm_set1_ps(0.5), // broadcast 0.5
+                            _mm_mul_ps(
+                                _mm_setr_ps(self.max.x, self.max.y, self.max.z, 0.0),
+                                _mm_set1_ps(0.5), // broadcast 0.5
+                            ),
                         ),
                     );
                 }
                 Vec3::new(center[0], center[1], center[2])
             } else {
-                (self.min + self.max) * 0.5
+                self.min * 0.5 + self.max * 0.5
             }
         }
     }
@@ -102,9 +104,9 @@ impl Aabb {
     /// Computes the center of the box along the given axis.
     pub fn center_along_axis(&self, axis: Axis) -> f32 {
         match axis {
-            Axis::X => (self.min.x + self.max.x) * 0.5,
-            Axis::Y => (self.min.y + self.max.y) * 0.5,
-            Axis::Z => (self.min.z + self.max.z) * 0.5,
+            Axis::X => self.min.x * 0.5 + self.max.x * 0.5,
+            Axis::Y => self.min.y * 0.5 + self.max.y * 0.5,
+            Axis::Z => self.min.z * 0.5 + self.max.z * 0.5,
         }
     }
 
@@ -121,7 +123,7 @@ impl Aabb {
 
     /// Checks if the bounding box contains another bounding box.
     pub fn contains(&self, other: &Aabb) -> bool {
-        cfg_if!{
+        cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
                 unsafe {
                     let a_min = _mm_setr_ps(self.min.x, self.min.y, self.min.z, 0.0);
@@ -135,7 +137,7 @@ impl Aabb {
                     let cmp_mask = _mm_movemask_ps(_mm_and_ps(cmp_min, cmp_max));
 
                     // Check if the first AABB completely contains the second AABB.
-                    cmp_mask == 0b111
+                    cmp_mask == 0b1111
                 }
             } else {
                 self.min.x <= other.min.x && self.min.y <= other.min.y && self.min.z <= other.min.z
@@ -158,20 +160,13 @@ impl Aabb {
 
                     let cmp_mask = _mm_movemask_ps(_mm_and_ps(cmp_min, cmp_max));
 
-                    cmp_mask == 0b111
+                    cmp_mask == 0b1111
                 }
             } else {
                 self.min.x <= point.x && self.min.y <= point.y && self.min.z <= point.z
                     && self.max.x >= point.x && self.max.y >= point.y && self.max.z >= point.z
             }
         }
-    }
-
-    /// Enlarges the box by moving both min and max by `amount`.
-    pub fn enlarge(&mut self, amount: f32) {
-        let amount = Vec3::new(amount, amount, amount);
-        self.min -= amount;
-        self.max += amount;
     }
 
     /// Computes the box diagonal.
@@ -210,6 +205,16 @@ impl Aabb {
         }
     }
 
+    /// Returns the longest axis of the box.
+    pub fn max_extent_axis(&self) -> Axis { Axis::max_axis(self.extent()) }
+
+    /// Enlarges the box by moving both min and max by `amount`.
+    pub fn enlarge(&mut self, amount: f32) {
+        let amount = Vec3::new(amount, amount, amount);
+        self.min -= amount;
+        self.max += amount;
+    }
+
     /// Extends the box to contain another box.
     pub fn extend(&mut self, other: &Aabb) {
         cfg_if! {
@@ -242,7 +247,7 @@ impl Aabb {
     }
 
     /// Extend the bounding box with a point.
-    pub fn extend_point(&mut self, point: Vec3) {
+    pub fn extend_point(&mut self, point: &Vec3) {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
                 let mut min = [0.0_f32; 4];
@@ -273,7 +278,12 @@ impl Aabb {
     }
 
     /// Checks if the box is intersecting with another box.
-    pub fn intersects(&self, other: &Aabb) -> bool {
+    pub fn intersects(&self, other: &Aabb) -> bool { self.intersect_inner(other).is_some() }
+
+    /// Computes the intersection of two boxes.
+    pub fn intersection(&self, other: &Aabb) -> Option<Aabb> { self.intersect_inner(other) }
+
+    fn intersect_inner(&self, other: &Aabb) -> Option<Aabb> {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
                 let mut min = [0.0_f32; 4];
@@ -296,35 +306,20 @@ impl Aabb {
                 }
                 let min = Vec3::new(min[0], min[1], min[2]);
                 let max = Vec3::new(max[0], max[1], max[2]);
-                min.x <= max.x && min.y <= max.y && min.z <= max.z
+                (min.x <= max.x && min.y <= max.y && min.z <= max.z).then(|| Aabb { min, max })
             } else {
                 let min = self.min.max(other.min);
                 let max = self.max.min(other.max);
-                min.x <= max.x && min.y <= max.y && min.z <= max.z
+                (min.x <= max.x && min.y <= max.y && min.z <= max.z).then(|| Aabb { min, max })
             }
-        }
-    }
-
-    /// Computes the intersection of two boxes.
-    pub fn intersection(&self, other: &Aabb) -> Option<Aabb> {
-        if self.intersects(other) {
-            Some(Aabb {
-                min: self.min.max(other.min),
-                max: self.max.min(other.max),
-            })
-        } else {
-            None
         }
     }
 
     /// Checks if the box is flat in any direction.
     pub fn is_flat(&self) -> bool {
-        ulp_eq(self.min.x, self.max.x) || ulp_eq(self.min.y, self.max.y) || ulp_eq(self.min.z, self.max.z)
-    }
-
-    /// Returns the longest axis of the box.
-    pub fn longest_axis(&self) -> Axis {
-        Axis::max_axis(self.extent())
+        ulp_eq(self.min.x, self.max.x)
+            || ulp_eq(self.min.y, self.max.y)
+            || ulp_eq(self.min.z, self.max.z)
     }
 
     /// Unions two boxes.
@@ -348,9 +343,9 @@ impl PartialEq for Aabb {
 
 #[cfg(test)]
 mod tests {
-    use std::io::empty;
-    use proptest::prelude::*;
     use super::*;
+    use proptest::prelude::*;
+    use std::io::empty;
 
     #[test]
     fn aabb_creation() {
@@ -359,33 +354,45 @@ mod tests {
         assert_eq!(aabb0.max, Vec3::new(1.0, 1.0, 1.0));
 
         let aabb1 = Aabb::empty();
-        assert_eq!(aabb1.min, Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY));
-        assert_eq!(aabb1.max, Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY));
+        assert_eq!(
+            aabb1.min,
+            Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY)
+        );
+        assert_eq!(
+            aabb1.max,
+            Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY)
+        );
         assert!(!aabb1.is_valid());
 
         let aabb2 = Aabb::default();
         assert_eq!(aabb1, aabb2);
         assert!(!aabb2.is_valid());
 
-        let mut aabb3 = Aabb::from_points(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.8), Vec3::new(1.5, 1.0, 1.0));
+        let mut aabb3 = Aabb::from_points(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 1.8),
+            Vec3::new(1.5, 1.0, 1.0),
+        );
         assert_eq!(aabb3.min, Vec3::new(0.0, 0.0, 0.0));
         assert_eq!(aabb3.max, Vec3::new(1.5, 1.0, 1.8));
         assert!(aabb3.is_valid());
 
         aabb3.invalidate();
         assert!(!aabb3.is_valid());
+
+        let aabb4 = Aabb::from_points(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 1.0, 1.0),
+            Vec3::new(0.0, 1.0, 1.0),
+        );
+        assert!(aabb4.is_flat());
     }
 
     const MIN: f32 = f32::MIN;
     const HALF: f32 = f32::MAX * 0.5;
+    const QUARTER: f32 = f32::MAX * 0.25;
+    const THREE_QUARTERS: f32 = f32::MAX * 0.75;
     const MAX: f32 = f32::MAX;
-
-    #[test]
-    fn aabb_contains0() {
-        let large_aabb = Aabb::new(Vec3::new(1.0, 1.0, 1.0), Vec3::new(4.0, 4.0, 4.0));
-        let small_aabb = Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0));
-        assert!(large_aabb.contains(&small_aabb));
-    }
 
     proptest! {
         #[test]
@@ -415,12 +422,12 @@ mod tests {
             let max = Vec3::new(d, e, f);
             let aabb = Aabb::new(min, max);
             let center = aabb.center();
-            let expected = (min + max) * 0.5;
+            let expected = min * 0.5 + max * 0.5;
             prop_assert_eq!(center, expected);
 
-            let mid_x = (a + d) * 0.5;
-            let mid_y = (b + e) * 0.5;
-            let mid_z = (c + f) * 0.5;
+            let mid_x = a * 0.5 + d * 0.5;
+            let mid_y = b * 0.5 + e * 0.5;
+            let mid_z = c * 0.5 + f * 0.5;
             let center_x = aabb.center_along_axis(Axis::X);
             let center_y = aabb.center_along_axis(Axis::Y);
             let center_z = aabb.center_along_axis(Axis::Z);
@@ -430,23 +437,77 @@ mod tests {
         }
 
         #[test]
-        fn aabb_contains(a in MIN..HALF, b in MIN..HALF, c in MIN..HALF,
+        fn aabb_contains(a in MIN..QUARTER, b in MIN..QUARTER, c in MIN..QUARTER,
             d in HALF..MAX, e in HALF..MAX, f in HALF..MAX) {
 
             let large_aabb = Aabb::new(Vec3::new(1.0, 1.0, 1.0), Vec3::new(4.0, 4.0, 4.0));
             let small_aabb = Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0));
-            prop_assert!(large_aabb.contains(&small_aabb));
+            prop_assert!(large_aabb.contains(&small_aabb), "1. {:?} should be contained in {:?}", small_aabb, large_aabb);
 
-            // let min = Vec3::new(a, b, c);
-            // let max = Vec3::new(d, e, f);
-            // let large_aabb = Aabb::new(min, max);
-            // let small_aabb =Aabb::new(min * 0.5, max * 0.5);
-            // prop_assert!(large_aabb.contains(&small_aabb));
-            // prop_assert!(!small_aabb.contains(&large_aabb));
-            //
-            // let point = max * 0.8;
-            // prop_assert!(large_aabb.contains_point(&point));
-            // prop_assert!(!small_aabb.contains_point(&point));
+            let min = Vec3::new(a, b, c);
+            let max = Vec3::new(d, e, f);
+            let large_aabb = Aabb::new(min, max);
+            let small_aabb =Aabb::new(min + (min * 0.2).abs(), max * 0.7);
+            prop_assert!(large_aabb.contains(&small_aabb), "2. {:?} should be contained in {:?}", small_aabb, large_aabb);
+            prop_assert!(!small_aabb.contains(&large_aabb), "3. {:?} should not be contained in {:?}", large_aabb, small_aabb);
+
+            let point = max * 0.8;
+            prop_assert!(large_aabb.contains_point(&point), "4. {:?} should be contained in {:?}", point, large_aabb);
+            prop_assert!(!small_aabb.contains_point(&point), "5. {:?} should not be contained in {:?}", point, small_aabb);
+        }
+
+        #[test]
+        fn aabb_extension_and_extent(a in MIN..QUARTER, b in MIN..QUARTER, c in MIN..QUARTER,
+            d in HALF..THREE_QUARTERS, e in HALF..THREE_QUARTERS, f in HALF..THREE_QUARTERS, g in MIN..QUARTER) {
+            let min = Vec3::new(a, b, c);
+            let max = Vec3::new(d, e, f);
+            let mut aabb0 = Aabb::new(min, max);
+            aabb0.enlarge(g);
+            prop_assert_eq!(aabb0.min, min - Vec3::new(g, g, g));
+            prop_assert_eq!(aabb0.max, max + Vec3::new(g, g, g));
+
+            let mut aabb1 = Aabb::new(min, max);
+            {
+                prop_assert_eq!(aabb1.extent(), max - min);
+                prop_assert_eq!(aabb1.max_extent(), (max - min).max_element());
+                prop_assert_eq!(aabb1.max_extent_axis(), Axis::max_axis(max - min));
+                prop_assert_eq!(aabb1.extent_along_axis(Axis::X), max.x - min.x);
+            }
+
+            let aabb2 = Aabb::new((min + max) * 0.5, max + Vec3::new(g, g, g).abs());
+            aabb1.extend(&aabb2);
+            prop_assert_eq!(aabb1.min, min);
+            prop_assert_eq!(aabb1.max, max + Vec3::new(g, g, g).abs());
+
+            let point = max + Vec3::new(g, g, g).abs();
+            let mut aabb3 = Aabb::new(min, max);
+            aabb3.extend_point(&point);
+            prop_assert_eq!(aabb3, aabb1);
+        }
+
+        #[test]
+        fn aabb_intersection(a in QUARTER..HALF, b in QUARTER..HALF, c in QUARTER..HALF,
+            d in HALF..THREE_QUARTERS, e in HALF..THREE_QUARTERS, f in HALF..THREE_QUARTERS) {
+            let min_x = a.min(d);
+            let min_y = b.min(e);
+            let min_z = c.min(f);
+            let max_x = a.max(d);
+            let max_y = b.max(e);
+            let max_z = c.max(f);
+            let min = Vec3::new(min_x, min_y, min_z);
+            let max = Vec3::new(max_x, max_y, max_z);
+            let avg = min * 0.5 + max * 0.5;
+            let avg_left = avg - (avg * 0.3).abs();
+            let avg_right = avg + (avg * 0.3).abs();
+            let aabb0 = Aabb::new(min, avg_right);
+            let aabb1 = Aabb::new(avg_left, max);
+            prop_assert!(aabb0.intersects(&aabb1), "1. {:?} should intersect {:?}", aabb0, aabb1);
+            prop_assert_eq!(aabb0.intersection(&aabb1), Some(Aabb::new(avg_left.max(min), avg_right.min(max))), "2. {:?} should intersect {:?}", aabb0, aabb1);
+
+            let aabb2 = Aabb::new(min, avg);
+            let aabb3 = Aabb::new(avg + (avg * 0.1).abs(), max);
+            prop_assert!(!aabb2.intersects(&aabb3), "3. {:?} should not intersect {:?}", aabb2, aabb3);
+            prop_assert_eq!(aabb2.intersection(&aabb3), None, "4. {:?} should not intersect {:?}", aabb2, aabb3);
         }
     }
 }
@@ -479,8 +540,8 @@ mod tests {
 // }
 //
 // /// Find the intersection between a ray and a axis-aligned bounding box.
-// pub fn ray_intersects(&self, ray: Ray, t_min: f32, t_max: f32) -> Option<Vec3> {
-//     let mut t_enter = t_min;
+// pub fn ray_intersects(&self, ray: Ray, t_min: f32, t_max: f32) ->
+// Option<Vec3> {     let mut t_enter = t_min;
 //     let mut t_exit = t_max;
 //
 //     for i in 0..3 {
@@ -511,7 +572,8 @@ mod tests {
 // #[test]
 // fn test_ray_aabb_intersection() {
 //     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
-//     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+//     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0,
+// 1.0));
 //
 //     println!(
 //         "{:?}",
@@ -523,7 +585,8 @@ mod tests {
 //     );
 //
 //     let ray = Ray::new(Vec3::new(2.0, 2.0, 0.0), Vec3::new(-1.0, -1.0, 0.0));
-//     let aabb = Aabb::new(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 0.0, 1.0));
+//     let aabb = Aabb::new(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 0.0,
+// 1.0));
 //
 //     println!(
 //         "{:?}",
