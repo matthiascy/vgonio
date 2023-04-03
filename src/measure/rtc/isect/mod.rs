@@ -1,11 +1,9 @@
 //! Intersection algorithms.
 
 use crate::math::Vec3;
-mod aabb;
 mod axis;
 mod triangle;
 
-pub use aabb::Aabb;
 pub use axis::Axis;
 pub use triangle::{ray_tri_intersect_moller_trumbore, ray_tri_intersect_woop};
 

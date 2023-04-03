@@ -11,14 +11,14 @@ use crate::{
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
         rtc::{
-            isect::{ray_tri_intersect_woop, Aabb, RayTriIsect},
-            Ray,
+            isect::{ray_tri_intersect_woop, RayTriIsect},
+            Aabb, Ray,
         },
         Collector, Emitter, RtcRecord, TrajectoryNode,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::{fresnel::reflect, ior::RefractiveIndex},
-    units::um,
+    units::{um, UMicrometre},
 };
 use glam::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles};
 use rayon::prelude::*;
@@ -51,302 +51,89 @@ pub fn measure_bsdf(
     }
 }
 
-/// Axis at which the kd-tree is split.
-#[repr(u32)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-enum Axis {
-    Horizontal,
-    Vertical,
-}
-
-impl Axis {
-    /// Returns the next axis to split.
-    fn flip(&self) -> Self {
-        match self {
-            Axis::Horizontal => Axis::Vertical,
-            Axis::Vertical => Axis::Horizontal,
-        }
-    }
-}
-
-/// Evenly split kd-tree for accelerating grid ray tracing.
-///
-/// The kd-tree is built from the grid of the micro-surface mesh. Each node of
-/// the kd-tree is either a leaf node or a branch node. A leaf node contains a
-/// part of the rectangular grid of the micro-surface mesh, and a branch node
-/// contains two child nodes. The splitting axis of the branch node is
-/// determined by the axis of the parent node, and is flipped for each level of
-/// the tree.
-#[derive(Debug)]
-struct KdTree<'ms> {
-    surf: &'ms MicroSurface,
-    mesh: &'ms MicroSurfaceMesh,
-    root: u32,
-    nodes: Vec<Node>,
-}
-
+/// Base grid cell (the smallest unit of the grid).
 #[derive(Debug, Copy, Clone)]
-enum Node {
-    /// Leaf node of the kd-tree.
-    /// The leaf node contains a part of the rectangular grid of the
-    /// micro-surface mesh (represented by lower-right and upper-left grid
-    /// coordinates), , the minimum and maximum height of the grid cells and
-    /// the axis-aligned bounding box of the node.
-    Leaf {
-        /// Minimum grid coordinate of the node.
-        min: UVec2,
-        /// Maximum grid coordinate of the node.
-        max: UVec2,
-        /// Minimum height of the node.
-        min_height: f32,
-        /// Maximum height of the node.
-        max_height: f32,
-    },
-    /// Branch node of the kd-tree.
-    /// The branch node contains two child nodes, and the axis at which the
-    /// node is split. The splitting axis of the branch node is determined by
-    /// the axis of the parent node, and is flipped for each level of the tree.
-    /// The axis index is the coordinate of the axis in the grid space of the
-    /// dimension specified by the splitting axis.
-    Branch {
-        /// Axis at which the node is split.
-        axis: Axis,
-        /// Minimum grid coordinate contained in the node.
-        min: UVec2,
-        /// Maximum grid coordinate contained in the node.
-        max: UVec2,
-        /// Minimum height of the node.
-        min_height: f32,
-        /// Maximum height of the node.
-        max_height: f32,
-        /// Index of the first child node.
-        child0: NodeIndex,
-        /// Index of the second child node.
-        child1: NodeIndex,
-        /// Axis-aligned bounding box of the node.
-        bounds: Aabb,
-    },
+pub struct BaseCell {
+    /// Horizontal grid coordinate of the cell.
+    pub x: u32,
+    /// Vertical grid coordinate of the cell.
+    pub y: u32,
+    /// Indices of 4 vertices of the cell, stored in counter-clockwise order.
+    /// a --- c
+    /// |     |
+    /// b --- d
+    /// The order is: a, b, c, d.
+    pub verts: [u32; 4],
+    /// Minimum height of the cell.
+    pub min_height: f32,
+    /// Maximum height of the cell.
+    pub max_height: f32,
 }
 
-impl Node {
-    pub fn is_leaf(&self) -> bool { matches!(self, Node::Leaf { .. }) }
-
-    pub fn is_branch(&self) -> bool { matches!(self, Node::Branch { .. }) }
-
-    /// Returns the minimum grid coordinate of the node.
-    pub fn min(&self) -> UVec2 {
-        match self {
-            Node::Leaf { min, .. } => *min,
-            Node::Branch { min, .. } => *min,
-        }
-    }
-
-    /// Returns the maximum grid coordinate of the node.
-    pub fn max(&self) -> UVec2 {
-        match self {
-            Node::Leaf { max, .. } => *max,
-            Node::Branch { max, .. } => *max,
-        }
-    }
-
-    pub fn axis(&self) -> Option<Axis> {
-        match self {
-            Node::Leaf { .. } => None,
-            Node::Branch { axis, .. } => Some(*axis),
-        }
-    }
-
-    pub fn set_child0(&mut self, child0: NodeIndex) {
-        match self {
-            Node::Leaf { .. } => panic!("Leaf node has no children"),
-            Node::Branch { child0: c0, .. } => *c0 = child0,
-        }
-    }
-
-    pub fn set_child1(&mut self, child1: NodeIndex) {
-        match self {
-            Node::Leaf { .. } => panic!("Leaf node has no children"),
-            Node::Branch { child1: c1, .. } => *c1 = child1,
+impl Default for BaseCell {
+    fn default() -> Self {
+        BaseCell {
+            x: u32::MAX,
+            y: u32::MAX,
+            verts: [u32::MAX; 4],
+            min_height: f32::MAX,
+            max_height: f32::MAX,
         }
     }
 }
 
-/// Index of a node in the kd-tree.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-struct NodeIndex(u32);
-
-impl NodeIndex {
-    fn none() -> Self { Self(u32::MAX) }
-
-    fn some(index: u32) -> Self { Self(index) }
-
-    fn is_none(&self) -> bool { self.0 == u32::MAX }
-
-    fn is_some(&self) -> bool { self.0 != u32::MAX }
-
-    fn unwrap(self) -> u32 { self.0 }
+/// Coarse grid cell.
+#[derive(Debug, Copy, Clone)]
+pub struct CoarseCell {
+    /// Horizontal grid coordinate of the cell.
+    x: u32,
+    /// Vertical grid coordinate of the cell.
+    y: u32,
+    /// The min grid coordinates of the last level coarse cells or base cells.
+    min: UVec2,
+    /// The max grid coordinates of the last level coarse cells or base cells.
+    max: UVec2,
+    /// Minimum height of the cell.
+    min_height: f32,
+    /// Maximum height of the cell.
+    max_height: f32,
 }
 
-impl<'ms> KdTree<'ms> {
-    /// Maximum number of grid cells in a leaf node in each dimension.
-    pub const MAX_LEAF_CELL_DIM: u32 = 32;
-
-    pub fn new(grid: &Grid<'ms>) -> Self {
-        let mut nodes = Vec::new();
-        let root = Self::build_branch(
-            &mut nodes,
-            Axis::Horizontal,
-            UVec2::new(0, 0),
-            UVec2::new(grid.width - 1, grid.height - 1),
-            grid.surf.min,
-            grid.surf.max,
-            grid.mesh.bounds,
-        );
-        Self::build(grid, &mut nodes);
-        Self {
-            surf: grid.surf,
-            mesh: grid.mesh,
-            root,
-            nodes,
+impl Default for CoarseCell {
+    fn default() -> Self {
+        CoarseCell {
+            x: u32::MAX,
+            y: u32::MAX,
+            min: UVec2::new(u32::MAX, u32::MAX),
+            max: UVec2::new(u32::MAX, u32::MAX),
+            min_height: f32::MAX,
+            max_height: f32::MAX,
         }
-    }
-
-    /// Builds the kd-tree.
-    fn build(grid: &Grid<'ms>, nodes: &mut Vec<Node>) { Self::build_recursive(grid, 0, nodes); }
-
-    fn build_recursive(grid: &Grid<'ms>, parent: u32, nodes: &mut Vec<Node>) {
-        if nodes[parent as usize].is_leaf() {
-            return;
-        }
-
-        let (min, max, axis) = {
-            let parent = &nodes[parent as usize];
-            (parent.min(), parent.max(), parent.axis().unwrap())
-        };
-
-        let ((min0, max0), (min1, max1)) = match axis {
-            Axis::Horizontal => {
-                let min0 = UVec2::new(min.x, min.y);
-                let max0 = UVec2::new(max.x, max.y / 2);
-                let min1 = UVec2::new(min.x, max.y / 2 + 1);
-                let max1 = UVec2::new(max.x, max.y);
-                ((min0, max0), (min1, max1))
-            }
-            Axis::Vertical => {
-                let min0 = UVec2::new(min.x, min.y);
-                let max0 = UVec2::new(max.x / 2, max.y);
-                let min1 = UVec2::new(max.x / 2 + 1, min.y);
-                let max1 = UVec2::new(max.x, max.y);
-                ((min0, max0), (min1, max1))
-            }
-        };
-
-        {
-            // Creation of the first child node.
-            let grid_size = max0 - min0;
-            let (min_height, max_height) = grid.min_max_of_region(min0, max0);
-            // If the grid size is smaller than the maximum leaf size, create a
-            // leaf node.
-            if grid_size.x <= Self::MAX_LEAF_CELL_DIM && grid_size.y <= Self::MAX_LEAF_CELL_DIM {
-                let index = Self::build_leaf(nodes, min0, max0, min_height, max_height);
-                nodes[parent as usize].set_child0(NodeIndex::some(index));
-            } else {
-                // Otherwise, create a branch node.
-                let split_axis = if grid_size.x > grid_size.y {
-                    Axis::Horizontal
-                } else {
-                    Axis::Vertical
-                };
-                let index = Self::build_branch(
-                    nodes,
-                    split_axis,
-                    min0,
-                    max0,
-                    min_height,
-                    max_height,
-                    grid.bounds_of_region(min0, max0),
-                );
-                nodes[parent as usize].set_child0(NodeIndex::some(index));
-                Self::build_recursive(grid, index, nodes);
-            }
-        }
-
-        {
-            // Creation of the second child node.
-            let grid_size = max1 - min1;
-            let (min_height, max_height) = grid.min_max_of_region(min1, max1);
-            // If the grid size is smaller than the maximum leaf size, create a
-            // leaf node.
-            if grid_size.x <= Self::MAX_LEAF_CELL_DIM && grid_size.y <= Self::MAX_LEAF_CELL_DIM {
-                let index = Self::build_leaf(nodes, min1, max1, min_height, max_height);
-                nodes[parent as usize].set_child1(NodeIndex::some(index));
-            } else {
-                // Otherwise, create a branch node.
-                let split_axis = if grid_size.x > grid_size.y {
-                    Axis::Horizontal
-                } else {
-                    Axis::Vertical
-                };
-                let index = Self::build_branch(
-                    nodes,
-                    split_axis,
-                    min1,
-                    max1,
-                    min_height,
-                    max_height,
-                    grid.bounds_of_region(min1, max1),
-                );
-                nodes[parent as usize].set_child1(NodeIndex::some(index));
-                Self::build_recursive(grid, index, nodes);
-            }
-        }
-    }
-
-    fn build_leaf(
-        nodes: &mut Vec<Node>,
-        min: UVec2,
-        max: UVec2,
-        min_height: f32,
-        max_height: f32,
-    ) -> u32 {
-        let node_index = nodes.len() as u32;
-        nodes.push(Node::Leaf {
-            min,
-            max,
-            min_height,
-            max_height,
-        });
-        node_index
-    }
-
-    fn build_branch(
-        nodes: &mut Vec<Node>,
-        axis: Axis,
-        min: UVec2,
-        max: UVec2,
-        min_height: f32,
-        max_height: f32,
-        bounds: Aabb,
-    ) -> u32 {
-        let node_index = nodes.len() as u32;
-        nodes.push(Node::Branch {
-            axis,
-            min,
-            max,
-            min_height,
-            max_height,
-            child0: NodeIndex::none(),
-            child1: NodeIndex::none(),
-            bounds,
-        });
-        node_index
     }
 }
 
-/// Helper structure for grid ray tracing.
+pub trait Cell: Sized {
+    fn min_height(&self) -> f32;
+    fn max_height(&self) -> f32;
+}
+
+impl Cell for BaseCell {
+    fn min_height(&self) -> f32 { self.min_height }
+
+    fn max_height(&self) -> f32 { self.max_height }
+}
+
+impl Cell for CoarseCell {
+    fn min_height(&self) -> f32 { self.min_height }
+
+    fn max_height(&self) -> f32 { self.max_height }
+}
+
+/// One level of the multi-level grid [`MultilevelGrid`].
 ///
-/// The grid is built on top of the micro-surface, and the grid cells are
-/// represented by two triangles as defined in the `MicroSurfaceMesh`.
+/// The grid is built on top of the micro-surface mesh. It consists of a set of
+/// grid cells of different coarseness.
+///
 ///
 /// The coordinates of the grid cells are defined in the grid space, which is
 /// different from the world space. The grid space is defined as follows:
@@ -359,8 +146,8 @@ impl<'ms> KdTree<'ms> {
 /// +vertical
 /// ```
 ///
-/// The grid coordinates lie in the range of [0, cols - 2] and [0, rows - 2].
-/// Knowing the grid coordinates, the corresponding vertices of the
+/// The finest grid coordinates lie in the range of [0, cols - 2] and [0, rows -
+/// 2]. Knowing the grid coordinates, the corresponding vertices of the
 /// micro-surface mesh can be found by the following formula:
 ///
 /// ```text
@@ -376,63 +163,144 @@ impl<'ms> KdTree<'ms> {
 ///
 /// The blue dots are the micro-surface samples, and the orange dots are the
 /// grid cells.
+///
+/// The grid cells are stored in row-major order, i.e. the cells in the same
+/// row are stored contiguously.
 #[derive(Debug)]
-pub struct Grid<'ms> {
+pub struct Grid<C: Cell> {
+    /// Width of the grid (max number of columns).
+    cols: u32,
+
+    /// Height of the grid (max number of rows).
+    rows: u32,
+
+    /// Size of a grid cell in the world space (in micrometres).
+    /// Equals to the grid space cell size multiplied by the spacing between
+    /// the micro-surface samples.
+    world_space_cell_size: Vec2,
+
+    /// Size of a grid cell in the grid space (number of base cells).
+    /// For coarse level grid, the actual size of a cell may be smaller than
+    /// this value due to the boundary of the grid. For the finest level grid,
+    /// the size of a cell is always equal to this value. The first level of
+    /// coarse grid is always MIN_COARSE_CELL_SIZE, the further levels are
+    /// doubled in each level.
+    grid_space_cell_size: u32,
+
+    /// Cells of the grid stored in row-major order.
+    cells: Vec<C>,
+}
+
+impl<C: Cell> Grid<C> {
+    /// Returns the minimum and maximum height of the grid cells in the given
+    /// region defined by the minimum and maximum grid coordinates.
+    pub fn min_max_of_region(&self, min: UVec2, max: UVec2) -> (f32, f32) {
+        let mut min_height = f32::MAX;
+        let mut max_height = f32::MIN;
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                let cell = &self.cells[y as usize * self.cols as usize + x as usize];
+                min_height = min_height.min(cell.min_height());
+                max_height = max_height.max(cell.max_height());
+            }
+        }
+        (min_height, max_height)
+    }
+
+    /// Returns the cell at the given grid coordinates.
+    pub fn cell_at(&self, x: u32, y: u32) -> &C {
+        debug_assert!(
+            x < self.cols && y < self.rows,
+            "Cell index out of bounds: ({}, {})",
+            x,
+            y
+        );
+        &self.cells[y as usize * self.cols as usize + x as usize]
+    }
+
+    /// Traverses the grid cells along the given ray to identify all the cells
+    /// and the corresponding intersection.
+    ///
+    /// Modified version of Digital Differential Analyzer (DDA) algorithm.
+    pub fn traverse(&self, ray: &Ray) {
+        log::debug!("Traversing the grid along the ray: {:?}", ray);
+    }
+}
+
+/// Multilevel grid.
+pub struct MultilevelGrid<'ms> {
     /// The heightfield where the grid is defined.
     surf: &'ms MicroSurface,
 
     /// Corresponding `TriangleMesh` of the surface.
     mesh: &'ms MicroSurfaceMesh,
 
-    /// Width of the grid (max number of columns).
-    width: u32,
+    /// Minimum size of a coarse grid cell (number of base cells).
+    min_coarse_cell_size: u32,
 
-    /// Height of the grid (max number of rows).
-    height: u32,
+    /// Number of levels of the coarse grid.
+    level: u32,
 
-    /// Cells of the grid stored in row-major order.
-    cells: Vec<Cell>,
+    /// The finest grid.
+    base: Grid<BaseCell>,
+
+    /// The different levels of the coarse grid, from finest to coarsest (the
+    /// size of the grid cells are doubled in each level).
+    coarse: Vec<Grid<CoarseCell>>,
 }
 
-/// A grid cell.
-#[derive(Debug, Copy, Clone)]
-pub struct Cell {
-    /// Horizontal grid coordinate of the cell.
-    pub x: u32,
-    /// Vertical grid coordinate of the cell.
-    pub y: u32,
-    /// Index of 4 vertices of the cell, stored in counter-clockwise order.
-    /// a --- c
-    /// |     |
-    /// b --- d
-    /// The order is: a, b, c, d.
-    pub verts: [u32; 4],
-    /// Minimum height of the cell.
-    pub min_height: f32,
-    /// Maximum height of the cell.
-    pub max_height: f32,
-}
+impl<'ms> MultilevelGrid<'ms> {
+    /// Creates a new grid ray tracing object.
+    pub fn new(
+        surf: &'ms MicroSurface,
+        mesh: &'ms MicroSurfaceMesh,
+        min_coarse_cell_size: u32,
+    ) -> Self {
+        let base = Self::build_base_grid(surf);
+        let (level, coarse) = {
+            let n = surf.cols.max(surf.rows) / min_coarse_cell_size as usize;
+            if n == 0 {
+                (0, vec![])
+            } else {
+                let num_levels = (n as f32).log2().floor() as u32;
+                (
+                    num_levels,
+                    (0..num_levels)
+                        .into_iter()
+                        .into_par_iter()
+                        .map(|level| Self::build_coarse_grid(&base, level, min_coarse_cell_size))
+                        .collect::<Vec<_>>(),
+                )
+            }
+        };
 
-impl Default for Cell {
-    fn default() -> Self {
-        Cell {
-            x: u32::MAX,
-            y: u32::MAX,
-            verts: [u32::MAX; 4],
-            min_height: f32::MAX,
-            max_height: f32::MAX,
+        #[cfg(debug_assertions)]
+        {
+            // Check order of generated coarse grids.
+            for i in 0..coarse.len() - 1 {
+                let s0 = coarse[i].grid_space_cell_size;
+                let s1 = coarse[i + 1].grid_space_cell_size;
+                assert!(s1 > s0);
+            }
+        }
+
+        MultilevelGrid {
+            surf,
+            mesh,
+            min_coarse_cell_size,
+            level,
+            base,
+            coarse,
         }
     }
-}
 
-impl<'ms> Grid<'ms> {
-    /// Creates a new grid ray tracing object.
-    pub fn new(surface: &'ms MicroSurface, mesh: &'ms MicroSurfaceMesh) -> Self {
-        let surf_width = surface.cols;
-        let grid_width = surface.cols - 1;
-        let grid_height = surface.rows - 1;
-        let mut cells = vec![Cell::default(); (surface.cols - 1) * (surface.rows - 1)];
-        cells
+    /// Builds the base (finest) grid.
+    fn build_base_grid(surf: &MicroSurface) -> Grid<BaseCell> {
+        let surf_width = surf.cols;
+        let grid_width = surf.cols - 1;
+        let grid_height = surf.rows - 1;
+        let mut base_cells = vec![BaseCell::default(); (surf.cols - 1) * (surf.rows - 1)];
+        base_cells
             .par_chunks_mut(512)
             .enumerate()
             .for_each(|(i, chunk)| {
@@ -448,10 +316,10 @@ impl<'ms> Grid<'ms> {
                     ];
                     let (min_height, max_height) =
                         verts.iter().fold((f32::MAX, f32::MIN), |(min, max), vert| {
-                            let height = surface.samples[*vert as usize];
+                            let height = surf.samples[*vert as usize];
                             (min.min(height), max.max(height))
                         });
-                    *cell = Cell {
+                    *cell = BaseCell {
                         x: x as u32,
                         y: y as u32,
                         verts,
@@ -462,70 +330,227 @@ impl<'ms> Grid<'ms> {
             });
 
         Grid {
-            surf: surface,
-            mesh,
-            width: grid_width as u32,
-            height: grid_height as u32,
+            cols: grid_width as u32,
+            rows: grid_height as u32,
+            world_space_cell_size: Vec2::new(surf.du, surf.dv),
+            grid_space_cell_size: 1,
+            cells: base_cells,
+        }
+    }
+
+    /// Builds a coarse grid.
+    ///
+    /// # Arguments
+    ///
+    /// * `base` - The finest grid.
+    /// * `level` - The current level of the coarse grid.
+    fn build_coarse_grid(
+        base: &Grid<BaseCell>,
+        level: u32,
+        min_coarse_cell_size: u32,
+    ) -> Grid<CoarseCell> {
+        // Size of a coarse grid cell in the base grid space.
+        let cell_size_in_base = min_coarse_cell_size * (1 << level);
+        // Number of coarse grid cells in each direction.
+        let cols = (base.cols as f32 / cell_size_in_base as f32).ceil() as u32;
+        let rows = (base.rows as f32 / cell_size_in_base as f32).ceil() as u32;
+        let mut cells = vec![CoarseCell::default(); (cols * rows) as usize];
+        // Size of a coarse grid cell compared to the last level.
+        let (relative_cell_size, max_cell_x, max_cell_y, prev_cell_size) = if level == 0 {
+            (min_coarse_cell_size, base.cols - 1, base.rows - 1, 1)
+        } else {
+            let prev_cell_size = min_coarse_cell_size * (1 << (level - 1));
+            let prev_cols = (base.cols as f32 / prev_cell_size as f32).ceil() as u32;
+            let prev_rows = (base.rows as f32 / prev_cell_size as f32).ceil() as u32;
+            (2, prev_cols - 1, prev_rows - 1, prev_cell_size)
+        };
+        cells
+            .par_chunks_mut(256)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                for (j, cell) in chunk.iter_mut().enumerate() {
+                    let idx = (i * 256 + j) as u32;
+                    let x = idx % cols;
+                    let y = idx / cols;
+                    let min = UVec2::new(x * relative_cell_size, y * relative_cell_size);
+                    let max = UVec2::new(
+                        ((x + 1) * relative_cell_size - 1).min(max_cell_x),
+                        ((y + 1) * relative_cell_size - 1).min(max_cell_y),
+                    );
+                    let min_in_base = min * prev_cell_size;
+                    let max_in_base = max * prev_cell_size;
+                    let (min_height, max_height) = base.min_max_of_region(min_in_base, max_in_base);
+
+                    *cell = CoarseCell {
+                        x,
+                        y,
+                        min,
+                        max,
+                        min_height,
+                        max_height,
+                    };
+                }
+            });
+
+        Grid {
+            cols,
+            rows,
+            world_space_cell_size: Vec2::new(
+                base.world_space_cell_size.x * cell_size_in_base as f32,
+                base.world_space_cell_size.y * cell_size_in_base as f32,
+            ),
+            grid_space_cell_size: cell_size_in_base,
             cells,
         }
     }
 
-    /// Returns the minimum and maximum height of the grid cells in the given
-    /// region defined by the minimum and maximum grid coordinates.
-    pub fn min_max_of_region(&self, min: UVec2, max: UVec2) -> (f32, f32) {
-        let mut min_height = f32::MAX;
-        let mut max_height = f32::MIN;
-        for y in min.y..=max.y {
-            for x in min.x..=max.x {
-                let cell = &self.cells[y as usize * self.width as usize + x as usize];
-                min_height = min_height.min(cell.min_height);
-                max_height = max_height.max(cell.max_height);
+    /// Returns the number of levels.
+    pub fn level(&self) -> u32 { self.level }
+
+    /// Returns the base grid.
+    pub fn base(&self) -> &Grid<BaseCell> { &self.base }
+
+    /// Returns the coarse grid at the given level.
+    /// The finest grid is at level 0.
+    pub fn coarse(&self, level: usize) -> &Grid<CoarseCell> { &self.coarse[level] }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        common::ulp_eq,
+        measure::rtc::grid::MultilevelGrid,
+        msurf::{AxisAlignment, MicroSurface},
+        units::{um, UMicrometre},
+    };
+    use glam::UVec2;
+    use proptest::proptest;
+
+    #[test]
+    fn test_multilevel_grid_creation() {
+        let surf = MicroSurface::from_samples::<UMicrometre>(
+            9,
+            9,
+            um!(0.5),
+            um!(0.5),
+            vec![0.0; 81],
+            None,
+        );
+        let mesh = surf.as_micro_surface_mesh(AxisAlignment::XZ);
+        let grid = MultilevelGrid::new(&surf, &mesh, 2);
+        assert_eq!(grid.level(), 2);
+        assert_eq!(grid.coarse.len(), 2);
+        assert_eq!(grid.base().cols, 8);
+        assert_eq!(grid.base().rows, 8);
+        assert_eq!(grid.base().grid_space_cell_size, 1);
+        assert_eq!(grid.coarse(0).cols, 4);
+        assert_eq!(grid.coarse(0).rows, 4);
+        assert_eq!(grid.coarse(0).grid_space_cell_size, 2);
+        assert_eq!(grid.coarse(1).cols, 2);
+        assert_eq!(grid.coarse(1).rows, 2);
+        assert_eq!(grid.coarse(1).grid_space_cell_size, 4);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_multilevel_grid_region() {
+        let cols = 10;
+        let rows = 8;
+
+        let surf = MicroSurface::from_samples::<UMicrometre>(
+            cols,
+            rows,
+            um!(0.5),
+            um!(0.5),
+            vec![
+                0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 
+                0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+                0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1,
+                0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2,
+                0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 
+                0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4,
+                0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 
+                0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6,
+            ],
+            None,
+        );
+        let mesh = surf.as_micro_surface_mesh(AxisAlignment::XZ);
+        let grid = MultilevelGrid::new(&surf, &mesh, 2);
+        let base = grid.base();
+        assert_eq!(grid.level(), 2);
+        assert_eq!(grid.coarse.len(), 2);
+        assert_eq!(base.cols, cols as u32 - 1);
+        assert_eq!(base.rows, rows as u32 - 1);
+        assert_eq!(base.grid_space_cell_size, 1);
+
+        let coarse0 = grid.coarse(0);
+        let coarse1 = grid.coarse(1);
+
+        assert_eq!(coarse0.cols, 5);
+        assert_eq!(coarse0.rows, 4);
+        assert_eq!(coarse0.grid_space_cell_size, 2);
+        assert_eq!(coarse1.cols, 3);
+        assert_eq!(coarse1.rows, 2);
+        assert_eq!(coarse1.grid_space_cell_size, 4);
+        
+        for y in 0..base.rows {
+            for x in 0..base.cols {
+                let cell = base.cell_at(x, y);
+                assert!(ulp_eq(cell.min_height, (x + y) as f32 * 0.1), "base min height at x={}, y={}", x, y);
+                assert!(ulp_eq(cell.max_height, (x + y) as f32 * 0.1 + 0.2), "base max height at x={}, y={}", x, y);
             }
         }
-        (min_height, max_height)
+
+        for y in 0..coarse0.rows {
+            for x in 0..coarse0.cols {
+                let cell = coarse0.cell_at(x, y);
+                assert_eq!(
+                    cell.min,
+                    UVec2::new(grid.min_coarse_cell_size * x, grid.min_coarse_cell_size * y),
+                    "coarse level 0 min at x={}, y={}",
+                    x,
+                    y
+                );
+                assert_eq!(
+                    cell.max,
+                    UVec2::new(
+                        (grid.min_coarse_cell_size * (x + 1) - 1).min(base.cols - 1),
+                        (grid.min_coarse_cell_size * (y + 1) - 1).min(base.rows - 1)
+                    ),
+                    "coarse level 0 max at x={}, y={}",
+                    x,
+                    y
+                );
+                assert!(ulp_eq(cell.min_height, (cell.min.x + cell.min.y) as f32 * 0.1));
+                assert!(ulp_eq(cell.max_height, (cell.max.x + cell.max.y) as f32 * 0.1 + 0.2));
+            }
+        }
+
+        for y in 0..coarse1.rows {
+            for x in 0..coarse1.cols {
+                let cell = coarse1.cell_at(x, y);
+                assert_eq!(
+                    cell.min,
+                    UVec2::new(2 * x, 2 * y),
+                    "coarse level 1 min at x={}, y={}",
+                    x,
+                    y
+                );
+                assert_eq!(
+                    cell.max,
+                    UVec2::new(
+                        (2 * (x + 1) - 1).min(coarse0.cols - 1),
+                        (2 * (y + 1) - 1).min(coarse0.rows - 1)
+                    ),
+                    "coarse level 1 max at x={}, y={}",
+                    x,
+                    y
+                );
+                assert!(ulp_eq(cell.min_height, (cell.min.x + cell.min.y) as f32 * 2.0 * 0.1));
+                assert!(ulp_eq(cell.max_height, (cell.max.x + cell.max.y) as f32 * 2.0 * 0.1 + 0.2));
+            }
+        }
     }
-
-    /// Returns the bounding box of the grid cells in the given region defined
-    /// by the minimum and maximum grid coordinates.
-    pub fn bounds_of_region(&self, min: UVec2, max: UVec2) -> Aabb {
-        let (min_height, max_height) = self.min_max_of_region(min, max);
-        let min_vert = self.mesh.verts[self.cell_at(min.x, min.y).verts[0] as usize];
-        let max_vert = self.mesh.verts[self.cell_at(max.x, max.y).verts[2] as usize];
-        // TODO: handedness
-        let min_horizontal = min_vert.x.min(max_vert.x);
-        let max_horizontal = min_vert.x.max(max_vert.x);
-        let min_vertical = min_vert.z.min(max_vert.z);
-        let max_vertical = min_vert.z.max(max_vert.z);
-        let min = Vec3::new(min_horizontal as f32, min_height, min_vertical);
-        let max = Vec3::new(max_horizontal as f32, max_height, max_vertical);
-        Aabb::new(min, max)
-    }
-
-    /// Returns the cell at the given grid coordinates.
-    pub fn cell_at(&self, x: u32, y: u32) -> &Cell {
-        debug_assert!(
-            x < self.width && y < self.height,
-            "Cell index out of bounds: ({}, {})",
-            x,
-            y
-        );
-        &self.cells[y as usize * self.width as usize + x as usize]
-    }
-}
-
-struct GridRT<'ms> {
-    grid: Grid<'ms>,
-    accel: KdTree<'ms>,
-}
-
-impl<'ms> GridRT<'ms> {
-    pub fn new(surface: &'ms MicroSurface, mesh: &'ms MicroSurfaceMesh) -> Self {
-        let grid = Grid::new(surface, mesh);
-        let accel = KdTree::new(&grid);
-        GridRT { grid, accel }
-    }
-
-    pub fn traverse(&self, ray: &Ray) {}
 }
 
 // /// Convert a world space position into a grid space position (coordinates
@@ -629,183 +654,183 @@ impl<'ms> GridRT<'ms> {
 //     condition
 // }
 //
-// /// Modified version of Digital Differential Analyzer (DDA) Algorithm.
-// ///
-// /// Traverse the grid to identify all cells and corresponding intersection
-// /// that are traversed by the ray.
-// ///
-// /// # Arguments
-// ///
-// /// * `ray_org` - The starting position (in world space) of the ray.
-// /// * `ray_dir` - The direction of the ray in world space.
-// pub fn traverse(&self, ray_org_world: Vec2, ray_dir: Vec2) -> GridTraversal {
-//     log::debug!(
-//         "    Grid origin: {:?}\n       min: {:?}\n       max: {:?}",
-//         self.origin,
-//         self.min,
-//         self.max_coord
-//     );
-//     log::debug!(
-//         "    Traverse the grid with the ray: o {:?}, d: {:?}",
-//         ray_org_world,
-//         ray_dir.normalize()
-//     );
-//     // Relocate the ray origin to the position relative to the origin of the
-// grid.     let ray_org_grid = ray_org_world - self.origin;
-//     let ray_org_cell = self.world_to_grid_2d(ray_org_world);
-//     log::debug!("      - ray origin cell: {:?}", ray_org_cell);
-//     log::debug!("      - ray origin grid: {:?}", ray_org_grid);
+// Modified version of Digital Differential Analyzer (DDA) Algorithm.
 //
-//     let is_parallel_to_x_axis = f32::abs(ray_dir.y - 0.0) < f32::EPSILON;
-//     let is_parallel_to_y_axis = f32::abs(ray_dir.x - 0.0) < f32::EPSILON;
+// Traverse the grid to identify all cells and corresponding intersection
+// that are traversed by the ray.
 //
-//     if is_parallel_to_x_axis && is_parallel_to_y_axis {
-//         // The ray is parallel to both axes, which means it comes from the
-// top or bottom         // of the grid.
-//         log::debug!("      -> parallel to both axes");
-//         return GridTraversal::FromTopOrBottom(ray_org_cell);
-//     }
+// # Arguments
 //
-//     let ray_dir = ray_dir.normalize();
-//     if is_parallel_to_x_axis && !is_parallel_to_y_axis {
-//         log::debug!("      -> parallel to X axis");
-//         let (dir, initial_dist, num_cells) = if ray_dir.x < 0.0 {
-//             (
-//                 -1,
-//                 ray_org_grid.x - ray_org_cell.x as f32 * self.surf.du,
-//                 ray_org_cell.x - self.min.x + 1,
-//             )
-//         } else {
-//             (
-//                 1,
-//                 (ray_org_cell.x + 1) as f32 * self.surf.du - ray_org_grid.x,
-//                 self.max_coord.x - ray_org_cell.x + 1,
-//             )
-//         };
-//         // March along the ray direction until the ray hits the grid
-// boundary.         let mut cells = vec![IVec2::ZERO; num_cells as usize];
-//         let mut dists = vec![0.0; num_cells as usize + 1];
-//         for i in 0..num_cells {
-//             cells[i as usize] = ray_org_cell + IVec2::new(dir * i, 0);
-//             dists[i as usize + 1] = initial_dist + (i as f32 * self.surf.du);
-//         }
-//         GridTraversal::Traversed { cells, dists }
-//     } else if is_parallel_to_y_axis && !is_parallel_to_x_axis {
-//         log::debug!("      -> parallel to Y axis");
-//         let (dir, initial_dist, num_cells) = if ray_dir.y < 0.0 {
-//             (
-//                 -1,
-//                 ray_org_grid.y - ray_org_cell.y as f32 * self.surf.dv,
-//                 ray_org_cell.y - self.min.y + 1,
-//             )
-//         } else {
-//             (
-//                 1,
-//                 (ray_org_cell.y + 1) as f32 * self.surf.dv - ray_org_grid.y,
-//                 self.max_coord.y - ray_org_cell.y + 1,
-//             )
-//         };
-//         let mut cells = vec![IVec2::ZERO; num_cells as usize];
-//         let mut dists = vec![0.0; num_cells as usize + 1];
-//         // March along the ray direction until the ray hits the grid
-// boundary.         for i in 0..num_cells {
-//             cells[i as usize] = ray_org_cell + IVec2::new(0, dir * i);
-//             dists[i as usize + 1] = initial_dist + (i as f32 * self.surf.dv);
-//         }
-//         GridTraversal::Traversed { cells, dists }
-//     } else {
-//         // The ray is not parallel to either x or y axis.
-//         let m = ray_dir.y / ray_dir.x; // The slope of the ray on the grid,
-// dy/dx.         let m_recip = m.recip(); // The reciprocal of the slope of
-// the ray on the grid, dy/dx.
-//
-//         log::debug!("    Slope: {:?}, Reciprocal: {:?}", m, m_recip);
-//
-//         // Calculate the distance along the direction of the ray when moving
-//         // a unit distance (size of the cell) along the x-axis and y-axis.
-//         let unit = Vec2::new(
-//             (1.0 + m * m).sqrt() * self.surf.du,
-//             (1.0 + m_recip * m_recip).sqrt() * self.surf.dv,
-//         )
-//         .abs();
-//
-//         let mut curr_cell = ray_org_cell;
-//         log::debug!("  - starting cell: {:?}", curr_cell);
-//         log::debug!("  - unit dist: {:?}", unit);
-//
-//         let step_dir = IVec2::new(
-//             if ray_dir.x >= 0.0 { 1 } else { -1 },
-//             if ray_dir.y >= 0.0 { 1 } else { -1 },
-//         );
-//
-//         // Accumulated line length when moving along the x-axis and y-axis.
-//         let mut accumulated = Vec2::new(
-//             if ray_dir.x < 0.0 {
-//                 //(ray_org_grid.x - curr_cell.x as f32 * self.surface.du) *
-// unit.x                 (ray_org_grid.x / self.surf.du - curr_cell.x as
-// f32) * unit.x             } else {
-//                 //((curr_cell.x + 1) as f32 * self.surface.du -
-// ray_org_grid.x) * unit.x                 ((curr_cell.x + 1) as f32 -
-// ray_org_grid.x / self.surf.du) * unit.x             },
-//             if ray_dir.y < 0.0 {
-//                 // (ray_org_grid.y - curr_cell.y as f32 * self.surface.dv) *
-// unit.y                 (ray_org_grid.y / self.surf.dv - curr_cell.y as
-// f32) * unit.y             } else {
-//                 // ((curr_cell.y + 1) as f32 * self.surface.dv -
-// ray_org_grid.y) * unit.y                 ((curr_cell.y + 1) as f32 -
-// ray_org_grid.y / self.surf.dv) * unit.y             },
-//         );
-//
-//         log::debug!("  - accumulated: {:?}", accumulated);
-//
-//         let mut distances = vec![0.0];
-//         let mut traversed = vec![curr_cell];
-//
-//         loop {
-//             if accumulated.x <= accumulated.y {
-//                 // avoid min - 1, max + 1
-//                 if (step_dir.x > 0 && curr_cell.x == self.max_coord.x)
-//                     || (step_dir.x < 0 && curr_cell.x == self.min.x)
-//                 {
-//                     break;
-//                 }
-//                 distances.push(accumulated.x);
-//                 curr_cell.x += step_dir.x;
-//                 accumulated.x += unit.x;
-//             } else {
-//                 if (step_dir.y > 0 && curr_cell.y == self.max_coord.y)
-//                     || (step_dir.y < 0 && curr_cell.y == self.min.y)
-//                 {
-//                     break;
-//                 }
-//                 distances.push(accumulated.y);
-//                 curr_cell.y += step_dir.y;
-//                 accumulated.y += unit.y;
-//             };
-//
-//             traversed.push(IVec2::new(curr_cell.x, curr_cell.y));
-//
-//             if (curr_cell.x < self.min.x && curr_cell.x > self.max_coord.x)
-//                 && (curr_cell.y < self.min.y && curr_cell.y >
-// self.max_coord.y)             {
-//                 break;
-//             }
-//         }
-//
-//         // Push distance to the existing point of the last cell.
-//         if accumulated.x <= accumulated.y {
-//             distances.push(accumulated.x);
-//         } else {
-//             distances.push(accumulated.y);
-//         }
-//
-//         GridTraversal::Traversed {
-//             cells: traversed,
-//             dists: distances,
-//         }
-//     }
-//}
-//
+// * `ray_org` - The starting position (in world space) of the ray.
+// * `ray_dir` - The direction of the ray in world space.
+pub fn traverse(ray_org_world: Vec2, ray_dir: Vec2) -> GridTraversal {
+    log::debug!(
+        "    Grid origin: {:?}\n       min: {:?}\n       max: {:?}",
+        self.origin,
+        self.min,
+        self.max_coord
+    );
+    log::debug!(
+        "    Traverse the grid with the ray: o {:?}, d: {:?}",
+        ray_org_world,
+        ray_dir.normalize()
+    );
+    // Relocate the ray origin to the position relative to the origin of the grid.
+    let ray_org_grid = ray_org_world - self.origin;
+    let ray_org_cell = self.world_to_grid_2d(ray_org_world);
+    log::debug!("      - ray origin cell: {:?}", ray_org_cell);
+    log::debug!("      - ray origin grid: {:?}", ray_org_grid);
+
+    let is_parallel_to_x_axis = f32::abs(ray_dir.y - 0.0) < f32::EPSILON;
+    let is_parallel_to_y_axis = f32::abs(ray_dir.x - 0.0) < f32::EPSILON;
+
+    if is_parallel_to_x_axis && is_parallel_to_y_axis {
+        // The ray is parallel to both axes, which means it comes from the
+top or bottom         // of the grid.
+        log::debug!("      -> parallel to both axes");
+        return GridTraversal::FromTopOrBottom(ray_org_cell);
+    }
+
+    let ray_dir = ray_dir.normalize();
+    if is_parallel_to_x_axis && !is_parallel_to_y_axis {
+        log::debug!("      -> parallel to X axis");
+        let (dir, initial_dist, num_cells) = if ray_dir.x < 0.0 {
+            (
+                -1,
+                ray_org_grid.x - ray_org_cell.x as f32 * self.surf.du,
+                ray_org_cell.x - self.min.x + 1,
+            )
+        } else {
+            (
+                1,
+                (ray_org_cell.x + 1) as f32 * self.surf.du - ray_org_grid.x,
+                self.max_coord.x - ray_org_cell.x + 1,
+            )
+        };
+        // March along the ray direction until the ray hits the grid
+boundary.         let mut cells = vec![IVec2::ZERO; num_cells as usize];
+        let mut dists = vec![0.0; num_cells as usize + 1];
+        for i in 0..num_cells {
+            cells[i as usize] = ray_org_cell + IVec2::new(dir * i, 0);
+            dists[i as usize + 1] = initial_dist + (i as f32 * self.surf.du);
+        }
+        GridTraversal::Traversed { cells, dists }
+    } else if is_parallel_to_y_axis && !is_parallel_to_x_axis {
+        log::debug!("      -> parallel to Y axis");
+        let (dir, initial_dist, num_cells) = if ray_dir.y < 0.0 {
+            (
+                -1,
+                ray_org_grid.y - ray_org_cell.y as f32 * self.surf.dv,
+                ray_org_cell.y - self.min.y + 1,
+            )
+        } else {
+            (
+                1,
+                (ray_org_cell.y + 1) as f32 * self.surf.dv - ray_org_grid.y,
+                self.max_coord.y - ray_org_cell.y + 1,
+            )
+        };
+        let mut cells = vec![IVec2::ZERO; num_cells as usize];
+        let mut dists = vec![0.0; num_cells as usize + 1];
+        // March along the ray direction until the ray hits the grid
+boundary.         for i in 0..num_cells {
+            cells[i as usize] = ray_org_cell + IVec2::new(0, dir * i);
+            dists[i as usize + 1] = initial_dist + (i as f32 * self.surf.dv);
+        }
+        GridTraversal::Traversed { cells, dists }
+    } else {
+        // The ray is not parallel to either x or y axis.
+        let m = ray_dir.y / ray_dir.x; // The slope of the ray on the grid,
+dy/dx.         let m_recip = m.recip(); // The reciprocal of the slope of
+the ray on the grid, dy/dx.
+
+        log::debug!("    Slope: {:?}, Reciprocal: {:?}", m, m_recip);
+
+        // Calculate the distance along the direction of the ray when moving
+        // a unit distance (size of the cell) along the x-axis and y-axis.
+        let unit = Vec2::new(
+            (1.0 + m * m).sqrt() * self.surf.du,
+            (1.0 + m_recip * m_recip).sqrt() * self.surf.dv,
+        )
+        .abs();
+
+        let mut curr_cell = ray_org_cell;
+        log::debug!("  - starting cell: {:?}", curr_cell);
+        log::debug!("  - unit dist: {:?}", unit);
+
+        let step_dir = IVec2::new(
+            if ray_dir.x >= 0.0 { 1 } else { -1 },
+            if ray_dir.y >= 0.0 { 1 } else { -1 },
+        );
+
+        // Accumulated line length when moving along the x-axis and y-axis.
+        let mut accumulated = Vec2::new(
+            if ray_dir.x < 0.0 {
+                //(ray_org_grid.x - curr_cell.x as f32 * self.surface.du) *
+unit.x                 (ray_org_grid.x / self.surf.du - curr_cell.x as
+f32) * unit.x             } else {
+                //((curr_cell.x + 1) as f32 * self.surface.du -
+ray_org_grid.x) * unit.x                 ((curr_cell.x + 1) as f32 -
+ray_org_grid.x / self.surf.du) * unit.x             },
+            if ray_dir.y < 0.0 {
+                // (ray_org_grid.y - curr_cell.y as f32 * self.surface.dv) *
+unit.y                 (ray_org_grid.y / self.surf.dv - curr_cell.y as
+f32) * unit.y             } else {
+                // ((curr_cell.y + 1) as f32 * self.surface.dv -
+ray_org_grid.y) * unit.y                 ((curr_cell.y + 1) as f32 -
+ray_org_grid.y / self.surf.dv) * unit.y             },
+        );
+
+        log::debug!("  - accumulated: {:?}", accumulated);
+
+        let mut distances = vec![0.0];
+        let mut traversed = vec![curr_cell];
+
+        loop {
+            if accumulated.x <= accumulated.y {
+                // avoid min - 1, max + 1
+                if (step_dir.x > 0 && curr_cell.x == self.max_coord.x)
+                    || (step_dir.x < 0 && curr_cell.x == self.min.x)
+                {
+                    break;
+                }
+                distances.push(accumulated.x);
+                curr_cell.x += step_dir.x;
+                accumulated.x += unit.x;
+            } else {
+                if (step_dir.y > 0 && curr_cell.y == self.max_coord.y)
+                    || (step_dir.y < 0 && curr_cell.y == self.min.y)
+                {
+                    break;
+                }
+                distances.push(accumulated.y);
+                curr_cell.y += step_dir.y;
+                accumulated.y += unit.y;
+            };
+
+            traversed.push(IVec2::new(curr_cell.x, curr_cell.y));
+
+            if (curr_cell.x < self.min.x && curr_cell.x > self.max_coord.x)
+                && (curr_cell.y < self.min.y && curr_cell.y >
+self.max_coord.y)             {
+                break;
+            }
+        }
+
+        // Push distance to the existing point of the last cell.
+        if accumulated.x <= accumulated.y {
+            distances.push(accumulated.x);
+        } else {
+            distances.push(accumulated.y);
+        }
+
+        GridTraversal::Traversed {
+            cells: traversed,
+            dists: distances,
+        }
+    }
+}
+
 // /// Calculate the intersection test result of the ray with the triangles
 // /// inside of a cell.
 // ///
@@ -1155,26 +1180,18 @@ impl<'ms> GridRT<'ms> {
 // }
 // }
 
-fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalize() }
+// fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] -
+// pts[0]).normalize() }
 
-/// Grid traversal outcome.
-#[derive(Debug)]
-pub enum GridTraversal {
-    FromTopOrBottom(IVec2),
-    Traversed {
-        /// Cells traversed by the ray.
-        cells: Vec<IVec2>,
-        /// Distances from the origin of the ray (entering cell of the ray) to
-        /// each intersection point between the ray and cells.
-        dists: Vec<f32>,
-    },
-}
-
-// #[test]
-// fn test_grid_traversal() {
-//     let heightfield = MicroSurface::new(6, 6, 1.0, 1.0, 2.0,
-// AxisAlignment::XY);     let triangle_mesh = heightfield.triangulate();
-//     let grid = GridRT::new(&heightfield, &triangle_mesh);
-//     let result = grid.traverse(Vec2::new(-3.5, -3.5), Vec2::new(1.0, 1.0));
-//     println!("{:?}", result);
+// /// Grid traversal outcome.
+// #[derive(Debug)]
+// pub enum GridTraversal {
+//     FromTopOrBottom(IVec2),
+//     Traversed {
+//         /// Cells traversed by the ray.
+//         cells: Vec<IVec2>,
+//         /// Distances from the origin of the ray (entering cell of the ray)
+//         to         /// each intersection point between the ray and cells.
+//         dists: Vec<f32>,
+//     },
 // }

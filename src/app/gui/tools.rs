@@ -12,7 +12,10 @@ use embree::Config;
 
 use winit::event_loop::EventLoopProxy;
 
-use crate::{measure::rtc::grid::Grid, msurf::MicroSurfaceMesh};
+use crate::{
+    measure::rtc::grid::{Grid, MultilevelGrid},
+    msurf::MicroSurfaceMesh,
+};
 pub(crate) use plotting::Plotting;
 pub(crate) use sampling::SamplingDebugger;
 pub(crate) use scratch::Scratch;
@@ -20,7 +23,7 @@ pub(crate) use visual_debug::VisualDebugger;
 
 use super::state::GuiRenderer;
 
-pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &Grid) -> Vec<Ray> {
+pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &MultilevelGrid) -> Vec<Ray> {
     log::debug!("trace_ray_grid_dbg: {:?}", ray);
     let mut rays = vec![];
     // grid_rt.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut rays);

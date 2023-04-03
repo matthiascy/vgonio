@@ -745,17 +745,18 @@ impl VgonioApp {
                         }
                         RtcMethod::Grid => {
                             log::debug!("  => [Grid Ray Tracing]");
-                            let cache = self.cache.deref().borrow();
-                            let grid_rt = Grid::new(
-                                cache
-                                    .micro_surface(self.msurf.as_ref().unwrap().surf)
-                                    .unwrap(),
-                                cache
-                                    .micro_surface_mesh(self.msurf.as_ref().unwrap().mesh)
-                                    .unwrap(),
-                            );
-                            self.debug_drawing.rays =
-                                trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
+                            // let cache = self.cache.deref().borrow();
+                            // let grid_rt = Grid::new(
+                            //     cache
+                            //         .micro_surface(self.msurf.as_ref().unwrap().surf)
+                            //         .unwrap(),
+                            //     cache
+                            //         .micro_surface_mesh(self.msurf.as_ref().unwrap().mesh)
+                            //         .unwrap(),
+                            // );
+                            // self.debug_drawing.rays =
+                            //     trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
+                            todo!()
                         }
                     }
                     if self.debug_drawing_enabled {

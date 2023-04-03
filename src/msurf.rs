@@ -1,6 +1,6 @@
 //! Heightfield
 
-use crate::{app::cache::Asset, measure::rtc::isect::Aabb};
+use crate::{app::cache::Asset, measure::rtc::Aabb};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, path::PathBuf};
@@ -240,7 +240,10 @@ impl MicroSurface {
         samples: Vec<f32>,
         path: Option<PathBuf>,
     ) -> MicroSurface {
-        debug_assert!(cols > 0 && rows > 0 && samples.len() == cols * rows);
+        debug_assert!(
+            cols > 0 && rows > 0 && samples.len() == cols * rows,
+            "Samples count must be equal to cols * rows"
+        );
         let to_micrometre_factor = U::FACTOR_TO_MICROMETRE;
         let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x)) * to_micrometre_factor;
         let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x)) * to_micrometre_factor;

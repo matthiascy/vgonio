@@ -284,6 +284,7 @@ impl Aabb {
     /// Computes the intersection of two boxes.
     pub fn intersection(&self, other: &Aabb) -> Option<Aabb> { self.intersect_inner(other) }
 
+    /// Inner implementation of intersection.
     fn intersect_inner(&self, other: &Aabb) -> Option<Aabb> {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
@@ -552,88 +553,3 @@ mod tests {
         }
     }
 }
-
-// /// Tests intersection between AABB and Ray using slab method.
-// /// The idea is to treat the AABB as the space inside of three pairs of
-// /// parallel planes. The ray is clipped by each pair of parallel planes,
-// /// and if any portion of the ray remains, it intersects the box.
-// pub fn ray_intersects_p(&self, ray: Ray, t_min: f32, t_max: f32) -> bool {
-//     let mut t_enter = t_min;
-//     let mut t_exit = t_max;
-//
-//     for i in 0..3 {
-//         let inv_d = 1.0 / ray.d[i];
-//         let (t_near, mut t_far) = {
-//             let near = (self.min[i] - ray.o[i]) * inv_d;
-//             let far = (self.max[i] - ray.o[i]) * inv_d;
-//
-//             (near.min(far), near.max(far))
-//         };
-//
-//         t_far *= 1.0 + 2.0 * gamma_f32(3.0);
-//
-//         t_enter = t_near.max(t_enter);
-//         t_exit = t_far.min(t_exit);
-//     }
-//
-//     t_exit > t_enter && t_exit >= 0.0
-// }
-//
-// /// Find the intersection between a ray and a axis-aligned bounding box.
-// pub fn ray_intersects(&self, ray: Ray, t_min: f32, t_max: f32) ->
-// Option<Vec3> {     let mut t_enter = t_min;
-//     let mut t_exit = t_max;
-//
-//     for i in 0..3 {
-//         let inv_d = 1.0 / ray.d[i];
-//         let (t_near, mut t_far) = {
-//             let near = (self.min[i] - ray.o[i]) * inv_d;
-//             let far = (self.max[i] - ray.o[i]) * inv_d;
-//
-//             (near.min(far), near.max(far))
-//         };
-//
-//         t_far *= 1.0 + 2.0 * gamma_f32(3.0);
-//
-//         t_enter = t_near.max(t_enter);
-//         t_exit = t_far.min(t_exit);
-//     }
-//
-//     (t_exit > t_enter && t_exit >= 0.0).then(|| {
-//         if t_enter < 0.0 {
-//             // ray origin is inside the box
-//             ray.o + ray.d * t_exit
-//         } else {
-//             ray.o + ray.d * t_enter
-//         }
-//     })
-// }
-//
-// #[test]
-// fn test_ray_aabb_intersection() {
-//     let ray = Ray::new(Vec3::new(-4.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
-//     let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0,
-// 1.0));
-//
-//     println!(
-//         "{:?}",
-//         aabb.ray_intersects_p(ray, f32::NEG_INFINITY, f32::INFINITY)
-//     );
-//     println!(
-//         "{:?}",
-//         aabb.ray_intersects(ray, f32::NEG_INFINITY, f32::INFINITY)
-//     );
-//
-//     let ray = Ray::new(Vec3::new(2.0, 2.0, 0.0), Vec3::new(-1.0, -1.0, 0.0));
-//     let aabb = Aabb::new(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 0.0,
-// 1.0));
-//
-//     println!(
-//         "{:?}",
-//         aabb.ray_intersects_p(ray, f32::NEG_INFINITY, f32::INFINITY)
-//     );
-//     println!(
-//         "{:?}",
-//         aabb.ray_intersects(ray, f32::NEG_INFINITY, f32::INFINITY)
-//     );
-// }
