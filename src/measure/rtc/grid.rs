@@ -197,7 +197,7 @@ pub struct Grid<C: Cell> {
 }
 
 /// Grid traversal outcome.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GridTraversal {
     FromTopOrBottom(IVec2),
     TraversedBaseCells {
@@ -258,7 +258,7 @@ impl<C: Cell> Grid<C> {
             "Start position in the world space relative to grid's origin: {:?}",
             start_pos
         );
-        let start_cell = self.world_to_local(&origin, &start_pos).unwrap();
+        let start_cell = self.world_to_local(&origin, &ray.o.xz()).unwrap();
         println!("Start position in the grid space: {:?}", start_cell);
         let ray_dir = ray.d.xz();
         log::debug!("Ray direction in the grid space: {:?}", ray_dir);
@@ -274,7 +274,7 @@ impl<C: Cell> Grid<C> {
         }
 
         let mut travelled_dists = vec![0.0];
-        let mut traversed_cells = vec![start_cell];
+        let mut traversed_cells = vec![];
 
         // We are using the DDA algorithm to find all the cells that the ray traverses
         // and its intersection points. In case we are traversing on the coarse
@@ -336,32 +336,32 @@ impl<C: Cell> Grid<C> {
 
         // 4. Identify the traversed cells and intersection points
         loop {
-            let reaching_left_or_right_edge = step_dir.x > 0
-                && curr_cell.x > (self.cols - 1) as i32
+            let reaching_left_or_right_edge = step_dir.x > 0 && curr_cell.x >= self.cols as i32
                 || step_dir.x < 0 && curr_cell.x < 0;
-            let reaching_top_or_bottom_edge = step_dir.y > 0
-                && curr_cell.y > (self.rows - 1) as i32
+            let reaching_top_or_bottom_edge = step_dir.y > 0 && curr_cell.y >= self.rows as i32
                 || step_dir.y < 0 && curr_cell.y < 0;
+
+            if reaching_left_or_right_edge || reaching_top_or_bottom_edge {
+                break;
+            } else {
+                traversed_cells.push(curr_cell);
+            }
+
             if accumulated_line.x <= accumulated_line.y {
-                if reaching_left_or_right_edge {
-                    break;
-                }
                 // Move along the x-axis.
                 travelled_dists.push(accumulated_line.x);
                 curr_cell.x += step_dir.x;
                 accumulated_line.x += dl.x;
             } else {
-                if reaching_top_or_bottom_edge {
-                    break;
-                }
                 // Move along the y-axis.
                 travelled_dists.push(accumulated_line.y);
                 curr_cell.y += step_dir.y;
                 accumulated_line.y += dl.y;
             }
-
-            traversed_cells.push(curr_cell);
         }
+
+        println!("Traversed cells: {:?}", traversed_cells);
+        println!("Travelled distances: {:?}", travelled_dists);
 
         if self.is_coarse {
             GridTraversal::TraversedCoarseCells {
@@ -379,12 +379,17 @@ impl<C: Cell> Grid<C> {
     /// position in the world space.
     ///
     /// Returns `None` if the position is outside the grid.
+    ///
+    /// # Arguments
+    ///
+    /// * `origin` - The origin of the grid in the world space.
+    /// * `pos` - The position in the world space.
     pub fn world_to_local(&self, origin: &Vec2, pos: &Vec2) -> Option<IVec2> {
         let x = {
             let x = (pos.x - origin.x) / self.world_space_cell_size.x;
             // If the position is exactly on the boundary of the cell, we
             // should use the cell on the left.
-            if x.fract() == 0.0 {
+            if x.trunc() == self.cols as f32 && x.fract() == 0.0 {
                 x as u32 - 1
             } else {
                 x as u32
@@ -394,7 +399,7 @@ impl<C: Cell> Grid<C> {
             let y = (pos.y - origin.y) / self.world_space_cell_size.y;
             // If the position is exactly on the boundary of the cell, we
             // should use the cell on the left.
-            if y.fract() == 0.0 {
+            if y.trunc() == self.rows as f32 && y.fract() == 0.0 {
                 y as u32 - 1
             } else {
                 y as u32
@@ -607,11 +612,14 @@ impl<'ms> MultilevelGrid<'ms> {
 mod tests {
     use crate::{
         common::ulp_eq,
-        measure::rtc::{grid::MultilevelGrid, Ray},
+        measure::rtc::{
+            grid::{GridTraversal, MultilevelGrid},
+            Ray,
+        },
         msurf::{AxisAlignment, MicroSurface},
         units::{um, UMicrometre},
     };
-    use glam::{UVec2, Vec3, Vec3Swizzles};
+    use glam::{IVec2, UVec2, Vec3, Vec3Swizzles};
     use proptest::proptest;
 
     #[test]
@@ -750,9 +758,107 @@ mod tests {
         println!("level: {}", grid.level());
         let coarse0 = grid.coarse(0);
         let coarse1 = grid.coarse(1);
-        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, -1.0));
-        let mut traversal = coarse1.traverse(mesh.bounds.min.xz(), &ray);
-        println!("traversal: {:?}", traversal);
+        assert_eq!(coarse1.cols, 3);
+        assert_eq!(coarse1.rows, 3);
+
+        {
+            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, 1.0));
+            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
+            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl0,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![
+                        IVec2::new(2, 2),
+                        IVec2::new(3, 2),
+                        IVec2::new(3, 3),
+                        IVec2::new(4, 3),
+                        IVec2::new(4, 4)
+                    ]
+                }
+            );
+            assert_eq!(
+                traversal_lvl1,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)]
+                }
+            );
+        }
+
+        {
+            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0, -0.1, -1.0));
+            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl0,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![
+                        IVec2::new(2, 2),
+                        IVec2::new(1, 2),
+                        IVec2::new(1, 1),
+                        IVec2::new(0, 1),
+                        IVec2::new(0, 0)
+                    ]
+                }
+            );
+
+            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl1,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 0)]
+                }
+            );
+        }
+
+        {
+            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, -1.0));
+            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl0,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![
+                        IVec2::new(2, 2),
+                        IVec2::new(3, 2),
+                        IVec2::new(3, 1),
+                        IVec2::new(4, 1),
+                        IVec2::new(4, 0)
+                    ]
+                }
+            );
+
+            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl1,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![IVec2::new(1, 1), IVec2::new(1, 0), IVec2::new(2, 0)]
+                }
+            );
+        }
+
+        {
+            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0, -0.1, 1.0));
+            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl0,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![
+                        IVec2::new(2, 2),
+                        IVec2::new(1, 2),
+                        IVec2::new(1, 3),
+                        IVec2::new(0, 3),
+                        IVec2::new(0, 4)
+                    ]
+                }
+            );
+
+            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_lvl1,
+                GridTraversal::TraversedCoarseCells {
+                    cells: vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 2)]
+                }
+            );
+        }
     }
 }
 
@@ -776,13 +882,6 @@ mod tests {
 //     )
 // }
 //
-// /// Convert a world space position into a grid space position.
-// pub fn world_to_grid_2d(&self, world_pos: Vec2) -> IVec2 {
-//     IVec2::new(
-//         ((world_pos.x - self.origin.x) / self.surf.du) as i32,
-//         ((world_pos.y - self.origin.y) / self.surf.dv) as i32,
-//     )
-// }
 //
 // /// Obtain the two triangles (with its corresponding index) contained within
 // /// the cell.
