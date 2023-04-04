@@ -3,7 +3,7 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
+    msurf::{MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Error,
 };
@@ -285,7 +285,6 @@ impl Cache {
         &mut self,
         config: &Config,
         paths: &PathBuf,
-        alignment: AxisAlignment,
     ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), Error> {
         self.resolve_path(paths, config)
             .map(|filepath| {
@@ -300,7 +299,7 @@ impl Cache {
                     log::debug!("-- loading: {}", filepath.display());
                     let msurf = MicroSurface::load_from_file(&filepath, None).unwrap();
                     let msurf_id = msurf.uuid;
-                    let mesh = msurf.as_micro_surface_mesh(alignment);
+                    let mesh = msurf.as_micro_surface_mesh();
                     let mesh_id = Uuid::new_v4();
                     self.msurfs.insert(msurf_id, msurf);
                     self.meshes.insert(mesh_id, mesh);
@@ -357,7 +356,6 @@ impl Cache {
         &mut self,
         config: &Config,
         paths: &[PathBuf],
-        alignment: AxisAlignment,
     ) -> Result<Vec<Handle<MicroSurface>>, Error> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
@@ -390,7 +388,7 @@ impl Cache {
                         log::debug!("-- loading: {}", filepath.display());
                         let msurf = MicroSurface::load_from_file(&filepath, None).unwrap();
                         let msurf_id = msurf.uuid;
-                        let mesh = msurf.as_micro_surface_mesh(alignment);
+                        let mesh = msurf.as_micro_surface_mesh();
                         let mesh_id = Uuid::new_v4();
                         self.msurfs.insert(msurf_id, msurf);
                         self.meshes.insert(mesh_id, mesh);

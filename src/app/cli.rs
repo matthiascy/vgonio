@@ -15,7 +15,7 @@ use crate::{
         },
         CollectorScheme, RtcMethod,
     },
-    msurf::{AxisAlignment, MicroSurface},
+    msurf::MicroSurface,
     Error,
 };
 
@@ -111,7 +111,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         .into_iter()
         .filter_map(|meas| {
             cache
-                .load_micro_surfaces(&config, &meas.surfaces, AxisAlignment::XZ)
+                .load_micro_surfaces(&config, &meas.surfaces)
                 .ok()
                 .map(|surfaces| (meas, surfaces))
         })

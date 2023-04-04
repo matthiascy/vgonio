@@ -255,7 +255,7 @@ impl Collector {
                                          have more than one intersection point."
                                     )
                                 }
-                                QuadraticSolution::Two(_, t) => last.org + last.dir * t,
+                                QuadraticSolution::Two(t, _) => last.org + last.dir * t,
                             };
                             Some((i, p.normalize(), trajectory.len() - 1))
                         }
@@ -422,7 +422,7 @@ impl PatchPartitioned {
     /// Checks if a unit vector (ray direction) falls into the patch.
     pub fn contains(&self, unit_vector: Vec3A) -> bool {
         let spherical =
-            SphericalCoord::from_cartesian(unit_vector.into(), Handedness::RightHandedYUp);
+            SphericalCoord::from_cartesian(unit_vector.into(), 1.0, Handedness::RightHandedYUp);
         let (zenith, azimuth) = (spherical.zenith, spherical.azimuth);
         let (zenith_start, zenith_stop) = self.zenith;
         let (azimuth_start, azimuth_stop) = self.azimuth;
@@ -460,8 +460,11 @@ impl PatchSingleRegion {
                 unit_vector.dot(self.unit_vector) > zenith.cos()
             }
             RegionShape::SphericalRect { zenith, azimuth } => {
-                let spherical =
-                    SphericalCoord::from_cartesian(unit_vector.into(), Handedness::RightHandedYUp);
+                let spherical = SphericalCoord::from_cartesian(
+                    unit_vector.into(),
+                    1.0,
+                    Handedness::RightHandedYUp,
+                );
                 let (theta, phi) = (spherical.zenith, spherical.azimuth);
                 let (zenith_start, zenith_stop) = zenith;
                 let (azimuth_start, azimuth_stop) = azimuth;

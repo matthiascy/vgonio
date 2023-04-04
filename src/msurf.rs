@@ -10,7 +10,7 @@ mod mesh;
 
 use crate::{
     app::gfx::RenderableMesh,
-    units::{nm, um, Length, LengthUnit, Micrometres, Nanometres},
+    units::{um, LengthUnit, Micrometres, Nanometres},
 };
 pub use mesh::MicroSurfaceMesh;
 
@@ -481,8 +481,9 @@ impl MicroSurface {
     }
 
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
-    pub fn as_micro_surface_mesh(&self, alignment: AxisAlignment) -> MicroSurfaceMesh {
-        let (verts, extent) = self.generate_vertices(alignment);
+    /// The triangulation is done in the XZ plane.
+    pub fn as_micro_surface_mesh(&self) -> MicroSurfaceMesh {
+        let (verts, extent) = self.generate_vertices(AxisAlignment::XZ);
         let tri_faces = regular_grid_triangulation(self.cols, self.rows);
         let num_faces = tri_faces.len() / 3;
 
@@ -503,7 +504,6 @@ impl MicroSurface {
             num_facets: num_faces,
             num_verts: verts.len(),
             bounds: extent,
-            alignment,
             verts,
             facets: tri_faces,
             facet_normals: normals,
@@ -513,18 +513,15 @@ impl MicroSurface {
     }
 
     /// Triangulate the heightfield then convert it into a [`RenderableMesh`].
-    pub fn as_renderable_mesh(
-        &self,
-        device: &wgpu::Device,
-        alignment: AxisAlignment,
-    ) -> RenderableMesh {
-        RenderableMesh::from_micro_surface(device, self, alignment)
+    pub fn as_renderable_mesh(&self, device: &wgpu::Device) -> RenderableMesh {
+        RenderableMesh::from_micro_surface(device, self)
     }
 
     /// Generate vertices from the height values.
     ///
     /// The vertices are generated following the order from left to right, top
-    /// to bottom.
+    /// to bottom. The vertices are also aligned to the given axis. The center
+    /// of the heightfield is at the origin.
     pub(crate) fn generate_vertices(&self, alignment: AxisAlignment) -> (Vec<Vec3>, Aabb) {
         log::info!(
             "Generating height field vertices with {:?} alignment",

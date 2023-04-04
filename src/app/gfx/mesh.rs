@@ -29,12 +29,11 @@ impl RenderableMesh {
     pub fn from_micro_surface(
         device: &wgpu::Device,
         surf: &MicroSurface,
-        alignment: AxisAlignment,
     ) -> Self {
         use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (surf.cols, surf.rows);
-        let (positions, extent) = surf.generate_vertices(alignment);
+        let (positions, extent) = surf.generate_vertices(AxisAlignment::XZ);
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
         let indices: Vec<u32> = regular_grid_triangulation(cols, rows);

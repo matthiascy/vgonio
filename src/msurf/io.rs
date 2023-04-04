@@ -1,8 +1,7 @@
 use crate::{
     error::Error,
-    io::{CacheHeader, CacheKind, MsHeader},
-    msurf::{AxisAlignment, MicroSurface},
-    units::{micrometres, nm, um, UMicrometre},
+    msurf::{MicroSurface},
+    units::{um, UMicrometre},
 };
 use std::{
     fs::File,

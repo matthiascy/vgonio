@@ -5,6 +5,8 @@ use crate::{
         cache::Cache,
         cli::{BRIGHT_YELLOW, RESET},
     },
+    common::ulp_eq,
+    math::rcp,
     measure::{
         bsdf::SpectrumSampler,
         collector::CollectorPatches,
@@ -12,7 +14,7 @@ use crate::{
         measurement::{BsdfMeasurement, Radius},
         rtc::{
             isect::{ray_tri_intersect_woop, RayTriIsect},
-            Aabb, Ray,
+            Ray,
         },
         Collector, Emitter, RtcRecord, TrajectoryNode,
     },
@@ -187,8 +189,30 @@ pub struct Grid<C: Cell> {
     /// doubled in each level.
     grid_space_cell_size: u32,
 
+    /// Whether the grid is coarse.
+    is_coarse: bool,
+
     /// Cells of the grid stored in row-major order.
     cells: Vec<C>,
+}
+
+/// Grid traversal outcome.
+#[derive(Debug, Clone)]
+pub enum GridTraversal {
+    FromTopOrBottom(IVec2),
+    TraversedBaseCells {
+        /// Cells traversed by the ray.
+        cells: Vec<IVec2>,
+        /// Distances from the origin of the ray (entering cell of the ray)
+        /// to each intersection point between the ray and cells.
+        /// The first element is always 0, and the last element is the
+        /// distance from the origin to the exit point of the ray.
+        dists: Vec<f32>,
+    },
+    TraversedCoarseCells {
+        /// Cells traversed by the ray.
+        cells: Vec<IVec2>,
+    },
 }
 
 impl<C: Cell> Grid<C> {
@@ -222,8 +246,166 @@ impl<C: Cell> Grid<C> {
     /// and the corresponding intersection.
     ///
     /// Modified version of Digital Differential Analyzer (DDA) algorithm.
-    pub fn traverse(&self, ray: &Ray) {
+    ///
+    /// # Arguments
+    ///
+    /// * `origin` - Origin of the grid in the world space (top-left corner).
+    /// * `ray` - The ray to traverse the grid.
+    pub fn traverse(&self, origin: Vec2, ray: &Ray) -> GridTraversal {
         log::debug!("Traversing the grid along the ray: {:?}", ray);
+        let start_pos = ray.o.xz() - origin;
+        log::debug!(
+            "Start position in the world space relative to grid's origin: {:?}",
+            start_pos
+        );
+        let start_cell = self.world_to_local(&origin, &start_pos).unwrap();
+        println!("Start position in the grid space: {:?}", start_cell);
+        let ray_dir = ray.d.xz();
+        log::debug!("Ray direction in the grid space: {:?}", ray_dir);
+
+        let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
+        let is_parallel_to_grid_y = ulp_eq(ray_dir.x, 0.0);
+
+        if is_parallel_to_grid_x && is_parallel_to_grid_y {
+            // The ray is parallel to both the grid x and y axis; coming from
+            // the top or bottom of the grid.
+            log::debug!("The ray is parallel to both the grid x and y axis");
+            return GridTraversal::FromTopOrBottom(start_cell);
+        }
+
+        let mut travelled_dists = vec![0.0];
+        let mut traversed_cells = vec![start_cell];
+
+        // We are using the DDA algorithm to find all the cells that the ray traverses
+        // and its intersection points. In case we are traversing on the coarse
+        // grid we can assume that the size of the grid cell is always 1x1.
+        log::debug!("The ray is not parallel to either the grid x or y axis");
+        let cell_size = if self.is_coarse {
+            Vec2::new(1.0, 1.0)
+        } else {
+            self.world_space_cell_size
+        };
+
+        // 1. Calculate the slope of the ray on the grid.
+        let (m, m_rcp) = {
+            if is_parallel_to_grid_x && !is_parallel_to_grid_y {
+                log::debug!("The ray is parallel to the grid x axis");
+                (1.0, 0.0)
+            } else if !is_parallel_to_grid_x && is_parallel_to_grid_y {
+                log::debug!("The ray is parallel to the grid y axis");
+                (0.0, 1.0)
+            } else {
+                log::debug!("The ray is not parallel to either the grid x or y axis");
+                let m = ray_dir.y * rcp(ray_dir.x);
+                (m, rcp(m))
+            }
+        };
+        log::debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);
+        // 2. Calculate the distance along each axis when moving one cell in the grid
+        // space.
+        let dl = Vec2::new(
+            m.mul_add(m, 1.0).sqrt() * cell_size.x,
+            m_rcp.mul_add(m_rcp, 1.0).sqrt() * cell_size.y,
+        );
+        log::debug!(
+            "Distance along each axis when moving one cell in the grid space: {:?}",
+            dl
+        );
+        let mut curr_cell = start_cell;
+        let step_dir = IVec2::new(
+            if ray_dir.x >= 0.0 { 1 } else { -1 },
+            if ray_dir.y >= 0.0 { 1 } else { -1 },
+        );
+
+        // 3. Calculate the line length from the start position when moving one
+        // unit along the x-axis and y-axis.
+        let mut accumulated_line = Vec2::new(
+            if ray_dir.x < 0.0 {
+                (start_pos.x / self.world_space_cell_size.x - curr_cell.x as f32) * dl.x
+            } else {
+                ((curr_cell.x + 1) as f32 - start_pos.x / self.world_space_cell_size.x) * dl.x
+            },
+            if ray_dir.y < 0.0 {
+                (start_pos.y / self.world_space_cell_size.y - curr_cell.y as f32) * dl.y
+            } else {
+                ((curr_cell.y + 1) as f32 - start_pos.y / self.world_space_cell_size.y) * dl.y
+            },
+        );
+
+        log::debug!("Initial accumulated line length: {:?}", accumulated_line);
+
+        // 4. Identify the traversed cells and intersection points
+        loop {
+            let reaching_left_or_right_edge = step_dir.x > 0
+                && curr_cell.x > (self.cols - 1) as i32
+                || step_dir.x < 0 && curr_cell.x < 0;
+            let reaching_top_or_bottom_edge = step_dir.y > 0
+                && curr_cell.y > (self.rows - 1) as i32
+                || step_dir.y < 0 && curr_cell.y < 0;
+            if accumulated_line.x <= accumulated_line.y {
+                if reaching_left_or_right_edge {
+                    break;
+                }
+                // Move along the x-axis.
+                travelled_dists.push(accumulated_line.x);
+                curr_cell.x += step_dir.x;
+                accumulated_line.x += dl.x;
+            } else {
+                if reaching_top_or_bottom_edge {
+                    break;
+                }
+                // Move along the y-axis.
+                travelled_dists.push(accumulated_line.y);
+                curr_cell.y += step_dir.y;
+                accumulated_line.y += dl.y;
+            }
+
+            traversed_cells.push(curr_cell);
+        }
+
+        if self.is_coarse {
+            GridTraversal::TraversedCoarseCells {
+                cells: traversed_cells,
+            }
+        } else {
+            GridTraversal::TraversedBaseCells {
+                cells: traversed_cells,
+                dists: travelled_dists,
+            }
+        }
+    }
+
+    /// Returns the grid coordinates of the cell that contains the given
+    /// position in the world space.
+    ///
+    /// Returns `None` if the position is outside the grid.
+    pub fn world_to_local(&self, origin: &Vec2, pos: &Vec2) -> Option<IVec2> {
+        let x = {
+            let x = (pos.x - origin.x) / self.world_space_cell_size.x;
+            // If the position is exactly on the boundary of the cell, we
+            // should use the cell on the left.
+            if x.fract() == 0.0 {
+                x as u32 - 1
+            } else {
+                x as u32
+            }
+        };
+        let y = {
+            let y = (pos.y - origin.y) / self.world_space_cell_size.y;
+            // If the position is exactly on the boundary of the cell, we
+            // should use the cell on the left.
+            if y.fract() == 0.0 {
+                y as u32 - 1
+            } else {
+                y as u32
+            }
+        };
+        if x >= self.cols || y >= self.rows {
+            None
+        } else {
+            debug_assert!(x > 0 && y > 0, "The position should be positive");
+            Some(IVec2::new(x as i32, y as i32))
+        }
     }
 }
 
@@ -240,6 +422,9 @@ pub struct MultilevelGrid<'ms> {
 
     /// Number of levels of the coarse grid.
     level: u32,
+
+    /// Origin of the grid in the world space (top-left corner).
+    origin: Vec2,
 
     /// The finest grid.
     base: Grid<BaseCell>,
@@ -289,6 +474,7 @@ impl<'ms> MultilevelGrid<'ms> {
             mesh,
             min_coarse_cell_size,
             level,
+            origin: Vec2::new(mesh.bounds.min.x, mesh.bounds.min.z),
             base,
             coarse,
         }
@@ -334,6 +520,7 @@ impl<'ms> MultilevelGrid<'ms> {
             rows: grid_height as u32,
             world_space_cell_size: Vec2::new(surf.du, surf.dv),
             grid_space_cell_size: 1,
+            is_coarse: false,
             cells: base_cells,
         }
     }
@@ -400,6 +587,7 @@ impl<'ms> MultilevelGrid<'ms> {
                 base.world_space_cell_size.y * cell_size_in_base as f32,
             ),
             grid_space_cell_size: cell_size_in_base,
+            is_coarse: true,
             cells,
         }
     }
@@ -419,11 +607,11 @@ impl<'ms> MultilevelGrid<'ms> {
 mod tests {
     use crate::{
         common::ulp_eq,
-        measure::rtc::grid::MultilevelGrid,
+        measure::rtc::{grid::MultilevelGrid, Ray},
         msurf::{AxisAlignment, MicroSurface},
         units::{um, UMicrometre},
     };
-    use glam::UVec2;
+    use glam::{UVec2, Vec3, Vec3Swizzles};
     use proptest::proptest;
 
     #[test]
@@ -436,7 +624,7 @@ mod tests {
             vec![0.0; 81],
             None,
         );
-        let mesh = surf.as_micro_surface_mesh(AxisAlignment::XZ);
+        let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         assert_eq!(grid.level(), 2);
         assert_eq!(grid.coarse.len(), 2);
@@ -474,7 +662,7 @@ mod tests {
             ],
             None,
         );
-        let mesh = surf.as_micro_surface_mesh(AxisAlignment::XZ);
+        let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
         assert_eq!(grid.level(), 2);
@@ -525,7 +713,7 @@ mod tests {
                 assert!(ulp_eq(cell.max_height, (cell.max.x + cell.max.y) as f32 * 0.1 + 0.2));
             }
         }
-
+        
         for y in 0..coarse1.rows {
             for x in 0..coarse1.cols {
                 let cell = coarse1.cell_at(x, y);
@@ -550,6 +738,21 @@ mod tests {
                 assert!(ulp_eq(cell.max_height, (cell.max.x + cell.max.y) as f32 * 2.0 * 0.1 + 0.2));
             }
         }
+    }
+
+    #[test]
+    fn grid_traverse() {
+        // todo: test traversal
+        let surf = MicroSurface::new(10, 10, um!(1.0), um!(1.0), um!(0.0));
+        let mesh = surf.as_micro_surface_mesh();
+        let grid = MultilevelGrid::new(&surf, &mesh, 2);
+        let base = grid.base();
+        println!("level: {}", grid.level());
+        let coarse0 = grid.coarse(0);
+        let coarse1 = grid.coarse(1);
+        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, -1.0));
+        let mut traversal = coarse1.traverse(mesh.bounds.min.xz(), &ray);
+        println!("traversal: {:?}", traversal);
     }
 }
 
@@ -653,183 +856,6 @@ mod tests {
 //     );
 //     condition
 // }
-//
-// Modified version of Digital Differential Analyzer (DDA) Algorithm.
-//
-// Traverse the grid to identify all cells and corresponding intersection
-// that are traversed by the ray.
-//
-// # Arguments
-//
-// * `ray_org` - The starting position (in world space) of the ray.
-// * `ray_dir` - The direction of the ray in world space.
-pub fn traverse(ray_org_world: Vec2, ray_dir: Vec2) -> GridTraversal {
-    log::debug!(
-        "    Grid origin: {:?}\n       min: {:?}\n       max: {:?}",
-        self.origin,
-        self.min,
-        self.max_coord
-    );
-    log::debug!(
-        "    Traverse the grid with the ray: o {:?}, d: {:?}",
-        ray_org_world,
-        ray_dir.normalize()
-    );
-    // Relocate the ray origin to the position relative to the origin of the grid.
-    let ray_org_grid = ray_org_world - self.origin;
-    let ray_org_cell = self.world_to_grid_2d(ray_org_world);
-    log::debug!("      - ray origin cell: {:?}", ray_org_cell);
-    log::debug!("      - ray origin grid: {:?}", ray_org_grid);
-
-    let is_parallel_to_x_axis = f32::abs(ray_dir.y - 0.0) < f32::EPSILON;
-    let is_parallel_to_y_axis = f32::abs(ray_dir.x - 0.0) < f32::EPSILON;
-
-    if is_parallel_to_x_axis && is_parallel_to_y_axis {
-        // The ray is parallel to both axes, which means it comes from the
-top or bottom         // of the grid.
-        log::debug!("      -> parallel to both axes");
-        return GridTraversal::FromTopOrBottom(ray_org_cell);
-    }
-
-    let ray_dir = ray_dir.normalize();
-    if is_parallel_to_x_axis && !is_parallel_to_y_axis {
-        log::debug!("      -> parallel to X axis");
-        let (dir, initial_dist, num_cells) = if ray_dir.x < 0.0 {
-            (
-                -1,
-                ray_org_grid.x - ray_org_cell.x as f32 * self.surf.du,
-                ray_org_cell.x - self.min.x + 1,
-            )
-        } else {
-            (
-                1,
-                (ray_org_cell.x + 1) as f32 * self.surf.du - ray_org_grid.x,
-                self.max_coord.x - ray_org_cell.x + 1,
-            )
-        };
-        // March along the ray direction until the ray hits the grid
-boundary.         let mut cells = vec![IVec2::ZERO; num_cells as usize];
-        let mut dists = vec![0.0; num_cells as usize + 1];
-        for i in 0..num_cells {
-            cells[i as usize] = ray_org_cell + IVec2::new(dir * i, 0);
-            dists[i as usize + 1] = initial_dist + (i as f32 * self.surf.du);
-        }
-        GridTraversal::Traversed { cells, dists }
-    } else if is_parallel_to_y_axis && !is_parallel_to_x_axis {
-        log::debug!("      -> parallel to Y axis");
-        let (dir, initial_dist, num_cells) = if ray_dir.y < 0.0 {
-            (
-                -1,
-                ray_org_grid.y - ray_org_cell.y as f32 * self.surf.dv,
-                ray_org_cell.y - self.min.y + 1,
-            )
-        } else {
-            (
-                1,
-                (ray_org_cell.y + 1) as f32 * self.surf.dv - ray_org_grid.y,
-                self.max_coord.y - ray_org_cell.y + 1,
-            )
-        };
-        let mut cells = vec![IVec2::ZERO; num_cells as usize];
-        let mut dists = vec![0.0; num_cells as usize + 1];
-        // March along the ray direction until the ray hits the grid
-boundary.         for i in 0..num_cells {
-            cells[i as usize] = ray_org_cell + IVec2::new(0, dir * i);
-            dists[i as usize + 1] = initial_dist + (i as f32 * self.surf.dv);
-        }
-        GridTraversal::Traversed { cells, dists }
-    } else {
-        // The ray is not parallel to either x or y axis.
-        let m = ray_dir.y / ray_dir.x; // The slope of the ray on the grid,
-dy/dx.         let m_recip = m.recip(); // The reciprocal of the slope of
-the ray on the grid, dy/dx.
-
-        log::debug!("    Slope: {:?}, Reciprocal: {:?}", m, m_recip);
-
-        // Calculate the distance along the direction of the ray when moving
-        // a unit distance (size of the cell) along the x-axis and y-axis.
-        let unit = Vec2::new(
-            (1.0 + m * m).sqrt() * self.surf.du,
-            (1.0 + m_recip * m_recip).sqrt() * self.surf.dv,
-        )
-        .abs();
-
-        let mut curr_cell = ray_org_cell;
-        log::debug!("  - starting cell: {:?}", curr_cell);
-        log::debug!("  - unit dist: {:?}", unit);
-
-        let step_dir = IVec2::new(
-            if ray_dir.x >= 0.0 { 1 } else { -1 },
-            if ray_dir.y >= 0.0 { 1 } else { -1 },
-        );
-
-        // Accumulated line length when moving along the x-axis and y-axis.
-        let mut accumulated = Vec2::new(
-            if ray_dir.x < 0.0 {
-                //(ray_org_grid.x - curr_cell.x as f32 * self.surface.du) *
-unit.x                 (ray_org_grid.x / self.surf.du - curr_cell.x as
-f32) * unit.x             } else {
-                //((curr_cell.x + 1) as f32 * self.surface.du -
-ray_org_grid.x) * unit.x                 ((curr_cell.x + 1) as f32 -
-ray_org_grid.x / self.surf.du) * unit.x             },
-            if ray_dir.y < 0.0 {
-                // (ray_org_grid.y - curr_cell.y as f32 * self.surface.dv) *
-unit.y                 (ray_org_grid.y / self.surf.dv - curr_cell.y as
-f32) * unit.y             } else {
-                // ((curr_cell.y + 1) as f32 * self.surface.dv -
-ray_org_grid.y) * unit.y                 ((curr_cell.y + 1) as f32 -
-ray_org_grid.y / self.surf.dv) * unit.y             },
-        );
-
-        log::debug!("  - accumulated: {:?}", accumulated);
-
-        let mut distances = vec![0.0];
-        let mut traversed = vec![curr_cell];
-
-        loop {
-            if accumulated.x <= accumulated.y {
-                // avoid min - 1, max + 1
-                if (step_dir.x > 0 && curr_cell.x == self.max_coord.x)
-                    || (step_dir.x < 0 && curr_cell.x == self.min.x)
-                {
-                    break;
-                }
-                distances.push(accumulated.x);
-                curr_cell.x += step_dir.x;
-                accumulated.x += unit.x;
-            } else {
-                if (step_dir.y > 0 && curr_cell.y == self.max_coord.y)
-                    || (step_dir.y < 0 && curr_cell.y == self.min.y)
-                {
-                    break;
-                }
-                distances.push(accumulated.y);
-                curr_cell.y += step_dir.y;
-                accumulated.y += unit.y;
-            };
-
-            traversed.push(IVec2::new(curr_cell.x, curr_cell.y));
-
-            if (curr_cell.x < self.min.x && curr_cell.x > self.max_coord.x)
-                && (curr_cell.y < self.min.y && curr_cell.y >
-self.max_coord.y)             {
-                break;
-            }
-        }
-
-        // Push distance to the existing point of the last cell.
-        if accumulated.x <= accumulated.y {
-            distances.push(accumulated.x);
-        } else {
-            distances.push(accumulated.y);
-        }
-
-        GridTraversal::Traversed {
-            cells: traversed,
-            dists: distances,
-        }
-    }
-}
 
 // /// Calculate the intersection test result of the ray with the triangles
 // /// inside of a cell.
@@ -1182,16 +1208,3 @@ self.max_coord.y)             {
 
 // fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] -
 // pts[0]).normalize() }
-
-// /// Grid traversal outcome.
-// #[derive(Debug)]
-// pub enum GridTraversal {
-//     FromTopOrBottom(IVec2),
-//     Traversed {
-//         /// Cells traversed by the ray.
-//         cells: Vec<IVec2>,
-//         /// Distances from the origin of the ray (entering cell of the ray)
-//         to         /// each intersection point between the ray and cells.
-//         dists: Vec<f32>,
-//     },
-// }

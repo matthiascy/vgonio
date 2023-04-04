@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// # Examples
 /// ```
-/// # use vgonio::measure::rtc::isect::Axis;
+/// # use vgonio::measure::rtc::Axis;
 ///
 /// let mut pos = [0.1, 0.4, 0.6];
 /// pos[Axis::X] -= 0.1;
@@ -42,29 +42,23 @@ impl Axis {
     pub fn next_axis(&self) -> Axis { Axis::from((*self as u32 + 1) % 3) }
 }
 
-impl From<i32> for Axis {
-    fn from(i: i32) -> Self {
-        assert!((0..3).contains(&i));
-        match i {
-            0 => Axis::X,
-            1 => Axis::Y,
-            2 => Axis::Z,
-            _ => unreachable!(),
+macro impl_axis_from_traits($($t:ty)+) {
+    $(
+        impl From<$t> for Axis {
+            fn from(i: $t) -> Self {
+                debug_assert!((0..3).contains(&i));
+                match i {
+                    0 => Axis::X,
+                    1 => Axis::Y,
+                    2 => Axis::Z,
+                    _ => unreachable!("Axis::from($t) is only defined for $t in [0, 3)"),
+                }
+            }
         }
-    }
+    )+
 }
 
-impl From<u32> for Axis {
-    fn from(i: u32) -> Self {
-        assert!(i < 3);
-        match i {
-            0 => Axis::X,
-            1 => Axis::Y,
-            2 => Axis::Z,
-            _ => unreachable!(),
-        }
-    }
-}
+impl_axis_from_traits!(u8 u16 u32 u64 usize i8 i16 i32 i64 isize);
 
 impl<T> Index<Axis> for [T] {
     type Output = T;
@@ -98,11 +92,10 @@ impl IndexMut<Axis> for Vec3 {
     }
 }
 
-// TODO: replace with proptest
 #[cfg(test)]
 mod test {
+    use crate::measure::rtc::Axis;
     use proptest::prelude::*;
-    use crate::measure::rtc::isect::Axis;
 
     proptest! {
         fn immutable_test(a: u32, b: u32, c: u32){

@@ -7,13 +7,8 @@ use core::arch::x86::*;
 use glam::Vec3;
 use std::ops::{Index, IndexMut};
 
-use crate::{
-    common::{gamma_f32, ulp_eq},
-    measure::rtc::{isect::Axis, Ray},
-};
+use crate::{common::ulp_eq, measure::rtc::Axis};
 use serde::{Deserialize, Serialize};
-
-// TODO: test
 
 /// Axis-aligned bounding box.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]

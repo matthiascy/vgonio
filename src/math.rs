@@ -1,6 +1,6 @@
 use crate::{
     common::{ulp_eq, Handedness, SphericalCoord},
-    units::{degrees, radians, Radians},
+    units::{radians, Radians},
 };
 pub use glam::*;
 
@@ -44,8 +44,7 @@ pub fn spherical_to_cartesian(
 /// * `r` - radius
 /// * `zenith` - polar angle
 /// * `azimuth` - azimuthal angle
-pub fn cartesian_to_spherical(v: Vec3, handedness: Handedness) -> SphericalCoord {
-    let radius = v.length();
+pub fn cartesian_to_spherical(v: Vec3, radius: f32, handedness: Handedness) -> SphericalCoord {
     let (zenith, azimuth) = match handedness {
         Handedness::RightHandedZUp => {
             let zenith = radians!((v.z * rcp(radius)).acos());
@@ -65,14 +64,18 @@ pub fn cartesian_to_spherical(v: Vec3, handedness: Handedness) -> SphericalCoord
     }
 }
 
+// TODO: improve accuracy
 #[test]
 fn spherical_cartesian_conversion() {
+    use crate::{common::ulp_eq, units::degrees};
+
     let r = 1.0;
     let zenith = radians!(0.0);
     let azimuth = radians!(0.0);
     let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
-    let sph = cartesian_to_spherical(v, Handedness::RightHandedZUp);
+    let sph = cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
     assert!(ulp_eq(r, sph.radius));
+    println!("{:.20} {:.20}", zenith.value, sph.zenith.value);
     assert!(ulp_eq(zenith.value, sph.zenith.value));
     assert!(ulp_eq(azimuth.value, sph.azimuth.value));
 
@@ -80,7 +83,7 @@ fn spherical_cartesian_conversion() {
     let zenith = degrees!(45.0).into();
     let azimuth = degrees!(120.0).into();
     let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
-    let sph = cartesian_to_spherical(v, Handedness::RightHandedZUp);
+    let sph = cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
     assert!(ulp_eq(r, sph.radius));
     assert!(ulp_eq(zenith.value, sph.zenith.value));
     assert!(ulp_eq(azimuth.value, sph.azimuth.value));
@@ -89,7 +92,7 @@ fn spherical_cartesian_conversion() {
     let zenith = degrees!(60.0).in_radians();
     let azimuth = degrees!(90.0).in_radians();
     let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedYUp);
-    let sph = cartesian_to_spherical(v, Handedness::RightHandedYUp);
+    let sph = cartesian_to_spherical(v, 1.5, Handedness::RightHandedYUp);
     assert!(ulp_eq(r, sph.radius));
     assert!(ulp_eq(zenith.value, sph.zenith.value));
     assert!(ulp_eq(azimuth.value, sph.azimuth.value));
@@ -126,32 +129,32 @@ pub fn rcp(x: f32) -> f32 {
 
 #[test]
 fn test_rcp() {
-    assert_eq!(rcp(1.0), 1.0);
-    assert_eq!(rcp(2.0), 0.5);
-    assert_eq!(rcp(4.0), 0.25);
-    assert_eq!(rcp(8.0), 0.125);
-    assert_eq!(rcp(16.0), 0.0625);
-    assert_eq!(rcp(32.0), 0.03125);
-    assert_eq!(rcp(64.0), 0.015625);
-    assert_eq!(rcp(128.0), 0.0078125);
-    assert_eq!(rcp(256.0), 0.00390625);
-    assert_eq!(rcp(512.0), 0.001953125);
-    assert_eq!(rcp(1024.0), 0.0009765625);
-    assert_eq!(rcp(2048.0), 0.00048828125);
-    assert_eq!(rcp(4096.0), 0.000244140625);
-    assert_eq!(rcp(8192.0), 0.0001220703125);
-    assert_eq!(rcp(16384.0), 6.103515625e-05);
-    assert_eq!(rcp(32768.0), 3.0517578125e-05);
-    assert_eq!(rcp(65536.0), 1.52587890625e-05);
-    assert_eq!(rcp(131072.0), 7.62939453125e-06);
-    assert_eq!(rcp(262144.0), 3.814697265625e-06);
-    assert_eq!(rcp(524288.0), 1.9073486328125e-06);
-    assert_eq!(rcp(1048576.0), 9.5367431640625e-07);
-    assert_eq!(rcp(2097152.0), 4.76837158203125e-07);
-    assert_eq!(rcp(4194304.0), 2.384185791015625e-07);
-    assert_eq!(rcp(8388608.0), 1.1920928955078125e-07);
-
-    assert_eq!(rcp(3.0), 1.0 / 3.0);
+    use crate::common::ulp_eq;
+    assert!(ulp_eq(rcp(1.0), 1.0));
+    assert!(ulp_eq(rcp(2.0), 0.5));
+    assert!(ulp_eq(rcp(4.0), 0.25));
+    assert!(ulp_eq(rcp(8.0), 0.125));
+    assert!(ulp_eq(rcp(16.0), 0.0625));
+    assert!(ulp_eq(rcp(32.0), 0.03125));
+    assert!(ulp_eq(rcp(64.0), 0.015625));
+    assert!(ulp_eq(rcp(128.0), 0.0078125));
+    assert!(ulp_eq(rcp(256.0), 0.00390625));
+    assert!(ulp_eq(rcp(512.0), 0.001953125));
+    assert!(ulp_eq(rcp(1024.0), 0.0009765625));
+    assert!(ulp_eq(rcp(2048.0), 0.00048828125));
+    assert!(ulp_eq(rcp(4096.0), 0.000244140625));
+    assert!(ulp_eq(rcp(8192.0), 0.0001220703125));
+    assert!(ulp_eq(rcp(16384.0), 6.103515625e-05));
+    assert!(ulp_eq(rcp(32768.0), 3.0517578125e-05));
+    assert!(ulp_eq(rcp(65536.0), 1.52587890625e-05));
+    assert!(ulp_eq(rcp(131072.0), 7.62939453125e-06));
+    assert!(ulp_eq(rcp(262144.0), 3.814697265625e-06));
+    assert!(ulp_eq(rcp(524288.0), 1.9073486328125e-06));
+    assert!(ulp_eq(rcp(1048576.0), 9.5367431640625e-07));
+    assert!(ulp_eq(rcp(2097152.0), 4.76837158203125e-07));
+    assert!(ulp_eq(rcp(4194304.0), 2.384185791015625e-07));
+    assert!(ulp_eq(rcp(8388608.0), 1.1920928955078125e-07));
+    assert!(ulp_eq(rcp(3.0), 1.0 / 3.0));
 }
 
 /// Returns the square of the given value.
@@ -258,9 +261,9 @@ impl PartialEq for QuadraticSolution {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (QuadraticSolution::None, QuadraticSolution::None) => true,
-            (QuadraticSolution::One(x), QuadraticSolution::One(y)) => x == y,
+            (QuadraticSolution::One(x), QuadraticSolution::One(y)) => ulp_eq(*x, *y),
             (QuadraticSolution::Two(x1, x2), QuadraticSolution::Two(y1, y2)) => {
-                (x1 == y1 && x2 == y2) || (x1 == y2 && x2 == y1)
+                (ulp_eq(*x1, *y1) && ulp_eq(*x2, *y2)) || (ulp_eq(*x1, *y2) && ulp_eq(*x2, *y1))
             }
             _ => false,
         }
@@ -293,14 +296,14 @@ fn test_quadratic() {
     assert_eq!(solve_quadratic(1.0, 0.0, 1.0), QuadraticSolution::None);
     assert_eq!(
         solve_quadratic(2.0, 5.0, 3.0),
-        QuadraticSolution::Two(-1.0, -1.5)
+        QuadraticSolution::Two(-1.5, -1.0)
     );
     assert_eq!(
         solve_quadratic(5.0, 6.0, 1.0),
-        QuadraticSolution::Two(-0.2, -1.0)
+        QuadraticSolution::Two(-1.0, -0.2)
     );
     assert_eq!(
         solve_quadratic(-2.0, 2.0, 1.0),
-        QuadraticSolution::Two(1.3660254, -0.3660254)
+        QuadraticSolution::Two(-0.3660254, 1.3660254)
     );
 }

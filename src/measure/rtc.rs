@@ -12,7 +12,9 @@ pub mod grid;
 
 mod aabb;
 pub mod isect;
+mod axis;
 
+pub use axis::Axis;
 pub use aabb::Aabb;
 
 /// Representation of a ray.
@@ -90,19 +92,19 @@ fn test_ray_aabb_intersection() {
         Vec3::new(1.0, 1.0, 1.0).normalize(),
     );
     let bbox = Aabb::new(Vec3::new(1.0, 1.0, 1.0), Vec3::new(2.0, 2.0, 2.0));
-    assert!(ray_aabb_intersection_p(&bbox, ray, 0.0, 10.0));
+    assert!(ray_aabb_intersection_p(&bbox, &ray, 0.0, 10.0));
 
     {
         let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
         let bbox = Aabb::new(Vec3::new(2.0, -1.0, -1.0), Vec3::new(3.0, 1.0, 1.0));
-        assert!(ray_aabb_intersection_p(&bbox, ray, 0.0, 10.0));
-        assert!(
-            ray_aabb_intersection(&bbox, ray, 0.0, 10.0),
+        assert!(ray_aabb_intersection_p(&bbox, &ray, 0.0, 10.0));
+        assert_eq!(
+            ray_aabb_intersection(&bbox, &ray, 0.0, 10.0),
             Some(Vec3::new(2.0, 0.0, 0.0))
         );
 
         let ray1 = Ray::new(Vec3::new(0.0, 2.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
-        assert!(!ray_aabb_intersection_p(&bbox, ray1, 0.0, 10.0));
-        assert!(ray_aabb_intersection(&bbox, ray1, 0.0, 10.0).is_none());
+        assert!(!ray_aabb_intersection_p(&bbox, &ray1, 0.0, 10.0));
+        assert!(ray_aabb_intersection(&bbox, &ray1, 0.0, 10.0).is_none());
     }
 }

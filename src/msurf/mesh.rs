@@ -1,4 +1,4 @@
-use crate::{app::cache::Asset, measure::rtc::Aabb, msurf::AxisAlignment};
+use crate::{app::cache::Asset, measure::rtc::Aabb};
 use glam::Vec3;
 use uuid::Uuid;
 
@@ -8,6 +8,9 @@ use uuid::Uuid;
 /// [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`),
 /// and has the same length unit ([`Micrometres`](`crate::units::Micrometres`))
 /// as the [`MicroSurface`](`crate::msurf::MicroSurface`).
+///
+/// By default, the generated mesh is located on XZ plane in right-handed Y up coordinate system.
+/// See [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`)
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
     /// Unique identifier.
@@ -18,9 +21,6 @@ pub struct MicroSurfaceMesh {
 
     /// Axis-aligned bounding box of the mesh.
     pub bounds: Aabb,
-
-    /// Axis alignment of the mesh.
-    pub alignment: AxisAlignment,
 
     /// Number of triangles in the mesh.
     pub num_facets: usize,

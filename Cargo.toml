@@ -16,7 +16,7 @@ cfg-if = "1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1"
-dirs = "4.0"
+dirs = "5.0"
 egui = { version = "0.21", features = ["bytemuck"] }
 egui_demo_lib = "0.21"
 egui-winit = { version = "0.21", default-features = false }
@@ -25,7 +25,7 @@ embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", 
 env_logger = "0.10"
 futures-intrusive = "0.5"
 glam = { version = "0.22", features = ["serde", "bytemuck"] }
-image = "0.24"
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 log = "0.4"
 paste = "1.0"
 pollster = "0.3"

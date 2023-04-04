@@ -72,7 +72,7 @@ pub fn ulp_eq(a: f32, b: f32) -> bool {
     let b_abs = b.abs();
     if a == b {
         true
-    } else if a == 0.0 || b == 0.0 || a_abs < f32::MIN_POSITIVE ||  b_abs < f32::MIN_POSITIVE {
+    } else if a == 0.0 || b == 0.0 || a_abs < f32::MIN_POSITIVE || b_abs < f32::MIN_POSITIVE {
         diff < (f32::MIN_POSITIVE * f32::EPSILON)
     } else {
         (diff / f32::min(a_abs + b_abs, f32::MAX)) < f32::EPSILON
@@ -138,8 +138,8 @@ impl SphericalCoord {
     }
 
     /// Convert from a cartesian coordinate.
-    pub fn from_cartesian(cartesian: Vec3, handedness: Handedness) -> Self {
-        cartesian_to_spherical(cartesian, handedness)
+    pub fn from_cartesian(cartesian: Vec3, radius: f32, handedness: Handedness) -> Self {
+        cartesian_to_spherical(cartesian, radius, handedness)
     }
 }
 
