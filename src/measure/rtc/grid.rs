@@ -13,6 +13,7 @@ use crate::{
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
         rtc::{
+            embr::Trajectory,
             isect::{ray_tri_intersect_woop, RayTriIsect},
             Ray,
         },
@@ -199,7 +200,7 @@ pub struct Grid<C: Cell> {
 /// Grid traversal outcome.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GridTraversal {
-    FromTopOrBottom(IVec2),
+    FromTopOrBottom([IVec2; 1]),
     TraversedBaseCells {
         /// Cells traversed by the ray.
         cells: Vec<IVec2>,
@@ -213,6 +214,16 @@ pub enum GridTraversal {
         /// Cells traversed by the ray.
         cells: Vec<IVec2>,
     },
+}
+
+impl GridTraversal {
+    pub fn cells(&self) -> &[IVec2] {
+        match self {
+            GridTraversal::FromTopOrBottom(cells) => cells.as_ref(),
+            GridTraversal::TraversedBaseCells { cells, .. } => cells,
+            GridTraversal::TraversedCoarseCells { cells } => cells,
+        }
+    }
 }
 
 impl<C: Cell> Grid<C> {
@@ -270,7 +281,7 @@ impl<C: Cell> Grid<C> {
             // The ray is parallel to both the grid x and y axis; coming from
             // the top or bottom of the grid.
             log::debug!("The ray is parallel to both the grid x and y axis");
-            return GridTraversal::FromTopOrBottom(start_cell);
+            return GridTraversal::FromTopOrBottom([start_cell]);
         }
 
         let mut travelled_dists = vec![0.0];
@@ -359,9 +370,6 @@ impl<C: Cell> Grid<C> {
                 accumulated_line.y += dl.y;
             }
         }
-
-        println!("Traversed cells: {:?}", traversed_cells);
-        println!("Travelled distances: {:?}", travelled_dists);
 
         if self.is_coarse {
             GridTraversal::TraversedCoarseCells {
@@ -606,6 +614,13 @@ impl<'ms> MultilevelGrid<'ms> {
     /// Returns the coarse grid at the given level.
     /// The finest grid is at level 0.
     pub fn coarse(&self, level: usize) -> &Grid<CoarseCell> { &self.coarse[level] }
+
+    /// Traces a ray through the grid.
+    pub fn trace(&self, ray: &Ray) -> Trajectory {
+        for coarse in self.coarse.iter().rev() {
+            let traversal = coarse.traverse(self.mesh.bounds.min.xz(), ray);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -763,8 +778,21 @@ mod tests {
 
         {
             let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, 1.0));
+            let traversal_base = base.traverse(mesh.bounds.min.xz(), &ray);
             let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
             let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
+            assert_eq!(
+                traversal_base.cells(),
+                vec![
+                    IVec2::new(5, 5),
+                    IVec2::new(6, 5),
+                    IVec2::new(6, 6),
+                    IVec2::new(7, 6),
+                    IVec2::new(7, 7),
+                    IVec2::new(8, 7),
+                    IVec2::new(8, 8),
+                ]
+            );
             assert_eq!(
                 traversal_lvl0,
                 GridTraversal::TraversedCoarseCells {
