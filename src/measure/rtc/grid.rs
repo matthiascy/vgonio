@@ -433,7 +433,7 @@ impl<C: Cell> Grid<C> {
         if x >= self.cols || y >= self.rows {
             None
         } else {
-            debug_assert!(x > 0 && y > 0, "The position should be positive");
+            debug_assert!(x >= 0 && y >= 0, "The position should be positive");
             Some(IVec2::new(x as i32, y as i32))
         }
     }
@@ -459,6 +459,7 @@ impl<C: Cell> Grid<C> {
 }
 
 // TODO: rename
+#[derive(Debug, Clone, Copy)]
 pub struct Isect {
     pub p: Vec3,
     pub n: Vec3,
@@ -473,11 +474,20 @@ impl Grid<BaseCell> {
         pos: &IVec2,
         mesh: &MicroSurfaceMesh,
     ) -> Option<(u32, Isect)> {
+        #[cfg(not(test))]
+        use log::debug;
+        #[cfg(test)]
+        use std::println as debug;
+
+        debug!("Intersecting with cell at {:?}", pos);
         let cell = self.cell_at(pos.x as _, pos.y as _);
+        debug!("  - triangle indices: {:?}", cell.tris);
         let triangles = self.triangles_of_cell(pos, mesh);
+        debug!("  - triangles: {:?}", triangles);
         let isect0 = ray_tri_intersect_woop(ray, &triangles[0]);
         let isect1 = ray_tri_intersect_woop(ray, &triangles[1]);
-
+        debug!("  - isect0: {:?}", isect0);
+        debug!("  - isect1: {:?}", isect1);
         match (isect0, isect1) {
             (Some(isect0), Some(isect1)) => {
                 let p0 = isect0.p;
@@ -487,7 +497,7 @@ impl Grid<BaseCell> {
                     // u of the first triangle is 0.0, and w of the second triangle
                     // is 0.0.
                     debug_assert!(ulp_eq(isect0.u, 0.0));
-                    debug_assert!(ulp_eq((1.0 - isect1.u - isect1.v), 0.0));
+                    debug_assert!(ulp_eq(1.0 - isect1.u - isect1.v, 0.0));
                     Some((
                         cell.tris[0],
                         Isect {
@@ -599,16 +609,21 @@ impl Grid<BaseCell> {
     /// Traces the given ray through the grid and returns the intersection
     /// point with the closest triangle.
     pub fn trace(&self, origin: Vec2, ray: &Ray, mesh: &MicroSurfaceMesh) -> Option<(u32, Isect)> {
-        log::debug!("Traversing the grid along the ray: {:?}", ray);
+        #[cfg(not(test))]
+        use log::{debug, log};
+        #[cfg(test)]
+        use std::{println as debug, println as log};
+
+        debug!("Traversing the grid along the ray: {:?}", ray);
         let start_pos = ray.o.xz() - origin;
-        log::debug!(
-            "Start position in the world space relative to grid's origin: {:?}",
-            start_pos
+        debug!(
+            "Relative start position {:?} in the world space, grid's origin: {:?}",
+            start_pos, origin
         );
         let start_cell = self.world_to_local(&origin, &ray.o.xz()).unwrap();
         println!("Start position in the grid space: {:?}", start_cell);
         let ray_dir = ray.d.xz();
-        log::debug!("Ray direction in the grid space: {:?}", ray_dir);
+        debug!("Ray direction in the grid space: {:?}", ray_dir);
 
         let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
         let is_parallel_to_grid_y = ulp_eq(ray_dir.x, 0.0);
@@ -616,7 +631,7 @@ impl Grid<BaseCell> {
         if is_parallel_to_grid_x && is_parallel_to_grid_y {
             // The ray is parallel to both the grid x and y axis; coming from
             // the top or bottom of the grid.
-            log::debug!("The ray is parallel to both the grid x and y axis");
+            debug!("The ray is parallel to both the grid x and y axis");
             return self.intersects_cell_triangles(ray, &start_cell, mesh);
         }
 
@@ -627,28 +642,28 @@ impl Grid<BaseCell> {
         // traverses and its intersection points. In case we are traversing
         // on the coarse grid we can assume that the size of the grid cell is
         // always 1x1.
-        log::debug!("The ray is not parallel to either the grid x or y axis");
         let cell_size = if self.is_coarse {
             Vec2::new(1.0, 1.0)
         } else {
             self.world_space_cell_size
         };
+        debug!("Cell size: {:?}", cell_size);
 
         // 1. Calculate the slope of the ray on the grid.
         let (m, m_rcp) = {
             if is_parallel_to_grid_x && !is_parallel_to_grid_y {
-                log::debug!("The ray is parallel to the grid x axis");
+                debug!("The ray is parallel to the grid x axis");
                 (1.0, 0.0)
             } else if !is_parallel_to_grid_x && is_parallel_to_grid_y {
-                log::debug!("The ray is parallel to the grid y axis");
+                debug!("The ray is parallel to the grid y axis");
                 (0.0, 1.0)
             } else {
-                log::debug!("The ray is not parallel to either the grid x or y axis");
+                debug!("The ray is not parallel to either the grid x or y axis");
                 let m = ray_dir.y * rcp(ray_dir.x);
                 (m, rcp(m))
             }
         };
-        log::debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);
+        debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);
 
         // 2. Calculate the distance along each axis when moving one cell in the grid
         // space.
@@ -656,7 +671,7 @@ impl Grid<BaseCell> {
             m.mul_add(m, 1.0).sqrt() * cell_size.x,
             m_rcp.mul_add(m_rcp, 1.0).sqrt() * cell_size.y,
         );
-        log::debug!(
+        debug!(
             "Distance along each axis when moving one cell in the grid space: {:?}",
             dl
         );
@@ -682,10 +697,11 @@ impl Grid<BaseCell> {
         );
         exiting_dist = accumulated_line.x.min(accumulated_line.y);
 
-        log::debug!("Initial accumulated line length: {:?}", accumulated_line);
+        debug!("Initial accumulated line length: {:?}", accumulated_line);
 
         // 4. Identify the traversed cells and intersection points
         loop {
+            debug!("Current cell: {:?}", curr_cell);
             let reaching_left_or_right_edge = step_dir.x > 0 && curr_cell.x >= self.cols as i32
                 || step_dir.x < 0 && curr_cell.x < 0;
             let reaching_top_or_bottom_edge = step_dir.y > 0 && curr_cell.y >= self.rows as i32
@@ -698,11 +714,11 @@ impl Grid<BaseCell> {
             // Perform the pre-check to see if the cell may intersect the ray.
             if self.may_intersect_cell(ray, &curr_cell, entering_dist, exiting_dist) {
                 // Perform the actual intersection test.
-                log::debug!("Cell {:?} may intersect the ray", curr_cell);
+                debug!("Cell {:?} may intersect the ray", curr_cell);
                 if let Some((tri_idx, isect)) =
                     self.intersects_cell_triangles(ray, &curr_cell, mesh)
                 {
-                    log::debug!("Cell {:?} intersects the ray", curr_cell);
+                    debug!("Cell {:?} intersects the ray", curr_cell);
                     return Some((tri_idx, isect));
                 }
             }
@@ -778,11 +794,13 @@ impl<'ms> MultilevelGrid<'ms> {
 
         #[cfg(debug_assertions)]
         {
-            // Check order of generated coarse grids.
-            for i in 0..coarse.len() - 1 {
-                let s0 = coarse[i].grid_space_cell_size;
-                let s1 = coarse[i + 1].grid_space_cell_size;
-                assert!(s1 > s0);
+            if !coarse.is_empty() {
+                // Check order of generated coarse grids.
+                for i in 0..coarse.len() - 1 {
+                    let s0 = coarse[i].grid_space_cell_size;
+                    let s1 = coarse[i + 1].grid_space_cell_size;
+                    assert!(s1 > s0);
+                }
             }
         }
 
@@ -941,14 +959,7 @@ mod tests {
 
     #[test]
     fn multilevel_grid_creation() {
-        let surf = MicroSurface::from_samples::<UMicrometre>(
-            9,
-            9,
-            um!(0.5),
-            um!(0.5),
-            vec![0.0; 81],
-            None,
-        );
+        let surf = MicroSurface::from_samples(9, 9, um!(0.5), um!(0.5), &vec![0.0; 81], None);
         let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         assert_eq!(grid.level(), 2);
@@ -986,7 +997,7 @@ mod tests {
         let cols = 10;
         let rows = 8;
 
-        let surf = MicroSurface::from_samples::<UMicrometre>(
+        let surf = MicroSurface::from_samples(
             cols,
             rows,
             um!(0.5),
@@ -1240,6 +1251,35 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn grid_trace() {
+        // todo: check triangle intersections
+        #[rustfmt::skip]
+        let surf = MicroSurface::from_samples(
+            5,
+            5,
+            um!(1.0),
+            um!(1.0),
+            &[
+                0.0, 0.0, 0.0, 0.0, 0.0, 
+                0.0, 0.0, 0.0, 0.0, 0.0, 
+                0.0, 0.0, 2.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0,
+            ],
+            None,
+        );
+        let mesh = surf.as_micro_surface_mesh();
+        let grid = MultilevelGrid::new(&surf, &mesh, 4);
+        let base = grid.base();
+        let traced = base.trace(
+            mesh.bounds.min.xz(),
+            &Ray::new(Vec3::new(-3.0, 0.2, -3.0), Vec3::new(1.0, 0.0, 1.0)),
+            &mesh,
+        );
+        println!("{:?}", traced);
     }
 }
 

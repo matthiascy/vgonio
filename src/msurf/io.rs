@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    msurf::{MicroSurface},
+    msurf::MicroSurface,
     units::{um, UMicrometre},
 };
 use std::{
@@ -138,7 +138,7 @@ fn read_ascii_dong2015<R: BufRead>(
         }
     };
     let samples = read_ascii_samples(reader);
-    Ok(MicroSurface::from_samples::<UMicrometre>(
+    Ok(MicroSurface::from_samples(
         cols,
         rows,
         um!(du),
@@ -183,7 +183,7 @@ fn read_ascii_usurf<R: BufRead>(
     let dv = y_coords[1] - y_coords[0];
     let samples: Vec<f32> = values.into_iter().flatten().collect();
 
-    Ok(MicroSurface::from_samples::<UMicrometre>(
+    Ok(MicroSurface::from_samples(
         x_coords.len(),
         y_coords.len(),
         um!(du),

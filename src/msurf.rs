@@ -10,7 +10,7 @@ mod mesh;
 
 use crate::{
     app::gfx::RenderableMesh,
-    units::{um, LengthUnit, Micrometres, Nanometres},
+    units::{um, Length, LengthUnit, Micrometres, Nanometres},
 };
 pub use mesh::MicroSurfaceMesh;
 
@@ -225,37 +225,43 @@ impl MicroSurface {
     /// # use vgonio::msurf::MicroSurface;
     /// # use vgonio::units::{um, UMicrometre};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field =
-    ///     MicroSurface::from_samples::<UMicrometre>(3, 3, um!(0.5), um!(0.5), samples, None);
+    /// let height_field = MicroSurface::from_samples(3, 3, um!(0.5), um!(0.5), &samples, None);
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
     /// assert_eq!(height_field.rows, 3);
     /// ```
-    pub fn from_samples<U: LengthUnit>(
+    pub fn from_samples<U: LengthUnit, S: AsRef<[f32]>>(
         cols: usize,
         rows: usize,
-        du: Micrometres,
-        dv: Micrometres,
-        samples: Vec<f32>,
+        du: Length<U>,
+        dv: Length<U>,
+        samples: S,
         path: Option<PathBuf>,
     ) -> MicroSurface {
         debug_assert!(
-            cols > 0 && rows > 0 && samples.len() == cols * rows,
+            cols > 0 && rows > 0 && samples.as_ref().len() == cols * rows,
             "Samples count must be equal to cols * rows"
         );
         let to_micrometre_factor = U::FACTOR_TO_MICROMETRE;
-        let max = samples.iter().fold(f32::MIN, |acc, x| f32::max(acc, *x)) * to_micrometre_factor;
-        let min = samples.iter().fold(f32::MAX, |acc, x| f32::min(acc, *x)) * to_micrometre_factor;
+        let (min, max) = {
+            let (max, min) = samples
+                .as_ref()
+                .iter()
+                .fold((f32::MIN, f32::MAX), |(max, min), x| {
+                    (f32::max(max, *x), f32::min(min, *x))
+                });
+            (min * to_micrometre_factor, max * to_micrometre_factor)
+        };
 
         let samples = if to_micrometre_factor == 1.0 {
-            samples
+            samples.as_ref().to_owned()
         } else {
-            let mut _samples = samples;
-            for s in _samples.iter_mut() {
-                *s *= to_micrometre_factor;
-            }
-            _samples
+            samples
+                .as_ref()
+                .iter()
+                .map(|x| x * to_micrometre_factor)
+                .collect::<Vec<_>>()
         };
 
         MicroSurface {
@@ -264,12 +270,12 @@ impl MicroSurface {
             path,
             rows,
             cols,
-            du: du.as_f32(),
-            dv: dv.as_f32(),
+            du: du.as_f32() * to_micrometre_factor,
+            dv: dv.as_f32() * to_micrometre_factor,
             max,
             min,
             samples,
-            median: (min + max) / 2.0,
+            median: min * 0.5 + max * 0.5,
         }
     }
 
