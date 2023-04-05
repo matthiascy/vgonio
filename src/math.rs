@@ -2,7 +2,9 @@ use crate::{
     common::{ulp_eq, Handedness, SphericalCoord},
     units::{radians, Radians},
 };
+use cfg_if::cfg_if;
 pub use glam::*;
+use std::arch::x86_64::_mm_mul_ss;
 
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -103,27 +105,29 @@ fn spherical_cartesian_conversion() {
 /// Newton-Raphson iteration is used to compute the reciprocal.
 #[inline(always)]
 pub fn rcp(x: f32) -> f32 {
-    if cfg!(target_arch = "x86_64") {
-        use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rcp_ss, _mm_set_ss, _mm_sub_ss};
-        unsafe {
-            let a = _mm_set_ss(x);
+    cfg_if! {
+        if #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rcp_ss, _mm_set_ss, _mm_sub_ss};
+            unsafe {
+                let a = _mm_set_ss(x);
 
-            let r = if is_x86_feature_detected!("avx512vl") {
-                use std::arch::x86_64::_mm_rcp14_ss;
-                _mm_rcp14_ss(_mm_set_ss(0.0), a) // error is less than 2^-14
-            } else {
-                _mm_rcp_ss(a) // error is less than 1.5 * 2^-12
-            };
+                let r = if is_x86_feature_detected!("avx512vl") {
+                    use std::arch::x86_64::_mm_rcp14_ss;
+                    _mm_rcp14_ss(_mm_set_ss(0.0), a) // error is less than 2^-14
+                } else {
+                    _mm_rcp_ss(a) // error is less than 1.5 * 2^-12
+                };
 
-            if is_x86_feature_detected!("fma") {
-                use std::arch::x86_64::_mm_fnmadd_ss;
-                _mm_cvtss_f32(_mm_mul_ss(r, _mm_fnmadd_ss(r, a, _mm_set_ss(2.0))))
-            } else {
-                _mm_cvtss_f32(_mm_mul_ss(r, _mm_sub_ss(_mm_set_ss(2.0), _mm_mul_ss(r, a))))
+                if is_x86_feature_detected!("fma") {
+                    use std::arch::x86_64::_mm_fnmadd_ss;
+                    _mm_cvtss_f32(_mm_mul_ss(r, _mm_fnmadd_ss(r, a, _mm_set_ss(2.0))))
+                } else {
+                    _mm_cvtss_f32(_mm_mul_ss(r, _mm_sub_ss(_mm_set_ss(2.0), _mm_mul_ss(r, a))))
+                }
             }
+        } else {
+            1.0 / x
         }
-    } else {
-        1.0 / x
     }
 }
 
@@ -161,6 +165,54 @@ fn test_rcp() {
 #[inline(always)]
 pub fn sqr(x: f32) -> f32 { x * x }
 
+/// Returns the accurate reciprocal square root of the given value.
+#[inline(always)]
+pub fn rsqrt(x: f32) -> f32 {
+    cfg_if! {
+        if #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rsqrt_ss, _mm_set_ss, _mm_sub_ss, _mm_add_ss};
+            unsafe {
+                let a = _mm_set_ss(x);
+
+                let r = if is_x86_feature_detected!("avx512vl") {
+                    use std::arch::x86_64::_mm_rsqrt14_ss;
+                    _mm_rsqrt14_ss(_mm_set_ss(0.0), a) // relative error is less than 2^-14
+                } else {
+                    _mm_rsqrt_ss(a) // error is less than 1.5 * 2^-12
+                };
+
+                _mm_cvtss_f32(_mm_add_ss(
+                    _mm_mul_ss(_mm_set_ss(1.5), r),
+                    _mm_mul_ss(
+                        _mm_mul_ss(_mm_mul_ss(a, _mm_set_ss(-0.5)), r),
+                        _mm_mul_ss(r, r),
+                    ),
+                ))
+            }
+        } else {
+            1.0 / x.sqrt()
+        }
+    }
+}
+
+#[test]
+fn test_rsqrt() {
+    assert!(ulp_eq(rsqrt(1.0), 1.0));
+    assert!(ulp_eq(rsqrt(4.0), 0.5));
+    assert!(ulp_eq(rsqrt(8.0), 0.35355338));
+    assert!(ulp_eq(rsqrt(9.0), 0.33333334));
+    assert!(ulp_eq(rsqrt(16.0), 0.25));
+    assert!(ulp_eq(rsqrt(64.0), 0.125));
+    assert!(ulp_eq(rsqrt(256.0), 0.0625));
+    assert!(ulp_eq(rsqrt(1024.0), 0.03125));
+    assert!(ulp_eq(rsqrt(4096.0), 0.015625));
+    assert!(ulp_eq(rsqrt(16384.0), 0.0078125));
+    assert!(ulp_eq(rsqrt(65536.0), 0.00390625));
+    assert!(ulp_eq(rsqrt(262144.0), 0.001953125));
+    println!("{:.20} - {:.20}", rsqrt(3.0), rcp(3.0f32.sqrt()));
+    let a = 10.0f32;
+}
+
 /// Returns the fused multiply-subtract of the given values.
 ///
 /// This is equivalent to `a * b - c`. However, this function may fall back to
@@ -189,11 +241,13 @@ fn test_msub() {
 /// a non-fused multiply-add on some platforms.
 #[inline(always)]
 pub fn madd(a: f32, b: f32, c: f32) -> f32 {
-    if cfg!(target_arch = "x86_64") && cfg!(target_feature = "fma") {
-        use std::arch::x86_64::{_mm_cvtss_f32, _mm_fmadd_ss, _mm_set_ss};
-        unsafe { _mm_cvtss_f32(_mm_fmadd_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
-    } else {
-        a * b + c
+    cfg_if! {
+        if #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::{_mm_cvtss_f32, _mm_fmadd_ss, _mm_set_ss};
+            unsafe { _mm_cvtss_f32(_mm_fmadd_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
+        } else {
+            a * b + c
+        }
     }
 }
 
@@ -306,4 +360,10 @@ fn test_quadratic() {
         solve_quadratic(-2.0, 2.0, 1.0),
         QuadraticSolution::Two(-0.3660254, 1.3660254)
     );
+}
+
+/// Checks if the given values are close enough to each other.
+/// TODO: add a tolerance parameter or error bound
+pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
+    ulp_eq(a.x, b.x) && ulp_eq(a.y, b.y) && ulp_eq(a.z, b.z)
 }

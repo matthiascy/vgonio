@@ -85,7 +85,7 @@ pub fn max_axis(v: Vec3) -> u32 {
 /// # Returns
 ///
 /// [`RayTriIsect`] if the ray intersects the triangle, otherwise `None`.
-pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
+pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     let ray_d = ray.d.as_dvec3();
     let ray_o = ray.o.as_dvec3();
     let p0 = triangle[0].as_dvec3();
@@ -242,7 +242,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: Ray, triangle: &[Vec3; 3]) -> Opti
 /// (1) Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle
 /// Intersection, Journal of Computer Graphics Techniques (JCGT), vol. 2, no. 1,
 /// 65-82, 2013
-pub fn ray_tri_intersect_woop(ray: Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
+pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     // Transform the triangle vertices into the ray coordinate system.
     let mut p0t = triangle[0] - ray.o; // A'
     let mut p1t = triangle[1] - ray.o; // B'
@@ -368,7 +368,7 @@ mod tests {
         ];
 
         for ray in rays {
-            let isect = ray_tri_intersect_woop(ray, &triangle);
+            let isect = ray_tri_intersect_woop(&ray, &triangle);
 
             println!("{:?}", isect);
             assert!(isect.is_some());

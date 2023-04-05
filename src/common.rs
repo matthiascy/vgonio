@@ -60,6 +60,8 @@ pub const fn gamma(n: u32) -> f32 {
 
 /// Equality test of two floating point numbers.
 ///
+/// todo: specify the error bound.
+///
 /// # Arguments
 ///
 /// * `a`: The first number.
