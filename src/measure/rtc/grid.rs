@@ -12,11 +12,8 @@ use crate::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
-        rtc::{
-            embr::Trajectory,
-            isect::{ray_tri_intersect_woop, RayTriIsect},
-            Ray,
-        },
+        rtc,
+        rtc::{embr::Trajectory, Ray},
         Collector, Emitter, RtcRecord, TrajectoryNode,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
@@ -281,14 +278,14 @@ impl<C: Cell> Grid<C> {
     /// * `ray` - The ray to traverse the grid.
     pub fn traverse(&self, origin: Vec2, ray: &Ray) -> GridTraversal {
         log::debug!("Traversing the grid along the ray: {:?}", ray);
-        let start_pos = ray.o.xz() - origin;
+        let start_pos = ray.org.xz() - origin;
         log::debug!(
             "Start position in the world space relative to grid's origin: {:?}",
             start_pos
         );
-        let start_cell = self.world_to_local(&origin, &ray.o.xz()).unwrap();
+        let start_cell = self.world_to_local(&origin, &ray.org.xz()).unwrap();
         println!("Start position in the grid space: {:?}", start_cell);
-        let ray_dir = ray.d.xz();
+        let ray_dir = ray.dir.xz();
         log::debug!("Ray direction in the grid space: {:?}", ray_dir);
 
         let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
@@ -433,7 +430,6 @@ impl<C: Cell> Grid<C> {
         if x >= self.cols || y >= self.rows {
             None
         } else {
-            debug_assert!(x >= 0 && y >= 0, "The position should be positive");
             Some(IVec2::new(x as i32, y as i32))
         }
     }
@@ -449,8 +445,8 @@ impl<C: Cell> Grid<C> {
     /// * `entering` - The distance from the ray origin to the entering point.
     /// * `exiting` - The distance from the ray origin to the exiting point.
     pub fn may_intersect_cell(&self, ray: &Ray, pos: &IVec2, entering: f32, exiting: f32) -> bool {
-        let entering_height = ray.o.y + entering * ray.d.y;
-        let exiting_height = ray.o.y + exiting * ray.d.y;
+        let entering_height = ray.org.y + entering * ray.dir.y;
+        let exiting_height = ray.org.y + exiting * ray.dir.y;
         let cell = self.cell_at(pos.x as _, pos.y as _);
         let ge_max = entering_height >= cell.max_height() || exiting_height >= cell.max_height();
         let le_min = entering_height <= cell.min_height() || exiting_height <= cell.min_height();
@@ -484,8 +480,8 @@ impl Grid<BaseCell> {
         debug!("  - triangle indices: {:?}", cell.tris);
         let triangles = self.triangles_of_cell(pos, mesh);
         debug!("  - triangles: {:?}", triangles);
-        let isect0 = ray_tri_intersect_woop(ray, &triangles[0]);
-        let isect1 = ray_tri_intersect_woop(ray, &triangles[1]);
+        let isect0 = rtc::ray_tri_intersect_woop(ray, &triangles[0]);
+        let isect1 = rtc::ray_tri_intersect_woop(ray, &triangles[1]);
         debug!("  - isect0: {:?}", isect0);
         debug!("  - isect1: {:?}", isect1);
         match (isect0, isect1) {
@@ -581,7 +577,7 @@ impl Grid<BaseCell> {
                 } else {
                     isect.n
                 };
-                Some((cell.tris[0], Isect { p: isect.p, n }))
+                Some((cell.tris[1], Isect { p: isect.p, n }))
             }
             (None, None) => None,
         }
@@ -615,14 +611,14 @@ impl Grid<BaseCell> {
         use std::{println as debug, println as log};
 
         debug!("Traversing the grid along the ray: {:?}", ray);
-        let start_pos = ray.o.xz() - origin;
+        let start_pos = ray.org.xz() - origin;
         debug!(
             "Relative start position {:?} in the world space, grid's origin: {:?}",
             start_pos, origin
         );
-        let start_cell = self.world_to_local(&origin, &ray.o.xz()).unwrap();
+        let start_cell = self.world_to_local(&origin, &ray.org.xz()).unwrap();
         println!("Start position in the grid space: {:?}", start_cell);
-        let ray_dir = ray.d.xz();
+        let ray_dir = ray.dir.xz();
         debug!("Ray direction in the grid space: {:?}", ray_dir);
 
         let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
@@ -1262,7 +1258,7 @@ mod tests {
             5,
             um!(1.0),
             um!(1.0),
-            &[
+            [
                 0.0, 0.0, 0.0, 0.0, 0.0, 
                 0.0, 0.0, 0.0, 0.0, 0.0, 
                 0.0, 0.0, 2.0, 0.0, 0.0,
@@ -1279,7 +1275,8 @@ mod tests {
             &Ray::new(Vec3::new(-3.0, 0.2, -3.0), Vec3::new(1.0, 0.0, 1.0)),
             &mesh,
         );
-        println!("{:?}", traced);
+        assert!(traced.is_some());
+        assert_eq!(traced.unwrap().0, 11);
     }
 }
 

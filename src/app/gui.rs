@@ -764,10 +764,10 @@ impl VgonioApp {
                             .debug_drawing
                             .rays
                             .iter()
-                            .map(|r| r.o)
+                            .map(|r| r.org)
                             .collect::<Vec<_>>();
                         let last_ray = self.debug_drawing.rays[self.debug_drawing.rays.len() - 1];
-                        content.push(last_ray.o + last_ray.d * self.debug_drawing.ray_t);
+                        content.push(last_ray.org + last_ray.dir * self.debug_drawing.ray_t);
                         log::debug!("content: {:?}", content);
                         self.debug_drawing.rays_vertex_count =
                             self.debug_drawing.rays.len() as u32 + 1;

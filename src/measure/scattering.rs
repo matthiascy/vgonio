@@ -31,28 +31,23 @@ pub struct ScatteringSpectrum {
     pub reflectance: Vec<f32>,
 }
 
+// TODO: to be removed
 /// Scattering happens between the air and the conductor.
 pub fn scatter_air_conductor(ray: Ray, p: Vec3A, n: Vec3A, eta_t: f32, k_t: f32) -> Scattering {
-    let reflected_dir = reflect(ray.d.into(), n);
-    let refracted = refract2(ray.d.into(), n, 1.0, eta_t);
+    let reflected_dir = reflect(ray.dir.into(), n);
+    let refracted = refract2(ray.dir.into(), n, 1.0, eta_t);
     let reflectance = optics::fresnel::reflectance_insulator_conductor(
-        ray.d.dot(n.into()).abs(),
+        ray.dir.dot(n.into()).abs(),
         1.0,
         eta_t,
         k_t,
     );
 
     Scattering {
-        reflected: Ray {
-            o: p.into(),
-            d: reflected_dir.into(),
-        },
+        reflected: Ray::new(p.into(), reflected_dir.into()),
         refracted: match refracted {
             RefractionResult::TotalInternalReflection => None,
-            RefractionResult::Refraction { dir_t, .. } => Some(Ray {
-                o: p.into(),
-                d: dir_t.into(),
-            }),
+            RefractionResult::Refraction { dir_t, .. } => Some(Ray::new(p.into(), dir_t.into())),
         },
         reflectance,
     }
@@ -66,29 +61,23 @@ pub fn scatter_air_conductor_spectrum(
     n: Vec3A,
     iors: &[RefractiveIndex],
 ) -> ScatteringSpectrum {
-    let reflected_dir = reflect(ray.d.into(), n);
+    let reflected_dir = reflect(ray.dir.into(), n);
     let refracted = iors
         .iter()
-        .map(|ior| match refract2(ray.d.into(), n, 1.0, ior.eta) {
+        .map(|ior| match refract2(ray.dir.into(), n, 1.0, ior.eta) {
             RefractionResult::TotalInternalReflection => None,
-            RefractionResult::Refraction { dir_t, .. } => Some(Ray {
-                o: p.into(),
-                d: dir_t.into(),
-            }),
+            RefractionResult::Refraction { dir_t, .. } => Some(Ray::new(p.into(), dir_t.into())),
         })
         .collect::<Vec<_>>();
 
     let reflectance = optics::fresnel::reflectance_insulator_conductor_spectrum(
-        ray.d.dot(n.into()).abs(),
+        ray.dir.dot(n.into()).abs(),
         1.0,
         iors,
     );
 
     ScatteringSpectrum {
-        reflected: Ray {
-            o: p.into(),
-            d: reflected_dir.into(),
-        },
+        reflected: Ray::new(p.into(), reflected_dir.into()),
         refracted,
         reflectance,
     }

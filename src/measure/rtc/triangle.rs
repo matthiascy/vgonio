@@ -1,10 +1,22 @@
 use crate::{
     common::gamma,
-    measure::rtc::{isect::RayTriIsect, Ray},
+    math::rcp,
+    measure::rtc::{Ray, RayTriIsect},
 };
 use glam::Vec3;
+use std::borrow::Cow;
 
 pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
+
+pub struct Triangle<'a>(Cow<'a, [Vec3]>);
+
+impl<'a> From<&'a [Vec3; 3]> for Triangle<'a> {
+    fn from(value: &'a [Vec3; 3]) -> Self { Self(Cow::Borrowed(value)) }
+}
+
+impl<'a> From<[Vec3; 3]> for Triangle<'a> {
+    fn from(value: [Vec3; 3]) -> Self { Self(Cow::Owned(value.to_vec())) }
+}
 
 /// Permutes the given vector according to the given permutation.
 ///
@@ -26,6 +38,7 @@ pub fn max_axis(v: Vec3) -> u32 {
     }
 }
 
+#[rustfmt::skip]
 /// Modified Möller-Trumbore ray-triangle intersection algorithm.
 ///
 /// As an improvement over the original algorithm (1), the algorithm is
@@ -38,33 +51,40 @@ pub fn max_axis(v: Vec3) -> u32 {
 /// solving a linear system of equations using Cramer's rule and by evaluating
 /// determinants using scalar triple products.
 /// Assuming that `P` is the point of intersection. It can be expressed:
-///   + by barycentric coordinates $(u, v, w)$: $P = wA + uB + vC = A + u(B - A)
-/// + v(C - A)$   + or by ray parameter t: $P = O + tD$
+///   + by barycentric coordinates $(u, v, w)$:
+///
+///     $P = wA + uB + vC = A + u(B - A) + v(C - A) = (1-u-v)A + uB + vC$
+///   
+///   + or by ray parameter t:
+///
+///     $P = O + tD$
 ///
 /// Moller and Trumbore use the barycentric coordinates to evaluate the
 /// intersection point. The system of equations is defined as follows:
 ///
-/// $$O - A = \begin{bmatrix}-D & B-A & C-A\end{bmatrix} \begin{bmatrix}t \\\ u
-/// \\\ v\end{bmatrix}$$
+/// $O - A = \begin{bmatrix}-D & B-A & C-A\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$
 ///
-/// with $$E0 = B - A,  E1 = C - A, O - A = T$$
+/// with $E0 = B - A,  E1 = C - A, O - A = T$.
 ///
-/// $$T = \begin{bmatrix}-D & E0 & E1\end{bmatrix} \begin{bmatrix}t \\\ u \\\
-/// v\end{bmatrix}$$
+/// $T = \begin{bmatrix}-D & E0 & E1\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$
 ///
 /// Apply Cramer's rule,
-/// $$\begin{vmatrix}A & B & C\end{vmatrix} = -(A \times C) \cdot B = -(C \times
-/// B) \cdot A$$, we have
 ///
-/// $$det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0
-/// = (D \times E1) \cdot E0$$ $$det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix}
-/// = -(T \times E1) \cdot E0 = -(T \times E1) \cdot E0 = (T \times E0) \cdot
-/// E1$$ $$det_u = \begin{vmatrix}-D & T & E1\end{vmatrix} = -(-D \times E1)
-/// \cdot T = (D \times E1) \cdot T$$ $$det_v = \begin{vmatrix}-D & E0 &
-/// T\end{vmatrix} = -(T \times E0) \cdot -D = (T \times E0) \cdot D$$
+/// $\begin{vmatrix}A & B & C\end{vmatrix} = -(A \times C) \cdot B = -(C \times B) \cdot A$
 ///
-/// and finally we have $$t = \frac{det_t}{det}, u = \frac{det_u}{det}, v =
-/// \frac{det_v}{det}$$.
+/// then, we have
+///
+/// $det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0 = (D \times E1) \cdot E0$ 
+/// 
+/// $det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix} = -(T \times E1) \cdot E0 = -(T \times E1) \cdot E0 = (T \times E0) \cdot E1$ 
+/// 
+/// $det_u = \begin{vmatrix}-D & T & E1\end{vmatrix} = -(-D \times E1) \cdot T = (D \times E1) \cdot T$ 
+/// 
+/// $det_v = \begin{vmatrix}-D & E0 & T\end{vmatrix} = -(T \times E0) \cdot -D = (T \times E0) \cdot D$
+///
+/// and finally we have 
+/// 
+/// $$t = \frac{det_t}{det}, u = \frac{det_u}{det}, v = \frac{det_v}{det}$$
 ///
 /// # References
 ///
@@ -86,8 +106,8 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///
 /// [`RayTriIsect`] if the ray intersects the triangle, otherwise `None`.
 pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
-    let ray_d = ray.d.as_dvec3();
-    let ray_o = ray.o.as_dvec3();
+    let ray_d = ray.dir.as_dvec3();
+    let ray_o = ray.org.as_dvec3();
     let p0 = triangle[0].as_dvec3();
     let p1 = triangle[1].as_dvec3();
     let p2 = triangle[2].as_dvec3();
@@ -104,7 +124,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
         return None;
     }
 
-    let inv_det = 1.0 / det;
+    let inv_det = rcp(det); 
     let tvec = ray_o - p0; // O - A
 
     let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
@@ -135,7 +155,6 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
     }
 }
 
-// TODO: precompute shear coefficients.
 /// Sven Woop's watertight ray-triangle intersection algorithm.
 ///
 /// # Algorithm
@@ -244,24 +263,26 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
 /// 65-82, 2013
 pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
     // Transform the triangle vertices into the ray coordinate system.
-    let mut p0t = triangle[0] - ray.o; // A'
-    let mut p1t = triangle[1] - ray.o; // B'
-    let mut p2t = triangle[2] - ray.o; // C'
+    let mut p0t = triangle[0] - ray.org; // A'
+    let mut p1t = triangle[1] - ray.org; // B'
+    let mut p2t = triangle[2] - ray.org; // C'
+
+    // Calculate the dimension where the ray direction has the largest change.
+    let kz = max_axis(ray.dir.abs());
+    let kx = if kz + 1 == 3 { 0 } else { kz + 1 };
+    let ky = if kx + 1 == 3 { 0 } else { kx + 1 };
 
     // Permutation in a winding preserving way.
-    let kz = max_axis(ray.d.abs());
-    let kx = (kz + 1) % 3;
-    let ky = (kz + 2) % 3;
-
-    let d = permute(ray.d, kx, ky, kz);
+    let d = permute(ray.dir, kx, ky, kz);
     p0t = permute(p0t, kx, ky, kz);
     p1t = permute(p1t, kx, ky, kz);
     p2t = permute(p2t, kx, ky, kz);
 
-    // Shearing.
-    let sx = -d.x / d.z;
-    let sy = -d.y / d.z;
-    let sz = 1.0 / d.z;
+    // Perform Shear and scale of vertices.
+    let rcp_dz = rcp(d.z);
+    let sx = -d.x * rcp_dz;
+    let sy = -d.y * rcp_dz;
+    let sz = rcp_dz;
 
     p0t.x += sx * p0t.z;
     p0t.y += sy * p0t.z;
@@ -270,7 +291,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     p2t.x += sx * p2t.z;
     p2t.y += sy * p2t.z;
 
-    // Intersection test.
+    // Calculate scaled barycentric coordinates.
     let mut e0 = p1t.x * p2t.y - p1t.y * p2t.x;
     let mut e1 = p2t.x * p0t.y - p2t.y * p0t.x;
     let mut e2 = p0t.x * p1t.y - p0t.y * p1t.x;
@@ -281,7 +302,9 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
         e2 = (p0t.x as f64 * p1t.y as f64 - p0t.y as f64 * p1t.x as f64) as f32;
     }
 
+    // Perform edge tests.
     if (e0 < 0.0 || e1 < 0.0 || e2 < 0.0) && (e0 > 0.0 || e1 > 0.0 || e2 > 0.0) {
+        println!("case 1");
         return None;
     }
 
@@ -298,15 +321,14 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     p2t.z *= sz;
     let t_scaled = e0 * p0t.z + e1 * p1t.z + e2 * p2t.z;
     // Check if the scaled distance value t is in the range [t_min, t_max].
-    // Note: assume ray.t_max * det = MAX_FLOAT
-    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < f32::MAX * 0.5))
-        || (det > 0.0 && (t_scaled <= 0.0 || t_scaled > f32::MAX * 0.5))
+    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < ray.tmax * det))
+        || (det > 0.0 && (t_scaled <= 0.0 || t_scaled > ray.tmax * det))
     {
         return None;
     }
 
     // Compute barycentric coordinates and t value for triangle intersection.
-    let inv_det = 1.0 / det;
+    let inv_det = rcp(det);
     let b0 = e0 * inv_det;
     let b1 = e1 * inv_det;
     let b2 = e2 * inv_det;
@@ -347,7 +369,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
 #[cfg(test)]
 mod tests {
     use super::ray_tri_intersect_woop;
-    use crate::measure::Ray;
+    use crate::measure::{rtc::ray_tri_intersect_moller_trumbore, Ray};
     use glam::Vec3;
 
     #[test]
@@ -369,8 +391,38 @@ mod tests {
 
         for ray in rays {
             let isect = ray_tri_intersect_woop(&ray, &triangle);
+            // println!("{:?}", isect);
+            assert!(isect.is_some());
+        }
 
-            println!("{:?}", isect);
+        {
+            let ray = Ray::new(Vec3::new(-3.0, -3.0, 0.5), Vec3::new(1.0, 1.0, 0.0));
+            let triangle = [
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ];
+            let isect_woop = ray_tri_intersect_woop(&ray, &triangle);
+            let isect_moeller = ray_tri_intersect_moller_trumbore(&ray, &triangle);
+            // println!("woop: {:?}", isect_woop);
+            // print!("moller: {:?}", isect_moeller);
+            assert!(isect_woop.is_some());
+            assert!(isect_moeller.is_some());
+        }
+
+        {
+            println!("last test");
+            let ray = Ray::new(Vec3::new(-3.0, 0.5, -3.0), Vec3::new(1.0, 0.0, 1.0));
+            let triangle = [
+                Vec3::new(0.0, 0.0, -1.0),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+            ];
+            let isect_woop = ray_tri_intersect_woop(&ray, &triangle);
+            println!("woop: {:?}", isect_woop);
+            let isect = ray_tri_intersect_moller_trumbore(&ray, &triangle);
+            println!("moller: {:?}", isect);
+            assert!(isect_woop.is_some());
             assert!(isect.is_some());
         }
     }

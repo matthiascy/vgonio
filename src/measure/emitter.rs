@@ -203,7 +203,7 @@ impl Emitter {
             .par_iter()
             .map(|sample| {
                 let origin = mat * *sample * radius.as_f32();
-                Ray { o: origin, d: dir }
+                Ray::new(origin, dir)
             })
             .collect();
         rays

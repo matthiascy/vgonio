@@ -164,12 +164,12 @@ impl egui::Widget for &mut RayTracingPane {
         ui.horizontal(|ui| {
             if ui.button("Trace").clicked() {
                 let ray = match self.ray_mode {
-                    RayMode::Cartesian => Ray {
-                        o: self.ray_origin_cartesian.into(),
-                        d: (self.ray_target - self.ray_origin_cartesian)
+                    RayMode::Cartesian => Ray::new(
+                        self.ray_origin_cartesian.into(),
+                        (self.ray_target - self.ray_origin_cartesian)
                             .normalize()
                             .into(),
-                    },
+                    ),
                     RayMode::Spherical => {
                         let r = self.ray_origin_spherical.x;
                         let theta = self.ray_origin_spherical.y.to_radians();
@@ -179,10 +179,7 @@ impl egui::Widget for &mut RayTracingPane {
                             r * theta.cos(),
                             r * theta.sin() * phi.sin(),
                         );
-                        Ray {
-                            o: origin.into(),
-                            d: (self.ray_target - origin).normalize().into(),
-                        }
+                        Ray::new(origin.into(), (self.ray_target - origin).normalize().into())
                     }
                 };
                 let event = VgonioEvent::TraceRayDbg {

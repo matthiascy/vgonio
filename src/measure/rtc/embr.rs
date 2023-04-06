@@ -268,7 +268,7 @@ pub fn measure_bsdf(
         log::debug!(
             "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
             num_emitted_rays,
-            emitted_rays[0].d,
+            emitted_rays[0].dir,
             pos.zenith.in_degrees().value(),
             pos.azimuth.in_degrees().value(),
             elapsed.as_secs_f64(),
@@ -318,8 +318,8 @@ pub fn measure_bsdf(
                 let chunk_size = rays.len();
                 let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));
                 for (i, mut ray) in ray_hit_n.ray.iter_mut().enumerate() {
-                    ray.set_org(rays[i].o.into());
-                    ray.set_dir(rays[i].d.into());
+                    ray.set_org(rays[i].org.into());
+                    ray.set_dir(rays[i].dir.into());
                     ray.set_id(i as u32);
                     ray.set_tnear(0.0);
                     ray.set_tfar(f32::INFINITY);
@@ -327,8 +327,8 @@ pub fn measure_bsdf(
 
                 for (i, ray) in rays.iter().enumerate() {
                     data.trajectory[i].push(TrajectoryNode {
-                        org: ray.o.into(),
-                        dir: ray.d.into(),
+                        org: ray.org.into(),
+                        dir: ray.dir.into(),
                         cos: None,
                     });
                 }
