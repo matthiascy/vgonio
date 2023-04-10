@@ -7,7 +7,11 @@ use core::arch::x86::*;
 use glam::Vec3;
 use std::ops::{Index, IndexMut};
 
-use crate::{common::ulp_eq, measure::rtc::Axis};
+use crate::{
+    common::ulp_eq,
+    math::rcp,
+    measure::rtc::{Axis, Ray},
+};
 use serde::{Deserialize, Serialize};
 
 /// Axis-aligned bounding box.
@@ -366,6 +370,147 @@ macro impl_aabb_indexing($($t:ty)*) {
 
 impl_aabb_indexing!(usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128);
 
+fn ray_aabb_intersects_inner(ray: &Ray, bbox: &Aabb) -> (f32, f32) {
+    let mut t_near = f32::NEG_INFINITY;
+    let mut t_far = f32::INFINITY;
+
+    for i in 0..3 {
+        let inv_d = rcp(ray.dir[i]);
+        let (t_near_i, mut t_far_i) = {
+            let near = (bbox.min[i] - ray.org[i]) * inv_d;
+            let far = (bbox.max[i] - ray.org[i]) * inv_d;
+            if near > far {
+                (far, near)
+            } else {
+                (near, far)
+            }
+        };
+
+        t_far_i *= 1.0 + 2.0 * crate::common::gamma_f32(3.0);
+
+        t_near = t_near.max(t_near_i);
+        t_far = t_far.min(t_far_i);
+    }
+
+    (t_near, t_far)
+}
+
+/// Intersection result of a ray and an AABB.
+///
+/// The distance (ray parameter) is the distance from the ray origin to the
+/// nearest intersection point. Only the ray with the positive distance
+/// will be considered as a hit.
+#[derive(Debug, Clone, Copy)]
+pub enum RayAabbIsect {
+    /// The ray is inside the AABB.
+    Inside(f32),
+    /// The ray is outside the AABB.
+    Outside(f32),
+}
+
+impl RayAabbIsect {
+    /// Returns true if the ray is inside the AABB.
+    pub fn is_inside(&self) -> bool {
+        match self {
+            RayAabbIsect::Inside(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the ray is outside the AABB.
+    pub fn is_outside(&self) -> bool {
+        match self {
+            RayAabbIsect::Outside(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns the distance from the ray origin to the nearest intersection
+    /// point.
+    pub fn distance(&self) -> f32 {
+        match self {
+            RayAabbIsect::Inside(d) | RayAabbIsect::Outside(d) => *d,
+        }
+    }
+}
+
+/// Tests intersection between AABB and Ray using slab method.
+pub fn ray_aabb_intersects(ray: &Ray, bbox: &Aabb) -> bool {
+    let mut t_near = f32::NEG_INFINITY;
+    let mut t_far = f32::INFINITY;
+
+    for i in 0..3 {
+        if ray.dir[i] == 0.0 && (ray.org[i] < bbox.min[i] || ray.org[i] > bbox.max[i]) {
+            return false;
+        }
+
+        let (near, mut far) = {
+            let inv_d = 1.0 / ray.dir[i];
+            let near = (bbox.min[i] - ray.org[i]) * inv_d;
+            let far = (bbox.max[i] - ray.org[i]) * inv_d;
+            if near > far {
+                (far, near)
+            } else {
+                (near, far)
+            }
+        };
+
+        far *= 1.0 + 2.0 * crate::common::gamma_f32(3.0);
+
+        t_near = t_near.max(near);
+        t_far = t_far.min(far);
+
+        if t_near > t_far {
+            return false;
+        }
+    }
+
+    t_far >= 0.0
+}
+
+/// Tests intersection between AABB and Ray using slab method.
+/// The idea is to treat the AABB as the space inside of three pairs of
+/// parallel planes. The ray is clipped by each pair of parallel planes,
+/// and if any portion of the ray remains, it intersects the box.
+pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
+    let mut t_near = f32::NEG_INFINITY;
+    let mut t_far = f32::INFINITY;
+
+    for i in 0..3 {
+        if ray.dir[i] == 0.0 && (ray.org[i] < bbox.min[i] || ray.org[i] > bbox.max[i]) {
+            return None;
+        }
+
+        let (near, mut far) = {
+            let inv_d = rcp(ray.dir[i]);
+            let near = (bbox.min[i] - ray.org[i]) * inv_d;
+            let far = (bbox.max[i] - ray.org[i]) * inv_d;
+            if near > far {
+                (far, near)
+            } else {
+                (near, far)
+            }
+        };
+
+        far *= 1.0 + 2.0 * crate::common::gamma_f32(3.0);
+
+        t_near = t_near.max(near);
+        t_far = t_far.min(far);
+
+        if t_near > t_far {
+            return None;
+        }
+    }
+
+    (t_far >= 0.0).then(|| {
+        if t_near >= 0.0 {
+            RayAabbIsect::Outside(t_near)
+        } else {
+            RayAabbIsect::Inside(t_far)
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,6 +690,185 @@ mod tests {
             prop_assert_eq!(aabb[1i32], max);
             prop_assert_eq!(aabb[0usize], min);
             prop_assert_eq!(aabb[1isize], max);
+        }
+    }
+
+    #[test]
+    fn aabb_ray_intersection() {
+        let ray = Ray::new(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 1.0).normalize(),
+        );
+        let bbox = Aabb::new(Vec3::new(1.0, 1.0, 1.0), Vec3::new(2.0, 2.0, 2.0));
+        assert!(ray_aabb_intersection(&ray, &bbox).is_some());
+
+        let bbox2 = Aabb::new(Vec3::new(-2.0, -2.0, -2.0), Vec3::new(-1.0, -1.0, -1.0));
+        assert!(ray_aabb_intersection(&ray, &bbox2).is_none());
+        assert!(!ray_aabb_intersects(&ray, &bbox2));
+
+        {
+            let bbox = Aabb::new(Vec3::new(2.0, -1.0, -1.0), Vec3::new(3.0, 1.0, 1.0));
+
+            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+            assert!(ray_aabb_intersection(&ray, &bbox).is_some());
+
+            println!("ray: {:?}", ray);
+            let ray1 = Ray::new(Vec3::new(0.0, 2.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+            let isect = ray_aabb_intersection(&ray1, &bbox);
+            println!("{:?}", isect);
+            assert!(isect.is_none());
+            assert!(!ray_aabb_intersects(&ray1, &bbox));
+        }
+    }
+
+    #[test]
+    fn aabb_ray_intersection_flat() {
+        let aabb = Aabb::new(Vec3::new(2.0, 2.0, 0.0), Vec3::new(3.0, 3.0, 0.0));
+
+        let normal_ray = Ray::new(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0).normalize(),
+        );
+
+        assert!(
+            ray_aabb_intersects(&normal_ray, &aabb),
+            "normal ray should intersect"
+        );
+        assert!(
+            ray_aabb_intersection(&normal_ray, &aabb).is_some(),
+            "normal ray should intersect"
+        );
+
+        {
+            println!("parallel ray miss 0");
+            let parallel_ray_miss0 = Ray::new(
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0).normalize(),
+            );
+
+            assert!(
+                !ray_aabb_intersects(&parallel_ray_miss0, &aabb),
+                "parallel ray miss 0 should not intersect"
+            );
+            assert!(
+                ray_aabb_intersection(&parallel_ray_miss0, &aabb).is_none(),
+                "parallel ray miss 0 should not intersect"
+            );
+
+            let parallel_ray_miss00 = Ray::new(
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(-1.0, 0.0, 0.0).normalize(),
+            );
+            assert!(
+                !ray_aabb_intersects(&parallel_ray_miss00, &aabb),
+                "parallel ray miss 00 should not intersect"
+            );
+            assert!(
+                ray_aabb_intersection(&parallel_ray_miss00, &aabb).is_none(),
+                "parallel ray miss 00 should not intersect"
+            );
+        }
+
+        {
+            println!("parallel ray miss 1");
+            let parallel_ray_miss1 = Ray::new(
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0).normalize(),
+            );
+
+            assert!(
+                !ray_aabb_intersects(&parallel_ray_miss1, &aabb),
+                "parallel ray miss 1 should not intersect"
+            );
+            assert!(
+                ray_aabb_intersection(&parallel_ray_miss1, &aabb).is_none(),
+                "parallel ray miss 1 should not intersect"
+            );
+        }
+
+        {
+            println!("parallel ray hit 0");
+            let parallel_ray_hit0 = Ray::new(
+                Vec3::new(0.0, 2.5, 0.0),
+                Vec3::new(1.0, 0.0, 0.0).normalize(),
+            );
+
+            assert!(
+                ray_aabb_intersects(&parallel_ray_hit0, &aabb),
+                "parallel ray hit 0 should intersect"
+            );
+            assert!(
+                ray_aabb_intersection(&parallel_ray_hit0, &aabb).is_some(),
+                "parallel ray hit 0 should intersect"
+            );
+        }
+
+        let parallel_ray_hit1 = Ray::new(
+            Vec3::new(2.5, 0.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0).normalize(),
+        );
+
+        assert!(
+            ray_aabb_intersects(&parallel_ray_hit1, &aabb),
+            "parallel ray hit 1 should intersect"
+        );
+        assert!(
+            ray_aabb_intersection(&parallel_ray_hit1, &aabb).is_some(),
+            "parallel ray hit 1 should intersect"
+        );
+
+        {
+            let ray_inside = Ray::new(
+                Vec3::new(2.5, 2.5, 0.0),
+                Vec3::new(1.0, -1.0, 0.0).normalize(),
+            );
+            println!("ray inside: {:?}", ray_inside);
+            assert!(
+                ray_aabb_intersects(&ray_inside, &aabb),
+                "ray inside should intersect"
+            );
+            let isect = ray_aabb_intersection(&ray_inside, &aabb);
+            assert!(isect.is_some(), "ray inside should intersect");
+            assert!(
+                isect.unwrap().is_inside(),
+                "ray inside should intersect inside"
+            );
+        }
+
+        {
+            let ray_inside_parallel0 = Ray::new(
+                Vec3::new(2.5, 2.5, 0.0),
+                Vec3::new(1.0, 0.0, 0.0).normalize(),
+            );
+
+            assert!(
+                ray_aabb_intersects(&ray_inside_parallel0, &aabb),
+                "ray inside parallel 0 should intersect"
+            );
+            let isect = ray_aabb_intersection(&ray_inside_parallel0, &aabb);
+            assert!(isect.is_some(), "ray inside parallel 0 should intersect");
+            assert!(
+                isect.unwrap().is_inside(),
+                "ray inside parallel 0 should intersect inside"
+            );
+        }
+
+        {
+            let ray_inside_parallel1 = Ray::new(
+                Vec3::new(2.5, 2.5, 0.0),
+                Vec3::new(0.0, 1.0, 0.0).normalize(),
+            );
+
+            assert!(
+                ray_aabb_intersects(&ray_inside_parallel1, &aabb),
+                "ray inside parallel 1 should intersect"
+            );
+            let isect = ray_aabb_intersection(&ray_inside_parallel1, &aabb);
+            assert!(isect.is_some(), "ray inside parallel 1 should intersect");
+            assert!(
+                isect.unwrap().is_inside(),
+                "ray inside parallel 1 should intersect inside"
+            );
         }
     }
 }

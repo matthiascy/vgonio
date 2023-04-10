@@ -13,7 +13,7 @@ use crate::{
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
         rtc,
-        rtc::{embr::Trajectory, Ray},
+        rtc::{embr::Trajectory, ray_aabb_intersection, Hit, Ray},
         Collector, Emitter, RtcRecord, TrajectoryNode,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
@@ -454,13 +454,6 @@ impl<C: Cell> Grid<C> {
     }
 }
 
-// TODO: rename
-#[derive(Debug, Clone, Copy)]
-pub struct Isect {
-    pub p: Vec3,
-    pub n: Vec3,
-}
-
 impl Grid<BaseCell> {
     /// Checks if the given ray intersects with triangles within the cell at
     /// the given position in the grid space.
@@ -469,7 +462,7 @@ impl Grid<BaseCell> {
         ray: &Ray,
         pos: &IVec2,
         mesh: &MicroSurfaceMesh,
-    ) -> Option<(u32, Isect)> {
+    ) -> Option<Hit> {
         #[cfg(not(test))]
         use log::debug;
         #[cfg(test)]
@@ -480,8 +473,8 @@ impl Grid<BaseCell> {
         debug!("  - triangle indices: {:?}", cell.tris);
         let triangles = self.triangles_of_cell(pos, mesh);
         debug!("  - triangles: {:?}", triangles);
-        let isect0 = rtc::ray_tri_intersect_woop(ray, &triangles[0]);
-        let isect1 = rtc::ray_tri_intersect_woop(ray, &triangles[1]);
+        let isect0 = rtc::ray_tri_intersect_woop(ray, &triangles[0], f32::MAX);
+        let isect1 = rtc::ray_tri_intersect_woop(ray, &triangles[1], f32::MAX);
         debug!("  - isect0: {:?}", isect0);
         debug!("  - isect1: {:?}", isect1);
         match (isect0, isect1) {
@@ -494,13 +487,14 @@ impl Grid<BaseCell> {
                     // is 0.0.
                     debug_assert!(ulp_eq(isect0.u, 0.0));
                     debug_assert!(ulp_eq(1.0 - isect1.u - isect1.v, 0.0));
-                    Some((
-                        cell.tris[0],
-                        Isect {
-                            n: (isect0.n + isect1.n).normalize(),
-                            p: p0,
-                        },
-                    ))
+                    Some(Hit {
+                        normal: (isect0.n + isect1.n).normalize(),
+                        point: p0,
+                        u: isect0.u,
+                        v: isect0.v,
+                        geom_id: 0,
+                        prim_id: cell.tris[0],
+                    })
                 } else {
                     unreachable!("The ray should not intersect with two triangles")
                 }
@@ -540,7 +534,14 @@ impl Grid<BaseCell> {
                 } else {
                     isect.n
                 };
-                Some((cell.tris[0], Isect { p: isect.p, n }))
+                Some(Hit {
+                    normal: n,
+                    point: isect.p,
+                    u: isect.u,
+                    v: isect.v,
+                    geom_id: 0,
+                    prim_id: cell.tris[0],
+                })
             }
             (None, Some(isect)) => {
                 // Intersects with the second triangle.
@@ -577,7 +578,14 @@ impl Grid<BaseCell> {
                 } else {
                     isect.n
                 };
-                Some((cell.tris[1], Isect { p: isect.p, n }))
+                Some(Hit {
+                    normal: n,
+                    point: isect.p,
+                    u: isect.u,
+                    v: isect.v,
+                    geom_id: 0,
+                    prim_id: cell.tris[1],
+                })
             }
             (None, None) => None,
         }
@@ -604,7 +612,7 @@ impl Grid<BaseCell> {
 
     /// Traces the given ray through the grid and returns the intersection
     /// point with the closest triangle.
-    pub fn trace(&self, origin: Vec2, ray: &Ray, mesh: &MicroSurfaceMesh) -> Option<(u32, Isect)> {
+    pub fn trace(&self, origin: Vec2, ray: &Ray, mesh: &MicroSurfaceMesh) -> Option<Hit> {
         #[cfg(not(test))]
         use log::{debug, log};
         #[cfg(test)]
@@ -709,13 +717,13 @@ impl Grid<BaseCell> {
 
             // Perform the pre-check to see if the cell may intersect the ray.
             if self.may_intersect_cell(ray, &curr_cell, entering_dist, exiting_dist) {
-                // Perform the actual intersection test.
+                // Perform the actual intersection test. The ray origin is displaced by the
+                // entering distance.
                 debug!("Cell {:?} may intersect the ray", curr_cell);
-                if let Some((tri_idx, isect)) =
-                    self.intersects_cell_triangles(ray, &curr_cell, mesh)
-                {
+                let hit = self.intersects_cell_triangles(ray, &curr_cell, mesh);
+                if hit.is_some() {
                     debug!("Cell {:?} intersects the ray", curr_cell);
-                    return Some((tri_idx, isect));
+                    return hit;
                 }
             }
 
@@ -936,7 +944,10 @@ impl<'ms> MultilevelGrid<'ms> {
     pub fn coarse(&self, level: usize) -> &Grid<CoarseCell> { &self.coarse[level] }
 
     // /// Traces a ray through the grid.
-    // pub fn trace(&self, ray: &Ray) -> Trajectory { if self.coarse.len() == 0 {} }
+    // pub fn trace(&self, ray: &Ray) -> Trajectory {
+    //     let mut trajectory = Trajectory::new();
+    //     if ray_aabb_intersection()
+    // }
 }
 
 #[cfg(test)]
@@ -1276,7 +1287,7 @@ mod tests {
             &mesh,
         );
         assert!(traced.is_some());
-        assert_eq!(traced.unwrap().0, 11);
+        assert_eq!(traced.unwrap().prim_id, 11);
     }
 }
 

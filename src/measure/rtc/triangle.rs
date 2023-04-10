@@ -261,7 +261,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
 /// (1) Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle
 /// Intersection, Journal of Computer Graphics Techniques (JCGT), vol. 2, no. 1,
 /// 65-82, 2013
-pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriIsect> {
+pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Option<RayTriIsect> {
     // Transform the triangle vertices into the ray coordinate system.
     let mut p0t = triangle[0] - ray.org; // A'
     let mut p1t = triangle[1] - ray.org; // B'
@@ -321,8 +321,8 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3]) -> Option<RayTriI
     p2t.z *= sz;
     let t_scaled = e0 * p0t.z + e1 * p1t.z + e2 * p2t.z;
     // Check if the scaled distance value t is in the range [t_min, t_max].
-    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < ray.tmax * det))
-        || (det > 0.0 && (t_scaled <= 0.0 || t_scaled > ray.tmax * det))
+    if (det < 0.0 && (t_scaled >= 0.0 || t_scaled < tmax * det))
+        || (det > 0.0 && (t_scaled <= 0.0 || t_scaled > tmax * det))
     {
         return None;
     }
@@ -390,7 +390,7 @@ mod tests {
         ];
 
         for ray in rays {
-            let isect = ray_tri_intersect_woop(&ray, &triangle);
+            let isect = ray_tri_intersect_woop(&ray, &triangle, f32::INFINITY);
             // println!("{:?}", isect);
             assert!(isect.is_some());
         }
@@ -402,7 +402,7 @@ mod tests {
                 Vec3::new(-1.0, 0.0, 0.0),
                 Vec3::new(0.0, 0.0, 1.0),
             ];
-            let isect_woop = ray_tri_intersect_woop(&ray, &triangle);
+            let isect_woop = ray_tri_intersect_woop(&ray, &triangle, f32::INFINITY);
             let isect_moeller = ray_tri_intersect_moller_trumbore(&ray, &triangle);
             // println!("woop: {:?}", isect_woop);
             // print!("moller: {:?}", isect_moeller);
@@ -418,7 +418,7 @@ mod tests {
                 Vec3::new(-1.0, 0.0, 0.0),
                 Vec3::new(0.0, 1.0, 0.0),
             ];
-            let isect_woop = ray_tri_intersect_woop(&ray, &triangle);
+            let isect_woop = ray_tri_intersect_woop(&ray, &triangle, f32::INFINITY);
             println!("woop: {:?}", isect_woop);
             let isect = ray_tri_intersect_moller_trumbore(&ray, &triangle);
             println!("moller: {:?}", isect);

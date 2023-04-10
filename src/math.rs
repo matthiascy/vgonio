@@ -105,12 +105,16 @@ fn spherical_cartesian_conversion() {
 /// Newton-Raphson iteration is used to compute the reciprocal.
 #[inline(always)]
 pub fn rcp(x: f32) -> f32 {
+    // Intel' intrinsic will give us NaN if x is 0.0 or -0.0
+    if x == 0.0 {
+        return f32::INFINITY * x.signum();
+    }
+
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
             use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rcp_ss, _mm_set_ss, _mm_sub_ss};
             unsafe {
                 let a = _mm_set_ss(x);
-
                 let r = if is_x86_feature_detected!("avx512vl") {
                     use std::arch::x86_64::_mm_rcp14_ss;
                     _mm_rcp14_ss(_mm_set_ss(0.0), a) // error is less than 2^-14
@@ -159,6 +163,9 @@ fn test_rcp() {
     assert!(ulp_eq(rcp(4194304.0), 2.384185791015625e-07));
     assert!(ulp_eq(rcp(8388608.0), 1.1920928955078125e-07));
     assert!(ulp_eq(rcp(3.0), 1.0 / 3.0));
+    assert_eq!(1.0 / -0.0, rcp(-0.0));
+    assert_eq!(1.0 / 0.0, rcp(0.0));
+    assert_eq!(rcp(0.0), f32::INFINITY);
 }
 
 /// Returns the square of the given value.

@@ -301,10 +301,9 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{um, UMetre};
+    /// # use vgonio::units::{m};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf =
-    ///     MicroSurface::from_samples::<UMetre>(3, 3, um!(0.2), um!(0.2), samples, Default::default());
+    /// let msurf = MicroSurface::from_samples(3, 3, m!(0.2), m!(0.2), samples, None);
     /// assert_eq!(msurf.samples_count(), 9);
     /// ```
     pub fn samples_count(&self) -> usize { self.cols * self.rows }
@@ -315,16 +314,9 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{um, UMicrometre};
+    /// # use vgonio::units::{um};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples::<UMicrometre>(
-    ///     3,
-    ///     3,
-    ///     um!(0.2),
-    ///     um!(0.2),
-    ///     samples,
-    ///     Default::default(),
-    /// );
+    /// let msurf = MicroSurface::from_samples(3, 3, um!(0.2), um!(0.2), samples, None);
     /// assert_eq!(msurf.cells_count(), 4);
     /// ```
     pub fn cells_count(&self) -> usize {
@@ -346,31 +338,17 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{um, UMillimetre};
+    /// # use vgonio::units::{mm, um};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples::<UMillimetre>(
-    ///     3,
-    ///     3,
-    ///     um!(0.2),
-    ///     um!(0.2),
-    ///     samples,
-    ///     Default::default(),
-    /// );
+    /// let msurf = MicroSurface::from_samples(3, 3, mm!(0.2), mm!(0.2), samples, Default::default());
     /// assert_eq!(msurf.sample_at(2, 2), um!(0.1 * 1000.0));
     /// ```
     ///
     /// ```should_panic
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{um, UMillimetre};
+    /// # use vgonio::units::{mm};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples::<UMillimetre>(
-    ///     3,
-    ///     3,
-    ///     um!(0.2),
-    ///     um!(0.3),
-    ///     samples,
-    ///     Default::default(),
-    /// );
+    /// let msurf = MicroSurface::from_samples(3, 3, mm!(0.2), mm!(0.3), samples, Default::default());
     /// let h = msurf.sample_at(4, 4);
     /// ```
     pub fn sample_at(&self, col: usize, row: usize) -> Micrometres {
