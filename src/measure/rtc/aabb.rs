@@ -370,31 +370,6 @@ macro impl_aabb_indexing($($t:ty)*) {
 
 impl_aabb_indexing!(usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128);
 
-fn ray_aabb_intersects_inner(ray: &Ray, bbox: &Aabb) -> (f32, f32) {
-    let mut t_near = f32::NEG_INFINITY;
-    let mut t_far = f32::INFINITY;
-
-    for i in 0..3 {
-        let inv_d = rcp(ray.dir[i]);
-        let (t_near_i, mut t_far_i) = {
-            let near = (bbox.min[i] - ray.org[i]) * inv_d;
-            let far = (bbox.max[i] - ray.org[i]) * inv_d;
-            if near > far {
-                (far, near)
-            } else {
-                (near, far)
-            }
-        };
-
-        t_far_i *= 1.0 + 2.0 * crate::common::gamma_f32(3.0);
-
-        t_near = t_near.max(t_near_i);
-        t_far = t_far.min(t_far_i);
-    }
-
-    (t_near, t_far)
-}
-
 /// Intersection result of a ray and an AABB.
 ///
 /// The distance (ray parameter) is the distance from the ray origin to the

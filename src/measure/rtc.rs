@@ -1,5 +1,6 @@
 //! Ray tracing measurement module.
 
+use approx::RelativeEq;
 use glam::Vec3;
 
 #[cfg(feature = "embree")]
@@ -14,6 +15,7 @@ mod aabb;
 mod axis;
 mod triangle;
 
+use crate::common::ulp_eq;
 pub use aabb::*;
 pub use axis::Axis;
 pub use triangle::*;
@@ -37,10 +39,14 @@ impl Ray {
         Self { org: o, dir: d }
     }
 
-    // /// Intersects the ray with an axis-aligned bounding box.
-    // pub fn intersect_aabb(&self, bbox: &Aabb) -> Option<Vec3> {
-    //     let (t_in, t_out) = ray_aabb_intersection(self, bbox);
-    // }
+    /// Checks if the ray intersects the given axis-aligned bounding box.
+    pub fn does_intersect_aabb(&self, bbox: &Aabb) -> bool { ray_aabb_intersects(self, bbox) }
+
+    /// Checks if the ray intersects the given axis-aligned bounding box also
+    /// if the ray is inside the bounding box.
+    pub fn intersects_aabb(&self, bbox: &Aabb) -> Option<RayAabbIsect> {
+        ray_aabb_intersection(self, bbox)
+    }
 }
 
 /// Representation of a ray hit result.
@@ -58,6 +64,41 @@ pub struct Hit {
     pub geom_id: u32,
     /// Primitive ID of the hit primitive.
     pub prim_id: u32,
+}
+
+impl Default for Hit {
+    fn default() -> Self {
+        Self {
+            normal: Vec3::ZERO,
+            point: Vec3::ZERO,
+            u: f32::INFINITY,
+            v: f32::INFINITY,
+            geom_id: u32::MAX,
+            prim_id: u32::MAX,
+        }
+    }
+}
+
+impl PartialEq for Hit {
+    fn eq(&self, other: &Self) -> bool {
+        self.geom_id == other.geom_id
+            && self.prim_id == other.prim_id
+            && self.u.relative_eq(&other.u, f32::EPSILON, 2e-7)
+            && self.v.relative_eq(&other.v, f32::EPSILON, 2e-7)
+            && self.normal.abs_diff_eq(other.normal, 2e-7)
+            && self.point.abs_diff_eq(other.point, 2e-7)
+    }
+}
+
+impl Hit {
+    /// Checks if the hit is valid.
+    pub fn is_valid(&self) -> bool { self.geom_id != u32::MAX && self.prim_id != u32::MAX }
+
+    /// Invalidates the hit.
+    pub fn invalidate(&mut self) {
+        self.geom_id = u32::MAX;
+        self.prim_id = u32::MAX;
+    }
 }
 
 // todo: make this more general, not only for triangles

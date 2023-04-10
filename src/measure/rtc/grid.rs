@@ -95,9 +95,11 @@ pub struct CoarseCell {
     x: u32,
     /// Vertical grid coordinate of the cell.
     y: u32,
-    /// The min grid coordinates of the last level coarse cells or base cells.
+    /// The min grid coordinates of the last level (one level finer) coarse
+    /// cells or base cells, inclusive.
     min: UVec2,
-    /// The max grid coordinates of the last level coarse cells or base cells.
+    /// The max grid coordinates of the last level (one level finer) coarse
+    /// cells or base cells, inclusive.
     max: UVec2,
     /// Minimum height of the cell.
     min_height: f32,
@@ -202,40 +204,29 @@ pub struct Grid<C: Cell> {
 
 /// Grid traversal outcome.
 #[derive(Debug, Clone, PartialEq)]
-pub enum GridTraversal {
-    FromTopOrBottom([IVec2; 1]),
-    TraversedBaseCells {
-        /// Cells traversed by the ray.
-        cells: Vec<IVec2>,
-        /// Distances from the origin of the ray (entering cell of the ray)
-        /// to each intersection point between the ray and cells.
-        /// The first element is always 0, and the last element is the
-        /// distance from the origin to the exit point of the ray.
-        dists: Vec<f32>,
-    },
-    TraversedCoarseCells {
-        /// Cells traversed by the ray.
-        cells: Vec<IVec2>,
-    },
-    Cell(IVec2),
+pub struct GridTraversal {
+    /// Whether the cells are coarse.
+    pub is_coarse: bool,
+    /// Cells traversed by the ray.
+    pub cells: Vec<IVec2>,
+    /// Distances from the origin of the ray (entering cell of the ray)
+    /// to each intersection point between the ray and cells.
+    /// The first element is always 0, and the last element is the
+    /// distance from the origin to the exit point of the ray.
+    /// The distance is in the world space.
+    dists: Vec<f32>,
 }
 
 impl GridTraversal {
-    #[cfg(debug_assertions)]
-    pub fn traversed_cells(&self) -> Option<&[IVec2]> {
-        match self {
-            GridTraversal::FromTopOrBottom(cells) => Some(cells.as_ref()),
-            GridTraversal::TraversedBaseCells { cells, .. } => Some(cells),
-            GridTraversal::TraversedCoarseCells { cells } => Some(cells),
-            _ => None,
-        }
-    }
-
-    pub fn cell(&self) -> Option<IVec2> {
-        match self {
-            GridTraversal::Cell(cell) => Some(*cell),
-            _ => None,
-        }
+    /// Returns an iterator over the cells traversed by the ray.
+    /// Each cell is represented by its grid coordinates and the
+    /// entering and exiting distances of the ray to the cell.
+    pub fn iter(&self) -> impl Iterator<Item = (IVec2, f32, f32)> + '_ {
+        self.cells.iter().enumerate().map(|(i, c)| {
+            let entering = self.dists[i];
+            let exiting = self.dists[i + 1];
+            (*c, entering, exiting)
+        })
     }
 }
 
@@ -268,7 +259,7 @@ impl<C: Cell> Grid<C> {
     }
 
     /// Traverses the grid cells along the given ray to identify all the cells
-    /// along the ray.
+    /// along the ray path inside a given region.
     ///
     /// Modified version of Digital Differential Analyzer (DDA) algorithm.
     ///
@@ -276,6 +267,10 @@ impl<C: Cell> Grid<C> {
     ///
     /// * `origin` - Origin of the grid in the world space (top-left corner).
     /// * `ray` - The ray to traverse the grid.
+    /// * `min` - Minimum grid coordinates (current level) of the region,
+    ///   inclusive.
+    /// * `max` - Maximum grid coordinates (current level) of the region,
+    ///   inclusive.
     pub fn traverse(&self, origin: Vec2, ray: &Ray) -> GridTraversal {
         log::debug!("Traversing the grid along the ray: {:?}", ray);
         let start_pos = ray.org.xz() - origin;
@@ -295,7 +290,11 @@ impl<C: Cell> Grid<C> {
             // The ray is parallel to both the grid x and y axis; coming from
             // the top or bottom of the grid.
             log::debug!("The ray is parallel to both the grid x and y axis");
-            return GridTraversal::FromTopOrBottom([start_cell]);
+            return GridTraversal {
+                is_coarse: self.is_coarse,
+                cells: vec![start_cell],
+                dists: vec![],
+            };
         }
 
         let mut travelled_dists = vec![0.0];
@@ -303,13 +302,10 @@ impl<C: Cell> Grid<C> {
 
         // We are using the DDA algorithm to find all the cells that the ray traverses
         // and its intersection points. In case we are traversing on the coarse
-        // grid we can assume that the size of the grid cell is always 1x1.
+        // grid we can assume that the size of the grid cell is always
+        // (1.0, mesh.dv/mesh.du).
         log::debug!("The ray is not parallel to either the grid x or y axis");
-        let cell_size = if self.is_coarse {
-            Vec2::new(1.0, 1.0)
-        } else {
-            self.world_space_cell_size
-        };
+        let cell_size = self.world_space_cell_size;
 
         // 1. Calculate the slope of the ray on the grid.
         let (m, m_rcp) = {
@@ -385,15 +381,10 @@ impl<C: Cell> Grid<C> {
             }
         }
 
-        if self.is_coarse {
-            GridTraversal::TraversedCoarseCells {
-                cells: traversed_cells,
-            }
-        } else {
-            GridTraversal::TraversedBaseCells {
-                cells: traversed_cells,
-                dists: travelled_dists,
-            }
+        GridTraversal {
+            is_coarse: self.is_coarse,
+            cells: traversed_cells,
+            dists: travelled_dists,
         }
     }
 
@@ -462,7 +453,8 @@ impl Grid<BaseCell> {
         ray: &Ray,
         pos: &IVec2,
         mesh: &MicroSurfaceMesh,
-    ) -> Option<Hit> {
+        hit: &mut Hit,
+    ) {
         #[cfg(not(test))]
         use log::debug;
         #[cfg(test)]
@@ -487,14 +479,14 @@ impl Grid<BaseCell> {
                     // is 0.0.
                     debug_assert!(ulp_eq(isect0.u, 0.0));
                     debug_assert!(ulp_eq(1.0 - isect1.u - isect1.v, 0.0));
-                    Some(Hit {
+                    *hit = Hit {
                         normal: (isect0.n + isect1.n).normalize(),
                         point: p0,
                         u: isect0.u,
                         v: isect0.v,
                         geom_id: 0,
                         prim_id: cell.tris[0],
-                    })
+                    };
                 } else {
                     unreachable!("The ray should not intersect with two triangles")
                 }
@@ -534,14 +526,14 @@ impl Grid<BaseCell> {
                 } else {
                     isect.n
                 };
-                Some(Hit {
+                *hit = Hit {
                     normal: n,
                     point: isect.p,
                     u: isect.u,
                     v: isect.v,
                     geom_id: 0,
                     prim_id: cell.tris[0],
-                })
+                };
             }
             (None, Some(isect)) => {
                 // Intersects with the second triangle.
@@ -578,16 +570,19 @@ impl Grid<BaseCell> {
                 } else {
                     isect.n
                 };
-                Some(Hit {
+                *hit = Hit {
                     normal: n,
                     point: isect.p,
                     u: isect.u,
                     v: isect.v,
                     geom_id: 0,
                     prim_id: cell.tris[1],
-                })
+                };
             }
-            (None, None) => None,
+            (None, None) => {
+                hit.geom_id = u32::MAX;
+                hit.prim_id = u32::MAX;
+            }
         }
     }
 
@@ -610,13 +605,17 @@ impl Grid<BaseCell> {
         ]
     }
 
-    /// Traces the given ray through the grid and returns the intersection
-    /// point with the closest triangle.
-    pub fn trace(&self, origin: Vec2, ray: &Ray, mesh: &MicroSurfaceMesh) -> Option<Hit> {
+    pub fn trace_with_origin(
+        &self,
+        origin: Vec2,
+        ray: &Ray,
+        mesh: &MicroSurfaceMesh,
+        hit: &mut Hit,
+    ) {
         #[cfg(not(test))]
         use log::{debug, log};
         #[cfg(test)]
-        use std::{println as debug, println as log};
+        use std::println as debug;
 
         debug!("Traversing the grid along the ray: {:?}", ray);
         let start_pos = ray.org.xz() - origin;
@@ -628,7 +627,37 @@ impl Grid<BaseCell> {
         println!("Start position in the grid space: {:?}", start_cell);
         let ray_dir = ray.dir.xz();
         debug!("Ray direction in the grid space: {:?}", ray_dir);
+        self.trace(start_cell, start_pos, ray, mesh, hit);
+    }
 
+    /// Traces the given ray through the grid over a region and returns the
+    /// intersection point with the closest triangle.
+    ///
+    /// The ray direction is assumed to be on the grid plane in the world space.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_cell` - The cell where the ray starts.
+    /// * `start_pos` - The position of the ray origin in the grid space.
+    /// * `ray` - The ray to trace.
+    /// * `mesh` - The mesh to trace the ray against.
+    /// * `hit` - The intersection point with the closest triangle.
+    /// * `min` - The minimum cell position in the grid space, inclusive.
+    /// * `max` - The maximum cell position in the grid space, inclusive.
+    pub fn trace(
+        &self,
+        start_cell: IVec2,
+        start_pos: Vec2,
+        ray: &Ray,
+        mesh: &MicroSurfaceMesh,
+        hit: &mut Hit,
+    ) {
+        #[cfg(not(test))]
+        use log::{debug, log};
+        #[cfg(test)]
+        use std::println as debug;
+
+        let ray_dir = ray.dir.xz();
         let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
         let is_parallel_to_grid_y = ulp_eq(ray_dir.x, 0.0);
 
@@ -636,7 +665,7 @@ impl Grid<BaseCell> {
             // The ray is parallel to both the grid x and y axis; coming from
             // the top or bottom of the grid.
             debug!("The ray is parallel to both the grid x and y axis");
-            return self.intersects_cell_triangles(ray, &start_cell, mesh);
+            return self.intersects_cell_triangles(ray, &start_cell, mesh, hit);
         }
 
         let mut entering_dist = 0.0;
@@ -720,10 +749,10 @@ impl Grid<BaseCell> {
                 // Perform the actual intersection test. The ray origin is displaced by the
                 // entering distance.
                 debug!("Cell {:?} may intersect the ray", curr_cell);
-                let hit = self.intersects_cell_triangles(ray, &curr_cell, mesh);
-                if hit.is_some() {
+                self.intersects_cell_triangles(ray, &curr_cell, mesh, hit);
+                if hit.is_valid() {
                     debug!("Cell {:?} intersects the ray", curr_cell);
-                    return hit;
+                    return;
                 }
             }
 
@@ -741,8 +770,6 @@ impl Grid<BaseCell> {
             }
             exiting_dist = accumulated_line.x.min(accumulated_line.y);
         }
-
-        None
     }
 }
 
@@ -943,11 +970,51 @@ impl<'ms> MultilevelGrid<'ms> {
     /// The finest grid is at level 0.
     pub fn coarse(&self, level: usize) -> &Grid<CoarseCell> { &self.coarse[level] }
 
-    // /// Traces a ray through the grid.
-    // pub fn trace(&self, ray: &Ray) -> Trajectory {
-    //     let mut trajectory = Trajectory::new();
-    //     if ray_aabb_intersection()
-    // }
+    /// Traces a ray through the grid.
+    pub fn trace(&self, ray: &Ray, hit: &mut Hit) {
+        fn trace_coarse(multi_grid: &MultilevelGrid, level: u32, ray: Ray, hit: &mut Hit) {
+            let grid = multi_grid.coarse(level as usize);
+            for (cell, entering_dist) in grid
+                .traverse(multi_grid.mesh.bounds.min.xz(), &ray)
+                .iter()
+                .filter_map(|(cell, entering, exiting)| {
+                    if grid.may_intersect_cell(&ray, &cell, entering, exiting) {
+                        Some((grid.cell_at(cell.x as _, cell.y as _), entering))
+                    } else {
+                        None
+                    }
+                })
+            {
+                let displaced_ray = Ray::new(ray.org + ray.dir * entering_dist, ray.dir);
+                if level != 0 {
+                    trace_coarse(multi_grid, level - 1, displaced_ray, hit);
+                } else {
+                    multi_grid.base.trace_with_origin(
+                        multi_grid.mesh.bounds.min.xz(),
+                        &displaced_ray,
+                        multi_grid.mesh,
+                        hit,
+                    );
+                };
+
+                if hit.is_valid() {
+                    return;
+                }
+            }
+        }
+
+        hit.invalidate();
+
+        if self.level == 0 {
+            // No coarse grid, just trace the base grid.
+            self.base
+                .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
+        } else {
+            // Trace the coarse grid.
+            let init_level = self.level - 1;
+            trace_coarse(self, init_level, *ray, hit);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -956,7 +1023,7 @@ mod tests {
         common::ulp_eq,
         measure::rtc::{
             grid::{GridTraversal, MultilevelGrid},
-            Ray,
+            Hit, Ray,
         },
         msurf::{AxisAlignment, MicroSurface},
         units::{um, UMicrometre},
@@ -1040,6 +1107,15 @@ mod tests {
         assert_eq!(coarse1.rows, 2);
         assert_eq!(coarse1.grid_space_cell_size, 4);
         
+        for y in 0..coarse0.rows {
+            for x in 0..coarse0.cols {
+                let cell = coarse0.cell_at(x, y);
+                assert_eq!(cell.min, UVec2::new(x * 2, y * 2));
+                assert_eq!(cell.max, UVec2::new(((x+1) * 2 - 1).min(base.cols as u32 - 1), 
+                                                ((y+1) * 2 - 1).min(base.rows as u32 - 1)));
+            }
+        }
+        
         for y in 0..base.rows {
             for x in 0..base.cols {
                 let cell = base.cell_at(x, y);
@@ -1119,8 +1195,9 @@ mod tests {
                 let traversal_base = base.traverse(mesh.bounds.min.xz(), &ray_slope_1);
                 let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray_slope_1);
                 let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray_slope_1);
+                assert!(!traversal_base.is_coarse);
                 assert_eq!(
-                    traversal_base.traversed_cells().unwrap(),
+                    traversal_base.cells,
                     vec![
                         IVec2::new(5, 5),
                         IVec2::new(6, 5),
@@ -1132,30 +1209,30 @@ mod tests {
                     ]
                 );
                 assert_eq!(
-                    traversal_lvl0,
-                    GridTraversal::TraversedCoarseCells {
-                        cells: vec![
-                            IVec2::new(2, 2),
-                            IVec2::new(3, 2),
-                            IVec2::new(3, 3),
-                            IVec2::new(4, 3),
-                            IVec2::new(4, 4)
-                        ]
-                    }
+                    traversal_lvl0.cells,
+                    vec![
+                        IVec2::new(2, 2),
+                        IVec2::new(3, 2),
+                        IVec2::new(3, 3),
+                        IVec2::new(4, 3),
+                        IVec2::new(4, 4)
+                    ]
                 );
+                assert!(traversal_lvl0.is_coarse);
+
                 assert_eq!(
-                    traversal_lvl1,
-                    GridTraversal::TraversedCoarseCells {
-                        cells: vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)]
-                    }
+                    traversal_lvl1.cells,
+                    vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)],
                 );
+                assert!(traversal_lvl1.is_coarse);
             }
             {
                 let traversal_base = base.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
                 let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
                 let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
+                assert!(!traversal_base.is_coarse);
                 assert_eq!(
-                    traversal_base.traversed_cells().unwrap(),
+                    traversal_base.cells,
                     vec![
                         IVec2::new(5, 5),
                         IVec2::new(6, 5),
@@ -1165,21 +1242,17 @@ mod tests {
                     ]
                 );
                 assert_eq!(
-                    traversal_lvl0,
-                    GridTraversal::TraversedCoarseCells {
-                        cells: vec![
-                            IVec2::new(2, 2),
-                            IVec2::new(3, 2),
-                            IVec2::new(3, 3),
-                            IVec2::new(4, 3),
-                        ]
-                    }
+                    traversal_lvl0.cells,
+                    vec![
+                        IVec2::new(2, 2),
+                        IVec2::new(3, 2),
+                        IVec2::new(3, 3),
+                        IVec2::new(4, 3),
+                    ]
                 );
                 assert_eq!(
-                    traversal_lvl1,
-                    GridTraversal::TraversedCoarseCells {
-                        cells: vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)]
-                    }
+                    traversal_lvl1.cells,
+                    vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)]
                 );
             }
         }
@@ -1188,24 +1261,20 @@ mod tests {
             let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0, -0.1, -1.0));
             let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
             assert_eq!(
-                traversal_lvl0,
-                GridTraversal::TraversedCoarseCells {
-                    cells: vec![
-                        IVec2::new(2, 2),
-                        IVec2::new(1, 2),
-                        IVec2::new(1, 1),
-                        IVec2::new(0, 1),
-                        IVec2::new(0, 0)
-                    ]
-                }
+                traversal_lvl0.cells,
+                vec![
+                    IVec2::new(2, 2),
+                    IVec2::new(1, 2),
+                    IVec2::new(1, 1),
+                    IVec2::new(0, 1),
+                    IVec2::new(0, 0)
+                ]
             );
 
             let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
             assert_eq!(
-                traversal_lvl1,
-                GridTraversal::TraversedCoarseCells {
-                    cells: vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 0)]
-                }
+                traversal_lvl1.cells,
+                vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 0)]
             );
         }
 
@@ -1213,24 +1282,20 @@ mod tests {
             let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, -1.0));
             let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
             assert_eq!(
-                traversal_lvl0,
-                GridTraversal::TraversedCoarseCells {
-                    cells: vec![
-                        IVec2::new(2, 2),
-                        IVec2::new(3, 2),
-                        IVec2::new(3, 1),
-                        IVec2::new(4, 1),
-                        IVec2::new(4, 0)
-                    ]
-                }
+                traversal_lvl0.cells,
+                vec![
+                    IVec2::new(2, 2),
+                    IVec2::new(3, 2),
+                    IVec2::new(3, 1),
+                    IVec2::new(4, 1),
+                    IVec2::new(4, 0)
+                ]
             );
 
             let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
             assert_eq!(
-                traversal_lvl1,
-                GridTraversal::TraversedCoarseCells {
-                    cells: vec![IVec2::new(1, 1), IVec2::new(1, 0), IVec2::new(2, 0)]
-                }
+                traversal_lvl1.cells,
+                vec![IVec2::new(1, 1), IVec2::new(1, 0), IVec2::new(2, 0)]
             );
         }
 
@@ -1238,24 +1303,20 @@ mod tests {
             let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0, -0.1, 1.0));
             let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
             assert_eq!(
-                traversal_lvl0,
-                GridTraversal::TraversedCoarseCells {
-                    cells: vec![
-                        IVec2::new(2, 2),
-                        IVec2::new(1, 2),
-                        IVec2::new(1, 3),
-                        IVec2::new(0, 3),
-                        IVec2::new(0, 4)
-                    ]
-                }
+                traversal_lvl0.cells,
+                vec![
+                    IVec2::new(2, 2),
+                    IVec2::new(1, 2),
+                    IVec2::new(1, 3),
+                    IVec2::new(0, 3),
+                    IVec2::new(0, 4)
+                ]
             );
 
             let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
             assert_eq!(
-                traversal_lvl1,
-                GridTraversal::TraversedCoarseCells {
-                    cells: vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 2)]
-                }
+                traversal_lvl1.cells,
+                vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 2)]
             );
         }
     }
@@ -1264,14 +1325,14 @@ mod tests {
     fn grid_trace() {
         // todo: check triangle intersections
         #[rustfmt::skip]
-        let surf = MicroSurface::from_samples(
+            let surf = MicroSurface::from_samples(
             5,
             5,
             um!(1.0),
             um!(1.0),
             [
-                0.0, 0.0, 0.0, 0.0, 0.0, 
-                0.0, 0.0, 0.0, 0.0, 0.0, 
+                0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 2.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -1279,258 +1340,26 @@ mod tests {
             None,
         );
         let mesh = surf.as_micro_surface_mesh();
-        let grid = MultilevelGrid::new(&surf, &mesh, 4);
+        let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
-        let traced = base.trace(
-            mesh.bounds.min.xz(),
-            &Ray::new(Vec3::new(-3.0, 0.2, -3.0), Vec3::new(1.0, 0.0, 1.0)),
-            &mesh,
-        );
-        assert!(traced.is_some());
-        assert_eq!(traced.unwrap().prim_id, 11);
+
+        let mut hit_base = Hit::default();
+        let ray = Ray::new(Vec3::new(-3.0, 0.2, -3.0), Vec3::new(1.0, 0.0, 1.0));
+        {
+            base.trace_with_origin(mesh.bounds.min.xz(), &ray, &mesh, &mut hit_base);
+            assert!(hit_base.is_valid());
+            assert_eq!(hit_base.prim_id, 11);
+        }
+
+        let mut hit = Hit::default();
+        {
+            grid.trace(&ray, &mut hit);
+        }
+        {
+            assert!(hit.is_valid());
+            assert_eq!(hit.prim_id, 11);
+        }
+
+        assert_eq!(hit_base, hit);
     }
 }
-
-//
-// pub fn trace_one_ray_dbg(
-//     &self,
-//     ray: Ray,
-//     max_bounces: u32,
-//     curr_bounces: u32,
-//     last_prim: Option<u32>,
-//     output: &mut Vec<Ray>,
-// ) {
-//     log::debug!("[{curr_bounces}]");
-//     log::debug!("Trace {:?}", ray);
-//     output.push(ray);
-//
-//     let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
-//         log::debug!(
-//             "  - ray origin is outside of the grid, test if it intersects
-// with the bounding \              box"
-//         );
-//         // The ray origin is outside the grid, tests first with the bounding
-// box.         self.mesh
-//             .extent
-//             .ray_intersects(ray, f32::EPSILON, f32::INFINITY)
-//             .map(|point| {
-//                 log::debug!("  - intersected with bounding box: {:?}",
-// point);                 // Displace the hit point backwards along the ray
-// direction.                 point - ray.d * 0.001
-//             })
-//     } else {
-//         Some(ray.o)
-//     };
-//     log::debug!("  - entering point: {:?}", entering_point);
-//
-//     if let Some(start) = entering_point {
-//         match self.traverse(start.xz(), ray.d.xz()) {
-//             GridTraversal::FromTopOrBottom(cell) => {
-//                 log::debug!("  - [top/bot] traversed cells: {:?}", cell);
-//                 // The ray coming from the top or bottom of the grid,
-// calculate the intersection                 // with the grid surface.
-//                 let intersections = self.intersect_with_cell(ray, cell);
-//                 log::debug!("  - [top/bot] intersections: {:?}",
-// intersections);                 match intersections.len() {
-//                     0 => {}
-//                     1 | 2 => {
-//                         log::debug!("  --> intersected with triangle {:?}",
-// intersections[0].0);                         let p = intersections[0].1.p;
-//                         let n = intersections[0].1.n;
-//                         log::debug!("    n: {:?}", n);
-//                         log::debug!("    p: {:?}", p);
-//                         let d = reflect(ray.d.into(), n.into()).normalize();
-//                         log::debug!("    r: {:?}", d);
-//                         self.trace_one_ray_dbg(
-//                             Ray::new(p, d.into()),
-//                             max_bounces,
-//                             curr_bounces + 1,
-//                             Some(intersections[0].0),
-//                             output,
-//                         );
-//                     }
-//                     _ => {
-//                         unreachable!(
-//                             "Can't have more than 2 intersections with one
-// cell of the grid."                         );
-//                     }
-//                 }
-//             }
-//             GridTraversal::Traversed { cells, dists } => {
-//                 let displaced_ray = Ray::new(start, ray.d);
-//                 log::debug!("      -- traversed cells: {:?}", cells);
-//                 log::debug!("      -- traversed dists: {:?}", dists);
-//                 // For the reason that the entering point is displaced
-// backwards along the ray                 // direction, here we will skip the
-// first cells if it is                 // outside of the grid.
-//                 let first = cells.iter().position(|c|
-// self.contains(c)).unwrap();                 let ray_dists = {
-//                     let cos = ray.d.dot(Vec3::Y).abs();
-//                     let sin = (1.0 - cos * cos).sqrt();
-//                     dists
-//                         .iter()
-//                         .map(|d| displaced_ray.o.y + *d / sin *
-// displaced_ray.d.y)                         .collect::<Vec<_>>()
-//                 };
-//                 log::debug!("      -- ray dists:       {:?}", ray_dists);
-//
-//                 let mut intersections = vec![None; cells.len()];
-//                 for i in first..cells.len() {
-//                     let cell = &cells[i];
-//                     let entering = ray_dists[i];
-//                     let exiting = ray_dists[i + 1];
-//                     if self.intersections_happened_at(*cell, entering,
-// exiting) {                         log::debug!("        ✓ intersected");
-//                         log::debug!("          -> intersect with triangles in
-// cell");                         let prim_intersections = match last_prim {
-//                             Some(last_prim) => {
-//                                 log::debug!("             has last prim");
-//                                 self.intersect_with_cell(displaced_ray,
-// cells[i])                                     .into_iter()
-//                                     .filter(|(index, info, _)| {
-//                                         log::debug!(
-//                                             "            isect test with tri:
-// {:?}, \                                              last_prim: {:?}",
-//                                             index,
-//                                             last_prim
-//                                         );
-//                                         *index != last_prim
-//                                     })
-//                                     .collect::<Vec<_>>()
-//                             }
-//                             None => {
-//                                 log::debug!("             no last prim");
-//                                 self.intersect_with_cell(displaced_ray,
-// cells[i])                             }
-//                         };
-//                         log::debug!("           intersections: {:?}",
-// prim_intersections);                         match prim_intersections.len() {
-//                             0 => {
-//                                 intersections[i] = None;
-//                             }
-//                             1 => {
-//                                 let p = prim_intersections[0].1.p;
-//                                 let prim = prim_intersections[0].0;
-//                                 log::debug!("  - p: {:?}", p);
-//                                 // Avoid backface hitting.
-//                                 if ray.d.dot(prim_intersections[0].1.n) < 0.0
-// {                                     let d =
-//                                         reflect(ray.d.into(),
-// prim_intersections[0].1.n.into());
-// intersections[i] = Some((p, d, prim))                                 }
-//                             }
-//                             2 => {
-//                                 // When the ray is intersected with two
-// triangles inside of a                                 // cell, check if they
-// are                                 // the same.
-//                                 let prim0 = &prim_intersections[0];
-//                                 let prim1 = &prim_intersections[1];
-//                                 match (prim0.2, prim1.2) {
-//                                     (Some(adj_0), Some(adj_1)) => {
-//                                         if prim0.0 == adj_1 && prim1.0 ==
-// adj_0 {                                             let p = prim0.1.p;
-//                                             let n = prim0.1.n;
-//                                             let prim = prim0.0;
-//                                             log::debug!("    n: {:?}", n);
-//                                             log::debug!("    p: {:?}", p);
-//                                             if ray.d.dot(prim0.1.n) < 0.0 {
-//                                                 let d = reflect(ray.d.into(),
-// n.into());                                                 log::debug!("
-// r: {:?}", d);
-// intersections[i] = Some((p, d, prim))
-// }                                         }
-//                                     }
-//                                     _ => {
-//                                         panic!(
-//                                             "Intersected with two triangles
-// but they are not \                                              the same! {},
-// {}",                                             prim_intersections[0].1.p,
-//                                             prim_intersections[1].1.p
-//                                         );
-//                                     }
-//                                 }
-//                             }
-//                             _ => {
-//                                 unreachable!(
-//                                     "Can't have more than 2 intersections
-// with one cell of \                                      the grid."
-//                                 );
-//                             }
-//                         }
-//                     }
-//                 }
-//
-//                 if let Some(Some((p, d, prim))) =
-// intersections.iter().find(|i| i.is_some()) {
-// self.trace_one_ray_dbg(                         Ray::new(*p, (*d).into()),
-//                         max_bounces,
-//                         curr_bounces + 1,
-//                         Some(*prim),
-//                         output,
-//                     );
-//                 }
-//             }
-//         }
-//     } else {
-//         log::debug!("  - no starting point");
-//     }
-// }
-//
-// pub fn trace_one_ray(
-//     &self,
-//     ray: Ray,
-//     max_bounces: u32,
-//     ior_t: &[RefractiveIndex],
-// ) -> Option<RtcRecord> {
-//     // self.trace_one_ray_dbg(ray, max_bounces, 0, None, &mut output);
-//     // output
-//     todo!()
-// }
-//
-// fn trace_one_ray_inner(
-//     &self,
-//     ray: Ray,
-//     max_bounces: u32,
-//     curr_bounces: u32,
-//     prev_prim: Option<u32>,
-//     trajectory: &mut Vec<TrajectoryNode>,
-// ) {
-//     log::debug!("--- current bounce {} ----", curr_bounces);
-//     trajectory.push(TrajectoryNode { ray, cos: 0.0 });
-//     log::debug!("push ray: {:?} | len: {:?}", ray, trajectory.len());
-//
-//     if curr_bounces >= max_bounces {
-//         log::debug!("  > bounce limit reached");
-//         return;
-//     }
-//
-//     // todo: hierachical grid
-//
-//     let entering_point = if !self.contains(&self.world_to_grid_3d(ray.o)) {
-//         log::debug!(
-//             "  > entering point outside of grid -- test if it intersects with
-// the bounding box"         );
-//         self.mesh
-//             .extent
-//             .ray_intersects(ray, f32::EPSILON, f32::INFINITY)
-//             .map(|point| {
-//                 log::debug!("    - intersected with bounding box: {:?}",
-// point);                 // Displaces the hit point backwards along the ray
-// direction.                 point - ray.d * 0.001
-//             })
-//     } else {
-//         Some(ray.o)
-//     };
-//     log::debug!("  > entering point: {:?}", entering_point);
-//
-//     if let Some(start) = entering_point {
-//         match self.traverse(start.xz(), ray.d.xz()) {
-//             GridTraversal::FromTopOrBottom(_) => {}
-//             GridTraversal::Traversed { .. } => {}
-//         }
-//     }
-// }
-// }
-
-// fn compute_normal(pts: &[Vec3; 3]) -> Vec3 { (pts[1] - pts[0]).cross(pts[2] -
-// pts[0]).normalize() }
