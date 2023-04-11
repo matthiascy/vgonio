@@ -5,9 +5,7 @@ use crate::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
     },
-    units::{
-        deg, metres, mm, nanometres, rad, Length, LengthUnit, Millimetres, Radians, SolidAngle,
-    },
+    units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
     Error,
 };
 use serde::{Deserialize, Serialize};

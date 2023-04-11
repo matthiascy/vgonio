@@ -8,13 +8,12 @@ use crate::{
     common::ulp_eq,
     math::{close_enough, rcp},
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfStats, SpectrumSampler},
+        bsdf::{BsdfMeasurementPoint, BsdfStats},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
         rtc,
-        rtc::{Hit, LastHit, Ray, RayAabbIsect, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
-        Collector, Emitter,
+        rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::{fresnel, ior::RefractiveIndex},
@@ -46,8 +45,7 @@ pub fn measure_bsdf(
     cache: &Cache,
 ) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
     let radius = match desc.emitter.radius {
-        // FIXME: max_extent() updated, thus 2.5 is not a good choice
-        Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
+        Radius::Auto(_) => um!(mesh.bounds.max_extent() * std::f32::consts::SQRT_2),
         Radius::Fixed(r) => r.in_micrometres(),
     };
     let max_bounces = desc.emitter.max_bounces;
@@ -101,8 +99,7 @@ pub fn measure_bsdf(
             .chunks(MAX_RAY_STREAM_SIZE)
             .zip(stream_data.iter_mut())
             //.par_chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.par_iter_mut())
-            .enumerate()
-            .for_each(|(i, (rays, data))| {
+            .for_each(|(rays, data)| {
                 let chunk_size = rays.len();
                 let mut validities = vec![true; chunk_size];
                 let mut rays = rays.to_owned();
@@ -256,8 +253,11 @@ impl Default for CoarseCell {
     }
 }
 
+/// Represents a grid cell of any level.
 pub trait Cell: Sized {
+    /// Minimum height of the cell.
     fn min_height(&self) -> f32;
+    /// Maximum height of the cell.
     fn max_height(&self) -> f32;
 }
 
@@ -789,7 +789,7 @@ impl Grid<BaseCell> {
         hit: &mut Hit,
     ) {
         #[cfg(not(test))]
-        use log::{debug, log};
+        use log::debug;
         #[cfg(test)]
         use std::println as debug;
 
@@ -1110,7 +1110,7 @@ impl<'ms> MultilevelGrid<'ms> {
     pub fn trace(&self, ray: &Ray, hit: &mut Hit) {
         fn trace_coarse(multi_grid: &MultilevelGrid, level: u32, ray: Ray, hit: &mut Hit) {
             let grid = multi_grid.coarse(level as usize);
-            for (cell, entering_dist) in grid
+            for (_, entering_dist) in grid
                 .traverse(multi_grid.mesh.bounds.min.xz(), &ray)
                 .iter()
                 .filter_map(|(cell, entering, exiting)| {

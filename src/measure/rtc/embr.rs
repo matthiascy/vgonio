@@ -183,8 +183,7 @@ pub fn measure_bsdf(
 
     // Calculate emitter's radius to match the surface's dimensions.
     let radius = match desc.emitter.radius() {
-        // FIXME: max_extent() updated, thus 2.5 is not a good choice
-        Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
+        Radius::Auto(_) => um!(mesh.bounds.max_extent() * std::f32::consts::SQRT_2),
         Radius::Fixed(r) => r.in_micrometres(),
     };
 

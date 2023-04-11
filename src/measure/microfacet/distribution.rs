@@ -7,7 +7,15 @@ use std::{
     path::Path,
 };
 
-use crate::{app::cache::{Cache, Handle}, common::{DataEncoding, Handedness}, error::Error, math, measure::{self, measurement::MicrofacetNormalDistributionMeasurement}, msurf::MicroSurface, units::{self, Radians}};
+use crate::{
+    app::cache::{Cache, Handle},
+    common::{DataEncoding, Handedness},
+    error::Error,
+    math,
+    measure::measurement::MicrofacetNormalDistributionMeasurement,
+    msurf::MicroSurface,
+    units::{self, Radians},
+};
 
 /// Structure holding the data for micro-facet normal distribution measurement.
 ///
@@ -113,8 +121,7 @@ pub fn measure_normal_distribution(
 ) -> Vec<MicrofacetNormalDistribution> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet normal distribution...");
-    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces)
-        .unwrap();
+    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
     let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
     let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
     surfaces

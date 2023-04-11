@@ -3,12 +3,11 @@
 use crate::{app::cache::Asset, measure::rtc::Aabb};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, path::PathBuf};
-use uuid::Uuid;
+use std::path::PathBuf;
 
 use crate::{
     app::gfx::RenderableMesh,
-    units::{um, Length, LengthUnit, Micrometres, Nanometres},
+    units::{um, Length, LengthUnit, Micrometres},
 };
 
 /// Static variable used to generate height field name.
@@ -620,10 +619,10 @@ fn regular_grid_triangulation_test() {
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
     /// Unique identifier.
-    pub uuid: Uuid,
+    pub uuid: uuid::Uuid,
 
     /// Uuid of the [`MicroSurface`] from which the mesh is generated.
-    pub msurf: Uuid,
+    pub msurf: uuid::Uuid,
 
     /// Axis-aligned bounding box of the mesh.
     pub bounds: Aabb,
@@ -670,11 +669,7 @@ impl MicroSurfaceMesh {
 }
 
 mod io {
-    use crate::{
-        error::Error,
-        msurf::MicroSurface,
-        units::{um, UMicrometre},
-    };
+    use crate::{error::Error, msurf::MicroSurface, units::um};
     use std::{
         fs::File,
         io::{BufRead, BufReader, Read},

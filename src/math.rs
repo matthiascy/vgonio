@@ -4,7 +4,6 @@ use crate::{
 };
 use cfg_if::cfg_if;
 pub use glam::*;
-use std::arch::x86_64::_mm_mul_ss;
 
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -177,7 +176,7 @@ pub fn sqr(x: f32) -> f32 { x * x }
 pub fn rsqrt(x: f32) -> f32 {
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
-            use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rsqrt_ss, _mm_set_ss, _mm_sub_ss, _mm_add_ss};
+            use std::arch::x86_64::{_mm_cvtss_f32, _mm_mul_ss, _mm_rsqrt_ss, _mm_set_ss, _mm_add_ss};
             unsafe {
                 let a = _mm_set_ss(x);
 
@@ -217,7 +216,6 @@ fn test_rsqrt() {
     assert!(ulp_eq(rsqrt(65536.0), 0.00390625));
     assert!(ulp_eq(rsqrt(262144.0), 0.001953125));
     println!("{:.20} - {:.20}", rsqrt(3.0), rcp(3.0f32.sqrt()));
-    let a = 10.0f32;
 }
 
 /// Returns the fused multiply-subtract of the given values.

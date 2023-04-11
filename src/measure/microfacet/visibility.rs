@@ -1,11 +1,19 @@
-use crate::{app::{
-    cache::{Cache, Handle},
-    gfx::{
-        self,
-        camera::{Camera, Projection},
-        GpuContext, RenderPass, Texture, WgpuConfig,
+use crate::{
+    app::{
+        cache::{Cache, Handle},
+        gfx::{
+            self,
+            camera::{Camera, Projection},
+            GpuContext, RenderPass, Texture, WgpuConfig,
+        },
     },
-}, common::{DataEncoding, Handedness}, measure, measure::measurement::MicrofacetMaskingShadowingMeasurement, msurf::MicroSurface, units::Radians, Error, math};
+    common::{DataEncoding, Handedness},
+    math, measure,
+    measure::measurement::MicrofacetMaskingShadowingMeasurement,
+    msurf::MicroSurface,
+    units::Radians,
+    Error,
+};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use std::{num::NonZeroU32, path::Path};
@@ -1466,7 +1474,7 @@ pub fn measure_masking_shadowing(
                 usage: wgpu::BufferUsages::INDEX,
             });
         let facets_idx_num = surface.facets.len() as u32;
-        let diagonal =
+        let diagonal = // surface.bounds.max_extent()
             (surface.bounds.max - surface.bounds.min).max_element() * std::f32::consts::SQRT_2;
         let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
         let proj_mat =

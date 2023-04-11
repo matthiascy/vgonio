@@ -16,7 +16,6 @@ mod aabb;
 mod axis;
 mod triangle;
 
-use crate::common::ulp_eq;
 pub use aabb::*;
 pub use axis::Axis;
 pub use triangle::*;
@@ -190,6 +189,9 @@ impl Trajectory {
         }
     }
 
+    /// Returns a mutable reference to the last ray of the trajectory if the ray
+    /// hit the micro-surface or was absorbed, `None` in case if the ray did
+    /// not hit anything.
     pub fn last_mut(&mut self) -> Option<&mut TrajectoryNode> {
         if self.is_missed() {
             None

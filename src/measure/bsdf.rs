@@ -4,11 +4,11 @@ use crate::{
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     common::RangeByStepSize,
-    measure::{measurement::Radius, rtc::grid::Grid, Collector, CollectorScheme, Emitter, Patch},
+    measure::Patch,
     msurf::MicroSurface,
-    units::{metres, mm, Nanometres},
+    units::Nanometres,
 };
-use serde::{ser::SerializeTupleStruct, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
@@ -19,7 +19,7 @@ use super::measurement::BsdfMeasurement;
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")] // TODO: use case_insensitive in the future
+#[serde(rename_all = "kebab-case")]
 pub enum BsdfKind {
     /// Bidirectional reflectance distribution function.
     Brdf,
