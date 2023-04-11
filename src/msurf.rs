@@ -4,15 +4,12 @@ use crate::{app::cache::Asset, measure::rtc::Aabb};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, path::PathBuf};
-
-mod io;
-mod mesh;
+use uuid::Uuid;
 
 use crate::{
     app::gfx::RenderableMesh,
     units::{um, Length, LengthUnit, Micrometres, Nanometres},
 };
-pub use mesh::MicroSurfaceMesh;
 
 /// Static variable used to generate height field name.
 static mut MICRO_SURFACE_COUNTER: u32 = 0;
@@ -608,4 +605,422 @@ fn regular_grid_triangulation_test() {
     let indices = regular_grid_triangulation(4, 3);
     assert_eq!(indices.len(), 36);
     println!("{:?}", indices);
+}
+
+/// Triangle representation of the surface mesh.
+///
+/// Created from [`MicroSurface`](`crate::msurf::MicroSurface`) using
+/// [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`),
+/// and has the same length unit ([`Micrometres`](`crate::units::Micrometres`))
+/// as the [`MicroSurface`](`crate::msurf::MicroSurface`).
+///
+/// By default, the generated mesh is located on XZ plane in right-handed Y up
+/// coordinate system.
+/// See [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`)
+#[derive(Debug)]
+pub struct MicroSurfaceMesh {
+    /// Unique identifier.
+    pub uuid: Uuid,
+
+    /// Uuid of the [`MicroSurface`] from which the mesh is generated.
+    pub msurf: Uuid,
+
+    /// Axis-aligned bounding box of the mesh.
+    pub bounds: Aabb,
+
+    /// Number of triangles in the mesh.
+    pub num_facets: usize,
+
+    /// Number of vertices in the mesh.
+    pub num_verts: usize,
+
+    /// Vertices of the mesh.
+    pub verts: Vec<Vec3>,
+
+    /// Vertex indices forming the facets which are triangles.
+    pub facets: Vec<u32>,
+
+    /// Normal vectors of each facet.
+    pub facet_normals: Vec<Vec3>,
+
+    /// Surface area of each facet.
+    pub facet_areas: Vec<f32>,
+}
+
+impl Asset for MicroSurfaceMesh {}
+
+impl MicroSurfaceMesh {
+    /// Returns the surface area of a facet.
+    ///
+    /// # Arguments
+    ///
+    /// * `facet` - Index of the facet.
+    ///
+    /// TODO(yang): unit of surface area
+    pub fn facet_surface_area(&self, facet: usize) -> f32 { self.facet_areas[facet] }
+
+    /// Calculate the macro surface area of the mesh.
+    ///
+    /// REVIEW(yang): temporarily the surface mesh is generated on XZ plane in
+    /// right-handed Y up coordinate system.
+    /// TODO(yang): unit of surface area
+    pub fn macro_surface_area(&self) -> f32 {
+        (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.z - self.bounds.min.z)
+    }
+}
+
+mod io {
+    use crate::{
+        error::Error,
+        msurf::MicroSurface,
+        units::{um, UMicrometre},
+    };
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader, Read},
+        path::Path,
+    };
+
+    /// Origin of the micro-geometry height field.
+    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+    pub enum MicroSurfaceOrigin {
+        /// Micro-geometry height field from Predicting Appearance from Measured
+        /// Microgeometry of Metal Surfaces.
+        Dong2015,
+        /// Micro-geometry height field from µsurf confocal microscope system.
+        Usurf,
+    }
+
+    impl MicroSurface {
+        /// Creates micro-geometry height field by reading the samples stored in
+        /// different file format. Supported formats are
+        ///
+        /// 1. Ascii Matrix file (plain text) coming from
+        ///    Predicting Appearance from Measured Microgeometry of Metal
+        /// Surfaces. 2. Plain text data coming from µsurf confocal
+        /// microscope system. 2. Micro-surface height field file
+        /// (binary format, ends with *.dcms). 3. Micro-surface height
+        /// field cache file (binary format, ends with *.dccc).
+        pub fn load_from_file(
+            path: &Path,
+            origin: Option<MicroSurfaceOrigin>,
+        ) -> Result<MicroSurface, Error> {
+            let file = File::open(path)?;
+            let mut reader = BufReader::new(file);
+
+            if let Some(origin) = origin {
+                // If origin is specified, call directly corresponding loading function.
+                match origin {
+                    MicroSurfaceOrigin::Dong2015 => read_ascii_dong2015(reader, true, path),
+                    MicroSurfaceOrigin::Usurf => read_ascii_usurf(reader, true, path),
+                }
+            } else {
+                // Otherwise, try to figure out the file format by reading first several bytes.
+                let mut buf = [0_u8; 4];
+                reader.read_exact(&mut buf)?;
+
+                match std::str::from_utf8(&buf)? {
+                    "Asci" => read_ascii_dong2015(reader, false, path),
+                    "DATA" => read_ascii_usurf(reader, false, path),
+                    // TODO: fix DCCC and DCMS
+                    // "DCCC" => {
+                    //     let header = {
+                    //         let mut buf = [0_u8; 6];
+                    //         reader.read_exact(&mut buf)?;
+                    //         CacheHeader::new(buf)
+                    //     };
+                    //
+                    //     if header.kind != CacheKind::HeightField {
+                    //         Err(Error::FileError("Not a valid height field cache!"))
+                    //     } else if header.binary {
+                    //         Ok(bincode::deserialize_from(reader)?)
+                    //     } else {
+                    //         Ok(serde_yaml::from_reader(reader)?)
+                    //     }
+                    // }
+                    // "DCMS" => {
+                    //     let header = {
+                    //         let mut buf = [0_u8; 23];
+                    //         reader.read_exact(&mut buf)?;
+                    //         MsHeader::new(buf)
+                    //     };
+                    //
+                    //     let samples = if header.binary {
+                    //         read_binary_samples(reader, (header.size / 4) as usize)
+                    //     } else {
+                    //         read_ascii_samples(reader)
+                    //     };
+                    //
+                    //     Ok(MicroSurface::from_samples(
+                    //         header.extent[0] as usize,
+                    //         header.extent[1] as usize,
+                    //         um!(header.spacing[0]),
+                    //         um!(header.spacing[1]),
+                    //         samples,
+                    //         alignment.unwrap_or_default(),
+                    //         Some(path.into()),
+                    //     ))
+                    // }
+                    _ => Err(Error::UnrecognizedFile),
+                }
+            }
+            .map(|mut ms| {
+                ms.fill_holes();
+                ms
+            })
+        }
+    }
+
+    /// Read micro-surface height field following the convention specified in
+    /// the paper:
+    ///
+    /// [`Predicting Appearance from Measured Microgeometry of Metal Surfaces. Zhao Dong, Bruce Walter, Steve Marschner, and Donald P. Greenberg. 2016.`](https://dl.acm.org/doi/10.1145/2815618)
+    ///
+    /// Unit used during the measurement is micrometre.
+    fn read_ascii_dong2015<R: BufRead>(
+        mut reader: R,
+        read_first_4_bytes: bool,
+        path: &Path,
+    ) -> Result<MicroSurface, Error> {
+        if read_first_4_bytes {
+            let mut buf = [0_u8; 4];
+            reader.read_exact(&mut buf)?;
+
+            if std::str::from_utf8(&buf)? != "Asci" {
+                return Err(Error::UnrecognizedFile);
+            }
+        }
+
+        let mut line = String::new();
+        reader.read_line(&mut line)?;
+        let (cols, rows, du, dv) = {
+            let first_line = line.trim().split_ascii_whitespace().collect::<Vec<_>>();
+
+            let cols = first_line[1].parse::<usize>().unwrap();
+            let rows = first_line[2].parse::<usize>().unwrap();
+
+            if first_line.len() == 3 {
+                (cols, rows, 0.11, 0.11)
+            } else if first_line.len() == 5 {
+                let du = first_line[3].parse::<f32>().unwrap();
+                let dv = first_line[4].parse::<f32>().unwrap();
+                (cols, rows, du, dv)
+            } else {
+                panic!("Invalid first line: {line:?}");
+            }
+        };
+        let samples = read_ascii_samples(reader);
+        Ok(MicroSurface::from_samples(
+            cols,
+            rows,
+            um!(du),
+            um!(dv),
+            samples,
+            Some(path.into()),
+        ))
+    }
+
+    /// Read micro-surface height field issued from µsurf confocal microscope.
+    fn read_ascii_usurf<R: BufRead>(
+        mut reader: R,
+        read_first_4_bytes: bool,
+        path: &Path,
+    ) -> Result<MicroSurface, Error> {
+        let mut line = String::new();
+        reader.read_line(&mut line)?;
+
+        if read_first_4_bytes && line.trim() != "DATA" {
+            return Err(Error::UnrecognizedFile);
+        }
+
+        // Read horizontal coordinates
+        reader.read_line(&mut line)?;
+        let x_coords: Vec<f32> = line
+            .trim()
+            .split_ascii_whitespace()
+            .map(|x_coord| x_coord.parse::<f32>().expect("Read f32 error!"))
+            .collect();
+
+        let (y_coords, values): (Vec<f32>, Vec<Vec<f32>>) = reader
+            .lines()
+            .map(|line| {
+                let mut values = read_line_ascii_usurf(&line.unwrap());
+                let head = values.remove(0);
+                (head, values)
+            })
+            .unzip();
+
+        // TODO: deal with case when coordinates are not uniform.
+        let du = x_coords[1] - x_coords[0];
+        let dv = y_coords[1] - y_coords[0];
+        let samples: Vec<f32> = values.into_iter().flatten().collect();
+
+        Ok(MicroSurface::from_samples(
+            x_coords.len(),
+            y_coords.len(),
+            um!(du),
+            um!(dv),
+            samples,
+            Some(path.into()),
+        ))
+    }
+
+    /// Read a line of usurf file. Height values are separated by tab character.
+    /// Consecutive tabs signifies that the height value at this point is
+    /// missing.
+    fn read_line_ascii_usurf(line: &str) -> Vec<f32> {
+        assert!(line.is_ascii());
+        line.chars()
+            .enumerate()
+            .filter_map(|(index, byte)| if byte == '\t' { Some(index) } else { None }) // find tab positions
+            .scan((0, false), |(last, last_word_is_tab), curr| {
+                // cut string into pieces: floating points string and tab character
+                if *last != curr - 1 {
+                    let val_str = if *last == 0 {
+                        &line[*last..curr]
+                    } else {
+                        &line[(*last + 1)..curr]
+                    };
+                    *last = curr;
+                    *last_word_is_tab = false;
+                    Some(val_str)
+                } else {
+                    *last = curr;
+                    *last_word_is_tab = true;
+                    if *last_word_is_tab {
+                        if curr != line.len() - 2 {
+                            Some("\t")
+                        } else {
+                            Some("")
+                        }
+                    } else {
+                        Some("")
+                    }
+                }
+            })
+            .filter_map(|s| {
+                // parse float string into floating point value
+                if s.is_empty() {
+                    None
+                } else if s == "\t" {
+                    Some(f32::NAN)
+                } else {
+                    Some(s.parse::<f32>().unwrap())
+                }
+            })
+            .collect()
+    }
+
+    /// Read sample values separated by whitespace line by line.
+    fn read_ascii_samples<R: BufRead>(reader: R) -> Vec<f32> {
+        reader
+            .lines()
+            .enumerate()
+            .flat_map(|(n, line)| {
+                let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
+                l.trim()
+                    .split_ascii_whitespace()
+                    .enumerate()
+                    .map(|(i, x)| {
+                        x.parse()
+                            .unwrap_or_else(|_| panic!("Parse float error at line {n} pos {i}"))
+                    })
+                    .collect::<Vec<f32>>()
+            })
+            .collect()
+    }
+
+    fn read_binary_samples<R: Read>(mut reader: R, count: usize) -> Vec<f32> {
+        use byteorder::{LittleEndian, ReadBytesExt};
+
+        let mut samples = vec![0.0; count];
+
+        (0..count).for_each(|i| {
+            samples[i] = reader.read_f32::<LittleEndian>().expect("read f32 error");
+        });
+
+        samples
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::msurf::io::read_line_ascii_usurf;
+
+        #[test]
+        #[rustfmt::skip]
+        fn test_read_line_ascii_surf0() {
+            let lines = [
+                "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
+                "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
+                "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
+            ];
+
+            assert_eq!(read_line_ascii_usurf(lines[0]).len(), 16);
+            assert_eq!(read_line_ascii_usurf(lines[1]).len(), 23);
+            assert_eq!(read_line_ascii_usurf(lines[2]).len(), 30);
+        }
+
+        #[test]
+        #[rustfmt::skip]
+        fn test_read_line_ascii_surf1() {
+            let lines = [
+                "0.00\t12.65\t\t12.63\t12.70\t12.73\t\t12.85\t\n",
+                "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
+                "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
+                "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
+            ];
+
+            fn _read_line(line: &str) -> Vec<&str> {
+                let tabs = line
+                    .chars()
+                    .enumerate()
+                    .filter_map(|(index, byte)| if byte == '\t' { Some(index) } else { None })
+                    .collect::<Vec<usize>>();
+
+                let pieces = tabs
+                    .iter()
+                    .scan((0, false), |(last, last_word_is_tab), curr| {
+                        // cut string into pieces: floating points string and tab character
+                        if *last != curr - 1 {
+                            let val_str = if *last == 0 {
+                                &line[*last..*curr]
+                            } else {
+                                &line[(*last + 1)..*curr]
+                            };
+                            *last = *curr;
+                            *last_word_is_tab = false;
+                            Some(val_str)
+                        } else {
+                            *last = *curr;
+                            *last_word_is_tab = true;
+                            if *last_word_is_tab {
+                                if *curr != tabs[tabs.len() - 1] {
+                                    Some(&"\t")
+                                } else {
+                                    Some(&"")
+                                }
+                            } else {
+                                Some(&"")
+                            }
+                        }
+                    })
+                    .filter(|piece| !piece.is_empty())
+                    .collect::<Vec<&str>>();
+                pieces
+            }
+
+            let mut results = vec![];
+
+            for &line in &lines {
+                let pieces = _read_line(line);
+                println!("pieces: {:?}", pieces);
+                results.push(pieces.len());
+            }
+
+            assert_eq!(results[0], 8);
+            assert_eq!(results[1], 16);
+            assert_eq!(results[2], 23);
+            assert_eq!(results[3], 30);
+        }
+    }
 }
