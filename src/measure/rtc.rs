@@ -1,7 +1,8 @@
 //! Ray tracing measurement module.
 
 use approx::RelativeEq;
-use glam::Vec3;
+use glam::{Vec3, Vec3A};
+use std::ops::{Add, Deref, DerefMut, Mul};
 
 #[cfg(feature = "embree")]
 pub mod embr;
@@ -101,8 +102,12 @@ impl Hit {
     }
 }
 
-// todo: make this more general, not only for triangles
 /// Ray/Triangle intersection result.
+///
+/// The parameterization of a triangle uses the first vertex p0 as base point,
+/// the vector p1 - p0 as u-direction and the vector p2 - p0 as v-direction.
+/// Thus vertex attributes can be interpolated using the barycentric coordinates
+/// u and v: t_uv = (1 - u - v) * t0 + u * t1 + v * t2.
 #[derive(Debug)]
 pub struct RayTriIsect {
     /// Barycentric coordinates of the intersection point.
@@ -121,4 +126,78 @@ pub struct RayTriIsect {
 impl RayTriIsect {
     /// Constructs a new `RayTriIsect`. TODO: add error bounds.
     pub fn new(p: Vec3, p_err: Vec3, n: Vec3, u: f32, v: f32) -> Self { Self { u, v, n, p } }
+
+    /// Interpolates the given vertex attributes according to the barycentric
+    /// coordinates.
+    pub fn interpolate<T>(&self, p0: T, p1: T, p2: T) -> T
+    where
+        T: Add<Output = T> + Mul<f32, Output = T> + Copy,
+    {
+        p0 * (1.0 - self.u - self.v) + p1 * self.u + p2 * self.v
+    }
 }
+
+/// Hit information used for avoiding self-intersections.
+#[derive(Debug, Clone, Copy)]
+struct LastHit {
+    /// Geometry ID of the last hit primitive.
+    pub geom_id: u32,
+    /// Primitive ID of the last hit primitive.
+    pub prim_id: u32,
+    /// Normal of the last hit primitive.
+    pub normal: Vec3A,
+}
+
+/// Records the status of a traced ray.
+#[derive(Debug, Clone, Copy)]
+pub struct TrajectoryNode {
+    /// The origin of the ray.
+    pub org: Vec3A,
+    /// The direction of the ray.
+    pub dir: Vec3A,
+    /// The cosine of the incident angle (always positive),
+    /// only has value if the ray has hit the micro-surface.
+    pub cos: Option<f32>,
+}
+
+/// Records the trajectory of a ray from the moment it is spawned.
+///
+/// The trajectory always starts with the ray that is spawned.
+#[derive(Debug, Clone)]
+pub struct Trajectory(pub(crate) Vec<TrajectoryNode>);
+
+impl Deref for Trajectory {
+    type Target = Vec<TrajectoryNode>;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl DerefMut for Trajectory {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
+impl Trajectory {
+    /// Returns `true` if the ray did not hit anything.
+    pub fn is_missed(&self) -> bool { self.0.len() <= 1 }
+
+    /// Returns the last ray of the trajectory if the ray hit the micro-surface
+    /// or was absorbed, `None` in case if the ray did not hit anything.
+    pub fn last(&self) -> Option<&TrajectoryNode> {
+        if self.is_missed() {
+            None
+        } else {
+            self.0.last()
+        }
+    }
+
+    pub fn last_mut(&mut self) -> Option<&mut TrajectoryNode> {
+        if self.is_missed() {
+            None
+        } else {
+            self.0.last_mut()
+        }
+    }
+}
+
+/// Maximum number of rays that can be traced in a single stream.
+const MAX_RAY_STREAM_SIZE: usize = 1024;

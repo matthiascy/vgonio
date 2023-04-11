@@ -16,7 +16,7 @@ use crate::{
     measure::{
         bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength, SpectrumSampler},
         measurement::BsdfMeasurement,
-        rtc::embr::{Trajectory, TrajectoryNode},
+        rtc::Trajectory,
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
@@ -165,8 +165,7 @@ impl Collector {
     }
 
     /// Collects the ray-tracing data.
-    #[cfg(feature = "embree")]
-    pub fn collect_embree_rt(
+    pub fn collect(
         &self,
         desc: &BsdfMeasurement,
         mesh: &MicroSurfaceMesh,

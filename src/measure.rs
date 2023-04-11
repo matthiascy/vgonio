@@ -37,30 +37,30 @@ pub enum RtcMethod {
     Grid,
 }
 
-/// Struct used to record the trajectory of a ray.
-#[derive(Debug, Copy, Clone)]
-pub struct TrajectoryNode {
-    /// The ray of the node.
-    pub ray: Ray,
-
-    /// The cosine of the incident angle between the ray and the normal (always
-    /// positive) of the surface where the ray hits.
-    pub cos: f32,
-}
-
-/// Ray tracing record.
-#[derive(Debug)]
-pub struct RtcRecord {
-    /// Path of traced ray.
-    pub trajectory: Vec<TrajectoryNode>,
-
-    /// Energy of the ray with different wavelengths at each bounce.
-    /// Inner vector is the energy of the ray of different wavelengths.
-    /// Outer vector is the number of bounces.
-    pub energy_each_bounce: Vec<Vec<f32>>,
-}
-
-impl RtcRecord {
-    /// Returns the bounces of traced ray.
-    pub fn bounces(&self) -> usize { self.trajectory.len() - 1 }
-}
+// /// Struct used to record the trajectory of a ray.
+// #[derive(Debug, Copy, Clone)]
+// pub struct TrajectoryNode {
+//     /// The ray of the node.
+//     pub ray: Ray,
+//
+//     /// The cosine of the incident angle between the ray and the normal
+// (always     /// positive) of the surface where the ray hits.
+//     pub cos: f32,
+// }
+//
+// /// Ray tracing record.
+// #[derive(Debug)]
+// pub struct RtcRecord {
+//     /// Path of traced ray.
+//     pub trajectory: Vec<TrajectoryNode>,
+//
+//     /// Energy of the ray with different wavelengths at each bounce.
+//     /// Inner vector is the energy of the ray of different wavelengths.
+//     /// Outer vector is the number of bounces.
+//     pub energy_each_bounce: Vec<Vec<f32>>,
+// }
+//
+// impl RtcRecord {
+//     /// Returns the bounces of traced ray.
+//     pub fn bounces(&self) -> usize { self.trajectory.len() - 1 }
+// }

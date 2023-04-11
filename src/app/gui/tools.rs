@@ -5,7 +5,7 @@ mod visual_debug;
 
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
-    measure::{rtc::Ray, TrajectoryNode},
+    measure::rtc::Ray,
 };
 #[cfg(feature = "embree")]
 use embree::Config;

@@ -10,6 +10,7 @@ use crate::{
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
+        rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
     msurf::MicroSurfaceMesh,
     optics::{fresnel, ior::RefractiveIndex},
@@ -21,6 +22,7 @@ use embree::{
     ValidMask, ValidityN, INVALID_ID,
 };
 use glam::{Vec3, Vec3A};
+use rayon::prelude::*;
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -53,56 +55,6 @@ impl MicroSurfaceMesh {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct HitData {
-    pub geom_id: u32,
-    pub prim_id: u32,
-    pub normal: Vec3A,
-}
-
-/// Records the status of a traced ray.
-#[derive(Debug, Clone, Copy)]
-pub struct TrajectoryNode {
-    /// The origin of the ray.
-    pub org: Vec3A,
-    /// The direction of the ray.
-    pub dir: Vec3A,
-    /// The cosine of the incident angle (always positive),
-    /// only has value if the ray has hit the micro-surface.
-    pub cos: Option<f32>,
-}
-
-/// Records the trajectory of a ray from the moment it is spawned.
-///
-/// The trajectory always starts with the ray that is spawned.
-#[derive(Debug, Clone)]
-pub struct Trajectory(pub(crate) Vec<TrajectoryNode>);
-
-impl Deref for Trajectory {
-    type Target = Vec<TrajectoryNode>;
-
-    fn deref(&self) -> &Self::Target { &self.0 }
-}
-
-impl DerefMut for Trajectory {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
-}
-
-impl Trajectory {
-    /// Returns `true` if the ray did not hit anything.
-    pub fn is_missed(&self) -> bool { self.0.len() <= 1 }
-
-    /// Returns the last ray of the trajectory if the ray hit the micro-surface
-    /// or was absorbed, `None` in case if the ray did not hit anything.
-    pub fn last(&self) -> Option<&TrajectoryNode> {
-        if self.is_missed() {
-            None
-        } else {
-            Some(&self.0.last().unwrap())
-        }
-    }
-}
-
 /// Extra data associated with a ray stream.
 ///
 /// This is used to record the trajectory, energy, last hit info and bounce
@@ -113,7 +65,7 @@ pub struct RayStreamData<'a> {
     /// The micro-surface geometry.
     msurf: Arc<Geometry<'a>>,
     /// The last hit for each ray.
-    last_hit: Vec<HitData>,
+    last_hit: Vec<LastHit>,
     /// The trajectory of each ray. Each ray's trajectory is started with the
     /// initial ray and then followed by the rays after each bounce. The cosine
     /// of the incident angle at each bounce is also recorded.
@@ -209,8 +161,6 @@ fn intersect_filter_stream<'a>(
     }
 }
 
-const MAX_RAY_STREAM_SIZE: usize = 1024;
-
 /// Measures the BSDF of a micro-surface mesh.
 ///
 /// # Arguments
@@ -275,10 +225,10 @@ pub fn measure_bsdf(
         );
 
         let arc_geom = Arc::new(geometry.clone());
-        let n_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
+        let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
         // In case the number of rays is less than one stream, we need to
         // adjust the stream size to match the number of rays.
-        let stream_size = if n_streams == 1 {
+        let stream_size = if num_streams == 1 {
             num_emitted_rays
         } else {
             MAX_RAY_STREAM_SIZE
@@ -288,7 +238,7 @@ pub fn measure_bsdf(
             RayStreamData {
                 msurf: arc_geom.clone(),
                 last_hit: vec![
-                    HitData {
+                    LastHit {
                         geom_id: INVALID_ID,
                         prim_id: INVALID_ID,
                         normal: Vec3A::ZERO,
@@ -297,23 +247,22 @@ pub fn measure_bsdf(
                 ],
                 trajectory: vec![Trajectory(Vec::with_capacity(max_bounces as usize)); stream_size],
             };
-            n_streams
+            num_streams
         ];
 
         println!(
             "        {BRIGHT_YELLOW}>{RESET} Trace {} rays ({} streams)",
             emitted_rays.len(),
-            n_streams
+            num_streams
         );
 
         emitted_rays
-            .chunks(MAX_RAY_STREAM_SIZE)
-            .zip(stream_data.iter_mut())
-            // rays.par_chunks_exact(MAX_RAY_STREAM_SIZE)
-            //     .zip(stream_data.par_iter_mut())
+            .par_chunks(MAX_RAY_STREAM_SIZE)
+            .zip(stream_data.par_iter_mut())
+            // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
             .enumerate()
             .for_each(|(i, (rays, data))| {
-                log::trace!("stream {} of {}", i, n_streams);
+                log::trace!("stream {} of {}", i, num_streams);
                 // Populate embree ray stream with generated rays.
                 let chunk_size = rays.len();
                 let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));
@@ -400,7 +349,7 @@ pub fn measure_bsdf(
             .collect::<Vec<_>>();
         result.push(
             desc.collector
-                .collect_embree_rt(desc, mesh, &trajectories, &patches, &cache),
+                .collect(desc, mesh, &trajectories, &patches, &cache),
         );
     }
     result

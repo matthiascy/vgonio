@@ -8,22 +8,33 @@ use crate::{
     common::ulp_eq,
     math::{close_enough, rcp},
     measure::{
-        bsdf::SpectrumSampler,
-        collector::CollectorPatches,
+        bsdf::{BsdfMeasurementPoint, BsdfStats, SpectrumSampler},
+        collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
         rtc,
-        rtc::{embr::Trajectory, ray_aabb_intersection, Hit, Ray},
-        Collector, Emitter, RtcRecord, TrajectoryNode,
+        rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
+        Collector, Emitter,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
-    optics::{fresnel::reflect, ior::RefractiveIndex},
+    optics::{fresnel, ior::RefractiveIndex},
     units::{um, UMicrometre},
 };
 use cfg_if::cfg_if;
-use glam::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles};
+use glam::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use rayon::prelude::*;
 use std::time::Instant;
+
+/// Extra data associated with a ray stream.
+///
+/// A ray stream is a chunk of rays that are emitted from the same emitter.
+#[derive(Debug, Clone)]
+pub struct RayStreamData {
+    /// The last hit of each ray in the stream.
+    last_hit: Vec<LastHit>,
+    /// The trajectory of each ray in the stream. The trajectory is a list of
+    trajectory: Vec<Trajectory>,
+}
 
 /// Measures the BSDF of the given micro-surface mesh.
 pub fn measure_bsdf(
@@ -33,13 +44,16 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) {
+) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
     let radius = match desc.emitter.radius {
         // FIXME: max_extent() updated, thus 2.5 is not a good choice
         Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
         Radius::Fixed(r) => r.in_micrometres(),
     };
     let max_bounces = desc.emitter.max_bounces;
+    let grid = MultilevelGrid::new(surf, mesh, 64);
+    let mut result = vec![];
+
     for pos in desc.emitter.meas_points() {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
@@ -47,9 +61,131 @@ pub fn measure_bsdf(
             pos.azimuth.in_degrees().value()
         );
 
+        let t = Instant::now();
         let emitted_rays = desc.emitter.emit_rays_with_radius(samples, pos, radius);
         let num_emitted_rays = emitted_rays.len();
+        let elapsed = t.elapsed();
+
+        log::debug!(
+            "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
+            num_emitted_rays,
+            emitted_rays[0].dir,
+            pos.zenith.in_degrees().value(),
+            pos.azimuth.in_degrees().value(),
+            elapsed.as_secs_f64(),
+        );
+
+        let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
+        let stream_size = if num_streams == 1 {
+            num_emitted_rays
+        } else {
+            MAX_RAY_STREAM_SIZE
+        };
+
+        let mut stream_data = vec![
+            RayStreamData {
+                last_hit: vec![
+                    LastHit {
+                        geom_id: u32::MAX,
+                        prim_id: u32::MAX,
+                        normal: Vec3A::ZERO,
+                    };
+                    stream_size
+                ],
+                trajectory: vec![Trajectory(Vec::with_capacity(max_bounces as usize)); stream_size],
+            };
+            num_streams
+        ];
+
+        emitted_rays
+            .chunks(MAX_RAY_STREAM_SIZE)
+            .zip(stream_data.iter_mut())
+            //.par_chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.par_iter_mut())
+            .enumerate()
+            .for_each(|(i, (rays, data))| {
+                let chunk_size = rays.len();
+                let mut validities = vec![true; chunk_size];
+                let mut rays = rays.to_owned();
+                let mut hits = vec![Hit::default(); chunk_size];
+                let mut bounces = 0;
+                let mut num_active_rays = chunk_size;
+
+                while bounces < max_bounces && num_active_rays > 0 {
+                    log::trace!("bounces: {}, num_active_rays: {}", bounces, num_active_rays);
+
+                    for (ray, hit) in rays.iter().zip(hits.iter_mut()) {
+                        grid.trace(ray, hit);
+                    }
+
+                    for (i, (ray, (is_valid, hit))) in rays
+                        .iter_mut()
+                        .zip(validities.iter_mut().zip(hits.iter_mut()))
+                        .enumerate()
+                    {
+                        if !*is_valid {
+                            continue;
+                        }
+
+                        if !hit.is_valid() {
+                            *is_valid = false;
+                            num_active_rays -= 1;
+                            continue;
+                        }
+
+                        if hit.prim_id == data.last_hit[i].prim_id {
+                            // Hit the same primitive as the last hit.
+                            log::trace!("self-intersection: nudging the ray origin");
+                            let traj_node = data.trajectory[i].last_mut().unwrap();
+                            traj_node.org += data.last_hit[i].normal * 1e-6;
+                            continue;
+                        } else {
+                            // Hit a different primitive.
+                            // Record the cos of the last hit.
+                            let last_node = data.trajectory[i].last_mut().unwrap();
+                            last_node.cos = Some(hit.normal.dot(ray.dir));
+                            let reflected_dir = fresnel::reflect(ray.dir.into(), hit.normal.into());
+                            data.trajectory[i].push(TrajectoryNode {
+                                org: hit.point.into(),
+                                dir: reflected_dir,
+                                cos: None,
+                            });
+                            // Update the last hit.
+                            let last_hit = &mut data.last_hit[i];
+                            last_hit.geom_id = hit.geom_id;
+                            last_hit.prim_id = hit.prim_id;
+                            last_hit.normal = hit.normal.into();
+
+                            // Update the ray and hit.
+                            ray.org = hit.point;
+                            ray.dir = reflected_dir.into();
+                            hit.invalidate();
+                        }
+                    }
+
+                    bounces += 1;
+                }
+
+                log::trace!(
+                    "------------ result {}, active rays {}\n {:?} | {:?}\n{:?}",
+                    bounces,
+                    num_active_rays,
+                    data.trajectory,
+                    data.trajectory.len() - 1,
+                    validities
+                );
+            });
+        // Extract the trajectory of each ray.
+        let trajectories = stream_data
+            .into_iter()
+            .flat_map(|data| data.trajectory)
+            .collect::<Vec<_>>();
+        result.push(
+            desc.collector
+                .collect(desc, mesh, &trajectories, &patches, &cache),
+        );
     }
+
+    result
 }
 
 /// Base grid cell (the smallest unit of the grid).
