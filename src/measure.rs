@@ -6,7 +6,6 @@ pub(crate) mod emitter; // TODO: maybe make private
 pub mod measurement;
 pub mod microfacet;
 pub mod rtc;
-pub mod scattering;
 
 pub use collector::{Collector, CollectorScheme, Patch};
 pub use emitter::Emitter;

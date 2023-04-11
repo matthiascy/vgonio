@@ -13,7 +13,7 @@ use crate::{
         emitter::EmitterSamples,
         measurement::{BsdfMeasurement, Radius},
         rtc,
-        rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
+        rtc::{Hit, LastHit, Ray, RayAabbIsect, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
         Collector, Emitter,
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
@@ -1141,14 +1141,24 @@ impl<'ms> MultilevelGrid<'ms> {
 
         hit.invalidate();
 
-        if self.level == 0 {
-            // No coarse grid, just trace the base grid.
-            self.base
-                .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
-        } else {
-            // Trace the coarse grid.
-            let init_level = self.level - 1;
-            trace_coarse(self, init_level, *ray, hit);
+        match ray.intersects_aabb(&self.mesh.bounds) {
+            None => return,
+            Some(isect) => {
+                // The ray is emitted from the micro surface, which means that the
+                // ray has been reflected. We don't need to trace the coarse grid.
+                if isect.is_inside() {
+                    self.base
+                        .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
+                } else if self.level == 0 {
+                    // No coarse grid, just trace the base grid.
+                    self.base
+                        .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
+                } else {
+                    // Trace the coarse grid.
+                    let init_level = self.level - 1;
+                    trace_coarse(self, init_level, *ray, hit);
+                }
+            }
         }
     }
 }

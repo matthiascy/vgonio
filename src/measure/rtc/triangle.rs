@@ -6,7 +6,7 @@ use crate::{
 use glam::Vec3;
 use std::borrow::Cow;
 
-pub const TOLERANCE: f32 = f32::EPSILON * 2.0;
+const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
 pub struct Triangle<'a>(Cow<'a, [Vec3]>);
 
