@@ -30,7 +30,7 @@ use crate::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
-            GpuContext, RenderPass, RenderableMesh, Texture, WgpuConfig,
+            GpuContext, RenderPass, RenderableMesh, Texture, VisualGridUniforms, WgpuConfig,
             DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
@@ -259,11 +259,11 @@ impl VgonioApp {
         let win_surf = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
         let depth_map = DepthMap::new(&gpu_ctx, win_surf.width(), win_surf.height());
         let camera = {
-            let camera = Camera::new(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO, Vec3::Y);
+            let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
                 100.0,
-                60.0f32.to_radians(),
+                75.0f32.to_radians(),
                 win_surf.width(),
                 win_surf.height(),
             );
@@ -292,7 +292,7 @@ impl VgonioApp {
             Arc::new(RefCell::new(_cache))
         };
 
-        let mut gui = VgonioUi::new(
+        let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
             cache.clone(),
@@ -300,7 +300,7 @@ impl VgonioApp {
             &mut gui_state.renderer,
         );
 
-        gui.set_theme(Theme::Dark);
+        ui.set_theme(Theme::Dark);
 
         let input = InputState {
             key_map: Default::default(),
@@ -316,7 +316,7 @@ impl VgonioApp {
             gpu_ctx,
             gui_state,
             config,
-            ui: gui,
+            ui,
             cache,
             input,
             passes,
@@ -398,12 +398,6 @@ impl VgonioApp {
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
-
-        let (view, proj) = (
-            self.camera.uniform.view_matrix,
-            self.camera.uniform.proj_matrix,
-        );
-
         self.gpu_ctx.queue.write_buffer(
             self.passes
                 .get("visual_grid")
@@ -412,12 +406,22 @@ impl VgonioApp {
                 .as_ref()
                 .unwrap(),
             0,
-            bytemuck::cast_slice(&[
-                view,
-                proj,
-                self.camera.uniform.view_inv_matrix,
-                self.camera.uniform.proj_inv_matrix,
-            ]),
+            bytemuck::bytes_of(&VisualGridUniforms {
+                view: self.camera.uniform.view_matrix.to_cols_array(),
+                proj: self.camera.uniform.proj_matrix.to_cols_array(),
+                view_inv: self.camera.uniform.view_inv_matrix.to_cols_array(),
+                proj_inv: self.camera.uniform.proj_inv_matrix.to_cols_array(),
+                grid_line_color: [
+                    self.ui.theme_visuals().grid_line_color.r as f32,
+                    self.ui.theme_visuals().grid_line_color.g as f32,
+                    self.ui.theme_visuals().grid_line_color.b as f32,
+                    if self.ui.theme_visuals().egui_visuals.dark_mode {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                ],
+            }),
         );
 
         if let Some(msurf_view) = &self.msurf {
@@ -1023,16 +1027,12 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
 }
 
 fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
-    // let grid_vert_shader = ctx
-    //     .device
-    //     .create_shader_module(wgpu::include_spirv!("../assets/shaders/spirv/grid.
-    // vert.spv")); let grid_frag_shader = ctx
-    //     .device
-    //     .create_shader_module(wgpu::include_spirv!("../assets/shaders/spirv/grid.
-    // frag.spv"));
-    let grid_shader = ctx
-        .device
-        .create_shader_module(wgpu::include_wgsl!("./gui/assets/shaders/wgsl/grid.wgsl"));
+    let grid_vert_shader = ctx.device.create_shader_module(wgpu::include_spirv!(
+        "gui/assets/shaders/spirv/grid.vert.spv"
+    ));
+    let grid_frag_shader = ctx.device.create_shader_module(wgpu::include_spirv!(
+        "gui/assets/shaders/spirv/grid.frag.spv"
+    ));
     let bind_group_layout = ctx
         .device
         .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
@@ -1047,7 +1047,7 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("grid_uniform_buffer"),
-            contents: bytemuck::bytes_of(&crate::app::gfx::VisualGridUniforms::default()),
+            contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
     let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1064,8 +1064,8 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
             label: Some("grid_render_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &grid_shader,
-                entry_point: "vs_main",
+                module: &grid_vert_shader,
+                entry_point: "main",
                 buffers: &[],
             },
             primitive: wgpu::PrimitiveState {
@@ -1080,8 +1080,7 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, /* tells when to discard a
-                                                             * new pixel */
+                depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -1091,23 +1090,11 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(wgpu::FragmentState {
-                module: &grid_shader,
-                entry_point: "fs_main",
+                module: &grid_frag_shader,
+                entry_point: "main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    // blend: Some(wgpu::BlendState {
-                    //     color: wgpu::BlendComponent {
-                    //         src_factor: wgpu::BlendFactor::SrcAlpha,
-                    //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                    //         operation: wgpu::BlendOperation::Add,
-                    //     },
-                    //     alpha: wgpu::BlendComponent {
-                    //         src_factor: wgpu::BlendFactor::One,
-                    //         dst_factor: wgpu::BlendFactor::Zero,
-                    //         operation: wgpu::BlendOperation::Add,
-                    //     },
-                    // }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),

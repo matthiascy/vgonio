@@ -19,6 +19,7 @@ pub struct VisualGridUniforms {
     pub proj: [f32; 16],
     pub view_inv: [f32; 16],
     pub proj_inv: [f32; 16],
+    pub grid_line_color: [f32; 4],
 }
 
 impl Default for VisualGridUniforms {
@@ -28,6 +29,7 @@ impl Default for VisualGridUniforms {
             proj: IDENTITY_MAT4,
             view_inv: IDENTITY_MAT4,
             proj_inv: IDENTITY_MAT4,
+            grid_line_color: [0.6, 0.6, 0.6, 1.0],
         }
     }
 }

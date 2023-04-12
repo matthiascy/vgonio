@@ -1,7 +1,7 @@
 use super::{simulation::SimulationWorkspace, state::GuiRenderer, VgonioEvent};
 use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, Config};
 use glam::Mat4;
-use std::{cell::RefCell, fmt::Write, sync::Arc};
+use std::{cell::RefCell, fmt::Write, ops::Deref, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 /// Implementation of the GUI for vgonio application.
@@ -16,6 +16,7 @@ pub struct VgonioUi {
     event_loop: EventLoopProxy<VgonioEvent>,
 
     theme: Theme,
+
     theme_visuals: [ThemeVisuals; 2],
 
     /// Tools are small windows that can be opened and closed.
@@ -34,6 +35,13 @@ pub enum Theme {
 pub struct ThemeVisuals {
     pub egui_visuals: egui::Visuals,
     pub clear_color: wgpu::Color,
+    pub grid_line_color: wgpu::Color,
+}
+
+impl Deref for ThemeVisuals {
+    type Target = egui::Visuals;
+
+    fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
 impl VgonioUi {
@@ -62,6 +70,12 @@ impl VgonioUi {
                         b: 0.046,
                         a: 1.0,
                     },
+                    grid_line_color: wgpu::Color {
+                        r: 0.4,
+                        g: 0.4,
+                        b: 0.4,
+                        a: 1.0,
+                    },
                 },
                 ThemeVisuals {
                     egui_visuals: egui::Visuals {
@@ -72,6 +86,12 @@ impl VgonioUi {
                         r: 0.208, // no gamma correction
                         g: 0.208,
                         b: 0.208,
+                        a: 1.0,
+                    },
+                    grid_line_color: wgpu::Color {
+                        r: 0.68,
+                        g: 0.68,
+                        b: 0.68,
                         a: 1.0,
                     },
                 },

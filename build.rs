@@ -1,12 +1,12 @@
 const SPIRV_DST_PATH: &str = "src/app/gui/assets/shaders/spirv";
 const GLSL_SRC_PATH: &str = "src/app/gui/assets/shaders/glsl";
 const GLSL_SRC_FILES: [&str; 6] = [
-    "src/app/assets/shaders/glsl/grid.vert",
-    "src/app/assets/shaders/glsl/grid.frag",
-    "src/app/assets/shaders/glsl/shadow_pass.vert",
-    "src/app/assets/shaders/glsl/shadow_pass.frag",
-    "src/app/assets/shaders/glsl/geom_term.vert",
-    "src/app/assets/shaders/glsl/geom_term.frag",
+    "src/app/gui/assets/shaders/glsl/grid.vert",
+    "src/app/gui/assets/shaders/glsl/grid.frag",
+    "src/app/gui/assets/shaders/glsl/shadow_pass.vert",
+    "src/app/gui/assets/shaders/glsl/shadow_pass.frag",
+    "src/app/gui/assets/shaders/glsl/geom_term.vert",
+    "src/app/gui/assets/shaders/glsl/geom_term.frag",
 ];
 
 fn main() {
