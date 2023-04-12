@@ -1,11 +1,11 @@
 ---
 type: !bsdf
   kind: brdf
-  sim_kind: !geom-optics embree # !wave_optics
+  sim_kind: !geom-optics grid # embree/grid/optix # !wave_optics
   incident_medium: air
   transmitted_medium: aluminium
   emitter:
-    num_rays: 10
+    num_rays: 100
     max_bounces: 10
     radius: auto
     zenith: 0deg ~ 90 deg / 90deg

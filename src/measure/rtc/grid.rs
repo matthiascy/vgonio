@@ -98,8 +98,9 @@ pub fn measure_bsdf(
         emitted_rays
             .chunks(MAX_RAY_STREAM_SIZE)
             .zip(stream_data.iter_mut())
+            .enumerate()
             //.par_chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.par_iter_mut())
-            .for_each(|(rays, data)| {
+            .for_each(|(i, (rays, data))| {
                 let chunk_size = rays.len();
                 let mut validities = vec![true; chunk_size];
                 let mut rays = rays.to_owned();
@@ -108,7 +109,12 @@ pub fn measure_bsdf(
                 let mut num_active_rays = chunk_size;
 
                 while bounces < max_bounces && num_active_rays > 0 {
-                    log::trace!("bounces: {}, num_active_rays: {}", bounces, num_active_rays);
+                    log::trace!(
+                        "stream {}, bounces: {}, num_active_rays: {}",
+                        i,
+                        bounces,
+                        num_active_rays
+                    );
 
                     for (ray, hit) in rays.iter().zip(hits.iter_mut()) {
                         grid.trace(ray, hit);
@@ -343,6 +349,8 @@ pub struct Grid<C: Cell> {
 pub struct GridTraversal {
     /// Whether the cells are coarse.
     pub is_coarse: bool,
+    /// Whether the ray is coming vertically.
+    pub is_coming_vertically: bool,
     /// Cells traversed by the ray.
     pub cells: Vec<IVec2>,
     /// Distances from the origin of the ray (entering cell of the ray)
@@ -357,12 +365,29 @@ impl GridTraversal {
     /// Returns an iterator over the cells traversed by the ray.
     /// Each cell is represented by its grid coordinates and the
     /// entering and exiting distances of the ray to the cell.
-    pub fn iter(&self) -> impl Iterator<Item = (IVec2, f32, f32)> + '_ {
-        self.cells.iter().enumerate().map(|(i, c)| {
+    ///
+    /// In the case of a ray coming vertically, the iterator will
+    /// return only one cell with the entering and exiting distances
+    /// set to INFINITY.
+    pub fn iter(&self) -> Box<dyn Iterator<Item = (IVec2, f32, f32)> + '_> {
+        debug_assert!(
+            !self.is_coming_vertically,
+            "For ray coming vertically, use directly the cell."
+        );
+
+        if self.is_coming_vertically {
+            return Box::new(
+                self.cells
+                    .iter()
+                    .map(|c| (*c, f32::INFINITY, f32::INFINITY)),
+            );
+        }
+
+        Box::new(self.cells.iter().enumerate().map(|(i, c)| {
             let entering = self.dists[i];
             let exiting = self.dists[i + 1];
             (*c, entering, exiting)
-        })
+        }))
     }
 }
 
@@ -425,9 +450,10 @@ impl<C: Cell> Grid<C> {
         if is_parallel_to_grid_x && is_parallel_to_grid_y {
             // The ray is parallel to both the grid x and y axis; coming from
             // the top or bottom of the grid.
-            log::debug!("The ray is parallel to both the grid x and y axis");
+            log::debug!("(traversing) The ray is parallel to both the grid x and y axis");
             return GridTraversal {
                 is_coarse: self.is_coarse,
+                is_coming_vertically: true,
                 cells: vec![start_cell],
                 dists: vec![],
             };
@@ -519,6 +545,7 @@ impl<C: Cell> Grid<C> {
 
         GridTraversal {
             is_coarse: self.is_coarse,
+            is_coming_vertically: false,
             cells: traversed_cells,
             dists: travelled_dists,
         }
@@ -753,14 +780,14 @@ impl Grid<BaseCell> {
         #[cfg(test)]
         use std::println as debug;
 
-        debug!("Traversing the grid along the ray: {:?}", ray);
+        debug!("Tracing the ray {:?} on the grid", ray);
         let start_pos = ray.org.xz() - origin;
         debug!(
             "Relative start position {:?} in the world space, grid's origin: {:?}",
             start_pos, origin
         );
         let start_cell = self.world_to_local(&origin, &ray.org.xz()).unwrap();
-        println!("Start position in the grid space: {:?}", start_cell);
+        debug!("Start position in the grid space: {:?}", start_cell);
         let ray_dir = ray.dir.xz();
         debug!("Ray direction in the grid space: {:?}", ray_dir);
         self.trace(start_cell, start_pos, ray, mesh, hit);
@@ -800,7 +827,7 @@ impl Grid<BaseCell> {
         if is_parallel_to_grid_x && is_parallel_to_grid_y {
             // The ray is parallel to both the grid x and y axis; coming from
             // the top or bottom of the grid.
-            debug!("The ray is parallel to both the grid x and y axis");
+            debug!("(tracing) The ray is parallel to both the grid x and y axis");
             return self.intersects_cell_triangles(ray, &start_cell, mesh, hit);
         }
 
@@ -1151,6 +1178,11 @@ impl<'ms> MultilevelGrid<'ms> {
                         .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
                 } else if self.level == 0 {
                     // No coarse grid, just trace the base grid.
+                    self.base
+                        .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
+                } else if ray.dir.x == 0.0 && ray.dir.z == 0.0 {
+                    // The ray is parallel to the micro surface, so we don't need to trace the
+                    // coarse grid.
                     self.base
                         .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
                 } else {
