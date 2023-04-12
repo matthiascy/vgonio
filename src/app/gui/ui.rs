@@ -15,10 +15,25 @@ pub struct VgonioUi {
     /// Event loop proxy for sending user defined events.
     event_loop: EventLoopProxy<VgonioEvent>,
 
+    theme: Theme,
+    theme_visuals: [ThemeVisuals; 2],
+
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
 
     pub simulation_workspace: SimulationWorkspace, // TODO: make private
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Theme {
+    Dark,
+    Light,
+}
+
+pub struct ThemeVisuals {
+    pub egui_visuals: egui::Visuals,
+    pub clear_color: wgpu::Color,
 }
 
 impl VgonioUi {
@@ -35,6 +50,33 @@ impl VgonioUi {
             dropped_files: vec![],
             tools: Tools::new(event_loop.clone(), gpu, gui),
             simulation_workspace: SimulationWorkspace::new(event_loop, cache),
+            theme_visuals: [
+                ThemeVisuals {
+                    egui_visuals: egui::Visuals {
+                        dark_mode: true,
+                        ..egui::Visuals::dark()
+                    },
+                    clear_color: wgpu::Color {
+                        r: 0.046, // no gamma correction
+                        g: 0.046,
+                        b: 0.046,
+                        a: 1.0,
+                    },
+                },
+                ThemeVisuals {
+                    egui_visuals: egui::Visuals {
+                        dark_mode: false,
+                        ..egui::Visuals::light()
+                    },
+                    clear_color: wgpu::Color {
+                        r: 0.208, // no gamma correction
+                        g: 0.208,
+                        b: 0.208,
+                        a: 1.0,
+                    },
+                },
+            ],
+            theme: Theme::Dark,
         }
     }
 
@@ -51,6 +93,10 @@ impl VgonioUi {
         self.simulation_workspace.show(ctx);
         self.file_drag_and_drop(ctx);
     }
+
+    pub fn set_theme(&mut self, theme: Theme) { self.theme = theme; }
+
+    pub fn theme_visuals(&self) -> &ThemeVisuals { &self.theme_visuals[self.theme as usize] }
 }
 
 impl VgonioUi {
@@ -240,8 +286,35 @@ impl VgonioUi {
                     }
                 });
                 ui.separator();
-                egui::widgets::global_dark_light_mode_switch(ui);
+                self.theme_toggle_button(ui);
             });
+        }
+    }
+
+    fn theme_toggle_button(&mut self, ui: &mut egui::Ui) {
+        match self.theme {
+            Theme::Dark => {
+                if ui
+                    .add(egui::Button::new("☀").frame(false))
+                    .on_hover_text("Switch to light mode")
+                    .clicked()
+                {
+                    self.set_theme(Theme::Light);
+                    ui.ctx()
+                        .set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
+                }
+            }
+            Theme::Light => {
+                if ui
+                    .add(egui::Button::new("🌙").frame(false))
+                    .on_hover_text("Switch to dark mode")
+                    .clicked()
+                {
+                    self.set_theme(Theme::Dark);
+                    ui.ctx()
+                        .set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
+                }
+            }
         }
     }
 }

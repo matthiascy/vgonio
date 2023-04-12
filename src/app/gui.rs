@@ -33,7 +33,10 @@ use crate::{
             GpuContext, RenderPass, RenderableMesh, Texture, WgpuConfig,
             DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
-        gui::state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
+        gui::{
+            state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
+            ui::Theme,
+        },
     },
     measure::rtc::grid::Grid,
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
@@ -289,13 +292,15 @@ impl VgonioApp {
             Arc::new(RefCell::new(_cache))
         };
 
-        let gui = VgonioUi::new(
+        let mut gui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
             cache.clone(),
             &gpu_ctx,
             &mut gui_state.renderer,
         );
+
+        gui.set_theme(Theme::Dark);
 
         let input = InputState {
             key_map: Default::default(),
@@ -496,12 +501,7 @@ impl VgonioApp {
                         // same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.046,
-                                g: 0.046,
-                                b: 0.046,
-                                a: 1.0,
-                            }),
+                            load: wgpu::LoadOp::Clear(self.ui.theme_visuals().clear_color),
                             store: true,
                         },
                     },
