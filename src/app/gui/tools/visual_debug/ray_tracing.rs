@@ -1,6 +1,6 @@
 use crate::{
     app::gui::{
-        widgets::{input3_spherical, input3_xyz},
+        misc::{input3_spherical, input3_xyz},
         VgonioEvent,
     },
     measure::{rtc::Ray, RtcMethod},

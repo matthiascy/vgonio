@@ -4,7 +4,7 @@ use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Windo
 
 use crate::app::gui::VgonioEvent;
 
-pub struct GuiContext {
+pub struct RawGuiContext {
     /// Context for using egui.
     pub(crate) inner: egui::Context, // tmp, remove pub
     /// States translated from winit events.
@@ -13,7 +13,7 @@ pub struct GuiContext {
     input: egui::RawInput,
 }
 
-impl GuiContext {
+impl RawGuiContext {
     /// Creates a new GUI context.
     pub(crate) fn new(event_loop: &EventLoopWindowTarget<VgonioEvent>) -> Self {
         Self {
@@ -47,12 +47,12 @@ impl GuiContext {
     }
 }
 
-impl Deref for GuiContext {
+impl Deref for RawGuiContext {
     type Target = egui::Context;
 
     fn deref(&self) -> &Self::Target { &self.inner }
 }
 
-impl DerefMut for GuiContext {
+impl DerefMut for RawGuiContext {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
 }

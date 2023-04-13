@@ -556,7 +556,7 @@ impl SimulationWorkspace {
 
                         ui.label("Visual Grid");
                         {
-                            let res = ui.add(super::widgets::toggle(&mut self.visual_grid_enabled));
+                            let res = ui.add(super::misc::toggle(&mut self.visual_grid_enabled));
                             if res.changed()
                                 && self.event_loop.send_event(VgonioEvent::ToggleGrid).is_err()
                             {
@@ -566,7 +566,7 @@ impl SimulationWorkspace {
 
                         ui.label("Surface Visibility");
                         {
-                            let res = ui.add(super::widgets::toggle(&mut self.surface_visible));
+                            let res = ui.add(super::misc::toggle(&mut self.surface_visible));
                             if res.changed()
                                 && self
                                     .event_loop

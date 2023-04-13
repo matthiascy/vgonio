@@ -676,6 +676,13 @@ mod io {
         path::Path,
     };
 
+    enum MagicNumber {
+        AsciiMatrix = 0x4d415441,
+        PlainText = 0x4d415450,
+        Dcms = 0x4d534344,
+        Dccc = 0x43434344,
+    }
+
     /// Origin of the micro-geometry height field.
     #[derive(Debug, Copy, Clone, Eq, PartialEq)]
     pub enum MicroSurfaceOrigin {
@@ -733,7 +740,7 @@ mod io {
                     //         Ok(serde_yaml::from_reader(reader)?)
                     //     }
                     // }
-                    // "DCMS" => {
+                    // "VGMS" => {
                     //     let header = {
                     //         let mut buf = [0_u8; 23];
                     //         reader.read_exact(&mut buf)?;

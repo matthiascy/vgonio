@@ -6,7 +6,7 @@ mod microfacet;
 mod ray_tracing;
 mod shadow_map;
 
-use crate::app::gui::{tools::Tool, widgets::toggle_ui};
+use crate::app::gui::{misc::toggle_ui, tools::Tool};
 use microfacet::MicrofacetMeasurementPane;
 use ray_tracing::RayTracingPane;
 use shadow_map::ShadowMapPane;

@@ -1,12 +1,8 @@
 const SPIRV_DST_PATH: &str = "src/app/gui/assets/shaders/spirv";
 const GLSL_SRC_PATH: &str = "src/app/gui/assets/shaders/glsl";
-const GLSL_SRC_FILES: [&str; 6] = [
-    "src/app/gui/assets/shaders/glsl/grid.vert",
-    "src/app/gui/assets/shaders/glsl/grid.frag",
-    "src/app/gui/assets/shaders/glsl/shadow_pass.vert",
-    "src/app/gui/assets/shaders/glsl/shadow_pass.frag",
-    "src/app/gui/assets/shaders/glsl/geom_term.vert",
-    "src/app/gui/assets/shaders/glsl/geom_term.frag",
+const GLSL_SRC_FILES: [&str; 2] = [
+    "src/app/gui/assets/shaders/glsl/visual_grid.vert",
+    "src/app/gui/assets/shaders/glsl/visual_grid.frag",
 ];
 
 fn main() {
@@ -34,6 +30,7 @@ fn main() {
                         "frag" => Some(shaderc::ShaderKind::Fragment),
                         _ => None,
                     });
+                let output_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
                 if let Some(kind) = kind {
                     let spirv = {
@@ -48,9 +45,9 @@ fn main() {
 
                     match spirv {
                         Ok(compiled) => {
-                            let output_filepath =
-                                format!("src/app/gui/assets/shaders/spirv/{filename}.spv");
-                            match std::fs::write(&output_filepath, compiled.as_binary_u8()) {
+                            let output_filepath = output_dir.join(format!("{filename}.spv"));
+                            match std::fs::write(output_filepath.as_path(), compiled.as_binary_u8())
+                            {
                                 Ok(_) => {}
                                 Err(err) => {
                                     panic!("failed to write to {output_filepath:?}\n{err}");

@@ -1,10 +1,11 @@
 mod gizmo;
+mod misc;
+mod outliner;
 mod plotter;
 mod simulation;
 pub mod state;
 mod tools;
 mod ui;
-mod widgets;
 
 use crate::{
     common::Handedness,
@@ -22,7 +23,7 @@ use std::{
 pub(crate) use tools::trace_ray_standard_dbg;
 
 pub(crate) use tools::{trace_ray_grid_dbg, VisualDebugger};
-pub use ui::VgonioUi;
+pub use ui::VgonioGuiState;
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -34,7 +35,7 @@ use crate::{
             DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
-            state::{camera::CameraState, DebugState, DepthMap, GuiState, InputState},
+            state::{camera::CameraState, DebugState, DepthMap, GuiContext, InputState},
             ui::Theme,
         },
     },
@@ -202,19 +203,25 @@ struct MicroSurfaceView {
     visible: bool,
 }
 
+/// Vgonio application context.
+/// Contains all the resources needed for rendering.
+pub struct Context {
+    /// GPU context for rendering.
+    gpu: GpuContext,
+    /// GUI context for rendering.
+    gui: GuiContext,
+}
+
 /// Vgonio client application with GUI.
 pub struct VgonioApp {
-    /// GPU context for rendering.
-    gpu_ctx: GpuContext,
+    /// The application context.
+    ctx: Context,
 
     /// Surface for presenting rendered frames.
     win_surf: WindowSurface,
 
-    /// GUI context and state for rendering.
-    gui_state: GuiState,
-
     /// The GUI application state.
-    ui: VgonioUi,
+    state: VgonioGuiState,
 
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
@@ -277,7 +284,7 @@ impl VgonioApp {
         passes.insert("visual_grid", visual_grid_pass);
         passes.insert("heightfield", heightfield_pass);
 
-        let mut gui_state = GuiState::new(
+        let mut gui_ctx = GuiContext::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             win_surf.format(),
@@ -292,12 +299,12 @@ impl VgonioApp {
             Arc::new(RefCell::new(_cache))
         };
 
-        let mut ui = VgonioUi::new(
+        let mut ui = VgonioGuiState::new(
             event_loop.create_proxy(),
             config.clone(),
             cache.clone(),
             &gpu_ctx,
-            &mut gui_state.renderer,
+            &mut gui_ctx.renderer,
         );
 
         ui.set_theme(Theme::Dark);
@@ -313,10 +320,12 @@ impl VgonioApp {
         let debug_drawing = DebugState::new(&gpu_ctx, win_surf.format());
 
         Ok(Self {
-            gpu_ctx,
-            gui_state,
+            ctx: Context {
+                gpu: gpu_ctx,
+                gui: gui_ctx,
+            },
             config,
-            ui,
+            state: ui,
             cache,
             input,
             passes,
@@ -339,17 +348,17 @@ impl VgonioApp {
     #[inline]
     pub fn surface_height(&self) -> u32 { self.win_surf.height() }
 
-    pub fn reconfigure_surface(&mut self) { self.win_surf.reconfigure(&self.gpu_ctx.device); }
+    pub fn reconfigure_surface(&mut self) { self.win_surf.reconfigure(&self.ctx.gpu.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
         if self.win_surf.resize(
-            &self.gpu_ctx.device,
+            &self.ctx.gpu.device,
             new_size.width,
             new_size.height,
             scale_factor,
         ) {
             self.depth_map
-                .resize(&self.gpu_ctx, new_size.width, new_size.height);
+                .resize(&self.ctx.gpu, new_size.width, new_size.height);
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
@@ -357,7 +366,7 @@ impl VgonioApp {
     }
 
     pub fn on_event(&mut self, event: &WindowEvent) -> EventResponse {
-        match self.gui_state.on_event(event) {
+        match self.ctx.gui.on_event(event) {
             EventResponse::Ignored => match event {
                 WindowEvent::KeyboardInput {
                     input:
@@ -393,12 +402,12 @@ impl VgonioApp {
         // Update camera uniform.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
-        self.ui.update_gizmo_matrices(
+        self.state.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
-        self.gpu_ctx.queue.write_buffer(
+        self.ctx.gpu.queue.write_buffer(
             self.passes
                 .get("visual_grid")
                 .unwrap()
@@ -412,10 +421,10 @@ impl VgonioApp {
                 view_inv: self.camera.uniform.view_inv_matrix.to_cols_array(),
                 proj_inv: self.camera.uniform.proj_inv_matrix.to_cols_array(),
                 grid_line_color: [
-                    self.ui.theme_visuals().grid_line_color.r as f32,
-                    self.ui.theme_visuals().grid_line_color.g as f32,
-                    self.ui.theme_visuals().grid_line_color.b as f32,
-                    if self.ui.theme_visuals().egui_visuals.dark_mode {
+                    self.state.theme_visuals().grid_line_color.r as f32,
+                    self.state.theme_visuals().grid_line_color.g as f32,
+                    self.state.theme_visuals().grid_line_color.b as f32,
+                    if self.state.theme_visuals().egui_visuals.dark_mode {
                         1.0
                     } else {
                         0.0
@@ -445,7 +454,7 @@ impl VgonioApp {
                 msurf.max - msurf.min,
                 msurf_view.scale_factor,
             ]);
-            self.gpu_ctx.queue.write_buffer(
+            self.ctx.gpu.queue.write_buffer(
                 self.passes
                     .get("heightfield")
                     .unwrap()
@@ -459,11 +468,11 @@ impl VgonioApp {
             // Update the uniform buffer for debug drawing.
             if self.debug_drawing_enabled {
                 self.debug_drawing
-                    .update_uniform_buffer(&self.gpu_ctx, &uniform);
+                    .update_uniform_buffer(&self.ctx.gpu, &uniform);
             }
         }
 
-        self.gui_state.update(window);
+        self.ctx.gui.update(window);
 
         // Reset mouse movement
         self.input.scroll_delta = 0.0;
@@ -481,12 +490,14 @@ impl VgonioApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
         // Command encoders for the current frame.
         let mut encoders = [
-            self.gpu_ctx
+            self.ctx
+                .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_encoder"),
                 }),
-            self.gpu_ctx
+            self.ctx
+                .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_debug_encoder"),
@@ -505,7 +516,7 @@ impl VgonioApp {
                         // same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(self.ui.theme_visuals().clear_color),
+                            load: wgpu::LoadOp::Clear(self.state.theme_visuals().clear_color),
                             store: true,
                         },
                     },
@@ -594,19 +605,19 @@ impl VgonioApp {
         }
 
         // UI render pass recoding.
-        let ui_render_output = self.gui_state.render(
+        let ui_render_output = self.ctx.gui.render(
             window,
             self.win_surf.screen_descriptor(),
             &output_view,
             |ctx| {
-                // self.demos.ui(ctx);
-                self.ui.show(ctx);
+                self.demos.ui(ctx);
+                self.state.show(ctx)
             },
         );
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
-        self.gpu_ctx.queue.submit(
+        self.ctx.gpu.queue.submit(
             ui_render_output.user_cmds.into_iter().chain(
                 encoders
                     .into_iter()
@@ -616,7 +627,7 @@ impl VgonioApp {
         );
 
         self.depth_map
-            .copy_to_buffer(&self.gpu_ctx, self.win_surf.width(), self.win_surf.height());
+            .copy_to_buffer(&self.ctx.gpu, self.win_surf.width(), self.win_surf.height());
 
         // Present the frame to the screen.
         output_frame.present();
@@ -639,12 +650,12 @@ impl VgonioApp {
                     .borrow_mut()
                     .load_micro_surface(&self.config, &path)
                     .unwrap();
-                self.ui
+                self.state
                     .simulation_workspace
                     .update_surface_list(&cache.borrow().loaded_micro_surface_paths().unwrap());
                 let renderable = cache
                     .borrow_mut()
-                    .create_micro_surface_renderable_mesh(&self.gpu_ctx.device, surf)
+                    .create_micro_surface_renderable_mesh(&self.ctx.gpu.device, surf)
                     .unwrap();
                 self.msurf = Some(MicroSurfaceView {
                     surf,
@@ -659,18 +670,18 @@ impl VgonioApp {
             }
             VgonioEvent::UpdateDepthMap => {
                 self.depth_map.copy_to_buffer(
-                    &self.gpu_ctx,
+                    &self.ctx.gpu,
                     self.win_surf.width(),
                     self.win_surf.height(),
                 );
-                self.ui
+                self.state
                     .tools
                     .get_tool::<VisualDebugger>("Visual Debugger")
                     .unwrap()
                     .shadow_map_pane
                     .update_depth_map(
-                        &self.gpu_ctx,
-                        &self.gui_state,
+                        &self.ctx.gpu,
+                        &self.ctx.gui,
                         &self.depth_map.depth_attachment_storage,
                         self.depth_map.width,
                         self.win_surf.height(),
@@ -708,12 +719,12 @@ impl VgonioApp {
                             vertices[1],
                             vertices[2]
                         );
-                        let mut encoder = self.gpu_ctx.device.create_command_encoder(
+                        let mut encoder = self.ctx.gpu.device.create_command_encoder(
                             &wgpu::CommandEncoderDescriptor {
                                 label: Some("copy-index-buffer-encoder"),
                             },
                         );
-                        self.gpu_ctx.queue.write_buffer(
+                        self.ctx.gpu.queue.write_buffer(
                             &self.debug_drawing.msurf_prim_index_buf,
                             0,
                             bytemuck::cast_slice(&indices),
@@ -776,7 +787,7 @@ impl VgonioApp {
                         self.debug_drawing.rays_vertex_count =
                             self.debug_drawing.rays.len() as u32 + 1;
                         self.debug_drawing.drawing_msurf_prims = false;
-                        self.gpu_ctx.queue.write_buffer(
+                        self.ctx.gpu.queue.write_buffer(
                             &self.debug_drawing.rays_vertex_buf,
                             0,
                             bytemuck::cast_slice(&content),
@@ -807,17 +818,18 @@ impl VgonioApp {
                     Handedness::RightHandedYUp,
                 );
                 let mut encoder =
-                    self.gpu_ctx
+                    self.ctx
+                        .gpu
                         .device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("Sampling Debugger Encoder"),
                         });
-                self.ui
+                self.state
                     .tools
                     .get_tool::<SamplingDebugger>("Sampling Debugger")
                     .unwrap()
-                    .record_render_pass(&self.gpu_ctx, &mut encoder, &samples);
-                self.gpu_ctx.queue.submit(Some(encoder.finish()));
+                    .record_render_pass(&self.ctx.gpu, &mut encoder, &samples);
+                self.ctx.gpu.queue.submit(Some(encoder.finish()));
             }
             VgonioEvent::CheckVisibleFacets {
                 m_azimuth,
@@ -884,7 +896,7 @@ impl VgonioApp {
                                 visible_facets_indices.len() * std::mem::size_of::<u32>() + 3
                             );
                             self.debug_drawing.msurf_prim_index_buf =
-                                self.gpu_ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                                self.ctx.gpu.device.create_buffer(&wgpu::BufferDescriptor {
                                     label: Some("Visible Facets Index Buffer"),
                                     size: (visible_facets_indices.len()
                                         * std::mem::size_of::<u32>()
@@ -898,7 +910,7 @@ impl VgonioApp {
                         self.debug_drawing.msurf_prim_index_count =
                             visible_facets_indices.len() as u32;
                         log::debug!("Updating visible facets index buffer");
-                        self.gpu_ctx.queue.write_buffer(
+                        self.ctx.gpu.queue.write_buffer(
                             &self.debug_drawing.msurf_prim_index_buf,
                             3 * std::mem::size_of::<u32>() as u64,
                             bytemuck::cast_slice(&visible_facets_indices),
@@ -1027,12 +1039,18 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
 }
 
 fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
-    let grid_vert_shader = ctx.device.create_shader_module(wgpu::include_spirv!(
-        "gui/assets/shaders/spirv/grid.vert.spv"
-    ));
-    let grid_frag_shader = ctx.device.create_shader_module(wgpu::include_spirv!(
-        "gui/assets/shaders/spirv/grid.frag.spv"
-    ));
+    let grid_vert_shader = ctx
+        .device
+        .create_shader_module(wgpu::include_spirv!(concat!(
+            env!("OUT_DIR"),
+            "/visual_grid.vert.spv"
+        )));
+    let grid_frag_shader = ctx
+        .device
+        .create_shader_module(wgpu::include_spirv!(concat!(
+            env!("OUT_DIR"),
+            "/visual_grid.frag.spv"
+        )));
     let bind_group_layout = ctx
         .device
         .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);

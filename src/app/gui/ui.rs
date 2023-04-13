@@ -1,16 +1,21 @@
 use super::{simulation::SimulationWorkspace, state::GuiRenderer, VgonioEvent};
-use crate::app::{cache::Cache, gfx::GpuContext, gui::tools::Tools, Config};
+use crate::{
+    app::{
+        cache::{Cache, Handle},
+        gfx::GpuContext,
+        gui::{tools::Tools, VgonioApp},
+        Config,
+    },
+    msurf::MicroSurface,
+};
 use glam::Mat4;
 use std::{cell::RefCell, fmt::Write, ops::Deref, sync::Arc};
 use winit::event_loop::EventLoopProxy;
 
 /// Implementation of the GUI for vgonio application.
-pub struct VgonioUi {
+pub struct VgonioGuiState {
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
-
-    /// Files dropped in the window area.
-    dropped_files: Vec<egui::DroppedFile>,
 
     /// Event loop proxy for sending user defined events.
     event_loop: EventLoopProxy<VgonioEvent>,
@@ -23,6 +28,12 @@ pub struct VgonioUi {
     pub(crate) tools: Tools,
 
     pub simulation_workspace: SimulationWorkspace, // TODO: make private
+
+    /// Files dropped in the window area.
+    dropped_files: Vec<egui::DroppedFile>,
+
+    /// Handles to the micro-surfaces that are currently opened.
+    opened_msurfs: Vec<Handle<MicroSurface>>,
 }
 
 #[repr(u8)]
@@ -44,7 +55,7 @@ impl Deref for ThemeVisuals {
     fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
-impl VgonioUi {
+impl VgonioGuiState {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
         config: Arc<Config>,
@@ -55,9 +66,9 @@ impl VgonioUi {
         Self {
             config,
             event_loop: event_loop.clone(),
-            dropped_files: vec![],
             tools: Tools::new(event_loop.clone(), gpu, gui),
             simulation_workspace: SimulationWorkspace::new(event_loop, cache),
+            dropped_files: vec![],
             theme_visuals: [
                 ThemeVisuals {
                     egui_visuals: egui::Visuals {
@@ -97,6 +108,7 @@ impl VgonioUi {
                 },
             ],
             theme: Theme::Dark,
+            opened_msurfs: vec![],
         }
     }
 
@@ -119,7 +131,7 @@ impl VgonioUi {
     pub fn theme_visuals(&self) -> &ThemeVisuals { &self.theme_visuals[self.theme as usize] }
 }
 
-impl VgonioUi {
+impl VgonioGuiState {
     fn file_drag_and_drop(&mut self, ctx: &egui::Context) {
         use egui::*;
 
@@ -161,7 +173,8 @@ impl VgonioUi {
         // Show dropped files (if any):
         if !self.dropped_files.is_empty() {
             let mut open = true;
-            egui::Window::new("Dropped files")
+
+            Window::new("Dropped files")
                 .open(&mut open)
                 .show(ctx, |ui| {
                     for file in &self.dropped_files {

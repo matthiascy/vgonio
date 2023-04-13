@@ -6,7 +6,7 @@ mod renderer;
 // TODO: create default config folder the first time the app is launched (gui
 // and cli)
 
-pub use context::GuiContext;
+pub use context::RawGuiContext;
 pub use input::InputState;
 pub use renderer::GuiRenderer;
 
@@ -427,13 +427,13 @@ impl DebugState {
 }
 
 /// Context for rendering the UI.
-pub struct GuiState {
+pub struct GuiContext {
     //// The wgpu device.
     device: Arc<wgpu::Device>,
     //// The wgpu queue.
     queue: Arc<wgpu::Queue>,
     /// Context for GUI painting.
-    context: GuiContext,
+    context: RawGuiContext,
     /// Rendering state for the GUI.
     pub renderer: GuiRenderer, // TODO: make private
 }
@@ -443,7 +443,7 @@ pub struct GuiRenderOutput {
     pub ui_cmd: wgpu::CommandBuffer,
 }
 
-impl GuiState {
+impl GuiContext {
     /// Creates related resources used for UI rendering.
     ///
     /// If the format passed is not a *Srgb format, the shader will
@@ -455,7 +455,7 @@ impl GuiState {
         event_loop: &EventLoopWindowTarget<VgonioEvent>,
         msaa_samples: u32,
     ) -> Self {
-        let context = GuiContext::new(event_loop);
+        let context = RawGuiContext::new(event_loop);
         let renderer = GuiRenderer::new(&device, surface_format, None, msaa_samples);
         Self {
             device,
@@ -469,7 +469,7 @@ impl GuiState {
     pub fn update(&mut self, window: &Window) { self.context.prepare(window); }
 
     /// Returns the encapsulated GUI context.
-    pub fn context(&self) -> &GuiContext { &self.context }
+    pub fn ctx(&self) -> &RawGuiContext { &self.context }
 
     /// Run the UI and record the rendering commands.
     pub fn render(
