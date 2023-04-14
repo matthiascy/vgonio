@@ -74,6 +74,60 @@ pub enum SubCommand {
     /// Prints related information about the current vgonio instance.
     #[clap(name = "info")]
     PrintInfo(PrintInfoOptions),
+
+    /// Converts non-vgonio files to vgonio files.
+    Convert(ConvertOptions),
+}
+
+#[derive(clap::Args, Debug)]
+#[clap(about = "Converts non-vgonio files to vgonio files.")]
+pub struct ConvertOptions {
+    /// Path to input files.
+    #[clap(
+        short,
+        long,
+        num_args(1..),
+        help = "Files to be converted."
+    )]
+    pub inputs: Vec<PathBuf>,
+
+    /// Path to output file.
+    #[clap(help = "Path to store converted files.")]
+    pub output: Option<PathBuf>,
+
+    #[clap(
+        short,
+        long,
+        default_value_t = DataEncoding::Binary,
+        help = "Data encoding for the output."
+    )]
+    pub encoding: DataEncoding,
+
+    #[clap(
+        short,
+        long,
+        default_value_t = DataCompression::None,
+        help = "Data compression for the output."
+    )]
+    pub compression: DataCompression,
+
+    #[clap(
+        short,
+        long,
+        help = "Type of conversion to perform. If not specified, the\nconversion will be inferred \
+                from the file extension."
+    )]
+    pub kind: ConvertKind,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvertKind {
+    /// Convert a micro-surface profile to .vgms file. Accepts files
+    /// coming from Predicting Appearance from Measured Microgeometry of Metal
+    /// Surfaces, and plain text data coming from µsurf confocal microscope
+    /// system.
+    #[clap(name = "ms")]
+    MicroSurfaceProfile,
 }
 
 #[derive(clap::Args, Debug)]

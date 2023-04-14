@@ -1198,12 +1198,12 @@ impl<'ms> MultilevelGrid<'ms> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        common::ulp_eq,
         measure::rtc::{
             grid::{GridTraversal, MultilevelGrid},
             Hit, Ray,
         },
         msurf::{AxisAlignment, MicroSurface},
+        ulp_eq,
         units::{um, UMicrometre},
     };
     use glam::{IVec2, UVec2, Vec3, Vec3Swizzles};

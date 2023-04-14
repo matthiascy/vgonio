@@ -69,7 +69,7 @@ pub fn cartesian_to_spherical(v: Vec3, radius: f32, handedness: Handedness) -> S
 // TODO: improve accuracy
 #[test]
 fn spherical_cartesian_conversion() {
-    use crate::{common::ulp_eq, units::degrees};
+    use crate::{ulp_eq, units::degrees};
 
     let r = 1.0;
     let zenith = radians!(0.0);
@@ -137,7 +137,7 @@ pub fn rcp(x: f32) -> f32 {
 
 #[test]
 fn test_rcp() {
-    use crate::common::ulp_eq;
+    use crate::ulp_eq;
     assert!(ulp_eq(rcp(1.0), 1.0));
     assert!(ulp_eq(rcp(2.0), 0.5));
     assert!(ulp_eq(rcp(4.0), 0.25));

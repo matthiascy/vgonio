@@ -1,6 +1,9 @@
 //! This module defines the specification of the VGMO file formats.
 
-use crate::measure::measurement::MeasurementKind;
+use crate::{
+    measure::measurement::MeasurementKind,
+    units::{LengthUnit, LengthUnitEnum},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -10,11 +13,22 @@ use std::{
 
 /// Data encoding while storing the data to the disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum DataEncoding {
     /// The data is encoded as ascii text (plain text).
     Ascii = 0x23, // '#'
     /// The data is encoded as binary data.
     Binary = 0x21, // '!'
+}
+
+impl From<u8> for DataEncoding {
+    fn from(value: u8) -> Self {
+        match value {
+            0x23 => DataEncoding::Ascii,
+            0x21 => DataEncoding::Binary,
+            _ => panic!("Invalid data encoding: {}", value),
+        }
+    }
 }
 
 impl fmt::Display for DataEncoding {
@@ -45,11 +59,22 @@ impl DataEncoding {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum DataCompression {
     /// No compression.
     None = 0x00,
     /// Zlib compression.
     Zlib = 0xFF,
+}
+
+impl From<u8> for DataCompression {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => DataCompression::None,
+            0xFF => DataCompression::Zlib,
+            _ => panic!("Invalid data compression: {}", value),
+        }
+    }
 }
 
 impl fmt::Display for DataCompression {
@@ -122,54 +147,138 @@ impl<'a> Vgmo<'a> {
         header[40..44].copy_from_slice(&(self.samples.len() as u32).to_le_bytes());
         header[47] = 0x0A; // LF
         writer.write_all(&header)?;
-
-        match self.encoding {
-            DataEncoding::Ascii => match self.compression {
-                DataCompression::None => {
-                    for (i, s) in self.samples.iter().enumerate() {
-                        let val = if i as u32 % self.zenith_range.bin_count
-                            == self.zenith_range.bin_count - 1
-                        {
-                            format!("{s}\n")
-                        } else {
-                            format!("{s} ")
-                        };
-                        writer.write_all(val.as_bytes())?;
-                    }
-                }
-                DataCompression::Zlib => {
-                    let mut encoder =
-                        flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
-                    for (i, s) in self.samples.iter().enumerate() {
-                        let val = if i as u32 % self.zenith_range.bin_count
-                            == self.zenith_range.bin_count - 1
-                        {
-                            format!("{s}\n")
-                        } else {
-                            format!("{s} ")
-                        };
-                        encoder.write_all(val.as_bytes())?;
-                    }
-                    encoder.finish()?;
-                }
-            },
-            DataEncoding::Binary => match self.compression {
-                DataCompression::None => {
-                    for s in self.samples.iter() {
-                        writer.write_all(&s.to_le_bytes())?;
-                    }
-                }
-                DataCompression::Zlib => {
-                    let mut encoder =
-                        flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
-                    for s in self.samples.iter() {
-                        encoder.write_all(&s.to_le_bytes())?;
-                    }
-                    encoder.finish()?;
-                }
-            },
-        }
-
-        Ok(())
+        write_data_samples(
+            writer,
+            self.encoding,
+            self.compression,
+            &self.samples,
+            self.zenith_range.bin_count,
+        )
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[repr(C)]
+pub struct VgmsHeader {
+    pub rows: u32,
+    pub cols: u32,
+    pub du: f32,
+    pub dv: f32,
+    pub unit: LengthUnitEnum,
+    pub sample_data_size: u8,
+    pub encoding: DataEncoding,
+    pub compression: DataCompression,
+}
+
+impl VgmsHeader {
+    pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
+        let mut header = [0x20u8; 32];
+        header[0..4].copy_from_slice(Vgms::MAGIC);
+        header[4..8].copy_from_slice(&self.rows.to_le_bytes());
+        header[8..12].copy_from_slice(&self.cols.to_le_bytes());
+        header[12..16].copy_from_slice(&self.du.to_le_bytes());
+        header[16..20].copy_from_slice(&self.dv.to_le_bytes());
+        header[20] = self.unit as u8;
+        header[21] = self.sample_data_size;
+        header[22] = self.encoding as u8;
+        header[23] = self.compression as u8;
+        header[31] = 0x0A; // LF
+        writer.write_all(&header)
+    }
+
+    /// Reads the header from a byte slice without checking the magic number.
+    pub fn from_bytes(bytes: [u8; 28]) -> Option<Self> {
+        let rows = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let cols = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let du = f32::from_le_bytes(bytes[8..12].try_into().unwrap());
+        let dv = f32::from_le_bytes(bytes[12..16].try_into().unwrap());
+        let unit = LengthUnitEnum::from(bytes[16]);
+        // TODO: check if sample_data_size is valid
+        let sample_data_size = bytes[17];
+        let encoding = DataEncoding::from(bytes[18]);
+        let compression = DataCompression::from(bytes[19]);
+        Some(Self {
+            rows,
+            cols,
+            du,
+            dv,
+            unit,
+            sample_data_size,
+            encoding,
+            compression,
+        })
+    }
+}
+
+pub struct Vgms<'a> {
+    pub header: VgmsHeader,
+    pub body: Cow<'a, [f32]>,
+}
+
+impl<'a> Vgms<'a> {
+    pub const MAGIC: &'static [u8] = b"VGMS";
+
+    pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
+        self.header.write(writer)?;
+        write_data_samples(
+            writer,
+            self.header.encoding,
+            self.header.compression,
+            &self.body,
+            self.header.cols,
+        )
+    }
+}
+
+fn write_data_samples(
+    writer: &mut impl Write,
+    encoding: DataEncoding,
+    compression: DataCompression,
+    samples: &[f32],
+    cols: u32,
+) -> std::io::Result<()> {
+    match encoding {
+        DataEncoding::Ascii => match compression {
+            DataCompression::None => {
+                for (i, s) in samples.iter().enumerate() {
+                    let val = if i as u32 % cols == cols - 1 {
+                        format!("{s}\n")
+                    } else {
+                        format!("{s} ")
+                    };
+                    writer.write_all(val.as_bytes())?;
+                }
+            }
+            DataCompression::Zlib => {
+                let mut encoder =
+                    flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
+                for (i, s) in samples.iter().enumerate() {
+                    let val = if i as u32 % cols == cols - 1 {
+                        format!("{s}\n")
+                    } else {
+                        format!("{s} ")
+                    };
+                    encoder.write_all(val.as_bytes())?;
+                }
+                encoder.finish()?;
+            }
+        },
+        DataEncoding::Binary => match compression {
+            DataCompression::None => {
+                for s in samples.iter() {
+                    writer.write_all(&s.to_le_bytes())?;
+                }
+            }
+            DataCompression::Zlib => {
+                let mut encoder =
+                    flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
+                for s in samples.iter() {
+                    encoder.write_all(&s.to_le_bytes())?;
+                }
+                encoder.finish()?;
+            }
+        },
+    }
+
+    Ok(())
 }

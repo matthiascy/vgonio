@@ -2,7 +2,7 @@ use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 
 use crate::{
     app::{
-        args::{FastMeasurementKind, MeasureOptions, SubCommand},
+        args::{ConvertKind, ConvertOptions, FastMeasurementKind, MeasureOptions, SubCommand},
         cache::{resolve_path, Cache},
         Config,
     },
@@ -35,6 +35,7 @@ pub fn run(cmd: SubCommand, config: Config) -> Result<(), Error> {
         SubCommand::Measure(opts) => measure(opts, config),
         SubCommand::PrintInfo(opts) => info::print(opts, config),
         SubCommand::Generate(opts) => generate(opts, config),
+        SubCommand::Convert(opts) => convert(opts, config),
     }
 }
 
@@ -499,6 +500,42 @@ fn measure_microfacet_masking_shadowing(
             })
     }
     println!("    {BRIGHT_CYAN}✓{RESET} Done!");
+    Ok(())
+}
+
+fn convert(opts: ConvertOptions, config: Config) -> Result<(), Error> {
+    let output_dir = resolve_output_dir(&config, &opts.output)?;
+    for input in opts.inputs {
+        let resolved = resolve_path(&config.cwd, Some(&input));
+        match opts.kind {
+            ConvertKind::MicroSurfaceProfile => {
+                let profile = MicroSurface::load_from_file(&resolved, None)?;
+                let filename = format!(
+                    "{}.vgms",
+                    resolved
+                        .file_stem()
+                        .unwrap()
+                        .to_ascii_lowercase()
+                        .to_str()
+                        .unwrap()
+                );
+                println!(
+                    "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",
+                    resolved, output_dir
+                );
+                profile
+                    .save(&output_dir.join(filename), opts.encoding, opts.compression)
+                    .unwrap_or_else(|err| {
+                        eprintln!(
+                            "  {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                            resolved.display(),
+                            err
+                        );
+                    });
+                println!("{BRIGHT_CYAN}✓{RESET} Done!",);
+            }
+        }
+    }
     Ok(())
 }
 

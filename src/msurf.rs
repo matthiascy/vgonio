@@ -46,6 +46,7 @@ pub enum AxisAlignment {
     ZY,
 }
 
+// TODO: support f64
 /// Representation of the micro-surface.
 ///
 /// All measurements are in micrometers.
@@ -669,10 +670,16 @@ impl MicroSurfaceMesh {
 }
 
 mod io {
-    use crate::{error::Error, msurf::MicroSurface, units::um};
+    use crate::{
+        error::Error,
+        msurf::MicroSurface,
+        specs::{DataCompression, DataEncoding, Vgms, VgmsHeader},
+        units::{um, LengthUnit, LengthUnitEnum, UMicrometre},
+    };
     use std::{
+        borrow::Cow,
         fs::File,
-        io::{BufRead, BufReader, Read},
+        io::{BufRead, BufReader, BufWriter, Read, Write},
         path::Path,
     };
 
@@ -694,15 +701,18 @@ mod io {
     }
 
     impl MicroSurface {
+        #[rustfmt::skip]
         /// Creates micro-geometry height field by reading the samples stored in
         /// different file format. Supported formats are
         ///
         /// 1. Ascii Matrix file (plain text) coming from
-        ///    Predicting Appearance from Measured Microgeometry of Metal
-        /// Surfaces. 2. Plain text data coming from µsurf confocal
-        /// microscope system. 2. Micro-surface height field file
-        /// (binary format, ends with *.dcms). 3. Micro-surface height
-        /// field cache file (binary format, ends with *.dccc).
+        ///    Predicting Appearance from Measured Microgeometry of Metal Surfaces.
+        ///
+        /// 2. Plain text data coming from µsurf confocal microscope system.
+        ///
+        /// 3. Micro-surface height field file (binary format, ends with *.vgms).
+        ///
+        /// 4. Micro-surface height field cache file (binary format, ends with *.vgcc).
         pub fn load_from_file(
             path: &Path,
             origin: Option<MicroSurfaceOrigin>,
@@ -740,29 +750,56 @@ mod io {
                     //         Ok(serde_yaml::from_reader(reader)?)
                     //     }
                     // }
-                    // "VGMS" => {
-                    //     let header = {
-                    //         let mut buf = [0_u8; 23];
-                    //         reader.read_exact(&mut buf)?;
-                    //         MsHeader::new(buf)
-                    //     };
-                    //
-                    //     let samples = if header.binary {
-                    //         read_binary_samples(reader, (header.size / 4) as usize)
-                    //     } else {
-                    //         read_ascii_samples(reader)
-                    //     };
-                    //
-                    //     Ok(MicroSurface::from_samples(
-                    //         header.extent[0] as usize,
-                    //         header.extent[1] as usize,
-                    //         um!(header.spacing[0]),
-                    //         um!(header.spacing[1]),
-                    //         samples,
-                    //         alignment.unwrap_or_default(),
-                    //         Some(path.into()),
-                    //     ))
-                    // }
+                    "VGMS" => {
+                        if let Some(header) = {
+                            let mut buf = [0_u8; 28];
+                            reader.read_exact(&mut buf)?;
+                            VgmsHeader::from_bytes(buf)
+                        } {
+                            let unit_conversion = match header.unit {
+                                LengthUnitEnum::Micrometre => UMicrometre::FACTOR_TO_MICROMETRE,
+                                LengthUnitEnum::Millimetre => UMicrometre::FACTOR_TO_MILLIMETRE,
+                                LengthUnitEnum::Metre => UMicrometre::FACTOR_TO_METRE,
+                                LengthUnitEnum::Centimetre => UMicrometre::FACTOR_TO_CENTIMETRE,
+                                LengthUnitEnum::Nanometre => UMicrometre::FACTOR_TO_NANOMETRE,
+                            };
+
+                            let f = if unit_conversion != 1.0 {
+                                Some(|x| x * unit_conversion)
+                            } else {
+                                None
+                            };
+
+                            let samples = match header.compression {
+                                DataCompression::None => {
+                                    if header.encoding.is_binary() {
+                                        read_binary_samples(reader, (header.rows * header.cols) as usize, f)
+                                    } else {
+                                        read_ascii_samples(reader, f)
+                                    }
+                                }
+                                DataCompression::Zlib => {
+                                    let mut decoder = flate2::read::ZlibDecoder::new(reader);
+                                    if header.encoding.is_binary() {
+                                        read_binary_samples(decoder, (header.rows * header.cols) as usize, f)
+                                    } else {
+                                        read_ascii_samples(decoder, f)
+                                    }
+                                }
+                            };
+
+                            Ok(MicroSurface::from_samples(
+                                header.cols as usize,
+                                header.rows as usize,
+                                um!(header.du * unit_conversion),
+                                um!(header.dv * unit_conversion),
+                                samples,
+                                Some(path.into()),
+                            ))
+                        } else {
+                            Err(Error::UnrecognizedFile)
+                        }
+                    }
                     _ => Err(Error::UnrecognizedFile),
                 }
             }
@@ -770,6 +807,31 @@ mod io {
                 ms.fill_holes();
                 ms
             })
+        }
+
+        pub fn save(
+            &self,
+            filepath: &Path,
+            encoding: DataEncoding,
+            compression: DataCompression,
+        ) -> Result<(), std::io::Error> {
+            let file = File::create(filepath)?;
+            let mut writer = BufWriter::new(file);
+
+            let output = Vgms {
+                header: VgmsHeader {
+                    rows: self.rows as u32,
+                    cols: self.cols as u32,
+                    du: self.du,
+                    dv: self.dv,
+                    unit: LengthUnitEnum::Micrometre,
+                    sample_data_size: 4,
+                    encoding,
+                    compression,
+                },
+                body: Cow::Borrowed(&self.samples),
+            };
+            output.write(&mut writer)
         }
     }
 
@@ -811,7 +873,7 @@ mod io {
                 panic!("Invalid first line: {line:?}");
             }
         };
-        let samples = read_ascii_samples(reader);
+        let samples = read_ascii_samples(reader, None::<fn(f32) -> f32>);
         Ok(MicroSurface::from_samples(
             cols,
             rows,
@@ -914,32 +976,68 @@ mod io {
     }
 
     /// Read sample values separated by whitespace line by line.
-    fn read_ascii_samples<R: BufRead>(reader: R) -> Vec<f32> {
-        reader
-            .lines()
-            .enumerate()
-            .flat_map(|(n, line)| {
-                let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
-                l.trim()
-                    .split_ascii_whitespace()
-                    .enumerate()
-                    .map(|(i, x)| {
-                        x.parse()
-                            .unwrap_or_else(|_| panic!("Parse float error at line {n} pos {i}"))
-                    })
-                    .collect::<Vec<f32>>()
-            })
-            .collect()
+    fn read_ascii_samples<R, F>(reader: R, f: Option<F>) -> Vec<f32>
+    where
+        F: Fn(f32) -> f32,
+        R: Read,
+    {
+        let reader = BufReader::new(reader);
+
+        if let Some(f) = f {
+            reader
+                .lines()
+                .enumerate()
+                .flat_map(|(n, line)| {
+                    let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
+                    l.trim()
+                        .split_ascii_whitespace()
+                        .enumerate()
+                        .map(|(i, x)| {
+                            let val = x.parse().unwrap_or_else(|_| {
+                                panic!("Parse float error at line {n} pos {i}")
+                            });
+                            f(val)
+                        })
+                        .collect::<Vec<f32>>()
+                })
+                .collect()
+        } else {
+            reader
+                .lines()
+                .enumerate()
+                .flat_map(|(n, line)| {
+                    let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
+                    l.trim()
+                        .split_ascii_whitespace()
+                        .enumerate()
+                        .map(|(i, x)| {
+                            x.parse()
+                                .unwrap_or_else(|_| panic!("Parse float error at line {n} pos {i}"))
+                        })
+                        .collect::<Vec<f32>>()
+                })
+                .collect()
+        }
     }
 
-    fn read_binary_samples<R: Read>(mut reader: R, count: usize) -> Vec<f32> {
+    fn read_binary_samples<R, F>(mut reader: R, count: usize, f: Option<F>) -> Vec<f32>
+    where
+        F: Fn(f32) -> f32,
+        R: Read,
+    {
         use byteorder::{LittleEndian, ReadBytesExt};
 
         let mut samples = vec![0.0; count];
 
-        (0..count).for_each(|i| {
-            samples[i] = reader.read_f32::<LittleEndian>().expect("read f32 error");
-        });
+        if let Some(f) = f {
+            (0..count).for_each(|i| {
+                samples[i] = f(reader.read_f32::<LittleEndian>().expect("read f32 error"));
+            });
+        } else {
+            (0..count).for_each(|i| {
+                samples[i] = reader.read_f32::<LittleEndian>().expect("read f32 error");
+            });
+        }
 
         samples
     }

@@ -349,7 +349,7 @@ super::impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
 #[cfg(test)]
 mod angle_unit_tests {
     use super::*;
-    use crate::common::ulp_eq;
+    use crate::ulp_eq;
 
     #[test]
     fn conversion() {
