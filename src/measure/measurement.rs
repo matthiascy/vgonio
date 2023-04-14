@@ -1,12 +1,11 @@
 //! Measurement parameters.
 use crate::{
-    common::{Medium, RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition},
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
     },
     units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
-    Error,
+    Error, Medium, RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -424,7 +423,7 @@ impl MicrofacetMaskingShadowingMeasurement {
 /// Describes the different kind of measurements with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum MeasurementKind {
+pub enum MeasurementKindDescription {
     /// Measure the BSDF of a micro-surface.
     Bsdf(BsdfMeasurement),
     /// Measure the micro-facet normal distribution function of a micro-surface.
@@ -435,7 +434,7 @@ pub enum MeasurementKind {
     Mmsf(MicrofacetMaskingShadowingMeasurement),
 }
 
-impl MeasurementKind {
+impl MeasurementKindDescription {
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, Error> {
         match self {
@@ -457,7 +456,7 @@ impl MeasurementKind {
 
     /// Get the BSDF measurement parameters.
     pub fn bsdf(&self) -> Option<&BsdfMeasurement> {
-        if let MeasurementKind::Bsdf(bsdf) = self {
+        if let MeasurementKindDescription::Bsdf(bsdf) = self {
             Some(bsdf)
         } else {
             None
@@ -466,7 +465,7 @@ impl MeasurementKind {
 
     /// Get the micro-facet distribution measurement parameters.
     pub fn microfacet_distribution(&self) -> Option<&MicrofacetNormalDistributionMeasurement> {
-        if let MeasurementKind::Mndf(mfd) = self {
+        if let MeasurementKindDescription::Mndf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -475,7 +474,7 @@ impl MeasurementKind {
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
     pub fn micro_surface_shadow_masking(&self) -> Option<&MicrofacetMaskingShadowingMeasurement> {
-        if let MeasurementKind::Mmsf(mfd) = self {
+        if let MeasurementKindDescription::Mmsf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -491,11 +490,22 @@ impl MeasurementKind {
 pub struct Measurement {
     /// Type of measurement.
     #[serde(rename = "type")]
-    pub kind: MeasurementKind,
+    pub desc: MeasurementKindDescription,
     /// Surfaces to be measured. surface's path can be prefixed with either
     /// `usr://` or `sys://` to indicate the user-defined data file path
     /// or system-defined data file path.
     pub surfaces: Vec<PathBuf>, // TODO(yang): use Cow<'a, Vec<PathBuf>> to avoid copying the path
+}
+
+/// Kind of different measurements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MeasurementKind {
+    /// BSDF measurement.
+    Bsdf = 0x00,
+    /// Micro-facet distribution measurement.
+    MicrofacetDistribution = 0x01,
+    /// Micro-surface shadowing-masking function measurement.
+    MicrofacetMaskingShadowing = 0x02,
 }
 
 impl Measurement {
@@ -563,19 +573,19 @@ impl Measurement {
     /// Validate the measurement description.
     pub fn validate(self) -> Result<Self, Error> {
         log::info!("Validating measurement description...");
-        let details = self.kind.validate()?;
+        let details = self.desc.validate()?;
         Ok(Self {
-            kind: details,
+            desc: details,
             ..self
         })
     }
 
     /// Measurement kind in the form of a string.
     pub fn name(&self) -> &'static str {
-        match self.kind {
-            MeasurementKind::Bsdf { .. } => "BSDF measurement",
-            MeasurementKind::Mndf { .. } => "microfacet-distribution measurement",
-            MeasurementKind::Mmsf { .. } => "micro-surface-shadow-masking measurement",
+        match self.desc {
+            MeasurementKindDescription::Bsdf { .. } => "BSDF measurement",
+            MeasurementKindDescription::Mndf { .. } => "microfacet-distribution measurement",
+            MeasurementKindDescription::Mmsf { .. } => "micro-surface-shadow-masking measurement",
         }
     }
 }

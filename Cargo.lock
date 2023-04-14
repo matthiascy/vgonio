@@ -2619,6 +2619,7 @@ dependencies = [
  "egui_demo_lib",
  "embree",
  "env_logger",
+ "flate2",
  "futures-intrusive",
  "glam",
  "image",

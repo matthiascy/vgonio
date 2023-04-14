@@ -8,10 +8,10 @@ mod tools;
 mod ui;
 
 use crate::{
-    common::Handedness,
     error::Error,
     measure::{rtc::Ray, RtcMethod},
     units::degrees,
+    Handedness,
 };
 use glam::{IVec2, Mat4, Vec3};
 use std::{

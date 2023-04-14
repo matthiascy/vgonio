@@ -3,10 +3,10 @@ use crate::{
         cache::{Cache, Handle},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
-    common::RangeByStepSize,
     measure::Patch,
     msurf::MicroSurface,
     units::Nanometres,
+    RangeByStepSize,
 };
 use serde::{Deserialize, Serialize};
 use std::{

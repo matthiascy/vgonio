@@ -1,7 +1,7 @@
 use crate::{
-    common::{Handedness, RangeByStepSize, SphericalCoord},
     measure::{measurement::Radius, rtc::Ray},
     units::{radians, steradians, LengthUnit, Micrometres, Nanometres, Radians, SolidAngle},
+    Handedness, RangeByStepSize, SphericalCoord,
 };
 use glam::Vec3;
 use rand::{

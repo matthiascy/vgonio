@@ -7,16 +7,16 @@ use crate::{
             GpuContext, RenderPass, Texture, WgpuConfig,
         },
     },
-    common::{DataEncoding, Handedness},
     math, measure,
-    measure::measurement::MicrofacetMaskingShadowingMeasurement,
+    measure::measurement::{MeasurementKind, MicrofacetMaskingShadowingMeasurement},
     msurf::MicroSurface,
+    specs::{AngleRange, DataCompression, DataEncoding, Vgmo},
     units::Radians,
-    Error,
+    Error, Handedness,
 };
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use std::{num::NonZeroU32, path::Path};
+use std::{borrow::Cow, num::NonZeroU32, path::Path};
 use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of
@@ -1341,7 +1341,7 @@ pub struct MicrofacetMaskingShadowing {
     pub azimuth_stop: Radians,
     /// The bin size of azimuthal angle when sampling the microfacet
     /// distribution.
-    pub azimuth_bin_size: Radians,
+    pub azimuth_bin_width: Radians,
     /// The number of bins in the azimuthal angle.
     pub azimuth_bins_count_inclusive: usize,
     /// The start zenith of the measurement.
@@ -1361,13 +1361,39 @@ pub struct MicrofacetMaskingShadowing {
 }
 
 impl MicrofacetMaskingShadowing {
+    pub fn as_vgmo(&self, encoding: DataEncoding, compression: DataCompression) -> Vgmo {
+        Vgmo {
+            kind: MeasurementKind::MicrofacetMaskingShadowing,
+            encoding,
+            compression,
+            azimuth_range: AngleRange {
+                start: self.azimuth_start.value,
+                end: self.azimuth_stop.value,
+                bin_count: self.azimuth_bins_count_inclusive as u32,
+                bin_width: self.azimuth_bin_width.value,
+            },
+            zenith_range: AngleRange {
+                start: self.zenith_start.value,
+                end: self.zenith_stop.value,
+                bin_count: self.zenith_bins_count_inclusive as u32,
+                bin_width: self.zenith_bin_size.value,
+            },
+            samples: Cow::Borrowed(&self.samples),
+        }
+    }
+
     /// Returns the number of measurement bins.
     pub fn bins_count(&self) -> usize {
         (self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive).pow(2)
     }
 
     /// Saves the microfacet shadowing and masking function.
-    pub fn save(&self, filepath: &Path, encoding: DataEncoding) -> Result<(), std::io::Error> {
+    pub fn save(
+        &self,
+        filepath: &Path,
+        encoding: DataEncoding,
+        compression: DataCompression,
+    ) -> Result<(), std::io::Error> {
         use std::io::{BufWriter, Write};
         assert_eq!(self.samples.len(), self.bins_count());
         let file = std::fs::OpenOptions::new()
@@ -1375,55 +1401,65 @@ impl MicrofacetMaskingShadowing {
             .truncate(true)
             .write(true)
             .open(filepath)?;
-        let mut writter = BufWriter::new(file);
-        match encoding {
-            DataEncoding::Ascii => {
-                log::info!("Saving microfacet masking and shadowing function as plain text.");
-                writter.write_all(b"VGMO\x02#")?; // 6 bytes
-                writter.write_all(&self.azimuth_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.azimuth_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.samples.len() as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes
-                self.samples.iter().enumerate().for_each(|(i, s)| {
-                    let val = if i % self.zenith_bins_count_inclusive
-                        == self.zenith_bins_count_inclusive - 1
-                    {
-                        format!("{s}\n")
-                    } else {
-                        format!("{s} ")
-                    };
-                    writter.write_all(val.as_bytes()).unwrap();
-                });
-            }
-            DataEncoding::Binary => {
-                log::info!("Saving microfacet masking and shadowing function as binary.");
-                writter.write_all(b"VGMO\x02!")?; // 6 bytes
-                writter.write_all(&self.azimuth_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.azimuth_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.samples.len() as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes
-                writter.write_all(
-                    &self
-                        .samples
-                        .iter()
-                        .flat_map(|x| x.to_le_bytes())
-                        .collect::<Vec<_>>(),
-                )?;
-            }
-        }
-        Ok(())
+        let mut writer = BufWriter::new(file);
+        self.as_vgmo(encoding, compression).write(&mut writer)
+
+        // match encoding {
+        //     DataEncoding::Ascii => {
+        //         log::info!("Saving microfacet masking and shadowing function
+        // as plain text.");         writter.write_all(b"VGMO\x02#")?;
+        // // 6 bytes         writter.write_all(&self.azimuth_start.
+        // value.to_le_bytes())?; // 4 bytes
+        // writter.write_all(&self.azimuth_stop.value. to_le_bytes())?;
+        // // 4 bytes         writter.write_all(&self. azimuth_bin_size.
+        // value.to_le_bytes())?; // 4 bytes         writter.
+        // write_all(&(self.azimuth_bins_count_inclusive as
+        // u32).to_le_bytes())?; // 4 bytes
+        // writter.write_all(&self.zenith_start.value. to_le_bytes())?;
+        // // 4 bytes         writter.write_all(&self. zenith_stop.
+        // value.to_le_bytes())?; // 4 bytes         writter.
+        // write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&(self.zenith_bins_count_inclusive as
+        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&(self.
+        // samples.len() as u32).to_le_bytes())?; // 4 bytes         writter.
+        // write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes         self.
+        // samples.iter().enumerate().for_each(|(i, s)| {             let val =
+        // if i % self.zenith_bins_count_inclusive                 ==
+        // self.zenith_bins_count_inclusive - 1             {
+        //                 format!("{s}\n")
+        //             } else {
+        //                 format!("{s} ")
+        //             };
+        //             writter.write_all(val.as_bytes()).unwrap();
+        //         });
+        //     }
+        //     DataEncoding::Binary => {
+        //         log::info!("Saving microfacet masking and shadowing function
+        // as binary.");         writter.write_all(b"VGMO\x02!")?; // 6
+        // bytes         writter.write_all(&self.azimuth_start.value.
+        // to_le_bytes())?; // 4 bytes
+        // writter.write_all(&self.azimuth_stop.value. to_le_bytes())?;
+        // // 4 bytes         writter.write_all(&self. azimuth_bin_size.
+        // value.to_le_bytes())?; // 4 bytes         writter.
+        // write_all(&(self.azimuth_bins_count_inclusive as
+        // u32).to_le_bytes())?; // 4 bytes
+        // writter.write_all(&self.zenith_start.value. to_le_bytes())?;
+        // // 4 bytes         writter.write_all(&self. zenith_stop.
+        // value.to_le_bytes())?; // 4 bytes         writter.
+        // write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&(self.zenith_bins_count_inclusive as
+        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&(self.
+        // samples.len() as u32).to_le_bytes())?; // 4 bytes         writter.
+        // write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes         writter.
+        // write_all(             &self
+        //                 .samples
+        //                 .iter()
+        //                 .flat_map(|x| x.to_le_bytes())
+        //                 .collect::<Vec<_>>(),
+        //         )?;
+        //     }
+        // }
+        // Ok(())
     }
 }
 
@@ -1588,7 +1624,7 @@ pub fn measure_masking_shadowing(
         results.push(MicrofacetMaskingShadowing {
             azimuth_start: desc.azimuth.start,
             azimuth_stop: desc.azimuth.stop,
-            azimuth_bin_size: desc.azimuth.step_size,
+            azimuth_bin_width: desc.azimuth.step_size,
             zenith_start: desc.zenith.start,
             zenith_stop: desc.zenith.stop,
             zenith_bin_size: desc.zenith.step_size,

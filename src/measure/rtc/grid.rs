@@ -5,7 +5,6 @@ use crate::{
         cache::Cache,
         cli::{BRIGHT_YELLOW, RESET},
     },
-    common::ulp_eq,
     math::{close_enough, rcp},
     measure::{
         bsdf::{BsdfMeasurementPoint, BsdfStats},
@@ -17,6 +16,7 @@ use crate::{
     },
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::{fresnel, ior::RefractiveIndex},
+    ulp_eq,
     units::{um, UMicrometre},
 };
 use cfg_if::cfg_if;

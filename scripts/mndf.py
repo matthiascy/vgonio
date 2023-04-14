@@ -1,6 +1,7 @@
 """
 The normal distribution function (microfacet distribution)
 """
+import io
 import os.path
 import struct
 
@@ -8,6 +9,7 @@ import argparse
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
+import zlib
 
 
 def read_data(filename):
@@ -31,11 +33,12 @@ def read_data(filename):
         if header[0:4] != b'VGMO' or header[4] != ord(b'\x01'):
             raise Exception('Invalid file format, the file does not contain the correct data: microfacet distribution required.')
         is_binary = header[5] == ord('!')
-        [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("fff", header[6:18]))
-        azimuth_bin_count = int.from_bytes(header[18:22], byteorder='little')
-        [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("fff", header[22:34]))
-        zenith_bin_count = int.from_bytes(header[34:38], byteorder='little')
-        sample_count = int.from_bytes(header[38:42], byteorder='little')
+        is_compressed = header[6] == ord('\xff')
+        [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("<fff", header[8:20]))
+        azimuth_bin_count = int.from_bytes(header[20:24], byteorder='little')
+        [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("<fff", header[24:36]))
+        zenith_bin_count = int.from_bytes(header[36:40], byteorder='little')
+        sample_count = int.from_bytes(header[40:44], byteorder='little')
 
         if sample_count != azimuth_bin_count * zenith_bin_count:
             raise Exception('Invalid file format, {} samples expected, but {} samples found.'.format(azimuth_bin_count * zenith_bin_count, sample_count))
@@ -43,13 +46,24 @@ def read_data(filename):
         print('azimuth_start = {}, azimuth_stop = {}, azimuth_bin_size = {}, azimuth_bin_count = {}'
               .format(azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count))
         print('zenith_start = {}, zenith_stop = {}, zenith_bin_size = {}, zenith_bin_count = {}'
-                .format(zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count))
-        if is_binary:
-            print('read binary file')
-            data = np.fromfile(f, dtype=('<f'), count=sample_count)
+              .format(zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count))
+
+        if is_compressed:
+            print('decompressing data')
+            f = io.BytesIO(zlib.decompress(f.read()))
+            if is_binary:
+                print('read compressed binary file')
+                data = np.frombuffer(f.read(), dtype=('<f'), count=sample_count)
+            else:
+                print('read compressed ascii file')
+                data = np.loadtxt(f, dtype=np.float32, delimiter=' ')
         else:
-            print('read text file')
-            data = np.fromfile(f, dtype=np.float32, count=sample_count, sep=' ')
+            if is_binary:
+                print('read uncompressed binary file')
+                data = np.fromfile(f, dtype=('<f'), count=sample_count)
+            else:
+                print('read uncompressed ascii file')
+                data = np.fromfile(f, dtype=np.float32, count=sample_count, sep=' ')
 
         data = data.reshape((azimuth_bin_count, zenith_bin_count))
 

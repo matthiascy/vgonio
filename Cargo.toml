@@ -23,6 +23,7 @@ egui-winit = { version = "0.21", default-features = false }
 egui-gizmo = "0.10"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true}
 env_logger = "0.10"
+flate2 = "1.0"
 futures-intrusive = "0.5"
 glam = { version = "0.22", features = ["serde", "bytemuck"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }

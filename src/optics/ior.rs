@@ -1,8 +1,8 @@
 //! Index of refraction.
 
 use crate::{
-    common::{MaterialKind, Medium},
     units::{nanometres, Length, LengthUnit, Nanometres},
+    MaterialKind, Medium,
 };
 use std::{cmp::Ordering, collections::HashMap, path::Path};
 

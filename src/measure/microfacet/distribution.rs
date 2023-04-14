@@ -2,19 +2,22 @@
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 
+use flate2::write::ZlibEncoder;
 use std::{
+    borrow::Cow,
     io::{BufWriter, Write},
     path::Path,
 };
 
 use crate::{
     app::cache::{Cache, Handle},
-    common::{DataEncoding, Handedness},
     error::Error,
     math,
-    measure::measurement::MicrofacetNormalDistributionMeasurement,
+    measure::measurement::{MeasurementKind, MicrofacetNormalDistributionMeasurement},
     msurf::MicroSurface,
+    specs::{AngleRange, DataCompression, DataEncoding, Vgmo},
     units::{self, Radians},
+    Handedness,
 };
 
 /// Structure holding the data for micro-facet normal distribution measurement.
@@ -31,7 +34,7 @@ pub struct MicrofacetNormalDistribution {
     pub azimuth_stop: Radians,
     /// The bin size of azimuthal angle when sampling the microfacet
     /// distribution.
-    pub azimuth_bin_size: Radians,
+    pub azimuth_bin_width: Radians,
     /// The number of bins in the azimuthal angle including the start and stop.
     pub azimuth_bins_count_inclusive: usize,
     /// Start angle of the zenith.
@@ -49,8 +52,34 @@ pub struct MicrofacetNormalDistribution {
 }
 
 impl MicrofacetNormalDistribution {
+    pub fn as_vgmo(&self, encoding: DataEncoding, compression: DataCompression) -> Vgmo {
+        Vgmo {
+            kind: MeasurementKind::MicrofacetDistribution,
+            encoding,
+            compression,
+            azimuth_range: AngleRange {
+                start: self.azimuth_start.value,
+                end: self.azimuth_stop.value,
+                bin_count: self.azimuth_bins_count_inclusive as u32,
+                bin_width: self.azimuth_bin_width.value,
+            },
+            zenith_range: AngleRange {
+                start: self.zenith_start.value,
+                end: self.zenith_stop.value,
+                bin_count: self.zenith_bins_count_inclusive as u32,
+                bin_width: self.zenith_bin_size.value,
+            },
+            samples: Cow::Borrowed(&self.samples),
+        }
+    }
+
     /// Save the microfacet distribution to a file
-    pub fn save(&self, filepath: &Path, encoding: DataEncoding) -> Result<(), Error> {
+    pub fn save(
+        &self,
+        filepath: &Path,
+        encoding: DataEncoding,
+        compression: DataCompression,
+    ) -> Result<(), std::io::Error> {
         assert_eq!(
             self.samples.len(),
             self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive,
@@ -61,55 +90,81 @@ impl MicrofacetNormalDistribution {
             .write(true)
             .truncate(true)
             .open(filepath)?;
+        let output = Vgmo {
+            kind: MeasurementKind::MicrofacetDistribution,
+            encoding,
+            compression,
+            azimuth_range: AngleRange {
+                start: self.azimuth_start.value,
+                end: self.azimuth_stop.value,
+                bin_count: self.azimuth_bins_count_inclusive as u32,
+                bin_width: self.azimuth_bin_width.value,
+            },
+            zenith_range: AngleRange {
+                start: self.zenith_start.value,
+                end: self.zenith_stop.value,
+                bin_count: self.zenith_bins_count_inclusive as u32,
+                bin_width: self.zenith_bin_size.value,
+            },
+            samples: Cow::Borrowed(&self.samples),
+        };
         let mut writter = BufWriter::new(file);
-        match encoding {
-            DataEncoding::Ascii => {
-                log::info!("Saving microfacet distribution as plain text.");
-                writter.write_all(b"VGMO\x01#")?; // 6 bytes
-                writter.write_all(&self.azimuth_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.azimuth_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.samples.len() as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes
-                self.samples.iter().enumerate().for_each(|(i, s)| {
-                    let val = if i % self.zenith_bins_count_inclusive
-                        == self.zenith_bins_count_inclusive - 1
-                    {
-                        format!("{s}\n")
-                    } else {
-                        format!("{s} ")
-                    };
-                    writter.write_all(val.as_bytes()).unwrap();
-                });
-            }
-            DataEncoding::Binary => {
-                log::info!("Saving microfacet distribution as binary.");
-                writter.write_all(b"VGMO\x01!")?; // 6 bytes
-                writter.write_all(&self.azimuth_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.azimuth_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_start.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_stop.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(&(self.samples.len() as u32).to_le_bytes())?; // 4 bytes
-                writter.write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes
-                writter.write_all(
-                    &self
-                        .samples
-                        .iter()
-                        .flat_map(|x| x.to_le_bytes())
-                        .collect::<Vec<_>>(),
-                )?;
-            }
-        }
-        Ok(())
+        output.write(&mut writter)
+
+        // match encoding {
+        //     DataEncoding::Ascii => {
+        //         log::info!("Saving microfacet distribution as plain text.");
+        //         writter.write_all(b"VGMO\x01#")?; // 6 bytes
+        //         writter.write_all(&self.azimuth_start.value.to_le_bytes())?;
+        // // 4 bytes         writter.write_all(&self.azimuth_stop.
+        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
+        // self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&(self.azimuth_bins_count_inclusive as
+        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&
+        // self.zenith_start.value.to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&self.zenith_stop.value.to_le_bytes())?; //
+        // 4 bytes         writter.write_all(&self.zenith_bin_size.
+        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
+        // (self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&(self.samples.len() as
+        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(b"
+        // \x20\x20\x20\x20\x20\n")?; // 6 bytes         self.samples.
+        // iter().enumerate().for_each(|(i, s)| {             let val =
+        // if i % self.zenith_bins_count_inclusive                 ==
+        // self.zenith_bins_count_inclusive - 1             {
+        //                 format!("{s}\n")
+        //             } else {
+        //                 format!("{s} ")
+        //             };
+        //             writter.write_all(val.as_bytes()).unwrap();
+        //         });
+        //     }
+        //     DataEncoding::Binary => {
+        //         log::info!("Saving microfacet distribution as binary.");
+        //         writter.write_all(b"VGMO\x01!")?; // 6 bytes
+        //         writter.write_all(&self.azimuth_start.value.to_le_bytes())?;
+        // // 4 bytes         writter.write_all(&self.azimuth_stop.
+        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
+        // self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&(self.azimuth_bins_count_inclusive as
+        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&
+        // self.zenith_start.value.to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&self.zenith_stop.value.to_le_bytes())?; //
+        // 4 bytes         writter.write_all(&self.zenith_bin_size.
+        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
+        // (self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
+        //         writter.write_all(&(self.samples.len() as
+        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(b"
+        // \x20\x20\x20\x20\x20\n")?; // 6 bytes         writter.
+        // write_all(             &self
+        //                 .samples
+        //                 .iter()
+        //                 .flat_map(|x| x.to_le_bytes())
+        //                 .collect::<Vec<_>>(),
+        //         )?;
+        //     }
+        // }
+        // Ok(())
     }
 }
 
@@ -177,7 +232,7 @@ pub fn measure_normal_distribution(
                 })
                 .collect::<Vec<_>>();
             MicrofacetNormalDistribution {
-                azimuth_bin_size: desc.azimuth.step_size,
+                azimuth_bin_width: desc.azimuth.step_size,
                 zenith_bin_size: desc.zenith.step_size,
                 azimuth_bins_count_inclusive: desc.azimuth.step_count(),
                 zenith_bins_count_inclusive: desc.zenith.step_count() + 1,

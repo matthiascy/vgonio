@@ -8,9 +8,9 @@ use glam::Vec3;
 use std::ops::{Index, IndexMut};
 
 use crate::{
-    common::ulp_eq,
     math::rcp,
     measure::rtc::{Axis, Ray},
+    ulp_eq,
 };
 use serde::{Deserialize, Serialize};
 
@@ -430,7 +430,7 @@ pub fn ray_aabb_intersects(ray: &Ray, bbox: &Aabb) -> bool {
             }
         };
 
-        far *= 1.0 + 2.0 * crate::common::gamma_f32(3.0);
+        far *= 1.0 + 2.0 * crate::gamma_f32(3.0);
 
         t_near = t_near.max(near);
         t_far = t_far.min(far);
@@ -467,7 +467,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
             }
         };
 
-        far *= 1.0 + 2.0 * crate::common::gamma_f32(3.0);
+        far *= 1.0 + 2.0 * crate::gamma_f32(3.0);
 
         t_near = t_near.max(near);
         t_far = t_far.min(far);

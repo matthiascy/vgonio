@@ -6,17 +6,18 @@ use crate::{
         cache::{resolve_path, Cache},
         Config,
     },
-    common::{DataEncoding, Handedness, SphericalPartition},
     measure::{
         self,
         measurement::{
-            BsdfMeasurement, Measurement, MeasurementKind, MicrofacetMaskingShadowingMeasurement,
-            MicrofacetNormalDistributionMeasurement, SimulationKind,
+            BsdfMeasurement, Measurement, MeasurementKindDescription,
+            MicrofacetMaskingShadowingMeasurement, MicrofacetNormalDistributionMeasurement,
+            SimulationKind,
         },
         CollectorScheme, RtcMethod,
     },
     msurf::MicroSurface,
-    Error,
+    specs::{DataCompression, DataEncoding},
+    Error, Handedness, SphericalPartition,
 };
 
 use super::{args::GenerateOptions, cache::Handle};
@@ -75,17 +76,17 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                 .iter()
                 .map(|kind| match kind {
                     FastMeasurementKind::Bsdf => Measurement {
-                        kind: MeasurementKind::Bsdf(BsdfMeasurement::default()),
+                        desc: MeasurementKindDescription::Bsdf(BsdfMeasurement::default()),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetNormalDistribution => Measurement {
-                        kind: MeasurementKind::Mndf(
+                        desc: MeasurementKindDescription::Mndf(
                             MicrofacetNormalDistributionMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {
-                        kind: MeasurementKind::Mmsf(
+                        desc: MeasurementKindDescription::Mmsf(
                             MicrofacetMaskingShadowingMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
@@ -100,7 +101,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
     );
 
     // Load data files: refractive indices, spd etc. if needed.
-    if measurements.iter().any(|meas| meas.kind.is_bsdf()) {
+    if measurements.iter().any(|meas| meas.desc.is_bsdf()) {
         println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
         cache.load_ior_database(&config);
         println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
@@ -132,8 +133,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         .iter()
         .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
     for (measurement, surfaces) in tasks {
-        match measurement.kind {
-            MeasurementKind::Bsdf(measurement) => {
+        match measurement.desc {
+            MeasurementKindDescription::Bsdf(measurement) => {
                 let start = std::time::SystemTime::now();
                 let collector_info = match measurement.collector.scheme {
                     CollectorScheme::Partitioned { domain, partition } => match partition {
@@ -277,7 +278,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     start.elapsed().unwrap().as_secs_f32()
                 );
             }
-            MeasurementKind::Mndf(measurement) => {
+            MeasurementKindDescription::Mndf(measurement) => {
                 measure_microfacet_normal_distribution(
                     measurement,
                     &surfaces,
@@ -285,13 +286,14 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     &config,
                     &opts.output,
                     opts.encoding,
+                    opts.compression,
                 )
                 .map_err(|err| {
                     eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
                     err
                 })?;
             }
-            MeasurementKind::Mmsf(measurement) => {
+            MeasurementKindDescription::Mmsf(measurement) => {
                 measure_microfacet_masking_shadowing(
                     measurement,
                     &surfaces,
@@ -299,6 +301,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     &config,
                     &opts.output,
                     opts.encoding,
+                    opts.compression,
                 )
                 .map_err(|err| {
                     eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
@@ -373,6 +376,7 @@ fn measure_microfacet_normal_distribution(
     config: &Config,
     output: &Option<PathBuf>,
     encoding: DataEncoding,
+    compression: DataCompression,
 ) -> Result<(), Error> {
     println!(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet normal distribution:
@@ -413,13 +417,15 @@ fn measure_microfacet_normal_distribution(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        distrib.save(&filepath, encoding).unwrap_or_else(|err| {
-            eprintln!(
-                "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-                filepath.display(),
-                err
-            );
-        })
+        distrib
+            .save(&filepath, encoding, compression)
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                    filepath.display(),
+                    err
+                );
+            })
     }
     println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     Ok(())
@@ -434,6 +440,7 @@ fn measure_microfacet_masking_shadowing(
     config: &Config,
     output: &Option<PathBuf>,
     encoding: DataEncoding,
+    compression: DataCompression,
 ) -> Result<(), Error> {
     println!(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
@@ -481,13 +488,15 @@ fn measure_microfacet_masking_shadowing(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        distrib.save(&filepath, encoding).unwrap_or_else(|err| {
-            eprintln!(
-                "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-                filepath.display(),
-                err
-            );
-        })
+        distrib
+            .save(&filepath, encoding, compression)
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                    filepath.display(),
+                    err
+                );
+            })
     }
     println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     Ok(())

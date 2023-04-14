@@ -1,5 +1,5 @@
 use crate::{
-    common::gamma,
+    gamma,
     math::rcp,
     measure::rtc::{Ray, RayTriIsect},
 };

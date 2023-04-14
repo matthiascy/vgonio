@@ -1,4 +1,4 @@
-use crate::{common::ulp_eq, error::Error};
+use crate::{error::Error, ulp_eq};
 use core::fmt::Debug;
 use std::{cmp::Ordering, str::FromStr};
 

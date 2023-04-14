@@ -5,15 +5,14 @@ use crate::{
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
-    Error,
+    Error, Medium,
 };
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    str::FromStr,
 };
-use std::str::FromStr;
 use uuid::Uuid;
-use crate::common::Medium;
 
 use super::gfx::RenderableMesh;
 

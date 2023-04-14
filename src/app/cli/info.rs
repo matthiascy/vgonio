@@ -5,8 +5,8 @@ use crate::{
     },
     error::Error,
     measure::measurement::{
-        BsdfMeasurement, Measurement, MeasurementKind, MicrofacetMaskingShadowingMeasurement,
-        MicrofacetNormalDistributionMeasurement,
+        BsdfMeasurement, Measurement, MeasurementKindDescription,
+        MicrofacetMaskingShadowingMeasurement, MicrofacetNormalDistributionMeasurement,
     },
 };
 use std::{
@@ -96,21 +96,25 @@ pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
-                kind: MeasurementKind::Mndf(MicrofacetNormalDistributionMeasurement::default()),
+                desc: MeasurementKindDescription::Mndf(
+                    MicrofacetNormalDistributionMeasurement::default(),
+                ),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                kind: MeasurementKind::Mmsf(MicrofacetMaskingShadowingMeasurement::default()),
+                desc: MeasurementKindDescription::Mmsf(
+                    MicrofacetMaskingShadowingMeasurement::default(),
+                ),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                kind: MeasurementKind::Bsdf(BsdfMeasurement::default()),
+                desc: MeasurementKindDescription::Bsdf(BsdfMeasurement::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

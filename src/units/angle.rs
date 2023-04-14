@@ -1,4 +1,4 @@
-use crate::common::ulp_eq;
+use crate::ulp_eq;
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
 

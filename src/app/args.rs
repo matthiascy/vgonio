@@ -1,4 +1,4 @@
-use crate::common::DataEncoding;
+use crate::specs::{DataCompression, DataEncoding};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -197,6 +197,14 @@ pub struct MeasureOptions {
         help = "Data format for the measurement output."
     )]
     pub encoding: DataEncoding,
+
+    #[clap(
+        short,
+        long,
+        default_value_t = DataCompression::None,
+        help = "Data compression for the measurement output."
+    )]
+    pub compression: DataCompression,
 
     #[clap(
         short,

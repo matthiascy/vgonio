@@ -1,7 +1,7 @@
 use crate::{
-    common::{RangeByStepSize, SphericalDomain, SphericalPartition},
     measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
+    RangeByStepSize, SphericalDomain, SphericalPartition,
 };
 use glam::{Vec3, Vec3A};
 use std::{
@@ -11,7 +11,6 @@ use std::{
 
 use crate::{
     app::cache::{normalise_path, Cache},
-    common::{Handedness, Medium, SphericalCoord},
     math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
         bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength, SpectrumSampler},
@@ -21,6 +20,7 @@ use crate::{
     msurf::MicroSurfaceMesh,
     optics::fresnel,
     units::{um, Nanometres},
+    Handedness, Medium, SphericalCoord,
 };
 use serde::{Deserialize, Serialize};
 
