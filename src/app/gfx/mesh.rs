@@ -26,17 +26,14 @@ impl Asset for RenderableMesh {}
 
 // TODO: create a separate method to extract face normals of an heightfield
 impl RenderableMesh {
-    pub fn from_micro_surface(
-        device: &wgpu::Device,
-        surf: &MicroSurface,
-    ) -> Self {
+    pub fn from_micro_surface(device: &wgpu::Device, surf: &MicroSurface) -> Self {
         use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (surf.cols, surf.rows);
         let (positions, extent) = surf.generate_vertices(AxisAlignment::XZ);
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-        let indices: Vec<u32> = regular_grid_triangulation(cols, rows);
+        let indices: Vec<u32> = regular_grid_triangulation(rows, cols);
         debug_assert_eq!(indices.len(), indices_count);
         log::debug!(
             "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",

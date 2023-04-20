@@ -112,8 +112,8 @@ impl MicroSurface {
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
     pub fn new(
-        cols: usize,
         rows: usize,
+        cols: usize,
         du: Micrometres,
         dv: Micrometres,
         height: Micrometres,
@@ -163,8 +163,8 @@ impl MicroSurface {
     /// assert_eq!(msurf.sample_at(2, 3), um!(5.0));
     /// ```
     pub fn new_by<F>(
-        cols: usize,
         rows: usize,
+        cols: usize,
         du: Micrometres,
         dv: Micrometres,
         setter: F,
@@ -229,8 +229,8 @@ impl MicroSurface {
     /// assert_eq!(height_field.rows, 3);
     /// ```
     pub fn from_samples<U: LengthUnit, S: AsRef<[f32]>>(
-        cols: usize,
         rows: usize,
+        cols: usize,
         du: Length<U>,
         dv: Length<U>,
         samples: S,
@@ -465,7 +465,7 @@ impl MicroSurface {
     /// The triangulation is done in the XZ plane.
     pub fn as_micro_surface_mesh(&self) -> MicroSurfaceMesh {
         let (verts, extent) = self.generate_vertices(AxisAlignment::XZ);
-        let tri_faces = regular_grid_triangulation(self.cols, self.rows);
+        let tri_faces = regular_grid_triangulation(self.rows, self.cols);
         let num_faces = tri_faces.len() / 3;
 
         let mut normals = vec![Vec3::ZERO; num_faces];
@@ -564,7 +564,7 @@ impl MicroSurface {
 /// # Returns
 ///
 /// Vec<u32>: An array of vertex indices forming triangles.
-pub(crate) fn regular_grid_triangulation(cols: usize, rows: usize) -> Vec<u32> {
+pub(crate) fn regular_grid_triangulation(rows: usize, cols: usize) -> Vec<u32> {
     let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
     let mut tri = 0;
     for i in 0..cols * rows {
@@ -674,7 +674,7 @@ mod io {
         error::Error,
         msurf::MicroSurface,
         specs::{DataCompression, DataEncoding, Vgms, VgmsHeader},
-        units::{um, LengthUnit, LengthUnitEnum, UMicrometre},
+        units::{um, LengthUnit, LengthUnitType, UMicrometre},
     };
     use std::{
         borrow::Cow,
@@ -682,13 +682,6 @@ mod io {
         io::{BufRead, BufReader, BufWriter, Read, Write},
         path::Path,
     };
-
-    enum MagicNumber {
-        AsciiMatrix = 0x4d415441,
-        PlainText = 0x4d415450,
-        Dcms = 0x4d534344,
-        Dccc = 0x43434344,
-    }
 
     /// Origin of the micro-geometry height field.
     #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -734,22 +727,6 @@ mod io {
                 match std::str::from_utf8(&buf)? {
                     "Asci" => read_ascii_dong2015(reader, false, path),
                     "DATA" => read_ascii_usurf(reader, false, path),
-                    // TODO: fix DCCC and DCMS
-                    // "DCCC" => {
-                    //     let header = {
-                    //         let mut buf = [0_u8; 6];
-                    //         reader.read_exact(&mut buf)?;
-                    //         CacheHeader::new(buf)
-                    //     };
-                    //
-                    //     if header.kind != CacheKind::HeightField {
-                    //         Err(Error::FileError("Not a valid height field cache!"))
-                    //     } else if header.binary {
-                    //         Ok(bincode::deserialize_from(reader)?)
-                    //     } else {
-                    //         Ok(serde_yaml::from_reader(reader)?)
-                    //     }
-                    // }
                     "VGMS" => {
                         if let Some(header) = {
                             let mut buf = [0_u8; 28];
@@ -757,11 +734,11 @@ mod io {
                             VgmsHeader::from_bytes(buf)
                         } {
                             let unit_conversion = match header.unit {
-                                LengthUnitEnum::Micrometre => UMicrometre::FACTOR_TO_MICROMETRE,
-                                LengthUnitEnum::Millimetre => UMicrometre::FACTOR_TO_MILLIMETRE,
-                                LengthUnitEnum::Metre => UMicrometre::FACTOR_TO_METRE,
-                                LengthUnitEnum::Centimetre => UMicrometre::FACTOR_TO_CENTIMETRE,
-                                LengthUnitEnum::Nanometre => UMicrometre::FACTOR_TO_NANOMETRE,
+                                LengthUnitType::Micrometre => UMicrometre::FACTOR_TO_MICROMETRE,
+                                LengthUnitType::Millimetre => UMicrometre::FACTOR_TO_MILLIMETRE,
+                                LengthUnitType::Metre => UMicrometre::FACTOR_TO_METRE,
+                                LengthUnitType::Centimetre => UMicrometre::FACTOR_TO_CENTIMETRE,
+                                LengthUnitType::Nanometre => UMicrometre::FACTOR_TO_NANOMETRE,
                             };
 
                             let f = if unit_conversion != 1.0 {
@@ -789,8 +766,8 @@ mod io {
                             };
 
                             Ok(MicroSurface::from_samples(
-                                header.cols as usize,
                                 header.rows as usize,
+                                header.cols as usize,
                                 um!(header.du * unit_conversion),
                                 um!(header.dv * unit_conversion),
                                 samples,
@@ -824,7 +801,7 @@ mod io {
                     cols: self.cols as u32,
                     du: self.du,
                     dv: self.dv,
-                    unit: LengthUnitEnum::Micrometre,
+                    unit: LengthUnitType::Micrometre,
                     sample_data_size: 4,
                     encoding,
                     compression,
@@ -839,6 +816,19 @@ mod io {
     /// the paper:
     ///
     /// [`Predicting Appearance from Measured Microgeometry of Metal Surfaces. Zhao Dong, Bruce Walter, Steve Marschner, and Donald P. Greenberg. 2016.`](https://dl.acm.org/doi/10.1145/2815618)
+    ///
+    /// All the data are stored as 2D matrices in a simple ascii format (or
+    /// equivalently as single channel floating point images).  The first line
+    /// gives the dimensions of the image and then the remaining lines give the
+    /// image data, one scanline per text line (from left to right and top to
+    /// bottom).  In our convention the x dimension increases along a scanline
+    /// and the y dimension increases with each successive scanline.  An example
+    /// file with small 2x3 checkerboard with a white square in the upper left
+    /// is:
+    ///
+    /// AsciiMatrix 3 2
+    /// 1.0 0.1 1.0
+    /// 0.1 1.0 0.1
     ///
     /// Unit used during the measurement is micrometre.
     fn read_ascii_dong2015<R: BufRead>(
@@ -875,8 +865,8 @@ mod io {
         };
         let samples = read_ascii_samples(reader, None::<fn(f32) -> f32>);
         Ok(MicroSurface::from_samples(
-            cols,
             rows,
+            cols,
             um!(du),
             um!(dv),
             samples,
@@ -920,8 +910,8 @@ mod io {
         let samples: Vec<f32> = values.into_iter().flatten().collect();
 
         Ok(MicroSurface::from_samples(
-            x_coords.len(),
             y_coords.len(),
+            x_coords.len(),
             um!(du),
             um!(dv),
             samples,

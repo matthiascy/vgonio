@@ -1250,8 +1250,8 @@ mod tests {
         let rows = 8;
 
         let surf = MicroSurface::from_samples(
-            cols,
             rows,
+            cols,
             um!(0.5),
             um!(0.5),
             vec![

@@ -3,17 +3,23 @@ use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, str::FromStr};
 
+/// Represents a unit of length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
-pub enum LengthUnitEnum {
+pub enum LengthUnitType {
+    /// Metres.
     Metre = 0,
+    /// Centimetres.
     Centimetre = 1,
+    /// Millimetres.
     Millimetre = 2,
+    /// Micrometres.
     Micrometre = 3,
+    /// Nanometres.
     Nanometre = 4,
 }
 
-impl From<u8> for LengthUnitEnum {
+impl From<u8> for LengthUnitType {
     fn from(value: u8) -> Self {
         debug_assert!(value <= 4, "Invalid length unit: {}", value);
         match value {
@@ -66,7 +72,7 @@ pub trait LengthUnit: Debug + Copy + Clone {
     const FACTOR_TO_NANOMETRE: f32 = 1.0 / Self::FACTOR_FROM_NANOMETRE;
 
     /// The enum value of the unit.
-    const ENUM: LengthUnitEnum;
+    const TYPE: LengthUnitType;
 }
 
 /// Meters.
@@ -97,7 +103,7 @@ impl LengthUnit for UMetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e-3;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-6;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-9;
-    const ENUM: LengthUnitEnum = LengthUnitEnum::Metre;
+    const TYPE: LengthUnitType = LengthUnitType::Metre;
 }
 
 impl LengthUnit for UCentimetre {
@@ -108,7 +114,7 @@ impl LengthUnit for UCentimetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e-1;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-4;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-7;
-    const ENUM: LengthUnitEnum = LengthUnitEnum::Centimetre;
+    const TYPE: LengthUnitType = LengthUnitType::Centimetre;
 }
 
 impl LengthUnit for UMillimetre {
@@ -119,7 +125,7 @@ impl LengthUnit for UMillimetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-3;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-6;
-    const ENUM: LengthUnitEnum = LengthUnitEnum::Millimetre;
+    const TYPE: LengthUnitType = LengthUnitType::Millimetre;
 }
 
 impl LengthUnit for UMicrometre {
@@ -130,7 +136,7 @@ impl LengthUnit for UMicrometre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e3;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-3;
-    const ENUM: LengthUnitEnum = LengthUnitEnum::Micrometre;
+    const TYPE: LengthUnitType = LengthUnitType::Micrometre;
 }
 
 impl LengthUnit for UNanometre {
@@ -141,7 +147,7 @@ impl LengthUnit for UNanometre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e6;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e3;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0;
-    const ENUM: LengthUnitEnum = LengthUnitEnum::Nanometre;
+    const TYPE: LengthUnitType = LengthUnitType::Nanometre;
 }
 
 /// Length with a unit.
