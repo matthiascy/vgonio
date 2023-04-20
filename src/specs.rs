@@ -2,7 +2,7 @@
 
 use crate::{
     measure::measurement::MeasurementKind,
-    units::{LengthUnit, LengthUnitType},
+    units::{LengthMeasurement, LengthUnit},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -164,7 +164,7 @@ pub struct VgmsHeader {
     pub cols: u32,
     pub du: f32,
     pub dv: f32,
-    pub unit: LengthUnitType,
+    pub unit: LengthUnit,
     pub sample_data_size: u8,
     pub encoding: DataEncoding,
     pub compression: DataCompression,
@@ -192,7 +192,7 @@ impl VgmsHeader {
         let cols = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
         let du = f32::from_le_bytes(bytes[8..12].try_into().unwrap());
         let dv = f32::from_le_bytes(bytes[12..16].try_into().unwrap());
-        let unit = LengthUnitType::from(bytes[16]);
+        let unit = LengthUnit::from(bytes[16]);
         // TODO: check if sample_data_size is valid
         let sample_data_size = bytes[17];
         let encoding = DataEncoding::from(bytes[18]);

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::{
     app::gfx::RenderableMesh,
-    units::{um, Length, LengthUnit, Micrometres},
+    units::{Length, LengthUnit, Micrometres},
 };
 
 /// Static variable used to generate height field name.
@@ -48,8 +48,6 @@ pub enum AxisAlignment {
 
 // TODO: support f64
 /// Representation of the micro-surface.
-///
-/// All measurements are in micrometers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MicroSurface {
     /// Generated unique identifier.
@@ -74,6 +72,9 @@ pub struct MicroSurface {
 
     /// The space between sample points in vertical direction.
     pub dv: f32,
+
+    /// The unit of the micro-surface (shared between du, dv and samples).
+    pub unit: LengthUnit,
 
     /// Minimum height of the height field.
     pub min: f32,
@@ -106,21 +107,14 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
-    /// # use vgonio::units::um;
-    /// let height_field = MicroSurface::new(10, 10, um!(0.11), um!(0.11), um!(0.12));
+    /// # use vgonio::units::LengthUnit;
+    /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, LengthUnit::UM);
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
     /// ```
-    pub fn new(
-        rows: usize,
-        cols: usize,
-        du: Micrometres,
-        dv: Micrometres,
-        height: Micrometres,
-    ) -> Self {
+    pub fn new(rows: usize, cols: usize, du: f32, dv: f32, height: f32, unit: LengthUnit) -> Self {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::new();
-        let height = height.as_f32();
         samples.resize(cols * rows, height);
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
@@ -128,8 +122,9 @@ impl MicroSurface {
             path: None,
             rows,
             cols,
-            du: du.as_f32(),
-            dv: dv.as_f32(),
+            du,
+            dv,
+            unit,
             min: height,
             max: height,
             median: height,
@@ -153,30 +148,33 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
-    /// # use vgonio::units::um;
-    /// let msurf = MicroSurface::new_by(4, 4, um!(0.1), um!(0.1), |row, col| um!((row + col) as f32));
+    /// # use vgonio::units::LengthUnit;
+    /// let msurf = MicroSurface::new_by(4, 4, 0.1, 0.1, LengthUnit::UM, |row, col| {
+    ///     (row + col) as f32
+    /// });
     /// assert_eq!(msurf.samples_count(), 16);
     /// assert_eq!(msurf.max, 6.0);
     /// assert_eq!(msurf.min, 0.0);
     /// assert_eq!(msurf.samples[0], 0.0);
     /// assert_eq!(msurf.samples[2], 2.0);
-    /// assert_eq!(msurf.sample_at(2, 3), um!(5.0));
+    /// assert_eq!(msurf.sample_at(2, 3), 5.0);
     /// ```
     pub fn new_by<F>(
         rows: usize,
         cols: usize,
-        du: Micrometres,
-        dv: Micrometres,
+        du: f32,
+        dv: f32,
+        unit: LengthUnit,
         setter: F,
     ) -> MicroSurface
     where
-        F: Fn(usize, usize) -> Micrometres,
+        F: Fn(usize, usize) -> f32,
     {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::with_capacity(cols * rows);
         for r in 0..rows {
             for c in 0..cols {
-                samples.push(setter(r, c).as_f32());
+                samples.push(setter(r, c));
             }
         }
         let max = *samples
@@ -194,12 +192,13 @@ impl MicroSurface {
             path: None,
             cols,
             rows,
-            du: du.as_f32(),
-            dv: dv.as_f32(),
+            du,
+            dv,
             max,
             min,
             samples,
             median: (min + max) / 2.0,
+            unit,
         }
     }
 
@@ -220,19 +219,20 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{um, UMicrometre};
+    /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = MicroSurface::from_samples(3, 3, um!(0.5), um!(0.5), &samples, None);
+    /// let height_field = MicroSurface::from_samples(3, 3, 0.5, 0.5, LengthUnit::UM, &samples, None);
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
     /// assert_eq!(height_field.rows, 3);
     /// ```
-    pub fn from_samples<U: LengthUnit, S: AsRef<[f32]>>(
+    pub fn from_samples<S: AsRef<[f32]>>(
         rows: usize,
         cols: usize,
-        du: Length<U>,
-        dv: Length<U>,
+        du: f32,
+        dv: f32,
+        unit: LengthUnit,
         samples: S,
         path: Option<PathBuf>,
     ) -> MicroSurface {
@@ -240,26 +240,12 @@ impl MicroSurface {
             cols > 0 && rows > 0 && samples.as_ref().len() == cols * rows,
             "Samples count must be equal to cols * rows"
         );
-        let to_micrometre_factor = U::FACTOR_TO_MICROMETRE;
-        let (min, max) = {
-            let (max, min) = samples
-                .as_ref()
-                .iter()
-                .fold((f32::MIN, f32::MAX), |(max, min), x| {
-                    (f32::max(max, *x), f32::min(min, *x))
-                });
-            (min * to_micrometre_factor, max * to_micrometre_factor)
-        };
-
-        let samples = if to_micrometre_factor == 1.0 {
-            samples.as_ref().to_owned()
-        } else {
-            samples
-                .as_ref()
-                .iter()
-                .map(|x| x * to_micrometre_factor)
-                .collect::<Vec<_>>()
-        };
+        let (max, min) = samples
+            .as_ref()
+            .iter()
+            .fold((f32::MIN, f32::MAX), |(max, min), x| {
+                (f32::max(max, *x), f32::min(min, *x))
+            });
 
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
@@ -267,12 +253,13 @@ impl MicroSurface {
             path,
             rows,
             cols,
-            du: du.as_f32() * to_micrometre_factor,
-            dv: dv.as_f32() * to_micrometre_factor,
+            du,
+            dv,
             max,
             min,
-            samples,
+            samples: samples.as_ref().to_owned(),
             median: min * 0.5 + max * 0.5,
+            unit,
         }
     }
 
@@ -281,15 +268,12 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// use vgonio::units::um;
-    /// let msurf = MicroSurface::new(100, 100, um!(0.1), um!(0.1), um!(0.1));
-    /// assert_eq!(msurf.dimension(), (um!(10.0), um!(10.0)));
+    /// use vgonio::units::LengthUnit;
+    /// let msurf = MicroSurface::new(100, 100, 0.1, 0.1, 0.1, LengthUnit::UM);
+    /// assert_eq!(msurf.dimension(), (10.0, 10.0));
     /// ```
-    pub fn dimension(&self) -> (Micrometres, Micrometres) {
-        (
-            um!(self.rows as f32 * self.du),
-            um!(self.cols as f32 * self.dv),
-        )
+    pub fn dimension(&self) -> (f32, f32) {
+        (self.rows as f32 * self.du, self.cols as f32 * self.dv)
     }
 
     /// Returns the number of samples of height field.
@@ -298,9 +282,9 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{m};
+    /// use vgonio::units::LengthUnit;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, m!(0.2), m!(0.2), samples, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None);
     /// assert_eq!(msurf.samples_count(), 9);
     /// ```
     pub fn samples_count(&self) -> usize { self.cols * self.rows }
@@ -311,9 +295,9 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{um};
+    /// use vgonio::units::LengthUnit;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, um!(0.2), um!(0.2), samples, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None);
     /// assert_eq!(msurf.cells_count(), 4);
     /// ```
     pub fn cells_count(&self) -> usize {
@@ -335,23 +319,25 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{mm, um};
+    /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, mm!(0.2), mm!(0.2), samples, Default::default());
-    /// assert_eq!(msurf.sample_at(2, 2), um!(0.1 * 1000.0));
+    /// let msurf =
+    ///     MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, Default::default());
+    /// assert_eq!(msurf.sample_at(2, 2), 0.1 * 1000.0);
     /// ```
     ///
     /// ```should_panic
     /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{mm};
+    /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, mm!(0.2), mm!(0.3), samples, Default::default());
+    /// let msurf =
+    ///     MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, Default::default());
     /// let h = msurf.sample_at(4, 4);
     /// ```
-    pub fn sample_at(&self, col: usize, row: usize) -> Micrometres {
+    pub fn sample_at(&self, row: usize, col: usize) -> f32 {
         assert!(col < self.cols);
         assert!(row < self.rows);
-        um!(self.samples[row * self.cols + col])
+        self.samples[row * self.cols + col]
     }
 
     /// Fill holes on the height field.
@@ -490,6 +476,7 @@ impl MicroSurface {
             facet_normals: normals,
             facet_areas: areas,
             msurf: self.uuid,
+            unit: self.unit,
         }
     }
 
@@ -645,6 +632,10 @@ pub struct MicroSurfaceMesh {
 
     /// Surface area of each facet.
     pub facet_areas: Vec<f32>,
+
+    /// Length unit of inherited from the
+    /// [`MicroSurface`](`crate::msurf::MicroSurface`).
+    pub unit: LengthUnit,
 }
 
 impl Asset for MicroSurfaceMesh {}
@@ -674,7 +665,7 @@ mod io {
         error::Error,
         msurf::MicroSurface,
         specs::{DataCompression, DataEncoding, Vgms, VgmsHeader},
-        units::{um, LengthUnit, LengthUnitType, UMicrometre},
+        units::{um, LengthMeasurement, LengthUnit, UMicrometre},
     };
     use std::{
         borrow::Cow,
@@ -733,34 +724,20 @@ mod io {
                             reader.read_exact(&mut buf)?;
                             VgmsHeader::from_bytes(buf)
                         } {
-                            let unit_conversion = match header.unit {
-                                LengthUnitType::Micrometre => UMicrometre::FACTOR_TO_MICROMETRE,
-                                LengthUnitType::Millimetre => UMicrometre::FACTOR_TO_MILLIMETRE,
-                                LengthUnitType::Metre => UMicrometre::FACTOR_TO_METRE,
-                                LengthUnitType::Centimetre => UMicrometre::FACTOR_TO_CENTIMETRE,
-                                LengthUnitType::Nanometre => UMicrometre::FACTOR_TO_NANOMETRE,
-                            };
-
-                            let f = if unit_conversion != 1.0 {
-                                Some(|x| x * unit_conversion)
-                            } else {
-                                None
-                            };
-
                             let samples = match header.compression {
                                 DataCompression::None => {
                                     if header.encoding.is_binary() {
-                                        read_binary_samples(reader, (header.rows * header.cols) as usize, f)
+                                        read_binary_samples(reader, (header.rows * header.cols) as usize)
                                     } else {
-                                        read_ascii_samples(reader, f)
+                                        read_ascii_samples(reader)
                                     }
                                 }
                                 DataCompression::Zlib => {
-                                    let mut decoder = flate2::read::ZlibDecoder::new(reader);
+                                    let decoder = flate2::read::ZlibDecoder::new(reader);
                                     if header.encoding.is_binary() {
-                                        read_binary_samples(decoder, (header.rows * header.cols) as usize, f)
+                                        read_binary_samples(decoder, (header.rows * header.cols) as usize)
                                     } else {
-                                        read_ascii_samples(decoder, f)
+                                        read_ascii_samples(decoder)
                                     }
                                 }
                             };
@@ -768,8 +745,9 @@ mod io {
                             Ok(MicroSurface::from_samples(
                                 header.rows as usize,
                                 header.cols as usize,
-                                um!(header.du * unit_conversion),
-                                um!(header.dv * unit_conversion),
+                                header.du,
+                                header.dv,
+                                header.unit,
                                 samples,
                                 Some(path.into()),
                             ))
@@ -786,7 +764,8 @@ mod io {
             })
         }
 
-        pub fn save(
+        /// Save the micro-surface height field to a file.
+        pub fn write_to_file(
             &self,
             filepath: &Path,
             encoding: DataEncoding,
@@ -794,14 +773,13 @@ mod io {
         ) -> Result<(), std::io::Error> {
             let file = File::create(filepath)?;
             let mut writer = BufWriter::new(file);
-
             let output = Vgms {
                 header: VgmsHeader {
                     rows: self.rows as u32,
                     cols: self.cols as u32,
                     du: self.du,
                     dv: self.dv,
-                    unit: LengthUnitType::Micrometre,
+                    unit: self.unit,
                     sample_data_size: 4,
                     encoding,
                     compression,
@@ -863,12 +841,13 @@ mod io {
                 panic!("Invalid first line: {line:?}");
             }
         };
-        let samples = read_ascii_samples(reader, None::<fn(f32) -> f32>);
+        let samples = read_ascii_samples(reader);
         Ok(MicroSurface::from_samples(
             rows,
             cols,
-            um!(du),
-            um!(dv),
+            du,
+            dv,
+            LengthUnit::UM,
             samples,
             Some(path.into()),
         ))
@@ -912,8 +891,9 @@ mod io {
         Ok(MicroSurface::from_samples(
             y_coords.len(),
             x_coords.len(),
-            um!(du),
-            um!(dv),
+            du,
+            dv,
+            LengthUnit::UM,
             samples,
             Some(path.into()),
         ))
@@ -966,68 +946,38 @@ mod io {
     }
 
     /// Read sample values separated by whitespace line by line.
-    fn read_ascii_samples<R, F>(reader: R, f: Option<F>) -> Vec<f32>
+    fn read_ascii_samples<R>(reader: R) -> Vec<f32>
     where
-        F: Fn(f32) -> f32,
         R: Read,
     {
         let reader = BufReader::new(reader);
-
-        if let Some(f) = f {
-            reader
-                .lines()
-                .enumerate()
-                .flat_map(|(n, line)| {
-                    let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
-                    l.trim()
-                        .split_ascii_whitespace()
-                        .enumerate()
-                        .map(|(i, x)| {
-                            let val = x.parse().unwrap_or_else(|_| {
-                                panic!("Parse float error at line {n} pos {i}")
-                            });
-                            f(val)
-                        })
-                        .collect::<Vec<f32>>()
-                })
-                .collect()
-        } else {
-            reader
-                .lines()
-                .enumerate()
-                .flat_map(|(n, line)| {
-                    let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
-                    l.trim()
-                        .split_ascii_whitespace()
-                        .enumerate()
-                        .map(|(i, x)| {
-                            x.parse()
-                                .unwrap_or_else(|_| panic!("Parse float error at line {n} pos {i}"))
-                        })
-                        .collect::<Vec<f32>>()
-                })
-                .collect()
-        }
+        reader
+            .lines()
+            .enumerate()
+            .flat_map(|(n, line)| {
+                let l = line.unwrap_or_else(|_| panic!("Bad line at {n}"));
+                l.trim()
+                    .split_ascii_whitespace()
+                    .enumerate()
+                    .map(|(i, x)| {
+                        x.parse()
+                            .unwrap_or_else(|_| panic!("Parse float error at line {n} pos {i}"))
+                    })
+                    .collect::<Vec<f32>>()
+            })
+            .collect()
     }
 
-    fn read_binary_samples<R, F>(mut reader: R, count: usize, f: Option<F>) -> Vec<f32>
+    fn read_binary_samples<R>(mut reader: R, count: usize) -> Vec<f32>
     where
-        F: Fn(f32) -> f32,
         R: Read,
     {
         use byteorder::{LittleEndian, ReadBytesExt};
 
         let mut samples = vec![0.0; count];
-
-        if let Some(f) = f {
-            (0..count).for_each(|i| {
-                samples[i] = f(reader.read_f32::<LittleEndian>().expect("read f32 error"));
-            });
-        } else {
-            (0..count).for_each(|i| {
-                samples[i] = reader.read_f32::<LittleEndian>().expect("read f32 error");
-            });
-        }
+        (0..count).for_each(|i| {
+            samples[i] = reader.read_f32::<LittleEndian>().expect("read f32 error");
+        });
 
         samples
     }

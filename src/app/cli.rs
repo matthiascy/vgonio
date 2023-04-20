@@ -524,7 +524,7 @@ fn convert(opts: ConvertOptions, config: Config) -> Result<(), Error> {
                     resolved, output_dir
                 );
                 profile
-                    .save(&output_dir.join(filename), opts.encoding, opts.compression)
+                    .write_to_file(&output_dir.join(filename), opts.encoding, opts.compression)
                     .unwrap_or_else(|err| {
                         eprintln!(
                             "  {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",

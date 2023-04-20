@@ -25,7 +25,7 @@ use crate::{
     error::Error,
     math::{cartesian_to_spherical, spherical_to_cartesian},
     measure::Patch,
-    units::{Angle, AngleUnit, Length, LengthUnit, Radians},
+    units::{Angle, AngleUnit, Length, LengthMeasurement, Radians},
 };
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
@@ -731,7 +731,7 @@ impl<A: AngleUnit> RangeByStepSize<Angle<A>> {
     pub fn step_count(&self) -> usize { impl_step_count_for_range_by_step_size!(self) }
 }
 
-impl<A: LengthUnit> RangeByStepSize<Length<A>> {
+impl<A: LengthMeasurement> RangeByStepSize<Length<A>> {
     /// Returns the number of steps in this range of lengths.
     pub fn step_count(&self) -> usize { impl_step_count_for_range_by_step_size!(self) }
 }
@@ -907,7 +907,7 @@ impl RangeByStepCount<f32> {
     pub const fn step_size(&self) -> f32 { self.span() / self.step_count as f32 }
 }
 
-impl<A: LengthUnit> RangeByStepCount<Length<A>> {
+impl<A: LengthMeasurement> RangeByStepCount<Length<A>> {
     /// Returns the size of the step bewteen two consecutive values in the
     /// range.
     #[inline]

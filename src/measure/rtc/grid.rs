@@ -17,7 +17,7 @@ use crate::{
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     optics::{fresnel, ior::RefractiveIndex},
     ulp_eq,
-    units::{um, UMicrometre},
+    units::{um, UMicrometre, UMillimetre},
 };
 use cfg_if::cfg_if;
 use glam::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
@@ -44,9 +44,11 @@ pub fn measure_bsdf(
     patches: &CollectorPatches,
     cache: &Cache,
 ) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
+    // Unify the units of the micro-surface and emitter radius by converting
+    // to micrometres.
     let radius = match desc.emitter.radius {
-        Radius::Auto(_) => um!(mesh.bounds.max_extent() * std::f32::consts::SQRT_2),
-        Radius::Fixed(r) => r.in_micrometres(),
+        Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
+        Radius::Fixed(r) => mesh.unit.convert_from_factor::<UMillimetre>() * r.as_f32(),
     };
     let max_bounces = desc.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
@@ -184,7 +186,7 @@ pub fn measure_bsdf(
             .collect::<Vec<_>>();
         result.push(
             desc.collector
-                .collect(desc, mesh, &trajectories, &patches, &cache),
+                .collect(desc, mesh, &trajectories, patches, cache),
         );
     }
 
@@ -768,6 +770,8 @@ impl Grid<BaseCell> {
         ]
     }
 
+    /// Trace the ray on the grid knowing the origin position of the grid in the
+    /// world space.
     pub fn trace_with_origin(
         &self,
         origin: Vec2,
@@ -776,7 +780,7 @@ impl Grid<BaseCell> {
         hit: &mut Hit,
     ) {
         #[cfg(not(test))]
-        use log::{debug, log};
+        use log::debug;
         #[cfg(test)]
         use std::println as debug;
 
@@ -978,7 +982,6 @@ impl<'ms> MultilevelGrid<'ms> {
                 (
                     num_levels,
                     (0..num_levels)
-                        .into_iter()
                         .into_par_iter()
                         .map(|level| Self::build_coarse_grid(&base, level, min_coarse_cell_size))
                         .collect::<Vec<_>>(),
@@ -1169,20 +1172,11 @@ impl<'ms> MultilevelGrid<'ms> {
         hit.invalidate();
 
         match ray.intersects_aabb(&self.mesh.bounds) {
-            None => return,
+            None => {}
             Some(isect) => {
                 // The ray is emitted from the micro surface, which means that the
                 // ray has been reflected. We don't need to trace the coarse grid.
-                if isect.is_inside() {
-                    self.base
-                        .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
-                } else if self.level == 0 {
-                    // No coarse grid, just trace the base grid.
-                    self.base
-                        .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
-                } else if ray.dir.x == 0.0 && ray.dir.z == 0.0 {
-                    // The ray is parallel to the micro surface, so we don't need to trace the
-                    // coarse grid.
+                if isect.is_inside() || self.level == 0 || ray.dir.x == 0.0 && ray.dir.z == 0.0 {
                     self.base
                         .trace_with_origin(self.mesh.bounds.min.xz(), ray, self.mesh, hit);
                 } else {
@@ -1198,20 +1192,16 @@ impl<'ms> MultilevelGrid<'ms> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        measure::rtc::{
-            grid::{GridTraversal, MultilevelGrid},
-            Hit, Ray,
-        },
+        measure::rtc::{grid::MultilevelGrid, Hit, Ray},
         msurf::{AxisAlignment, MicroSurface},
         ulp_eq,
-        units::{um, UMicrometre},
+        units::{um, LengthUnit, UMicrometre},
     };
     use glam::{IVec2, UVec2, Vec3, Vec3Swizzles};
-    use proptest::proptest;
 
     #[test]
     fn multilevel_grid_creation() {
-        let surf = MicroSurface::from_samples(9, 9, um!(0.5), um!(0.5), &vec![0.0; 81], None);
+        let surf = MicroSurface::from_samples(9, 9, 0.5, 0.5, LengthUnit::UM, &vec![0.0; 81], None);
         let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         assert_eq!(grid.level(), 2);
@@ -1252,8 +1242,9 @@ mod tests {
         let surf = MicroSurface::from_samples(
             rows,
             cols,
-            um!(0.5),
-            um!(0.5),
+            0.5,
+            0.5,
+            LengthUnit::UM,
             vec![
                 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 
                 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
@@ -1289,8 +1280,8 @@ mod tests {
             for x in 0..coarse0.cols {
                 let cell = coarse0.cell_at(x, y);
                 assert_eq!(cell.min, UVec2::new(x * 2, y * 2));
-                assert_eq!(cell.max, UVec2::new(((x+1) * 2 - 1).min(base.cols as u32 - 1), 
-                                                ((y+1) * 2 - 1).min(base.rows as u32 - 1)));
+                assert_eq!(cell.max, UVec2::new(((x+1) * 2 - 1).min(base.cols - 1), 
+                                                ((y+1) * 2 - 1).min(base.rows - 1)));
             }
         }
         
@@ -1355,7 +1346,7 @@ mod tests {
 
     #[test]
     fn grid_traverse() {
-        let surf = MicroSurface::new(10, 10, um!(1.0), um!(1.0), um!(0.0));
+        let surf = MicroSurface::new(10, 10, 1.0, 1.0, 0.0, LengthUnit::UM);
         let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
@@ -1506,8 +1497,9 @@ mod tests {
             let surf = MicroSurface::from_samples(
             5,
             5,
-            um!(1.0),
-            um!(1.0),
+            1.0,
+            1.0,
+            LengthUnit::UM,
             [
                 0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0,

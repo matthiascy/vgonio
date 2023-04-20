@@ -14,7 +14,7 @@ use crate::{
     },
     msurf::MicroSurfaceMesh,
     optics::{fresnel, ior::RefractiveIndex},
-    units::um,
+    units::{um, UMillimetre},
 };
 use embree::{
     BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
@@ -182,9 +182,9 @@ pub fn measure_bsdf(
     scene.set_flags(SceneFlags::ROBUST);
 
     // Calculate emitter's radius to match the surface's dimensions.
-    let radius = match desc.emitter.radius() {
-        Radius::Auto(_) => um!(mesh.bounds.max_extent() * std::f32::consts::SQRT_2),
-        Radius::Fixed(r) => r.in_micrometres(),
+    let radius = match desc.emitter.radius {
+        Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
+        Radius::Fixed(r) => mesh.unit.convert_from_factor::<UMillimetre>() * r.as_f32(),
     };
 
     log::debug!("mesh extent: {:?}", mesh.bounds);

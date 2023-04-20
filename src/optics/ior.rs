@@ -1,7 +1,7 @@
 //! Index of refraction.
 
 use crate::{
-    units::{nanometres, Length, LengthUnit, Nanometres},
+    units::{nanometres, Length, LengthMeasurement, Nanometres},
     MaterialKind, Medium,
 };
 use std::{cmp::Ordering, collections::HashMap, path::Path};
@@ -78,7 +78,7 @@ impl RefractiveIndexDatabase {
 
     /// Returns the refractive index of the given medium at the given spectrum
     /// (in nanometers).
-    pub fn ior_of_spectrum<A: LengthUnit>(
+    pub fn ior_of_spectrum<A: LengthMeasurement>(
         &self,
         medium: Medium,
         wavelengths: &[Length<A>],

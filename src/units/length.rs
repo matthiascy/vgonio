@@ -6,35 +6,59 @@ use std::{cmp::Ordering, str::FromStr};
 /// Represents a unit of length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
-pub enum LengthUnitType {
+pub enum LengthUnit {
     /// Metres.
-    Metre = 0,
+    M = 0,
     /// Centimetres.
-    Centimetre = 1,
+    CM = 1,
     /// Millimetres.
-    Millimetre = 2,
+    MM = 2,
     /// Micrometres.
-    Micrometre = 3,
+    UM = 3,
     /// Nanometres.
-    Nanometre = 4,
+    NM = 4,
 }
 
-impl From<u8> for LengthUnitType {
+impl From<u8> for LengthUnit {
     fn from(value: u8) -> Self {
         debug_assert!(value <= 4, "Invalid length unit: {}", value);
         match value {
-            0 => Self::Metre,
-            1 => Self::Centimetre,
-            2 => Self::Millimetre,
-            3 => Self::Micrometre,
-            4 => Self::Nanometre,
+            0 => Self::M,
+            1 => Self::CM,
+            2 => Self::MM,
+            3 => Self::UM,
+            4 => Self::NM,
             _ => unreachable!(),
         }
     }
 }
 
+impl LengthUnit {
+    /// Returns the conversion factor from the unit to the specified unit.
+    pub const fn convert_to_factor<U: LengthMeasurement>(&self) -> f32 {
+        match self {
+            LengthUnit::M => U::FACTOR_FROM_METRE,
+            LengthUnit::CM => U::FACTOR_FROM_CENTIMETRE,
+            LengthUnit::MM => U::FACTOR_FROM_MILLIMETRE,
+            LengthUnit::UM => U::FACTOR_FROM_MICROMETRE,
+            LengthUnit::NM => U::FACTOR_FROM_NANOMETRE,
+        }
+    }
+
+    /// Returns the conversion factor from the specified unit to the unit.
+    pub const fn convert_from_factor<U: LengthMeasurement>(&self) -> f32 {
+        match self {
+            LengthUnit::M => U::FACTOR_TO_METRE,
+            LengthUnit::CM => U::FACTOR_TO_CENTIMETRE,
+            LengthUnit::MM => U::FACTOR_TO_MILLIMETRE,
+            LengthUnit::UM => U::FACTOR_TO_MICROMETRE,
+            LengthUnit::NM => U::FACTOR_TO_NANOMETRE,
+        }
+    }
+}
+
 /// Trait representing a unit of length.
-pub trait LengthUnit: Debug + Copy + Clone {
+pub trait LengthMeasurement: Debug + Copy + Clone {
     /// The name of the unit.
     const NAME: &'static str;
 
@@ -72,7 +96,7 @@ pub trait LengthUnit: Debug + Copy + Clone {
     const FACTOR_TO_NANOMETRE: f32 = 1.0 / Self::FACTOR_FROM_NANOMETRE;
 
     /// The enum value of the unit.
-    const TYPE: LengthUnitType;
+    const UNIT: LengthUnit;
 }
 
 /// Meters.
@@ -95,7 +119,7 @@ pub struct UMicrometre;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct UNanometre;
 
-impl LengthUnit for UMetre {
+impl LengthMeasurement for UMetre {
     const NAME: &'static str = "metre";
     const SYMBOL: &'static str = "m";
     const FACTOR_FROM_METRE: f32 = 1.0;
@@ -103,10 +127,10 @@ impl LengthUnit for UMetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e-3;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-6;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-9;
-    const TYPE: LengthUnitType = LengthUnitType::Metre;
+    const UNIT: LengthUnit = LengthUnit::M;
 }
 
-impl LengthUnit for UCentimetre {
+impl LengthMeasurement for UCentimetre {
     const NAME: &'static str = "centimetre";
     const SYMBOL: &'static str = "cm";
     const FACTOR_FROM_METRE: f32 = 100.0;
@@ -114,10 +138,10 @@ impl LengthUnit for UCentimetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e-1;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-4;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-7;
-    const TYPE: LengthUnitType = LengthUnitType::Centimetre;
+    const UNIT: LengthUnit = LengthUnit::CM;
 }
 
-impl LengthUnit for UMillimetre {
+impl LengthMeasurement for UMillimetre {
     const NAME: &'static str = "millimetre";
     const SYMBOL: &'static str = "mm";
     const FACTOR_FROM_METRE: f32 = 1.0e3;
@@ -125,10 +149,10 @@ impl LengthUnit for UMillimetre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e-3;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-6;
-    const TYPE: LengthUnitType = LengthUnitType::Millimetre;
+    const UNIT: LengthUnit = LengthUnit::MM;
 }
 
-impl LengthUnit for UMicrometre {
+impl LengthMeasurement for UMicrometre {
     const NAME: &'static str = "micrometre";
     const SYMBOL: &'static str = "um";
     const FACTOR_FROM_METRE: f32 = 1.0e6;
@@ -136,10 +160,10 @@ impl LengthUnit for UMicrometre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e3;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0e-3;
-    const TYPE: LengthUnitType = LengthUnitType::Micrometre;
+    const UNIT: LengthUnit = LengthUnit::UM;
 }
 
-impl LengthUnit for UNanometre {
+impl LengthMeasurement for UNanometre {
     const NAME: &'static str = "nanometre";
     const SYMBOL: &'static str = "nm";
     const FACTOR_FROM_METRE: f32 = 1.0e9;
@@ -147,34 +171,34 @@ impl LengthUnit for UNanometre {
     const FACTOR_FROM_MILLIMETRE: f32 = 1.0e6;
     const FACTOR_FROM_MICROMETRE: f32 = 1.0e3;
     const FACTOR_FROM_NANOMETRE: f32 = 1.0;
-    const TYPE: LengthUnitType = LengthUnitType::Nanometre;
+    const UNIT: LengthUnit = LengthUnit::NM;
 }
 
 /// Length with a unit.
 #[repr(transparent)]
 #[derive(Copy, Clone)]
-pub struct Length<A: LengthUnit> {
+pub struct Length<A: LengthMeasurement> {
     pub(crate) value: f32,
     pub(crate) unit: core::marker::PhantomData<A>,
 }
 
-impl<A: LengthUnit> Default for Length<A> {
+impl<A: LengthMeasurement> Default for Length<A> {
     fn default() -> Self { Self::new(0.0) }
 }
 
-impl<A: LengthUnit> Debug for Length<A> {
+impl<A: LengthMeasurement> Debug for Length<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Length {{ value: {}, unit: {} }}", self.value, A::NAME)
     }
 }
 
-impl<A: LengthUnit> std::fmt::Display for Length<A> {
+impl<A: LengthMeasurement> std::fmt::Display for Length<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.value, A::SYMBOL)
     }
 }
 
-impl<A: LengthUnit, B: LengthUnit> PartialEq<Length<B>> for Length<A> {
+impl<A: LengthMeasurement, B: LengthMeasurement> PartialEq<Length<B>> for Length<A> {
     fn eq(&self, other: &Length<B>) -> bool {
         ulp_eq(
             self.value * A::FACTOR_TO_METRE,
@@ -183,7 +207,7 @@ impl<A: LengthUnit, B: LengthUnit> PartialEq<Length<B>> for Length<A> {
     }
 }
 
-impl<A: LengthUnit, B: LengthUnit> PartialOrd<Length<B>> for Length<A> {
+impl<A: LengthMeasurement, B: LengthMeasurement> PartialOrd<Length<B>> for Length<A> {
     fn partial_cmp(&self, other: &Length<B>) -> Option<Ordering> {
         let a = self.value * A::FACTOR_TO_METRE;
         let b = other.value * B::FACTOR_TO_METRE;
@@ -191,7 +215,7 @@ impl<A: LengthUnit, B: LengthUnit> PartialOrd<Length<B>> for Length<A> {
     }
 }
 
-impl<A: LengthUnit> Length<A> {
+impl<A: LengthMeasurement> Length<A> {
     /// Creates a new length.
     pub const fn new(value: f32) -> Self {
         Self {
@@ -229,7 +253,7 @@ impl<A: LengthUnit> Length<A> {
 
     /// Tests if the two lengths are approximately equal using the absolute
     /// difference.
-    pub fn abs_diff_eq<B: LengthUnit>(&self, other: &Length<B>, epsilon: f32) -> bool {
+    pub fn abs_diff_eq<B: LengthMeasurement>(&self, other: &Length<B>, epsilon: f32) -> bool {
         let a = self.value * A::FACTOR_TO_METRE;
         let b = other.value * B::FACTOR_TO_METRE;
         (a - b).abs() <= epsilon
@@ -266,11 +290,11 @@ impl<A: LengthUnit> Length<A> {
     // TODO: relative_eq
 }
 
-impl<A: LengthUnit> From<f32> for Length<A> {
+impl<A: LengthMeasurement> From<f32> for Length<A> {
     fn from(value: f32) -> Self { Self::new(value) }
 }
 
-impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
+impl<'a, A: LengthMeasurement> TryFrom<&'a str> for Length<A> {
     type Error = Error;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
@@ -296,23 +320,23 @@ impl<'a, A: LengthUnit> TryFrom<&'a str> for Length<A> {
     }
 }
 
-impl<A: LengthUnit> FromStr for Length<A> {
+impl<A: LengthMeasurement> FromStr for Length<A> {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
-super::impl_serialization!(Length<A> where A: LengthUnit, #[doc = "Customized serialization for the `Length` type."]);
+super::impl_serialization!(Length<A> where A: LengthMeasurement, #[doc = "Customized serialization for the `Length` type."]);
 
 // Customized deserialization for the `Length` type.
-impl<'de, A: LengthUnit> serde::Deserialize<'de> for Length<A> {
+impl<'de, A: LengthMeasurement> serde::Deserialize<'de> for Length<A> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         struct LengthVisitor<T>(core::marker::PhantomData<T>);
 
-        impl<'de, T: LengthUnit> serde::de::Visitor<'de> for LengthVisitor<T> {
+        impl<'de, T: LengthMeasurement> serde::de::Visitor<'de> for LengthVisitor<T> {
             type Value = Length<T>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -419,17 +443,17 @@ impl_conversion!(UMillimetre => UMetre, 1e-3; UCentimetre, 1e-1; UMicrometre, 1e
 impl_conversion!(UMicrometre => UMetre, 1e-6; UCentimetre, 1e-4; UMillimetre, 1e-3; UNanometre, 1e3);
 impl_conversion!(UNanometre => UMetre, 1e-9; UCentimetre, 1e-7; UMillimetre, 1e-6; UMicrometre, 1e-3);
 
-super::impl_ops!(Add, Sub for Length where A, B: LengthUnit);
-super::impl_ops_with_f32!(Mul, Div for Length where A: LengthUnit);
+super::impl_ops!(Add, Sub for Length where A, B: LengthMeasurement);
+super::impl_ops_with_f32!(Mul, Div for Length where A: LengthMeasurement);
 
-impl<A: LengthUnit> core::ops::Div<Length<A>> for Length<A> {
+impl<A: LengthMeasurement> core::ops::Div<Length<A>> for Length<A> {
     type Output = f32;
 
     #[inline(always)]
     fn div(self, other: Length<A>) -> Self::Output { self.value / other.value }
 }
 
-impl<A: LengthUnit> core::ops::Mul<Length<A>> for f32 {
+impl<A: LengthMeasurement> core::ops::Mul<Length<A>> for f32 {
     type Output = Length<A>;
 
     fn mul(self, rhs: Length<A>) -> Self::Output {
@@ -440,7 +464,7 @@ impl<A: LengthUnit> core::ops::Mul<Length<A>> for f32 {
     }
 }
 
-impl<A: LengthUnit> core::ops::Neg for Length<A> {
+impl<A: LengthMeasurement> core::ops::Neg for Length<A> {
     type Output = Length<A>;
 
     fn neg(self) -> Self::Output {
@@ -451,7 +475,7 @@ impl<A: LengthUnit> core::ops::Neg for Length<A> {
     }
 }
 
-super::impl_ops_assign!(AddAssign, SubAssign for Length where A, B: LengthUnit);
+super::impl_ops_assign!(AddAssign, SubAssign for Length where A, B: LengthMeasurement);
 
 #[cfg(test)]
 mod length_unit_tests {

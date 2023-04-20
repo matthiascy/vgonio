@@ -1,6 +1,6 @@
 use crate::{
     measure::{measurement::Radius, rtc::Ray},
-    units::{radians, steradians, LengthUnit, Micrometres, Nanometres, Radians, SolidAngle},
+    units::{radians, steradians, LengthMeasurement, Micrometres, Nanometres, Radians, SolidAngle},
     Handedness, RangeByStepSize, SphericalCoord,
 };
 use glam::Vec3;
@@ -188,7 +188,7 @@ impl Emitter {
         &self,
         samples: &EmitterSamples,
         pos: SphericalCoord,
-        radius: Micrometres,
+        radius: f32,
     ) -> Vec<Ray> {
         log::trace!(
             "Emitting rays from position {:?} with radius: {}",
@@ -202,7 +202,7 @@ impl Emitter {
         let rays = samples
             .par_iter()
             .map(|sample| {
-                let origin = mat * *sample * radius.as_f32();
+                let origin = mat * *sample * radius;
                 Ray::new(origin, dir)
             })
             .collect();
