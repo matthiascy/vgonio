@@ -509,7 +509,7 @@ fn convert(opts: ConvertOptions, config: Config) -> Result<(), Error> {
         let resolved = resolve_path(&config.cwd, Some(&input));
         match opts.kind {
             ConvertKind::MicroSurfaceProfile => {
-                let profile = MicroSurface::load_from_file(&resolved, None)?;
+                let profile = MicroSurface::read_from_file(&resolved, None)?;
                 let filename = format!(
                     "{}.vgms",
                     resolved

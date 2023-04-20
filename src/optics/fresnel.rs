@@ -525,8 +525,8 @@ pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k
     0.5 * (rp + rs)
 }
 
-/// Computes the unpolarised Fresnel reflection coefficient at a planar interface
-/// between two unknown media.
+/// Computes the unpolarised Fresnel reflection coefficient at a planar
+/// interface between two unknown media.
 ///
 /// This function is a wrapper around [`reflectance_insulator`] and
 /// [`reflectance_insulator_conductor`].
@@ -543,17 +543,18 @@ pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k
 /// Because reflectance from a conductor to a dielectric is not implemented yet,
 /// `cos_i` must be positive in this case.
 pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -> f32 {
-    debug_assert!(
-        (-1.0..=1.0).contains(&cos_i),
-        "cos_i must be in [-1, 1]"
-    );
+    debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
     match (ior_i.is_insulator(), ior_t.is_insulator()) {
         // Both are dielectrics.
         (true, true) => reflectance_insulator(cos_i, ior_i.eta, ior_t.eta),
         // One is a dielectric and the other is a conductor (entering the conductor).
-        (true, false) => reflectance_insulator_conductor(cos_i.abs(), ior_i.eta, ior_t.eta, ior_t.k),
+        (true, false) => {
+            reflectance_insulator_conductor(cos_i.abs(), ior_i.eta, ior_t.eta, ior_t.k)
+        }
         // One is a conductor and the other is a dielectric.
-        (false, true) => unimplemented!("reflectance from a conductor to a dielectric is not implemented"),
+        (false, true) => {
+            unimplemented!("reflectance from a conductor to a dielectric is not implemented")
+        }
         // Both are conductors.
         (false, false) => unimplemented!("reflectance between two conductors is not implemented"),
     }
@@ -574,7 +575,8 @@ pub fn reflectance_insulator_conductor_spectrum(
 ) -> Vec<f32> {
     assert!(
         (0.0..=1.0).contains(&cos),
-        "the angle between normal and incident light should be positive");
+        "the angle between normal and incident light should be positive"
+    );
     let mut output = vec![1.0; ior_t.len()];
     for (i, r) in output.iter_mut().enumerate() {
         *r = reflectance_insulator_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
@@ -584,9 +586,8 @@ pub fn reflectance_insulator_conductor_spectrum(
 
 #[cfg(test)]
 mod tests {
+    use crate::{optics::ior::RefractiveIndex, units::nm};
     use std::{fs::OpenOptions, io::Write};
-    use crate::optics::ior::RefractiveIndex;
-    use crate::units::nm;
 
     #[test]
     fn reflectance_insulator_test() {
@@ -692,13 +693,26 @@ mod tests {
         for i in 0..1000 {
             let cos_i = (1000 - i) as f32 / 1000.0;
             let angle = cos_i.acos();
-            let r0 = super::reflectance_insulator_conductor(cos_i, ior_vacuum.eta, ior_al.eta, ior_al.k);
+            let r0 =
+                super::reflectance_insulator_conductor(cos_i, ior_vacuum.eta, ior_al.eta, ior_al.k);
             let r1 = super::reflectance(cos_i, ior_vacuum, ior_al);
-            assert!((r0 - r1).abs() < 0.0001, "angle: {}, r0: {}, r1: {}", angle, r0, r1);
+            assert!(
+                (r0 - r1).abs() < 0.0001,
+                "angle: {}, r0: {}, r1: {}",
+                angle,
+                r0,
+                r1
+            );
 
             let r2 = super::reflectance(cos_i, ior_vacuum, ior_glass);
             let r3 = super::reflectance_insulator(cos_i, ior_vacuum.eta, ior_glass.eta);
-            assert!((r2 - r3).abs() < 0.0001, "angle: {}, r2: {}, r3: {}", angle, r2, r3);
+            assert!(
+                (r2 - r3).abs() < 0.0001,
+                "angle: {}, r2: {}, r3: {}",
+                angle,
+                r2,
+                r3
+            );
         }
     }
 }

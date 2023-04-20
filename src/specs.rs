@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     fmt,
-    io::{BufWriter, Write},
+    io::{BufReader, BufWriter, Read, Write},
 };
 
 /// Data encoding while storing the data to the disk.
@@ -171,6 +171,7 @@ pub struct VgmsHeader {
 }
 
 impl VgmsHeader {
+    /// Write the header to the given writer.
     pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
         let mut header = [0x20u8; 32];
         header[0..4].copy_from_slice(Vgms::MAGIC);
@@ -186,38 +187,51 @@ impl VgmsHeader {
         writer.write_all(&header)
     }
 
-    /// Reads the header from a byte slice without checking the magic number.
-    pub fn from_bytes(bytes: [u8; 28]) -> Option<Self> {
-        let rows = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-        let cols = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-        let du = f32::from_le_bytes(bytes[8..12].try_into().unwrap());
-        let dv = f32::from_le_bytes(bytes[12..16].try_into().unwrap());
-        let unit = LengthUnit::from(bytes[16]);
-        // TODO: check if sample_data_size is valid
-        let sample_data_size = bytes[17];
-        let encoding = DataEncoding::from(bytes[18]);
-        let compression = DataCompression::from(bytes[19]);
-        Some(Self {
-            rows,
-            cols,
-            du,
-            dv,
-            unit,
-            sample_data_size,
-            encoding,
-            compression,
-        })
+    /// Reads the header from the given reader.
+    pub fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self> {
+        let mut buf = [0u8; 32];
+        reader.read_exact(&mut buf)?;
+        if &buf[0..4] == Vgms::MAGIC {
+            let rows = u32::from_le_bytes(buf[4..8].try_into().unwrap());
+            let cols = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+            let du = f32::from_le_bytes(buf[12..16].try_into().unwrap());
+            let dv = f32::from_le_bytes(buf[16..20].try_into().unwrap());
+            let unit = LengthUnit::from(buf[20]);
+            let sample_data_size = buf[21];
+            let encoding = DataEncoding::from(buf[22]);
+            let compression = DataCompression::from(buf[23]);
+            Ok(Self {
+                rows,
+                cols,
+                du,
+                dv,
+                unit,
+                sample_data_size,
+                encoding,
+                compression,
+            })
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid header Magic Number in VGMS file",
+            ))
+        }
     }
 }
 
+/// Utility struct for reading/writing VGMS files.
 pub struct Vgms<'a> {
+    /// The header of the VGMS file.
     pub header: VgmsHeader,
+    /// The data samples of the VGMS file.
     pub body: Cow<'a, [f32]>,
 }
 
 impl<'a> Vgms<'a> {
+    /// The magic number of a VGMS file.
     pub const MAGIC: &'static [u8] = b"VGMS";
 
+    /// Writes the VGMS file to the given writer.
     pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
         self.header.write(writer)?;
         write_data_samples(
@@ -228,6 +242,12 @@ impl<'a> Vgms<'a> {
             self.header.cols,
         )
     }
+
+    // /// Reads the VGMS file from the given reader.
+    // pub fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<()> {
+    //     Self::read(reader)?;
+    //     read_data_samples(reader, self.header.encoding, self.header.compression)
+    // }
 }
 
 fn write_data_samples(
@@ -282,3 +302,27 @@ fn write_data_samples(
 
     Ok(())
 }
+
+// fn read_data_samples(
+//     reader: &mut impl Read,
+//     encoding: DataEncoding,
+//     compression: DataCompression,
+// ) -> std::io::Result<Vec<f32>> {
+//     match header.compression {
+//         DataCompression::None => {
+//             if header.encoding.is_binary() {
+//                 read_binary_samples(reader, (header.rows * header.cols) as
+// usize)             } else {
+//                 read_ascii_samples(reader)
+//             }
+//         }
+//         DataCompression::Zlib => {
+//             let decoder = flate2::read::ZlibDecoder::new(reader);
+//             if header.encoding.is_binary() {
+//                 read_binary_samples(decoder, (header.rows * header.cols) as
+// usize)             } else {
+//                 read_ascii_samples(decoder)
+//             }
+//         }
+//     }
+// }

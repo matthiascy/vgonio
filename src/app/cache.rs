@@ -296,7 +296,7 @@ impl Cache {
                     (Handle::new(*msurf_id), record.mesh)
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
-                    let msurf = MicroSurface::load_from_file(&filepath, None).unwrap();
+                    let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
                     let msurf_id = msurf.uuid;
                     let mesh = msurf.as_micro_surface_mesh();
                     let mesh_id = Uuid::new_v4();
@@ -385,7 +385,7 @@ impl Cache {
                         loaded.push(Handle::new(*msurf_id));
                     } else {
                         log::debug!("-- loading: {}", filepath.display());
-                        let msurf = MicroSurface::load_from_file(&filepath, None).unwrap();
+                        let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
                         let msurf_id = msurf.uuid;
                         let mesh = msurf.as_micro_surface_mesh();
                         let mesh_id = Uuid::new_v4();

@@ -670,7 +670,7 @@ mod io {
     use std::{
         borrow::Cow,
         fs::File,
-        io::{BufRead, BufReader, BufWriter, Read, Write},
+        io::{BufRead, BufReader, BufWriter, Read, Seek, Write},
         path::Path,
     };
 
@@ -697,7 +697,7 @@ mod io {
         /// 3. Micro-surface height field file (binary format, ends with *.vgms).
         ///
         /// 4. Micro-surface height field cache file (binary format, ends with *.vgcc).
-        pub fn load_from_file(
+        pub fn read_from_file(
             path: &Path,
             origin: Option<MicroSurfaceOrigin>,
         ) -> Result<MicroSurface, Error> {
@@ -719,41 +719,38 @@ mod io {
                     "Asci" => read_ascii_dong2015(reader, false, path),
                     "DATA" => read_ascii_usurf(reader, false, path),
                     "VGMS" => {
-                        if let Some(header) = {
-                            let mut buf = [0_u8; 28];
-                            reader.read_exact(&mut buf)?;
-                            VgmsHeader::from_bytes(buf)
-                        } {
-                            let samples = match header.compression {
-                                DataCompression::None => {
-                                    if header.encoding.is_binary() {
-                                        read_binary_samples(reader, (header.rows * header.cols) as usize)
-                                    } else {
-                                        read_ascii_samples(reader)
-                                    }
-                                }
-                                DataCompression::Zlib => {
-                                    let decoder = flate2::read::ZlibDecoder::new(reader);
-                                    if header.encoding.is_binary() {
-                                        read_binary_samples(decoder, (header.rows * header.cols) as usize)
-                                    } else {
-                                        read_ascii_samples(decoder)
-                                    }
-                                }
-                            };
+                        let header = {
+                            reader.seek(std::io::SeekFrom::Start(0))?;
+                            VgmsHeader::read(&mut reader)?
+                        };
 
-                            Ok(MicroSurface::from_samples(
-                                header.rows as usize,
-                                header.cols as usize,
-                                header.du,
-                                header.dv,
-                                header.unit,
-                                samples,
-                                Some(path.into()),
-                            ))
-                        } else {
-                            Err(Error::UnrecognizedFile)
-                        }
+                        let samples = match header.compression {
+                            DataCompression::None => {
+                                if header.encoding.is_binary() {
+                                    read_binary_samples(reader, (header.rows * header.cols) as usize)
+                                } else {
+                                    read_ascii_samples(reader)
+                                }
+                            }
+                            DataCompression::Zlib => {
+                                let decoder = flate2::read::ZlibDecoder::new(reader);
+                                if header.encoding.is_binary() {
+                                    read_binary_samples(decoder, (header.rows * header.cols) as usize)
+                                } else {
+                                    read_ascii_samples(decoder)
+                                }
+                            }
+                        };
+
+                        Ok(MicroSurface::from_samples(
+                            header.rows as usize,
+                            header.cols as usize,
+                            header.du,
+                            header.dv,
+                            header.unit,
+                            samples,
+                            Some(path.into()),
+                        ))
                     }
                     _ => Err(Error::UnrecognizedFile),
                 }
