@@ -1,3 +1,4 @@
+use crate::io::{ReadFileError, WriteFileError};
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
@@ -25,6 +26,9 @@ pub enum Error {
     InvalidOutputDir(PathBuf),
     InvalidParameter(&'static str),
     DirectoryOrFileNotFound(PathBuf),
+
+    ReadFile(ReadFileError),
+    WriteFile(WriteFileError),
 }
 
 #[derive(Debug)]
@@ -116,6 +120,12 @@ impl Display for Error {
             Error::DirectoryOrFileNotFound(path) => {
                 write!(f, "Directory or file not found: {}", path.display())
             }
+            Error::ReadFile(err) => {
+                write!(f, "Read file error: {}", err)
+            }
+            Error::WriteFile(err) => {
+                write!(f, "Write file error: {}", err)
+            }
         }
     }
 }
@@ -164,4 +174,12 @@ impl From<toml::de::Error> for Error {
     fn from(err: toml::de::Error) -> Self {
         Error::SerialisationError(SerialisationError::TomlDe(err))
     }
+}
+
+impl From<WriteFileError> for Error {
+    fn from(value: WriteFileError) -> Self { Self::WriteFile(value) }
+}
+
+impl From<ReadFileError> for Error {
+    fn from(value: ReadFileError) -> Self { Self::ReadFile(value) }
 }

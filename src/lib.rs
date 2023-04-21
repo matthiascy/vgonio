@@ -18,7 +18,6 @@ mod math;
 pub mod measure;
 pub mod msurf;
 pub mod optics;
-pub mod specs;
 pub mod units;
 
 use crate::{

@@ -7,10 +7,10 @@ use crate::{
             GpuContext, RenderPass, Texture, WgpuConfig,
         },
     },
+    io::{vgmo, vgmo::AngleRange, CompressionScheme, FileEncoding, WriteFileError},
     math, measure,
     measure::measurement::{MeasurementKind, MicrofacetMaskingShadowingMeasurement},
     msurf::MicroSurface,
-    specs::{AngleRange, DataCompression, DataEncoding, Vgmo},
     units::Radians,
     Error, Handedness,
 };
@@ -1361,8 +1361,27 @@ pub struct MicrofacetMaskingShadowing {
 }
 
 impl MicrofacetMaskingShadowing {
-    pub fn as_vgmo(&self, encoding: DataEncoding, compression: DataCompression) -> Vgmo {
-        Vgmo {
+    /// Returns the number of measurement bins.
+    pub fn bins_count(&self) -> usize {
+        (self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive).pow(2)
+    }
+
+    /// Saves the microfacet shadowing and masking function.
+    pub fn write_to_file(
+        &self,
+        filepath: &Path,
+        encoding: FileEncoding,
+        compression: CompressionScheme,
+    ) -> Result<(), Error> {
+        use std::io::{BufWriter, Write};
+        assert_eq!(self.samples.len(), self.bins_count());
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(filepath)?;
+        let mut writer = BufWriter::new(file);
+        let header = vgmo::Header {
             kind: MeasurementKind::MicrofacetMaskingShadowing,
             encoding,
             compression,
@@ -1378,31 +1397,14 @@ impl MicrofacetMaskingShadowing {
                 bin_count: self.zenith_bins_count_inclusive as u32,
                 bin_width: self.zenith_bin_size.value,
             },
-            samples: Cow::Borrowed(&self.samples),
-        }
-    }
-
-    /// Returns the number of measurement bins.
-    pub fn bins_count(&self) -> usize {
-        (self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive).pow(2)
-    }
-
-    /// Saves the microfacet shadowing and masking function.
-    pub fn save(
-        &self,
-        filepath: &Path,
-        encoding: DataEncoding,
-        compression: DataCompression,
-    ) -> Result<(), std::io::Error> {
-        use std::io::{BufWriter, Write};
-        assert_eq!(self.samples.len(), self.bins_count());
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(filepath)?;
-        let mut writer = BufWriter::new(file);
-        self.as_vgmo(encoding, compression).write(&mut writer)
+            samples_count: self.samples.len() as u32,
+        };
+        vgmo::write(&mut writer, header, &self.samples).map_err(|err| {
+            Error::WriteFile(WriteFileError {
+                path: filepath.to_path_buf().into_boxed_path(),
+                kind: err,
+            })
+        })
 
         // match encoding {
         //     DataEncoding::Ascii => {

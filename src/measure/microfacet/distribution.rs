@@ -12,10 +12,10 @@ use std::{
 use crate::{
     app::cache::{Cache, Handle},
     error::Error,
+    io::{vgmo, vgmo::AngleRange, CompressionScheme, FileEncoding, WriteFileError},
     math,
     measure::measurement::{MeasurementKind, MicrofacetNormalDistributionMeasurement},
     msurf::MicroSurface,
-    specs::{AngleRange, DataCompression, DataEncoding, Vgmo},
     units::{self, Radians},
     Handedness,
 };
@@ -52,34 +52,13 @@ pub struct MicrofacetNormalDistribution {
 }
 
 impl MicrofacetNormalDistribution {
-    pub fn as_vgmo(&self, encoding: DataEncoding, compression: DataCompression) -> Vgmo {
-        Vgmo {
-            kind: MeasurementKind::MicrofacetDistribution,
-            encoding,
-            compression,
-            azimuth_range: AngleRange {
-                start: self.azimuth_start.value,
-                end: self.azimuth_stop.value,
-                bin_count: self.azimuth_bins_count_inclusive as u32,
-                bin_width: self.azimuth_bin_width.value,
-            },
-            zenith_range: AngleRange {
-                start: self.zenith_start.value,
-                end: self.zenith_stop.value,
-                bin_count: self.zenith_bins_count_inclusive as u32,
-                bin_width: self.zenith_bin_size.value,
-            },
-            samples: Cow::Borrowed(&self.samples),
-        }
-    }
-
     /// Save the microfacet distribution to a file
-    pub fn save(
+    pub fn write_to_file(
         &self,
         filepath: &Path,
-        encoding: DataEncoding,
-        compression: DataCompression,
-    ) -> Result<(), std::io::Error> {
+        encoding: FileEncoding,
+        compression: CompressionScheme,
+    ) -> Result<(), Error> {
         assert_eq!(
             self.samples.len(),
             self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive,
@@ -90,7 +69,7 @@ impl MicrofacetNormalDistribution {
             .write(true)
             .truncate(true)
             .open(filepath)?;
-        let output = Vgmo {
+        let header = vgmo::Header {
             kind: MeasurementKind::MicrofacetDistribution,
             encoding,
             compression,
@@ -106,65 +85,15 @@ impl MicrofacetNormalDistribution {
                 bin_count: self.zenith_bins_count_inclusive as u32,
                 bin_width: self.zenith_bin_size.value,
             },
-            samples: Cow::Borrowed(&self.samples),
+            samples_count: self.samples.len() as u32,
         };
         let mut writter = BufWriter::new(file);
-        output.write(&mut writter)
-
-        // match encoding {
-        //     DataEncoding::Ascii => {
-        //         log::info!("Saving microfacet distribution as plain text.");
-        //         writter.write_all(b"VGMO\x01#")?; // 6 bytes
-        //         writter.write_all(&self.azimuth_start.value.to_le_bytes())?;
-        // // 4 bytes         writter.write_all(&self.azimuth_stop.
-        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
-        // self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&(self.azimuth_bins_count_inclusive as
-        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&
-        // self.zenith_start.value.to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&self.zenith_stop.value.to_le_bytes())?; //
-        // 4 bytes         writter.write_all(&self.zenith_bin_size.
-        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
-        // (self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&(self.samples.len() as
-        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(b"
-        // \x20\x20\x20\x20\x20\n")?; // 6 bytes         self.samples.
-        // iter().enumerate().for_each(|(i, s)| {             let val =
-        // if i % self.zenith_bins_count_inclusive                 ==
-        // self.zenith_bins_count_inclusive - 1             {
-        //                 format!("{s}\n")
-        //             } else {
-        //                 format!("{s} ")
-        //             };
-        //             writter.write_all(val.as_bytes()).unwrap();
-        //         });
-        //     }
-        //     DataEncoding::Binary => {
-        //         log::info!("Saving microfacet distribution as binary.");
-        //         writter.write_all(b"VGMO\x01!")?; // 6 bytes
-        //         writter.write_all(&self.azimuth_start.value.to_le_bytes())?;
-        // // 4 bytes         writter.write_all(&self.azimuth_stop.
-        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
-        // self.azimuth_bin_size.value.to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&(self.azimuth_bins_count_inclusive as
-        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&
-        // self.zenith_start.value.to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&self.zenith_stop.value.to_le_bytes())?; //
-        // 4 bytes         writter.write_all(&self.zenith_bin_size.
-        // value.to_le_bytes())?; // 4 bytes         writter.write_all(&
-        // (self.zenith_bins_count_inclusive as u32).to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&(self.samples.len() as
-        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(b"
-        // \x20\x20\x20\x20\x20\n")?; // 6 bytes         writter.
-        // write_all(             &self
-        //                 .samples
-        //                 .iter()
-        //                 .flat_map(|x| x.to_le_bytes())
-        //                 .collect::<Vec<_>>(),
-        //         )?;
-        //     }
-        // }
-        // Ok(())
+        vgmo::write(&mut writter, header, &self.samples).map_err(|err| {
+            Error::WriteFile(WriteFileError {
+                path: filepath.to_path_buf().into_boxed_path(),
+                kind: err,
+            })
+        })
     }
 }
 

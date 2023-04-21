@@ -1,4 +1,4 @@
-use crate::specs::{DataCompression, DataEncoding};
+use crate::io::{CompressionScheme, FileEncoding};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -98,18 +98,18 @@ pub struct ConvertOptions {
     #[clap(
         short,
         long,
-        default_value_t = DataEncoding::Binary,
+        default_value_t = FileEncoding::Binary,
         help = "Data encoding for the output."
     )]
-    pub encoding: DataEncoding,
+    pub encoding: FileEncoding,
 
     #[clap(
         short,
         long,
-        default_value_t = DataCompression::None,
+        default_value_t = CompressionScheme::None,
         help = "Data compression for the output."
     )]
-    pub compression: DataCompression,
+    pub compression: CompressionScheme,
 
     #[clap(
         short,
@@ -247,18 +247,18 @@ pub struct MeasureOptions {
     #[clap(
         short,
         long,
-        default_value_t = DataEncoding::Binary,
+        default_value_t = FileEncoding::Binary,
         help = "Data format for the measurement output."
     )]
-    pub encoding: DataEncoding,
+    pub encoding: FileEncoding,
 
     #[clap(
         short,
         long,
-        default_value_t = DataCompression::None,
+        default_value_t = CompressionScheme::None,
         help = "Data compression for the measurement output."
     )]
-    pub compression: DataCompression,
+    pub compression: CompressionScheme,
 
     #[clap(
         short,

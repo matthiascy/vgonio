@@ -6,6 +6,7 @@ use crate::{
         cache::{resolve_path, Cache},
         Config,
     },
+    io::{CompressionScheme, FileEncoding},
     measure::{
         self,
         measurement::{
@@ -16,7 +17,6 @@ use crate::{
         CollectorScheme, RtcMethod,
     },
     msurf::MicroSurface,
-    specs::{DataCompression, DataEncoding},
     Error, Handedness, SphericalPartition,
 };
 
@@ -376,8 +376,8 @@ fn measure_microfacet_normal_distribution(
     cache: &Cache,
     config: &Config,
     output: &Option<PathBuf>,
-    encoding: DataEncoding,
-    compression: DataCompression,
+    encoding: FileEncoding,
+    compression: CompressionScheme,
 ) -> Result<(), Error> {
     println!(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet normal distribution:
@@ -419,7 +419,7 @@ fn measure_microfacet_normal_distribution(
             filepath.display()
         );
         distrib
-            .save(&filepath, encoding, compression)
+            .write_to_file(&filepath, encoding, compression)
             .unwrap_or_else(|err| {
                 eprintln!(
                     "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
@@ -440,8 +440,8 @@ fn measure_microfacet_masking_shadowing(
     cache: &Cache,
     config: &Config,
     output: &Option<PathBuf>,
-    encoding: DataEncoding,
-    compression: DataCompression,
+    encoding: FileEncoding,
+    compression: CompressionScheme,
 ) -> Result<(), Error> {
     println!(
         "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
@@ -490,7 +490,7 @@ fn measure_microfacet_masking_shadowing(
             filepath.display()
         );
         distrib
-            .save(&filepath, encoding, compression)
+            .write_to_file(&filepath, encoding, compression)
             .unwrap_or_else(|err| {
                 eprintln!(
                     "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
