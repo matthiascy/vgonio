@@ -157,12 +157,19 @@ pub fn measure_bsdf_embree_rt(
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
-    let msurfs = cache.micro_surfaces(surfaces).unwrap();
-    let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
+    let msurfs = cache.get_micro_surfaces(surfaces);
+    let meshes = cache.get_micro_surface_meshes_by_surfaces(surfaces);
     let samples = desc.emitter.generate_samples();
     let patches = desc.collector.generate_patches();
 
     for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
+        if surf.is_none() || mesh.is_none() {
+            log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
+            continue;
+        }
+
+        let surf = surf.unwrap();
+        let mesh = mesh.unwrap();
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surf.path.as_ref().unwrap().display()
@@ -187,12 +194,18 @@ pub fn measure_bsdf_grid_rt(
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
-    let msurfs = cache.micro_surfaces(surfaces).unwrap();
-    let meshes = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
+    let msurfs = cache.get_micro_surfaces(surfaces);
+    let meshes = cache.get_micro_surface_meshes_by_surfaces(surfaces);
     let samples = desc.emitter.generate_samples();
     let patches = desc.collector.generate_patches();
 
     for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
+        if surf.is_none() || mesh.is_none() {
+            log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
+            continue;
+        }
+        let surf = surf.unwrap();
+        let mesh = mesh.unwrap();
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surf.path.as_ref().unwrap().display()

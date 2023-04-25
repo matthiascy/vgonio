@@ -30,7 +30,7 @@ pub fn toggle_ui(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
     // You can query the `ui` how much space is available,
     // but in this example we have a fixed size widget based on the height of a
     // standard button:
-    let desired_size = ui.spacing().interact_size.y * egui::vec2(2.0, 1.0);
+    let desired_size = ui.spacing().interact_size.y * egui::vec2(1.8, 0.8);
 
     // 2. Allocating space:
     // This is where we get a region of the screen assigned.

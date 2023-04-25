@@ -1,7 +1,7 @@
 use crate::{
     app::{
         cache::Cache,
-        gui::{gizmo::VgonioGizmo, VgonioEvent},
+        gui::{gizmo::NavigationGizmo, VgonioEvent},
     },
     measure::measurement::{BsdfMeasurement, Measurement},
 };
@@ -11,7 +11,7 @@ use std::{
     cell::RefCell,
     fmt::{Display, Formatter},
     path::Path,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use winit::event_loop::EventLoopProxy;
 
@@ -84,11 +84,11 @@ pub struct SimulationPanel {
 
     simulation_progress: f32,
 
-    cache: Arc<RefCell<Cache>>,
+    cache: Arc<Mutex<Cache>>,
 }
 
 impl SimulationPanel {
-    pub fn new(cache: Arc<RefCell<Cache>>) -> Self {
+    pub fn new(cache: Arc<Mutex<Cache>>) -> Self {
         Self {
             desc: Measurement {
                 desc: crate::measure::measurement::MeasurementKindDescription::Bsdf(
@@ -480,9 +480,6 @@ pub struct SimulationWorkspace {
 
     surface_visible: bool,
 
-    /// The gizmo used to indicate the camera's orientation.
-    view_gizmo: VgonioGizmo,
-
     /// The simulation parameters.
     pub(crate) simulation_panel: SimulationPanel,
 
@@ -494,11 +491,11 @@ pub struct SimulationWorkspace {
 }
 
 impl SimulationWorkspace {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RefCell<Cache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<Mutex<Cache>>) -> Self {
         Self {
             view_gizmo_opened: false,
             simulation_pane_opened: false,
-            view_gizmo: VgonioGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
+            //view_gizmo: NavigationGizmo::new(GizmoMode::Translate, GizmoOrientation::Global),
             simulation_panel: SimulationPanel::new(cache),
             visual_grid_enabled: true,
             surface_scale_factor: 1.0,
@@ -509,7 +506,6 @@ impl SimulationWorkspace {
 
     pub fn show(&mut self, ctx: &egui::Context) {
         self.ui(ctx);
-        self.view_gizmo.show(ctx, &mut self.view_gizmo_opened);
         self.simulation_panel
             .show(ctx, &mut self.simulation_pane_opened);
     }
@@ -523,10 +519,6 @@ impl SimulationWorkspace {
                 }
             }
         }
-    }
-
-    pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
-        self.view_gizmo.update_matrices(model, view, proj)
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
@@ -544,27 +536,29 @@ impl SimulationWorkspace {
                                 &mut self.surface_scale_factor,
                                 0.05..=1.2,
                             ));
-                            if res.changed()
-                                && self
-                                    .event_loop
-                                    .send_event(VgonioEvent::UpdateSurfaceScaleFactor(
-                                        self.surface_scale_factor,
-                                    ))
-                                    .is_err()
-                            {
-                                log::warn!("[EVENT] Failed to send SetScaleFactor event");
-                            }
+                            // TODO: remove this
+                            // if res.changed()
+                            //     && self
+                            //         .event_loop
+                            //         .send_event(VgonioEvent::UpdateSurfaceScaleFactor(
+                            //             self.surface_scale_factor,
+                            //         ))
+                            //         .is_err()
+                            // {
+                            //     log::warn!("[EVENT] Failed to send
+                            // SetScaleFactor event");
+                            // }
                         }
 
-                        ui.label("Visual Grid");
-                        {
-                            let res = ui.add(super::misc::toggle(&mut self.visual_grid_enabled));
-                            if res.changed()
-                                && self.event_loop.send_event(VgonioEvent::ToggleGrid).is_err()
-                            {
-                                log::warn!("[EVENT] Failed to send ToggleGrid event");
-                            }
-                        }
+                        // ui.label("Visual Grid");
+                        // {
+                        //     let res = ui.add(super::misc::toggle(&mut self.visual_grid_enabled));
+                        //     if res.changed()
+                        //         && self.event_loop.send_event(VgonioEvent::ToggleGrid).is_err()
+                        //     {
+                        //         log::warn!("[EVENT] Failed to send ToggleGrid event");
+                        //     }
+                        // }
 
                         ui.label("Surface Visibility");
                         {

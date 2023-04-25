@@ -1494,9 +1494,14 @@ pub fn measure_masking_shadowing(
         desc.resolution,
         desc.measurement_location_count() as u32,
     );
-    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
+    let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
     let mut results = Vec::with_capacity(surfaces.len());
-    surfaces.iter().for_each(|surface| {
+    for surface in surfaces {
+        if surface.is_none() {
+            continue;
+        }
+
+        let surface = surface.unwrap();
         let facets_vtx_buf = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1634,6 +1639,6 @@ pub fn measure_masking_shadowing(
             zenith_bins_count_inclusive: desc.zenith_step_count_inclusive(),
             samples: measurement,
         });
-    });
+    }
     results
 }

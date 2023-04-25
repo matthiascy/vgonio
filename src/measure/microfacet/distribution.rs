@@ -105,12 +105,17 @@ pub fn measure_normal_distribution(
 ) -> Vec<MicrofacetNormalDistribution> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet normal distribution...");
-    let surfaces = cache.micro_surface_meshes_by_surfaces(surfaces).unwrap();
+    let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
     let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
     let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
     surfaces
         .iter()
-        .map(|surface| {
+        .filter_map(|surface| {
+            if surface.is_none() {
+                log::debug!("Skipping a surface because it is not loaded {:?}.", surface);
+                return None;
+            }
+            let surface = surface.as_ref().unwrap();
             let macro_area = surface.macro_surface_area();
             let solid_angle = units::solid_angle_of_spherical_cap(desc.zenith.step_size).value();
             let divisor = macro_area * solid_angle;
@@ -160,7 +165,7 @@ pub fn measure_normal_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            MicrofacetNormalDistribution {
+            Some(MicrofacetNormalDistribution {
                 azimuth_bin_width: desc.azimuth.step_size,
                 zenith_bin_size: desc.zenith.step_size,
                 azimuth_bins_count_inclusive: desc.azimuth.step_count(),
@@ -170,7 +175,7 @@ pub fn measure_normal_distribution(
                 azimuth_stop: desc.azimuth.stop,
                 zenith_start: desc.zenith.start,
                 zenith_stop: desc.zenith.stop,
-            }
+            })
         })
         .collect()
 }

@@ -2,7 +2,10 @@ use egui::{Align2, Color32};
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 use glam::Mat4;
 
-pub struct VgonioGizmo {
+// TODO: customise gizmo visuals: implement Viewport (Navigation) Gizmo and
+//       Object(Transform) Gizmo
+
+pub struct NavigationGizmo {
     model_matrix: Mat4,
     view_matrix: Mat4,
     proj_matrix: Mat4,
@@ -11,7 +14,7 @@ pub struct VgonioGizmo {
     last_gizmo_response: Option<GizmoResult>,
 }
 
-impl Default for VgonioGizmo {
+impl Default for NavigationGizmo {
     fn default() -> Self {
         Self {
             model_matrix: Mat4::IDENTITY,
@@ -24,13 +27,13 @@ impl Default for VgonioGizmo {
     }
 }
 
-impl VgonioGizmo {
-    pub fn new(mode: GizmoMode, orientation: GizmoOrientation) -> Self {
+impl NavigationGizmo {
+    pub fn new(orientation: GizmoOrientation) -> Self {
         Self {
             model_matrix: Mat4::IDENTITY,
             view_matrix: Mat4::IDENTITY,
             proj_matrix: Mat4::IDENTITY,
-            mode,
+            mode: GizmoMode::Translate,
             orientation,
             last_gizmo_response: None,
         }
@@ -44,31 +47,12 @@ impl VgonioGizmo {
 
     pub fn name(&self) -> &'static str { "Gizmo" }
 
-    pub fn show(&mut self, ctx: &egui::Context, _open: &mut bool) {
+    pub fn show(&mut self, ctx: &egui::Context) {
         egui::Area::new(self.name())
             // .fixed_pos((0.0, 0.0))
             .anchor(Align2::RIGHT_BOTTOM, (-150.0, -150.0))
             .interactable(false)
             .show(ctx, |ui| {
-                // ui.with_layer_id(LayerId::background(), |ui| {
-                // Snapping is enabled with ctrl key.
-                // let snapping = ui.input().modifiers.command;
-                // // Snap angle to use for rotation when snapping is enabled.
-                // // Smaller snap angle is used when shift key is pressed.
-                // let snap_angle = if ui.input().modifiers.shift {
-                //     DEFAULT_SNAP_ANGLE / 2.0
-                // } else {
-                //     DEFAULT_SNAP_ANGLE
-                // };
-
-                // // Snap distance to use for translation when snapping is enabled.
-                // // Smaller snap distance is used when shift key is pressed.
-                // let snap_distance = if ui.input().modifiers.shift {
-                //     DEFAULT_SNAP_DISTANCE / 2.0
-                // } else {
-                //     DEFAULT_SNAP_DISTANCE
-                // };
-
                 let visuals = GizmoVisuals {
                     stroke_width: 6.0,
                     x_color: Color32::from_rgb(255, 0, 148),
@@ -87,7 +71,7 @@ impl VgonioGizmo {
                     .model_matrix(self.model_matrix.to_cols_array_2d())
                     .mode(self.mode)
                     .orientation(self.orientation)
-                    // .snapping(snapping)
+                    .snapping(true)
                     // .snap_angle(snap_angle)
                     // .snap_distance(snap_distance)
                     .visuals(visuals);
@@ -98,6 +82,5 @@ impl VgonioGizmo {
                     self.model_matrix = gizmo_response.transform();
                 }
             });
-        // });
     }
 }

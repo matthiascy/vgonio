@@ -227,7 +227,8 @@ impl MicroSurface {
     /// # use vgonio::msurf::MicroSurface;
     /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let height_field = MicroSurface::from_samples(3, 3, 0.5, 0.5, LengthUnit::UM, &samples, None);
+    /// let height_field =
+    ///     MicroSurface::from_samples(3, 3, 0.5, 0.5, LengthUnit::UM, &samples, None, None);
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
@@ -240,6 +241,7 @@ impl MicroSurface {
         dv: f32,
         unit: LengthUnit,
         samples: S,
+        name: Option<String>,
         path: Option<PathBuf>,
     ) -> MicroSurface {
         debug_assert!(
@@ -255,7 +257,7 @@ impl MicroSurface {
 
         MicroSurface {
             uuid: uuid::Uuid::new_v4(),
-            name: gen_micro_surface_name(),
+            name: name.unwrap_or(gen_micro_surface_name()),
             path,
             rows,
             cols,
@@ -290,7 +292,7 @@ impl MicroSurface {
     /// # use vgonio::msurf::MicroSurface;
     /// use vgonio::units::LengthUnit;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.samples_count(), 9);
     /// ```
     pub fn samples_count(&self) -> usize { self.cols * self.rows }
@@ -303,7 +305,7 @@ impl MicroSurface {
     /// # use vgonio::msurf::MicroSurface;
     /// use vgonio::units::LengthUnit;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.cells_count(), 4);
     /// ```
     pub fn cells_count(&self) -> usize {
@@ -327,8 +329,7 @@ impl MicroSurface {
     /// # use vgonio::msurf::MicroSurface;
     /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf =
-    ///     MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, Default::default());
+    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, None, None);
     /// assert_eq!(msurf.sample_at(2, 2), 0.1 * 1000.0);
     /// ```
     ///
@@ -336,8 +337,7 @@ impl MicroSurface {
     /// # use vgonio::msurf::MicroSurface;
     /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf =
-    ///     MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, Default::default());
+    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, None, None);
     /// let h = msurf.sample_at(4, 4);
     /// ```
     pub fn sample_at(&self, row: usize, col: usize) -> f32 {
@@ -612,7 +612,7 @@ fn regular_grid_triangulation_test() {
 /// See [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`)
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
-    /// Unique identifier.
+    /// Unique identifier, different from the [`MicroSurface`] uuid.
     pub uuid: uuid::Uuid,
 
     /// Uuid of the [`MicroSurface`] from which the mesh is generated.
@@ -701,19 +701,18 @@ impl MicroSurface {
             if let Some(origin) = origin {
                 // If origin is specified, call directly corresponding loading function.
                 match origin {
-                    MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(reader, true, filepath),
-                    MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(reader, true, filepath),
+                    MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(&mut reader, filepath),
+                    MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(&mut reader, filepath),
                 }
             } else {
                 // Otherwise, try to figure out the file format by reading first several bytes.
                 let mut buf = [0_u8; 4];
                 reader.read_exact(&mut buf)?;
-
+                reader.seek(std::io::SeekFrom::Start(0))?; // Reset the cursor to the beginning of the file.
                 match std::str::from_utf8(&buf)? {
-                    "Asci" => io::read_ascii_dong2015(reader, false, filepath),
-                    "DATA" => io::read_ascii_usurf(reader, false, filepath),
+                    "Asci" => io::read_ascii_dong2015(&mut reader, filepath),
+                    "DATA" => io::read_ascii_usurf(&mut reader, filepath),
                     "VGMS" => {
-                        reader.seek(std::io::SeekFrom::Start(0))?;
                         let (header, samples) = vgms::read(&mut reader)
                             .map_err(|err| Error::ReadFile(ReadFileError {
                                 path: filepath.to_owned().into_boxed_path(),
@@ -726,6 +725,10 @@ impl MicroSurface {
                             header.dv,
                             header.unit,
                             samples,
+                            filepath
+                                .file_stem()
+                                //.file_name()
+                                .and_then(|name| name.to_str().map(|name| name.to_owned())),
                             Some(filepath.to_owned()),
                         ))
                     }

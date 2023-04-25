@@ -1,6 +1,6 @@
 mod gizmo;
 mod misc;
-mod outliner;
+pub mod outliner;
 mod plotter;
 mod simulation;
 pub mod state;
@@ -14,8 +14,15 @@ use crate::{
     Handedness,
 };
 use glam::{IVec2, Mat4, Vec3};
+use rfd::FileHandle;
 use std::{
-    cell::RefCell, collections::HashMap, default::Default, ops::Deref, path::PathBuf, sync::Arc,
+    cell::RefCell,
+    collections::HashMap,
+    default::Default,
+    ffi::OsStr,
+    ops::Deref,
+    path::PathBuf,
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
@@ -28,6 +35,7 @@ use wgpu::util::DeviceExt;
 
 use crate::{
     app::{
+        args::ConvertKind::MicroSurfaceProfile,
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
@@ -84,12 +92,11 @@ impl From<egui_winit::EventResponse> for EventResponse {
 
 /// Events used by Vgonio application.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum VgonioEvent {
     Quit,
     RequestRedraw,
-    OpenFile(rfd::FileHandle),
-    ToggleGrid,
-    UpdateSurfaceScaleFactor(f32),
+    OpenFiles(Vec<rfd::FileHandle>),
     UpdateDepthMap,
     TraceRayDbg {
         ray: Ray,
@@ -132,7 +139,7 @@ pub fn run(config: Config) -> Result<(), Error> {
         .build(&event_loop)
         .unwrap();
 
-    let mut vgonio = pollster::block_on(VgonioApp::new(config, &window, &event_loop))?;
+    let mut vgonio = pollster::block_on(VgonioGuiApp::new(config, &window, &event_loop))?;
 
     let mut last_frame_time = Instant::now();
 
@@ -188,21 +195,6 @@ pub fn run(config: Config) -> Result<(), Error> {
     })
 }
 
-/// Micro-surface presentation view.
-#[derive(Debug)]
-struct MicroSurfaceView {
-    /// Handle to the micro-surface.
-    surf: Handle<MicroSurface>,
-    /// Handle to the micro-surface mesh.
-    mesh: Handle<MicroSurfaceMesh>,
-    /// Handle to the micro-surface's renderable mesh.
-    renderable: Handle<RenderableMesh>,
-    /// Scale factor when rendering the micro-surface.
-    scale_factor: f32,
-    /// Visibility of the micro-surface in the scene.
-    visible: bool,
-}
-
 /// Vgonio application context.
 /// Contains all the resources needed for rendering.
 pub struct Context {
@@ -213,7 +205,7 @@ pub struct Context {
 }
 
 /// Vgonio client application with GUI.
-pub struct VgonioApp {
+pub struct VgonioGuiApp {
     /// The application context.
     ctx: Context,
 
@@ -228,7 +220,7 @@ pub struct VgonioApp {
 
     /// The cache of the application including preloaded datafiles. See
     /// [`VgonioCache`].
-    cache: Arc<RefCell<Cache>>,
+    cache: Cache,
 
     input: InputState,
     camera: CameraState,
@@ -239,15 +231,12 @@ pub struct VgonioApp {
     depth_map: DepthMap,
     debug_drawing: DebugState,
     debug_drawing_enabled: bool,
-    msurf: Option<MicroSurfaceView>,
-
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
     pub demos: egui_demo_lib::DemoWindows,
-    pub visual_grid_enabled: bool,
 }
 
-impl VgonioApp {
+impl VgonioGuiApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
         config: Config,
@@ -296,18 +285,18 @@ impl VgonioApp {
         let cache = {
             let mut _cache = Cache::new(config.cache_dir());
             _cache.load_ior_database(&config);
-            Arc::new(RefCell::new(_cache))
+            _cache
         };
 
         let mut ui = VgonioGuiState::new(
             event_loop.create_proxy(),
             config.clone(),
-            cache.clone(),
+            //            cache.clone(),
             &gpu_ctx,
             &mut gui_ctx.renderer,
         );
 
-        ui.set_theme(Theme::Dark);
+        ui.set_theme(Theme::Light);
 
         let input = InputState {
             key_map: Default::default(),
@@ -332,12 +321,10 @@ impl VgonioApp {
             depth_map,
             debug_drawing,
             debug_drawing_enabled: true,
-            msurf: None,
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
             demos: egui_demo_lib::DemoWindows::default(),
-            visual_grid_enabled: true,
             win_surf,
         })
     }
@@ -407,6 +394,7 @@ impl VgonioApp {
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
+        let current_theme_visuals = self.state.current_theme_visuals();
         self.ctx.gpu.queue.write_buffer(
             self.passes
                 .get("visual_grid")
@@ -421,10 +409,10 @@ impl VgonioApp {
                 view_inv: self.camera.uniform.view_inv_matrix.to_cols_array(),
                 proj_inv: self.camera.uniform.proj_inv_matrix.to_cols_array(),
                 grid_line_color: [
-                    self.state.theme_visuals().grid_line_color.r as f32,
-                    self.state.theme_visuals().grid_line_color.g as f32,
-                    self.state.theme_visuals().grid_line_color.b as f32,
-                    if self.state.theme_visuals().egui_visuals.dark_mode {
+                    current_theme_visuals.grid_line_color.r as f32,
+                    current_theme_visuals.grid_line_color.g as f32,
+                    current_theme_visuals.grid_line_color.b as f32,
+                    if current_theme_visuals.egui_visuals.dark_mode {
                         1.0
                     } else {
                         0.0
@@ -433,27 +421,22 @@ impl VgonioApp {
             }),
         );
 
-        if let Some(msurf_view) = &self.msurf {
-            let cache = self.cache.deref().borrow();
-            let msurf = cache.micro_surface(msurf_view.surf).unwrap();
+        // TODO: push constants
+        if let Some((hdl, scale)) = self.state.outliner().visible_surfaces().next() {
+            let msurf = self.cache.get_micro_surface(*hdl).unwrap();
             let mut uniform = [0.0f32; 16 * 3 + 4];
             // Displace visually the heightfield.
             uniform[0..16].copy_from_slice(
                 &Mat4::from_translation(Vec3::new(
                     0.0,
-                    -(msurf.max + msurf.min) * 0.5 * msurf_view.scale_factor,
+                    -(msurf.max + msurf.min) * 0.5 * scale,
                     0.0,
                 ))
                 .to_cols_array(),
             );
             uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
             uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
-            uniform[48..52].copy_from_slice(&[
-                msurf.min,
-                msurf.max,
-                msurf.max - msurf.min,
-                msurf_view.scale_factor,
-            ]);
+            uniform[48..52].copy_from_slice(&[msurf.min, msurf.max, msurf.max - msurf.min, scale]);
             self.ctx.gpu.queue.write_buffer(
                 self.passes
                     .get("heightfield")
@@ -465,12 +448,13 @@ impl VgonioApp {
                 bytemuck::cast_slice(&uniform),
             );
 
-            // Update the uniform buffer for debug drawing.
-            if self.debug_drawing_enabled {
-                self.debug_drawing
-                    .update_uniform_buffer(&self.ctx.gpu, &uniform);
-            }
+            // // Update the uniform buffer for debug drawing.
+            // if self.debug_drawing_enabled {
+            //     self.debug_drawing
+            //         .update_uniform_buffer(&self.ctx.gpu, &uniform);
+            // }
         }
+        //
 
         self.ctx.gui.update(window);
 
@@ -481,7 +465,6 @@ impl VgonioApp {
 
     /// Render the frame to the surface.
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
-        let cache = self.cache.deref().borrow();
         // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.win_surf.get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
@@ -516,7 +499,9 @@ impl VgonioApp {
                         // same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(self.state.theme_visuals().clear_color),
+                            load: wgpu::LoadOp::Clear(
+                                self.state.current_theme_visuals().clear_color,
+                            ),
                             store: true,
                         },
                     },
@@ -531,25 +516,32 @@ impl VgonioApp {
                 }),
             });
 
-            if let Some(ref msurf_view) = self.msurf {
-                if msurf_view.visible {
-                    let renderable = cache
-                        .micro_surface_renderable_mesh(msurf_view.renderable)
-                        .expect("Failed to get renderable mesh");
-
-                    let pass = self.passes.get("heightfield").unwrap();
-                    render_pass.set_pipeline(&pass.pipeline);
-                    render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
-                    render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        renderable.index_buffer.slice(..),
-                        renderable.index_format,
+            let pass = self.passes.get("heightfield").unwrap();
+            for (hdl, _) in self.state.outliner().visible_surfaces() {
+                println!("-- rendering msurf: {:?}", hdl);
+                let surface = self.cache.get_micro_surface(*hdl);
+                let renderable = self
+                    .cache
+                    .get_micro_surface_renderable_mesh_by_surface_id(*hdl);
+                if renderable.is_none() || surface.is_none() {
+                    println!(
+                        "Failed to get renderable mesh or surface, renderable: {:?}, surface: {:?}",
+                        renderable.is_none(),
+                        surface.is_none()
                     );
-                    render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
+                    continue;
                 }
+                let renderable = renderable.unwrap();
+                println!("   renderable: {:?}", renderable.uuid);
+                render_pass.set_pipeline(&pass.pipeline);
+                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
+                render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(renderable.index_buffer.slice(..), renderable.index_format);
+                render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
             }
 
-            if self.visual_grid_enabled {
+            if self.state.enable_visual_grid {
                 let pass = self.passes.get("visual_grid").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
@@ -557,52 +549,56 @@ impl VgonioApp {
             }
         }
 
-        if self.debug_drawing_enabled {
-            if let Some(ref msurf_view) = self.msurf {
-                let renderable = cache
-                    .micro_surface_renderable_mesh(msurf_view.renderable)
-                    .expect("Failed to get renderable mesh");
-                let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &output_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                });
-                if !self.debug_drawing.drawing_msurf_prims {
-                    render_pass.set_pipeline(&self.debug_drawing.rays_rp.pipeline);
-                    render_pass.set_bind_group(0, &self.debug_drawing.rays_rp.bind_groups[0], &[]);
-                    render_pass.set_vertex_buffer(0, self.debug_drawing.rays_vertex_buf.slice(..));
-                    render_pass.draw(0..self.debug_drawing.rays_vertex_count, 0..1);
-                } else {
-                    render_pass.set_pipeline(&self.debug_drawing.msurf_prim_rp.pipeline);
-                    render_pass.set_bind_group(
-                        0,
-                        &self.debug_drawing.msurf_prim_rp.bind_groups[0],
-                        &[],
-                    );
-                    render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        self.debug_drawing.msurf_prim_index_buf.slice(..),
-                        renderable.index_format,
-                    );
-                    if self.debug_drawing.multiple_prims {
-                        render_pass.draw_indexed(
-                            3..3 + self.debug_drawing.msurf_prim_index_count,
-                            0,
-                            0..1,
-                        );
-                    } else {
-                        render_pass.draw_indexed(0..3, 0, 0..1);
-                    }
-                }
-            }
-        }
+        // if self.debug_drawing_enabled {
+        // if let Some(ref msurf_view) = self.msurf {
+        //     let renderable = cache
+        //         .micro_surface_renderable_mesh(msurf_view.renderable)
+        //         .expect("Failed to get renderable mesh");
+        //     let mut render_pass =
+        // encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
+        //         label: Some("Render Pass"),
+        //         color_attachments: &[Some(wgpu::RenderPassColorAttachment
+        // {             view: &output_view,
+        //             resolve_target: None,
+        //             ops: wgpu::Operations {
+        //                 load: wgpu::LoadOp::Load,
+        //                 store: true,
+        //             },
+        //         })],
+        //         depth_stencil_attachment: None,
+        //     });
+        //     if !self.debug_drawing.drawing_msurf_prims {
+        //         render_pass.set_pipeline(&self.debug_drawing.rays_rp.
+        // pipeline);         render_pass.set_bind_group(0,
+        // &self.debug_drawing.rays_rp.bind_groups[0], &[]);
+        //         render_pass.set_vertex_buffer(0,
+        // self.debug_drawing.rays_vertex_buf.slice(..));
+        //         render_pass.draw(0..self.debug_drawing.rays_vertex_count,
+        // 0..1);     } else {
+        //         render_pass.set_pipeline(&self.debug_drawing.
+        // msurf_prim_rp.pipeline);         render_pass.
+        // set_bind_group(             0,
+        //             &self.debug_drawing.msurf_prim_rp.bind_groups[0],
+        //             &[],
+        //         );
+        //         render_pass.set_vertex_buffer(0,
+        // renderable.vertex_buffer.slice(..));
+        //         render_pass.set_index_buffer(
+        //             self.debug_drawing.msurf_prim_index_buf.slice(..),
+        //             renderable.index_format,
+        //         );
+        //         if self.debug_drawing.multiple_prims {
+        //             render_pass.draw_indexed(
+        //                 3..3 + self.debug_drawing.msurf_prim_index_count,
+        //                 0,
+        //                 0..1,
+        //             );
+        //         } else {
+        //             render_pass.draw_indexed(0..3, 0, 0..1);
+        //         }
+        //     }
+        // }
+        // }
 
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
@@ -641,33 +637,7 @@ impl VgonioApp {
                 *control_flow = ControlFlow::Exit;
             }
             VgonioEvent::RequestRedraw => {}
-            VgonioEvent::OpenFile(handle) => {
-                // TODO: deal with different file types
-                let path: PathBuf = handle.into();
-                log::debug!("Opening file: {:?}", path);
-                let cache = self.cache.deref();
-                let (surf, mesh) = cache
-                    .borrow_mut()
-                    .load_micro_surface(&self.config, &path)
-                    .unwrap();
-                self.state
-                    .simulation_workspace
-                    .update_surface_list(&cache.borrow().loaded_micro_surface_paths().unwrap());
-                let renderable = cache
-                    .borrow_mut()
-                    .create_micro_surface_renderable_mesh(&self.ctx.gpu.device, surf)
-                    .unwrap();
-                self.msurf = Some(MicroSurfaceView {
-                    surf,
-                    mesh,
-                    renderable,
-                    scale_factor: 1.0,
-                    visible: true,
-                });
-            }
-            VgonioEvent::ToggleGrid => {
-                self.visual_grid_enabled = !self.visual_grid_enabled;
-            }
+            VgonioEvent::OpenFiles(files) => self.open_files(files),
             VgonioEvent::UpdateDepthMap => {
                 self.depth_map.copy_to_buffer(
                     &self.ctx.gpu,
@@ -687,123 +657,120 @@ impl VgonioApp {
                         self.win_surf.height(),
                     );
             }
-            VgonioEvent::UpdateSurfaceScaleFactor(factor) => {
-                if let Some(msurf_view) = &mut self.msurf {
-                    msurf_view.scale_factor = factor;
-                }
-            }
             VgonioEvent::UpdateDebugT(t) => {
                 self.debug_drawing.ray_t = t;
             }
-            VgonioEvent::UpdatePrimId(prim_id) => {
-                if let Some(msurf_view) = &self.msurf {
-                    let cache = self.cache.deref().borrow();
-                    let msurf = cache.micro_surface_mesh(msurf_view.mesh).unwrap();
-                    let id = prim_id as usize;
-                    if id < msurf.facets.len() {
-                        let indices = [
-                            msurf.facets[id * 3],
-                            msurf.facets[id * 3 + 1],
-                            msurf.facets[id * 3 + 2],
-                        ];
-                        let vertices = [
-                            msurf.verts[indices[0] as usize],
-                            msurf.verts[indices[1] as usize],
-                            msurf.verts[indices[2] as usize],
-                        ];
-                        log::debug!(
-                            "query prim {}: {:?}\n    p0: {:?}\n    p1: {:?}\n    p2: {:?}",
-                            prim_id,
-                            indices,
-                            vertices[0],
-                            vertices[1],
-                            vertices[2]
-                        );
-                        let mut encoder = self.ctx.gpu.device.create_command_encoder(
-                            &wgpu::CommandEncoderDescriptor {
-                                label: Some("copy-index-buffer-encoder"),
-                            },
-                        );
-                        self.ctx.gpu.queue.write_buffer(
-                            &self.debug_drawing.msurf_prim_index_buf,
-                            0,
-                            bytemuck::cast_slice(&indices),
-                        );
-                    }
-                    self.debug_drawing.drawing_msurf_prims = true;
-                    self.debug_drawing.multiple_prims = false;
-                }
-            }
-            VgonioEvent::TraceRayDbg {
-                ray,
-                method,
-                max_bounces,
-            } => {
-                log::debug!("= = = = [Debug Ray Tracing] = = = =\n  => {:?}", ray);
-                if self.msurf.is_none() {
-                    log::warn!("No micro-surface loaded, can't trace ray!");
-                } else {
-                    match method {
-                        #[cfg(feature = "embree")]
-                        RtcMethod::Embree => {
-                            log::debug!("  => [Standard Ray Tracing]");
-                            todo!();
-                            // self.debug_drawing.rays = trace_ray_standard_dbg(
-                            //     ray,
-                            //     max_bounces,
-                            //     self.surface_mesh.as_ref().unwrap(),
-                            // );
-                        }
-                        #[cfg(feature = "optix")]
-                        RtcMethod::Optix => {
-                            todo!()
-                        }
-                        RtcMethod::Grid => {
-                            log::debug!("  => [Grid Ray Tracing]");
-                            // let cache = self.cache.deref().borrow();
-                            // let grid_rt = Grid::new(
-                            //     cache
-                            //         .micro_surface(self.msurf.as_ref().unwrap().surf)
-                            //         .unwrap(),
-                            //     cache
-                            //         .micro_surface_mesh(self.msurf.as_ref().unwrap().mesh)
-                            //         .unwrap(),
-                            // );
-                            // self.debug_drawing.rays =
-                            //     trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
-                            todo!()
-                        }
-                    }
-                    if self.debug_drawing_enabled {
-                        let mut content = self
-                            .debug_drawing
-                            .rays
-                            .iter()
-                            .map(|r| r.org)
-                            .collect::<Vec<_>>();
-                        let last_ray = self.debug_drawing.rays[self.debug_drawing.rays.len() - 1];
-                        content.push(last_ray.org + last_ray.dir * self.debug_drawing.ray_t);
-                        log::debug!("content: {:?}", content);
-                        self.debug_drawing.rays_vertex_count =
-                            self.debug_drawing.rays.len() as u32 + 1;
-                        self.debug_drawing.drawing_msurf_prims = false;
-                        self.ctx.gpu.queue.write_buffer(
-                            &self.debug_drawing.rays_vertex_buf,
-                            0,
-                            bytemuck::cast_slice(&content),
-                        );
-                    }
-                }
-            }
+            // VgonioEvent::UpdatePrimId(prim_id) => {
+            // if let Some(msurf_view) = &self.msurf {
+            //     let cache = self.cache.deref().borrow();
+            //     let msurf =
+            // cache.micro_surface_mesh(msurf_view.mesh).unwrap();
+            //     let id = prim_id as usize;
+            //     if id < msurf.facets.len() {
+            //         let indices = [
+            //             msurf.facets[id * 3],
+            //             msurf.facets[id * 3 + 1],
+            //             msurf.facets[id * 3 + 2],
+            //         ];
+            //         let vertices = [
+            //             msurf.verts[indices[0] as usize],
+            //             msurf.verts[indices[1] as usize],
+            //             msurf.verts[indices[2] as usize],
+            //         ];
+            //         log::debug!(
+            //             "query prim {}: {:?}\n    p0: {:?}\n    p1:
+            // {:?}\n    p2: {:?}",             prim_id,
+            //             indices,
+            //             vertices[0],
+            //             vertices[1],
+            //             vertices[2]
+            //         );
+            //         let mut encoder =
+            // self.ctx.gpu.device.create_command_encoder(
+            //             &wgpu::CommandEncoderDescriptor {
+            //                 label: Some("copy-index-buffer-encoder"),
+            //             },
+            //         );
+            //         self.ctx.gpu.queue.write_buffer(
+            //             &self.debug_drawing.msurf_prim_index_buf,
+            //             0,
+            //             bytemuck::cast_slice(&indices),
+            //         );
+            //     }
+            //     self.debug_drawing.drawing_msurf_prims = true;
+            //     self.debug_drawing.multiple_prims = false;
+            // }
+            // }
+            // VgonioEvent::TraceRayDbg {
+            //     ray,
+            //     method,
+            //     max_bounces,
+            // } => {
+            //     log::debug!("= = = = [Debug Ray Tracing] = = = =\n  => {:?}", ray);
+            //     if self.msurf.is_none() {
+            //         log::warn!("No micro-surface loaded, can't trace ray!");
+            //     } else {
+            //         match method {
+            //             #[cfg(feature = "embree")]
+            //             RtcMethod::Embree => {
+            //                 log::debug!("  => [Standard Ray Tracing]");
+            //                 todo!();
+            //                 // self.debug_drawing.rays = trace_ray_standard_dbg(
+            //                 //     ray,
+            //                 //     max_bounces,
+            //                 //     self.surface_mesh.as_ref().unwrap(),
+            //                 // );
+            //             }
+            //             #[cfg(feature = "optix")]
+            //             RtcMethod::Optix => {
+            //                 todo!()
+            //             }
+            //             RtcMethod::Grid => {
+            //                 log::debug!("  => [Grid Ray Tracing]");
+            //                 // let cache = self.cache.deref().borrow();
+            //                 // let grid_rt = Grid::new(
+            //                 //     cache
+            //                 //         .micro_surface(self.msurf.as_ref().unwrap().surf)
+            //                 //         .unwrap(),
+            //                 //     cache
+            //                 //         .micro_surface_mesh(self.msurf.as_ref().unwrap().mesh)
+            //                 //         .unwrap(),
+            //                 // );
+            //                 // self.debug_drawing.rays =
+            //                 //     trace_ray_grid_dbg(ray, max_bounces, &grid_rt);
+            //                 todo!()
+            //             }
+            //         }
+            //         if self.debug_drawing_enabled {
+            //             let mut content = self
+            //                 .debug_drawing
+            //                 .rays
+            //                 .iter()
+            //                 .map(|r| r.org)
+            //                 .collect::<Vec<_>>();
+            //             let last_ray = self.debug_drawing.rays[self.debug_drawing.rays.len() -
+            // 1];             content.push(last_ray.org + last_ray.dir *
+            // self.debug_drawing.ray_t);             log::debug!("content: {:?}",
+            // content);             self.debug_drawing.rays_vertex_count =
+            //                 self.debug_drawing.rays.len() as u32 + 1;
+            //             self.debug_drawing.drawing_msurf_prims = false;
+            //             self.ctx.gpu.queue.write_buffer(
+            //                 &self.debug_drawing.rays_vertex_buf,
+            //                 0,
+            //                 bytemuck::cast_slice(&content),
+            //             );
+            //         }
+            //     }
+            // }
             VgonioEvent::ToggleDebugDrawing => {
                 self.debug_drawing_enabled = !self.debug_drawing_enabled;
                 println!("Debug drawing: {}", self.debug_drawing_enabled);
             }
-            VgonioEvent::ToggleSurfaceVisibility => {
-                if let Some(msurf_view) = &mut self.msurf {
-                    msurf_view.visible = !msurf_view.visible;
-                }
-            }
+            // VgonioEvent::ToggleSurfaceVisibility => {
+            //     if let Some(msurf_view) = &mut self.msurf {
+            //         msurf_view.visible = !msurf_view.visible;
+            //     }
+            // }
             VgonioEvent::UpdateSamplingDebugger {
                 count,
                 azimuth,
@@ -831,97 +798,158 @@ impl VgonioApp {
                     .record_render_pass(&self.ctx.gpu, &mut encoder, &samples);
                 self.ctx.gpu.queue.submit(Some(encoder.finish()));
             }
-            VgonioEvent::CheckVisibleFacets {
-                m_azimuth,
-                m_zenith,
-                opening_angle,
-            } => match &self.msurf {
-                None => {}
-                Some(msurf) => {
-                    let cache = self.cache.deref().borrow();
-                    let msurf_mesh = cache.micro_surface_mesh(msurf.mesh).unwrap();
-                    let half_opening_angle_cos = (opening_angle / 2.0).cos();
-                    log::debug!(
-                        "zenith: {}, azimuth: {}, opening angle: {}, half opening angle cos: {}",
-                        m_zenith,
-                        m_azimuth,
-                        opening_angle,
-                        half_opening_angle_cos
-                    );
-                    // Right-handed Y-up
-                    let view_dir = Vec3::new(
-                        m_zenith.sin() * m_azimuth.cos(),
-                        m_zenith.cos(),
-                        m_zenith.sin() * m_azimuth.sin(),
-                    )
-                    .normalize();
-                    log::debug!("View direction: {:?}", view_dir);
-                    log::debug!("normals: {:?}", msurf_mesh.facet_normals);
-                    let visible_facets_indices = msurf_mesh
-                        .facet_normals
-                        .iter()
-                        .enumerate()
-                        .inspect(|(idx, normal)| {
-                            log::debug!(
-                                "facet {}: {:?}, dot {}",
-                                idx,
-                                normal,
-                                normal.dot(view_dir)
-                            );
-                        })
-                        .filter_map(|(idx, normal)| {
-                            if normal.dot(view_dir) >= half_opening_angle_cos {
-                                Some(idx)
-                            } else {
-                                None
-                            }
-                        })
-                        .flat_map(|idx| {
-                            [
-                                msurf_mesh.facets[idx * 3],
-                                msurf_mesh.facets[idx * 3 + 1],
-                                msurf_mesh.facets[idx * 3 + 2],
-                            ]
-                        })
-                        .collect::<Vec<_>>();
-                    log::debug!("Visible facets count: {}", visible_facets_indices.len() / 3);
-
-                    if visible_facets_indices.len() >= 3 {
-                        // reallocate buffer if needed
-                        if visible_facets_indices.len() * std::mem::size_of::<u32>()
-                            > self.debug_drawing.msurf_prim_index_buf.size() as usize - 3
-                        {
-                            log::debug!(
-                                "Reallocating visible facets index buffer to {} bytes",
-                                visible_facets_indices.len() * std::mem::size_of::<u32>() + 3
-                            );
-                            self.debug_drawing.msurf_prim_index_buf =
-                                self.ctx.gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                                    label: Some("Visible Facets Index Buffer"),
-                                    size: (visible_facets_indices.len()
-                                        * std::mem::size_of::<u32>()
-                                        + 3) as u64,
-                                    usage: wgpu::BufferUsages::COPY_DST
-                                        | wgpu::BufferUsages::INDEX
-                                        | wgpu::BufferUsages::COPY_SRC,
-                                    mapped_at_creation: false,
-                                });
-                        }
-                        self.debug_drawing.msurf_prim_index_count =
-                            visible_facets_indices.len() as u32;
-                        log::debug!("Updating visible facets index buffer");
-                        self.ctx.gpu.queue.write_buffer(
-                            &self.debug_drawing.msurf_prim_index_buf,
-                            3 * std::mem::size_of::<u32>() as u64,
-                            bytemuck::cast_slice(&visible_facets_indices),
-                        );
-                        self.debug_drawing.drawing_msurf_prims = true;
-                        self.debug_drawing.multiple_prims = true;
-                    }
-                }
-            },
+            // VgonioEvent::CheckVisibleFacets {
+            //     m_azimuth,
+            //     m_zenith,
+            //     opening_angle,
+            // } => match &self.msurf {
+            //     None => {}
+            //     Some(msurf) => {
+            //         let cache = self.cache.deref().borrow();
+            //         let msurf_mesh = cache.micro_surface_mesh(msurf.mesh).unwrap();
+            //         let half_opening_angle_cos = (opening_angle / 2.0).cos();
+            //         log::debug!(
+            //             "zenith: {}, azimuth: {}, opening angle: {}, half opening angle cos: {}",
+            //             m_zenith,
+            //             m_azimuth,
+            //             opening_angle,
+            //             half_opening_angle_cos
+            //         );
+            //         // Right-handed Y-up
+            //         let view_dir = Vec3::new(
+            //             m_zenith.sin() * m_azimuth.cos(),
+            //             m_zenith.cos(),
+            //             m_zenith.sin() * m_azimuth.sin(),
+            //         )
+            //         .normalize();
+            //         log::debug!("View direction: {:?}", view_dir);
+            //         log::debug!("normals: {:?}", msurf_mesh.facet_normals);
+            //         let visible_facets_indices = msurf_mesh
+            //             .facet_normals
+            //             .iter()
+            //             .enumerate()
+            //             .inspect(|(idx, normal)| {
+            //                 log::debug!(
+            //                     "facet {}: {:?}, dot {}",
+            //                     idx,
+            //                     normal,
+            //                     normal.dot(view_dir)
+            //                 );
+            //             })
+            //             .filter_map(|(idx, normal)| {
+            //                 if normal.dot(view_dir) >= half_opening_angle_cos {
+            //                     Some(idx)
+            //                 } else {
+            //                     None
+            //                 }
+            //             })
+            //             .flat_map(|idx| {
+            //                 [
+            //                     msurf_mesh.facets[idx * 3],
+            //                     msurf_mesh.facets[idx * 3 + 1],
+            //                     msurf_mesh.facets[idx * 3 + 2],
+            //                 ]
+            //             })
+            //             .collect::<Vec<_>>();
+            //         log::debug!("Visible facets count: {}", visible_facets_indices.len() / 3);
+            //
+            //         if visible_facets_indices.len() >= 3 {
+            //             // reallocate buffer if needed
+            //             if visible_facets_indices.len() * std::mem::size_of::<u32>()
+            //                 > self.debug_drawing.msurf_prim_index_buf.size() as usize - 3
+            //             {
+            //                 log::debug!(
+            //                     "Reallocating visible facets index buffer to {} bytes",
+            //                     visible_facets_indices.len() * std::mem::size_of::<u32>() + 3
+            //                 );
+            //                 self.debug_drawing.msurf_prim_index_buf =
+            //                     self.ctx.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            //                         label: Some("Visible Facets Index Buffer"),
+            //                         size: (visible_facets_indices.len()
+            //                             * std::mem::size_of::<u32>()
+            //                             + 3) as u64,
+            //                         usage: wgpu::BufferUsages::COPY_DST
+            //                             | wgpu::BufferUsages::INDEX
+            //                             | wgpu::BufferUsages::COPY_SRC,
+            //                         mapped_at_creation: false,
+            //                     });
+            //             }
+            //             self.debug_drawing.msurf_prim_index_count =
+            //                 visible_facets_indices.len() as u32;
+            //             log::debug!("Updating visible facets index buffer");
+            //             self.ctx.gpu.queue.write_buffer(
+            //                 &self.debug_drawing.msurf_prim_index_buf,
+            //                 3 * std::mem::size_of::<u32>() as u64,
+            //                 bytemuck::cast_slice(&visible_facets_indices),
+            //             );
+            //             self.debug_drawing.drawing_msurf_prims = true;
+            //             self.debug_drawing.multiple_prims = true;
+            //         }
+            //     }
+            // },
             _ => {}
         }
+    }
+}
+
+// VgonioEvent handling
+impl VgonioGuiApp {
+    fn open_files(&mut self, files: Vec<FileHandle>) {
+        // TODO: handle other file types
+        for file in files {
+            let path: PathBuf = file.into();
+            let ext = match path.extension() {
+                None => None,
+                Some(s) => {
+                    if let Some(s) = s.to_str() {
+                        Some(s.to_lowercase())
+                    } else {
+                        None
+                    }
+                }
+            };
+
+            if let Some(ext) = ext {
+                match ext.as_str() {
+                    "vgmo" => {
+                        // Micro-surface measurement output
+                        todo!()
+                    }
+                    "vgms" | "txt" => {
+                        // Micro-surface profile
+                        log::debug!("Opening micro-surface profile: {:?}", path);
+                        let load_result = self.cache.load_micro_surface(&self.config, &path);
+                        match load_result {
+                            Ok((surf, mesh)) => {
+                                // self.state.simulation_workspace.update_surface_list(
+                                //     &cache.borrow().loaded_micro_surface_paths().unwrap(),
+                                // );
+                                let _ = self
+                                    .cache
+                                    .create_micro_surface_renderable_mesh(
+                                        &self.ctx.gpu.device,
+                                        surf,
+                                    )
+                                    .unwrap();
+                            }
+                            Err(e) => {
+                                log::error!("Failed to load micro surface: {:?}", e);
+                            }
+                        }
+                    }
+                    "spd" => {
+                        todo!()
+                    }
+                    "csv" => {
+                        todo!()
+                    }
+                    _ => {}
+                }
+            } else {
+                log::warn!("File {:?} has no extension, ignoring", path);
+            }
+        }
+        self.state.outliner_mut().update_surfaces(&self.cache);
     }
 }
 
@@ -1024,7 +1052,7 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),

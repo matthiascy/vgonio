@@ -425,7 +425,7 @@ pub macro nm($val:expr) {
 
 macro impl_conversion($from:ident => $($to:ident, $factor:expr);*) {
     $(
-        impl const From<Length<$from>> for Length<$to> {
+        impl From<Length<$from>> for Length<$to> {
             #[inline(always)]
             fn from(other: Length<$from>) -> Self {
                 Length {

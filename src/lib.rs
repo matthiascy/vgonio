@@ -4,7 +4,6 @@
 #![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
-#![feature(is_some_and)]
 #![feature(vec_push_within_capacity)]
 #![warn(missing_docs)]
 #![feature(stdsimd)] // to enable _mm_rcp14_ss
@@ -780,9 +779,9 @@ impl<T: Copy + Clone> RangeByStepCount<T> {
     }
 
     /// Returns the span of the range.
-    pub const fn span(&self) -> T
+    pub fn span(&self) -> T
     where
-        T: ~const Sub<Output = T>,
+        T: Sub<Output = T>,
     {
         self.stop - self.start
     }
@@ -903,7 +902,7 @@ step'"
 impl RangeByStepCount<f32> {
     /// Returns the step between two consecutive values in the range.
     #[inline]
-    pub const fn step_size(&self) -> f32 { self.span() / self.step_count as f32 }
+    pub fn step_size(&self) -> f32 { self.span() / self.step_count as f32 }
 }
 
 impl<A: LengthMeasurement> RangeByStepCount<Length<A>> {

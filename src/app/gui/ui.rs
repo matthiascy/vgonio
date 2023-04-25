@@ -3,72 +3,106 @@ use crate::{
     app::{
         cache::{Cache, Handle},
         gfx::GpuContext,
-        gui::{tools::Tools, VgonioApp},
+        gui::{gizmo::NavigationGizmo, outliner::Outliner, tools::Tools, VgonioGuiApp},
         Config,
     },
     msurf::MicroSurface,
 };
+use egui_gizmo::GizmoOrientation;
 use glam::Mat4;
-use std::{cell::RefCell, fmt::Write, ops::Deref, sync::Arc};
+use std::{
+    cell::RefCell,
+    fmt::Write,
+    ops::Deref,
+    sync::{Arc, Mutex},
+};
 use winit::event_loop::EventLoopProxy;
 
-/// Implementation of the GUI for vgonio application.
-pub struct VgonioGuiState {
-    /// The configuration of the application. See [`Config`].
-    config: Arc<Config>,
-
-    /// Event loop proxy for sending user defined events.
+/// Implementation of the drag and drop functionality.
+pub struct FileDragDrop {
     event_loop: EventLoopProxy<VgonioEvent>,
-
-    theme: Theme,
-
-    theme_visuals: [ThemeVisuals; 2],
-
-    /// Tools are small windows that can be opened and closed.
-    pub(crate) tools: Tools,
-
-    pub simulation_workspace: SimulationWorkspace, // TODO: make private
-
-    /// Files dropped in the window area.
-    dropped_files: Vec<egui::DroppedFile>,
-
-    /// Handles to the micro-surfaces that are currently opened.
-    opened_msurfs: Vec<Handle<MicroSurface>>,
+    files: Vec<egui::DroppedFile>,
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Theme {
-    Dark,
-    Light,
-}
-
-pub struct ThemeVisuals {
-    pub egui_visuals: egui::Visuals,
-    pub clear_color: wgpu::Color,
-    pub grid_line_color: wgpu::Color,
-}
-
-impl Deref for ThemeVisuals {
-    type Target = egui::Visuals;
-
-    fn deref(&self) -> &Self::Target { &self.egui_visuals }
-}
-
-impl VgonioGuiState {
-    pub fn new(
-        event_loop: EventLoopProxy<VgonioEvent>,
-        config: Arc<Config>,
-        cache: Arc<RefCell<Cache>>,
-        gpu: &GpuContext,
-        gui: &mut GuiRenderer,
-    ) -> Self {
+impl FileDragDrop {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
-            config,
-            event_loop: event_loop.clone(),
-            tools: Tools::new(event_loop.clone(), gpu, gui),
-            simulation_workspace: SimulationWorkspace::new(event_loop, cache),
-            dropped_files: vec![],
+            event_loop,
+            files: vec![],
+        }
+    }
+
+    pub fn clear(&mut self) { self.files.clear(); }
+
+    pub fn show(&mut self, ctx: &egui::Context) {
+        use egui::*;
+
+        let hovered_files = ctx.input(|i| i.raw.hovered_files.clone());
+
+        // Preview hovering files:
+        if !hovered_files.is_empty() {
+            let mut text = "Dropping files:\n".to_owned();
+            for file in &hovered_files {
+                if let Some(path) = &file.path {
+                    write!(text, "\n{}", path.display()).unwrap();
+                } else if !file.mime.is_empty() {
+                    write!(text, " \n{}", file.mime).unwrap();
+                } else {
+                    text += "\n???";
+                }
+            }
+
+            let painter =
+                ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
+            let screen_rect = ctx.input(|i| i.screen_rect());
+            painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(210));
+            painter.text(
+                screen_rect.center(),
+                Align2::CENTER_CENTER,
+                text,
+                TextStyle::Heading.resolve(&ctx.style()),
+                Color32::WHITE,
+            );
+        }
+
+        // Collect dropped files:
+        let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
+        if !dropped_files.is_empty() {
+            self.files = dropped_files;
+        }
+
+        // TODO: Load dropped files, if any into the cache
+        if !self.files.is_empty() {
+            let files = std::mem::take(&mut self.files)
+                .into_iter()
+                .filter_map(|f| {
+                    f.path
+                        .filter(|p| p.is_file() && p.exists())
+                        .map(|p| rfd::FileHandle::from(p))
+                })
+                .collect::<Vec<_>>();
+
+            if self
+                .event_loop
+                .clone()
+                .send_event(VgonioEvent::OpenFiles(files))
+                .is_err()
+            {
+                log::warn!("[EVENT] Failed to send OpenFiles event");
+            }
+        }
+    }
+}
+
+pub struct ThemeState {
+    pub theme: Theme,
+    pub theme_visuals: [ThemeVisuals; 2],
+    pub need_update: bool,
+}
+
+impl Default for ThemeState {
+    fn default() -> Self {
+        Self {
             theme_visuals: [
                 ThemeVisuals {
                     egui_visuals: egui::Visuals {
@@ -91,6 +125,7 @@ impl VgonioGuiState {
                 ThemeVisuals {
                     egui_visuals: egui::Visuals {
                         dark_mode: false,
+                        panel_fill: egui::Color32::from_gray(190),
                         ..egui::Visuals::light()
                     },
                     clear_color: wgpu::Color {
@@ -107,96 +142,127 @@ impl VgonioGuiState {
                     },
                 },
             ],
-            theme: Theme::Dark,
-            opened_msurfs: vec![],
+            theme: Theme::Light,
+            need_update: true,
+        }
+    }
+}
+
+impl ThemeState {
+    pub fn update(&mut self, ctx: &egui::Context) {
+        if self.need_update {
+            self.need_update = false;
+            ctx.set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
+        }
+    }
+
+    pub fn set(&mut self, theme: Theme) {
+        if self.theme != theme {
+            self.theme = theme;
+            self.need_update = true;
+        }
+    }
+
+    pub fn current_theme(&self) -> Theme { self.theme }
+
+    pub fn current_theme_visuals(&self) -> &ThemeVisuals {
+        &self.theme_visuals[self.theme as usize]
+    }
+}
+
+/// Implementation of the GUI for vgonio application.
+pub struct VgonioGuiState {
+    /// The configuration of the application. See [`Config`].
+    config: Arc<Config>,
+
+    /// Event loop proxy for sending user defined events.
+    event_loop: EventLoopProxy<VgonioEvent>,
+
+    theme: ThemeState,
+
+    /// Tools are small windows that can be opened and closed.
+    pub(crate) tools: Tools,
+
+    // pub simulation_workspace: SimulationWorkspace, // TODO: make private, simplify access
+    /// The drag and drop state.
+    drag_drop: FileDragDrop,
+
+    /// Gizmo inside the viewport for navigating the scene.
+    navigator: NavigationGizmo,
+
+    /// Outliner of the scene.
+    outliner: Outliner,
+
+    /// Visibility of the visual grid.
+    pub enable_visual_grid: bool,
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Theme {
+    Dark = 0,
+    Light = 1,
+}
+
+pub struct ThemeVisuals {
+    pub egui_visuals: egui::Visuals,
+    pub clear_color: wgpu::Color,
+    pub grid_line_color: wgpu::Color,
+}
+
+impl Deref for ThemeVisuals {
+    type Target = egui::Visuals;
+
+    fn deref(&self) -> &Self::Target { &self.egui_visuals }
+}
+
+impl VgonioGuiState {
+    pub fn new(
+        event_loop: EventLoopProxy<VgonioEvent>,
+        config: Arc<Config>,
+        //cache: Arc<Mutex<Cache>>,
+        gpu: &GpuContext,
+        gui: &mut GuiRenderer,
+    ) -> Self {
+        Self {
+            config,
+            event_loop: event_loop.clone(),
+            tools: Tools::new(event_loop.clone(), gpu, gui),
+            // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
+            drag_drop: FileDragDrop::new(event_loop),
+            theme: ThemeState::default(),
+            navigator: NavigationGizmo::new(GizmoOrientation::Global),
+            outliner: Outliner::new(),
+            enable_visual_grid: true,
         }
     }
 
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
-        self.simulation_workspace
-            .update_gizmo_matrices(model, view, proj);
+        self.navigator.update_matrices(model, view, proj);
     }
 
     pub fn show(&mut self, ctx: &egui::Context) {
+        self.theme.update(ctx);
         egui::TopBottomPanel::top("vgonio-menu-bar").show(ctx, |ui| {
             self.menu_bar(ui);
         });
         self.tools.show(ctx);
-        self.simulation_workspace.show(ctx);
-        self.file_drag_and_drop(ctx);
+        //self.simulation_workspace.show(ctx);
+        self.drag_drop.show(ctx);
+        self.navigator.show(ctx);
+        self.outliner.show(ctx);
     }
 
-    pub fn set_theme(&mut self, theme: Theme) { self.theme = theme; }
+    pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
 
-    pub fn theme_visuals(&self) -> &ThemeVisuals { &self.theme_visuals[self.theme as usize] }
+    pub fn current_theme_visuals(&self) -> &ThemeVisuals { self.theme.current_theme_visuals() }
+
+    pub fn outliner(&self) -> &Outliner { &self.outliner }
+
+    pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
 }
 
 impl VgonioGuiState {
-    fn file_drag_and_drop(&mut self, ctx: &egui::Context) {
-        use egui::*;
-
-        let hovered_files = ctx.input(|i| i.raw.hovered_files.clone());
-
-        // Preview hovering files:
-        if !hovered_files.is_empty() {
-            let mut text = "Dropping files:\n".to_owned();
-            for file in &hovered_files {
-                if let Some(path) = &file.path {
-                    write!(text, "\n{}", path.display()).unwrap();
-                } else if !file.mime.is_empty() {
-                    write!(text, " \n{}", file.mime).unwrap();
-                } else {
-                    text += "\n???";
-                }
-            }
-
-            let painter =
-                ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
-
-            let screen_rect = ctx.input(|i| i.screen_rect());
-            painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
-            painter.text(
-                screen_rect.center(),
-                Align2::CENTER_CENTER,
-                text,
-                TextStyle::Heading.resolve(&ctx.style()),
-                Color32::WHITE,
-            );
-        }
-
-        // Collect dropped files:
-        let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
-        if !dropped_files.is_empty() {
-            self.dropped_files = dropped_files;
-        }
-
-        // Show dropped files (if any):
-        if !self.dropped_files.is_empty() {
-            let mut open = true;
-
-            Window::new("Dropped files")
-                .open(&mut open)
-                .show(ctx, |ui| {
-                    for file in &self.dropped_files {
-                        let mut info = if let Some(path) = &file.path {
-                            path.display().to_string()
-                        } else if !file.name.is_empty() {
-                            file.name.clone()
-                        } else {
-                            "???".to_owned()
-                        };
-                        if let Some(bytes) = &file.bytes {
-                            write!(info, " ({} bytes)", bytes.len()).unwrap();
-                        }
-                        ui.label(info);
-                    }
-                });
-            if !open {
-                self.dropped_files.clear();
-            }
-        }
-    }
-
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         // FIXME: temporarily disabled when using the web backend.
         #[cfg(not(target_arch = "wasm32"))]
@@ -218,17 +284,17 @@ impl VgonioGuiState {
                                 .config
                                 .user_data_dir()
                                 .unwrap_or_else(|| self.config.sys_data_dir());
-                            let task = AsyncFileDialog::new().set_directory(dir).pick_file();
+                            let task = AsyncFileDialog::new().set_directory(dir).pick_files();
                             let event_loop_proxy = self.event_loop.clone();
                             std::thread::spawn(move || {
                                 pollster::block_on(async {
-                                    let file_handle = task.await;
-                                    if let Some(hd) = file_handle {
+                                    let file_handles = task.await;
+                                    if let Some(hds) = file_handles {
                                         if event_loop_proxy
-                                            .send_event(VgonioEvent::OpenFile(hd))
+                                            .send_event(VgonioEvent::OpenFiles(hds))
                                             .is_err()
                                         {
-                                            log::warn!("[EVENT] Failed to send OpenFile event");
+                                            log::warn!("[EVENT] Failed to send OpenFiles event");
                                         }
                                     }
                                 })
@@ -288,6 +354,21 @@ impl VgonioGuiState {
 
                     ui.separator();
 
+                    if ui.button("     Reset windows").clicked() {
+                        ui.ctx().memory_mut(|mem| mem.reset_areas());
+                        ui.close_menu();
+                    }
+
+                    {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("     Visual grid");
+                            ui.add_space(5.0);
+                            ui.add(super::misc::toggle(&mut self.enable_visual_grid));
+                        });
+                    }
+
+                    ui.separator();
+
                     if ui.button("\u{2699} Preferences").clicked() {
                         println!("TODO: open preferences window");
                     }
@@ -325,16 +406,14 @@ impl VgonioGuiState {
     }
 
     fn theme_toggle_button(&mut self, ui: &mut egui::Ui) {
-        match self.theme {
+        match self.theme.current_theme() {
             Theme::Dark => {
                 if ui
                     .add(egui::Button::new("☀").frame(false))
                     .on_hover_text("Switch to light mode")
                     .clicked()
                 {
-                    self.set_theme(Theme::Light);
-                    ui.ctx()
-                        .set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
+                    self.theme.set(Theme::Light);
                 }
             }
             Theme::Light => {
@@ -343,9 +422,7 @@ impl VgonioGuiState {
                     .on_hover_text("Switch to dark mode")
                     .clicked()
                 {
-                    self.set_theme(Theme::Dark);
-                    ui.ctx()
-                        .set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
+                    self.theme.set(Theme::Dark);
                 }
             }
         }

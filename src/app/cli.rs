@@ -405,7 +405,7 @@ fn measure_microfacet_normal_distribution(
         let filename = format!(
             "microfacet-normal-distribution-{}.vgmo",
             cache
-                .micro_surface_path(*surface)
+                .get_micro_surface_filepath(*surface)
                 .unwrap()
                 .file_stem()
                 .unwrap()
@@ -476,7 +476,7 @@ fn measure_microfacet_masking_shadowing(
         let filename = format!(
             "microfacet-masking-shadowing-{}.vgmo",
             cache
-                .micro_surface_path(*surface)
+                .get_micro_surface_filepath(*surface)
                 .unwrap()
                 .file_stem()
                 .unwrap()

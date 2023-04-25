@@ -30,7 +30,7 @@ impl std::error::Error for ReadFileError {
 }
 
 impl ReadFileError {
-    /// Creates a new `FromFileError` from a `ParseError`.
+    /// Creates a new `ReadFileError` from a `ParseError`.
     pub fn from_parse_error(path: impl AsRef<Path>, err: ParseError) -> Self {
         Self {
             path: path.as_ref().to_path_buf().into_boxed_path(),
@@ -38,7 +38,7 @@ impl ReadFileError {
         }
     }
 
-    /// Creates a new `FromFileError` from a `std::io::Error`.
+    /// Creates a new `ReadFileError` from a `std::io::Error`.
     pub fn from_std_io_error(path: impl AsRef<Path>, err: std::io::Error) -> Self {
         Self {
             path: path.as_ref().to_path_buf().into_boxed_path(),
@@ -595,18 +595,14 @@ pub mod vgmo {
 /// 0.1 1.0 0.1
 ///
 /// Unit used during the measurement is micrometre.
-pub fn read_ascii_dong2015<R: Read>(
-    mut reader: R,
-    read_first_4_bytes: bool,
-    path: &Path,
+pub fn read_ascii_dong2015<R: BufRead>(
+    reader: &mut R,
+    filepath: &Path,
 ) -> Result<MicroSurface, Error> {
-    if read_first_4_bytes {
-        let mut buf = [0_u8; 4];
-        reader.read_exact(&mut buf)?;
-
-        if std::str::from_utf8(&buf)? != "Asci" {
-            return Err(Error::UnrecognizedFile);
-        }
+    let mut buf = [0_u8; 4];
+    reader.read_exact(&mut buf)?;
+    if std::str::from_utf8(&buf)? != "Asci" {
+        return Err(Error::UnrecognizedFile);
     }
 
     let mut reader = BufReader::new(reader);
@@ -634,7 +630,7 @@ pub fn read_ascii_dong2015<R: Read>(
 
     read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
         Error::ReadFile(ReadFileError {
-            path: path.to_owned().into_boxed_path(),
+            path: filepath.to_owned().into_boxed_path(),
             kind: ReadFileErrorKind::Parse(err),
         })
     })?;
@@ -646,29 +642,43 @@ pub fn read_ascii_dong2015<R: Read>(
         dv,
         LengthUnit::UM,
         samples,
-        Some(path.into()),
+        filepath
+            .file_name()
+            .and_then(|name| name.to_str().map(|name| name.to_owned())),
+        Some(filepath.into()),
     ))
 }
 
 /// Read micro-surface height field issued from µsurf confocal microscope.
 pub fn read_ascii_usurf<R: BufRead>(
-    mut reader: R,
-    read_first_4_bytes: bool,
-    path: &Path,
+    reader: &mut R,
+    filepath: &Path,
 ) -> Result<MicroSurface, Error> {
     let mut line = String::new();
-    reader.read_line(&mut line)?;
 
-    if read_first_4_bytes && line.trim() != "DATA" {
+    loop {
+        reader.read_line(&mut line)?;
+        if !line.is_empty() {
+            break;
+        }
+    }
+
+    if line.trim() != "DATA" {
         return Err(Error::UnrecognizedFile);
     }
+
+    line.clear();
 
     // Read horizontal coordinates
     reader.read_line(&mut line)?;
     let x_coords: Vec<f32> = line
         .trim()
         .split_ascii_whitespace()
-        .map(|x_coord| x_coord.parse::<f32>().expect("Read f32 error!"))
+        .map(|x_coord| {
+            x_coord
+                .parse::<f32>()
+                .expect(&format!("Read f32 error! {}", x_coord))
+        })
         .collect();
 
     let (y_coords, values): (Vec<f32>, Vec<Vec<f32>>) = reader
@@ -692,7 +702,10 @@ pub fn read_ascii_usurf<R: BufRead>(
         dv,
         LengthUnit::UM,
         samples,
-        Some(path.into()),
+        filepath
+            .file_name()
+            .and_then(|name| name.to_str().map(|name| name.to_owned())),
+        Some(filepath.into()),
     ))
 }
 
@@ -823,115 +836,3 @@ mod tests {
         assert_eq!(results[3], 30);
     }
 }
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum CacheKind {
-    Bvh,
-    Mesh,
-    HeightField,
-    Unknown,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct CacheHeader {
-    pub binary: bool,
-    pub kind: CacheKind,
-    pub size: u32,
-}
-
-impl CacheHeader {
-    pub fn new(buf: [u8; 6]) -> Self {
-        Self {
-            binary: buf[0] == b'!',
-            kind: match buf[1] {
-                0x01 => CacheKind::Bvh,
-                0x02 => CacheKind::HeightField,
-                0x04 => CacheKind::Mesh,
-                _ => CacheKind::Unknown,
-            },
-            size: u32::from_le_bytes(buf[2..6].try_into().expect("incorrect len")),
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum SiUnit {
-    Nanometre,
-    Micrometre,
-}
-
-/// Micro-surface file header
-#[derive(Debug)]
-pub struct MsHeader {
-    pub binary: bool,
-    pub unit: SiUnit,
-    pub spacing: [f32; 2],
-    pub extent: [u32; 2],
-    pub size: u32,
-}
-
-impl MsHeader {
-    /// Read from a buffer without the first 4 bytes: DCMS
-    /// Last byte of the buffer is the new line character
-    pub fn new(buf: [u8; 23]) -> Self {
-        let unit = match buf[1] {
-            0x01 => SiUnit::Micrometre,
-            0x02 => SiUnit::Nanometre,
-            _ => SiUnit::Nanometre,
-        };
-        let spacing_x = f32::from_le_bytes(buf[2..6].try_into().expect("incorrect len"));
-        let spacing_y = f32::from_le_bytes(buf[6..10].try_into().expect("incorrect len"));
-        let samples_count_x = u32::from_le_bytes(buf[10..14].try_into().expect("incorrect len"));
-        let samples_count_y = u32::from_le_bytes(buf[14..18].try_into().expect("incorrect len"));
-
-        Self {
-            binary: buf[0] == b'!',
-            unit,
-            spacing: [spacing_x, spacing_y],
-            extent: [samples_count_x, samples_count_y],
-            size: u32::from_le_bytes(buf[18..22].try_into().expect("incorrect len")),
-        }
-    }
-
-    pub fn write_into<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        let mut buf = [0_u8; 27];
-
-        buf[0..4].clone_from_slice(b"DCMS");
-
-        buf[4] = if self.binary { b'!' } else { b'#' };
-
-        buf[5] = match self.unit {
-            SiUnit::Nanometre => 0x01,
-            SiUnit::Micrometre => 0x02,
-        };
-
-        buf[6..10].clone_from_slice(&f32::to_le_bytes(self.spacing[0]));
-        buf[10..14].clone_from_slice(&f32::to_le_bytes(self.spacing[1]));
-        buf[14..18].clone_from_slice(&u32::to_le_bytes(self.extent[0]));
-        buf[18..22].clone_from_slice(&u32::to_le_bytes(self.extent[1]));
-        buf[22..26].clone_from_slice(&u32::to_le_bytes(self.size));
-        buf[26] = b'\n';
-        writer.write_all(&buf).map(|_| Ok(()))?
-    }
-}
-
-// /// VGonio measurement output file.
-// pub struct Vgmo<T: MicroSurfaceMeasurement> {
-//     pub header: VgmoHeader,
-//     pub measurement: T,
-// }
-
-// pub struct VgmoHeader {
-//     pub magic: [u8; 4],
-//     pub measurement_type: u8,
-//     pub encoding: u8,
-// }
-
-// /// Metadata for micro-facet normal distribution function and
-// masking/shadowing /// function
-// pub struct VgmoHeaderMndfAndMmsf {}
-
-// impl VgmoHeader {
-//     /// Size of the header in bytes.
-//     pub const SIZE_IN_BYTES: usize = std::mem::size_of::<Self>();
-// }
