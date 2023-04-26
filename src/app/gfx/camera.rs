@@ -184,22 +184,36 @@ impl Camera {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ViewProjUniform {
+    pub view: Mat4,
+    pub proj: Mat4,
+}
+
+impl ViewProjUniform {
+    pub const SIZE_IN_BYTES: usize = std::mem::size_of::<Self>();
+}
+
+#[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct CameraUniform {
-    pub view_matrix: Mat4,
-    pub proj_matrix: Mat4,
-    pub view_inv_matrix: Mat4,
-    pub proj_inv_matrix: Mat4,
+    pub view_proj: ViewProjUniform,
+    pub view_proj_inv: ViewProjUniform,
 }
 
 impl CameraUniform {
     pub fn new(camera: &Camera, projection: &Projection, kind: ProjectionKind) -> Self {
+        let view_matrix = camera.view_matrix();
         let proj_matrix = projection.matrix(kind);
         Self {
-            view_matrix: camera.view_matrix(),
-            proj_matrix,
-            view_inv_matrix: camera.view_matrix().inverse(),
-            proj_inv_matrix: proj_matrix.inverse(),
+            view_proj: ViewProjUniform {
+                view: view_matrix,
+                proj: proj_matrix,
+            },
+            view_proj_inv: ViewProjUniform {
+                view: view_matrix.inverse(),
+                proj: proj_matrix.inverse(),
+            },
         }
     }
 

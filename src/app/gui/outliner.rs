@@ -56,9 +56,10 @@ impl Outliner {
     pub fn any_visible_surfaces(&self) -> bool { self.states.iter().any(|(_, s)| s.visible) }
 
     /// Updates the outliner according to the cache.
-    pub fn update_surfaces(&mut self, cache: &Cache) {
-        for record in cache.records.values() {
-            if let std::collections::hash_map::Entry::Vacant(e) = self.states.entry(record.surf) {
+    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &Cache) {
+        for hdl in surfs {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.states.entry(*hdl) {
+                let record = cache.get_micro_surface_record(*hdl).unwrap();
                 let surf = cache.get_micro_surface(*e.key()).unwrap();
                 e.insert(MicroSurfaceRenderState {
                     name: record.name().to_string(),
@@ -69,7 +70,7 @@ impl Outliner {
                     y_offset: -(surf.max + surf.min) * 0.5,
                 });
                 self.headers
-                    .insert(record.surf, SurfaceCollapsableHeader { selected: false });
+                    .insert(*hdl, SurfaceCollapsableHeader { selected: false });
             }
         }
     }

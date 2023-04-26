@@ -251,6 +251,13 @@ impl Cache {
         Ok(handle)
     }
 
+    pub fn get_micro_surface_record(
+        &self,
+        handle: Handle<MicroSurface>,
+    ) -> Option<&MicroSurfaceRecord> {
+        self.records.get(&handle)
+    }
+
     /// Returns a micro-surface profile [`RenderableMesh`] from the cache
     /// given handle to the micro-surface profile.
     pub fn get_micro_surface_renderable_mesh_by_surface_id(
