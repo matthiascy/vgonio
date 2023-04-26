@@ -338,7 +338,7 @@ impl DebugState {
                         resource: rays_rp_uniform_buffer.as_entire_binding(),
                     }],
                 })],
-                uniform_buffer: Some(rays_rp_uniform_buffer),
+                uniform_buffers: Some(vec![rays_rp_uniform_buffer]),
             },
             ray_t: 0.0,
             msurf_prim_rp: RenderPass {
@@ -403,7 +403,7 @@ impl DebugState {
                         resource: msurf_prim_rp_uniform_buffer.as_entire_binding(),
                     }],
                 })],
-                uniform_buffer: Some(msurf_prim_rp_uniform_buffer),
+                uniform_buffers: Some(vec![msurf_prim_rp_uniform_buffer]),
             },
             msurf_prim_index_buf,
             msurf_prim_index_count: 0,
@@ -414,12 +414,12 @@ impl DebugState {
 
     pub fn update_uniform_buffer(&mut self, ctx: &GpuContext, uniform: &[f32; 16 * 3 + 4]) {
         ctx.queue.write_buffer(
-            self.rays_rp.uniform_buffer.as_ref().unwrap(),
+            &self.rays_rp.uniform_buffers.as_ref().unwrap()[0],
             0,
             bytemuck::cast_slice(uniform),
         );
         ctx.queue.write_buffer(
-            self.msurf_prim_rp.uniform_buffer.as_ref().unwrap(),
+            &self.msurf_prim_rp.uniform_buffers.as_ref().unwrap()[0],
             0,
             bytemuck::cast_slice(uniform),
         );

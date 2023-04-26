@@ -163,7 +163,7 @@ impl ShadowPass {
         let pass = RenderPass {
             pipeline,
             bind_groups: vec![bind_group],
-            uniform_buffer: Some(uniform_buffer),
+            uniform_buffers: Some(vec![uniform_buffer]),
         };
 
         let size = (std::mem::size_of::<f32>() * (width * height) as usize) as wgpu::BufferAddress;
@@ -191,7 +191,12 @@ impl ShadowPass {
 
     pub fn bind_groups(&self) -> &[wgpu::BindGroup] { &self.inner.bind_groups }
 
-    pub fn uniform_buffer(&self) -> Option<&wgpu::Buffer> { self.inner.uniform_buffer.as_ref() }
+    pub fn uniform_buffer(&self) -> Option<&wgpu::Buffer> {
+        self.inner
+            .uniform_buffers
+            .as_ref()
+            .map(|buffers| &buffers[0])
+    }
 
     pub fn depth_attachment(&self) -> (&wgpu::Texture, &wgpu::TextureView, &wgpu::Sampler) {
         (
@@ -221,7 +226,7 @@ impl ShadowPass {
 
     pub fn update_uniforms(&self, queue: &wgpu::Queue, model: Mat4, view: Mat4, proj: Mat4) {
         queue.write_buffer(
-            self.inner.uniform_buffer.as_ref().unwrap(),
+            &self.inner.uniform_buffers.as_ref().unwrap()[0],
             0,
             bytemuck::cast_slice(&[model, proj * view]),
         );

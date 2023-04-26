@@ -275,7 +275,7 @@ impl VisibilityEstimator {
             RenderPass {
                 pipeline,
                 bind_groups: vec![bind_group],
-                uniform_buffer: None,
+                uniform_buffers: None,
             }
         };
 
@@ -441,7 +441,7 @@ impl VisibilityEstimator {
             RenderPass {
                 pipeline,
                 bind_groups,
-                uniform_buffer: None,
+                uniform_buffers: None,
             }
         };
 

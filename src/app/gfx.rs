@@ -32,7 +32,7 @@ pub enum BufferType {
 pub struct RenderPass {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_groups: Vec<wgpu::BindGroup>,
-    pub uniform_buffer: Option<wgpu::Buffer>,
+    pub uniform_buffers: Option<Vec<wgpu::Buffer>>,
 }
 
 pub const DEFAULT_BIND_GROUP_LAYOUT_DESC: wgpu::BindGroupLayoutDescriptor =

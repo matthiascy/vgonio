@@ -13,13 +13,11 @@ use crate::{
     units::degrees,
     Handedness,
 };
-use glam::{IVec2, Mat4, Vec3};
-use rfd::FileHandle;
+use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
-    cell::RefCell,
     collections::HashMap,
     default::Default,
-    ffi::OsStr,
+    num::NonZeroU64,
     ops::Deref,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -35,7 +33,6 @@ use wgpu::util::DeviceExt;
 
 use crate::{
     app::{
-        args::ConvertKind::MicroSurfaceProfile,
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind},
@@ -204,6 +201,27 @@ pub struct Context {
     gui: GuiContext,
 }
 
+struct MicroSurfaceRenderPass {
+    pipeline: wgpu::RenderPipeline,
+    global_uniform_bind_group: wgpu::BindGroup,
+    local_uniform_bind_group: wgpu::BindGroup,
+    global_uniform_buffer: wgpu::Buffer,
+    local_uniform_buffer: wgpu::Buffer,
+}
+
+impl MicroSurfaceRenderPass {
+    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
+        let shader_module = ctx
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("height_field_shader_module"),
+                source: wgpu::ShaderSource::Wgsl(
+                    include_str!("./gui/assets/shaders/wgsl/micro_surface.wgsl").into(),
+                ),
+            });
+    }
+}
+
 /// Vgonio client application with GUI.
 pub struct VgonioGuiApp {
     /// The application context.
@@ -266,12 +284,12 @@ impl VgonioGuiApp {
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
 
-        let heightfield_pass = create_heightfield_pass(&gpu_ctx, win_surf.format());
+        let micro_surface_pass = create_micro_surface_pass(&gpu_ctx, win_surf.format());
         let visual_grid_pass = create_visual_grid_pass(&gpu_ctx, win_surf.format());
 
         let mut passes = HashMap::new();
         passes.insert("visual_grid", visual_grid_pass);
-        passes.insert("heightfield", heightfield_pass);
+        passes.insert("micro_surface", micro_surface_pass);
 
         let mut gui_ctx = GuiContext::new(
             gpu_ctx.device.clone(),
@@ -396,12 +414,13 @@ impl VgonioGuiApp {
         );
         let current_theme_visuals = self.state.current_theme_visuals();
         self.ctx.gpu.queue.write_buffer(
-            self.passes
+            &self
+                .passes
                 .get("visual_grid")
                 .unwrap()
-                .uniform_buffer
+                .uniform_buffers
                 .as_ref()
-                .unwrap(),
+                .unwrap()[0],
             0,
             bytemuck::bytes_of(&VisualGridUniforms {
                 view: self.camera.uniform.view_matrix.to_cols_array(),
@@ -421,32 +440,82 @@ impl VgonioGuiApp {
             }),
         );
 
-        // TODO: push constants
-        if let Some((hdl, scale)) = self.state.outliner().visible_surfaces().next() {
-            let msurf = self.cache.get_micro_surface(*hdl).unwrap();
-            let mut uniform = [0.0f32; 16 * 3 + 4];
-            // Displace visually the heightfield.
-            uniform[0..16].copy_from_slice(
-                &Mat4::from_translation(Vec3::new(
-                    0.0,
-                    -(msurf.max + msurf.min) * 0.5 * scale,
-                    0.0,
-                ))
-                .to_cols_array(),
-            );
-            uniform[16..32].copy_from_slice(&self.camera.uniform.view_matrix.to_cols_array());
-            uniform[32..48].copy_from_slice(&self.camera.uniform.proj_matrix.to_cols_array());
-            uniform[48..52].copy_from_slice(&[msurf.min, msurf.max, msurf.max - msurf.min, scale]);
+        // Update uniform buffer for the micro-surface shader.
+        let visible_surfaces = self.state.outliner().visible_surfaces();
+        if !visible_surfaces.is_empty() {
+            // Update globals.
             self.ctx.gpu.queue.write_buffer(
-                self.passes
-                    .get("heightfield")
+                &self
+                    .passes
+                    .get("micro_surface")
                     .unwrap()
-                    .uniform_buffer
+                    .uniform_buffers
                     .as_ref()
-                    .unwrap(),
+                    .unwrap()[0],
                 0,
-                bytemuck::cast_slice(&uniform),
+                bytemuck::cast_slice(&[CameraViewProjection {
+                    view: self.camera.uniform.view_matrix,
+                    proj: self.camera.uniform.proj_matrix,
+                }]),
             );
+            let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+            let mut buffer = vec![0.0; aligned_size as usize * visible_surfaces.len()];
+            for (i, (_, state)) in visible_surfaces.iter().enumerate() {
+                let offset = i * aligned_size as usize;
+                buffer[offset..offset + 16].copy_from_slice(
+                    &Mat4::from_translation(Vec3::new(0.0, -state.y_offset * state.scale, 0.0))
+                        .to_cols_array(),
+                );
+                buffer[offset + 16..offset + 20].copy_from_slice(&[
+                    state.min,
+                    state.max,
+                    state.max - state.min,
+                    state.scale,
+                ]);
+            }
+            self.ctx.gpu.queue.write_buffer(
+                &self
+                    .passes
+                    .get("micro_surface")
+                    .unwrap()
+                    .uniform_buffers
+                    .as_ref()
+                    .unwrap()[1],
+                0,
+                bytemuck::cast_slice(&buffer),
+            );
+            // let msurf = self.cache.get_micro_surface(*hdl).unwrap();
+            // // Only upload view and proj matrices if there are surfaces to
+            // draw. let mut view_proj_model_info = [0.0f32; 16 * 3
+            // + 4]; view_proj_model_info[0..16]
+            //     .copy_from_slice(&self.camera.uniform.view_matrix.
+            // to_cols_array()); view_proj_model_info[16..32]
+            //     .copy_from_slice(&self.camera.uniform.proj_matrix.
+            // to_cols_array()); view_proj_model_info[32..48].
+            // copy_from_slice(
+            //     &Mat4::from_translation(Vec3::new(
+            //         0.0,
+            //         -(msurf.max + msurf.min) * 0.5 * state.scale,
+            //         0.0,
+            //     ))
+            //     .to_cols_array(),
+            // );
+            // view_proj_model_info[48..52].copy_from_slice(&[
+            //     msurf.min,
+            //     msurf.max,
+            //     msurf.max - msurf.min,
+            //     state.scale,
+            // ]);
+            // self.ctx.gpu.queue.write_buffer(
+            //     self.passes
+            //         .get("micro_surface")
+            //         .unwrap()
+            //         .uniform_buffer
+            //         .as_ref()
+            //         .unwrap(),
+            //     0,
+            //     bytemuck::cast_slice(&view_proj_model_info),
+            // );
 
             // // Update the uniform buffer for debug drawing.
             // if self.debug_drawing_enabled {
@@ -477,19 +546,22 @@ impl VgonioGuiApp {
                 .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vgonio_render_encoder"),
+                    label: Some("vgnoio_update_encoder"),
                 }),
             self.ctx
                 .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vgonio_render_debug_encoder"),
+                    label: Some("vgonio_render_encoder"),
                 }),
         ];
 
+        let pass = self.passes.get("micro_surface").unwrap();
+
         // Main render pass
+        let visible_surfaces = self.state.outliner().visible_surfaces();
         {
-            let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
                 color_attachments: &[Some(
                     // This is what [[location(0)]] in the fragment shader targets
@@ -516,25 +588,29 @@ impl VgonioGuiApp {
                 }),
             });
 
-            let pass = self.passes.get("heightfield").unwrap();
-            for (hdl, _) in self.state.outliner().visible_surfaces() {
-                println!("-- rendering msurf: {:?}", hdl);
-                let surface = self.cache.get_micro_surface(*hdl);
+            let aligned_micro_surface_uniform_size =
+                MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+
+            render_pass.set_pipeline(&pass.pipeline);
+            render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
+
+            for (i, (hdl, _)) in visible_surfaces.iter().enumerate() {
                 let renderable = self
                     .cache
-                    .get_micro_surface_renderable_mesh_by_surface_id(*hdl);
-                if renderable.is_none() || surface.is_none() {
-                    println!(
-                        "Failed to get renderable mesh or surface, renderable: {:?}, surface: {:?}",
-                        renderable.is_none(),
-                        surface.is_none()
+                    .get_micro_surface_renderable_mesh_by_surface_id(**hdl);
+                if renderable.is_none() {
+                    log::debug!(
+                        "Failed to get renderable mesh for surface {:?}, skipping.",
+                        hdl
                     );
                     continue;
                 }
                 let renderable = renderable.unwrap();
-                println!("   renderable: {:?}", renderable.uuid);
-                render_pass.set_pipeline(&pass.pipeline);
-                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
+                render_pass.set_bind_group(
+                    1,
+                    &pass.bind_groups[1],
+                    &[i as u32 * aligned_micro_surface_uniform_size],
+                );
                 render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(renderable.index_buffer.slice(..), renderable.index_format);
@@ -766,11 +842,6 @@ impl VgonioGuiApp {
                 self.debug_drawing_enabled = !self.debug_drawing_enabled;
                 println!("Debug drawing: {}", self.debug_drawing_enabled);
             }
-            // VgonioEvent::ToggleSurfaceVisibility => {
-            //     if let Some(msurf_view) = &mut self.msurf {
-            //         msurf_view.visible = !msurf_view.visible;
-            //     }
-            // }
             VgonioEvent::UpdateSamplingDebugger {
                 count,
                 azimuth,
@@ -894,19 +965,13 @@ impl VgonioGuiApp {
 
 // VgonioEvent handling
 impl VgonioGuiApp {
-    fn open_files(&mut self, files: Vec<FileHandle>) {
+    fn open_files(&mut self, files: Vec<rfd::FileHandle>) {
         // TODO: handle other file types
         for file in files {
             let path: PathBuf = file.into();
             let ext = match path.extension() {
                 None => None,
-                Some(s) => {
-                    if let Some(s) = s.to_str() {
-                        Some(s.to_lowercase())
-                    } else {
-                        None
-                    }
-                }
+                Some(s) => s.to_str().map(|s| s.to_lowercase()),
             };
 
             if let Some(ext) = ext {
@@ -953,48 +1018,115 @@ impl VgonioGuiApp {
     }
 }
 
-fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CameraViewProjection {
+    view: Mat4,
+    proj: Mat4,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MicroSurfaceUniforms {
+    model: Mat4,
+    info: Vec4,
+}
+
+impl MicroSurfaceUniforms {
+    fn aligned_size(device: &wgpu::Device) -> u32 {
+        let alignment = device.limits().min_uniform_buffer_offset_alignment;
+        let size = std::mem::size_of::<MicroSurfaceUniforms>() as u32;
+        let remainder = size % alignment;
+        if remainder == 0 {
+            size
+        } else {
+            size + alignment - remainder
+        }
+    }
+}
+
+fn create_micro_surface_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
     // Load shader
     let shader_module = ctx
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("height_field_shader_module"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("./gui/assets/shaders/wgsl/heightfield.wgsl").into(),
+                include_str!("./gui/assets/shaders/wgsl/micro_surface.wgsl").into(),
             ),
         });
 
-    // Create uniform buffer for rendering height field
-    let uniform_buffer = ctx
+    // Create uniform buffer for rendering micro-surfaces.
+    // Pre-allocate space for 64 surfaces.
+    let globals_uniform_buffer = ctx
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("camera-uniform-buffer"),
-            contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
+            contents: bytemuck::cast_slice(&[0.0; 16 * 2]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-    let bind_group_layout = ctx
-        .device
-        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("height_field_bind_group_layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
+    let aligned_local_uniform_size = MicroSurfaceUniforms::aligned_size(&ctx.device);
+    let locals_uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("micro_surface_uniform_buffer"),
+        size: (aligned_local_uniform_size * 64) as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
 
-    let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("height_field_bind_group"),
-        layout: &bind_group_layout,
+    let globals_bind_group_layout =
+        ctx.device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("micro_surface_globals_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<
+                            CameraViewProjection,
+                        >() as u64),
+                    },
+                    count: None,
+                }],
+            });
+
+    let locals_bind_group_layout =
+        ctx.device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("height_field_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: wgpu::BufferSize::new(aligned_local_uniform_size as u64),
+                    },
+                    count: None,
+                }],
+            });
+
+    let globals_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("micro_surface_globals_bind_group"),
+        layout: &globals_bind_group_layout,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
-            resource: uniform_buffer.as_entire_binding(),
+            resource: globals_uniform_buffer.as_entire_binding(),
+        }],
+    });
+
+    let locals_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("micro_surface_locals_bind_group"),
+        layout: &locals_bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                buffer: &locals_uniform_buffer,
+                offset: 0,
+                size: wgpu::BufferSize::new(aligned_local_uniform_size as u64),
+            }),
         }],
     });
 
@@ -1002,15 +1134,15 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
     let render_pipeline_layout =
         ctx.device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("height_field_render_pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                label: Some("micro_surface_render_pipeline_layout"),
+                bind_group_layouts: &[&globals_bind_group_layout, &locals_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
     let pipeline = ctx
         .device
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("height_field_render_pipeline"),
+            label: Some("micro_surface_render_pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader_module,
@@ -1052,7 +1184,7 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -1061,8 +1193,8 @@ fn create_heightfield_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
 
     RenderPass {
         pipeline,
-        bind_groups: vec![bind_group],
-        uniform_buffer: Some(uniform_buffer),
+        bind_groups: vec![globals_bind_group, locals_bind_group],
+        uniform_buffers: Some(vec![globals_uniform_buffer, locals_uniform_buffer]),
     }
 }
 
@@ -1150,6 +1282,6 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
     RenderPass {
         pipeline,
         bind_groups: vec![bind_group],
-        uniform_buffer: Some(uniform_buffer),
+        uniform_buffers: Some(vec![uniform_buffer]),
     }
 }

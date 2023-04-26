@@ -2,18 +2,23 @@ use crate::{
     app::cache::{Cache, Handle},
     msurf::MicroSurface,
 };
-use egui::Widget;
-use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
+use std::collections::HashMap;
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]
-struct State {
+pub struct MicroSurfaceRenderState {
     /// The name of the micro surface.
     pub name: String,
     /// Whether the micro surface is visible.
     pub visible: bool,
     /// The scale factor of the micro surface.
     pub scale: f32,
+    /// The lowest value of the micro surface.
+    pub min: f32,
+    /// The highest value of the micro surface.
+    pub max: f32,
+    /// Offset along the Y axis without scaling.
+    pub y_offset: f32,
 }
 
 /// Outliner is a widget that displays the scene graph of the current scene.
@@ -22,8 +27,12 @@ struct State {
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
     /// States of the micro surfaces, indexed by their ids.
-    states: HashMap<Handle<MicroSurface>, State>,
+    states: HashMap<Handle<MicroSurface>, MicroSurfaceRenderState>,
     headers: HashMap<Handle<MicroSurface>, SurfaceCollapsableHeader>,
+}
+
+impl Default for Outliner {
+    fn default() -> Self { Self::new() }
 }
 
 impl Outliner {
@@ -36,34 +45,33 @@ impl Outliner {
     }
 
     /// Returns an iterator over all the visible micro surfaces.
-    pub fn visible_surfaces(&self) -> impl Iterator<Item = (&Handle<MicroSurface>, f32)> {
+    pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &MicroSurfaceRenderState)> {
         self.states
             .iter()
             .filter(|(_, s)| s.visible)
-            .map(|(id, s)| (id, s.scale))
+            .map(|(id, s)| (id, s))
+            .collect()
     }
+
+    pub fn any_visible_surfaces(&self) -> bool { self.states.iter().any(|(_, s)| s.visible) }
 
     /// Updates the outliner according to the cache.
     pub fn update_surfaces(&mut self, cache: &Cache) {
-        let records = cache.records.iter().map(|(_, record)| record);
-        for record in records {
-            if !self.states.contains_key(&record.surf) {
-                self.states.insert(
-                    record.surf,
-                    State {
-                        name: record.name().to_string(),
-                        visible: false,
-                        scale: 1.0,
-                    },
-                );
+        for record in cache.records.values() {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.states.entry(record.surf) {
+                let surf = cache.get_micro_surface(*e.key()).unwrap();
+                e.insert(MicroSurfaceRenderState {
+                    name: record.name().to_string(),
+                    visible: false,
+                    scale: 1.0,
+                    min: surf.min,
+                    max: surf.max,
+                    y_offset: -(surf.max + surf.min) * 0.5,
+                });
                 self.headers
                     .insert(record.surf, SurfaceCollapsableHeader { selected: false });
             }
         }
-
-        println!("Cache records: {:?}", cache.records);
-
-        println!("Outliner: {:?}", self.states);
     }
 }
 
@@ -72,7 +80,7 @@ struct SurfaceCollapsableHeader {
 }
 
 impl SurfaceCollapsableHeader {
-    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut State) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut MicroSurfaceRenderState) {
         let id = ui.make_persistent_id(&state.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
