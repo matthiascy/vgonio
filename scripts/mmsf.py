@@ -18,7 +18,7 @@ def read_data(filename):
         if header[0:4] != b'VGMO' or header[4] != ord(b'\x02'):
             raise Exception('Invalid file format, the file does not contain the correct data: microfacet masking shadowing required.')
         is_binary = header[5] == ord('!')
-        is_compressed = header[6] == ord('\xff')
+        is_compressed = header[6] != 0
         [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("<fff", header[8:20]))
         azimuth_bin_count = int.from_bytes(header[20:24], byteorder='little')
         [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("<fff", header[24:36]))
@@ -29,7 +29,12 @@ def read_data(filename):
             raise Exception('Invalid file format, sample count does not match the number of bins.')
 
         if is_compressed:
-            f = io.BytesIO(zlib.decompress(f.read()))
+            if header[6] == 1:
+                import zlib as compression
+            else:
+                import gzip as compression
+            print('decompressing data')
+            f = io.BytesIO(compression.decompress(f.read()))
             if is_binary:
                 print('read compressed binary file')
                 data = np.frombuffer(f.read(), dtype=('<f'), count=sample_count)

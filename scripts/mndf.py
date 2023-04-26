@@ -9,7 +9,6 @@ import argparse
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
-import zlib
 
 
 def read_data(filename):
@@ -33,7 +32,8 @@ def read_data(filename):
         if header[0:4] != b'VGMO' or header[4] != ord(b'\x01'):
             raise Exception('Invalid file format, the file does not contain the correct data: microfacet distribution required.')
         is_binary = header[5] == ord('!')
-        is_compressed = header[6] == ord('\xff')
+        is_compressed = header[6] != 0
+
         [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("<fff", header[8:20]))
         azimuth_bin_count = int.from_bytes(header[20:24], byteorder='little')
         [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("<fff", header[24:36]))
@@ -49,8 +49,12 @@ def read_data(filename):
               .format(zenith_start, zenith_stop, zenith_bin_size, zenith_bin_count))
 
         if is_compressed:
+            if header[6] == 1:
+                import zlib as compression
+            else:
+                import gzip as compression
             print('decompressing data')
-            f = io.BytesIO(zlib.decompress(f.read()))
+            f = io.BytesIO(compression.decompress(f.read()))
             if is_binary:
                 print('read compressed binary file')
                 data = np.frombuffer(f.read(), dtype=('<f'), count=sample_count)
