@@ -1405,63 +1405,6 @@ impl MicrofacetMaskingShadowing {
                 kind: err,
             })
         })
-
-        // match encoding {
-        //     DataEncoding::Ascii => {
-        //         log::info!("Saving microfacet masking and shadowing function
-        // as plain text.");         writter.write_all(b"VGMO\x02#")?;
-        // // 6 bytes         writter.write_all(&self.azimuth_start.
-        // value.to_le_bytes())?; // 4 bytes
-        // writter.write_all(&self.azimuth_stop.value. to_le_bytes())?;
-        // // 4 bytes         writter.write_all(&self. azimuth_bin_size.
-        // value.to_le_bytes())?; // 4 bytes         writter.
-        // write_all(&(self.azimuth_bins_count_inclusive as
-        // u32).to_le_bytes())?; // 4 bytes
-        // writter.write_all(&self.zenith_start.value. to_le_bytes())?;
-        // // 4 bytes         writter.write_all(&self. zenith_stop.
-        // value.to_le_bytes())?; // 4 bytes         writter.
-        // write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&(self.zenith_bins_count_inclusive as
-        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&(self.
-        // samples.len() as u32).to_le_bytes())?; // 4 bytes         writter.
-        // write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes         self.
-        // samples.iter().enumerate().for_each(|(i, s)| {             let val =
-        // if i % self.zenith_bins_count_inclusive                 ==
-        // self.zenith_bins_count_inclusive - 1             {
-        //                 format!("{s}\n")
-        //             } else {
-        //                 format!("{s} ")
-        //             };
-        //             writter.write_all(val.as_bytes()).unwrap();
-        //         });
-        //     }
-        //     DataEncoding::Binary => {
-        //         log::info!("Saving microfacet masking and shadowing function
-        // as binary.");         writter.write_all(b"VGMO\x02!")?; // 6
-        // bytes         writter.write_all(&self.azimuth_start.value.
-        // to_le_bytes())?; // 4 bytes
-        // writter.write_all(&self.azimuth_stop.value. to_le_bytes())?;
-        // // 4 bytes         writter.write_all(&self. azimuth_bin_size.
-        // value.to_le_bytes())?; // 4 bytes         writter.
-        // write_all(&(self.azimuth_bins_count_inclusive as
-        // u32).to_le_bytes())?; // 4 bytes
-        // writter.write_all(&self.zenith_start.value. to_le_bytes())?;
-        // // 4 bytes         writter.write_all(&self. zenith_stop.
-        // value.to_le_bytes())?; // 4 bytes         writter.
-        // write_all(&self.zenith_bin_size.value.to_le_bytes())?; // 4 bytes
-        //         writter.write_all(&(self.zenith_bins_count_inclusive as
-        // u32).to_le_bytes())?; // 4 bytes         writter.write_all(&(self.
-        // samples.len() as u32).to_le_bytes())?; // 4 bytes         writter.
-        // write_all(b"\x20\x20\x20\x20\x20\n")?; // 6 bytes         writter.
-        // write_all(             &self
-        //                 .samples
-        //                 .iter()
-        //                 .flat_map(|x| x.to_le_bytes())
-        //                 .collect::<Vec<_>>(),
-        //         )?;
-        //     }
-        // }
-        // Ok(())
     }
 }
 
