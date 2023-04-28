@@ -1,7 +1,11 @@
 use crate::{error::Error, ulp_eq};
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, str::FromStr};
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 /// Represents a unit of length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -29,6 +33,28 @@ impl From<u8> for LengthUnit {
             3 => Self::UM,
             4 => Self::NM,
             _ => unreachable!(),
+        }
+    }
+}
+
+impl Display for LengthUnit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LengthUnit::M => {
+                write!(f, "m")
+            }
+            LengthUnit::CM => {
+                write!(f, "cm")
+            }
+            LengthUnit::MM => {
+                write!(f, "mm")
+            }
+            LengthUnit::UM => {
+                write!(f, "um")
+            }
+            LengthUnit::NM => {
+                write!(f, "nm")
+            }
         }
     }
 }

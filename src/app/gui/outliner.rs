@@ -1,6 +1,7 @@
 use crate::{
     app::cache::{Cache, Handle},
     msurf::MicroSurface,
+    units::LengthUnit,
 };
 use std::collections::HashMap;
 
@@ -13,6 +14,8 @@ pub struct MicroSurfaceRenderState {
     pub visible: bool,
     /// The scale factor of the micro surface.
     pub scale: f32,
+    /// The length unit of the micro surface.
+    pub unit: LengthUnit,
     /// The lowest value of the micro surface.
     pub min: f32,
     /// The highest value of the micro surface.
@@ -65,6 +68,7 @@ impl Outliner {
                     name: record.name().to_string(),
                     visible: false,
                     scale: 1.0,
+                    unit: surf.unit,
                     min: surf.min,
                     max: surf.max,
                     y_offset: -(surf.max + surf.min) * 0.5,
@@ -103,6 +107,19 @@ impl SurfaceCollapsableHeader {
                     .spacing([40.0, 4.0])
                     .striped(true)
                     .show(ui, |ui| {
+                        ui.add(egui::Label::new("Min"));
+                        ui.add(egui::Label::new(format!("{:.4} {}", state.min, state.unit)));
+                        ui.end_row();
+                        ui.add(egui::Label::new("Max"));
+                        ui.add(egui::Label::new(format!("{:.4} {}", state.max, state.unit)));
+                        ui.end_row();
+                        ui.add(egui::Label::new("Y Offset"));
+                        ui.add(
+                            egui::Slider::new(&mut state.y_offset, -100.0..=100.0)
+                                .trailing_fill(true)
+                                .suffix(format!("{}", state.unit)),
+                        );
+                        ui.end_row();
                         ui.add(egui::Label::new("Scale"));
                         ui.add(egui::Slider::new(&mut state.scale, 0.05..=1.5).trailing_fill(true));
                     });
@@ -114,10 +131,7 @@ impl SurfaceCollapsableHeader {
 impl Outliner {
     /// Creates the ui for the outliner.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.label("Outliner");
-        ui.separator();
-
-        ui.set_min_width(200.0);
+        ui.set_min_size(egui::Vec2::new(300.0, 200.0));
         egui::CollapsingHeader::new("Surfaces")
             .default_open(true)
             .show(ui, |ui| {
@@ -137,8 +151,9 @@ impl Outliner {
             let mut open = true;
             egui::Window::new("Outliner")
                 .open(&mut open)
-                .title_bar(false)
-                .resizable(false)
+                //.title_bar(false)
+                .collapsible(true)
+                .vscroll(true)
                 .anchor(egui::Align2::RIGHT_TOP, (0.0, 0.0))
                 .show(ctx, |ui| self.ui(ui));
         }

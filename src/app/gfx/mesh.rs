@@ -26,7 +26,11 @@ impl Asset for RenderableMesh {}
 
 // TODO: create a separate method to extract face normals of an heightfield
 impl RenderableMesh {
-    pub fn from_micro_surface(device: &wgpu::Device, surf: &MicroSurface) -> Self {
+    pub fn from_micro_surface_with_id(
+        device: &wgpu::Device,
+        surf: &MicroSurface,
+        id: Uuid,
+    ) -> Self {
         use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (surf.cols, surf.rows);
@@ -70,7 +74,15 @@ impl RenderableMesh {
         }
     }
 
-    pub fn from_micro_surface_mesh(device: &wgpu::Device, mesh: &MicroSurfaceMesh) -> Self {
+    pub fn from_micro_surface(device: &wgpu::Device, surf: &MicroSurface) -> Self {
+        Self::from_micro_surface_with_id(device, surf, Uuid::new_v4())
+    }
+
+    pub fn from_micro_surface_mesh_with_id(
+        device: &wgpu::Device,
+        mesh: &MicroSurfaceMesh,
+        id: Uuid,
+    ) -> Self {
         use wgpu::util::DeviceExt;
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("mesh_view_vertex_buffer"),
@@ -94,7 +106,7 @@ impl RenderableMesh {
         );
 
         Self {
-            uuid: Uuid::new_v4(),
+            uuid: id,
             msurf: Some(mesh.msurf),
             vertices_count: mesh.num_verts as u32,
             indices_count: mesh.facets.len() as u32,
@@ -105,6 +117,10 @@ impl RenderableMesh {
             index_format: wgpu::IndexFormat::Uint32,
             topology: wgpu::PrimitiveTopology::TriangleList,
         }
+    }
+
+    pub fn from_micro_surface_mesh(device: &wgpu::Device, mesh: &MicroSurfaceMesh) -> Self {
+        Self::from_micro_surface_mesh_with_id(device, mesh, Uuid::new_v4())
     }
 }
 

@@ -230,28 +230,13 @@ impl Display for CompressionScheme {
 
 impl CompressionScheme {
     /// Returns true if the data is not compressed.
-    pub fn is_none(&self) -> bool {
-        match self {
-            CompressionScheme::None => true,
-            _ => false,
-        }
-    }
+    pub fn is_none(&self) -> bool { matches!(self, CompressionScheme::None) }
 
     /// Returns true if the data is compressed with zlib.
-    pub fn is_zlib(&self) -> bool {
-        match self {
-            CompressionScheme::Zlib => true,
-            _ => false,
-        }
-    }
+    pub fn is_zlib(&self) -> bool { matches!(self, CompressionScheme::Zlib) }
 
     /// Returns true if the data is compressed with gzip.
-    pub fn is_gzip(&self) -> bool {
-        match self {
-            CompressionScheme::Gzip => true,
-            _ => false,
-        }
-    }
+    pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
 }
 
 /// Write the data samples to the given writer.

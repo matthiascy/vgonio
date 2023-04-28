@@ -239,8 +239,9 @@ impl Cache {
             .meshes
             .get(&record.mesh)
             .ok_or_else(|| Error::Any(format!("{BRIGHT_RED}Surface mesh not exist!{RESET}")))?;
-        let handle = Handle::with_id(Uuid::new_v4());
-        let renderable = RenderableMesh::from_micro_surface_mesh(device, mesh);
+        log::trace!("MicroSurfaceMesh of surface {}: {}", msurf, mesh.uuid);
+        let handle = Handle::new();
+        let renderable = RenderableMesh::from_micro_surface_mesh_with_id(device, mesh, handle.id);
         self.renderables.insert(handle, renderable);
         record.renderable = handle;
         log::debug!(
@@ -248,6 +249,7 @@ impl Cache {
             handle,
             msurf
         );
+        log::trace!("Renderable meshes: {:#?}", self.renderables);
         Ok(handle)
     }
 

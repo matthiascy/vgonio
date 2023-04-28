@@ -311,7 +311,7 @@ impl MicroSurfacesRenderState {
                     module: &shader_module,
                     entry_point: "vs_main",
                     buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: 3 * 4,
+                        array_stride: 3 * std::mem::size_of::<f32>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: &[wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Float32x3,
@@ -324,7 +324,7 @@ impl MicroSurfacesRenderState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
+                    cull_mode: None,
                     unclipped_depth: false,
                     polygon_mode: wgpu::PolygonMode::Line,
                     conservative: false,
@@ -332,7 +332,7 @@ impl MicroSurfacesRenderState {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Texture::DEPTH_FORMAT,
                     depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Never,
+                    depth_compare: wgpu::CompareFunction::Less,
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
@@ -405,6 +405,7 @@ pub struct VgonioGuiApp {
     debug_drawing_enabled: bool,
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
+    // TODO: to be removed
     pub demos: egui_demo_lib::DemoWindows,
 }
 
@@ -571,6 +572,8 @@ impl VgonioGuiApp {
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
         let current_theme_visuals = self.state.current_theme_visuals();
+        let view_proj = self.camera.uniform.view_proj;
+        let view_proj_inv = self.camera.uniform.view_proj_inv;
         self.ctx.gpu.queue.write_buffer(
             &self
                 .passes
@@ -581,10 +584,10 @@ impl VgonioGuiApp {
                 .unwrap()[0],
             0,
             bytemuck::bytes_of(&VisualGridUniforms {
-                view: self.camera.uniform.view_proj.view.to_cols_array(),
-                proj: self.camera.uniform.view_proj.proj.to_cols_array(),
-                view_inv: self.camera.uniform.view_proj_inv.view.to_cols_array(),
-                proj_inv: self.camera.uniform.view_proj_inv.proj.to_cols_array(),
+                view: view_proj.view.to_cols_array(),
+                proj: view_proj.proj.to_cols_array(),
+                view_inv: view_proj_inv.view.to_cols_array(),
+                proj_inv: view_proj_inv.proj.to_cols_array(),
                 grid_line_color: [
                     current_theme_visuals.grid_line_color.r as f32,
                     current_theme_visuals.grid_line_color.g as f32,
@@ -601,12 +604,12 @@ impl VgonioGuiApp {
         // Update uniform buffer for the micro-surface shader.
         let visible_surfaces = self.state.outliner().visible_surfaces();
         if !visible_surfaces.is_empty() {
-            let view_proj_uniform = self.camera.uniform.view_proj;
             // Update global uniform buffer.
+            log::trace!("Updating global uniform buffer.");
             self.ctx.gpu.queue.write_buffer(
                 &self.msurfs_render_state.global_uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[view_proj_uniform]),
+                bytemuck::bytes_of(&view_proj),
             );
             // Update per-surface uniform buffer.
             let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
@@ -616,10 +619,10 @@ impl VgonioGuiApp {
                     .msurfs_render_state
                     .locals_lookup
                     .iter()
-                    .position(|hdl| *hdl == *hdl)
+                    .position(|h| *h == **hdl)
                     .unwrap();
                 buf[0..16].copy_from_slice(
-                    &Mat4::from_translation(Vec3::new(0.0, -state.y_offset * state.scale, 0.0))
+                    &Mat4::from_translation(Vec3::new(0.0, state.y_offset * state.scale, 0.0))
                         .to_cols_array(),
                 );
                 buf[16..20].copy_from_slice(&[
@@ -634,6 +637,7 @@ impl VgonioGuiApp {
                     bytemuck::cast_slice(&buf),
                 );
             }
+            // --
             // let msurf = self.cache.get_micro_surface(*hdl).unwrap();
             // // Only upload view and proj matrices if there are surfaces to
             // draw. let mut view_proj_model_info = [0.0f32; 16 * 3
@@ -691,25 +695,18 @@ impl VgonioGuiApp {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         // Command encoders for the current frame.
-        let mut encoders = [
-            self.ctx
-                .gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vgnoio_update_encoder"),
-                }),
-            self.ctx
+        let mut encoders =
+            [self
+                .ctx
                 .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_encoder"),
-                }),
-        ];
+                })];
 
-        // Main render pass
         let visible_surfaces = self.state.outliner().visible_surfaces();
         {
-            let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
                 color_attachments: &[Some(
                     // This is what [[location(0)]] in the fragment shader targets
@@ -840,7 +837,7 @@ impl VgonioGuiApp {
             self.win_surf.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.demos.ui(ctx);
+                //self.demos.ui(ctx);
                 self.state.show(ctx)
             },
         );
@@ -998,7 +995,6 @@ impl VgonioGuiApp {
             // }
             VgonioEvent::ToggleDebugDrawing => {
                 self.debug_drawing_enabled = !self.debug_drawing_enabled;
-                println!("Debug drawing: {}", self.debug_drawing_enabled);
             }
             VgonioEvent::UpdateSamplingDebugger {
                 count,
