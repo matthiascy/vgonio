@@ -279,8 +279,8 @@ impl ShadowPass {
                 buffer: self.depth_attachment_storage.as_ref().unwrap(),
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(std::mem::size_of::<f32>() as u32 * self.width),
-                    rows_per_image: NonZeroU32::new(self.height),
+                    bytes_per_row: Some(std::mem::size_of::<f32>() as u32 * self.width),
+                    rows_per_image: Some(self.height),
                 },
             },
             wgpu::Extent3d {

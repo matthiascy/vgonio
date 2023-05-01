@@ -42,10 +42,10 @@ toml = "0.7"
 type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 winit = "0.28"
-wgpu = { version = "0.15", features = ["spirv"] }
+wgpu = { version = "0.16", features = ["spirv"] }
 
 [features]
-default = ["optix", "embree"]
+default = []
 embree = ["dep:embree"]
 optix = []
 

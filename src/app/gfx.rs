@@ -118,7 +118,7 @@ pub const fn tex_fmt_bpp(format: wgpu::TextureFormat) -> u32 {
         TextureFormat::Bc5RgUnorm
         | TextureFormat::Bc5RgSnorm
         | TextureFormat::Bc6hRgbUfloat
-        | TextureFormat::Bc6hRgbSfloat
+        | TextureFormat::Bc6hRgbFloat
         | TextureFormat::Bc7RgbaUnorm
         | TextureFormat::Bc7RgbaUnormSrgb => 16,
         TextureFormat::Etc2Rgb8Unorm

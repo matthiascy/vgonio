@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]
-pub struct MicroSurfaceRenderState {
+pub struct PerMicroSurfaceState {
     /// The name of the micro surface.
     pub name: String,
     /// Whether the micro surface is visible.
@@ -30,7 +30,7 @@ pub struct MicroSurfaceRenderState {
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
     /// States of the micro surfaces, indexed by their ids.
-    states: HashMap<Handle<MicroSurface>, MicroSurfaceRenderState>,
+    states: HashMap<Handle<MicroSurface>, PerMicroSurfaceState>,
     headers: HashMap<Handle<MicroSurface>, SurfaceCollapsableHeader>,
 }
 
@@ -48,7 +48,7 @@ impl Outliner {
     }
 
     /// Returns an iterator over all the visible micro surfaces.
-    pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &MicroSurfaceRenderState)> {
+    pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &PerMicroSurfaceState)> {
         self.states
             .iter()
             .filter(|(_, s)| s.visible)
@@ -64,14 +64,15 @@ impl Outliner {
             if let std::collections::hash_map::Entry::Vacant(e) = self.states.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
                 let surf = cache.get_micro_surface(*e.key()).unwrap();
-                e.insert(MicroSurfaceRenderState {
+                let median = surf.max * 0.5 + surf.min * 0.5;
+                e.insert(PerMicroSurfaceState {
                     name: record.name().to_string(),
                     visible: false,
                     scale: 1.0,
                     unit: surf.unit,
                     min: surf.min,
                     max: surf.max,
-                    y_offset: -(surf.max + surf.min) * 0.5,
+                    y_offset: -median,
                 });
                 self.headers
                     .insert(*hdl, SurfaceCollapsableHeader { selected: false });
@@ -85,7 +86,7 @@ struct SurfaceCollapsableHeader {
 }
 
 impl SurfaceCollapsableHeader {
-    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut MicroSurfaceRenderState) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut PerMicroSurfaceState) {
         let id = ui.make_persistent_id(&state.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
@@ -103,7 +104,7 @@ impl SurfaceCollapsableHeader {
             .body(|ui| {
                 // Scale
                 egui::Grid::new("my_grid")
-                    .num_columns(2)
+                    .num_columns(3)
                     .spacing([40.0, 4.0])
                     .striped(true)
                     .show(ui, |ui| {
@@ -113,14 +114,40 @@ impl SurfaceCollapsableHeader {
                         ui.add(egui::Label::new("Max"));
                         ui.add(egui::Label::new(format!("{:.4} {}", state.max, state.unit)));
                         ui.end_row();
-                        ui.add(egui::Label::new("Y Offset"));
+                        ui.add(egui::Label::new(format!("Y Offset ({})", state.unit)))
+                            .on_hover_text(
+                                "Offset along the Y axis without scaling. (Visual only - does not \
+                                 affect the actual surface)",
+                            );
                         ui.add(
                             egui::Slider::new(&mut state.y_offset, -100.0..=100.0)
-                                .trailing_fill(true)
-                                .suffix(format!("{}", state.unit)),
+                                .trailing_fill(true),
                         );
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .add(egui::Button::new("Median"))
+                                .on_hover_text(
+                                    "Sets the Y offset to median value of the surface heights",
+                                )
+                                .clicked()
+                            {
+                                state.y_offset = -(state.min + state.max) * 0.5;
+                            }
+                            if ui
+                                .add(egui::Button::new("Ground"))
+                                .on_hover_text(
+                                    "Adjusts its position so that the minimum height value is at \
+                                     the ground level.",
+                                )
+                                .clicked()
+                            {
+                                state.y_offset = -state.min;
+                            }
+                        });
                         ui.end_row();
-                        ui.add(egui::Label::new("Scale"));
+                        ui.add(egui::Label::new("Scale")).on_hover_text(
+                            "Scales the surface visually. Doest not affect the actual surface.",
+                        );
                         ui.add(egui::Slider::new(&mut state.scale, 0.05..=1.5).trailing_fill(true));
                     });
             });
@@ -131,7 +158,7 @@ impl SurfaceCollapsableHeader {
 impl Outliner {
     /// Creates the ui for the outliner.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.set_min_size(egui::Vec2::new(300.0, 200.0));
+        ui.set_min_size(egui::Vec2::new(460.0, 200.0));
         egui::CollapsingHeader::new("Surfaces")
             .default_open(true)
             .show(ui, |ui| {

@@ -203,13 +203,19 @@ pub struct Context {
 
 /// Rendering resources for loaded [`MicroSurface`].
 struct MicroSurfacesRenderState {
+    /// Render pipeline for rendering micro surfaces.
     pipeline: wgpu::RenderPipeline,
+    /// Bind group containing global uniform buffer.
     globals_bind_group: wgpu::BindGroup,
+    /// Bind group containing local uniform buffer.
     locals_bind_group: wgpu::BindGroup,
+    /// Uniform buffer containing only view and projection matrices.
     global_uniform_buffer: wgpu::Buffer,
+    /// Uniform buffer containing data subject to each loaded micro surface.
     local_uniform_buffer: wgpu::Buffer,
-    locals_lookup: Vec<Handle<MicroSurface>>, /* index in the lookup table is the locals bind
-                                               * group index */
+    /// Lookup table linking [`MicroSurface`] to its offset in the local uniform
+    /// buffer.
+    locals_lookup: Vec<Handle<MicroSurface>>,
 }
 
 impl MicroSurfacesRenderState {

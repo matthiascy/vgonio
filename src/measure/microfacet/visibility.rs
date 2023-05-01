@@ -785,7 +785,7 @@ impl LayeredTexture {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             aspect: wgpu::TextureAspect::All,
             base_array_layer: 0,
-            array_layer_count: Some(NonZeroU32::new(layers).unwrap()),
+            array_layer_count: Some(layers),
             ..Default::default()
         }));
         for i in 0..layers {
@@ -797,10 +797,10 @@ impl LayeredTexture {
                 base_mip_level: 0,
                 mip_level_count: None,
                 base_array_layer: i,
-                array_layer_count: NonZeroU32::new(1),
+                array_layer_count: Some(1),
             }));
         }
-        let layer_size_in_bytes = (width * height * format.describe().block_size as u32) as u64;
+        let layer_size_in_bytes = (width * height * format.block_size(None).unwrap() as u32) as u64;
         Self {
             format,
             texture,
@@ -829,10 +829,8 @@ impl LayeredTexture {
                 buffer,
                 layout: wgpu::ImageDataLayout {
                     offset,
-                    bytes_per_row: NonZeroU32::new(
-                        self.extent.width * gfx::tex_fmt_bpp(self.format),
-                    ),
-                    rows_per_image: NonZeroU32::new(self.extent.height),
+                    bytes_per_row: Some(self.extent.width * gfx::tex_fmt_bpp(self.format)),
+                    rows_per_image: Some(self.extent.height),
                 },
             },
             self.extent,
@@ -902,8 +900,7 @@ impl DepthAttachment {
         let max_buffer_size = device.limits().max_buffer_size;
 
         let layers_per_texture = max_layers_per_texture.min(
-            (max_buffer_size / ((width * height * format.describe().block_size as u32) as u64))
-                as u32,
+            (max_buffer_size / ((width * height * format.block_size(None).unwrap()) as u64)) as u32,
         );
 
         let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
@@ -1089,8 +1086,7 @@ impl ColorAttachment {
         let max_buffer_size = device.limits().max_buffer_size;
 
         let layers_per_texture = max_layers_per_texture.min(
-            (max_buffer_size / ((width * height * format.describe().block_size as u32) as u64))
-                as u32,
+            (max_buffer_size / ((width * height * format.block_size(None).unwrap()) as u64)) as u32,
         );
 
         let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
