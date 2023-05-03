@@ -64,7 +64,6 @@ impl Outliner {
             if let std::collections::hash_map::Entry::Vacant(e) = self.states.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
                 let surf = cache.get_micro_surface(*e.key()).unwrap();
-                let median = surf.max * 0.5 + surf.min * 0.5;
                 e.insert(PerMicroSurfaceState {
                     name: record.name().to_string(),
                     visible: false,
@@ -72,7 +71,7 @@ impl Outliner {
                     unit: surf.unit,
                     min: surf.min,
                     max: surf.max,
-                    y_offset: -median,
+                    y_offset: 0.0,
                 });
                 self.headers
                     .insert(*hdl, SurfaceCollapsableHeader { selected: false });

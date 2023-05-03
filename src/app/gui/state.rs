@@ -89,7 +89,8 @@ impl ScreenDescriptor {
 /// of 256.
 pub struct DepthMap {
     pub(crate) depth_attachment: Texture,
-    pub(crate) depth_attachment_storage: wgpu::Buffer, // used to store depth attachment
+    /// Buffer storing depth attachment data.
+    pub(crate) depth_attachment_storage: wgpu::Buffer,
     /// Manually padded width to make sure the bytes per row is a multiple of
     /// 256.
     pub(crate) width: u32,

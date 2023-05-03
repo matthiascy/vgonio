@@ -202,7 +202,7 @@ pub struct Context {
 }
 
 /// Rendering resources for loaded [`MicroSurface`].
-struct MicroSurfacesRenderState {
+struct MicroSurfaceRenderingStates {
     /// Render pipeline for rendering micro surfaces.
     pipeline: wgpu::RenderPipeline,
     /// Bind group containing global uniform buffer.
@@ -218,7 +218,7 @@ struct MicroSurfacesRenderState {
     locals_lookup: Vec<Handle<MicroSurface>>,
 }
 
-impl MicroSurfacesRenderState {
+impl MicroSurfaceRenderingStates {
     pub const INITIAL_MICRO_SURFACE_COUNT: usize = 64;
 
     pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
@@ -389,7 +389,7 @@ pub struct VgonioGuiApp {
     win_surf: WindowSurface,
 
     /// The GUI application state.
-    state: VgonioGuiState,
+    gui_state: VgonioGuiState,
 
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
@@ -401,12 +401,13 @@ pub struct VgonioGuiApp {
     input: InputState,
     camera: CameraState,
 
-    msurfs_render_state: MicroSurfacesRenderState,
+    rendering_states: MicroSurfaceRenderingStates,
 
     /// Different pipelines with its binding groups used for rendering.
     passes: HashMap<&'static str, RenderPass>,
 
     depth_map: DepthMap,
+
     debug_drawing: DebugState,
     debug_drawing_enabled: bool,
     pub start_time: Instant,
@@ -445,8 +446,6 @@ impl VgonioGuiApp {
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
 
-        //let micro_surface_pass = create_micro_surface_pass(&gpu_ctx,
-        // win_surf.format());
         let visual_grid_pass = create_visual_grid_pass(&gpu_ctx, win_surf.format());
 
         let mut passes = HashMap::new();
@@ -488,7 +487,7 @@ impl VgonioGuiApp {
 
         let debug_drawing = DebugState::new(&gpu_ctx, win_surf.format());
 
-        let msurfs_render_state = MicroSurfacesRenderState::new(&gpu_ctx, win_surf.format());
+        let msurfs_render_state = MicroSurfaceRenderingStates::new(&gpu_ctx, win_surf.format());
 
         Ok(Self {
             ctx: Context {
@@ -496,7 +495,7 @@ impl VgonioGuiApp {
                 gui: gui_ctx,
             },
             config,
-            state: ui,
+            gui_state: ui,
             cache,
             input,
             passes,
@@ -508,7 +507,7 @@ impl VgonioGuiApp {
             prev_frame_time: None,
             demos: egui_demo_lib::DemoWindows::default(),
             win_surf,
-            msurfs_render_state,
+            rendering_states: msurfs_render_state,
         })
     }
 
@@ -572,12 +571,12 @@ impl VgonioGuiApp {
         // Update camera uniform.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
-        self.state.update_gizmo_matrices(
+        self.gui_state.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
-        let current_theme_visuals = self.state.current_theme_visuals();
+        let current_theme_visuals = self.gui_state.current_theme_visuals();
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
         self.ctx.gpu.queue.write_buffer(
@@ -608,12 +607,12 @@ impl VgonioGuiApp {
         );
 
         // Update uniform buffer for the micro-surface shader.
-        let visible_surfaces = self.state.outliner().visible_surfaces();
+        let visible_surfaces = self.gui_state.outliner().visible_surfaces();
         if !visible_surfaces.is_empty() {
             // Update global uniform buffer.
             log::trace!("Updating global uniform buffer.");
             self.ctx.gpu.queue.write_buffer(
-                &self.msurfs_render_state.global_uniform_buffer,
+                &self.rendering_states.global_uniform_buffer,
                 0,
                 bytemuck::bytes_of(&view_proj),
             );
@@ -622,7 +621,7 @@ impl VgonioGuiApp {
             for (hdl, state) in visible_surfaces.iter() {
                 let mut buf = [0.0; 20];
                 let local_uniform_buf_index = self
-                    .msurfs_render_state
+                    .rendering_states
                     .locals_lookup
                     .iter()
                     .position(|h| *h == **hdl)
@@ -638,7 +637,7 @@ impl VgonioGuiApp {
                     state.scale,
                 ]);
                 self.ctx.gpu.queue.write_buffer(
-                    &self.msurfs_render_state.local_uniform_buffer,
+                    &self.rendering_states.local_uniform_buffer,
                     local_uniform_buf_index as u64 * aligned_size as u64,
                     bytemuck::cast_slice(&buf),
                 );
@@ -710,7 +709,7 @@ impl VgonioGuiApp {
                     label: Some("vgonio_render_encoder"),
                 })];
 
-        let visible_surfaces = self.state.outliner().visible_surfaces();
+        let visible_surfaces = self.gui_state.outliner().visible_surfaces();
         {
             let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
@@ -723,7 +722,7 @@ impl VgonioGuiApp {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(
-                                self.state.current_theme_visuals().clear_color,
+                                self.gui_state.current_theme_visuals().clear_color,
                             ),
                             store: true,
                         },
@@ -743,8 +742,8 @@ impl VgonioGuiApp {
                 MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
 
             if !visible_surfaces.is_empty() {
-                render_pass.set_pipeline(&self.msurfs_render_state.pipeline);
-                render_pass.set_bind_group(0, &self.msurfs_render_state.globals_bind_group, &[]);
+                render_pass.set_pipeline(&self.rendering_states.pipeline);
+                render_pass.set_bind_group(0, &self.rendering_states.globals_bind_group, &[]);
 
                 for (hdl, _) in visible_surfaces.iter() {
                     let renderable = self
@@ -758,7 +757,7 @@ impl VgonioGuiApp {
                         continue;
                     }
                     let buf_index = self
-                        .msurfs_render_state
+                        .rendering_states
                         .locals_lookup
                         .iter()
                         .position(|x| x == *hdl)
@@ -766,7 +765,7 @@ impl VgonioGuiApp {
                     let renderable = renderable.unwrap();
                     render_pass.set_bind_group(
                         1,
-                        &self.msurfs_render_state.locals_bind_group,
+                        &self.rendering_states.locals_bind_group,
                         &[buf_index as u32 * aligned_micro_surface_uniform_size],
                     );
                     render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
@@ -778,7 +777,7 @@ impl VgonioGuiApp {
                 }
             }
 
-            if self.state.enable_visual_grid {
+            if self.gui_state.enable_visual_grid {
                 let pass = self.passes.get("visual_grid").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
@@ -844,7 +843,7 @@ impl VgonioGuiApp {
             &output_view,
             |ctx| {
                 //self.demos.ui(ctx);
-                self.state.show(ctx)
+                self.gui_state.show(ctx)
             },
         );
 
@@ -881,7 +880,7 @@ impl VgonioGuiApp {
                     self.win_surf.width(),
                     self.win_surf.height(),
                 );
-                self.state
+                self.gui_state
                     .tools
                     .get_tool::<VisualDebugger>("Visual Debugger")
                     .unwrap()
@@ -1022,7 +1021,7 @@ impl VgonioGuiApp {
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("Sampling Debugger Encoder"),
                         });
-                self.state
+                self.gui_state
                     .tools
                     .get_tool::<SamplingDebugger>("Sampling Debugger")
                     .unwrap()
@@ -1176,10 +1175,10 @@ impl VgonioGuiApp {
                 log::warn!("File {:?} has no extension, ignoring", path);
             }
         }
-        self.state
+        self.gui_state
             .outliner_mut()
             .update_surfaces(&surfaces, &self.cache);
-        self.msurfs_render_state.update_locals_lookup(&surfaces);
+        self.rendering_states.update_locals_lookup(&surfaces);
     }
 }
 
@@ -1202,163 +1201,6 @@ impl MicroSurfaceUniforms {
         }
     }
 }
-
-// fn create_micro_surface_pass(ctx: &GpuContext, target_format:
-// wgpu::TextureFormat) -> RenderPass {     // Load shader
-//     let shader_module = ctx
-//         .device
-//         .create_shader_module(wgpu::ShaderModuleDescriptor {
-//             label: Some("height_field_shader_module"),
-//             source: wgpu::ShaderSource::Wgsl(
-//
-// include_str!("./gui/assets/shaders/wgsl/micro_surface.wgsl").into(),
-//             ),
-//         });
-//
-//     // Create uniform buffer for rendering micro-surfaces.
-//     // Pre-allocate space for 64 surfaces.
-//     let globals_uniform_buffer = ctx
-//         .device
-//         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//             label: Some("camera-uniform-buffer"),
-//             contents: bytemuck::cast_slice(&[0.0; 16 * 2]),
-//             usage: wgpu::BufferUsages::UNIFORM |
-// wgpu::BufferUsages::COPY_DST,         });
-//
-//     let aligned_local_uniform_size =
-// MicroSurfaceUniforms::aligned_size(&ctx.device);
-//     let locals_uniform_buffer =
-// ctx.device.create_buffer(&wgpu::BufferDescriptor {         label:
-// Some("micro_surface_uniform_buffer"),         size:
-// (aligned_local_uniform_size * 64) as u64,         usage:
-// wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-//         mapped_at_creation: false,
-//     });
-//
-//     let globals_bind_group_layout =
-//         ctx.device
-//             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-//                 label: Some("micro_surface_globals_bind_group_layout"),
-//                 entries: &[wgpu::BindGroupLayoutEntry {
-//                     binding: 0,
-//                     visibility: wgpu::ShaderStages::VERTEX,
-//                     ty: wgpu::BindingType::Buffer {
-//                         ty: wgpu::BufferBindingType::Uniform,
-//                         has_dynamic_offset: false,
-//                         min_binding_size:
-// wgpu::BufferSize::new(std::mem::size_of::<
-// CameraViewProjection,                         >() as u64),
-//                     },
-//                     count: None,
-//                 }],
-//             });
-//
-//     let locals_bind_group_layout =
-//         ctx.device
-//             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-//                 label: Some("height_field_bind_group_layout"),
-//                 entries: &[wgpu::BindGroupLayoutEntry {
-//                     binding: 0,
-//                     visibility: wgpu::ShaderStages::VERTEX,
-//                     ty: wgpu::BindingType::Buffer {
-//                         ty: wgpu::BufferBindingType::Uniform,
-//                         has_dynamic_offset: true,
-//                         min_binding_size:
-// wgpu::BufferSize::new(aligned_local_uniform_size as u64),
-// },                     count: None,
-//                 }],
-//             });
-//
-//     let globals_bind_group =
-// ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {         label:
-// Some("micro_surface_globals_bind_group"),         layout:
-// &globals_bind_group_layout,         entries: &[wgpu::BindGroupEntry {
-//             binding: 0,
-//             resource: globals_uniform_buffer.as_entire_binding(),
-//         }],
-//     });
-//
-//     let locals_bind_group =
-// ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {         label:
-// Some("micro_surface_locals_bind_group"),         layout:
-// &locals_bind_group_layout,         entries: &[wgpu::BindGroupEntry {
-//             binding: 0,
-//             resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-//                 buffer: &locals_uniform_buffer,
-//                 offset: 0,
-//                 size: wgpu::BufferSize::new(aligned_local_uniform_size as
-// u64),             }),
-//         }],
-//     });
-//
-//     // Create height field render pipeline
-//     let render_pipeline_layout =
-//         ctx.device
-//             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-//                 label: Some("micro_surface_render_pipeline_layout"),
-//                 bind_group_layouts: &[&globals_bind_group_layout,
-// &locals_bind_group_layout],                 push_constant_ranges: &[],
-//             });
-//
-//     let pipeline = ctx
-//         .device
-//         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-//             label: Some("micro_surface_render_pipeline"),
-//             layout: Some(&render_pipeline_layout),
-//             vertex: wgpu::VertexState {
-//                 module: &shader_module,
-//                 entry_point: "vs_main",
-//                 buffers: &[wgpu::VertexBufferLayout {
-//                     array_stride: 12,
-//                     step_mode: wgpu::VertexStepMode::Vertex,
-//                     attributes: &[wgpu::VertexAttribute {
-//                         format: wgpu::VertexFormat::Float32x3,
-//                         offset: 0,
-//                         shader_location: 0,
-//                     }],
-//                 }],
-//             },
-//             primitive: wgpu::PrimitiveState {
-//                 topology: wgpu::PrimitiveTopology::TriangleList,
-//                 strip_index_format: None,
-//                 front_face: wgpu::FrontFace::Ccw,
-//                 cull_mode: Some(wgpu::Face::Back),
-//                 unclipped_depth: false,
-//                 polygon_mode: wgpu::PolygonMode::Line,
-//                 conservative: false,
-//             },
-//             depth_stencil: Some(wgpu::DepthStencilState {
-//                 format: Texture::DEPTH_FORMAT,
-//                 depth_write_enabled: true,
-//                 depth_compare: wgpu::CompareFunction::Less, /* tells when to
-// discard a
-//                                                              * new pixel */
-//                 stencil: wgpu::StencilState::default(),
-//                 bias: wgpu::DepthBiasState::default(),
-//             }),
-//             multisample: wgpu::MultisampleState {
-//                 count: 1,
-//                 mask: !0,
-//                 alpha_to_coverage_enabled: false,
-//             },
-//             fragment: Some(wgpu::FragmentState {
-//                 module: &shader_module,
-//                 entry_point: "fs_main",
-//                 targets: &[Some(wgpu::ColorTargetState {
-//                     format: target_format,
-//                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-//                     write_mask: wgpu::ColorWrites::ALL,
-//                 })],
-//             }),
-//             multiview: None,
-//         });
-//
-//     RenderPass {
-//         pipeline,
-//         bind_groups: vec![globals_bind_group, locals_bind_group],
-//         uniform_buffers: Some(vec![globals_uniform_buffer,
-// locals_uniform_buffer]),     }
-// }
 
 fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
     let grid_vert_shader = ctx
