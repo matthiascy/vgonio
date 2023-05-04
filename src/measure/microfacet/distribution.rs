@@ -85,7 +85,7 @@ impl MicrofacetNormalDistribution {
                 bin_count: self.zenith_bins_count_inclusive as u32,
                 bin_width: self.zenith_bin_size.value,
             },
-            samples_count: self.samples.len() as u32,
+            sample_count: self.samples.len() as u32,
         };
         let mut writter = BufWriter::new(file);
         vgmo::write(&mut writter, header, &self.samples).map_err(|err| {

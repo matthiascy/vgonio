@@ -93,6 +93,7 @@ impl Display for ParseError {
             ParseErrorKind::InvalidCompression => write!(f, "invalid compression"),
             ParseErrorKind::InvalidLine => write!(f, "invalid line"),
             ParseErrorKind::ParseFloat => write!(f, "invalid float"),
+            ParseErrorKind::NotEnoughData => write!(f, "not enough data"),
         }
     }
 }
@@ -106,6 +107,7 @@ pub enum ParseErrorKind {
     InvalidCompression,
     InvalidLine,
     ParseFloat,
+    NotEnoughData,
 }
 
 #[derive(Debug)]
@@ -325,7 +327,7 @@ where
     );
     let reader = BufReader::new(reader);
 
-    let mut idx = 0;
+    let mut loaded = 0;
     for (n, line) in reader.lines().enumerate() {
         let line = line.map_err(|_| ParseError {
             line: n as u32,
@@ -344,12 +346,16 @@ where
                 kind: ParseErrorKind::ParseFloat,
                 encoding: FileEncoding::Ascii,
             })?;
-            samples[idx] = x;
-            idx += 1;
+            samples[loaded] = x;
+            loaded += 1;
         }
     }
-
-    Ok(())
+    (count == loaded).then_some(()).ok_or(ParseError {
+        line: u32::MAX,
+        position: u32::MAX,
+        kind: ParseErrorKind::NotEnoughData,
+        encoding: FileEncoding::Ascii,
+    })
 }
 
 /// Reads sample values as binary data.
@@ -369,11 +375,22 @@ where
     use byteorder::{LittleEndian, ReadBytesExt};
 
     for i in 0..count {
-        samples[i] = reader.read_f32::<LittleEndian>().map_err(|_| ParseError {
-            line: 0,
-            position: i as u32,
-            kind: ParseErrorKind::ParseFloat,
-            encoding: FileEncoding::Binary,
+        samples[i] = reader.read_f32::<LittleEndian>().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                ParseError {
+                    line: u32::MAX,
+                    position: i as u32 * 4,
+                    kind: ParseErrorKind::NotEnoughData,
+                    encoding: FileEncoding::Binary,
+                }
+            } else {
+                ParseError {
+                    line: u32::MAX,
+                    position: i as u32 * 4,
+                    kind: ParseErrorKind::ParseFloat,
+                    encoding: FileEncoding::Binary,
+                }
+            }
         })?;
     }
 
@@ -517,11 +534,13 @@ pub mod vgmo {
         pub compression: CompressionScheme,
         pub azimuth_range: AngleRange,
         pub zenith_range: AngleRange,
-        pub samples_count: u32,
+        pub sample_count: u32,
     }
 
     impl Header {
         pub const MAGIC: &'static [u8] = b"VGMO";
+
+        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> { todo!() }
 
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
             let mut header = [0x20; 48];
@@ -537,7 +556,7 @@ pub mod vgmo {
             header[28..32].copy_from_slice(&self.zenith_range.end.to_le_bytes());
             header[32..36].copy_from_slice(&self.zenith_range.bin_width.to_le_bytes());
             header[36..40].copy_from_slice(&self.zenith_range.bin_count.to_le_bytes());
-            header[40..44].copy_from_slice(&self.samples_count.to_le_bytes());
+            header[40..44].copy_from_slice(&self.sample_count.to_le_bytes());
             header[47] = 0x0A; // LF
             writer.write_all(&header).map_err(|err| err.into())
         }
@@ -558,6 +577,22 @@ pub mod vgmo {
             header.zenith_range.bin_count,
         )
         .map_err(|err| err.into())
+    }
+
+    /// Reads the VGMO file from the given reader.
+    ///
+    /// Returns the header and the measurement samples.
+    pub fn read<R: Read>(
+        reader: &mut BufReader<R>,
+    ) -> Result<(Header, Vec<f32>), ReadFileErrorKind> {
+        let header = Header::read(reader)?;
+        let samples = read_data_samples(
+            reader,
+            header.sample_count as usize,
+            header.encoding,
+            header.compression,
+        )?;
+        Ok((header, samples))
     }
 }
 
@@ -675,7 +710,7 @@ pub fn read_ascii_usurf<R: BufRead>(
         })
         .unzip();
 
-    // TODO: deal with case when coordinates are not uniform.
+    // Assume that the spacing between two consecutive coordinates is uniform.
     let du = x_coords[1] - x_coords[0];
     let dv = y_coords[1] - y_coords[0];
     let samples: Vec<f32> = values.into_iter().flatten().collect();

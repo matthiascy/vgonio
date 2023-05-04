@@ -1,7 +1,7 @@
+mod debugging;
 mod plotting;
 mod sampling;
 mod scratch;
-mod visual_debug;
 
 use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
@@ -12,14 +12,11 @@ use embree::Config;
 
 use winit::event_loop::EventLoopProxy;
 
-use crate::{
-    measure::rtc::grid::{Grid, MultilevelGrid},
-    msurf::MicroSurfaceMesh,
-};
-pub(crate) use plotting::Plotting;
-pub(crate) use sampling::SamplingDebugger;
+use crate::{measure::rtc::grid::MultilevelGrid, msurf::MicroSurfaceMesh};
+pub(crate) use debugging::DebuggingInspector;
+pub(crate) use plotting::PlottingInspector;
+pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
-pub(crate) use visual_debug::VisualDebugger;
 
 use super::state::GuiRenderer;
 
@@ -74,9 +71,9 @@ impl Tools {
         Self {
             windows: vec![
                 Box::<Scratch>::default(),
-                Box::new(VisualDebugger::new(event_loop.clone())),
-                Box::<Plotting>::default(),
-                Box::new(SamplingDebugger::new(
+                Box::new(DebuggingInspector::new(event_loop.clone())),
+                Box::<PlottingInspector>::default(),
+                Box::new(SamplingInspector::new(
                     gpu,
                     gui,
                     wgpu::TextureFormat::Rgba8UnormSrgb,
@@ -87,8 +84,12 @@ impl Tools {
         }
     }
 
-    pub fn toggle(&mut self, name: &str) {
-        if let Some(i) = self.windows.iter().position(|w| w.name() == name) {
+    pub fn toggle<T: 'static>(&mut self) {
+        if let Some(i) = self
+            .windows
+            .iter()
+            .position(|w| w.as_any().type_id() == std::any::TypeId::of::<T>())
+        {
             self.states[i] = !self.states[i];
         }
     }
@@ -99,10 +100,10 @@ impl Tools {
         }
     }
 
-    pub fn get_tool<T: 'static>(&mut self, name: &str) -> Option<&mut T> {
+    pub fn get_tool<T: 'static>(&mut self) -> Option<&mut T> {
         self.windows
             .iter_mut()
-            .find(|w| w.name() == name)
+            .find(|w| w.as_any().type_id() == std::any::TypeId::of::<T>())
             .and_then(|w| w.as_any_mut().downcast_mut::<T>())
     }
 }

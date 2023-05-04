@@ -12,7 +12,7 @@ use std::{
 use crate::{
     app::gfx::RenderableMesh,
     error::Error,
-    io::{vgms, CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError},
+    io,
     units::{LengthUnit, Micrometres},
 };
 
@@ -693,63 +693,61 @@ impl MicroSurface {
         filepath: &Path,
         origin: Option<MicroSurfaceOrigin>,
         ) -> Result<MicroSurface, Error> {
-        use crate::io::{self, vgms};
+        use crate::io;
+        let file = File::open(filepath)?;
+        let mut reader = BufReader::new(file);
 
-            let file = File::open(filepath)?;
-            let mut reader = BufReader::new(file);
-
-            if let Some(origin) = origin {
-                // If origin is specified, call directly corresponding loading function.
-                match origin {
-                    MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(&mut reader, filepath),
-                    MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(&mut reader, filepath),
-                }
-            } else {
-                // Otherwise, try to figure out the file format by reading first several bytes.
-                let mut buf = [0_u8; 4];
-                reader.read_exact(&mut buf)?;
-                reader.seek(std::io::SeekFrom::Start(0))?; // Reset the cursor to the beginning of the file.
-                match std::str::from_utf8(&buf)? {
-                    "Asci" => io::read_ascii_dong2015(&mut reader, filepath),
-                    "DATA" => io::read_ascii_usurf(&mut reader, filepath),
-                    "VGMS" => {
-                        let (header, samples) = vgms::read(&mut reader)
-                            .map_err(|err| Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            }))?;
-                        Ok(MicroSurface::from_samples(
-                            header.rows as usize,
-                            header.cols as usize,
-                            header.du,
-                            header.dv,
-                            header.unit,
-                            samples,
-                            filepath
-                                .file_stem()
-                                //.file_name()
-                                .and_then(|name| name.to_str().map(|name| name.to_owned())),
-                            Some(filepath.to_owned()),
-                        ))
-                    }
-                    _ => Err(Error::UnrecognizedFile),
-                }
+        if let Some(origin) = origin {
+            // If origin is specified, call directly corresponding loading function.
+            match origin {
+                MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(&mut reader, filepath),
+                MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(&mut reader, filepath),
             }
+        } else {
+            // Otherwise, try to figure out the file format by reading first several bytes.
+            let mut buf = [0_u8; 4];
+            reader.read_exact(&mut buf)?;
+            reader.seek(std::io::SeekFrom::Start(0))?; // Reset the cursor to the beginning of the file.
+            match std::str::from_utf8(&buf)? {
+                "Asci" => io::read_ascii_dong2015(&mut reader, filepath),
+                "DATA" => io::read_ascii_usurf(&mut reader, filepath),
+                "VGMS" => {
+                    let (header, samples) = io::vgms::read(&mut reader)
+                        .map_err(|err| Error::ReadFile(io::ReadFileError {
+                            path: filepath.to_owned().into_boxed_path(),
+                            kind: err,
+                        }))?;
+                    Ok(MicroSurface::from_samples(
+                        header.rows as usize,
+                        header.cols as usize,
+                        header.du,
+                        header.dv,
+                        header.unit,
+                        samples,
+                        filepath
+                            .file_stem()
+                            .and_then(|name| name.to_str().map(|name| name.to_owned())),
+                        Some(filepath.to_owned()),
+                    ))
+                }
+                _ => Err(Error::UnrecognizedFile),
+            }
+        }
             .map(|mut ms| {
                 ms.fill_holes();
                 ms
             })
-        }
+    }
 
     /// Save the micro-surface height field to a file.
     pub fn write_to_file(
         &self,
         filepath: &Path,
-        encoding: FileEncoding,
-        compression: CompressionScheme,
+        encoding: io::FileEncoding,
+        compression: io::CompressionScheme,
     ) -> Result<(), Error> {
         let mut file = File::create(filepath)?;
-        let header = vgms::Header {
+        let header = io::vgms::Header {
             rows: self.rows as u32,
             cols: self.cols as u32,
             du: self.du,
@@ -760,8 +758,8 @@ impl MicroSurface {
             compression,
         };
         let mut writer = BufWriter::new(&mut file);
-        vgms::write(&mut writer, header, &self.samples).map_err(|err| {
-            Error::WriteFile(WriteFileError {
+        io::vgms::write(&mut writer, header, &self.samples).map_err(|err| {
+            Error::WriteFile(io::WriteFileError {
                 path: filepath.to_owned().into_boxed_path(),
                 kind: err,
             })

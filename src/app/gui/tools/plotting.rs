@@ -5,11 +5,11 @@ use egui::{
 };
 use std::any::Any;
 
-pub struct Plotting {
+pub struct PlottingInspector {
     pub legend: Legend,
 }
 
-impl Default for Plotting {
+impl Default for PlottingInspector {
     fn default() -> Self {
         let legend = Legend::default()
             .text_style(egui::TextStyle::Monospace)
@@ -19,8 +19,8 @@ impl Default for Plotting {
     }
 }
 
-impl Tool for Plotting {
-    fn name(&self) -> &'static str { "Plot" }
+impl Tool for PlottingInspector {
+    fn name(&self) -> &'static str { "Plotting" }
 
     fn show(&mut self, ctx: &Context, open: &mut bool) {
         egui::Window::new(self.name())

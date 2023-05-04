@@ -3,7 +3,12 @@ use crate::{
     app::{
         cache::{Cache, Handle},
         gfx::GpuContext,
-        gui::{gizmo::NavigationGizmo, outliner::Outliner, tools::Tools, VgonioGuiApp},
+        gui::{
+            gizmo::NavigationGizmo,
+            outliner::Outliner,
+            tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
+            DebuggingInspector, VgonioGuiApp,
+        },
         Config,
     },
     msurf::MicroSurface,
@@ -31,8 +36,6 @@ impl FileDragDrop {
             files: vec![],
         }
     }
-
-    pub fn clear(&mut self) { self.files.clear(); }
 
     pub fn show(&mut self, ctx: &egui::Context) {
         use egui::*;
@@ -71,14 +74,13 @@ impl FileDragDrop {
             self.files = dropped_files;
         }
 
-        // TODO: Load dropped files, if any into the cache
         if !self.files.is_empty() {
             let files = std::mem::take(&mut self.files)
                 .into_iter()
                 .filter_map(|f| {
                     f.path
                         .filter(|p| p.is_file() && p.exists())
-                        .map(|p| rfd::FileHandle::from(p))
+                        .map(rfd::FileHandle::from)
                 })
                 .collect::<Vec<_>>();
 
@@ -374,21 +376,20 @@ impl VgonioGuiState {
                     }
                 });
                 ui.menu_button("Tools", |ui| {
-                    // TODO: iterater
                     if ui.button("\u{1F4D8} Console").clicked() {
                         println!("TODO: open console window");
                     }
-                    if ui.button("Plot").clicked() {
-                        self.tools.toggle("Plot");
-                    }
-                    if ui.button("Visual Debugger").clicked() {
-                        self.tools.toggle("Visual Debugger");
-                    }
                     if ui.button("Scratch").clicked() {
-                        self.tools.toggle("Scratch");
+                        self.tools.toggle::<Scratch>();
                     }
-                    if ui.button("Sampling Debugger").clicked() {
-                        self.tools.toggle("Sampling Debugger");
+                    if ui.button("\u{1F5E0} Plotting").clicked() {
+                        self.tools.toggle::<PlottingInspector>();
+                    }
+                    if ui.button("\u{1F41B} Debugging").clicked() {
+                        self.tools.toggle::<DebuggingInspector>();
+                    }
+                    if ui.button("\u{1F3B2} Sampling").clicked() {
+                        self.tools.toggle::<SamplingInspector>();
                     }
                 });
                 ui.menu_button("Help", |ui| {

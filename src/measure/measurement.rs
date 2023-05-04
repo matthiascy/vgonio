@@ -1,5 +1,7 @@
 //! Measurement parameters.
 use crate::{
+    app::cache::Asset,
+    io,
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
@@ -498,6 +500,7 @@ pub struct Measurement {
 }
 
 /// Kind of different measurements.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MeasurementKind {
     /// BSDF measurement.
@@ -588,4 +591,22 @@ impl Measurement {
             MeasurementKindDescription::Mmsf { .. } => "micro-surface-shadow-masking measurement",
         }
     }
+}
+
+// TODO: add support for storing data in the memory in a compressed
+//       format(maybe LZ4).
+
+/// Structure for storing measurement data in the memory especially
+/// when loading from a file.
+#[derive(Debug, Clone)]
+pub struct MeasuredData {
+    pub info: io::vgmo::Header,
+    pub path: Option<PathBuf>,
+    pub data: Vec<f32>,
+}
+
+impl Asset for MeasuredData {}
+
+impl MeasuredData {
+    pub fn read_from_file(path: &Path) -> Result<Self, Error> { todo!() }
 }

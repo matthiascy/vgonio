@@ -4,6 +4,7 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
+    measure::measurement::MeasuredData,
     msurf::{MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Error, Medium,
@@ -46,6 +47,21 @@ impl<T: Asset> Eq for Handle<T> {}
 
 impl<T: Asset> Hash for Handle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.id.hash(state) }
+}
+
+impl<T: Asset> Debug for Handle<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}<{}>",
+            std::any::type_name::<T>().split(&"::").last().unwrap(),
+            self.id
+        )
+    }
+}
+
+impl<T: Asset> Display for Handle<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{:?}", self) }
 }
 
 impl<T> Handle<T>
@@ -110,41 +126,41 @@ impl MicroSurfaceRecord {
     pub fn path(&self) -> &Path { &self.path }
 }
 
-impl Debug for Handle<MicroSurface> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MicroSurface<{}>", self.id())
-    }
-}
-
-impl Display for Handle<MicroSurface> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MicroSurface<{}>", self.id())
-    }
-}
-
-impl Debug for Handle<MicroSurfaceMesh> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MicroSurfaceMesh<{}>", self.id())
-    }
-}
-
-impl Display for Handle<MicroSurfaceMesh> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MicroSurfaceMesh<{}>", self.id())
-    }
-}
-
-impl Debug for Handle<RenderableMesh> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RenderableMesh<{}>", self.id())
-    }
-}
-
-impl Display for Handle<RenderableMesh> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RenderableMesh<{}>", self.id())
-    }
-}
+// impl Debug for Handle<MicroSurface> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "MicroSurface<{}>", self.id())
+//     }
+// }
+//
+// impl Display for Handle<MicroSurface> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "MicroSurface<{}>", self.id())
+//     }
+// }
+//
+// impl Debug for Handle<MicroSurfaceMesh> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "MicroSurfaceMesh<{}>", self.id())
+//     }
+// }
+//
+// impl Display for Handle<MicroSurfaceMesh> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "MicroSurfaceMesh<{}>", self.id())
+//     }
+// }
+//
+// impl Debug for Handle<RenderableMesh> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "RenderableMesh<{}>", self.id())
+//     }
+// }
+//
+// impl Display for Handle<RenderableMesh> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "RenderableMesh<{}>", self.id())
+//     }
+// }
 
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
@@ -168,6 +184,9 @@ pub struct Cache {
     /// Cache for `RenderableMesh`s, indexed by renderable mesh uuid.
     renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
 
+    /// Cache for measured data.
+    measured_data: HashMap<Handle<MeasuredData>, MeasuredData>,
+
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<PathBuf>>,
 
@@ -186,6 +205,7 @@ impl Cache {
             iors: RefractiveIndexDatabase::default(),
             renderables: Default::default(),
             records: Default::default(),
+            measured_data: Default::default(),
         }
     }
 
@@ -343,9 +363,9 @@ impl Cache {
     pub fn load_micro_surface(
         &mut self,
         config: &Config,
-        paths: &PathBuf,
+        path: &Path,
     ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), Error> {
-        match self.resolve_path(paths, config) {
+        match self.resolve_path(path, config) {
             None => Err(Error::Any(
                 "Failed to load micro surface profile!".to_string(),
             )),
@@ -380,8 +400,36 @@ impl Cache {
         }
     }
 
+    /// Loads a micro-surface measurement data from the given path and returns
+    /// its cache handle.
+    pub fn load_micro_surface_measurement(
+        &mut self,
+        config: &Config,
+        path: &Path,
+    ) -> Result<Handle<MeasuredData>, Error> {
+        match self.resolve_path(path, config) {
+            None => Err(Error::Any("Failed to load measurement data!".to_string())),
+            Some(filepath) => {
+                if let Some((hdl, _)) = self
+                    .measured_data
+                    .iter()
+                    .find(|(_, d)| d.path.as_ref() == Some(&filepath))
+                {
+                    log::debug!("-- already loaded: {}", filepath.display());
+                    Ok(*hdl)
+                } else {
+                    log::debug!("-- loading: {}", filepath.display());
+                    let data = MeasuredData::read_from_file(&filepath)?;
+                    let handle = Handle::new();
+                    self.measured_data.insert(handle, data);
+                    Ok(handle)
+                }
+            }
+        }
+    }
+
     /// Resolves a path to a file.
-    fn resolve_path(&self, path: &PathBuf, config: &Config) -> Option<PathBuf> {
+    fn resolve_path(&self, path: &Path, config: &Config) -> Option<PathBuf> {
         if let Ok(stripped) = path.strip_prefix("usr://") {
             if config.user_data_dir().is_some() {
                 config.user_data_dir().map(|p| p.join(stripped))

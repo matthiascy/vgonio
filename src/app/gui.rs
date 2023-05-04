@@ -27,7 +27,7 @@ use std::{
 #[cfg(feature = "embree")]
 pub(crate) use tools::trace_ray_standard_dbg;
 
-pub(crate) use tools::{trace_ray_grid_dbg, VisualDebugger};
+pub(crate) use tools::{trace_ray_grid_dbg, DebuggingInspector};
 pub use ui::VgonioGuiState;
 use wgpu::util::DeviceExt;
 
@@ -117,7 +117,7 @@ pub enum VgonioEvent {
     },
 }
 
-use self::tools::SamplingDebugger;
+use self::tools::SamplingInspector;
 
 use super::{gfx::WindowSurface, Config};
 
@@ -842,7 +842,7 @@ impl VgonioGuiApp {
             self.win_surf.screen_descriptor(),
             &output_view,
             |ctx| {
-                //self.demos.ui(ctx);
+                self.demos.ui(ctx);
                 self.gui_state.show(ctx)
             },
         );
@@ -882,7 +882,7 @@ impl VgonioGuiApp {
                 );
                 self.gui_state
                     .tools
-                    .get_tool::<VisualDebugger>("Visual Debugger")
+                    .get_tool::<DebuggingInspector>()
                     .unwrap()
                     .shadow_map_pane
                     .update_depth_map(
@@ -1023,7 +1023,7 @@ impl VgonioGuiApp {
                         });
                 self.gui_state
                     .tools
-                    .get_tool::<SamplingDebugger>("Sampling Debugger")
+                    .get_tool::<SamplingInspector>()
                     .unwrap()
                     .record_render_pass(&self.ctx.gpu, &mut encoder, &samples);
                 self.ctx.gpu.queue.submit(Some(encoder.finish()));
@@ -1138,7 +1138,10 @@ impl VgonioGuiApp {
                 match ext.as_str() {
                     "vgmo" => {
                         // Micro-surface measurement output
-                        todo!()
+                        log::debug!("Opening micro-surface measurement output: {:?}", path);
+                        let load_result = self
+                            .cache
+                            .load_micro_surface_measurement(&self.config, &path);
                     }
                     "vgms" | "txt" => {
                         // Micro-surface profile

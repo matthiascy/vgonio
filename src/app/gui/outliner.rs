@@ -158,7 +158,7 @@ impl Outliner {
     /// Creates the ui for the outliner.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.set_min_size(egui::Vec2::new(460.0, 200.0));
-        egui::CollapsingHeader::new("Surfaces")
+        egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
@@ -169,13 +169,21 @@ impl Outliner {
                     }
                 });
             });
+        egui::CollapsingHeader::new("Measurements")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label("Distance");
+                    ui.label("Height");
+                })
+            });
     }
 
     /// Represents the outliner as a window.
     pub fn show(&mut self, ctx: &egui::Context) {
         {
             let mut open = true;
-            egui::Window::new("Outliner")
+            egui::Window::new("Outline")
                 .open(&mut open)
                 //.title_bar(false)
                 .collapsible(true)

@@ -24,7 +24,7 @@ impl Default for PaneKind {
 }
 
 // TODO: adaptive image size
-pub(crate) struct VisualDebugger {
+pub(crate) struct DebuggingInspector {
     opened_pane: PaneKind,
     debug_drawing_enabled: bool,
     event_loop: EventLoopProxy<VgonioEvent>,
@@ -33,8 +33,8 @@ pub(crate) struct VisualDebugger {
     pub(crate) microfacet_pane: MicrofacetMeasurementPane,
 }
 
-impl Tool for VisualDebugger {
-    fn name(&self) -> &'static str { "Visual Debugger" }
+impl Tool for DebuggingInspector {
+    fn name(&self) -> &'static str { "Debugging" }
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         egui::Window::new(self.name())
@@ -81,7 +81,7 @@ impl Tool for VisualDebugger {
     fn as_any(&self) -> &dyn Any { self }
 }
 
-impl VisualDebugger {
+impl DebuggingInspector {
     pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
             opened_pane: Default::default(),

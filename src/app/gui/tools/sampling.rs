@@ -15,10 +15,12 @@ use super::Tool;
 
 // TODO: use paint callback in the future
 
-/// A debugger for sampling debugging.
-/// It renders the samples into a texture (offline mode) and then displays it on
-/// the screen.
-pub struct SamplingDebugger {
+/// A tool that allows to inspect different sampling patterns.
+///
+/// Generated samples will be rendered into a texture in offscreen mode, and
+/// then displays it on the screen by using directly the texture as an egui
+/// image.
+pub struct SamplingInspector {
     pub color_attachment_id: egui::TextureId,
     pub color_attachment: Texture,
     pub depth_attachment: Texture,
@@ -34,8 +36,8 @@ pub struct SamplingDebugger {
     zenith_max: f32,  // in degrees
 }
 
-impl Tool for SamplingDebugger {
-    fn name(&self) -> &'static str { "Sampling Debugger" }
+impl Tool for SamplingInspector {
+    fn name(&self) -> &'static str { "Sampling" }
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         egui::Window::new(self.name()).open(open).show(ctx, |ui| {
@@ -102,15 +104,15 @@ impl Tool for SamplingDebugger {
     fn as_any(&self) -> &dyn std::any::Any { self }
 }
 
-struct Vertex([f32; 30]);
+struct Vertex([f32; 3]);
 
-impl SamplingDebugger {
+impl SamplingInspector {
     pub fn new(
         gpu: &GpuContext,
         gui: &mut GuiRenderer,
         output_format: wgpu::TextureFormat,
         event_loop: EventLoopProxy<VgonioEvent>,
-    ) -> SamplingDebugger {
+    ) -> SamplingInspector {
         let camera = Camera::new(
             glam::Vec3::new(2.0, 1.5, 2.0),
             glam::Vec3::ZERO,
@@ -159,12 +161,6 @@ impl SamplingDebugger {
             None,
             Some("sampling-debugger-depth-attachment"),
         );
-        // let uniform_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        //     label: Some("sampling-debugger-uniform-buffer"),
-        //     size: std::mem::size_of::<[f32; 16]>() as u64,
-        //     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        //     mapped_at_creation: false,
-        // });
         let uniform_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -206,9 +202,7 @@ impl SamplingDebugger {
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("sampling-debugger-shader"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                    "sampling_debugger.wgsl"
-                ))),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("sampling.wgsl"))),
             });
         let pipeline = gpu
             .device
@@ -288,7 +282,7 @@ impl SamplingDebugger {
         samples: &[glam::Vec3],
     ) {
         let count = samples.len() as u32;
-        if count as u64 > self.vertex_buffer.size() {
+        if count as u64 * std::mem::size_of::<Vertex>() as u64 > self.vertex_buffer.size() {
             self.vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("sampling-debugger-vertex-buffer"),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
