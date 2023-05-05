@@ -4,7 +4,7 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    measure::measurement::MeasuredData,
+    measure::measurement::MeasurementData,
     msurf::{MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Error, Medium,
@@ -14,6 +14,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     hash::Hash,
     path::{Path, PathBuf},
+    rc::{Rc, Weak},
     str::FromStr,
 };
 use uuid::Uuid;
@@ -185,7 +186,7 @@ pub struct Cache {
     renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
 
     /// Cache for measured data.
-    measured_data: HashMap<Handle<MeasuredData>, MeasuredData>,
+    measurements_data: HashMap<Handle<MeasurementData>, Rc<MeasurementData>>,
 
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<PathBuf>>,
@@ -205,7 +206,7 @@ impl Cache {
             iors: RefractiveIndexDatabase::default(),
             renderables: Default::default(),
             records: Default::default(),
-            measured_data: Default::default(),
+            measurements_data: Default::default(),
         }
     }
 
@@ -359,6 +360,15 @@ impl Cache {
             .collect()
     }
 
+    pub fn get_measurement_data(
+        &self,
+        handle: Handle<MeasurementData>,
+    ) -> Option<Weak<MeasurementData>> {
+        self.measurements_data
+            .get(&handle)
+            .map(|h| Rc::downgrade(h))
+    }
+
     /// Loads a surface from its relevant place and returns its cache handle.
     pub fn load_micro_surface(
         &mut self,
@@ -406,22 +416,22 @@ impl Cache {
         &mut self,
         config: &Config,
         path: &Path,
-    ) -> Result<Handle<MeasuredData>, Error> {
+    ) -> Result<Handle<MeasurementData>, Error> {
         match self.resolve_path(path, config) {
             None => Err(Error::Any("Failed to load measurement data!".to_string())),
             Some(filepath) => {
-                if let Some((hdl, _)) = self
-                    .measured_data
+                if let Some((hdl, data)) = self
+                    .measurements_data
                     .iter()
-                    .find(|(_, d)| d.path.as_ref() == Some(&filepath))
+                    .find(|(_, d)| d.source.path() == Some(&filepath))
                 {
                     log::debug!("-- already loaded: {}", filepath.display());
                     Ok(*hdl)
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
-                    let data = MeasuredData::read_from_file(&filepath)?;
+                    let data = Rc::new(MeasurementData::read_from_file(&filepath)?);
                     let handle = Handle::new();
-                    self.measured_data.insert(handle, data);
+                    self.measurements_data.insert(handle, data);
                     Ok(handle)
                 }
             }

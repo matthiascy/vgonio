@@ -1,9 +1,15 @@
 use crate::{
     app::cache::{Cache, Handle},
+    measure::measurement::{MeasurementData, MeasurementDataSource, MeasurementKind},
     msurf::MicroSurface,
     units::LengthUnit,
 };
-use std::collections::HashMap;
+use egui::Widget;
+use std::{
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
+use toml::to_string;
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]
@@ -30,8 +36,9 @@ pub struct PerMicroSurfaceState {
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
     /// States of the micro surfaces, indexed by their ids.
-    states: HashMap<Handle<MicroSurface>, PerMicroSurfaceState>,
-    headers: HashMap<Handle<MicroSurface>, SurfaceCollapsableHeader>,
+    surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
+    /// States of the measured data.
+    measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
 }
 
 impl Default for Outliner {
@@ -42,45 +49,61 @@ impl Outliner {
     /// Creates a new outliner.
     pub fn new() -> Self {
         Self {
-            states: HashMap::new(),
-            headers: Default::default(),
+            surfaces: HashMap::new(),
+            measurements: Default::default(),
         }
     }
 
     /// Returns an iterator over all the visible micro surfaces.
     pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &PerMicroSurfaceState)> {
-        self.states
+        self.surfaces
             .iter()
-            .filter(|(_, s)| s.visible)
-            .map(|(id, s)| (id, s))
+            .filter(|(_, (_, s))| s.visible)
+            .map(|(id, (_, s))| (id, s))
             .collect()
     }
 
-    pub fn any_visible_surfaces(&self) -> bool { self.states.iter().any(|(_, s)| s.visible) }
+    pub fn any_visible_surfaces(&self) -> bool { self.surfaces.iter().any(|(_, (_, s))| s.visible) }
 
-    /// Updates the outliner according to the cache.
+    /// Updates the list of micro surfaces.
     pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &Cache) {
         for hdl in surfs {
-            if let std::collections::hash_map::Entry::Vacant(e) = self.states.entry(*hdl) {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.surfaces.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
                 let surf = cache.get_micro_surface(*e.key()).unwrap();
-                e.insert(PerMicroSurfaceState {
-                    name: record.name().to_string(),
-                    visible: false,
-                    scale: 1.0,
-                    unit: surf.unit,
-                    min: surf.min,
-                    max: surf.max,
-                    y_offset: 0.0,
-                });
-                self.headers
-                    .insert(*hdl, SurfaceCollapsableHeader { selected: false });
+                e.insert((
+                    SurfaceCollapsableHeader { selected: false },
+                    PerMicroSurfaceState {
+                        name: record.name().to_string(),
+                        visible: false,
+                        scale: 1.0,
+                        unit: surf.unit,
+                        min: surf.min,
+                        max: surf.max,
+                        y_offset: 0.0,
+                    },
+                ));
+            }
+        }
+    }
+
+    /// Updates the list of measurement data.
+    pub fn update_measurement_data(
+        &mut self,
+        measurements: &[Handle<MeasurementData>],
+        cache: &Cache,
+    ) {
+        for meas in measurements {
+            let data = cache.get_measurement_data(*meas).unwrap();
+            if !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) {
+                self.measurements
+                    .push((data, MeasuredDataCollapsableHeader { selected: false }));
             }
         }
     }
 }
 
-struct SurfaceCollapsableHeader {
+pub struct SurfaceCollapsableHeader {
     selected: bool,
 }
 
@@ -102,18 +125,18 @@ impl SurfaceCollapsableHeader {
             })
             .body(|ui| {
                 // Scale
-                egui::Grid::new("my_grid")
+                egui::Grid::new("surface_collapsable_header_grid")
                     .num_columns(3)
                     .spacing([40.0, 4.0])
                     .striped(true)
                     .show(ui, |ui| {
-                        ui.add(egui::Label::new("Min"));
+                        ui.add(egui::Label::new("Min:"));
                         ui.add(egui::Label::new(format!("{:.4} {}", state.min, state.unit)));
                         ui.end_row();
-                        ui.add(egui::Label::new("Max"));
+                        ui.add(egui::Label::new("Max:"));
                         ui.add(egui::Label::new(format!("{:.4} {}", state.max, state.unit)));
                         ui.end_row();
-                        ui.add(egui::Label::new(format!("Y Offset ({})", state.unit)))
+                        ui.add(egui::Label::new(format!("Y Offset ({}):", state.unit)))
                             .on_hover_text(
                                 "Offset along the Y axis without scaling. (Visual only - does not \
                                  affect the actual surface)",
@@ -144,10 +167,77 @@ impl SurfaceCollapsableHeader {
                             }
                         });
                         ui.end_row();
-                        ui.add(egui::Label::new("Scale")).on_hover_text(
+                        ui.add(egui::Label::new("Scale:")).on_hover_text(
                             "Scales the surface visually. Doest not affect the actual surface.",
                         );
                         ui.add(egui::Slider::new(&mut state.scale, 0.05..=1.5).trailing_fill(true));
+                    });
+            });
+    }
+}
+
+struct MeasuredDataCollapsableHeader {
+    selected: bool,
+}
+
+impl MeasuredDataCollapsableHeader {
+    pub fn ui(&mut self, ui: &mut egui::Ui, measurement: Weak<MeasurementData>) {
+        let meas_data = measurement.upgrade().unwrap();
+        let id = ui.make_persistent_id(&meas_data.name);
+        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+            .show_header(ui, |ui| {
+                ui.vertical_centered_justified(|ui| {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .selectable_label(self.selected, &meas_data.name)
+                            .clicked()
+                        {
+                            self.selected = !self.selected;
+                        }
+                    })
+                });
+                //ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Plot").clicked() {
+                    println!("plotting");
+                }
+                //})
+            })
+            .body(|ui| {
+                egui::Grid::new("measurement_data_body")
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("Type:");
+                        ui.label(format!("{}", meas_data.kind));
+                        ui.end_row();
+                        ui.label("Source:");
+                        match meas_data.source {
+                            MeasurementDataSource::Loaded(_) => {
+                                ui.label("loaded");
+                            }
+                            MeasurementDataSource::Measured(_) => {
+                                ui.label("measured");
+                            }
+                        }
+                        ui.end_row();
+
+                        if meas_data.kind == MeasurementKind::MicrofacetDistribution {
+                            ui.label("θ:");
+                            ui.label(format!(
+                                "{:.2}° ~ {:.2}°, every {:.2}°",
+                                meas_data.zenith.start.to_degrees(),
+                                meas_data.zenith.end.to_degrees(),
+                                meas_data.zenith.bin_width.to_degrees(),
+                            ));
+                            ui.end_row();
+                            ui.label("φ:");
+                            ui.label(format!(
+                                "{:.2}° ~ {:.2}°, every {:.2}°",
+                                meas_data.azimuth.start.to_degrees(),
+                                meas_data.azimuth.end.to_degrees(),
+                                meas_data.azimuth.bin_width.to_degrees(),
+                            ));
+                            ui.end_row();
+                        }
                     });
             });
     }
@@ -162,10 +252,8 @@ impl Outliner {
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    for ((_, state), (_, header)) in
-                        self.states.iter_mut().zip(self.headers.iter_mut())
-                    {
-                        header.ui(ui, state);
+                    for (_, (hdr, state)) in self.surfaces.iter_mut() {
+                        hdr.ui(ui, state);
                     }
                 });
             });
@@ -173,8 +261,9 @@ impl Outliner {
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    ui.label("Distance");
-                    ui.label("Height");
+                    for (data, hdr) in self.measurements.iter_mut() {
+                        hdr.ui(ui, data.clone());
+                    }
                 })
             });
     }

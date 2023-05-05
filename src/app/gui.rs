@@ -44,7 +44,7 @@ use crate::{
             ui::Theme,
         },
     },
-    measure::rtc::grid::Grid,
+    measure::{measurement::MeasurementData, rtc::grid::Grid},
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     units::Degrees,
 };
@@ -412,8 +412,6 @@ pub struct VgonioGuiApp {
     debug_drawing_enabled: bool,
     pub start_time: Instant,
     pub prev_frame_time: Option<f32>,
-    // TODO: to be removed
-    pub demos: egui_demo_lib::DemoWindows,
 }
 
 impl VgonioGuiApp {
@@ -505,7 +503,6 @@ impl VgonioGuiApp {
             camera,
             start_time: Instant::now(),
             prev_frame_time: None,
-            demos: egui_demo_lib::DemoWindows::default(),
             win_surf,
             rendering_states: msurfs_render_state,
         })
@@ -841,10 +838,7 @@ impl VgonioGuiApp {
             window,
             self.win_surf.screen_descriptor(),
             &output_view,
-            |ctx| {
-                self.demos.ui(ctx);
-                self.gui_state.show(ctx)
-            },
+            |ctx| self.gui_state.show(ctx),
         );
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
@@ -1126,6 +1120,7 @@ impl VgonioGuiApp {
 impl VgonioGuiApp {
     fn open_files(&mut self, files: Vec<rfd::FileHandle>) {
         let mut surfaces = vec![];
+        let mut measurements = vec![];
         // TODO: handle other file types
         for file in files {
             let path: PathBuf = file.into();
@@ -1137,17 +1132,24 @@ impl VgonioGuiApp {
             if let Some(ext) = ext {
                 match ext.as_str() {
                     "vgmo" => {
-                        // Micro-surface measurement output
+                        // Micro-surface measurement data
                         log::debug!("Opening micro-surface measurement output: {:?}", path);
-                        let load_result = self
+                        match self
                             .cache
-                            .load_micro_surface_measurement(&self.config, &path);
+                            .load_micro_surface_measurement(&self.config, &path)
+                        {
+                            Ok(hdl) => {
+                                measurements.push(hdl);
+                            }
+                            Err(e) => {
+                                log::error!("Failed to load micro surface measurement: {:?}", e);
+                            }
+                        }
                     }
                     "vgms" | "txt" => {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", path);
-                        let load_result = self.cache.load_micro_surface(&self.config, &path);
-                        match load_result {
+                        match self.cache.load_micro_surface(&self.config, &path) {
                             Ok((surf, mesh)) => {
                                 // self.state.simulation_workspace.update_surface_list(
                                 //     &cache.borrow().loaded_micro_surface_paths().unwrap(),
@@ -1182,6 +1184,9 @@ impl VgonioGuiApp {
             .outliner_mut()
             .update_surfaces(&surfaces, &self.cache);
         self.rendering_states.update_locals_lookup(&surfaces);
+        self.gui_state
+            .outliner_mut()
+            .update_measurement_data(&measurements, &self.cache);
     }
 }
 

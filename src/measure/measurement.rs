@@ -1,11 +1,13 @@
 //! Measurement parameters.
 use crate::{
-    app::cache::Asset,
+    app::cache::{Asset, Handle},
     io,
+    io::vgmo::AngleRange,
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
     },
+    msurf::MicroSurface,
     units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
     Error, Medium, RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition,
 };
@@ -511,6 +513,33 @@ pub enum MeasurementKind {
     MicrofacetMaskingShadowing = 0x02,
 }
 
+impl Display for MeasurementKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MeasurementKind::Bsdf => {
+                write!(f, "BSDF")
+            }
+            MeasurementKind::MicrofacetDistribution => {
+                write!(f, "NDF")
+            }
+            MeasurementKind::MicrofacetMaskingShadowing => {
+                write!(f, "Masking/Shadowing")
+            }
+        }
+    }
+}
+
+impl From<u8> for MeasurementKind {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => Self::Bsdf,
+            0x01 => Self::MicrofacetDistribution,
+            0x02 => Self::MicrofacetMaskingShadowing,
+            _ => panic!("Invalid measurement kind! {}", value),
+        }
+    }
+}
+
 impl Measurement {
     /// Loads the measurement from a path. The path can be either a file path
     /// or a directory path. In the latter case, files with the extension
@@ -593,20 +622,64 @@ impl Measurement {
     }
 }
 
+/// Measurement data source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MeasurementDataSource {
+    /// Measurement data is loaded from a file.
+    Loaded(PathBuf),
+    /// Measurement data is generated from a micro-surface.
+    Measured(Handle<MicroSurface>),
+}
+
+impl MeasurementDataSource {
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            MeasurementDataSource::Loaded(p) => Some(p.as_path()),
+            MeasurementDataSource::Measured(_) => None,
+        }
+    }
+}
+
 // TODO: add support for storing data in the memory in a compressed
 //       format(maybe LZ4).
-
 /// Structure for storing measurement data in the memory especially
 /// when loading from a file.
 #[derive(Debug, Clone)]
-pub struct MeasuredData {
-    pub info: io::vgmo::Header,
-    pub path: Option<PathBuf>,
+pub struct MeasurementData {
+    pub kind: MeasurementKind,
+    pub azimuth: AngleRange,
+    pub zenith: AngleRange,
+    pub source: MeasurementDataSource,
+    /// Internal tag for displaying the measurement data in the GUI.
+    pub name: String,
     pub data: Vec<f32>,
 }
 
-impl Asset for MeasuredData {}
+impl Asset for MeasurementData {}
 
-impl MeasuredData {
-    pub fn read_from_file(path: &Path) -> Result<Self, Error> { todo!() }
+impl MeasurementData {
+    pub fn read_from_file(path: &Path) -> Result<Self, Error> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        let (header, data) = io::vgmo::read(&mut reader).map_err(|err| {
+            Error::ReadFile(io::ReadFileError {
+                path: path.to_owned().into_boxed_path(),
+                kind: err,
+            })
+        })?;
+        let path = path.to_path_buf();
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("invalid file stem")
+            .to_string();
+        Ok(MeasurementData {
+            kind: header.kind,
+            azimuth: header.azimuth_range,
+            zenith: header.zenith_range,
+            source: MeasurementDataSource::Loaded(path),
+            name,
+            data,
+        })
+    }
 }

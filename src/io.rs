@@ -540,7 +540,42 @@ pub mod vgmo {
     impl Header {
         pub const MAGIC: &'static [u8] = b"VGMO";
 
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> { todo!() }
+        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+            let mut buf = [0u8; 48];
+            reader.read_exact(&mut buf)?;
+
+            if &buf[0..4] != Self::MAGIC {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid VGMO header {:?}", &buf[0..4]),
+                ));
+            }
+
+            let kind = MeasurementKind::from(buf[4]);
+            let encoding = FileEncoding::from(buf[5]);
+            let compression = CompressionScheme::from(buf[6]);
+            let azimuth_range = AngleRange {
+                start: f32::from_le_bytes(buf[8..12].try_into().unwrap()),
+                end: f32::from_le_bytes(buf[12..16].try_into().unwrap()),
+                bin_width: f32::from_le_bytes(buf[16..20].try_into().unwrap()),
+                bin_count: u32::from_le_bytes(buf[20..24].try_into().unwrap()),
+            };
+            let zenith_range = AngleRange {
+                start: f32::from_le_bytes(buf[24..28].try_into().unwrap()),
+                end: f32::from_le_bytes(buf[28..32].try_into().unwrap()),
+                bin_width: f32::from_le_bytes(buf[32..36].try_into().unwrap()),
+                bin_count: u32::from_le_bytes(buf[36..40].try_into().unwrap()),
+            };
+            let sample_count = u32::from_le_bytes(buf[40..44].try_into().unwrap());
+            Ok(Self {
+                kind,
+                encoding,
+                compression,
+                azimuth_range,
+                zenith_range,
+                sample_count,
+            })
+        }
 
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
             let mut header = [0x20; 48];
