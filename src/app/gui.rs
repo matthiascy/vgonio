@@ -1,4 +1,5 @@
 mod gizmo;
+mod icons;
 mod misc;
 pub mod outliner;
 mod plotter;

@@ -188,6 +188,7 @@ pub struct Cache {
     /// Cache for measured data.
     measurements_data: HashMap<Handle<MeasurementData>, Rc<MeasurementData>>,
 
+    // TODO: recently files
     /// Cache for recently opened files.
     pub recent_opened_files: Option<Vec<PathBuf>>,
 

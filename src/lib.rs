@@ -11,6 +11,7 @@
 extern crate core;
 
 mod app;
+mod build_info;
 mod error;
 mod io;
 mod math;

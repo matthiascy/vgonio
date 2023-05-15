@@ -18,6 +18,7 @@ clap = { version = "4", features = ["derive"] }
 csv = "1"
 dirs = "5.0"
 egui = { version = "0.21", features = ["bytemuck"] }
+egui_extras = "0.21"
 egui-winit = { version = "0.21", default-features = false }
 egui-gizmo = "0.10"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true}

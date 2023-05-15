@@ -145,6 +145,8 @@ impl SurfaceCollapsableHeader {
                             egui::Slider::new(&mut state.y_offset, -100.0..=100.0)
                                 .trailing_fill(true),
                         );
+                        ui.end_row();
+                        ui.add(egui::Label::new(""));
                         ui.horizontal_wrapped(|ui| {
                             if ui
                                 .add(egui::Button::new("Median"))
@@ -196,11 +198,6 @@ impl MeasuredDataCollapsableHeader {
                         }
                     })
                 });
-                //ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Plot").clicked() {
-                    println!("plotting");
-                }
-                //})
             })
             .body(|ui| {
                 egui::Grid::new("measurement_data_body")
@@ -239,6 +236,10 @@ impl MeasuredDataCollapsableHeader {
                             ui.end_row();
                         }
                     });
+                ui.add_space(5.0);
+                if ui.button("Plot").clicked() {
+                    println!("plotting");
+                }
             });
     }
 }
@@ -247,7 +248,6 @@ impl MeasuredDataCollapsableHeader {
 impl Outliner {
     /// Creates the ui for the outliner.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.set_min_size(egui::Vec2::new(460.0, 200.0));
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
@@ -266,19 +266,5 @@ impl Outliner {
                     }
                 })
             });
-    }
-
-    /// Represents the outliner as a window.
-    pub fn show(&mut self, ctx: &egui::Context) {
-        {
-            let mut open = true;
-            egui::Window::new("Outline")
-                .open(&mut open)
-                //.title_bar(false)
-                .collapsible(true)
-                .vscroll(true)
-                .anchor(egui::Align2::RIGHT_TOP, (0.0, 0.0))
-                .show(ctx, |ui| self.ui(ui));
-        }
     }
 }

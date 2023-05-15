@@ -5,18 +5,27 @@ use crate::{
         gfx::GpuContext,
         gui::{
             gizmo::NavigationGizmo,
+            icons,
+            icons::Icon,
             outliner::Outliner,
             tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
             DebuggingInspector, VgonioGuiApp,
         },
         Config,
     },
+    error::Error,
     msurf::MicroSurface,
 };
+use egui::NumExt;
+use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use glam::Mat4;
 use std::{
     cell::RefCell,
+    collections::{
+        hash_map::{Entry, OccupiedEntry},
+        HashMap,
+    },
     fmt::Write,
     ops::Deref,
     sync::{Arc, Mutex},
@@ -172,6 +181,46 @@ impl ThemeState {
     }
 }
 
+#[derive(Default)]
+pub struct ImageCache {
+    images: HashMap<&'static str, Arc<RetainedImage>>,
+}
+
+impl ImageCache {
+    pub fn get_or_insert(
+        &mut self,
+        id: &'static str,
+        bytes: Option<&'static [u8]>,
+    ) -> Option<Arc<RetainedImage>> {
+        match bytes {
+            None => self.images.get(id).cloned(),
+            Some(b) => Some(
+                self.images
+                    .entry(id)
+                    .or_insert_with(|| {
+                        let image = load_image_from_bytes(b)
+                            .unwrap_or_else(|err| panic!("Failed to load image {id:?}: {}", err));
+                        let retained = RetainedImage::from_color_image(id, image);
+                        Arc::new(retained)
+                    })
+                    .clone(),
+            ),
+        }
+    }
+}
+
+fn load_image_from_bytes(bytes: &[u8]) -> Result<egui::ColorImage, Error> {
+    let image = image::load_from_memory(bytes)
+        .map_err(|e| Error::Any(e.to_string()))?
+        .into_rgba8();
+    let size = [image.width() as _, image.height() as _];
+    let pixels = image.as_flat_samples();
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+        size,
+        pixels.as_slice(),
+    ))
+}
+
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGuiState {
     /// The configuration of the application. See [`Config`].
@@ -195,8 +244,13 @@ pub struct VgonioGuiState {
     /// Outliner of the scene.
     outliner: Outliner,
 
+    image_cache: Arc<Mutex<ImageCache>>,
+
     /// Visibility of the visual grid.
     pub enable_visual_grid: bool,
+
+    pub right_panel_expanded: bool,
+    pub left_panel_expanded: bool,
 }
 
 #[repr(u8)]
@@ -222,7 +276,6 @@ impl VgonioGuiState {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
         config: Arc<Config>,
-        //cache: Arc<Mutex<Cache>>,
         gpu: &GpuContext,
         gui: &mut GuiRenderer,
     ) -> Self {
@@ -235,7 +288,10 @@ impl VgonioGuiState {
             theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             outliner: Outliner::new(),
+            image_cache: Arc::new(Mutex::new(Default::default())),
             enable_visual_grid: true,
+            right_panel_expanded: true,
+            left_panel_expanded: false,
         }
     }
 
@@ -245,14 +301,26 @@ impl VgonioGuiState {
 
     pub fn show(&mut self, ctx: &egui::Context) {
         self.theme.update(ctx);
-        egui::TopBottomPanel::top("vgonio-menu-bar").show(ctx, |ui| {
-            self.menu_bar(ui);
-        });
+        egui::TopBottomPanel::top("vgonio_top_panel")
+            .exact_height(28.0)
+            .show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    self.menu_bar(ui);
+                });
+            });
+
         self.tools.show(ctx);
         //self.simulation_workspace.show(ctx);
         self.drag_drop.show(ctx);
         self.navigator.show(ctx);
-        self.outliner.show(ctx);
+
+        if self.right_panel_expanded {
+            egui::SidePanel::right("vgonio_right_panel")
+                .min_width(300.0)
+                .default_width(460.0)
+                .resizable(true)
+                .show(ctx, |ui| self.outliner.ui(ui));
+        }
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
@@ -265,167 +333,186 @@ impl VgonioGuiState {
 }
 
 impl VgonioGuiState {
-    fn menu_bar(&mut self, ui: &mut egui::Ui) {
-        // FIXME: temporarily disabled when using the web backend.
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    {
-                        ui.menu_button("\u{1F4C4} New", |ui| {
-                            if ui.button("General").clicked() {
-                                println!("TODO: new general file")
-                            }
-                            if ui.button("Height field").clicked() {
-                                println!("TODO: new height field");
-                            }
-                        });
-                        if ui.button("\u{1F4C2} Open").clicked() {
-                            use rfd::AsyncFileDialog;
-                            let dir = self
-                                .config
-                                .user_data_dir()
-                                .unwrap_or_else(|| self.config.sys_data_dir());
-                            let task = AsyncFileDialog::new().set_directory(dir).pick_files();
-                            let event_loop_proxy = self.event_loop.clone();
-                            std::thread::spawn(move || {
-                                pollster::block_on(async {
-                                    let file_handles = task.await;
-                                    if let Some(hds) = file_handles {
-                                        if event_loop_proxy
-                                            .send_event(VgonioEvent::OpenFiles(hds))
-                                            .is_err()
-                                        {
-                                            log::warn!("[EVENT] Failed to send OpenFiles event");
-                                        }
-                                    }
-                                })
-                            });
-                        }
-                        ui.menu_button("\u{1F4DC} Open Recent", |ui| {
-                            for i in 0..10 {
-                                if ui.button(format!("item {i}")).clicked() {
-                                    println!("TODO: open item {i}");
-                                }
-                            }
-                        });
-                    }
-
-                    ui.separator();
-
-                    {
-                        if ui.button("\u{1F4E9} Save").clicked() {
-                            println!("TODO: save");
-                        }
-                        if ui.button("     Save As").clicked() {
-                            println!("TODO: save as");
-                        }
-                        if ui.button("     Save Copy").clicked() {
-                            println!("TODO: save copy");
-                        }
-                    }
-
-                    ui.separator();
-
-                    {
-                        ui.menu_button("     Clean up", |ui| {
-                            ui.spacing();
-                            if ui.button("Cache").clicked() {
-                                println!("TODO: clear cache");
-                            }
-                        });
-                    }
-
-                    ui.separator();
-
-                    if ui.button("     Quit").clicked()
-                        && self.event_loop.send_event(VgonioEvent::Quit).is_err()
-                    {
-                        log::warn!("[EVENT] Failed to send Quit event.");
-                    }
-                });
-                ui.menu_button("Edit", |ui| {
-                    {
-                        if ui.button("     Undo").clicked() {
-                            println!("TODO: undo");
-                        }
-                        if ui.button("     Redo").clicked() {
-                            println!("TODO: file");
-                        }
-                    }
-
-                    ui.separator();
-
-                    if ui.button("     Reset windows").clicked() {
-                        ui.ctx().memory_mut(|mem| mem.reset_areas());
-                        ui.close_menu();
-                    }
-
-                    {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label("     Visual grid");
-                            ui.add_space(5.0);
-                            ui.add(super::misc::toggle(&mut self.enable_visual_grid));
-                        });
-                    }
-
-                    ui.separator();
-
-                    if ui.button("\u{2699} Preferences").clicked() {
-                        println!("TODO: open preferences window");
-                    }
-                });
-                ui.menu_button("Tools", |ui| {
-                    if ui.button("\u{1F4D8} Console").clicked() {
-                        println!("TODO: open console window");
-                    }
-                    if ui.button("Scratch").clicked() {
-                        self.tools.toggle::<Scratch>();
-                    }
-                    if ui.button("\u{1F5E0} Plotting").clicked() {
-                        self.tools.toggle::<PlottingInspector>();
-                    }
-                    if ui.button("\u{1F41B} Debugging").clicked() {
-                        self.tools.toggle::<DebuggingInspector>();
-                    }
-                    if ui.button("\u{1F3B2} Sampling").clicked() {
-                        self.tools.toggle::<SamplingInspector>();
-                    }
-                });
-                ui.menu_button("Help", |ui| {
-                    if ui.button("\u{1F4DA} Docs").clicked() {
-                        println!("TODO: docs");
-                    }
-                    if ui.button("     About").clicked() {
-                        println!("TODO: about");
-                    }
-                });
-                ui.separator();
-                self.theme_toggle_button(ui);
-            });
-        }
+    fn icon_image(&self, icon: &Icon) -> Arc<RetainedImage> {
+        self.image_cache
+            .lock()
+            .unwrap()
+            .get_or_insert(icon.id, Some(icon.bytes))
+            .unwrap()
     }
 
-    fn theme_toggle_button(&mut self, ui: &mut egui::Ui) {
-        match self.theme.current_theme() {
-            Theme::Dark => {
-                if ui
-                    .add(egui::Button::new("☀").frame(false))
-                    .on_hover_text("Switch to light mode")
-                    .clicked()
+    fn icon_toggle_button(
+        &self,
+        ui: &mut egui::Ui,
+        icon: &Icon,
+        selected: &mut bool,
+    ) -> egui::Response {
+        let size_points = egui::Vec2::splat(16.0);
+        let image = self.icon_image(icon);
+        let tex_id = image.texture_id(ui.ctx());
+        let tint = if *selected {
+            ui.visuals().widgets.inactive.fg_stroke.color
+        } else {
+            egui::Color32::from_gray(100)
+        };
+        let mut response = ui.add(egui::ImageButton::new(tex_id, size_points).tint(tint));
+        if response.clicked() {
+            *selected = !*selected;
+            response.mark_changed()
+        }
+        response
+    }
+
+    fn menu_bar(&mut self, ui: &mut egui::Ui) {
+        ui.set_height(28.0);
+        let icon_image = if self.theme.current_theme() == Theme::Dark {
+            self.icon_image(&Icon::VGONIO_MENU_DARK)
+        } else {
+            self.icon_image(&Icon::VGONIO_MENU_LIGHT)
+        };
+        let desired_icon_height = (ui.max_rect().height() - 4.0).at_most(28.0);
+        let image_size = icon_image.size_vec2() * (desired_icon_height / icon_image.size_vec2().y);
+        let texture_id = icon_image.texture_id(ui.ctx());
+
+        ui.menu_image_button(texture_id, image_size, |ui| {
+            if ui.button("About").clicked() {
+                println!("TODO: about, print build info");
+            }
+
+            ui.menu_button("New", |ui| {
+                if ui.button("General").clicked() {
+                    println!("TODO: new general file")
+                }
+                if ui.button("Height field").clicked() {
+                    println!("TODO: new height field");
+                }
+            });
+            if ui.button("Open...").clicked() {
+                use rfd::AsyncFileDialog;
+                let dir = self
+                    .config
+                    .user_data_dir()
+                    .unwrap_or_else(|| self.config.sys_data_dir());
+                let task = AsyncFileDialog::new().set_directory(dir).pick_files();
+                let event_loop_proxy = self.event_loop.clone();
+                std::thread::spawn(move || {
+                    pollster::block_on(async {
+                        let file_handles = task.await;
+                        if let Some(hds) = file_handles {
+                            if event_loop_proxy
+                                .send_event(VgonioEvent::OpenFiles(hds))
+                                .is_err()
+                            {
+                                log::warn!("[EVENT] Failed to send OpenFiles event");
+                            }
+                        }
+                    })
+                });
+            }
+            ui.menu_button("Recent...", |ui| {
+                for i in 0..10 {
+                    if ui.button(format!("item {i}")).clicked() {
+                        println!("TODO: open item {i}");
+                    }
+                }
+            });
+
+            ui.add_space(6.0);
+
+            {
+                if ui.button("Save...").clicked() {
+                    println!("TODO: save");
+                }
+            }
+
+            ui.menu_button("Edit", |ui| {
                 {
+                    if ui.button("     Undo").clicked() {
+                        println!("TODO: undo");
+                    }
+                    if ui.button("     Redo").clicked() {
+                        println!("TODO: file");
+                    }
+                }
+
+                ui.separator();
+
+                if ui.button("     Reset windows").clicked() {
+                    ui.ctx().memory_mut(|mem| mem.reset_areas());
+                    ui.close_menu();
+                }
+
+                {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("     Visual grid");
+                        ui.add_space(5.0);
+                        ui.add(super::misc::toggle(&mut self.enable_visual_grid));
+                    });
+                }
+
+                ui.separator();
+
+                if ui.button("\u{2699} Preferences").clicked() {
+                    println!("TODO: open preferences window");
+                }
+            });
+            ui.menu_button("Tools", |ui| {
+                if ui.button("\u{1F4D8} Console").clicked() {
+                    println!("TODO: open console window");
+                }
+                if ui.button("Scratch").clicked() {
+                    self.tools.toggle::<Scratch>();
+                }
+                if ui.button("\u{1F5E0} Plotting").clicked() {
+                    self.tools.toggle::<PlottingInspector>();
+                }
+                if ui.button("\u{1F41B} Debugging").clicked() {
+                    self.tools.toggle::<DebuggingInspector>();
+                }
+                if ui.button("\u{1F3B2} Sampling").clicked() {
+                    self.tools.toggle::<SamplingInspector>();
+                }
+            });
+            ui.menu_button("Theme", |ui| {
+                if ui.button("☀ Light").clicked() {
                     self.theme.set(Theme::Light);
                 }
-            }
-            Theme::Light => {
-                if ui
-                    .add(egui::Button::new("🌙").frame(false))
-                    .on_hover_text("Switch to dark mode")
-                    .clicked()
-                {
+                if ui.button("🌙 Dark").clicked() {
                     self.theme.set(Theme::Dark);
                 }
+            });
+
+            ui.add_space(6.0);
+            ui.hyperlink_to("Help", "https://github.com/matthiascy/vgonio");
+            ui.add_space(6.0);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if ui.button("Quit").clicked()
+                    && self.event_loop.send_event(VgonioEvent::Quit).is_err()
+                {
+                    log::warn!("[EVENT] Failed to send Quit event.");
+                }
             }
+        });
+
+        ui.add_space(ui.available_width() - 48.0);
+
+        let mut left_panel_expanded = self.left_panel_expanded;
+        if self
+            .icon_toggle_button(ui, &Icon::LEFT_PANEL_TOGGLE, &mut left_panel_expanded)
+            .clicked()
+        {
+            println!("TODO: toggle left panel: {}", self.left_panel_expanded);
+            self.left_panel_expanded = left_panel_expanded;
+        }
+
+        let mut right_panel_expanded = self.right_panel_expanded;
+        if self
+            .icon_toggle_button(ui, &Icon::RIGHT_PANEL_TOGGLE, &mut right_panel_expanded)
+            .clicked()
+        {
+            self.right_panel_expanded = right_panel_expanded;
+            println!("TODO: toggle right panel: {}", self.right_panel_expanded);
         }
     }
 }
