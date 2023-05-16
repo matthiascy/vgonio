@@ -9,12 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    app::gfx::RenderableMesh,
-    error::Error,
-    io,
-    units::{LengthUnit, Micrometres},
-};
+use crate::{app::gfx::RenderableMesh, error::Error, io, units::LengthUnit};
 
 /// Static variable used to generate height field name.
 static mut MICRO_SURFACE_COUNTER: u32 = 0;

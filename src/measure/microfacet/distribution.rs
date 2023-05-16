@@ -2,32 +2,27 @@
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 
-use flate2::write::ZlibEncoder;
-use std::{
-    borrow::Cow,
-    io::{BufWriter, Write},
-    path::Path,
-};
+use std::{io::BufWriter, path::Path};
 
 use crate::{
     app::cache::{Cache, Handle},
     error::Error,
     io::{vgmo, vgmo::AngleRange, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MeasurementKind, MicrofacetNormalDistributionMeasurement},
+    measure::measurement::{MeasurementKind, MicrofacetAreaDistributionMeasurement},
     msurf::MicroSurface,
     units::{self, Radians},
     Handedness,
 };
 
-/// Structure holding the data for micro-facet normal distribution measurement.
+/// Structure holding the data for microfacet area distribution measurement.
 ///
-/// D(m) is the micro-facet normal distribution function, which gives the
+/// D(m) is the micro-facet area (normal) distribution function, which gives the
 /// relative number of facets oriented in any given direction, or, more
 /// precisely, the relative total facet surface area per unit solid angle of
 /// surface normals pointed in any given direction.
 #[derive(Debug, Clone)]
-pub struct MicrofacetNormalDistribution {
+pub struct MicrofacetAreaDistribution {
     /// Start angle of the azimuth.
     pub azimuth_start: Radians,
     /// End angle of the azimuth.
@@ -51,7 +46,7 @@ pub struct MicrofacetNormalDistribution {
     pub samples: Vec<f32>,
 }
 
-impl MicrofacetNormalDistribution {
+impl MicrofacetAreaDistribution {
     /// Save the microfacet distribution to a file
     pub fn write_to_file(
         &self,
@@ -98,13 +93,13 @@ impl MicrofacetNormalDistribution {
 }
 
 /// Measure the microfacet distribution of a list of micro surfaces.
-pub fn measure_normal_distribution(
-    desc: MicrofacetNormalDistributionMeasurement,
+pub fn measure_area_distribution(
+    desc: MicrofacetAreaDistributionMeasurement,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
-) -> Vec<MicrofacetNormalDistribution> {
+) -> Vec<MicrofacetAreaDistribution> {
     use rayon::prelude::*;
-    log::info!("Measuring microfacet normal distribution...");
+    log::info!("Measuring microfacet area distribution...");
     let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
     let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
     let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
@@ -165,7 +160,7 @@ pub fn measure_normal_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            Some(MicrofacetNormalDistribution {
+            Some(MicrofacetAreaDistribution {
                 azimuth_bin_width: desc.azimuth.step_size,
                 zenith_bin_width: desc.zenith.step_size,
                 azimuth_bins_count_inclusive: desc.azimuth.step_count(),

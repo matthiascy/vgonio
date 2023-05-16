@@ -1,16 +1,13 @@
 use crate::{
-    measure::{bsdf::BsdfKind, emitter::RegionShape, measurement::Radius},
+    measure::{emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
     RangeByStepSize, SphericalDomain, SphericalPartition,
 };
 use glam::{Vec3, Vec3A};
-use std::{
-    ops::{Deref, DerefMut},
-    os::unix::process::parent_id,
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{
-    app::cache::{normalise_path, Cache},
+    app::cache::Cache,
     math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
         bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength, SpectrumSampler},

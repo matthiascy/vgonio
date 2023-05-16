@@ -620,7 +620,6 @@ pub mod vgmo {
         }
 
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            println!("Writing VGMO header{:?}", self);
             let mut header = [0x20; 48];
             header[0..4].copy_from_slice(Self::MAGIC);
             header[4] = self.kind as u8;

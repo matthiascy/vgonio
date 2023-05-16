@@ -1,5 +1,5 @@
 ---
-type: !mmsf
+type: !mmsf # !microfacet-masking-shadowing-function
   azimuth: 0 rad ~ 360 deg / 60 deg
   zenith: 0 rad ~ 90 deg / 5 deg
   resolution: 2048

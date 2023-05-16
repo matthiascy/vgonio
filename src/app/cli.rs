@@ -11,7 +11,7 @@ use crate::{
         self,
         measurement::{
             BsdfMeasurement, Measurement, MeasurementKindDescription,
-            MicrofacetMaskingShadowingMeasurement, MicrofacetNormalDistributionMeasurement,
+            MicrofacetAreaDistributionMeasurement, MicrofacetMaskingShadowingMeasurement,
             SimulationKind,
         },
         CollectorScheme, RtcMethod,
@@ -81,8 +81,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetNormalDistribution => Measurement {
-                        desc: MeasurementKindDescription::Mndf(
-                            MicrofacetNormalDistributionMeasurement::default(),
+                        desc: MeasurementKindDescription::Madf(
+                            MicrofacetAreaDistributionMeasurement::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
@@ -279,7 +279,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     start.elapsed().unwrap().as_secs_f32()
                 );
             }
-            MeasurementKindDescription::Mndf(measurement) => {
+            MeasurementKindDescription::Madf(measurement) => {
                 measure_microfacet_normal_distribution(
                     measurement,
                     &surfaces,
@@ -371,7 +371,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
 /// Measures the microfacet normal distribution of the given micro-surface and
 /// saves the result to the given output directory.
 fn measure_microfacet_normal_distribution(
-    measurement: MicrofacetNormalDistributionMeasurement,
+    measurement: MicrofacetAreaDistributionMeasurement,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -393,7 +393,7 @@ fn measure_microfacet_normal_distribution(
     );
     let start_time = Instant::now();
     let distributions =
-        measure::microfacet::measure_normal_distribution(measurement, surfaces, cache);
+        measure::microfacet::measure_area_distribution(measurement, surfaces, cache);
     let duration = Instant::now() - start_time;
     println!(
         "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
@@ -403,7 +403,7 @@ fn measure_microfacet_normal_distribution(
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
         let filename = format!(
-            "microfacet-normal-distribution-{}.vgmo",
+            "microfacet-area-distribution-{}.vgmo",
             cache
                 .get_micro_surface_filepath(*surface)
                 .unwrap()

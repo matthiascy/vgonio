@@ -275,14 +275,14 @@ const DEFAULT_ZENITH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
 
 /// Parameters for microfacet distribution measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetNormalDistributionMeasurement {
+pub struct MicrofacetAreaDistributionMeasurement {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSize<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSize<Radians>,
 }
 
-impl Default for MicrofacetNormalDistributionMeasurement {
+impl Default for MicrofacetAreaDistributionMeasurement {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -291,7 +291,7 @@ impl Default for MicrofacetNormalDistributionMeasurement {
     }
 }
 
-impl MicrofacetNormalDistributionMeasurement {
+impl MicrofacetAreaDistributionMeasurement {
     /// Returns the number of samples that will be taken along the zenith angle.
     ///
     /// Here one is added to the zenith step count to account for the zenith
@@ -434,9 +434,9 @@ impl MicrofacetMaskingShadowingMeasurement {
 pub enum MeasurementKindDescription {
     /// Measure the BSDF of a micro-surface.
     Bsdf(BsdfMeasurement),
-    /// Measure the micro-facet normal distribution function of a micro-surface.
-    #[serde(alias = "microfacet-normal-distribution-function")]
-    Mndf(MicrofacetNormalDistributionMeasurement),
+    /// Measure the micro-facet area distribution function of a micro-surface.
+    #[serde(alias = "microfacet-area-distribution-function")]
+    Madf(MicrofacetAreaDistributionMeasurement),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
     Mmsf(MicrofacetMaskingShadowingMeasurement),
@@ -447,7 +447,7 @@ impl MeasurementKindDescription {
     pub fn validate(self) -> Result<Self, Error> {
         match self {
             Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
-            Self::Mndf(mfd) => Ok(Self::Mndf(mfd.validate()?)),
+            Self::Madf(mfd) => Ok(Self::Madf(mfd.validate()?)),
             Self::Mmsf(mfs) => Ok(Self::Mmsf(mfs.validate()?)),
         }
     }
@@ -456,7 +456,7 @@ impl MeasurementKindDescription {
     pub fn is_bsdf(&self) -> bool { matches!(self, Self::Bsdf { .. }) }
 
     /// Whether the measurement is a micro-facet distribution measurement.
-    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Mndf { .. }) }
+    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Madf { .. }) }
 
     /// Whether the measurement is a micro-surface shadowing-masking function
     /// measurement.
@@ -472,8 +472,8 @@ impl MeasurementKindDescription {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MicrofacetNormalDistributionMeasurement> {
-        if let MeasurementKindDescription::Mndf(mfd) = self {
+    pub fn microfacet_distribution(&self) -> Option<&MicrofacetAreaDistributionMeasurement> {
+        if let MeasurementKindDescription::Madf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -620,7 +620,7 @@ impl Measurement {
     pub fn name(&self) -> &'static str {
         match self.desc {
             MeasurementKindDescription::Bsdf { .. } => "BSDF measurement",
-            MeasurementKindDescription::Mndf { .. } => "microfacet-distribution measurement",
+            MeasurementKindDescription::Madf { .. } => "microfacet-distribution measurement",
             MeasurementKindDescription::Mmsf { .. } => "micro-surface-shadow-masking measurement",
         }
     }
@@ -665,7 +665,7 @@ impl Plottable for MeasurementData {
     fn mode(&self) -> PlottingMode {
         match self.kind {
             MeasurementKind::Bsdf => PlottingMode::Bsdf,
-            MeasurementKind::MicrofacetAreaDistribution => PlottingMode::Ndf,
+            MeasurementKind::MicrofacetAreaDistribution => PlottingMode::Adf,
             MeasurementKind::MicrofacetMaskingShadowing => PlottingMode::Msf,
         }
     }
@@ -702,7 +702,8 @@ impl MeasurementData {
         })
     }
 
-    /// Returns the data slice for the given azimuthal angle in radians.
+    /// Returns the Area Distribution Function data slice for the given
+    /// azimuthal angle in radians.
     ///
     /// The returned slice contains two elements, the first one is the
     /// data slice for the given azimuthal angle, the second one is the
@@ -712,7 +713,8 @@ impl MeasurementData {
     /// Azimuthal angle will be wrapped around to the range [0, 2π].
     ///
     /// 2π will be mapped to 0.
-    pub fn data_slice_by_azimuth(&self, azimuth: f32) -> (&[f32], Option<&[f32]>) {
+    pub fn adf_data_slice(&self, azimuth: f32) -> (&[f32], Option<&[f32]>) {
+        debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         let angle = {
             azimuth - (0.5 * azimuth / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
         };
@@ -735,18 +737,98 @@ impl MeasurementData {
             };
 
         (
-            self.data_slice_by_azimuth_index(index),
-            opposite_index.map(|index| self.data_slice_by_azimuth_index(index)),
+            self.adf_data_slice_by_azimuth_index(index),
+            opposite_index.map(|index| self.adf_data_slice_by_azimuth_index(index)),
         )
     }
 
-    /// Returns the data slice for the given azimuthal angle index.
-    pub fn data_slice_by_azimuth_index(&self, index: usize) -> &[f32] {
+    /// Returns a data slice of the Area Distribution Function for the given
+    /// azimuthal angle index.
+    pub fn adf_data_slice_by_azimuth_index(&self, index: usize) -> &[f32] {
+        debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         debug_assert!(
             index < self.azimuth.bin_count as usize,
             "index out of range"
         );
         &self.data
             [index * self.zenith.bin_count as usize..(index + 1) * self.zenith.bin_count as usize]
+    }
+
+    /// Returns the Masking Shadowing Function data slice for the given
+    /// microfacet normal and azimuthal angle of the incident direction.
+    ///
+    /// The returned slice contains two elements, the first one is the
+    /// data slice for the given azimuthal angle, the second one is the
+    /// data slice for the azimuthal angle that is 180 degrees away from
+    /// the given azimuthal angle, if exists.
+    pub fn msf_data_slice(
+        &self,
+        azimuth_m: f32,
+        zenith_m: f32,
+        azimuth_i: f32,
+    ) -> (&[f32], Option<&[f32]>) {
+        debug_assert!(
+            self.kind == MeasurementKind::MicrofacetMaskingShadowing,
+            "measurement data kind should be MicrofacetMaskingShadowing"
+        );
+        let zenith_m = zenith_m.max(0.0).min(std::f32::consts::FRAC_PI_2);
+        let azimuth_m = {
+            azimuth_m
+                - (0.5 * azimuth_m / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
+        };
+        let azimuth_m_idx = ((azimuth_m - self.azimuth.start) / self.azimuth.bin_width) as usize;
+        let zenith_m_idx = ((zenith_m - self.zenith.start) / self.zenith.bin_width) as usize;
+
+        let azimuth_i = {
+            azimuth_i
+                - (0.5 * azimuth_i / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
+        };
+        let azimuth_i_idx = ((azimuth_i - self.azimuth.start) / self.azimuth.bin_width) as usize;
+
+        let mut opposite_azimuth_i = azimuth_i + std::f32::consts::PI;
+        if opposite_azimuth_i > std::f32::consts::PI * 2.0 {
+            opposite_azimuth_i -= std::f32::consts::PI * 2.0;
+        }
+        if opposite_azimuth_i < 0.0 {
+            opposite_azimuth_i += std::f32::consts::PI * 2.0;
+        }
+
+        let opposite_azimuth_i_idx =
+            if self.azimuth.start <= opposite_azimuth_i && opposite_azimuth_i <= self.azimuth.end {
+                Some(((opposite_azimuth_i - self.azimuth.start) / self.azimuth.bin_width) as usize)
+            } else {
+                None
+            };
+
+        (
+            self.msf_data_slice_inner(azimuth_m_idx, zenith_m_idx, azimuth_i_idx),
+            opposite_azimuth_i_idx
+                .map(|index| self.msf_data_slice_inner(azimuth_m_idx, zenith_m_idx, index)),
+        )
+    }
+
+    /// Returns a data slice of the Masking Shadowing Function for the given
+    /// indices.
+    fn msf_data_slice_inner(
+        &self,
+        azimuth_m_idx: usize,
+        zenith_m_idx: usize,
+        azimuth_i_idx: usize,
+    ) -> &[f32] {
+        debug_assert!(self.kind == MeasurementKind::MicrofacetMaskingShadowing);
+        debug_assert!(
+            azimuth_m_idx < self.azimuth.bin_count as usize,
+            "index out of range"
+        );
+        debug_assert!(
+            azimuth_i_idx < self.azimuth.bin_count as usize,
+            "index out of range"
+        );
+        debug_assert!(
+            zenith_m_idx < self.zenith.bin_count as usize,
+            "index out of range"
+        );
+        let offset = azimuth_m_idx * zenith_m_idx * azimuth_m_idx * self.zenith.bin_count as usize;
+        &self.data[offset..offset + self.zenith.bin_count as usize]
     }
 }

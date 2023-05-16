@@ -1276,7 +1276,7 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
 
 pub enum PlottingMode {
     None,
-    Ndf,
+    Adf,
     Bsdf,
     Msf,
 }
