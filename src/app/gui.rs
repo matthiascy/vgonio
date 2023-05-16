@@ -2,7 +2,6 @@ mod gizmo;
 mod icons;
 mod misc;
 pub mod outliner;
-mod plotter;
 mod simulation;
 pub mod state;
 mod tools;
@@ -16,20 +15,21 @@ use crate::{
 };
 use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
+    any::Any,
     collections::HashMap,
     default::Default,
     num::NonZeroU64,
     ops::Deref,
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[cfg(feature = "embree")]
 pub(crate) use tools::trace_ray_standard_dbg;
 
 pub(crate) use tools::{trace_ray_grid_dbg, DebuggingInspector};
-pub use ui::VgonioGuiState;
+pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -45,6 +45,7 @@ use crate::{
             ui::Theme,
         },
     },
+    io::vgmo::AngleRange,
     measure::{measurement::MeasurementData, rtc::grid::Grid},
     msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
     units::Degrees,
@@ -141,52 +142,25 @@ pub fn run(config: Config) -> Result<(), Error> {
 
     let mut last_frame_time = Instant::now();
 
-    event_loop.run(move |event, _, control_flow| {
+    event_loop.run(move |event, _, control| {
         let now = Instant::now();
         let dt = now - last_frame_time;
         last_frame_time = now;
 
         match event {
-            Event::UserEvent(event) => vgonio.on_user_event(event, control_flow),
+            Event::UserEvent(event) => vgonio.on_user_event(event, control),
             Event::WindowEvent {
                 window_id,
                 ref event,
             } if window_id == window.id() => {
-                if !vgonio.on_event(event).is_consumed() {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-
-                        WindowEvent::Resized(new_size) => {
-                            vgonio.resize(*new_size, Some(window.scale_factor() as f32))
-                        }
-
-                        WindowEvent::ScaleFactorChanged {
-                            new_inner_size,
-                            scale_factor,
-                        } => vgonio.resize(**new_inner_size, Some(*scale_factor as f32)),
-
-                        _ => {}
-                    }
-                }
+                vgonio.on_window_event(&window, event, control);
             }
 
             Event::RedrawRequested(window_id) if window_id == window.id() => {
-                vgonio.update(&window, dt);
-                match vgonio.render(&window) {
-                    Ok(_) => {}
-                    // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => vgonio.reconfigure_surface(),
-                    // The system is out of memory, we should quit
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{e:?}"),
-                }
+                vgonio.on_redraw_requested(&window, dt, control);
             }
 
-            Event::MainEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually request it.
-                window.request_redraw()
-            }
+            Event::MainEventsCleared => window.request_redraw(),
 
             _ => {}
         }
@@ -370,7 +344,7 @@ impl MicroSurfaceRenderingStates {
     }
 
     /// Only updates the lookup table. The actual data is updated in the
-    /// [`VgonioGuiApp::update`] method.
+    /// [`VgonioGuiApp::update_old`] method.
     pub fn update_locals_lookup(&mut self, surfs: &[Handle<MicroSurface>]) {
         for hdl in surfs {
             if self.locals_lookup.contains(hdl) {
@@ -390,7 +364,7 @@ pub struct VgonioGuiApp {
     win_surf: WindowSurface,
 
     /// The GUI application state.
-    gui_state: VgonioGuiState,
+    ui: VgonioUi,
 
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
@@ -466,7 +440,7 @@ impl VgonioGuiApp {
             _cache
         };
 
-        let mut ui = VgonioGuiState::new(
+        let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
             //            cache.clone(),
@@ -494,7 +468,7 @@ impl VgonioGuiApp {
                 gui: gui_ctx,
             },
             config,
-            gui_state: ui,
+            ui: ui,
             cache,
             input,
             passes,
@@ -532,8 +506,13 @@ impl VgonioGuiApp {
         }
     }
 
-    pub fn on_event(&mut self, event: &WindowEvent) -> EventResponse {
-        match self.ctx.gui.on_event(event) {
+    pub fn on_window_event(
+        &mut self,
+        window: &Window,
+        event: &WindowEvent,
+        control: &mut ControlFlow,
+    ) {
+        match self.ctx.gui.on_window_event(event) {
             EventResponse::Ignored => match event {
                 WindowEvent::KeyboardInput {
                     input:
@@ -545,36 +524,42 @@ impl VgonioGuiApp {
                     ..
                 } => {
                     self.input.update_key_map(*keycode, *state);
-                    EventResponse::Consumed
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
                     self.input.update_scroll_delta(*delta);
-                    EventResponse::Consumed
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
                     self.input.update_mouse_map(*button, *state);
-                    EventResponse::Consumed
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     self.input.update_cursor_delta((*position).cast::<f32>());
-                    EventResponse::Consumed
                 }
-                _ => EventResponse::Ignored,
+                WindowEvent::Resized(new_size) => {
+                    self.resize(*new_size, Some(window.scale_factor() as f32));
+                }
+                WindowEvent::ScaleFactorChanged {
+                    new_inner_size,
+                    scale_factor,
+                } => {
+                    self.resize(**new_inner_size, Some(*scale_factor as f32));
+                }
+                WindowEvent::CloseRequested => *control = ControlFlow::Exit,
+                _ => {}
             },
-            EventResponse::Consumed => EventResponse::Consumed,
+            EventResponse::Consumed => {}
         }
     }
 
-    pub fn update(&mut self, window: &Window, dt: std::time::Duration) {
+    pub fn update(&mut self, window: &Window, dt: Duration) -> Result<(), Error> {
         // Update camera uniform.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
-        self.gui_state.update_gizmo_matrices(
+        self.ui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
-        let current_theme_visuals = self.gui_state.current_theme_visuals();
+        let current_theme_visuals = self.ui.current_theme_visuals();
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
         self.ctx.gpu.queue.write_buffer(
@@ -604,8 +589,8 @@ impl VgonioGuiApp {
             }),
         );
 
-        // Update uniform buffer for the micro-surface shader.
-        let visible_surfaces = self.gui_state.outliner().visible_surfaces();
+        // Update uniform buffer for all visible surfaces.
+        let visible_surfaces = self.ui.outliner().visible_surfaces();
         if !visible_surfaces.is_empty() {
             // Update global uniform buffer.
             log::trace!("Updating global uniform buffer.");
@@ -640,53 +625,17 @@ impl VgonioGuiApp {
                     bytemuck::cast_slice(&buf),
                 );
             }
-            // --
-            // let msurf = self.cache.get_micro_surface(*hdl).unwrap();
-            // // Only upload view and proj matrices if there are surfaces to
-            // draw. let mut view_proj_model_info = [0.0f32; 16 * 3
-            // + 4]; view_proj_model_info[0..16]
-            //     .copy_from_slice(&self.camera.uniform.view_matrix.
-            // to_cols_array()); view_proj_model_info[16..32]
-            //     .copy_from_slice(&self.camera.uniform.proj_matrix.
-            // to_cols_array()); view_proj_model_info[32..48].
-            // copy_from_slice(
-            //     &Mat4::from_translation(Vec3::new(
-            //         0.0,
-            //         -(msurf.max + msurf.min) * 0.5 * state.scale,
-            //         0.0,
-            //     ))
-            //     .to_cols_array(),
-            // );
-            // view_proj_model_info[48..52].copy_from_slice(&[
-            //     msurf.min,
-            //     msurf.max,
-            //     msurf.max - msurf.min,
-            //     state.scale,
-            // ]);
-            // self.ctx.gpu.queue.write_buffer(
-            //     self.passes
-            //         .get("micro_surface")
-            //         .unwrap()
-            //         .uniform_buffer
-            //         .as_ref()
-            //         .unwrap(),
-            //     0,
-            //     bytemuck::cast_slice(&view_proj_model_info),
-            // );
-
-            // // Update the uniform buffer for debug drawing.
-            // if self.debug_drawing_enabled {
-            //     self.debug_drawing
-            //         .update_uniform_buffer(&self.ctx.gpu, &uniform);
-            // }
         }
-        //
 
         self.ctx.gui.update(window);
 
         // Reset mouse movement
         self.input.scroll_delta = 0.0;
         self.input.cursor_delta = [0.0, 0.0];
+
+        self.render(window)?;
+
+        Ok(())
     }
 
     /// Render the frame to the surface.
@@ -707,7 +656,7 @@ impl VgonioGuiApp {
                     label: Some("vgonio_render_encoder"),
                 })];
 
-        let visible_surfaces = self.gui_state.outliner().visible_surfaces();
+        let visible_surfaces = self.ui.outliner().visible_surfaces();
         {
             let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
@@ -719,9 +668,7 @@ impl VgonioGuiApp {
                         // same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(
-                                self.gui_state.current_theme_visuals().clear_color,
-                            ),
+                            load: wgpu::LoadOp::Clear(self.ui.current_theme_visuals().clear_color),
                             store: true,
                         },
                     },
@@ -775,7 +722,7 @@ impl VgonioGuiApp {
                 }
             }
 
-            if self.gui_state.enable_visual_grid {
+            if self.ui.enable_visual_grid {
                 let pass = self.passes.get("visual_grid").unwrap();
                 render_pass.set_pipeline(&pass.pipeline);
                 render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
@@ -839,7 +786,7 @@ impl VgonioGuiApp {
             window,
             self.win_surf.screen_descriptor(),
             &output_view,
-            |ctx| self.gui_state.show(ctx),
+            |ctx| self.ui.show(ctx),
         );
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
@@ -875,7 +822,7 @@ impl VgonioGuiApp {
                     self.win_surf.width(),
                     self.win_surf.height(),
                 );
-                self.gui_state
+                self.ui
                     .tools
                     .get_tool::<DebuggingInspector>()
                     .unwrap()
@@ -1016,7 +963,7 @@ impl VgonioGuiApp {
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("Sampling Debugger Encoder"),
                         });
-                self.gui_state
+                self.ui
                     .tools
                     .get_tool::<SamplingInspector>()
                     .unwrap()
@@ -1115,6 +1062,34 @@ impl VgonioGuiApp {
             _ => {}
         }
     }
+
+    /// Update the state of the application then render the current frame.
+    pub fn on_redraw_requested(
+        &mut self,
+        window: &Window,
+        dt: Duration,
+        control: &mut ControlFlow,
+    ) {
+        match self.update(window, dt) {
+            Ok(_) => {}
+            Err(Error::Rhi(error)) => {
+                if error.is_surface_error() {
+                    if let Some(surface_error) = error.get::<wgpu::SurfaceError>() {
+                        match surface_error {
+                            // Reconfigure the surface if lost
+                            wgpu::SurfaceError::Lost => self.reconfigure_surface(),
+                            // The system is out of memory, we should quit
+                            wgpu::SurfaceError::OutOfMemory => *control = ControlFlow::Exit,
+                            // All other errors (Outdated, Timeout) should be resolved by the next
+                            // frame
+                            error => eprintln!("{error:?}"),
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 // VgonioEvent handling
@@ -1181,11 +1156,11 @@ impl VgonioGuiApp {
                 log::warn!("File {:?} has no extension, ignoring", path);
             }
         }
-        self.gui_state
+        self.ui
             .outliner_mut()
             .update_surfaces(&surfaces, &self.cache);
         self.rendering_states.update_locals_lookup(&surfaces);
-        self.gui_state
+        self.ui
             .outliner_mut()
             .update_measurement_data(&measurements, &self.cache);
     }
@@ -1297,4 +1272,23 @@ fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat)
         bind_groups: vec![bind_group],
         uniform_buffers: Some(vec![uniform_buffer]),
     }
+}
+
+pub enum PlottingMode {
+    None,
+    Ndf,
+    Bsdf,
+    Msf,
+}
+
+pub trait Plottable {
+    fn mode(&self) -> PlottingMode { PlottingMode::None }
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+impl Plottable for () {
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }

@@ -5,10 +5,8 @@ use crate::{
     },
     measure::measurement::{BsdfMeasurement, Measurement},
 };
-use egui_gizmo::{GizmoMode, GizmoOrientation};
-use glam::Mat4;
+use egui_gizmo::GizmoOrientation;
 use std::{
-    cell::RefCell,
     fmt::{Display, Formatter},
     path::Path,
     sync::{Arc, Mutex},

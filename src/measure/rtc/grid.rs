@@ -1201,7 +1201,8 @@ mod tests {
 
     #[test]
     fn multilevel_grid_creation() {
-        let surf = MicroSurface::from_samples(9, 9, 0.5, 0.5, LengthUnit::UM, &vec![0.0; 81], None);
+        let surf =
+            MicroSurface::from_samples(9, 9, 0.5, 0.5, LengthUnit::UM, &vec![0.0; 81], None, None);
         let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         assert_eq!(grid.level(), 2);
@@ -1256,6 +1257,7 @@ mod tests {
                 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6,
             ],
             None,
+            None
         );
         let mesh = surf.as_micro_surface_mesh();
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
@@ -1507,6 +1509,7 @@ mod tests {
                 0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0,
             ],
+            None,
             None,
         );
         let mesh = surf.as_micro_surface_mesh();

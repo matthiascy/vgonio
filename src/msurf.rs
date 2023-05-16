@@ -330,7 +330,7 @@ impl MicroSurface {
     /// # use vgonio::units::{LengthUnit};
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, None, None);
-    /// assert_eq!(msurf.sample_at(2, 2), 0.1 * 1000.0);
+    /// assert_eq!(msurf.sample_at(2, 2), 0.1);
     /// ```
     ///
     /// ```should_panic

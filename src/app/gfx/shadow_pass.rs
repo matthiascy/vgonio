@@ -4,7 +4,7 @@ use crate::{
 };
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
-use std::{num::NonZeroU32, sync::Arc};
+use std::sync::Arc;
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.

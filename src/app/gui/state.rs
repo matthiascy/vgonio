@@ -16,7 +16,7 @@ use crate::app::{
 };
 
 use crate::{app::gfx::remap_depth, measure::rtc::Ray};
-use std::{default::Default, num::NonZeroU32, path::Path, sync::Arc};
+use std::{default::Default, path::Path, sync::Arc};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
 use super::EventResponse;
@@ -535,7 +535,7 @@ impl GuiContext {
     }
 
     /// Update the context whenever there is a window event.
-    pub fn on_event(&mut self, event: &WindowEvent) -> EventResponse {
-        self.context.on_event(event).into()
+    pub fn on_window_event(&mut self, event: &WindowEvent) -> EventResponse {
+        self.context.on_window_event(event).into()
     }
 }

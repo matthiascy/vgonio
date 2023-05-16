@@ -526,6 +526,48 @@ pub mod vgmo {
         pub bin_width: f32,
     }
 
+    impl AngleRange {
+        /// Returns all the possible angles as an iterator.
+        pub fn angles(&self) -> impl Iterator<Item = f32> {
+            let start = self.start;
+            let end = self.end;
+            let bin_width = self.bin_width;
+            (0..self.bin_count).map(move |i| (start + bin_width * i as f32).min(end))
+        }
+
+        /// Returns negative values of all the possible angles as an iterator in
+        /// reverse order.
+        pub fn rev_negative_angles(&self) -> impl Iterator<Item = f32> {
+            let start = self.start;
+            let end = self.end;
+            let bin_width = self.bin_width;
+            (0..self.bin_count)
+                .map(move |i| (start - bin_width * i as f32).max(-end))
+                .rev()
+        }
+    }
+
+    #[test]
+    fn angle_range() {
+        let range = AngleRange {
+            start: 0.0,
+            end: 90.0,
+            bin_count: 19,
+            bin_width: 5.0,
+        };
+        let angles: Vec<_> = range.angles().collect();
+        assert_eq!(angles.len(), 19);
+        assert_eq!(angles[0], 0.0);
+        assert_eq!(angles[1], 5.0);
+        assert_eq!(angles.last(), Some(&90.0));
+
+        let angles: Vec<_> = range.negative_angles().collect();
+        assert_eq!(angles.len(), 19);
+        assert_eq!(angles[0], -90.0);
+        assert_eq!(angles[1], -85.0);
+        assert_eq!(angles.last(), Some(&0.0));
+    }
+
     /// Header of the VGMO file.
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub struct Header {
@@ -578,6 +620,7 @@ pub mod vgmo {
         }
 
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
+            println!("Writing VGMO header{:?}", self);
             let mut header = [0x20; 48];
             header[0..4].copy_from_slice(Self::MAGIC);
             header[4] = self.kind as u8;

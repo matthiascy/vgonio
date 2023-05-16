@@ -8,7 +8,7 @@ use std::{
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
-    Rhi(wgpu::Error),
+    Rhi(WgpuError),
     Logger(log::SetLoggerError),
     UnrecognizedFile,
     Utf8Error(str::Utf8Error),
@@ -32,6 +32,25 @@ pub enum Error {
 }
 
 #[derive(Debug)]
+pub struct WgpuError {
+    source: Box<dyn std::error::Error + Send + 'static>,
+}
+
+impl WgpuError {
+    pub fn is_surface_error(&self) -> bool { self.source.is::<wgpu::SurfaceError>() }
+
+    pub fn is_request_device_error(&self) -> bool { self.source.is::<wgpu::RequestDeviceError>() }
+
+    pub fn is_create_surface_error(&self) -> bool { self.source.is::<wgpu::CreateSurfaceError>() }
+
+    pub fn is_buffer_async_error(&self) -> bool { self.source.is::<wgpu::BufferAsyncError>() }
+
+    pub fn get<T: std::error::Error + 'static>(&self) -> Option<&T> {
+        self.source.downcast_ref::<T>()
+    }
+}
+
+#[derive(Debug)]
 pub enum SerialisationError {
     TomlSe(toml::ser::Error),
     TomlDe(toml::de::Error),
@@ -46,7 +65,7 @@ impl Display for Error {
                 write!(f, "IO error - {err}")
             }
             Error::Rhi(err) => {
-                write!(f, "RHI error - {err}")
+                write!(f, "RHI error - {err:?}")
             }
             Error::Logger(_) => {
                 write!(f, "Set logger error.")
@@ -132,10 +151,6 @@ impl Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<wgpu::Error> for Error {
-    fn from(err: wgpu::Error) -> Self { Error::Rhi(err) }
-}
-
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self { Error::Io(err) }
 }
@@ -183,3 +198,23 @@ impl From<WriteFileError> for Error {
 impl From<ReadFileError> for Error {
     fn from(value: ReadFileError) -> Self { Self::ReadFile(value) }
 }
+
+macro impl_from_wgpu_errors($($err:ty),*) {
+$(
+        impl From<$err> for Error {
+            fn from(source: $err) -> Self {
+                Error::Rhi(WgpuError {
+                    source: Box::new(source),
+                })
+            }
+        }
+    )*
+}
+
+impl_from_wgpu_errors!(
+    wgpu::Error,
+    wgpu::RequestDeviceError,
+    wgpu::SurfaceError,
+    wgpu::CreateSurfaceError,
+    wgpu::BufferAsyncError
+);

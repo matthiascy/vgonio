@@ -1,15 +1,13 @@
 use crate::{
-    app::cache::{Cache, Handle},
+    app::{
+        cache::{Cache, Handle},
+        gui::tools::{PlottingInspector, Tool},
+    },
     measure::measurement::{MeasurementData, MeasurementDataSource, MeasurementKind},
     msurf::MicroSurface,
     units::LengthUnit,
 };
-use egui::Widget;
-use std::{
-    collections::HashMap,
-    rc::{Rc, Weak},
-};
-use toml::to_string;
+use std::{collections::HashMap, rc::Weak};
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]
@@ -39,6 +37,8 @@ pub struct Outliner {
     surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
     /// States of the measured data.
     measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
+    /// Plotting inspectors, linked to the measurement data they are inspecting.
+    plotting_inspectors: Vec<(Weak<MeasurementData>, PlottingInspector)>,
 }
 
 impl Default for Outliner {
@@ -51,6 +51,7 @@ impl Outliner {
         Self {
             surfaces: HashMap::new(),
             measurements: Default::default(),
+            plotting_inspectors: vec![],
         }
     }
 
@@ -96,8 +97,13 @@ impl Outliner {
         for meas in measurements {
             let data = cache.get_measurement_data(*meas).unwrap();
             if !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) {
-                self.measurements
-                    .push((data, MeasuredDataCollapsableHeader { selected: false }));
+                self.measurements.push((
+                    data,
+                    MeasuredDataCollapsableHeader {
+                        selected: false,
+                        show_plot: false,
+                    },
+                ));
             }
         }
     }
@@ -180,11 +186,17 @@ impl SurfaceCollapsableHeader {
 
 struct MeasuredDataCollapsableHeader {
     selected: bool,
+    show_plot: bool,
 }
 
 impl MeasuredDataCollapsableHeader {
-    pub fn ui(&mut self, ui: &mut egui::Ui, measurement: Weak<MeasurementData>) {
-        let meas_data = measurement.upgrade().unwrap();
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        data: Weak<MeasurementData>,
+        plots: &mut Vec<(Weak<MeasurementData>, PlottingInspector)>,
+    ) {
+        let meas_data = data.upgrade().unwrap();
         let id = ui.make_persistent_id(&meas_data.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
@@ -217,7 +229,7 @@ impl MeasuredDataCollapsableHeader {
                         }
                         ui.end_row();
 
-                        if meas_data.kind == MeasurementKind::MicrofacetDistribution {
+                        if meas_data.kind == MeasurementKind::MicrofacetAreaDistribution {
                             ui.label("θ:");
                             ui.label(format!(
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
@@ -238,7 +250,13 @@ impl MeasuredDataCollapsableHeader {
                     });
                 ui.add_space(5.0);
                 if ui.button("Plot").clicked() {
-                    println!("plotting");
+                    self.show_plot = true;
+                    if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
+                        plots.push((
+                            data.clone(),
+                            PlottingInspector::new(meas_data.name.clone(), meas_data.clone()),
+                        ));
+                    }
                 }
             });
     }
@@ -262,9 +280,20 @@ impl Outliner {
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     for (data, hdr) in self.measurements.iter_mut() {
-                        hdr.ui(ui, data.clone());
+                        hdr.ui(ui, data.clone(), &mut self.plotting_inspectors);
                     }
                 })
             });
+
+        for (data, plot) in self.plotting_inspectors.iter_mut() {
+            let open = &mut self
+                .measurements
+                .iter_mut()
+                .find(|(d, _)| d.ptr_eq(data))
+                .unwrap()
+                .1
+                .show_plot;
+            plot.show(ui.ctx(), open);
+        }
     }
 }

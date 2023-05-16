@@ -43,7 +43,7 @@ pub struct MicrofacetNormalDistribution {
     pub zenith_stop: Radians,
     /// The bin size of zenith angle when sampling the microfacet
     /// distribution.
-    pub zenith_bin_size: Radians,
+    pub zenith_bin_width: Radians,
     /// The number of bins in the zenith angle including the start and stop.
     pub zenith_bins_count_inclusive: usize,
     /// The distribution data. The first index is the azimuthal angle, and the
@@ -70,7 +70,7 @@ impl MicrofacetNormalDistribution {
             .truncate(true)
             .open(filepath)?;
         let header = vgmo::Header {
-            kind: MeasurementKind::MicrofacetDistribution,
+            kind: MeasurementKind::MicrofacetAreaDistribution,
             encoding,
             compression,
             azimuth_range: AngleRange {
@@ -83,12 +83,12 @@ impl MicrofacetNormalDistribution {
                 start: self.zenith_start.value,
                 end: self.zenith_stop.value,
                 bin_count: self.zenith_bins_count_inclusive as u32,
-                bin_width: self.zenith_bin_size.value,
+                bin_width: self.zenith_bin_width.value,
             },
             sample_count: self.samples.len() as u32,
         };
-        let mut writter = BufWriter::new(file);
-        vgmo::write(&mut writter, header, &self.samples).map_err(|err| {
+        let mut writer = BufWriter::new(file);
+        vgmo::write(&mut writer, header, &self.samples).map_err(|err| {
             Error::WriteFile(WriteFileError {
                 path: filepath.to_path_buf().into_boxed_path(),
                 kind: err,
@@ -167,7 +167,7 @@ pub fn measure_normal_distribution(
                 .collect::<Vec<_>>();
             Some(MicrofacetNormalDistribution {
                 azimuth_bin_width: desc.azimuth.step_size,
-                zenith_bin_size: desc.zenith.step_size,
+                zenith_bin_width: desc.zenith.step_size,
                 azimuth_bins_count_inclusive: desc.azimuth.step_count(),
                 zenith_bins_count_inclusive: desc.zenith.step_count() + 1,
                 samples,

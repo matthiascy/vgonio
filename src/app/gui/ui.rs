@@ -222,7 +222,7 @@ fn load_image_from_bytes(bytes: &[u8]) -> Result<egui::ColorImage, Error> {
 }
 
 /// Implementation of the GUI for vgonio application.
-pub struct VgonioGuiState {
+pub struct VgonioUi {
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
 
@@ -272,7 +272,7 @@ impl Deref for ThemeVisuals {
     fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
-impl VgonioGuiState {
+impl VgonioUi {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
         config: Arc<Config>,
@@ -312,6 +312,7 @@ impl VgonioGuiState {
         self.tools.show(ctx);
         //self.simulation_workspace.show(ctx);
         self.drag_drop.show(ctx);
+
         self.navigator.show(ctx);
 
         if self.right_panel_expanded {
@@ -332,7 +333,7 @@ impl VgonioGuiState {
     pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
 }
 
-impl VgonioGuiState {
+impl VgonioUi {
     fn icon_image(&self, icon: &Icon) -> Arc<RetainedImage> {
         self.image_cache
             .lock()

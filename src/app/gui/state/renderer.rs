@@ -3,7 +3,7 @@ use crate::app::{
     gui::state::{ScreenDescriptor, UiUniforms},
 };
 use egui::epaint;
-use std::{borrow::Cow, collections::HashMap, num::NonZeroU32};
+use std::{borrow::Cow, collections::HashMap};
 use type_map::TypeMap;
 
 type SetupCallback = dyn Fn(

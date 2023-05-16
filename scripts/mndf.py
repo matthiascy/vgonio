@@ -34,11 +34,19 @@ def read_data(filename):
         is_binary = header[5] == ord('!')
         is_compressed = header[6] != 0
 
+        print(f"is_binary = {is_binary}")
+        print(f"is_compressed = {is_compressed}")
+
         [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("<fff", header[8:20]))
-        azimuth_bin_count = int.from_bytes(header[20:24], byteorder='little')
+        [azimuth_bin_count] = struct.unpack("<I", header[20:24])
+        print(f"azimuth -- start = {azimuth_start}, stop = {azimuth_stop}, bin_size = {azimuth_bin_size}, count = {azimuth_bin_count}")
+
         [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("<fff", header[24:36]))
         zenith_bin_count = int.from_bytes(header[36:40], byteorder='little')
+        print(f"zenith -- start = {zenith_start}, stop = {zenith_stop}, bin_size = {zenith_bin_size}, count = {zenith_bin_count}")
+
         sample_count = int.from_bytes(header[40:44], byteorder='little')
+        print(f"sample_count = {sample_count}")
 
         if sample_count != azimuth_bin_count * zenith_bin_count:
             raise Exception('Invalid file format, {} samples expected, but {} samples found.'.format(azimuth_bin_count * zenith_bin_count, sample_count))

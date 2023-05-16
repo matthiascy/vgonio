@@ -1,5 +1,5 @@
 use image::GenericImageView;
-use std::{num::NonZeroU32, sync::Arc};
+use std::sync::Arc;
 
 // TODO: a texture may don't have a sampler (in case used as render pass
 // attachments)

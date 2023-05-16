@@ -1,6 +1,9 @@
 //! Measurement parameters.
 use crate::{
-    app::cache::{Asset, Handle},
+    app::{
+        cache::{Asset, Handle},
+        gui::{Plottable, PlottingMode},
+    },
     io,
     io::vgmo::AngleRange,
     measure::{
@@ -13,6 +16,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    any::Any,
     fmt::{Display, Formatter},
     fs::File,
     io::BufReader,
@@ -507,8 +511,8 @@ pub struct Measurement {
 pub enum MeasurementKind {
     /// BSDF measurement.
     Bsdf = 0x00,
-    /// Micro-facet distribution measurement.
-    MicrofacetDistribution = 0x01,
+    /// Micro-facet area distribution measurement.
+    MicrofacetAreaDistribution = 0x01,
     /// Micro-surface shadowing-masking function measurement.
     MicrofacetMaskingShadowing = 0x02,
 }
@@ -519,7 +523,7 @@ impl Display for MeasurementKind {
             MeasurementKind::Bsdf => {
                 write!(f, "BSDF")
             }
-            MeasurementKind::MicrofacetDistribution => {
+            MeasurementKind::MicrofacetAreaDistribution => {
                 write!(f, "NDF")
             }
             MeasurementKind::MicrofacetMaskingShadowing => {
@@ -533,7 +537,7 @@ impl From<u8> for MeasurementKind {
     fn from(value: u8) -> Self {
         match value {
             0x00 => Self::Bsdf,
-            0x01 => Self::MicrofacetDistribution,
+            0x01 => Self::MicrofacetAreaDistribution,
             0x02 => Self::MicrofacetMaskingShadowing,
             _ => panic!("Invalid measurement kind! {}", value),
         }
@@ -657,7 +661,22 @@ pub struct MeasurementData {
 
 impl Asset for MeasurementData {}
 
+impl Plottable for MeasurementData {
+    fn mode(&self) -> PlottingMode {
+        match self.kind {
+            MeasurementKind::Bsdf => PlottingMode::Bsdf,
+            MeasurementKind::MicrofacetAreaDistribution => PlottingMode::Ndf,
+            MeasurementKind::MicrofacetMaskingShadowing => PlottingMode::Msf,
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+}
+
 impl MeasurementData {
+    /// Loads the measurement data from a file.
     pub fn read_from_file(path: &Path) -> Result<Self, Error> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
@@ -681,5 +700,53 @@ impl MeasurementData {
             name,
             data,
         })
+    }
+
+    /// Returns the data slice for the given azimuthal angle in radians.
+    ///
+    /// The returned slice contains two elements, the first one is the
+    /// data slice for the given azimuthal angle, the second one is the
+    /// data slice for the azimuthal angle that is 180 degrees away from
+    /// the given azimuthal angle, if exists.
+    ///
+    /// Azimuthal angle will be wrapped around to the range [0, 2π].
+    ///
+    /// 2π will be mapped to 0.
+    pub fn data_slice_by_azimuth(&self, azimuth: f32) -> (&[f32], Option<&[f32]>) {
+        let angle = {
+            azimuth - (0.5 * azimuth / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
+        };
+
+        let index = ((angle - self.azimuth.start) / self.azimuth.bin_width) as usize;
+
+        let mut opposite_angle = angle + std::f32::consts::PI;
+        if opposite_angle > std::f32::consts::PI * 2.0 {
+            opposite_angle -= std::f32::consts::PI * 2.0;
+        }
+        if opposite_angle < 0.0 {
+            opposite_angle += std::f32::consts::PI * 2.0;
+        }
+
+        let opposite_index =
+            if self.azimuth.start <= opposite_angle && opposite_angle <= self.azimuth.end {
+                Some(((opposite_angle - self.azimuth.start) / self.azimuth.bin_width) as usize)
+            } else {
+                None
+            };
+
+        (
+            self.data_slice_by_azimuth_index(index),
+            opposite_index.map(|index| self.data_slice_by_azimuth_index(index)),
+        )
+    }
+
+    /// Returns the data slice for the given azimuthal angle index.
+    pub fn data_slice_by_azimuth_index(&self, index: usize) -> &[f32] {
+        debug_assert!(
+            index < self.azimuth.bin_count as usize,
+            "index out of range"
+        );
+        &self.data
+            [index * self.zenith.bin_count as usize..(index + 1) * self.zenith.bin_count as usize]
     }
 }

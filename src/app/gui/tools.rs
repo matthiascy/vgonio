@@ -9,6 +9,7 @@ use crate::{
 };
 #[cfg(feature = "embree")]
 use embree::Config;
+use std::rc::Rc;
 
 use winit::event_loop::EventLoopProxy;
 
@@ -46,7 +47,7 @@ pub(crate) fn trace_ray_standard_dbg(
 }
 
 pub trait Tool {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool);
 
@@ -72,7 +73,7 @@ impl Tools {
             windows: vec![
                 Box::<Scratch>::default(),
                 Box::new(DebuggingInspector::new(event_loop.clone())),
-                Box::<PlottingInspector>::default(),
+                Box::new(PlottingInspector::new("Graph".to_string(), Rc::new(()))),
                 Box::new(SamplingInspector::new(
                     gpu,
                     gui,
