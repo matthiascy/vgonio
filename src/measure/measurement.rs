@@ -771,7 +771,7 @@ impl MeasurementData {
             self.kind == MeasurementKind::MicrofacetMaskingShadowing,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
-        let zenith_m = zenith_m.max(0.0).min(std::f32::consts::FRAC_PI_2);
+        let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.end);
         let azimuth_m = {
             azimuth_m
                 - (0.5 * azimuth_m / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0

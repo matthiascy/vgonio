@@ -2,10 +2,11 @@ use crate::{
     app::gui::{tools::Tool, Plottable, PlottingMode},
     measure::measurement::MeasurementData,
 };
-use egui::{plot::*, text::LayoutJob, Context, Ui};
+use egui::{plot::*, text::LayoutJob, Context, Response, Ui, Widget, WidgetText};
 use std::{
     any::Any,
     iter::{Map, Rev, Zip},
+    ops::RangeInclusive,
     rc::Rc,
     slice::Iter,
 };
@@ -49,6 +50,19 @@ impl PlottingInspector {
             incident_direction_zenith: 0.0,
         }
     }
+
+    fn angle_slider(
+        value: &mut f32,
+        range: RangeInclusive<f32>,
+        step: f64,
+        text: impl Into<WidgetText>,
+    ) -> impl Widget + '_ {
+        egui::Slider::new(value, range)
+            .clamp_to_range(true)
+            .step_by(step)
+            .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
+            .text(text)
+    }
 }
 
 impl Tool for PlottingInspector {
@@ -62,6 +76,12 @@ impl Tool for PlottingInspector {
     }
 
     fn ui(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Plot type:");
+            ui.selectable_value(&mut self.plot_type, PlotType::Line, "Line");
+            ui.selectable_value(&mut self.plot_type, PlotType::Bar, "Bar");
+        });
+
         match self.data.mode() {
             PlottingMode::Adf => {
                 let measured = self
@@ -72,21 +92,13 @@ impl Tool for PlottingInspector {
                 let zenith_bin_width_rad = measured.zenith.bin_width;
 
                 ui.horizontal(|ui| {
-                    ui.label("Plot type:");
-                    ui.selectable_value(&mut self.plot_type, PlotType::Line, "Line");
-                    ui.selectable_value(&mut self.plot_type, PlotType::Bar, "Bar");
-                });
-                ui.horizontal(|ui| {
                     ui.label("microfacet normal - φ: ");
-                    ui.add(
-                        egui::Slider::new(
-                            &mut self.microfacet_normal_azimuth,
-                            measured.azimuth.start..=measured.azimuth.end,
-                        )
-                        .clamp_to_range(true)
-                        .step_by(measured.azimuth.bin_width as _)
-                        .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees())),
-                    );
+                    ui.add(PlottingInspector::angle_slider(
+                        &mut self.microfacet_normal_azimuth,
+                        measured.azimuth.range_inclusive(),
+                        measured.azimuth.bin_width as _,
+                        "",
+                    ));
                 });
 
                 let data: Vec<_> = {
@@ -124,7 +136,7 @@ impl Tool for PlottingInspector {
                 let plot = Plot::new("plotting")
                     .legend(self.legend.clone())
                     .data_aspect((max_x / max_y) as f32)
-                    .clamp_grid(true)
+                    //.clamp_grid(true)
                     .center_x_axis(true)
                     .sharp_grid_lines(true)
                     .x_grid_spacer(|input| {
@@ -206,34 +218,22 @@ impl Tool for PlottingInspector {
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
                 let zenith_bin_width_rad = measured.zenith.bin_width;
-
-                ui.horizontal(|ui| {
-                    ui.label("Plot type:");
-                    ui.selectable_value(&mut self.plot_type, PlotType::Line, "Line");
-                    ui.selectable_value(&mut self.plot_type, PlotType::Bar, "Bar");
-                });
                 ui.horizontal(|ui| {
                     ui.label("microfacet normal: ");
-                    ui.add(
-                        egui::Slider::new(
+                    ui.vertical(|ui| {
+                        ui.add(PlottingInspector::angle_slider(
                             &mut self.microfacet_normal_azimuth,
-                            measured.azimuth.start..=measured.azimuth.end,
-                        )
-                        .clamp_to_range(true)
-                        .step_by(measured.azimuth.bin_width as _)
-                        .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                        .text("φ"),
-                    );
-                    ui.add(
-                        egui::Slider::new(
+                            measured.azimuth.range_inclusive(),
+                            measured.azimuth.bin_width as _,
+                            "φ",
+                        ));
+                        ui.add(PlottingInspector::angle_slider(
                             &mut self.microfacet_normal_zenith,
-                            measured.zenith.start..=measured.zenith.end,
-                        )
-                        .clamp_to_range(true)
-                        .step_by(measured.zenith.bin_width as _)
-                        .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                        .text("θ"),
-                    );
+                            measured.zenith.range_inclusive(),
+                            measured.zenith.bin_width as _,
+                            "θ",
+                        ));
+                    });
                 });
                 ui.horizontal(|ui| {
                     ui.label("incident direction:  ");
@@ -282,7 +282,7 @@ impl Tool for PlottingInspector {
                 let plot = Plot::new("plot_msf")
                     .legend(self.legend.clone())
                     .data_aspect((max_x / max_y) as f32)
-                    .clamp_grid(true)
+                    //.clamp_grid(true)
                     .center_x_axis(true)
                     .sharp_grid_lines(true)
                     .x_grid_spacer(|input| {

@@ -511,7 +511,7 @@ pub mod vgms {
 pub mod vgmo {
     use super::*;
     use crate::measure::measurement::MeasurementKind;
-    use std::io::BufWriter;
+    use std::{io::BufWriter, ops::RangeInclusive};
 
     /// The range of the angle in the measurement, in radians.
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -545,6 +545,9 @@ pub mod vgmo {
                 .map(move |i| (start - bin_width * i as f32).max(-end))
                 .rev()
         }
+
+        /// Returns the inclusive range of the angle.
+        pub fn range_inclusive(&self) -> RangeInclusive<f32> { self.start..=self.end }
     }
 
     #[test]
