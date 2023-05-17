@@ -156,7 +156,7 @@ impl Tool for PlottingInspector {
                             let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
                             let half_bin_width = zenith_bin_width_rad.to_degrees() as f64 * 0.5;
                             format!(
-                                "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2}",
+                                "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2} sr⁻¹",
                                 0.0, bin, p.y
                             )
                         }),
@@ -325,7 +325,7 @@ impl Tool for PlottingInspector {
                         plot_ui.line(
                             Line::new(data)
                                 .stroke(egui::epaint::Stroke::new(2.0, egui::Color32::LIGHT_RED))
-                                .name("Microfacet area distribution"),
+                                .name("Microfacet masking shadowing"),
                         );
                     }
                     PlotType::Bar => {
