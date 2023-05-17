@@ -770,11 +770,6 @@ impl MeasurementData {
         let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
         let zenith_m_idx = self.zenith.angle_index(zenith_m);
         let azimuth_i_idx = self.azimuth.angle_index(azimuth_i);
-        println!(
-            "azimuth_m_idx: {}, zenith_m_idx: {}, azimuth_i_idx: {}",
-            azimuth_m_idx, zenith_m_idx, azimuth_i_idx
-        );
-
         let opposite_azimuth_i = calculate_opposite_angle(azimuth_i);
         let opposite_azimuth_i_idx =
             if self.azimuth.start <= opposite_azimuth_i && opposite_azimuth_i <= self.azimuth.end {
