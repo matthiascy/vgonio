@@ -548,6 +548,11 @@ pub mod vgmo {
 
         /// Returns the inclusive range of the angle.
         pub fn range_inclusive(&self) -> RangeInclusive<f32> { self.start..=self.end }
+
+        /// Returns the index of the angle in the range of the measurement.
+        pub fn angle_index(&self, angle: f32) -> usize {
+            ((angle - self.start) / self.bin_width).round() as usize
+        }
     }
 
     #[test]
@@ -564,11 +569,28 @@ pub mod vgmo {
         assert_eq!(angles[1], 5.0);
         assert_eq!(angles.last(), Some(&90.0));
 
-        let angles: Vec<_> = range.negative_angles().collect();
+        let angles: Vec<_> = range.rev_negative_angles().collect();
         assert_eq!(angles.len(), 19);
         assert_eq!(angles[0], -90.0);
         assert_eq!(angles[1], -85.0);
         assert_eq!(angles.last(), Some(&0.0));
+    }
+
+    #[test]
+    fn angle_index() {
+        let range = AngleRange {
+            start: 0.0,
+            end: 360.0,
+            bin_count: 12,
+            bin_width: 30.0,
+        };
+        assert_eq!(range.angle_index(0.0), 0);
+        assert_eq!(range.angle_index(15.0), 0);
+        assert_eq!(range.angle_index(30.0), 1);
+        assert_eq!(range.angle_index(30.01), 1);
+        assert_eq!(range.angle_index(45.0), 1);
+        assert_eq!(range.angle_index(60.0), 2);
+        assert_eq!(range.angle_index(90.0), 3);
     }
 
     /// Header of the VGMO file.

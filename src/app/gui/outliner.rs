@@ -238,6 +238,12 @@ impl MeasuredDataCollapsableHeader {
                                 meas_data.zenith.bin_width.to_degrees(),
                             ));
                             ui.end_row();
+                            #[cfg(debug_assertions)]
+                            {
+                                ui.label("θ bins:");
+                                ui.label(format!("{}", meas_data.zenith.bin_count));
+                                ui.end_row()
+                            }
                             ui.label("φ:");
                             ui.label(format!(
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
@@ -246,6 +252,12 @@ impl MeasuredDataCollapsableHeader {
                                 meas_data.azimuth.bin_width.to_degrees(),
                             ));
                             ui.end_row();
+                            #[cfg(debug_assertions)]
+                            {
+                                ui.label("φ bins:");
+                                ui.label(format!("{}", meas_data.azimuth.bin_count));
+                                ui.end_row()
+                            }
                         }
                     });
                 ui.add_space(5.0);

@@ -6,6 +6,7 @@ mod simulation;
 pub mod state;
 mod tools;
 mod ui;
+mod widgets;
 
 use crate::{
     error::Error,

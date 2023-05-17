@@ -1,6 +1,6 @@
 use crate::{
     app::gui::{tools::Tool, Plottable, PlottingMode},
-    measure::measurement::MeasurementData,
+    measure::measurement::{calculate_opposite_angle, MeasurementData},
 };
 use egui::{plot::*, text::LayoutJob, Context, Response, Ui, Widget, WidgetText};
 use std::{
@@ -99,6 +99,19 @@ impl Tool for PlottingInspector {
                         measured.azimuth.bin_width as _,
                         "",
                     ));
+                    #[cfg(debug_assertions)]
+                    if ui.button("print φ").clicked() {
+                        let initial =
+                            crate::measure::measurement::wrap_angle(self.microfacet_normal_azimuth);
+                        let opposite = calculate_opposite_angle(initial);
+                        println!(
+                            "φ = {}, index = {} | opposite φ = {}, index = {}",
+                            initial.to_degrees(),
+                            measured.azimuth.angle_index(initial),
+                            opposite.to_degrees(),
+                            measured.azimuth.angle_index(opposite),
+                        );
+                    }
                 });
 
                 let data: Vec<_> = {

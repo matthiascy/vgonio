@@ -11,6 +11,7 @@ use crate::{
         RtcMethod,
     },
     msurf::MicroSurface,
+    ulp_eq,
     units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
     Error, Medium, RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition,
 };
@@ -713,45 +714,37 @@ impl MeasurementData {
     /// Azimuthal angle will be wrapped around to the range [0, 2π].
     ///
     /// 2π will be mapped to 0.
-    pub fn adf_data_slice(&self, azimuth: f32) -> (&[f32], Option<&[f32]>) {
+    ///
+    /// # Arguments
+    ///
+    /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
+    pub fn adf_data_slice(&self, azimuth_m: f32) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
-        let angle = {
-            azimuth - (0.5 * azimuth / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
-        };
-
-        let index = ((angle - self.azimuth.start) / self.azimuth.bin_width) as usize;
-
-        let mut opposite_angle = angle + std::f32::consts::PI;
-        if opposite_angle > std::f32::consts::PI * 2.0 {
-            opposite_angle -= std::f32::consts::PI * 2.0;
-        }
-        if opposite_angle < 0.0 {
-            opposite_angle += std::f32::consts::PI * 2.0;
-        }
-
+        let azimuth_m = wrap_angle(azimuth_m);
+        let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
+        let opposite_azimuth_m = calculate_opposite_angle(azimuth_m);
         let opposite_index =
-            if self.azimuth.start <= opposite_angle && opposite_angle <= self.azimuth.end {
-                Some(((opposite_angle - self.azimuth.start) / self.azimuth.bin_width) as usize)
+            if self.azimuth.start <= opposite_azimuth_m && opposite_azimuth_m <= self.azimuth.end {
+                Some(self.azimuth.angle_index(opposite_azimuth_m))
             } else {
                 None
             };
-
         (
-            self.adf_data_slice_by_azimuth_index(index),
-            opposite_index.map(|index| self.adf_data_slice_by_azimuth_index(index)),
+            self.adf_data_slice_inner(azimuth_m_idx),
+            opposite_index.map(|index| self.adf_data_slice_inner(index)),
         )
     }
 
     /// Returns a data slice of the Area Distribution Function for the given
     /// azimuthal angle index.
-    pub fn adf_data_slice_by_azimuth_index(&self, index: usize) -> &[f32] {
+    pub fn adf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         debug_assert!(
-            index < self.azimuth.bin_count as usize,
+            azimuth_idx < self.azimuth.bin_count as usize,
             "index out of range"
         );
-        &self.data
-            [index * self.zenith.bin_count as usize..(index + 1) * self.zenith.bin_count as usize]
+        &self.data[azimuth_idx * self.zenith.bin_count as usize
+            ..(azimuth_idx + 1) * self.zenith.bin_count as usize]
     }
 
     /// Returns the Masking Shadowing Function data slice for the given
@@ -771,31 +764,18 @@ impl MeasurementData {
             self.kind == MeasurementKind::MicrofacetMaskingShadowing,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
+        let azimuth_m = wrap_angle(azimuth_m);
+        let azimuth_i = wrap_angle(azimuth_i);
         let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.end);
-        let azimuth_m = {
-            azimuth_m
-                - (0.5 * azimuth_m / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
-        };
-        let azimuth_m_idx = ((azimuth_m - self.azimuth.start) / self.azimuth.bin_width) as usize;
-        let zenith_m_idx = ((zenith_m - self.zenith.start) / self.zenith.bin_width) as usize;
 
-        let azimuth_i = {
-            azimuth_i
-                - (0.5 * azimuth_i / std::f32::consts::PI).floor() * std::f32::consts::PI * 2.0
-        };
-        let azimuth_i_idx = ((azimuth_i - self.azimuth.start) / self.azimuth.bin_width) as usize;
+        let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
+        let zenith_m_idx = self.zenith.angle_index(zenith_m);
+        let azimuth_i_idx = self.azimuth.angle_index(azimuth_i);
 
-        let mut opposite_azimuth_i = azimuth_i + std::f32::consts::PI;
-        if opposite_azimuth_i > std::f32::consts::PI * 2.0 {
-            opposite_azimuth_i -= std::f32::consts::PI * 2.0;
-        }
-        if opposite_azimuth_i < 0.0 {
-            opposite_azimuth_i += std::f32::consts::PI * 2.0;
-        }
-
+        let opposite_azimuth_i = calculate_opposite_angle(azimuth_i);
         let opposite_azimuth_i_idx =
             if self.azimuth.start <= opposite_azimuth_i && opposite_azimuth_i <= self.azimuth.end {
-                Some(((opposite_azimuth_i - self.azimuth.start) / self.azimuth.bin_width) as usize)
+                Some(self.azimuth.angle_index(opposite_azimuth_i))
             } else {
                 None
             };
@@ -831,4 +811,59 @@ impl MeasurementData {
         let offset = azimuth_m_idx * zenith_m_idx * azimuth_i_idx * self.zenith.bin_count as usize;
         &self.data[offset..offset + self.zenith.bin_count as usize]
     }
+}
+
+/// Wraps the given angle in radians to the range [0, 2π).
+pub(crate) fn wrap_angle(angle: f32) -> f32 {
+    // Clamp the angle to the range [0, 2π).
+    angle - (0.5 * angle / std::f32::consts::PI).floor() * std::f32::consts::TAU
+}
+
+/// Returns the opposite angle of the given angle in radians.
+///
+/// The returned angle is always within the range [0, 2π).
+pub(crate) fn calculate_opposite_angle(angle: f32) -> f32 {
+    wrap_angle(angle + std::f32::consts::PI)
+}
+
+#[test]
+fn test_wrap_angle() {
+    let angle = 0.0;
+    assert_eq!(wrap_angle(angle), 0.0);
+
+    let angle = std::f32::consts::PI;
+    assert_eq!(wrap_angle(angle), std::f32::consts::PI);
+
+    let angle = std::f32::consts::TAU;
+    assert_eq!(wrap_angle(angle), 0.0);
+
+    let angle = std::f32::consts::PI * 3.0;
+    assert!(ulp_eq(wrap_angle(angle), std::f32::consts::PI));
+
+    let angle = std::f32::consts::PI * -0.5;
+    assert!(ulp_eq(wrap_angle(angle), std::f32::consts::PI * 1.5));
+}
+
+#[test]
+fn test_opposite_angle() {
+    let angle = 0.0;
+    assert_eq!(calculate_opposite_angle(angle), std::f32::consts::PI);
+
+    let angle = std::f32::consts::PI;
+    assert_eq!(calculate_opposite_angle(angle), 0.0);
+
+    let angle = std::f32::consts::PI * 0.5;
+    assert_eq!(calculate_opposite_angle(angle), std::f32::consts::PI * 1.5);
+
+    let angle = std::f32::consts::PI * 1.5;
+    assert!(ulp_eq(
+        calculate_opposite_angle(angle),
+        std::f32::consts::PI * 0.5
+    ));
+
+    let angle = wrap_angle(std::f32::consts::PI * -0.5);
+    assert!(ulp_eq(
+        calculate_opposite_angle(angle),
+        std::f32::consts::PI * 0.5
+    ));
 }
