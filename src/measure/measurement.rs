@@ -767,10 +767,13 @@ impl MeasurementData {
         let azimuth_m = wrap_angle(azimuth_m);
         let azimuth_i = wrap_angle(azimuth_i);
         let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.end);
-
         let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
         let zenith_m_idx = self.zenith.angle_index(zenith_m);
         let azimuth_i_idx = self.azimuth.angle_index(azimuth_i);
+        println!(
+            "azimuth_m_idx: {}, zenith_m_idx: {}, azimuth_i_idx: {}",
+            azimuth_m_idx, zenith_m_idx, azimuth_i_idx
+        );
 
         let opposite_azimuth_i = calculate_opposite_angle(azimuth_i);
         let opposite_azimuth_i_idx =
@@ -779,7 +782,6 @@ impl MeasurementData {
             } else {
                 None
             };
-
         (
             self.msf_data_slice_inner(azimuth_m_idx, zenith_m_idx, azimuth_i_idx),
             opposite_azimuth_i_idx
@@ -808,7 +810,11 @@ impl MeasurementData {
             zenith_m_idx < self.zenith.bin_count as usize,
             "index out of range"
         );
-        let offset = azimuth_m_idx * zenith_m_idx * azimuth_i_idx * self.zenith.bin_count as usize;
+        let zenith_bin_count = self.zenith.bin_count as usize;
+        let azimuth_bin_count = self.azimuth.bin_count as usize;
+        let offset = azimuth_m_idx * zenith_bin_count * azimuth_bin_count * zenith_bin_count
+            + zenith_m_idx * azimuth_bin_count * zenith_bin_count
+            + azimuth_i_idx * zenith_bin_count;
         &self.data[offset..offset + self.zenith.bin_count as usize]
     }
 }

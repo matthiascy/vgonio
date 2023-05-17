@@ -1,8 +1,9 @@
 use crate::{
     app::gui::{tools::Tool, Plottable, PlottingMode},
+    io::vgmo::AngleRange,
     measure::measurement::{calculate_opposite_angle, MeasurementData},
 };
-use egui::{plot::*, text::LayoutJob, Context, Response, Ui, Widget, WidgetText};
+use egui::{plot::*, Context, Response, Ui, Widget, WidgetText};
 use std::{
     any::Any,
     iter::{Map, Rev, Zip},
@@ -26,12 +27,14 @@ pub struct PlottingInspector {
     pub legend: Legend,
     /// The type of plot to be displayed
     plot_type: PlotType,
-    /// The azimuthal angle of the slice to be displayed, in radians.
-    microfacet_normal_azimuth: f32,
-    microfacet_normal_zenith: f32,
-
-    incident_direction_azimuth: f32,
-    incident_direction_zenith: f32,
+    /// The azimuthal angle (facet normal m) of the slice to be displayed, in
+    /// radians.
+    azimuth_m: f32,
+    /// The zenith angle of (facet normal m) the slice to be displayed, in
+    /// radians.
+    zenith_m: f32,
+    /// The azimuthal angle (incident direction i) of the slice to be displayed,
+    azimuth_i: f32,
 }
 
 impl PlottingInspector {
@@ -44,10 +47,9 @@ impl PlottingInspector {
                 .background_alpha(1.0)
                 .position(Corner::RightTop),
             plot_type: PlotType::Line,
-            microfacet_normal_azimuth: 0.0,
-            microfacet_normal_zenith: 0.0,
-            incident_direction_azimuth: 0.0,
-            incident_direction_zenith: 0.0,
+            azimuth_m: 0.0,
+            zenith_m: 0.0,
+            azimuth_i: 0.0,
         }
     }
 
@@ -62,6 +64,33 @@ impl PlottingInspector {
             .step_by(step)
             .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
             .text(text)
+    }
+
+    #[cfg(debug_assertions)]
+    fn debug_print_angle_pair(angle: f32, range: &AngleRange, ui: &mut Ui) {
+        if ui.button("print").clicked() {
+            let initial = crate::measure::measurement::wrap_angle(angle);
+            let opposite = calculate_opposite_angle(initial);
+            println!(
+                "initial = {}, index = {} | opposite = {}, index = {}",
+                initial.to_degrees(),
+                range.angle_index(initial),
+                opposite.to_degrees(),
+                range.angle_index(opposite),
+            );
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    fn debug_print_angle(angle: f32, range: &AngleRange, ui: &mut Ui) {
+        if ui.button("print").clicked() {
+            let initial = crate::measure::measurement::wrap_angle(angle);
+            println!(
+                "angle = {}, index = {}",
+                initial.to_degrees(),
+                range.angle_index(initial),
+            );
+        }
     }
 }
 
@@ -94,29 +123,17 @@ impl Tool for PlottingInspector {
                 ui.horizontal(|ui| {
                     ui.label("microfacet normal - φ: ");
                     ui.add(PlottingInspector::angle_slider(
-                        &mut self.microfacet_normal_azimuth,
+                        &mut self.azimuth_m,
                         measured.azimuth.range_inclusive(),
                         measured.azimuth.bin_width as _,
                         "",
                     ));
                     #[cfg(debug_assertions)]
-                    if ui.button("print φ").clicked() {
-                        let initial =
-                            crate::measure::measurement::wrap_angle(self.microfacet_normal_azimuth);
-                        let opposite = calculate_opposite_angle(initial);
-                        println!(
-                            "φ = {}, index = {} | opposite φ = {}, index = {}",
-                            initial.to_degrees(),
-                            measured.azimuth.angle_index(initial),
-                            opposite.to_degrees(),
-                            measured.azimuth.angle_index(opposite),
-                        );
-                    }
+                    Self::debug_print_angle_pair(self.azimuth_m, &measured.azimuth, ui);
                 });
 
                 let data: Vec<_> = {
-                    let (starting, opposite) =
-                        measured.adf_data_slice(self.microfacet_normal_azimuth);
+                    let (starting, opposite) = measured.adf_data_slice(self.azimuth_m);
 
                     // Data of the opposite azimuthal angle side of the slice, if exists.
                     let data_opposite_part = opposite.map(|data| {
@@ -140,7 +157,7 @@ impl Tool for PlottingInspector {
                     }
                 };
 
-                let (max_x, max_y) = data.iter().fold((0.0, 0.0), |(max_x, max_y), [x, y]| {
+                let (max_x, max_y) = data.iter().fold((0.01, 0.01), |(max_x, max_y), [x, y]| {
                     let val_x = x.abs().max(max_x);
                     let val_y = y.max(max_y);
                     (val_x, val_y)
@@ -235,39 +252,38 @@ impl Tool for PlottingInspector {
                     ui.label("microfacet normal: ");
                     ui.vertical(|ui| {
                         ui.add(PlottingInspector::angle_slider(
-                            &mut self.microfacet_normal_azimuth,
+                            &mut self.azimuth_m,
                             measured.azimuth.range_inclusive(),
                             measured.azimuth.bin_width as _,
                             "φ",
                         ));
+                        #[cfg(debug_assertions)]
+                        Self::debug_print_angle_pair(self.azimuth_m, &measured.azimuth, ui);
                         ui.add(PlottingInspector::angle_slider(
-                            &mut self.microfacet_normal_zenith,
+                            &mut self.zenith_m,
                             measured.zenith.range_inclusive(),
                             measured.zenith.bin_width as _,
                             "θ",
                         ));
+                        #[cfg(debug_assertions)]
+                        Self::debug_print_angle(self.zenith_m, &measured.zenith, ui);
                     });
                 });
                 ui.horizontal(|ui| {
                     ui.label("incident direction:  ");
-                    ui.add(
-                        egui::Slider::new(
-                            &mut self.incident_direction_azimuth,
-                            measured.azimuth.start..=measured.azimuth.end,
-                        )
-                        .clamp_to_range(true)
-                        .step_by(measured.azimuth.bin_width as _)
-                        .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                        .text("φ"),
-                    );
+                    ui.add(PlottingInspector::angle_slider(
+                        &mut self.azimuth_i,
+                        measured.azimuth.range_inclusive(),
+                        measured.azimuth.bin_width as _,
+                        "φ",
+                    ));
+                    #[cfg(debug_assertions)]
+                    Self::debug_print_angle_pair(self.azimuth_i, &measured.azimuth, ui);
                 });
 
                 let data: Vec<_> = {
-                    let (starting, opposite) = measured.msf_data_slice(
-                        self.microfacet_normal_azimuth,
-                        self.microfacet_normal_zenith,
-                        self.incident_direction_azimuth,
-                    );
+                    let (starting, opposite) =
+                        measured.msf_data_slice(self.azimuth_m, self.zenith_m, self.azimuth_i);
                     let data_opposite_part = opposite.map(|data| {
                         data.iter()
                             .rev()
@@ -287,9 +303,9 @@ impl Tool for PlottingInspector {
                             .collect(),
                     }
                 };
-                let (max_x, max_y) = data.iter().fold((0.0, 0.0), |(max_x, max_y), [x, y]| {
+                let (max_x, max_y) = data.iter().fold((0.01, 0.01), |(max_x, max_y), [x, y]| {
                     let val_x = x.abs().max(max_x);
-                    let val_y = y.max(max_y);
+                    let val_y = y.abs().max(max_y);
                     (val_x, val_y)
                 });
                 let plot = Plot::new("plot_msf")

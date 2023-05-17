@@ -229,7 +229,9 @@ impl MeasuredDataCollapsableHeader {
                         }
                         ui.end_row();
 
-                        if meas_data.kind == MeasurementKind::MicrofacetAreaDistribution {
+                        if meas_data.kind == MeasurementKind::MicrofacetAreaDistribution
+                            || meas_data.kind == MeasurementKind::MicrofacetMaskingShadowing
+                        {
                             ui.label("θ:");
                             ui.label(format!(
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
