@@ -828,7 +828,7 @@ impl MeasurementData {
             zenith_m_idx < self.zenith.bin_count as usize,
             "index out of range"
         );
-        let offset = azimuth_m_idx * zenith_m_idx * azimuth_m_idx * self.zenith.bin_count as usize;
+        let offset = azimuth_m_idx * zenith_m_idx * azimuth_i_idx * self.zenith.bin_count as usize;
         &self.data[offset..offset + self.zenith.bin_count as usize]
     }
 }
