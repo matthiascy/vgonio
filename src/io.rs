@@ -550,8 +550,11 @@ pub mod vgmo {
         pub fn range_inclusive(&self) -> RangeInclusive<f32> { self.start..=self.end }
 
         /// Returns the index of the angle in the range of the measurement.
+        ///
+        /// The index of the bin is determined by testing if the angle falls
+        /// inside half of the bin width from the bin boundary.
         pub fn angle_index(&self, angle: f32) -> usize {
-            ((angle - self.start) / self.bin_width).round() as usize
+            ((angle - self.start) / self.bin_width).round() as usize % self.bin_count as usize
         }
     }
 
@@ -577,7 +580,7 @@ pub mod vgmo {
     }
 
     #[test]
-    fn angle_index() {
+    fn test_angle_index() {
         let range = AngleRange {
             start: 0.0,
             end: 360.0,
@@ -585,12 +588,22 @@ pub mod vgmo {
             bin_width: 30.0,
         };
         assert_eq!(range.angle_index(0.0), 0);
-        assert_eq!(range.angle_index(15.0), 0);
+        assert_eq!(range.angle_index(12.0), 0);
+        assert_eq!(range.angle_index(15.0), 1);
         assert_eq!(range.angle_index(30.0), 1);
         assert_eq!(range.angle_index(30.01), 1);
-        assert_eq!(range.angle_index(45.0), 1);
+        assert_eq!(range.angle_index(45.0), 2);
         assert_eq!(range.angle_index(60.0), 2);
         assert_eq!(range.angle_index(90.0), 3);
+
+        let range = AngleRange {
+            start: 0.0,
+            end: f32::consts::TAU,
+            bin_count: 12,
+            bin_width: 30.0f32.to_radians(),
+        };
+        assert_eq!(range.angle_index(0.0), 0);
+        assert_eq!(range.angle_index(10.0f32.to_radians()), 0);
     }
 
     /// Header of the VGMO file.

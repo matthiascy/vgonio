@@ -5,6 +5,7 @@ use crate::{
 };
 use cfg_if::cfg_if;
 pub use glam::*;
+use std::f32::consts::{PI, TAU};
 
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -372,4 +373,68 @@ fn test_quadratic() {
 /// TODO: add a tolerance parameter or error bound
 pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
     ulp_eq(a.x, b.x) && ulp_eq(a.y, b.y) && ulp_eq(a.z, b.z)
+}
+
+/// Wraps an angle to the range [0, 2π) in radians.
+pub const fn wrap_angle_to_tau_exclusive(angle: f32) -> f32 { (angle % TAU + TAU) % TAU }
+
+/// Wraps an angle to the range [0, 2π] in radians.
+pub const fn wrap_angle_to_tau_inclusive(angle: f32) -> f32 {
+    if angle < 0.0 {
+        (angle % TAU + TAU) % TAU
+    } else if angle > TAU {
+        angle % TAU
+    } else {
+        angle
+    }
+}
+
+/// Returns the opposite angle of the given angle in radians.
+///
+/// The returned angle is always within the range [0, 2π).
+pub const fn calculate_opposite_angle(angle: f32) -> f32 { wrap_angle_to_tau_exclusive(angle + PI) }
+
+#[test]
+fn test_wrap_angle_to_tau_exclusive() {
+    let angle = 0.0;
+    assert_eq!(wrap_angle_to_tau_exclusive(angle), 0.0);
+
+    let angle = PI;
+    assert!(ulp_eq(wrap_angle_to_tau_exclusive(angle), PI));
+
+    let angle = PI * 2.0;
+    assert_eq!(wrap_angle_to_tau_exclusive(angle), 0.0);
+
+    let angle = PI * 3.0;
+    assert!(ulp_eq(wrap_angle_to_tau_exclusive(angle), PI));
+
+    let angle = PI * -0.5;
+    assert!(ulp_eq(wrap_angle_to_tau_exclusive(angle), PI * 1.5));
+}
+
+#[test]
+fn test_opposite_angle() {
+    let angle = 0.0;
+    assert!(ulp_eq(calculate_opposite_angle(angle), PI));
+
+    let angle = std::f32::consts::PI;
+    assert_eq!(calculate_opposite_angle(angle), 0.0);
+
+    let angle = std::f32::consts::PI * 0.5;
+    assert!(ulp_eq(
+        calculate_opposite_angle(angle),
+        std::f32::consts::PI * 1.5
+    ));
+
+    let angle = std::f32::consts::PI * 1.5;
+    assert!(ulp_eq(
+        calculate_opposite_angle(angle),
+        std::f32::consts::PI * 0.5
+    ));
+
+    let angle = wrap_angle_to_tau_exclusive(std::f32::consts::PI * -0.5);
+    assert!(ulp_eq(
+        calculate_opposite_angle(angle),
+        std::f32::consts::PI * 0.5
+    ));
 }

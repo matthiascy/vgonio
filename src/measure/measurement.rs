@@ -6,6 +6,7 @@ use crate::{
     },
     io,
     io::vgmo::AngleRange,
+    math,
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
@@ -18,6 +19,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{
     any::Any,
+    f32::consts::{PI, TAU},
     fmt::{Display, Formatter},
     fs::File,
     io::BufReader,
@@ -720,9 +722,9 @@ impl MeasurementData {
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn adf_data_slice(&self, azimuth_m: f32) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
-        let azimuth_m = wrap_angle(azimuth_m);
+        let azimuth_m = crate::math::wrap_angle_to_tau_exclusive(azimuth_m);
         let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
-        let opposite_azimuth_m = calculate_opposite_angle(azimuth_m);
+        let opposite_azimuth_m = math::calculate_opposite_angle(azimuth_m);
         let opposite_index =
             if self.azimuth.start <= opposite_azimuth_m && opposite_azimuth_m <= self.azimuth.end {
                 Some(self.azimuth.angle_index(opposite_azimuth_m))
@@ -764,13 +766,13 @@ impl MeasurementData {
             self.kind == MeasurementKind::MicrofacetMaskingShadowing,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
-        let azimuth_m = wrap_angle(azimuth_m);
-        let azimuth_i = wrap_angle(azimuth_i);
+        let azimuth_m = math::wrap_angle_to_tau_exclusive(azimuth_m);
+        let azimuth_i = math::wrap_angle_to_tau_exclusive(azimuth_i);
         let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.end);
         let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
         let zenith_m_idx = self.zenith.angle_index(zenith_m);
         let azimuth_i_idx = self.azimuth.angle_index(azimuth_i);
-        let opposite_azimuth_i = calculate_opposite_angle(azimuth_i);
+        let opposite_azimuth_i = math::calculate_opposite_angle(azimuth_i);
         let opposite_azimuth_i_idx =
             if self.azimuth.start <= opposite_azimuth_i && opposite_azimuth_i <= self.azimuth.end {
                 Some(self.azimuth.angle_index(opposite_azimuth_i))
@@ -812,59 +814,4 @@ impl MeasurementData {
             + azimuth_i_idx * zenith_bin_count;
         &self.data[offset..offset + self.zenith.bin_count as usize]
     }
-}
-
-/// Wraps the given angle in radians to the range [0, 2π).
-pub(crate) fn wrap_angle(angle: f32) -> f32 {
-    // Clamp the angle to the range [0, 2π).
-    angle - (0.5 * angle / std::f32::consts::PI).floor() * std::f32::consts::TAU
-}
-
-/// Returns the opposite angle of the given angle in radians.
-///
-/// The returned angle is always within the range [0, 2π).
-pub(crate) fn calculate_opposite_angle(angle: f32) -> f32 {
-    wrap_angle(angle + std::f32::consts::PI)
-}
-
-#[test]
-fn test_wrap_angle() {
-    let angle = 0.0;
-    assert_eq!(wrap_angle(angle), 0.0);
-
-    let angle = std::f32::consts::PI;
-    assert_eq!(wrap_angle(angle), std::f32::consts::PI);
-
-    let angle = std::f32::consts::TAU;
-    assert_eq!(wrap_angle(angle), 0.0);
-
-    let angle = std::f32::consts::PI * 3.0;
-    assert!(ulp_eq(wrap_angle(angle), std::f32::consts::PI));
-
-    let angle = std::f32::consts::PI * -0.5;
-    assert!(ulp_eq(wrap_angle(angle), std::f32::consts::PI * 1.5));
-}
-
-#[test]
-fn test_opposite_angle() {
-    let angle = 0.0;
-    assert_eq!(calculate_opposite_angle(angle), std::f32::consts::PI);
-
-    let angle = std::f32::consts::PI;
-    assert_eq!(calculate_opposite_angle(angle), 0.0);
-
-    let angle = std::f32::consts::PI * 0.5;
-    assert_eq!(calculate_opposite_angle(angle), std::f32::consts::PI * 1.5);
-
-    let angle = std::f32::consts::PI * 1.5;
-    assert!(ulp_eq(
-        calculate_opposite_angle(angle),
-        std::f32::consts::PI * 0.5
-    ));
-
-    let angle = wrap_angle(std::f32::consts::PI * -0.5);
-    assert!(ulp_eq(
-        calculate_opposite_angle(angle),
-        std::f32::consts::PI * 0.5
-    ));
 }

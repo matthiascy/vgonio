@@ -1,16 +1,15 @@
 use crate::{
-    app::gui::{tools::Tool, Plottable, PlottingMode},
+    app::gui::{
+        tools::Tool,
+        widgets::{AngleKnob, AngleKnobWinding},
+        Plottable, PlottingMode,
+    },
     io::vgmo::AngleRange,
-    measure::measurement::{calculate_opposite_angle, MeasurementData},
+    math,
+    measure::measurement::MeasurementData,
 };
-use egui::{plot::*, Context, Response, Ui, Widget, WidgetText};
-use std::{
-    any::Any,
-    iter::{Map, Rev, Zip},
-    ops::RangeInclusive,
-    rc::Rc,
-    slice::Iter,
-};
+use egui::{plot::*, Align, Context, Ui, Vec2, Widget, WidgetText};
+use std::{any::Any, f32::consts::TAU, ops::RangeInclusive, rc::Rc, slice::Iter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PlotType {
@@ -66,11 +65,33 @@ impl PlottingInspector {
             .text(text)
     }
 
+    fn angle_knob(
+        ui: &mut Ui,
+        interactive: bool,
+        value: &mut f32,
+        range: RangeInclusive<f32>,
+        snap: f32,
+        diameter: f32,
+        formatter: impl Fn(f32) -> String,
+    ) {
+        ui.add(
+            AngleKnob::new(value)
+                .interactive(interactive)
+                .min(Some(*range.start()))
+                .max(Some(*range.end()))
+                .snap(Some(snap))
+                .winding(AngleKnobWinding::CounterClockwise)
+                .diameter(diameter)
+                .axis_count((TAU / snap).ceil() as u32),
+        );
+        ui.label(formatter(*value));
+    }
+
     #[cfg(debug_assertions)]
-    fn debug_print_angle_pair(angle: f32, range: &AngleRange, ui: &mut Ui) {
-        if ui.button("print").clicked() {
-            let initial = crate::measure::measurement::wrap_angle(angle);
-            let opposite = calculate_opposite_angle(initial);
+    fn debug_print_angle_pair(angle: f32, range: &AngleRange, ui: &mut Ui, text: &str) {
+        if ui.button(text).clicked() {
+            let initial = angle;
+            let opposite = math::calculate_opposite_angle(initial);
             println!(
                 "initial = {}, index = {} | opposite = {}, index = {}",
                 initial.to_degrees(),
@@ -82,9 +103,9 @@ impl PlottingInspector {
     }
 
     #[cfg(debug_assertions)]
-    fn debug_print_angle(angle: f32, range: &AngleRange, ui: &mut Ui) {
-        if ui.button("print").clicked() {
-            let initial = crate::measure::measurement::wrap_angle(angle);
+    fn debug_print_angle(angle: f32, range: &AngleRange, ui: &mut Ui, text: &str) {
+        if ui.button(text).clicked() {
+            let initial = crate::math::wrap_angle_to_tau_exclusive(angle);
             println!(
                 "angle = {}, index = {}",
                 initial.to_degrees(),
@@ -119,19 +140,39 @@ impl Tool for PlottingInspector {
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
                 let zenith_bin_width_rad = measured.zenith.bin_width;
-
-                ui.horizontal(|ui| {
-                    ui.label("microfacet normal - φ: ");
-                    ui.add(PlottingInspector::angle_slider(
-                        &mut self.azimuth_m,
-                        measured.azimuth.range_inclusive(),
-                        measured.azimuth.bin_width as _,
-                        "",
-                    ));
-                    #[cfg(debug_assertions)]
-                    Self::debug_print_angle_pair(self.azimuth_m, &measured.azimuth, ui);
-                });
-
+                ui.allocate_ui_with_layout(
+                    Vec2::new(ui.available_width(), 48.0),
+                    egui::Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label("microfacet normal: ");
+                        let mut opposite = math::calculate_opposite_angle(self.azimuth_m);
+                        PlottingInspector::angle_knob(
+                            ui,
+                            false,
+                            &mut opposite,
+                            measured.azimuth.range_inclusive(),
+                            measured.azimuth.bin_width,
+                            48.0,
+                            |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                        );
+                        PlottingInspector::angle_knob(
+                            ui,
+                            true,
+                            &mut self.azimuth_m,
+                            measured.azimuth.range_inclusive(),
+                            measured.azimuth.bin_width,
+                            48.0,
+                            |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                        );
+                        #[cfg(debug_assertions)]
+                        Self::debug_print_angle_pair(
+                            self.azimuth_m,
+                            &measured.azimuth,
+                            ui,
+                            "debug_print_φ_pair",
+                        );
+                    },
+                );
                 let data: Vec<_> = {
                     let (starting, opposite) = measured.adf_data_slice(self.azimuth_m);
 
@@ -193,7 +234,7 @@ impl Tool for PlottingInspector {
                     .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                     .coordinates_formatter(
                         Corner::LeftBottom,
-                        CoordinatesFormatter::new(move |p, b| {
+                        CoordinatesFormatter::new(move |p, _| {
                             let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
                             let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
                             let half_bin_width = zenith_bin_width_rad.to_degrees() as f64 * 0.5;
@@ -248,39 +289,78 @@ impl Tool for PlottingInspector {
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
                 let zenith_bin_width_rad = measured.zenith.bin_width;
-                ui.horizontal(|ui| {
-                    ui.label("microfacet normal: ");
-                    ui.vertical(|ui| {
-                        ui.add(PlottingInspector::angle_slider(
-                            &mut self.azimuth_m,
-                            measured.azimuth.range_inclusive(),
-                            measured.azimuth.bin_width as _,
-                            "φ",
-                        ));
-                        #[cfg(debug_assertions)]
-                        Self::debug_print_angle_pair(self.azimuth_m, &measured.azimuth, ui);
-                        ui.add(PlottingInspector::angle_slider(
+                ui.allocate_ui_with_layout(
+                    Vec2::new(ui.available_width(), 48.0),
+                    egui::Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label("microfacet normal: ");
+                        PlottingInspector::angle_knob(
+                            ui,
+                            true,
                             &mut self.zenith_m,
                             measured.zenith.range_inclusive(),
                             measured.zenith.bin_width as _,
-                            "θ",
-                        ));
+                            48.0,
+                            |v| format!("θ = {:>6.2}°", v.to_degrees()),
+                        );
+                        PlottingInspector::angle_knob(
+                            ui,
+                            true,
+                            &mut self.azimuth_m,
+                            measured.azimuth.range_inclusive(),
+                            measured.azimuth.bin_width,
+                            48.0,
+                            |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                        );
                         #[cfg(debug_assertions)]
-                        Self::debug_print_angle(self.zenith_m, &measured.zenith, ui);
-                    });
-                });
-                ui.horizontal(|ui| {
-                    ui.label("incident direction:  ");
-                    ui.add(PlottingInspector::angle_slider(
-                        &mut self.azimuth_i,
-                        measured.azimuth.range_inclusive(),
-                        measured.azimuth.bin_width as _,
-                        "φ",
-                    ));
-                    #[cfg(debug_assertions)]
-                    Self::debug_print_angle_pair(self.azimuth_i, &measured.azimuth, ui);
-                });
-
+                        Self::debug_print_angle_pair(
+                            self.azimuth_m,
+                            &measured.azimuth,
+                            ui,
+                            "debug_print_φ",
+                        );
+                        #[cfg(debug_assertions)]
+                        Self::debug_print_angle(
+                            self.zenith_m,
+                            &measured.zenith,
+                            ui,
+                            "debug_print_θ",
+                        );
+                    },
+                );
+                ui.allocate_ui_with_layout(
+                    Vec2::new(ui.available_width(), 48.0),
+                    egui::Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label("incident direction: ");
+                        let mut opposite = math::calculate_opposite_angle(self.azimuth_i);
+                        PlottingInspector::angle_knob(
+                            ui,
+                            false,
+                            &mut opposite,
+                            measured.azimuth.range_inclusive(),
+                            measured.azimuth.bin_width,
+                            48.0,
+                            |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                        );
+                        PlottingInspector::angle_knob(
+                            ui,
+                            true,
+                            &mut self.azimuth_i,
+                            measured.azimuth.range_inclusive(),
+                            measured.azimuth.bin_width,
+                            48.0,
+                            |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                        );
+                        #[cfg(debug_assertions)]
+                        Self::debug_print_angle_pair(
+                            self.azimuth_i,
+                            &measured.azimuth,
+                            ui,
+                            "debug_print_φ_pair",
+                        );
+                    },
+                );
                 let data: Vec<_> = {
                     let (starting, opposite) =
                         measured.msf_data_slice(self.azimuth_m, self.zenith_m, self.azimuth_i);
@@ -338,7 +418,7 @@ impl Tool for PlottingInspector {
                     .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                     .coordinates_formatter(
                         Corner::LeftBottom,
-                        CoordinatesFormatter::new(move |p, b| {
+                        CoordinatesFormatter::new(move |p, _| {
                             let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
                             let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
                             let half_bin_width = zenith_bin_width_rad.to_degrees() as f64 * 0.5;

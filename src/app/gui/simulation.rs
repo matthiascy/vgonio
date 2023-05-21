@@ -1,11 +1,7 @@
 use crate::{
-    app::{
-        cache::Cache,
-        gui::{gizmo::NavigationGizmo, VgonioEvent},
-    },
+    app::{cache::Cache, gui::VgonioEvent},
     measure::measurement::{BsdfMeasurement, Measurement},
 };
-use egui_gizmo::GizmoOrientation;
 use std::{
     fmt::{Display, Formatter},
     path::Path,

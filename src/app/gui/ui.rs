@@ -503,7 +503,6 @@ impl VgonioUi {
             .icon_toggle_button(ui, &Icon::LEFT_PANEL_TOGGLE, &mut left_panel_expanded)
             .clicked()
         {
-            println!("TODO: toggle left panel: {}", self.left_panel_expanded);
             self.left_panel_expanded = left_panel_expanded;
         }
 
