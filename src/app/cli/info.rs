@@ -54,7 +54,7 @@ impl Display for MicrofacetMaskingShadowingMeasurement {
 
 /// Prints Vgonio's current configurations.
 /// TODO: print default parameters for each measurement
-pub fn print(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
+pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
     let mut prints = [false, false, false];
     match opts.kind {
         Some(kind) => match kind {

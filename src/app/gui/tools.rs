@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use winit::event_loop::EventLoopProxy;
 
-use crate::measure::rtc::grid::MultilevelGrid;
+use crate::{measure::rtc::grid::MultilevelGrid, msurf::MicroSurfaceMesh};
 pub(crate) use debugging::DebuggingInspector;
 pub(crate) use plotting::PlottingInspector;
 pub(crate) use sampling::SamplingInspector;

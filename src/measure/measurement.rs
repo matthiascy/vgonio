@@ -85,6 +85,20 @@ pub enum SimulationKind {
     WaveOptics,
 }
 
+impl From<u8> for SimulationKind {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => Self::GeomOptics(RtcMethod::Grid),
+            #[cfg(feature = "embree")]
+            0x01 => Self::GeomOptics(RtcMethod::Embree),
+            #[cfg(feature = "optix")]
+            0x02 => Self::GeomOptics(RtcMethod::Optix),
+            0x03 => Self::WaveOptics,
+            _ => panic!("Invalid simulation kind {}", value),
+        }
+    }
+}
+
 /// Parameters for BSDF measurement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BsdfMeasurement {

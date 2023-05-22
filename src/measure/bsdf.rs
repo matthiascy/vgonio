@@ -22,19 +22,19 @@ use super::measurement::BsdfMeasurement;
 #[serde(rename_all = "kebab-case")]
 pub enum BsdfKind {
     /// Bidirectional reflectance distribution function.
-    Brdf,
+    Brdf = 0x00,
 
     /// Bidirectional transmittance distribution function.
-    Btdf,
+    Btdf = 0x01,
 
     /// Bidirectional scattering-surface distribution function.
-    Bssdf,
+    Bssdf = 0x02,
 
     /// Bidirectional scattering-surface reflectance distribution function.
-    Bssrdf,
+    Bssrdf = 0x03,
 
     /// Bidirectional scattering-surface transmittance distribution function.
-    Bsstdf,
+    Bsstdf = 0x04,
 }
 
 impl Display for BsdfKind {
@@ -55,6 +55,19 @@ impl Display for BsdfKind {
             BsdfKind::Bsstdf => {
                 write!(f, "bsstdf")
             }
+        }
+    }
+}
+
+impl From<u8> for BsdfKind {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => BsdfKind::Brdf,
+            0x01 => BsdfKind::Btdf,
+            0x02 => BsdfKind::Bssdf,
+            0x03 => BsdfKind::Bssrdf,
+            0x04 => BsdfKind::Bsstdf,
+            _ => panic!("Invalid BSDF kind: {}", value),
         }
     }
 }

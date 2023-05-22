@@ -21,7 +21,7 @@ pub mod units;
 
 use crate::{
     error::Error,
-    math::{cartesian_to_spherical, spherical_to_cartesian},
+    math::{cartesian_to_spherical, spherical_to_cartesian, AsPrimitiveCast},
     measure::Patch,
     units::{Angle, AngleUnit, Length, LengthMeasurement, Radians},
 };
@@ -29,7 +29,7 @@ use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
-    ops::Sub,
+    ops::{Div, Sub},
     str::FromStr,
 };
 
@@ -52,14 +52,26 @@ pub fn run() -> Result<(), Error> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Medium {
-    /// Air.
-    Air,
     /// Vacuum.
-    Vacuum,
+    Vacuum = 0x00,
+    /// Air.
+    Air = 0x01,
     /// Aluminium.
-    Aluminium,
+    Aluminium = 0x02,
     /// Copper.
-    Copper,
+    Copper = 0x03,
+}
+
+impl From<u8> for Medium {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => Self::Vacuum,
+            0x01 => Self::Air,
+            0x02 => Self::Aluminium,
+            0x03 => Self::Copper,
+            _ => panic!("Invalid medium kind: {}", value),
+        }
+    }
 }
 
 /// Describes the kind of material.
@@ -502,7 +514,143 @@ fn spherical_domain_clamp() {
     assert_eq!(clamped, degrees!(180.0));
 }
 
-// TODO: inclusive range
+/// Defines a range of values with a given step size or count.
+struct RangeInner<T, U> {
+    /// Initial value of the range.
+    pub start: T,
+    /// Final value of the range.
+    pub stop: T,
+    /// Step size or count.
+    pub step_size_or_count: U,
+}
+
+impl<T: Clone, U: Clone> Clone for RangeInner<T, U> {
+    fn clone(&self) -> Self {
+        Self {
+            start: self.start.clone(),
+            stop: self.stop.clone(),
+            step_size_or_count: self.step_size_or_count.clone(),
+        }
+    }
+}
+
+impl<T: Copy, U: Copy> Copy for RangeInner<T, U> {}
+
+/// Defines a inclusive range [a, b] of values with a given step.
+///
+/// The range is always inclusive, even if the step size does not divide the
+/// range evenly.
+#[derive(Clone, Copy)]
+pub struct RangeByStepSizeInclusive<T: Copy + Clone> {
+    inner: RangeInner<T, T>,
+}
+
+/// Defines a inclusive range [a, b] of values with a given step count.
+#[derive(Clone, Copy)]
+pub struct RangeByStepCountInclusive<T: Copy + Clone> {
+    inner: RangeInner<T, usize>,
+}
+
+impl<T: Copy + Clone> RangeByStepSizeInclusive<T> {
+    /// Create a new range.
+    pub const fn new(start: T, stop: T, step_size: T) -> Self {
+        Self {
+            inner: RangeInner {
+                start,
+                stop,
+                step_size_or_count: step_size,
+            },
+        }
+    }
+
+    /// Returns the initial value of the range.
+    pub const fn start(&self) -> &T { &self.inner.start }
+
+    /// Returns the final value of the range.
+    pub const fn stop(&self) -> &T { &self.inner.stop }
+
+    /// Returns the step size of the range.
+    pub const fn step_size(&self) -> &T { &self.inner.step_size_or_count }
+
+    /// Returns the step count of the range.
+    pub fn step_count(&self) -> usize
+    where
+        T: Div<Output = T> + Sub<Output = T> + AsPrimitiveCast<f32>,
+    {
+        let step_size = self.inner.step_size_or_count.as_cast();
+        let start = self.inner.start.as_cast();
+        let stop = self.inner.stop.as_cast();
+        ((stop - start) / step_size).ceil() as usize
+    }
+}
+
+impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
+    /// Create a new range.
+    pub const fn new(start: T, stop: T, step_count: usize) -> Self {
+        Self {
+            inner: RangeInner {
+                start,
+                stop,
+                step_size_or_count: step_count,
+            },
+        }
+    }
+
+    /// Returns the initial value of the range.
+    pub const fn start(&self) -> &T { &self.inner.start }
+
+    /// Returns the final value of the range.
+    pub const fn stop(&self) -> &T { &self.inner.stop }
+
+    /// Returns the step count of the range.
+    pub const fn step_count(&self) -> usize { self.inner.step_size_or_count }
+
+    /// Returns the step size of the range.
+    pub fn step_size(&self) -> T
+    where
+        T: Div<Output = T> + Sub<Output = T>,
+        usize: AsPrimitiveCast<T>,
+    {
+        let step_size =
+            (self.inner.stop - self.inner.start) / self.inner.step_size_or_count.as_cast();
+        step_size
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_range_by_step_size_inclusive() {
+        let range: RangeByStepSizeInclusive<u8> = RangeByStepSizeInclusive::new(0, 10, 3);
+        assert_eq!(range.step_count(), 4);
+
+        let range = RangeByStepSizeInclusive::new(0, 10, 4);
+        assert_eq!(range.step_count(), 3);
+
+        let range = RangeByStepSizeInclusive::new(0, 10, 5);
+        assert_eq!(range.step_count(), 2);
+
+        let range = RangeByStepSizeInclusive::new(1.0, 12.0, 6.0);
+        assert_eq!(range.step_count(), 2);
+    }
+
+    #[test]
+    fn test_range_by_step_count_inclusive() {
+        let range = RangeByStepCountInclusive::new(0, 10, 3);
+        assert_eq!(range.step_size(), 3);
+
+        let range = RangeByStepCountInclusive::new(0, 10, 4);
+        assert_eq!(range.step_size(), 2);
+
+        let range = RangeByStepCountInclusive::new(0, 10, 5);
+        assert_eq!(range.step_size(), 2);
+
+        let range = RangeByStepCountInclusive::new(1.0, 13.0, 6);
+        assert_eq!(range.step_size(), 2.0);
+    }
+}
 
 /// Defines a left inclusive, right exclusive range [a, b) of values with a
 /// given step.

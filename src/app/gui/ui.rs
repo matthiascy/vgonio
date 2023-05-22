@@ -381,6 +381,18 @@ impl VgonioUi {
             }
 
             ui.menu_button("New", |ui| {
+                ui.menu_button("Measurement", |ui| {
+                    if ui.button("BRDF").clicked() {
+                        println!("TODO: new angle measurement");
+                    }
+                    if ui.button("Area Distribution").clicked() {
+                        println!("TODO: new distance measurement");
+                    }
+                    if ui.button("Masking/Shadowing").clicked() {
+                        println!("TODO: new angle measurement");
+                    }
+                });
+
                 if ui.button("General").clicked() {
                     println!("TODO: new general file")
                 }
@@ -512,7 +524,6 @@ impl VgonioUi {
             .clicked()
         {
             self.right_panel_expanded = right_panel_expanded;
-            println!("TODO: toggle right panel: {}", self.right_panel_expanded);
         }
     }
 }

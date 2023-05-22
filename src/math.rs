@@ -7,6 +7,35 @@ use cfg_if::cfg_if;
 pub use glam::*;
 use std::f32::consts::{PI, TAU};
 
+pub trait AsPrimitiveCast<T> {
+    fn as_cast(&self) -> T;
+}
+
+macro impl_as_primitive($t0:ty as $($t1:ty),*) {
+    $(
+        impl AsPrimitiveCast<$t1> for $t0 {
+            fn as_cast(&self) -> $t1 {
+                *self as $t1
+            }
+        }
+    )*
+}
+
+impl_as_primitive!(f32 as f64, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(f64 as f32, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(i32 as f32, f64, u32, i64, u64, i128, u128);
+impl_as_primitive!(u32 as f32, f64, i32, i64, u64, i128, u128);
+impl_as_primitive!(i64 as f32, f64, i32, u32, u64, i128, u128);
+impl_as_primitive!(u64 as f32, f64, i32, u32, i64, i128, u128);
+impl_as_primitive!(i128 as f32, f64, i32, u32, i64, u64, u128);
+impl_as_primitive!(u128 as f32, f64, i32, u32, i64, u64, i128);
+impl_as_primitive!(u8 as f32, f64, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(i8 as f32, f64, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(u16 as f32, f64, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(i16 as f32, f64, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(usize as f32, f64, i32, u32, i64, u64, i128, u128);
+impl_as_primitive!(isize as f32, f64, i32, u32, i64, u64, i128, u128);
+
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
 ];

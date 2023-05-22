@@ -1,7 +1,7 @@
 ---
 type: !bsdf
   kind: brdf
-  sim_kind: !geom-optics grid # embree/grid/optix # !wave_optics
+  sim_kind: !geom-optics embree # embree/grid/optix # !wave_optics
   incident_medium: air
   transmitted_medium: aluminium
   emitter:
@@ -21,4 +21,4 @@ type: !bsdf
         zenith: 0 rad ~ 90deg, 6
         azimuth: 0rad ~ 90deg / 120 deg
 surfaces:
-  - usr://surfaces/Aluminium65bar100.txt
+  - usr://surfaces/aluminium65bar100.vgms

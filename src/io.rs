@@ -513,6 +513,7 @@ pub mod vgmo {
     use crate::measure::measurement::MeasurementKind;
     use std::{io::BufWriter, ops::RangeInclusive};
 
+    // TODO: replace with RangeByStepCount or RangeByStepSize
     /// The range of the angle in the measurement, in radians.
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub struct AngleRange {
@@ -598,7 +599,7 @@ pub mod vgmo {
 
         let range = AngleRange {
             start: 0.0,
-            end: f32::consts::TAU,
+            end: std::f32::consts::TAU,
             bin_count: 12,
             bin_width: 30.0f32.to_radians(),
         };

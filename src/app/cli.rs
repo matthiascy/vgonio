@@ -4,6 +4,7 @@ use crate::{
     app::{
         args::{ConvertKind, ConvertOptions, FastMeasurementKind, MeasureOptions, SubCommand},
         cache::{resolve_path, Cache},
+        cli::info::print_info,
         Config,
     },
     io::{CompressionScheme, FileEncoding},
@@ -33,7 +34,7 @@ mod info;
 pub fn run(cmd: SubCommand, config: Config) -> Result<(), Error> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
-        SubCommand::PrintInfo(opts) => info::print(opts, config),
+        SubCommand::PrintInfo(opts) => print_info(opts, config),
         SubCommand::Generate(opts) => generate(opts, config),
         SubCommand::Convert(opts) => convert(opts, config),
     }
