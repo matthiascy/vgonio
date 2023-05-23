@@ -9,7 +9,7 @@ use crate::{
     },
     io::{vgmo, vgmo::AngleRange, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MeasurementKind, MicrofacetMaskingShadowingMeasurement},
+    measure::measurement::{MeasurementKind, MicrofacetMaskingShadowingMeasurementParams},
     msurf::MicroSurface,
     units::Radians,
     Error, Handedness,
@@ -1377,7 +1377,7 @@ impl MicrofacetMaskingShadowing {
             .write(true)
             .open(filepath)?;
         let mut writer = BufWriter::new(file);
-        let header = vgmo::Header {
+        let header = vgmo::AdfMsfHeader {
             kind: MeasurementKind::MicrofacetMaskingShadowing,
             encoding,
             compression,
@@ -1406,7 +1406,7 @@ impl MicrofacetMaskingShadowing {
 
 /// Measurement of microfacet shadowing and masking function.
 pub fn measure_masking_shadowing(
-    desc: MicrofacetMaskingShadowingMeasurement,
+    desc: MicrofacetMaskingShadowingMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     handedness: Handedness,

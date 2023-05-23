@@ -6,7 +6,7 @@ use crate::{
     measure::Patch,
     msurf::MicroSurface,
     units::Nanometres,
-    RangeByStepSize,
+    RangeByStepSizeExclusive,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -14,7 +14,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use super::measurement::BsdfMeasurement;
+use super::measurement::BsdfMeasurementParams;
 
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
@@ -166,7 +166,7 @@ impl<PerPatchData: Clone> Clone for BsdfMeasurementPoint<PerPatchData> {
 /// a microfacet surface.
 #[cfg(feature = "embree")]
 pub fn measure_bsdf_embree_rt(
-    mut desc: BsdfMeasurement,
+    mut desc: BsdfMeasurementParams,
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
@@ -203,7 +203,7 @@ pub fn measure_bsdf_embree_rt(
 
 /// Brdf measurement of a microfacet surface using the grid ray tracing.
 pub fn measure_bsdf_grid_rt(
-    desc: BsdfMeasurement,
+    desc: BsdfMeasurementParams,
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {
@@ -235,7 +235,7 @@ pub fn measure_bsdf_grid_rt(
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.
 #[cfg(feature = "optix")]
 pub fn measure_bsdf_optix_rt(
-    _desc: BsdfMeasurement,
+    _desc: BsdfMeasurementParams,
     _cache: &Cache,
     _surfaces: &[Handle<MicroSurface>],
 ) {
@@ -335,12 +335,12 @@ pub fn measure_bsdf_optix_rt(
 
 /// Structure to sample over a spectrum.
 pub(crate) struct SpectrumSampler {
-    range: RangeByStepSize<Nanometres>,
+    range: RangeByStepSizeExclusive<Nanometres>,
     num_samples: usize,
 }
 
-impl From<RangeByStepSize<Nanometres>> for SpectrumSampler {
-    fn from(range: RangeByStepSize<Nanometres>) -> Self {
+impl From<RangeByStepSizeExclusive<Nanometres>> for SpectrumSampler {
+    fn from(range: RangeByStepSizeExclusive<Nanometres>) -> Self {
         let num_samples = ((range.stop - range.start) / range.step_size) as usize + 1;
         Self { range, num_samples }
     }

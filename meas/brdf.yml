@@ -8,17 +8,17 @@ type: !bsdf
     num_rays: 100
     max_bounces: 10
     radius: auto
-    zenith: 0deg ~ 90 deg / 90deg
-    azimuth: 0deg ~ 360deg / 360deg
+    zenith: [0deg, 90deg] / 90deg
+    azimuth: [0deg, 360deg] / 360deg
     shape: !cap
       zenith: 10deg
-    spectrum: 380 nm ~ 780 nm / 200 nm
+    spectrum: [380 nm, 780 nm] / 200 nm
   collector:
     radius: auto
     scheme: !partitioned
       domain: upper_hemisphere
       partition: !equal_area
-        zenith: 0 rad ~ 90deg, 6
-        azimuth: 0rad ~ 90deg / 120 deg
+        zenith: [0 rad, 90 deg] | 6
+        azimuth: [0rad, 90deg] / 120 deg
 surfaces:
   - usr://surfaces/aluminium65bar100.vgms

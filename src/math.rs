@@ -7,14 +7,15 @@ use cfg_if::cfg_if;
 pub use glam::*;
 use std::f32::consts::{PI, TAU};
 
-pub trait AsPrimitiveCast<T> {
-    fn as_cast(&self) -> T;
+/// Trait for converting from one primitive numeric type to another.
+pub trait NumericCast<T> {
+    fn cast(&self) -> T;
 }
 
 macro impl_as_primitive($t0:ty as $($t1:ty),*) {
     $(
-        impl AsPrimitiveCast<$t1> for $t0 {
-            fn as_cast(&self) -> $t1 {
+        impl NumericCast<$t1> for $t0 {
+            fn cast(&self) -> $t1 {
                 *self as $t1
             }
         }

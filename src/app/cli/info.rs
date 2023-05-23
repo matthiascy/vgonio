@@ -5,8 +5,8 @@ use crate::{
     },
     error::Error,
     measure::measurement::{
-        BsdfMeasurement, Measurement, MeasurementKindDescription,
-        MicrofacetAreaDistributionMeasurement, MicrofacetMaskingShadowingMeasurement,
+        BsdfMeasurementParams, Measurement, MeasurementKindDescription,
+        MicrofacetAreaDistributionMeasurementParams, MicrofacetMaskingShadowingMeasurementParams,
     },
 };
 use std::{
@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
 };
 
-impl Display for MicrofacetAreaDistributionMeasurement {
+impl Display for MicrofacetAreaDistributionMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -32,7 +32,7 @@ impl Display for MicrofacetAreaDistributionMeasurement {
     }
 }
 
-impl Display for MicrofacetMaskingShadowingMeasurement {
+impl Display for MicrofacetMaskingShadowingMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -82,11 +82,11 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         println!(
             "Microfacet distribution default parameters:\n\n{}",
-            MicrofacetAreaDistributionMeasurement::default()
+            MicrofacetAreaDistributionMeasurementParams::default()
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
-            MicrofacetMaskingShadowingMeasurement::default()
+            MicrofacetMaskingShadowingMeasurementParams::default()
         );
         // TODO: print default parameters for brdf measurement (prettified
         // version)
@@ -97,7 +97,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
         [
             Measurement {
                 desc: MeasurementKindDescription::Madf(
-                    MicrofacetAreaDistributionMeasurement::default(),
+                    MicrofacetAreaDistributionMeasurementParams::default(),
                 ),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
@@ -106,7 +106,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
             },
             Measurement {
                 desc: MeasurementKindDescription::Mmsf(
-                    MicrofacetMaskingShadowingMeasurement::default(),
+                    MicrofacetMaskingShadowingMeasurementParams::default(),
                 ),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
@@ -114,7 +114,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
                 ],
             },
             Measurement {
-                desc: MeasurementKindDescription::Bsdf(BsdfMeasurement::default()),
+                desc: MeasurementKindDescription::Bsdf(BsdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

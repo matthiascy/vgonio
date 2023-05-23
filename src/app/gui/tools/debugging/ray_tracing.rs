@@ -47,7 +47,7 @@ impl RayTracingPane {
 impl egui::Widget for &mut RayTracingPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal_wrapped(|ui| {
-            ui.label("method");
+            ui.label("Method");
             #[cfg(feature = "embree")]
             ui.selectable_value(&mut self.method, RtcMethod::Embree, "Embree");
             #[cfg(feature = "optix")]
@@ -56,7 +56,7 @@ impl egui::Widget for &mut RayTracingPane {
         });
 
         ui.horizontal_wrapped(|ui| {
-            ui.label("max_bounces");
+            ui.label("Max bounces");
             ui.add(
                 egui::DragValue::new(&mut self.max_bounces)
                     .clamp_range(1..=32)

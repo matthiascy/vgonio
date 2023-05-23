@@ -1,8 +1,8 @@
-use crate::RangeByStepSize;
+use crate::RangeByStepSizeExclusive;
 
 pub fn range_ui<T: Copy + egui::emath::Numeric>(
     ui: &mut egui::Ui,
-    value: &mut RangeByStepSize<T>,
+    value: &mut RangeByStepSizeExclusive<T>,
 ) -> egui::Response {
     ui.horizontal(|ui| {
         ui.add(egui::DragValue::new(&mut value.start).prefix("start: "));
@@ -19,7 +19,7 @@ pub fn range_ui<T: Copy + egui::emath::Numeric>(
 /// ui.add(input3(&mut my_vec3));
 /// ```
 pub fn range<T: Copy + egui::emath::Numeric>(
-    value: &mut RangeByStepSize<T>,
+    value: &mut RangeByStepSizeExclusive<T>,
 ) -> impl egui::Widget + '_ {
     move |ui: &mut egui::Ui| range_ui(ui, value)
 }

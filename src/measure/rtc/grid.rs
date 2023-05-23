@@ -10,7 +10,7 @@ use crate::{
         bsdf::{BsdfMeasurementPoint, BsdfStats},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
-        measurement::{BsdfMeasurement, Radius},
+        measurement::{BsdfMeasurementParams, Radius},
         rtc,
         rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
@@ -37,7 +37,7 @@ pub struct RayStreamData {
 
 /// Measures the BSDF of the given micro-surface mesh.
 pub fn measure_bsdf(
-    desc: &BsdfMeasurement,
+    desc: &BsdfMeasurementParams,
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     samples: &EmitterSamples,

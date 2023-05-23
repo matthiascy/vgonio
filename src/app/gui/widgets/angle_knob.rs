@@ -1,6 +1,5 @@
 use crate::{math, ulp_eq};
 use egui::{emath::Rot2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
-use itertools::Itertools;
 use std::f32::consts::{PI, TAU};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

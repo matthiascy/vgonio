@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, gui::VgonioEvent},
-    measure::measurement::{BsdfMeasurement, Measurement},
+    measure::measurement::{BsdfMeasurementParams, Measurement},
 };
 use std::{
     fmt::{Display, Formatter},
@@ -86,7 +86,7 @@ impl SimulationPanel {
         Self {
             desc: Measurement {
                 desc: crate::measure::measurement::MeasurementKindDescription::Bsdf(
-                    BsdfMeasurement::default(),
+                    BsdfMeasurementParams::default(),
                 ),
                 surfaces: vec![],
             },

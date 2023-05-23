@@ -9,7 +9,7 @@ use crate::{
         bsdf::{BsdfMeasurementPoint, BsdfStats, SpectrumSampler},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
-        measurement::{BsdfMeasurement, Radius},
+        measurement::{BsdfMeasurementParams, Radius},
         rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
     msurf::MicroSurfaceMesh,
@@ -171,7 +171,7 @@ fn intersect_filter_stream<'a>(
 /// * `emitter_samples` - The emitter samples.
 /// * `collector_patches` - The collector patches.
 pub fn measure_bsdf(
-    desc: &BsdfMeasurement,
+    desc: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     samples: &EmitterSamples,
     patches: &CollectorPatches,

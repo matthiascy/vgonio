@@ -1,7 +1,7 @@
 use crate::{
     measure::{measurement::Radius, rtc::Ray},
     units::{radians, steradians, LengthMeasurement, Micrometres, Nanometres, Radians, SolidAngle},
-    Handedness, RangeByStepSize, SphericalCoord,
+    Handedness, RangeByStepSizeExclusive, SphericalCoord,
 };
 use glam::Vec3;
 use rand::{
@@ -34,18 +34,18 @@ pub struct Emitter {
 
     /// Inclination angle (polar angle) of emitter's possible positions (center
     /// of the emitter) in spherical coordinates.
-    pub zenith: RangeByStepSize<Radians>,
+    pub zenith: RangeByStepSizeExclusive<Radians>,
 
     /// Azimuthal angle range of emitter's possible positions (center of the
     /// emitter) in spherical coordinates.
-    pub azimuth: RangeByStepSize<Radians>,
+    pub azimuth: RangeByStepSizeExclusive<Radians>,
 
     /// Shape of the emitter.
     /// The shape is defined by the region over the spherical domain.
     pub shape: RegionShape,
 
     /// Light source's spectrum.
-    pub spectrum: RangeByStepSize<Nanometres>,
+    pub spectrum: RangeByStepSizeExclusive<Nanometres>,
 
     /// Solid angle subtended by emitter's region.
     #[serde(skip)]

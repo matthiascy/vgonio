@@ -510,7 +510,17 @@ pub mod vgms {
 
 pub mod vgmo {
     use super::*;
-    use crate::measure::measurement::MeasurementKind;
+    use crate::{
+        measure::{
+            bsdf::BsdfKind,
+            measurement::{
+                BsdfMeasurementParams, MeasurementKind,
+                MicrofacetAreaDistributionMeasurementParams,
+                MicrofacetMaskingShadowingMeasurementParams,
+            },
+        },
+        Medium,
+    };
     use std::{io::BufWriter, ops::RangeInclusive};
 
     // TODO: replace with RangeByStepCount or RangeByStepSize
@@ -607,22 +617,80 @@ pub mod vgmo {
         assert_eq!(range.angle_index(10.0f32.to_radians()), 0);
     }
 
-    /// Header of the VGMO file.
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub struct Header {
+    /// First 8 bytes of the header.
+    ///
+    /// It contains the magic number, file encoding, compression scheme, and
+    /// measurement kind.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct HeaderMeta {
         pub kind: MeasurementKind,
         pub encoding: FileEncoding,
         pub compression: CompressionScheme,
-        pub azimuth_range: AngleRange,
-        pub zenith_range: AngleRange,
-        pub sample_count: u32,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum Header {
+        Bsdf {
+            meta: HeaderMeta,
+            bsdf: BsdfMeasurementParams,
+        },
+        Adf {
+            meta: HeaderMeta,
+            adf: MicrofacetAreaDistributionMeasurementParams,
+        },
+        Msf {
+            meta: HeaderMeta,
+            msf: MicrofacetMaskingShadowingMeasurementParams,
+        },
     }
 
     impl Header {
+        pub fn meta(&self) -> &HeaderMeta {
+            match self {
+                Self::Bsdf { meta, .. } => meta,
+                Self::Adf { meta, .. } => meta,
+                Self::Msf { meta, .. } => meta,
+            }
+        }
+
+        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+            let meta = HeaderMeta::read(reader)?;
+            match meta.kind {
+                MeasurementKind::Bsdf => Ok(Self::Bsdf {
+                    meta,
+                    bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
+                }),
+                MeasurementKind::MicrofacetAreaDistribution => Ok(Self::Adf {
+                    meta,
+                    adf: MicrofacetAreaDistributionMeasurementParams::read_from_vgmo(reader)?,
+                }),
+                MeasurementKind::MicrofacetMaskingShadowing => Ok(Self::Msf {
+                    meta,
+                    msf: MicrofacetMaskingShadowingMeasurementParams::read_from_vgmo(reader)?,
+                }),
+            }
+        }
+
+        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
+            match self {
+                Self::Bsdf { meta, bsdf } => {
+                    meta.write(writer).and_then(|_| bsdf.write_to_vgmo(writer))
+                }
+                Self::Adf { meta, adf } => {
+                    meta.write(writer).and_then(|_| adf.write_to_vgmo(writer))
+                }
+                Self::Msf { meta, msf } => {
+                    meta.write(writer).and_then(|_| msf.write_to_vgmo(writer))
+                }
+            }
+        }
+    }
+
+    impl HeaderMeta {
         pub const MAGIC: &'static [u8] = b"VGMO";
 
         pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; 48];
+            let mut buf = [0u8; 8];
             reader.read_exact(&mut buf)?;
 
             if &buf[0..4] != Self::MAGIC {
@@ -635,23 +703,49 @@ pub mod vgmo {
             let kind = MeasurementKind::from(buf[4]);
             let encoding = FileEncoding::from(buf[5]);
             let compression = CompressionScheme::from(buf[6]);
-            let azimuth_range = AngleRange {
-                start: f32::from_le_bytes(buf[8..12].try_into().unwrap()),
-                end: f32::from_le_bytes(buf[12..16].try_into().unwrap()),
-                bin_width: f32::from_le_bytes(buf[16..20].try_into().unwrap()),
-                bin_count: u32::from_le_bytes(buf[20..24].try_into().unwrap()),
-            };
-            let zenith_range = AngleRange {
-                start: f32::from_le_bytes(buf[24..28].try_into().unwrap()),
-                end: f32::from_le_bytes(buf[28..32].try_into().unwrap()),
-                bin_width: f32::from_le_bytes(buf[32..36].try_into().unwrap()),
-                bin_count: u32::from_le_bytes(buf[36..40].try_into().unwrap()),
-            };
-            let sample_count = u32::from_le_bytes(buf[40..44].try_into().unwrap());
             Ok(Self {
                 kind,
                 encoding,
                 compression,
+            })
+        }
+
+        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
+            let mut meta = [0x20; 8];
+            meta[0..4].copy_from_slice(Self::MAGIC);
+            meta[4] = self.kind as u8;
+            meta[5] = self.encoding as u8;
+            meta[6] = self.compression as u8;
+            writer.write_all(&meta).map_err(|err| err.into())
+        }
+    }
+
+    /// Header of the VGMO file
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    pub struct AdfMsfHeader {
+        pub azimuth_range: AngleRange,
+        pub zenith_range: AngleRange,
+        pub sample_count: u32,
+    }
+
+    impl AdfMsfHeader {
+        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+            let mut buf = [0u8; 40];
+            reader.read_exact(&mut buf)?;
+            let azimuth_range = AngleRange {
+                start: f32::from_le_bytes(buf[0..4].try_into().unwrap()),
+                end: f32::from_le_bytes(buf[4..8].try_into().unwrap()),
+                bin_width: f32::from_le_bytes(buf[8..12].try_into().unwrap()),
+                bin_count: u32::from_le_bytes(buf[12..16].try_into().unwrap()),
+            };
+            let zenith_range = AngleRange {
+                start: f32::from_le_bytes(buf[16..20].try_into().unwrap()),
+                end: f32::from_le_bytes(buf[20..24].try_into().unwrap()),
+                bin_width: f32::from_le_bytes(buf[24..28].try_into().unwrap()),
+                bin_count: u32::from_le_bytes(buf[28..32].try_into().unwrap()),
+            };
+            let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
+            Ok(Self {
                 azimuth_range,
                 zenith_range,
                 sample_count,
@@ -659,22 +753,33 @@ pub mod vgmo {
         }
 
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            let mut header = [0x20; 48];
-            header[0..4].copy_from_slice(Self::MAGIC);
-            header[4] = self.kind as u8;
-            header[5] = self.encoding as u8;
-            header[6] = self.compression as u8;
-            header[8..12].copy_from_slice(&self.azimuth_range.start.to_le_bytes());
-            header[12..16].copy_from_slice(&self.azimuth_range.end.to_le_bytes());
-            header[16..20].copy_from_slice(&self.azimuth_range.bin_width.to_le_bytes());
-            header[20..24].copy_from_slice(&self.azimuth_range.bin_count.to_le_bytes());
-            header[24..28].copy_from_slice(&self.zenith_range.start.to_le_bytes());
-            header[28..32].copy_from_slice(&self.zenith_range.end.to_le_bytes());
-            header[32..36].copy_from_slice(&self.zenith_range.bin_width.to_le_bytes());
-            header[36..40].copy_from_slice(&self.zenith_range.bin_count.to_le_bytes());
-            header[40..44].copy_from_slice(&self.sample_count.to_le_bytes());
-            header[47] = 0x0A; // LF
+            let mut header = [0x20; 40];
+            header[0..4].copy_from_slice(&self.azimuth_range.start.to_le_bytes());
+            header[4..8].copy_from_slice(&self.azimuth_range.end.to_le_bytes());
+            header[8..12].copy_from_slice(&self.azimuth_range.bin_width.to_le_bytes());
+            header[12..16].copy_from_slice(&self.azimuth_range.bin_count.to_le_bytes());
+            header[16..20].copy_from_slice(&self.zenith_range.start.to_le_bytes());
+            header[20..24].copy_from_slice(&self.zenith_range.end.to_le_bytes());
+            header[24..28].copy_from_slice(&self.zenith_range.bin_width.to_le_bytes());
+            header[28..32].copy_from_slice(&self.zenith_range.bin_count.to_le_bytes());
+            header[32..36].copy_from_slice(&self.sample_count.to_le_bytes());
+            header[39] = 0x0A; // LF
             writer.write_all(&header).map_err(|err| err.into())
+        }
+    }
+
+    impl BsdfMeasurementParams {
+        /// Reads the BSDF measurement parameters from the given reader.
+        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+            todo!("Read BSDF measurement parameters from VGMO file")
+        }
+
+        /// Writes the BSDF measurement parameters to the given writer.
+        pub fn write_to_vgmo<W: Write>(
+            &self,
+            writer: &mut BufWriter<W>,
+        ) -> Result<(), WriteFileErrorKind> {
+            todo!("Write BSDF measurement parameters to VGMO file")
         }
     }
 
@@ -687,8 +792,8 @@ pub mod vgmo {
         header.write(writer)?;
         write_data_samples(
             writer,
-            header.encoding,
-            header.compression,
+            header.meta().encoding,
+            header.meta().compression,
             samples,
             header.zenith_range.bin_count,
         )
@@ -700,8 +805,8 @@ pub mod vgmo {
     /// Returns the header and the measurement samples.
     pub fn read<R: Read>(
         reader: &mut BufReader<R>,
-    ) -> Result<(Header, Vec<f32>), ReadFileErrorKind> {
-        let header = Header::read(reader)?;
+    ) -> Result<(AdfMsfHeader, Vec<f32>), ReadFileErrorKind> {
+        let header = AdfMsfHeader::read(reader)?;
         let samples = read_data_samples(
             reader,
             header.sample_count as usize,

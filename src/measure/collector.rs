@@ -1,7 +1,7 @@
 use crate::{
     measure::{emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
-    RangeByStepSize, SphericalDomain, SphericalPartition,
+    RangeByStepSizeExclusive, SphericalDomain, SphericalPartition,
 };
 use glam::{Vec3, Vec3A};
 use std::ops::{Deref, DerefMut};
@@ -11,7 +11,7 @@ use crate::{
     math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
         bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength, SpectrumSampler},
-        measurement::BsdfMeasurement,
+        measurement::BsdfMeasurementParams,
         rtc::Trajectory,
     },
     msurf::MicroSurfaceMesh,
@@ -58,10 +58,10 @@ pub enum CollectorScheme {
         shape: RegionShape,
         /// Collector's possible positions in spherical coordinates (inclination
         /// angle range).
-        zenith: RangeByStepSize<Radians>,
+        zenith: RangeByStepSizeExclusive<Radians>,
         /// Collector's possible positions in spherical coordinates (azimuthal
         /// angle range).
-        azimuth: RangeByStepSize<Radians>,
+        azimuth: RangeByStepSizeExclusive<Radians>,
     },
 }
 
@@ -164,7 +164,7 @@ impl Collector {
     /// Collects the ray-tracing data.
     pub fn collect(
         &self,
-        desc: &BsdfMeasurement,
+        desc: &BsdfMeasurementParams,
         mesh: &MicroSurfaceMesh,
         trajectories: &[Trajectory],
         patches: &CollectorPatches,

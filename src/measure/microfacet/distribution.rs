@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     io::{vgmo, vgmo::AngleRange, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MeasurementKind, MicrofacetAreaDistributionMeasurement},
+    measure::measurement::{MeasurementKind, MicrofacetAreaDistributionMeasurementParams},
     msurf::MicroSurface,
     units::{self, Radians},
     Handedness,
@@ -64,7 +64,7 @@ impl MicrofacetAreaDistribution {
             .write(true)
             .truncate(true)
             .open(filepath)?;
-        let header = vgmo::Header {
+        let header = vgmo::AdfMsfHeader {
             kind: MeasurementKind::MicrofacetAreaDistribution,
             encoding,
             compression,
@@ -94,7 +94,7 @@ impl MicrofacetAreaDistribution {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    desc: MicrofacetAreaDistributionMeasurement,
+    desc: MicrofacetAreaDistributionMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MicrofacetAreaDistribution> {

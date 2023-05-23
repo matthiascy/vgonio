@@ -14,7 +14,8 @@ use crate::{
     msurf::MicroSurface,
     ulp_eq,
     units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
-    Error, Medium, RangeByStepCount, RangeByStepSize, SphericalDomain, SphericalPartition,
+    Error, Medium, RangeByStepCountExclusive, RangeByStepSizeExclusive, SphericalDomain,
+    SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -100,8 +101,8 @@ impl From<u8> for SimulationKind {
 }
 
 /// Parameters for BSDF measurement.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BsdfMeasurement {
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct BsdfMeasurementParams {
     /// The measurement kind.
     pub kind: BsdfKind,
 
@@ -121,7 +122,7 @@ pub struct BsdfMeasurement {
     pub collector: Collector,
 }
 
-impl Default for BsdfMeasurement {
+impl Default for BsdfMeasurementParams {
     fn default() -> Self {
         Self {
             kind: BsdfKind::Brdf,
@@ -132,12 +133,12 @@ impl Default for BsdfMeasurement {
                 num_rays: 1000,
                 max_bounces: 10,
                 radius: Radius::Auto(mm!(0.0)),
-                zenith: RangeByStepSize::<Radians> {
+                zenith: RangeByStepSizeExclusive::<Radians> {
                     start: deg!(0.0).in_radians(),
                     stop: deg!(90.0).in_radians(),
                     step_size: deg!(5.0).in_radians(),
                 },
-                azimuth: RangeByStepSize::<Radians> {
+                azimuth: RangeByStepSizeExclusive::<Radians> {
                     start: deg!(0.0).in_radians(),
                     stop: deg!(360.0).in_radians(),
                     step_size: deg!(120.0).in_radians(),
@@ -149,7 +150,7 @@ impl Default for BsdfMeasurement {
                     (rad!(0.0), deg!(5.0).in_radians()),
                     (rad!(0.0), rad!(2.0 * std::f32::consts::PI)),
                 ),
-                spectrum: RangeByStepSize {
+                spectrum: RangeByStepSizeExclusive {
                     start: nanometres!(400.0),
                     stop: nanometres!(700.0),
                     step_size: nanometres!(1.0),
@@ -160,12 +161,12 @@ impl Default for BsdfMeasurement {
                 scheme: CollectorScheme::Partitioned {
                     domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualArea {
-                        zenith: RangeByStepCount {
+                        zenith: RangeByStepCountExclusive {
                             start: deg!(0.0).in_radians(),
                             stop: deg!(90.0).in_radians(),
                             step_count: 1,
                         },
-                        azimuth: RangeByStepSize {
+                        azimuth: RangeByStepSizeExclusive {
                             start: deg!(0.0).in_radians(),
                             stop: deg!(360.0).in_radians(),
                             step_size: deg!(10.0).in_radians(),
@@ -177,7 +178,7 @@ impl Default for BsdfMeasurement {
     }
 }
 
-impl BsdfMeasurement {
+impl BsdfMeasurementParams {
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, Error> {
         log::info!("Validating measurement description...");
@@ -278,28 +279,28 @@ impl BsdfMeasurement {
     }
 }
 
-const DEFAULT_AZIMUTH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
+const DEFAULT_AZIMUTH_RANGE: RangeByStepSizeExclusive<Radians> = RangeByStepSizeExclusive {
     start: Radians::ZERO,
     stop: Radians::TWO_PI,
     step_size: deg!(5.0).in_radians(),
 };
 
-const DEFAULT_ZENITH_RANGE: RangeByStepSize<Radians> = RangeByStepSize {
+const DEFAULT_ZENITH_RANGE: RangeByStepSizeExclusive<Radians> = RangeByStepSizeExclusive {
     start: Radians::ZERO,
     stop: Radians::HALF_PI,
     step_size: deg!(2.0).in_radians(),
 };
 
 /// Parameters for microfacet distribution measurement.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetAreaDistributionMeasurement {
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct MicrofacetAreaDistributionMeasurementParams {
     /// Azimuthal angle sampling range.
-    pub azimuth: RangeByStepSize<Radians>,
+    pub azimuth: RangeByStepSizeExclusive<Radians>,
     /// Polar angle sampling range.
-    pub zenith: RangeByStepSize<Radians>,
+    pub zenith: RangeByStepSizeExclusive<Radians>,
 }
 
-impl Default for MicrofacetAreaDistributionMeasurement {
+impl Default for MicrofacetAreaDistributionMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -308,7 +309,7 @@ impl Default for MicrofacetAreaDistributionMeasurement {
     }
 }
 
-impl MicrofacetAreaDistributionMeasurement {
+impl MicrofacetAreaDistributionMeasurementParams {
     /// Returns the number of samples that will be taken along the zenith angle.
     ///
     /// Here one is added to the zenith step count to account for the zenith
@@ -358,17 +359,17 @@ impl MicrofacetAreaDistributionMeasurement {
 }
 
 /// Parameters for microfacet shadowing masking measurement.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetMaskingShadowingMeasurement {
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct MicrofacetMaskingShadowingMeasurementParams {
     /// Azimuthal angle sampling range.
-    pub azimuth: RangeByStepSize<Radians>,
+    pub azimuth: RangeByStepSizeExclusive<Radians>,
     /// Polar angle sampling range.
-    pub zenith: RangeByStepSize<Radians>,
+    pub zenith: RangeByStepSizeExclusive<Radians>,
     /// Discritization resolution during the measurement (area estimation).
     pub resolution: u32,
 }
 
-impl Default for MicrofacetMaskingShadowingMeasurement {
+impl Default for MicrofacetMaskingShadowingMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -378,7 +379,7 @@ impl Default for MicrofacetMaskingShadowingMeasurement {
     }
 }
 
-impl MicrofacetMaskingShadowingMeasurement {
+impl MicrofacetMaskingShadowingMeasurementParams {
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
     pub fn measurement_location_count(&self) -> usize {
@@ -450,13 +451,13 @@ impl MicrofacetMaskingShadowingMeasurement {
 #[serde(rename_all = "kebab-case")]
 pub enum MeasurementKindDescription {
     /// Measure the BSDF of a micro-surface.
-    Bsdf(BsdfMeasurement),
+    Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Madf(MicrofacetAreaDistributionMeasurement),
+    Madf(MicrofacetAreaDistributionMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
-    Mmsf(MicrofacetMaskingShadowingMeasurement),
+    Mmsf(MicrofacetMaskingShadowingMeasurementParams),
 }
 
 impl MeasurementKindDescription {
@@ -480,7 +481,7 @@ impl MeasurementKindDescription {
     pub fn is_micro_surface_shadow_masking(&self) -> bool { matches!(self, Self::Mmsf { .. }) }
 
     /// Get the BSDF measurement parameters.
-    pub fn bsdf(&self) -> Option<&BsdfMeasurement> {
+    pub fn bsdf(&self) -> Option<&BsdfMeasurementParams> {
         if let MeasurementKindDescription::Bsdf(bsdf) = self {
             Some(bsdf)
         } else {
@@ -489,7 +490,7 @@ impl MeasurementKindDescription {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MicrofacetAreaDistributionMeasurement> {
+    pub fn microfacet_distribution(&self) -> Option<&MicrofacetAreaDistributionMeasurementParams> {
         if let MeasurementKindDescription::Madf(mfd) = self {
             Some(mfd)
         } else {
@@ -498,7 +499,9 @@ impl MeasurementKindDescription {
     }
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
-    pub fn micro_surface_shadow_masking(&self) -> Option<&MicrofacetMaskingShadowingMeasurement> {
+    pub fn micro_surface_shadow_masking(
+        &self,
+    ) -> Option<&MicrofacetMaskingShadowingMeasurementParams> {
         if let MeasurementKindDescription::Mmsf(mfd) = self {
             Some(mfd)
         } else {

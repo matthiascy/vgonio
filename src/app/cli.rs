@@ -11,9 +11,9 @@ use crate::{
     measure::{
         self,
         measurement::{
-            BsdfMeasurement, Measurement, MeasurementKindDescription,
-            MicrofacetAreaDistributionMeasurement, MicrofacetMaskingShadowingMeasurement,
-            SimulationKind,
+            BsdfMeasurementParams, Measurement, MeasurementKindDescription,
+            MicrofacetAreaDistributionMeasurementParams,
+            MicrofacetMaskingShadowingMeasurementParams, SimulationKind,
         },
         CollectorScheme, RtcMethod,
     },
@@ -78,18 +78,18 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                 .iter()
                 .map(|kind| match kind {
                     FastMeasurementKind::Bsdf => Measurement {
-                        desc: MeasurementKindDescription::Bsdf(BsdfMeasurement::default()),
+                        desc: MeasurementKindDescription::Bsdf(BsdfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetNormalDistribution => Measurement {
                         desc: MeasurementKindDescription::Madf(
-                            MicrofacetAreaDistributionMeasurement::default(),
+                            MicrofacetAreaDistributionMeasurementParams::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {
                         desc: MeasurementKindDescription::Mmsf(
-                            MicrofacetMaskingShadowingMeasurement::default(),
+                            MicrofacetMaskingShadowingMeasurementParams::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
@@ -372,7 +372,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
 /// Measures the microfacet normal distribution of the given micro-surface and
 /// saves the result to the given output directory.
 fn measure_microfacet_normal_distribution(
-    measurement: MicrofacetAreaDistributionMeasurement,
+    measurement: MicrofacetAreaDistributionMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -436,7 +436,7 @@ fn measure_microfacet_normal_distribution(
 /// Measures the microfacet masking-shadowing function of the given
 /// micro-surface and saves the result to the given output directory.
 fn measure_microfacet_masking_shadowing(
-    measurement: MicrofacetMaskingShadowingMeasurement,
+    measurement: MicrofacetMaskingShadowingMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
