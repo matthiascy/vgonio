@@ -1,4 +1,4 @@
-use crate::ulp_eq;
+use crate::{math::NumericCast, ulp_eq};
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
 
@@ -345,6 +345,10 @@ impl<A: AngleUnit> core::ops::Neg for Angle<A> {
 }
 
 super::impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
+
+impl NumericCast<Angle<URadian>> for usize {
+    fn cast(&self) -> Angle<URadian> { Angle::new(*self as f32) }
+}
 
 #[cfg(test)]
 mod angle_unit_tests {

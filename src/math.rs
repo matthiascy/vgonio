@@ -1,6 +1,6 @@
 use crate::{
     ulp_eq,
-    units::{radians, Radians},
+    units::{rad, radians, Radians},
     Handedness, SphericalCoord,
 };
 use cfg_if::cfg_if;
@@ -422,7 +422,9 @@ pub const fn wrap_angle_to_tau_inclusive(angle: f32) -> f32 {
 /// Returns the opposite angle of the given angle in radians.
 ///
 /// The returned angle is always within the range [0, 2π).
-pub const fn calculate_opposite_angle(angle: f32) -> f32 { wrap_angle_to_tau_exclusive(angle + PI) }
+pub const fn calculate_opposite_angle(angle: Radians) -> Radians {
+    rad!(wrap_angle_to_tau_exclusive(angle.value + PI))
+}
 
 #[test]
 fn test_wrap_angle_to_tau_exclusive() {

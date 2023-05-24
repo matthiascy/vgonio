@@ -96,30 +96,30 @@ impl PlottingInspector {
         text: &str,
     ) {
         if ui.button(text).clicked() {
-            let opposite = math::calculate_opposite_angle(initial.value);
+            let opposite = math::calculate_opposite_angle(initial);
             println!(
                 "initial = {}, index = {} | opposite = {}, index = {}",
                 initial.to_degrees(),
-                range.index(initial),
+                range.index_of(initial),
                 opposite.to_degrees(),
-                range.angle_index(opposite),
+                range.index_of(opposite),
             );
         }
     }
 
     #[cfg(debug_assertions)]
     fn debug_print_angle(
-        angle: f32,
+        initial: Radians,
         range: &RangeByStepSizeInclusive<Radians>,
         ui: &mut Ui,
         text: &str,
     ) {
         if ui.button(text).clicked() {
-            let initial = crate::math::wrap_angle_to_tau_exclusive(angle);
+            let initial = rad!(math::wrap_angle_to_tau_exclusive(initial.value));
             println!(
                 "angle = {}, index = {}",
                 initial.to_degrees(),
-                range.angle_index(initial),
+                range.index_of(initial),
             );
         }
     }
@@ -155,11 +155,11 @@ impl Tool for PlottingInspector {
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label("microfacet normal: ");
-                        let mut opposite = math::calculate_opposite_angle(self.azimuth_m.value);
+                        let mut opposite = math::calculate_opposite_angle(self.azimuth_m);
                         PlottingInspector::angle_knob(
                             ui,
                             false,
-                            &mut opposite,
+                            &mut opposite.value,
                             measured.azimuth.map(|x| x.value).range_bound_inclusive(),
                             measured.azimuth.step_size().value,
                             48.0,
@@ -184,13 +184,13 @@ impl Tool for PlottingInspector {
                     },
                 );
                 let data: Vec<_> = {
-                    let (starting, opposite) = measured.adf_data_slice(self.azimuth_m);
+                    let (starting, opposite) = measured.adf_data_slice(self.azimuth_m.value);
 
                     // Data of the opposite azimuthal angle side of the slice, if exists.
                     let data_opposite_part = opposite.map(|data| {
                         data.iter()
                             .rev()
-                            .zip(measured.zenith.rev_negative_angles())
+                            .zip(measured.zenith.values().map(|x| x.value * -1.0).rev())
                             .map(|(y, x)| [x as f64, *y as f64])
                     });
 
