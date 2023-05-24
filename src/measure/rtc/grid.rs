@@ -14,12 +14,11 @@ use crate::{
         rtc,
         rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
-    msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
-    optics::{fresnel, ior::RefractiveIndex},
+    msurf::{MicroSurface, MicroSurfaceMesh},
+    optics::fresnel,
     ulp_eq,
-    units::{um, UMicrometre, UMillimetre},
+    units::UMillimetre,
 };
-use cfg_if::cfg_if;
 use glam::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use rayon::prelude::*;
 use std::time::Instant;

@@ -7,9 +7,9 @@ use std::{io::BufWriter, path::Path};
 use crate::{
     app::cache::{Cache, Handle},
     error::Error,
-    io::{vgmo, vgmo::AngleRange, CompressionScheme, FileEncoding, WriteFileError},
+    io::{vgmo, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MeasurementKind, MicrofacetAreaDistributionMeasurementParams},
+    measure::measurement::{MadfMeasurementParams, MeasurementKind},
     msurf::MicroSurface,
     units::{self, Radians},
     Handedness,
@@ -23,24 +23,8 @@ use crate::{
 /// surface normals pointed in any given direction.
 #[derive(Debug, Clone)]
 pub struct MicrofacetAreaDistribution {
-    /// Start angle of the azimuth.
-    pub azimuth_start: Radians,
-    /// End angle of the azimuth.
-    pub azimuth_stop: Radians,
-    /// The bin size of azimuthal angle when sampling the microfacet
-    /// distribution.
-    pub azimuth_bin_width: Radians,
-    /// The number of bins in the azimuthal angle including the start and stop.
-    pub azimuth_bins_count_inclusive: usize,
-    /// Start angle of the zenith.
-    pub zenith_start: Radians,
-    /// End angle of the zenith.
-    pub zenith_stop: Radians,
-    /// The bin size of zenith angle when sampling the microfacet
-    /// distribution.
-    pub zenith_bin_width: Radians,
-    /// The number of bins in the zenith angle including the start and stop.
-    pub zenith_bins_count_inclusive: usize,
+    /// The measurement parameters.
+    params: MadfMeasurementParams,
     /// The distribution data. The first index is the azimuthal angle, and the
     /// second index is the zenith angle.
     pub samples: Vec<f32>,
@@ -56,7 +40,7 @@ impl MicrofacetAreaDistribution {
     ) -> Result<(), Error> {
         assert_eq!(
             self.samples.len(),
-            self.azimuth_bins_count_inclusive * self.zenith_bins_count_inclusive,
+            self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count(),
             "The number of samples does not match the number of bins."
         );
         let file = std::fs::OpenOptions::new()
@@ -64,23 +48,26 @@ impl MicrofacetAreaDistribution {
             .write(true)
             .truncate(true)
             .open(filepath)?;
-        let header = vgmo::AdfMsfHeader {
-            kind: MeasurementKind::MicrofacetAreaDistribution,
-            encoding,
-            compression,
-            azimuth_range: AngleRange {
-                start: self.azimuth_start.value,
-                end: self.azimuth_stop.value,
-                bin_count: self.azimuth_bins_count_inclusive as u32,
-                bin_width: self.azimuth_bin_width.value,
+        let header = vgmo::Header::Madf {
+            meta: vgmo::HeaderMeta {
+                kind: MeasurementKind::MicrofacetAreaDistribution,
+                encoding,
+                compression,
             },
-            zenith_range: AngleRange {
-                start: self.zenith_start.value,
-                end: self.zenith_stop.value,
-                bin_count: self.zenith_bins_count_inclusive as u32,
-                bin_width: self.zenith_bin_width.value,
-            },
-            sample_count: self.samples.len() as u32,
+            // azimuth_range: AngleRange {
+            //     start: self.azimuth_start.value,
+            //     end: self.azimuth_stop.value,
+            //     bin_count: self.azimuth_bins_count_inclusive as u32,
+            //     bin_width: self.azimuth_bin_width.value,
+            // },
+            // zenith_range: AngleRange {
+            //     start: self.zenith_start.value,
+            //     end: self.zenith_stop.value,
+            //     bin_count: self.zenith_bins_count_inclusive as u32,
+            //     bin_width: self.zenith_bin_width.value,
+            // },
+            // sample_count: self.samples.len() as u32,
+            madf: self.params,
         };
         let mut writer = BufWriter::new(file);
         vgmo::write(&mut writer, header, &self.samples).map_err(|err| {
@@ -94,15 +81,15 @@ impl MicrofacetAreaDistribution {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    desc: MicrofacetAreaDistributionMeasurementParams,
+    desc: MadfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MicrofacetAreaDistribution> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet area distribution...");
     let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
-    let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
+    //let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
+    //let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
     surfaces
         .iter()
         .filter_map(|surface| {
@@ -112,19 +99,19 @@ pub fn measure_area_distribution(
             }
             let surface = surface.as_ref().unwrap();
             let macro_area = surface.macro_surface_area();
-            let solid_angle = units::solid_angle_of_spherical_cap(desc.zenith.step_size).value();
+            let solid_angle = units::solid_angle_of_spherical_cap(*desc.zenith.step_size()).value();
             let divisor = macro_area * solid_angle;
-            let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
+            let half_zenith_bin_size_cos = (*desc.zenith.step_size() / 2.0).cos();
             log::debug!("-- macro surface area: {}", macro_area);
             log::debug!("-- solid angle per measurement: {}", solid_angle);
-            let samples = (0..azimuth_step_count_inclusive)
+            let samples = (0..desc.azimuth.step_count_wrapped())
                 .flat_map(move |azimuth_idx| {
                     // NOTE: the zenith angle is measured from the top of the
                     // hemisphere. The center of the zenith/azimuth bin are at the zenith/azimuth
                     // angle calculated below.
-                    (0..zenith_step_count_inclusive).map(move |zenith_idx| {
-                        let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
-                        let zenith = zenith_idx as f32 * desc.zenith.step_size;
+                    (0..desc.zenith.step_count()).map(move |zenith_idx| {
+                        let azimuth = azimuth_idx as f32 * *desc.azimuth.step_size();
+                        let zenith = zenith_idx as f32 * *desc.zenith.step_size();
                         let dir = math::spherical_to_cartesian(
                             1.0,
                             zenith,
@@ -161,15 +148,8 @@ pub fn measure_area_distribution(
                 })
                 .collect::<Vec<_>>();
             Some(MicrofacetAreaDistribution {
-                azimuth_bin_width: desc.azimuth.step_size,
-                zenith_bin_width: desc.zenith.step_size,
-                azimuth_bins_count_inclusive: desc.azimuth.step_count(),
-                zenith_bins_count_inclusive: desc.zenith.step_count() + 1,
+                params: desc,
                 samples,
-                azimuth_start: desc.azimuth.start,
-                azimuth_stop: desc.azimuth.stop,
-                zenith_start: desc.zenith.start,
-                zenith_stop: desc.zenith.stop,
             })
         })
         .collect()

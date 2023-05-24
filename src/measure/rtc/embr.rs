@@ -6,28 +6,24 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfStats, SpectrumSampler},
+        bsdf::{BsdfMeasurementPoint, BsdfStats},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, Radius},
         rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
     msurf::MicroSurfaceMesh,
-    optics::{fresnel, ior::RefractiveIndex},
-    units::{um, UMillimetre},
+    optics::fresnel,
+    units::UMillimetre,
 };
 use embree::{
     BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
     IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, SceneFlags, SoAHit, SoARay,
     ValidMask, ValidityN, INVALID_ID,
 };
-use glam::{Vec3, Vec3A};
+use glam::Vec3A;
 use rayon::prelude::*;
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-    time::Instant,
-};
+use std::{sync::Arc, time::Instant};
 
 impl MicroSurfaceMesh {
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.

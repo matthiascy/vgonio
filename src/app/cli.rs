@@ -12,8 +12,8 @@ use crate::{
         self,
         measurement::{
             BsdfMeasurementParams, Measurement, MeasurementKindDescription,
-            MicrofacetAreaDistributionMeasurementParams,
-            MicrofacetMaskingShadowingMeasurementParams, SimulationKind,
+            MadfMeasurementParams,
+            MmsfMeasurementParams, SimulationKind,
         },
         CollectorScheme, RtcMethod,
     },
@@ -83,13 +83,13 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     },
                     FastMeasurementKind::MicrofacetNormalDistribution => Measurement {
                         desc: MeasurementKindDescription::Madf(
-                            MicrofacetAreaDistributionMeasurementParams::default(),
+                            MadfMeasurementParams::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {
                         desc: MeasurementKindDescription::Mmsf(
-                            MicrofacetMaskingShadowingMeasurementParams::default(),
+                            MmsfMeasurementParams::default(),
                         ),
                         surfaces: opts.inputs.clone(),
                     },
@@ -149,10 +149,10 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                                 "equal angle",
                                 zenith.start.prettified(),
                                 zenith.stop.prettified(),
-                                zenith.step_size.prettified(),
+                                zenith.step_size().prettified(),
                                 azimuth.stop.prettified(),
                                 azimuth.stop.prettified(),
-                                azimuth.step_size.prettified()
+                                azimuth.step_size().prettified()
                             )
                         }
                         SphericalPartition::EqualArea { zenith, azimuth } => {
@@ -164,10 +164,10 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                                 "equal area",
                                 zenith.start.prettified(),
                                 zenith.stop.prettified(),
-                                zenith.step_count,
+                                zenith.step_count(),
                                 azimuth.start.prettified(),
                                 azimuth.stop.prettified(),
-                                azimuth.step_size.prettified()
+                                azimuth.step_size().prettified()
                             )
                         }
                         SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
@@ -179,10 +179,10 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                                 "equal projected area",
                                 zenith.start.prettified(),
                                 zenith.stop.prettified(),
-                                zenith.step_count,
+                                zenith.step_count(),
                                 azimuth.start.prettified(),
                                 azimuth.stop.prettified(),
-                                azimuth.step_size.prettified()
+                                azimuth.step_size().prettified()
                             )
                         }
                     },
@@ -221,13 +221,13 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     measurement.emitter.max_bounces,
                     measurement.emitter.spectrum.start,
                     measurement.emitter.spectrum.stop,
-                    measurement.emitter.spectrum.step_size,
+                    measurement.emitter.spectrum.step_size(),
                     measurement.emitter.zenith.start.prettified(),
                     measurement.emitter.zenith.stop.prettified(),
-                    measurement.emitter.zenith.step_size.prettified(),
+                    measurement.emitter.zenith.step_size().prettified(),
                     measurement.emitter.azimuth.start.prettified(),
                     measurement.emitter.azimuth.stop.prettified(),
-                    measurement.emitter.azimuth.step_size.prettified(),
+                    measurement.emitter.azimuth.step_size().prettified(),
                     measurement.collector.radius,
                     collector_info
                 );
@@ -372,7 +372,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
 /// Measures the microfacet normal distribution of the given micro-surface and
 /// saves the result to the given output directory.
 fn measure_microfacet_normal_distribution(
-    measurement: MicrofacetAreaDistributionMeasurementParams,
+    measurement: MadfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -387,10 +387,10 @@ fn measure_microfacet_normal_distribution(
       + zenith: {} ~ {} per {}",
         measurement.azimuth.start.prettified(),
         measurement.azimuth.stop.prettified(),
-        measurement.azimuth.step_size.prettified(),
+        measurement.azimuth.step_size().prettified(),
         measurement.zenith.start.prettified(),
         measurement.zenith.stop.prettified(),
-        measurement.zenith.step_size.prettified()
+        measurement.zenith.step_size().prettified()
     );
     let start_time = Instant::now();
     let distributions =
@@ -436,7 +436,7 @@ fn measure_microfacet_normal_distribution(
 /// Measures the microfacet masking-shadowing function of the given
 /// micro-surface and saves the result to the given output directory.
 fn measure_microfacet_masking_shadowing(
-    measurement: MicrofacetMaskingShadowingMeasurementParams,
+    measurement: MmsfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -452,10 +452,10 @@ fn measure_microfacet_masking_shadowing(
       + resolution: {} x {}",
         measurement.azimuth.start.prettified(),
         measurement.azimuth.stop.prettified(),
-        measurement.azimuth.step_size.prettified(),
+        measurement.azimuth.step_size().prettified(),
         measurement.zenith.start.prettified(),
         measurement.zenith.stop.prettified(),
-        measurement.zenith.step_size.prettified(),
+        measurement.zenith.step_size().prettified(),
         measurement.resolution,
         measurement.resolution
     );

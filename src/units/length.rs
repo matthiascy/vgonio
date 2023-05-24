@@ -1,4 +1,4 @@
-use crate::{error::Error, ulp_eq};
+use crate::{error::Error, math::NumericCast, ulp_eq};
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -502,6 +502,11 @@ impl<A: LengthMeasurement> core::ops::Neg for Length<A> {
 }
 
 super::impl_ops_assign!(AddAssign, SubAssign for Length where A, B: LengthMeasurement);
+
+impl<U: LengthMeasurement> NumericCast<f32> for Length<U> {
+    #[inline(always)]
+    fn cast(&self) -> f32 { self.value }
+}
 
 #[cfg(test)]
 mod length_unit_tests {

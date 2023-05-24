@@ -21,17 +21,15 @@ use std::{
     any::Any,
     collections::HashMap,
     default::Default,
-    num::NonZeroU64,
-    ops::Deref,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "embree")]
-pub(crate) use tools::trace_ray_standard_dbg;
+// #[cfg(feature = "embree")]
+// pub(crate) use tools::trace_ray_standard_dbg;
 
-pub(crate) use tools::{trace_ray_grid_dbg, DebuggingInspector};
+pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioUi;
 use wgpu::util::DeviceExt;
 
@@ -40,7 +38,7 @@ use crate::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, RenderPass, RenderableMesh, Texture, VisualGridUniforms, WgpuConfig,
+            GpuContext, RenderPass, Texture, VisualGridUniforms, WgpuConfig,
             DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
@@ -48,9 +46,7 @@ use crate::{
             ui::Theme,
         },
     },
-    io::vgmo::AngleRange,
-    measure::{measurement::MeasurementData, rtc::grid::Grid},
-    msurf::{AxisAlignment, MicroSurface, MicroSurfaceMesh},
+    msurf::MicroSurface,
     units::Degrees,
 };
 use winit::{

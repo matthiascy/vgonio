@@ -5,22 +5,20 @@ use crate::{
         gui::{Plottable, PlottingMode},
     },
     io,
-    io::vgmo::AngleRange,
+    io::vgmo::Header,
     math,
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
     },
     msurf::MicroSurface,
-    ulp_eq,
     units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
-    Error, Medium, RangeByStepCountExclusive, RangeByStepSizeExclusive, SphericalDomain,
+    Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     any::Any,
-    f32::consts::{PI, TAU},
     fmt::{Display, Formatter},
     fs::File,
     io::BufReader,
@@ -133,16 +131,16 @@ impl Default for BsdfMeasurementParams {
                 num_rays: 1000,
                 max_bounces: 10,
                 radius: Radius::Auto(mm!(0.0)),
-                zenith: RangeByStepSizeExclusive::<Radians> {
-                    start: deg!(0.0).in_radians(),
-                    stop: deg!(90.0).in_radians(),
-                    step_size: deg!(5.0).in_radians(),
-                },
-                azimuth: RangeByStepSizeExclusive::<Radians> {
-                    start: deg!(0.0).in_radians(),
-                    stop: deg!(360.0).in_radians(),
-                    step_size: deg!(120.0).in_radians(),
-                },
+                zenith: RangeByStepSizeInclusive::new(
+                    deg!(0.0).in_radians(),
+                    deg!(90.0).in_radians(),
+                    deg!(5.0).in_radians(),
+                ),
+                azimuth: RangeByStepSizeInclusive::new(
+                    deg!(0.0).in_radians(),
+                    deg!(360.0).in_radians(),
+                    deg!(120.0).in_radians(),
+                ),
                 shape: RegionShape::SphericalCap {
                     zenith: deg!(5.0).in_radians(),
                 },
@@ -150,27 +148,27 @@ impl Default for BsdfMeasurementParams {
                     (rad!(0.0), deg!(5.0).in_radians()),
                     (rad!(0.0), rad!(2.0 * std::f32::consts::PI)),
                 ),
-                spectrum: RangeByStepSizeExclusive {
-                    start: nanometres!(400.0),
-                    stop: nanometres!(700.0),
-                    step_size: nanometres!(1.0),
-                },
+                spectrum: RangeByStepSizeInclusive::new(
+                    nanometres!(400.0),
+                    nanometres!(700.0),
+                    nanometres!(1.0),
+                ),
             },
             collector: Collector {
                 radius: Radius::Auto(mm!(0.0)),
                 scheme: CollectorScheme::Partitioned {
                     domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualArea {
-                        zenith: RangeByStepCountExclusive {
-                            start: deg!(0.0).in_radians(),
-                            stop: deg!(90.0).in_radians(),
-                            step_count: 1,
-                        },
-                        azimuth: RangeByStepSizeExclusive {
-                            start: deg!(0.0).in_radians(),
-                            stop: deg!(360.0).in_radians(),
-                            step_size: deg!(10.0).in_radians(),
-                        },
+                        zenith: RangeByStepCountInclusive::new(
+                            deg!(0.0).in_radians(),
+                            deg!(90.0).in_radians(),
+                            1,
+                        ),
+                        azimuth: RangeByStepSizeInclusive::new(
+                            deg!(0.0).in_radians(),
+                            deg!(360.0).in_radians(),
+                            deg!(10.0).in_radians(),
+                        ),
                     },
                 },
             },
@@ -194,8 +192,8 @@ impl BsdfMeasurementParams {
         }
 
         if !(emitter.radius().is_valid()
-            && emitter.zenith.step_size > rad!(0.0)
-            && emitter.azimuth.step_size > rad!(0.0))
+            && *emitter.zenith.step_size() > rad!(0.0)
+            && *emitter.azimuth.step_size() > rad!(0.0))
         {
             return Err(Error::InvalidEmitter(
                 "emitter's radius, zenith step size and azimuth step size must be positive",
@@ -279,28 +277,22 @@ impl BsdfMeasurementParams {
     }
 }
 
-const DEFAULT_AZIMUTH_RANGE: RangeByStepSizeExclusive<Radians> = RangeByStepSizeExclusive {
-    start: Radians::ZERO,
-    stop: Radians::TWO_PI,
-    step_size: deg!(5.0).in_radians(),
-};
+const DEFAULT_AZIMUTH_RANGE: RangeByStepSizeInclusive<Radians> =
+    RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TWO_PI, deg!(5.0).in_radians());
 
-const DEFAULT_ZENITH_RANGE: RangeByStepSizeExclusive<Radians> = RangeByStepSizeExclusive {
-    start: Radians::ZERO,
-    stop: Radians::HALF_PI,
-    step_size: deg!(2.0).in_radians(),
-};
+const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
+    RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, deg!(2.0).in_radians());
 
-/// Parameters for microfacet distribution measurement.
+/// Parameters for microfacet area distribution measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetAreaDistributionMeasurementParams {
+pub struct MadfMeasurementParams {
     /// Azimuthal angle sampling range.
-    pub azimuth: RangeByStepSizeExclusive<Radians>,
+    pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
-    pub zenith: RangeByStepSizeExclusive<Radians>,
+    pub zenith: RangeByStepSizeInclusive<Radians>,
 }
 
-impl Default for MicrofacetAreaDistributionMeasurementParams {
+impl Default for MadfMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -309,27 +301,28 @@ impl Default for MicrofacetAreaDistributionMeasurementParams {
     }
 }
 
-impl MicrofacetAreaDistributionMeasurementParams {
-    /// Returns the number of samples that will be taken along the zenith angle.
-    ///
-    /// Here one is added to the zenith step count to account for the zenith
-    /// angle of 90°.
-    pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count() + 1 }
+impl MadfMeasurementParams {
+    // /// Returns the number of samples that will be taken along the zenith angle.
+    // ///
+    // /// Here one is added to the zenith step count to account for the zenith
+    // /// angle of 90°.
+    // pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count()
+    // + 1 }
 
-    /// Returns the number of samples that will be taken along the azimuth
-    /// angle.
-    ///
-    /// Here no additional step is added to the azimuth step count due to that
-    /// in most cases the azimuth angle sampling range will be [0°, 360°] and
-    /// thus the azimuth angle of 360° will be sampled as it is the same as the
-    /// azimuth angle of 0°.
-    pub fn azimuth_step_count_inclusive(&self) -> usize {
-        if self.azimuth.start == Radians::ZERO && self.azimuth.stop == Radians::TWO_PI {
-            self.azimuth.step_count()
-        } else {
-            self.azimuth.step_count() + 1
-        }
-    }
+    // /// Returns the number of samples that will be taken along the azimuth
+    // /// angle.
+    // ///
+    // /// Here no additional step is added to the azimuth step count due to that
+    // /// in most cases the azimuth angle sampling range will be [0°, 360°] and
+    // /// thus the azimuth angle of 360° will be sampled as it is the same as the
+    // /// azimuth angle of 0°.
+    // pub fn azimuth_step_count_inclusive(&self) -> usize {
+    //     if self.azimuth.start == Radians::ZERO && self.azimuth.stop ==
+    // Radians::TWO_PI {         self.azimuth.step_count()
+    //     } else {
+    //         self.azimuth.step_count() + 1
+    //     }
+    // }
 
     /// Validate the parameters.
     pub fn validate(self) -> Result<Self, Error> {
@@ -347,7 +340,7 @@ impl MicrofacetAreaDistributionMeasurementParams {
                 "Microfacet distribution measurement: zenith angle must be in the range [0°, 90°]",
             ));
         }
-        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
+        if !(*self.azimuth.step_size() > rad!(0.0) && *self.zenith.step_size() > rad!(0.0)) {
             return Err(Error::InvalidParameter(
                 "Microfacet distribution measurement: azimuth and zenith step sizes must be \
                  positive!",
@@ -358,18 +351,18 @@ impl MicrofacetAreaDistributionMeasurementParams {
     }
 }
 
-/// Parameters for microfacet shadowing masking measurement.
+/// Parameters for microfacet masking and shadowing function measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MicrofacetMaskingShadowingMeasurementParams {
+pub struct MmsfMeasurementParams {
     /// Azimuthal angle sampling range.
-    pub azimuth: RangeByStepSizeExclusive<Radians>,
+    pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
-    pub zenith: RangeByStepSizeExclusive<Radians>,
+    pub zenith: RangeByStepSizeInclusive<Radians>,
     /// Discritization resolution during the measurement (area estimation).
     pub resolution: u32,
 }
 
-impl Default for MicrofacetMaskingShadowingMeasurementParams {
+impl Default for MmsfMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -379,41 +372,34 @@ impl Default for MicrofacetMaskingShadowingMeasurementParams {
     }
 }
 
-impl MicrofacetMaskingShadowingMeasurementParams {
+impl MmsfMeasurementParams {
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
     pub fn measurement_location_count(&self) -> usize {
-        let azimuth_count =
-            if self.azimuth.start == Radians::ZERO && self.azimuth.stop == Radians::TWO_PI {
-                self.azimuth.step_count()
-            } else {
-                self.azimuth.step_count() + 1
-            };
-        self.azimuth.step_count();
-        let zenith_count = self.zenith.step_count() + 1;
-        azimuth_count * zenith_count
+        self.azimuth.step_count_wrapped() * self.zenith.step_count()
     }
 
-    /// Returns the number of samples that will be taken along the zenith angle.
-    ///
-    /// Here one is added to the zenith step count to account for the zenith
-    /// angle of 90°.
-    pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count() + 1 }
-
-    /// Returns the number of samples that will be taken along the azimuth
-    /// angle.
-    ///
-    /// Here no additional step is added to the azimuth step count due to that
-    /// in most cases the azimuth angle sampling range will be [0°, 360°] and
-    /// thus the azimuth angle of 360° will be sampled as it is the same as the
-    /// azimuth angle of 0°.
-    pub fn azimuth_step_count_inclusive(&self) -> usize {
-        if self.azimuth.start == Radians::ZERO && self.azimuth.stop == Radians::TWO_PI {
-            self.azimuth.step_count()
-        } else {
-            self.azimuth.step_count() + 1
-        }
-    }
+    // /// Returns the number of samples that will be taken along the zenith angle.
+    // ///
+    // /// Here one is added to the zenith step count to account for the zenith
+    // /// angle of 90°.
+    // pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count()
+    // + 1 }
+    //
+    // /// Returns the number of samples that will be taken along the azimuth
+    // /// angle.
+    // ///
+    // /// Here no additional step is added to the azimuth step count due to that
+    // /// in most cases the azimuth angle sampling range will be [0°, 360°] and
+    // /// thus the azimuth angle of 360° will be sampled as it is the same as the
+    // /// azimuth angle of 0°.
+    // pub fn azimuth_step_count_inclusive(&self) -> usize {
+    //     if self.azimuth.start == Radians::ZERO && self.azimuth.stop ==
+    // Radians::TWO_PI {         self.azimuth.step_count()
+    //     } else {
+    //         self.azimuth.step_count() + 1
+    //     }
+    // }
 
     /// Validate the parameters when reading from a file.
     pub fn validate(self) -> Result<Self, Error> {
@@ -435,7 +421,7 @@ impl MicrofacetMaskingShadowingMeasurementParams {
                  90°]",
             ));
         }
-        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
+        if !(*self.azimuth.step_size() > rad!(0.0) && *self.zenith.step_size() > rad!(0.0)) {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: azimuth and zenith step sizes must be \
                  positive!",
@@ -454,10 +440,10 @@ pub enum MeasurementKindDescription {
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Madf(MicrofacetAreaDistributionMeasurementParams),
+    Madf(MadfMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
-    Mmsf(MicrofacetMaskingShadowingMeasurementParams),
+    Mmsf(MmsfMeasurementParams),
 }
 
 impl MeasurementKindDescription {
@@ -490,7 +476,7 @@ impl MeasurementKindDescription {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MicrofacetAreaDistributionMeasurementParams> {
+    pub fn microfacet_distribution(&self) -> Option<&MadfMeasurementParams> {
         if let MeasurementKindDescription::Madf(mfd) = self {
             Some(mfd)
         } else {
@@ -499,9 +485,7 @@ impl MeasurementKindDescription {
     }
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
-    pub fn micro_surface_shadow_masking(
-        &self,
-    ) -> Option<&MicrofacetMaskingShadowingMeasurementParams> {
+    pub fn micro_surface_shadow_masking(&self) -> Option<&MmsfMeasurementParams> {
         if let MeasurementKindDescription::Mmsf(mfd) = self {
             Some(mfd)
         } else {
@@ -671,8 +655,8 @@ impl MeasurementDataSource {
 #[derive(Debug, Clone)]
 pub struct MeasurementData {
     pub kind: MeasurementKind,
-    pub azimuth: AngleRange,
-    pub zenith: AngleRange,
+    pub azimuth: RangeByStepSizeInclusive<Radians>,
+    pub zenith: RangeByStepSizeInclusive<Radians>,
     pub source: MeasurementDataSource,
     /// Internal tag for displaying the measurement data in the GUI.
     pub name: String,
@@ -712,14 +696,29 @@ impl MeasurementData {
             .and_then(|s| s.to_str())
             .unwrap_or("invalid file stem")
             .to_string();
-        Ok(MeasurementData {
-            kind: header.kind,
-            azimuth: header.azimuth_range,
-            zenith: header.zenith_range,
-            source: MeasurementDataSource::Loaded(path),
-            name,
-            data,
-        })
+        match header {
+            Header::Bsdf { .. } => {
+                todo!("BSDF measurement data is not supported yet")
+            }
+            Header::Madf {
+                meta,
+                madf: MadfMeasurementParams { azimuth, zenith },
+            }
+            | Header::Mmsf {
+                meta,
+                mmsf:
+                    MmsfMeasurementParams {
+                        azimuth, zenith, ..
+                    },
+            } => Ok(MeasurementData {
+                kind: header.meta().kind,
+                azimuth,
+                zenith,
+                source: MeasurementDataSource::Loaded(path),
+                name,
+                data,
+            }),
+        }
     }
 
     /// Returns the Area Distribution Function data slice for the given

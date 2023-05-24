@@ -1,7 +1,7 @@
 use crate::{
     measure::{measurement::Radius, rtc::Ray},
-    units::{radians, steradians, LengthMeasurement, Micrometres, Nanometres, Radians, SolidAngle},
-    Handedness, RangeByStepSizeExclusive, SphericalCoord,
+    units::{radians, steradians, Nanometres, Radians, SolidAngle},
+    Handedness, RangeByStepSizeInclusive, SphericalCoord,
 };
 use glam::Vec3;
 use rand::{
@@ -34,18 +34,18 @@ pub struct Emitter {
 
     /// Inclination angle (polar angle) of emitter's possible positions (center
     /// of the emitter) in spherical coordinates.
-    pub zenith: RangeByStepSizeExclusive<Radians>,
+    pub zenith: RangeByStepSizeInclusive<Radians>,
 
     /// Azimuthal angle range of emitter's possible positions (center of the
     /// emitter) in spherical coordinates.
-    pub azimuth: RangeByStepSizeExclusive<Radians>,
+    pub azimuth: RangeByStepSizeInclusive<Radians>,
 
     /// Shape of the emitter.
     /// The shape is defined by the region over the spherical domain.
     pub shape: RegionShape,
 
     /// Light source's spectrum.
-    pub spectrum: RangeByStepSizeExclusive<Nanometres>,
+    pub spectrum: RangeByStepSizeInclusive<Nanometres>,
 
     /// Solid angle subtended by emitter's region.
     #[serde(skip)]
@@ -117,17 +117,15 @@ impl Emitter {
 
     /// All possible measurement positions of the emitter.
     pub fn meas_points(&self) -> Vec<SphericalCoord> {
-        let n_zenith =
-            ((self.zenith.stop - self.zenith.start) / self.zenith.step_size).ceil() as usize;
-        let n_azimuth =
-            ((self.azimuth.stop - self.azimuth.start) / self.azimuth.step_size).ceil() as usize;
+        let n_zenith = (self.zenith.span() / *self.zenith.step_size()).ceil() as usize;
+        let n_azimuth = (self.azimuth.span() / *self.azimuth.step_size()).ceil() as usize;
 
         (0..n_zenith)
             .flat_map(|i_theta| {
                 (0..n_azimuth).map(move |i_phi| SphericalCoord {
                     radius: 1.0,
-                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
-                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
+                    zenith: self.zenith.start + i_theta as f32 * *self.zenith.step_size(),
+                    azimuth: self.azimuth.start + i_phi as f32 * *self.azimuth.step_size(),
                 })
             })
             .collect()

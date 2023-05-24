@@ -113,11 +113,11 @@ impl<A: AngleUnit> Angle<A> {
 
     /// Converts the angle to radians.
     #[inline]
-    pub fn to_radian(&self) -> Angle<URadian> { Angle::new(self.value * A::FACTOR_TO_RAD) }
+    pub fn to_radians(&self) -> Angle<URadian> { Angle::new(self.value * A::FACTOR_TO_RAD) }
 
     /// Converts the angle to degrees.
     #[inline]
-    pub fn to_degree(&self) -> Angle<UDegree> { Angle::new(self.value * A::FACTOR_TO_DEG) }
+    pub fn to_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * A::FACTOR_TO_DEG) }
 
     super::forward_f32_methods!(
         abs,

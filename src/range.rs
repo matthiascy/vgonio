@@ -1,13 +1,13 @@
 use crate::{
     math,
     math::NumericCast,
-    units::{Angle, AngleUnit},
+    units::{Angle, AngleUnit, Radians},
 };
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
-    ops::{Add, Deref, Div, Mul, Sub},
+    ops::{Add, Deref, DerefMut, Div, Mul, Sub},
     str::FromStr,
 };
 
@@ -64,38 +64,16 @@ impl<T: PartialEq, U: PartialEq> PartialEq for RangeInner<T, U> {
 impl<T: PartialEq + Eq, U: PartialEq + Eq> Eq for RangeInner<T, U> {}
 
 impl<T, U> RangeInner<T, U> {
-    // /// Returns the initial value of the range.
-    // pub const fn start(&self) -> &T { &self.start }
-    //
-    // /// Returns the initial value of the range.
-    // pub const fn start_mut(&mut self) -> &mut T { &mut self.start }
-    //
-    // /// Returns the final value of the range.
-    // pub const fn stop(&self) -> &T { &self.stop }
-    //
-    // /// Returns the final value of the range.
-    // pub const fn stop_mut(&mut self) -> &mut T { &mut self.stop }
-    //
-    // /// Returns the step size or count.
-    // pub const fn step_size_or_count(&self) -> &U { &self.step_size_or_count }
-    //
-    // /// Returns the step size or count.
-    // pub const fn step_size_or_count_mut(&mut self) -> &mut U { &mut
-    // self.step_size_or_count }
-
-    /// Returns the span of the range.
-    pub const fn span(&self) -> T
-    where
-        T: Sub<Output = T> + Copy,
-    {
-        self.stop - self.start
-    }
-
     /// Returns the range as a `std::ops::Range`.
     pub fn range_bound(&self) -> std::ops::Range<T> { self.start..self.stop }
 
     /// Returns the range as a `std::ops::RangeInclusive`.
     pub fn range_bound_inclusive(&self) -> std::ops::RangeInclusive<T> { self.start..=self.stop }
+}
+
+impl<T: Sub<Output = T> + Copy + Clone> RangeInner<T, T> {
+    /// Returns the span of the range.
+    pub const fn span(&self) -> T { self.stop - self.start }
 }
 
 impl<T> From<[T; 3]> for RangeInner<T, T> {
@@ -143,6 +121,10 @@ impl<T: Copy + Clone> Deref for RangeByStepSizeInclusive<T> {
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
+impl<T: Copy + Clone> DerefMut for RangeByStepSizeInclusive<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
 impl<T: Copy + Clone + Debug> Debug for RangeByStepSizeInclusive<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RangeByStepSizeInclusive")
@@ -169,26 +151,34 @@ impl<T: Copy + Clone> RangeByStepSizeInclusive<T> {
     /// Returns the step size of the range.
     pub const fn step_size_mut(&mut self) -> &mut T { &mut self.0.step_size_or_count }
 
-    /// Returns the step count of the range.
-    pub fn step_count(&self) -> usize
+    /// Maps the range to a new range with a different type.
+    pub fn map<F, U>(self, mut f: F) -> RangeByStepSizeInclusive<U>
     where
-        T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
+        F: FnMut(T) -> U,
+        U: Copy + Clone,
     {
-        let step_size = self.0.step_size_or_count.cast();
-        let start = self.0.start.cast();
-        let stop = self.0.stop.cast();
-        (((stop - start) / step_size).ceil() as usize).min(2)
+        RangeByStepSizeInclusive(RangeInner {
+            start: f(self.start),
+            stop: f(self.stop),
+            step_size_or_count: f(self.step_size_or_count),
+        })
     }
+}
 
+impl<T> RangeByStepSizeInclusive<T>
+where
+    T: Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Mul<Output = T>
+        + NumericCast<f32>
+        + Ord
+        + Copy
+        + Clone,
+{
     /// Returns all possible values of the range.
     pub fn values(&self) -> impl Iterator<Item = T>
     where
-        T: Add<Output = T>
-            + Sub<Output = T>
-            + Div<Output = T>
-            + Mul<Output = T>
-            + NumericCast<f32>
-            + Ord,
         usize: NumericCast<T>,
     {
         let step_size = self.0.step_size_or_count;
@@ -196,6 +186,19 @@ impl<T: Copy + Clone> RangeByStepSizeInclusive<T> {
         let stop = self.0.stop;
         let step_count = self.step_count();
         (0..step_count).map(move |i| std::cmp::min(start + step_size * i.cast(), stop))
+    }
+}
+
+impl<T> RangeByStepSizeInclusive<T>
+where
+    T: Sub<Output = T> + NumericCast<f32> + Copy + Clone,
+{
+    /// Returns the step count of the range.
+    pub fn step_count(&self) -> usize {
+        let step_size = self.0.step_size_or_count.cast();
+        let start = self.0.start.cast();
+        let stop = self.0.stop.cast();
+        (((stop - start) / step_size).ceil() as usize).min(2)
     }
 }
 
@@ -210,6 +213,10 @@ impl<T: Copy + Clone> Deref for RangeByStepSizeExclusive<T> {
     type Target = RangeInner<T, T>;
 
     fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<T: Copy + Clone> DerefMut for RangeByStepSizeExclusive<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
 impl<T: Copy + Clone + Debug> Debug for RangeByStepSizeExclusive<T> {
@@ -238,23 +245,46 @@ impl<T: Copy + Clone> RangeByStepSizeExclusive<T> {
     /// Returns the step size of the range.
     pub const fn step_size_mut(&mut self) -> &mut T { &mut self.0.step_size_or_count }
 
-    /// Returns the step count of the exclusive range.
-    pub const fn step_count(&self) -> usize
+    /// Maps the range to a new range with a different type.
+    pub fn map<F, U>(self, mut f: F) -> RangeByStepSizeInclusive<U>
     where
-        T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
+        F: FnMut(T) -> U,
+        U: Copy + Clone,
     {
+        RangeByStepSizeInclusive(RangeInner {
+            start: f(self.start),
+            stop: f(self.stop),
+            step_size_or_count: f(self.step_size_or_count),
+        })
+    }
+}
+
+impl<T> RangeByStepSizeExclusive<T>
+where
+    T: Div<Output = T> + Sub<Output = T> + NumericCast<f32> + Copy + Clone,
+{
+    /// Returns the step count of the exclusive range.
+    pub const fn step_count(&self) -> usize {
         let step_size = self.0.step_size_or_count.cast();
         let start = self.0.start.cast();
         let stop = self.0.stop.cast();
         ((stop - start) / step_size).ceil() as usize
     }
-
+}
+impl<T> RangeByStepSizeExclusive<T>
+where
+    T: Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Mul<Output = T>
+        + NumericCast<f32>
+        + Copy
+        + Clone,
+    usize: NumericCast<T>,
+{
     /// Returns all possible values of the range.
     pub fn values(&self) -> impl Iterator<Item = T>
-    where
-        T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
-        usize: NumericCast<T>,
-    {
+where {
         let step_size = self.0.step_size_or_count;
         let start = self.0.start;
         let step_count = self.step_count();
@@ -498,6 +528,12 @@ where
 }
 
 impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
+    /// Returns the step count of the range.
+    pub fn step_count(&self) -> usize {
+        ((self.span() / self.step_size_or_count).ceil() as usize).min(2)
+    }
+
+    // TODO: Add tests
     /// Returns the number of steps in this range of angles.
     /// If the range's stop value is the same as the start value after wrapping
     /// it to the range [0, 2π), the range is considered to be a full circle.
@@ -505,11 +541,20 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         let start = self.start.to_radians().value;
         let stop = self.stop.to_radians().value;
         let step_size = self.0.step_size_or_count.to_radians().value;
+        let span = stop - start;
         if math::wrap_angle_to_tau_exclusive(stop) == math::wrap_angle_to_tau_exclusive(start) {
-            ((stop - start) / step_size).ceil() as usize
+            (span / step_size).ceil() as usize
         } else {
-            (((stop - start) / step_size).ceil() as usize).min(2)
+            ((span / step_size).ceil() as usize).min(2)
         }
+    }
+
+    /// Returns the index of the angle in the range of the measurement.
+    ///
+    /// The index of the bin is determined by testing if the angle falls
+    /// inside half of the bin width from the bin boundary.
+    pub fn index_of(&self, angle: Radians) -> usize {
+        ((angle - self.start) / self.step_size()).round() as usize % self.step_count() as usize
     }
 }
 
@@ -526,6 +571,10 @@ impl<T: Copy + Clone> Deref for RangeByStepCountInclusive<T> {
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
+impl<T: Copy + Clone> DerefMut for RangeByStepCountInclusive<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
 impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
     pub const fn new(start: T, stop: T, step_count: usize) -> Self {
         Self(RangeInner {
@@ -540,26 +589,30 @@ impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
 
     /// Returns the number of steps in this range.
     pub const fn step_count_mut(&mut self) -> &mut usize { &mut self.step_size_or_count }
+}
 
+impl<T> RangeByStepCountInclusive<T>
+where
+    T: Div<Output = T> + Sub<Output = T> + NumericCast<f32> + Copy + Clone,
+    f32: NumericCast<T>,
+{
+    /// Returns the step size of this range.
+    pub fn step_size(&self) -> T {
+        (self.span().cast() / (self.step_size_or_count as f32 - 1.0f32)).cast()
+    }
+}
+
+impl<T: Copy + Clone> RangeByStepCountInclusive<T>
+where
+    T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
+    f32: NumericCast<T>,
+    usize: NumericCast<T>,
+{
     /// Returns all possible values in this range.
-    pub fn values(&self) -> impl Iterator<Item = T>
-    where
-        T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
-        f32: NumericCast<T>,
-        usize: NumericCast<T>,
-    {
+    pub fn values(&self) -> impl Iterator<Item = T> {
         let step_size = self.step_size();
         let start = self.0.start;
         (0..self.0.step_size_or_count).map(move |i| start + step_size * i.cast())
-    }
-
-    /// Returns the step size of this range.
-    pub fn step_size(&self) -> T
-    where
-        T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
-        f32: NumericCast<T>,
-    {
-        (self.span().cast() / (self.step_size_or_count as f32 - 1.0f32)).cast()
     }
 }
 
@@ -576,6 +629,10 @@ impl<T: Copy + Clone> Deref for RangeByStepCountExclusive<T> {
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
+impl<T: Copy + Clone> DerefMut for RangeByStepCountExclusive<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
 impl<T: Copy + Clone> RangeByStepCountExclusive<T> {
     pub const fn new(start: T, stop: T, step_count: usize) -> Self {
         Self(RangeInner {
@@ -587,26 +644,28 @@ impl<T: Copy + Clone> RangeByStepCountExclusive<T> {
 
     /// Returns the number of steps in this range.
     pub const fn step_count(&self) -> usize { self.step_size_or_count }
+}
 
+impl<T> RangeByStepCountExclusive<T>
+where
+    T: Div<Output = T> + Sub<Output = T> + Copy + Clone,
+    usize: NumericCast<T>,
+{
+    /// Returns the step size of this range.
+    pub fn step_size(&self) -> T { self.0.span() / self.0.step_size_or_count.cast() }
+}
+
+impl<T: Copy + Clone> RangeByStepCountExclusive<T>
+where
+    T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
+    f32: NumericCast<T>,
+    usize: NumericCast<T>,
+{
     /// Returns all possible values in this range.
-    pub fn values(&self) -> impl Iterator<Item = T>
-    where
-        T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
-        f32: NumericCast<T>,
-        usize: NumericCast<T>,
-    {
+    pub fn values(&self) -> impl Iterator<Item = T> {
         let step_size = self.step_size();
         let start = self.0.start;
         (0..self.0.step_size_or_count).map(move |i| start + step_size * i.cast())
-    }
-
-    /// Returns the step size of this range.
-    pub fn step_size(&self) -> T
-    where
-        T: Div<Output = T> + Sub<Output = T>,
-        usize: NumericCast<T>,
-    {
-        self.0.span() / self.0.step_size_or_count.cast()
     }
 }
 

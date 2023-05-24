@@ -7,8 +7,6 @@ use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
     measure::rtc::Ray,
 };
-#[cfg(feature = "embree")]
-use embree::Config;
 use std::rc::Rc;
 
 use winit::event_loop::EventLoopProxy;

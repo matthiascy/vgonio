@@ -1,6 +1,6 @@
-use crate::{math, ulp_eq};
+use crate::math;
 use egui::{emath::Rot2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::TAU;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AngleKnobWinding {

@@ -511,111 +511,108 @@ pub mod vgms {
 pub mod vgmo {
     use super::*;
     use crate::{
-        measure::{
-            bsdf::BsdfKind,
-            measurement::{
-                BsdfMeasurementParams, MeasurementKind,
-                MicrofacetAreaDistributionMeasurementParams,
-                MicrofacetMaskingShadowingMeasurementParams,
-            },
+        measure::measurement::{
+            BsdfMeasurementParams, MadfMeasurementParams, MeasurementKind, MmsfMeasurementParams,
         },
-        Medium,
+        units::{rad, Radians},
+        RangeByStepSizeInclusive,
     };
     use std::{io::BufWriter, ops::RangeInclusive};
 
-    // TODO: replace with RangeByStepCount or RangeByStepSize
-    /// The range of the angle in the measurement, in radians.
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub struct AngleRange {
-        /// The start angle of the measurement, in radians.
-        pub start: f32,
-        /// The end angle of the measurement, in radians.
-        pub end: f32,
-        /// The number of angle bins of the measurement.
-        pub bin_count: u32,
-        /// The width of each angle bin, in radians.
-        pub bin_width: f32,
-    }
-
-    impl AngleRange {
-        /// Returns all the possible angles as an iterator.
-        pub fn angles(&self) -> impl Iterator<Item = f32> {
-            let start = self.start;
-            let end = self.end;
-            let bin_width = self.bin_width;
-            (0..self.bin_count).map(move |i| (start + bin_width * i as f32).min(end))
-        }
-
-        /// Returns negative values of all the possible angles as an iterator in
-        /// reverse order.
-        pub fn rev_negative_angles(&self) -> impl Iterator<Item = f32> {
-            let start = self.start;
-            let end = self.end;
-            let bin_width = self.bin_width;
-            (0..self.bin_count)
-                .map(move |i| (start - bin_width * i as f32).max(-end))
-                .rev()
-        }
-
-        /// Returns the inclusive range of the angle.
-        pub fn range_inclusive(&self) -> RangeInclusive<f32> { self.start..=self.end }
-
-        /// Returns the index of the angle in the range of the measurement.
-        ///
-        /// The index of the bin is determined by testing if the angle falls
-        /// inside half of the bin width from the bin boundary.
-        pub fn angle_index(&self, angle: f32) -> usize {
-            ((angle - self.start) / self.bin_width).round() as usize % self.bin_count as usize
-        }
-    }
-
-    #[test]
-    fn angle_range() {
-        let range = AngleRange {
-            start: 0.0,
-            end: 90.0,
-            bin_count: 19,
-            bin_width: 5.0,
-        };
-        let angles: Vec<_> = range.angles().collect();
-        assert_eq!(angles.len(), 19);
-        assert_eq!(angles[0], 0.0);
-        assert_eq!(angles[1], 5.0);
-        assert_eq!(angles.last(), Some(&90.0));
-
-        let angles: Vec<_> = range.rev_negative_angles().collect();
-        assert_eq!(angles.len(), 19);
-        assert_eq!(angles[0], -90.0);
-        assert_eq!(angles[1], -85.0);
-        assert_eq!(angles.last(), Some(&0.0));
-    }
-
-    #[test]
-    fn test_angle_index() {
-        let range = AngleRange {
-            start: 0.0,
-            end: 360.0,
-            bin_count: 12,
-            bin_width: 30.0,
-        };
-        assert_eq!(range.angle_index(0.0), 0);
-        assert_eq!(range.angle_index(12.0), 0);
-        assert_eq!(range.angle_index(15.0), 1);
-        assert_eq!(range.angle_index(30.0), 1);
-        assert_eq!(range.angle_index(30.01), 1);
-        assert_eq!(range.angle_index(45.0), 2);
-        assert_eq!(range.angle_index(60.0), 2);
-        assert_eq!(range.angle_index(90.0), 3);
-
-        let range = AngleRange {
-            start: 0.0,
-            end: std::f32::consts::TAU,
-            bin_count: 12,
-            bin_width: 30.0f32.to_radians(),
-        };
-        assert_eq!(range.angle_index(0.0), 0);
-        assert_eq!(range.angle_index(10.0f32.to_radians()), 0);
-    }
+    // // TODO: replace with RangeByStepCount or RangeByStepSize
+    // /// The range of the angle in the measurement, in radians.
+    // #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    // pub struct AngleRange {
+    //     /// The start angle of the measurement, in radians.
+    //     pub start: f32,
+    //     /// The end angle of the measurement, in radians.
+    //     pub end: f32,
+    //     /// The number of angle bins of the measurement.
+    //     pub bin_count: u32,
+    //     /// The width of each angle bin, in radians.
+    //     pub bin_width: f32,
+    // }
+    //
+    // impl AngleRange {
+    //     /// Returns all the possible angles as an iterator.
+    //     pub fn angles(&self) -> impl Iterator<Item = f32> {
+    //         let start = self.start;
+    //         let end = self.end;
+    //         let bin_width = self.bin_width;
+    //         (0..self.bin_count).map(move |i| (start + bin_width * i as
+    // f32).min(end))     }
+    //
+    //     /// Returns negative values of all the possible angles as an iterator in
+    //     /// reverse order.
+    //     pub fn rev_negative_angles(&self) -> impl Iterator<Item = f32> {
+    //         let start = self.start;
+    //         let end = self.end;
+    //         let bin_width = self.bin_width;
+    //         (0..self.bin_count)
+    //             .map(move |i| (start - bin_width * i as f32).max(-end))
+    //             .rev()
+    //     }
+    //
+    //     /// Returns the inclusive range of the angle.
+    //     pub fn range_inclusive(&self) -> RangeInclusive<f32> {
+    // self.start..=self.end }
+    //
+    //     /// Returns the index of the angle in the range of the measurement.
+    //     ///
+    //     /// The index of the bin is determined by testing if the angle falls
+    //     /// inside half of the bin width from the bin boundary.
+    //     pub fn angle_index(&self, angle: f32) -> usize {
+    //         ((angle - self.start) / self.bin_width).round() as usize %
+    // self.bin_count as usize     }
+    // }
+    //
+    // #[test]
+    // fn angle_range() {
+    //     let range = AngleRange {
+    //         start: 0.0,
+    //         end: 90.0,
+    //         bin_count: 19,
+    //         bin_width: 5.0,
+    //     };
+    //     let angles: Vec<_> = range.angles().collect();
+    //     assert_eq!(angles.len(), 19);
+    //     assert_eq!(angles[0], 0.0);
+    //     assert_eq!(angles[1], 5.0);
+    //     assert_eq!(angles.last(), Some(&90.0));
+    //
+    //     let angles: Vec<_> = range.rev_negative_angles().collect();
+    //     assert_eq!(angles.len(), 19);
+    //     assert_eq!(angles[0], -90.0);
+    //     assert_eq!(angles[1], -85.0);
+    //     assert_eq!(angles.last(), Some(&0.0));
+    // }
+    //
+    // #[test]
+    // fn test_angle_index() {
+    //     let range = AngleRange {
+    //         start: 0.0,
+    //         end: 360.0,
+    //         bin_count: 12,
+    //         bin_width: 30.0,
+    //     };
+    //     assert_eq!(range.angle_index(0.0), 0);
+    //     assert_eq!(range.angle_index(12.0), 0);
+    //     assert_eq!(range.angle_index(15.0), 1);
+    //     assert_eq!(range.angle_index(30.0), 1);
+    //     assert_eq!(range.angle_index(30.01), 1);
+    //     assert_eq!(range.angle_index(45.0), 2);
+    //     assert_eq!(range.angle_index(60.0), 2);
+    //     assert_eq!(range.angle_index(90.0), 3);
+    //
+    //     let range = AngleRange {
+    //         start: 0.0,
+    //         end: std::f32::consts::TAU,
+    //         bin_count: 12,
+    //         bin_width: 30.0f32.to_radians(),
+    //     };
+    //     assert_eq!(range.angle_index(0.0), 0);
+    //     assert_eq!(range.angle_index(10.0f32.to_radians()), 0);
+    // }
 
     /// First 8 bytes of the header.
     ///
@@ -634,13 +631,13 @@ pub mod vgmo {
             meta: HeaderMeta,
             bsdf: BsdfMeasurementParams,
         },
-        Adf {
+        Madf {
             meta: HeaderMeta,
-            adf: MicrofacetAreaDistributionMeasurementParams,
+            madf: MadfMeasurementParams,
         },
-        Msf {
+        Mmsf {
             meta: HeaderMeta,
-            msf: MicrofacetMaskingShadowingMeasurementParams,
+            mmsf: MmsfMeasurementParams,
         },
     }
 
@@ -648,8 +645,20 @@ pub mod vgmo {
         pub fn meta(&self) -> &HeaderMeta {
             match self {
                 Self::Bsdf { meta, .. } => meta,
-                Self::Adf { meta, .. } => meta,
-                Self::Msf { meta, .. } => meta,
+                Self::Madf { meta, .. } => meta,
+                Self::Mmsf { meta, .. } => meta,
+            }
+        }
+
+        pub fn sample_count(&self) -> usize {
+            match self {
+                Self::Bsdf { bsdf, .. } => todo!(),
+                Self::Madf { madf, .. } => {
+                    madf.zenith.step_count() * madf.azimuth.step_count_wrapped()
+                }
+                Self::Mmsf { mmsf, .. } => {
+                    mmsf.zenith.step_count() * mmsf.azimuth.step_count_wrapped()
+                }
             }
         }
 
@@ -660,13 +669,13 @@ pub mod vgmo {
                     meta,
                     bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::MicrofacetAreaDistribution => Ok(Self::Adf {
+                MeasurementKind::MicrofacetAreaDistribution => Ok(Self::Madf {
                     meta,
-                    adf: MicrofacetAreaDistributionMeasurementParams::read_from_vgmo(reader)?,
+                    madf: MadfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::MicrofacetMaskingShadowing => Ok(Self::Msf {
+                MeasurementKind::MicrofacetMaskingShadowing => Ok(Self::Mmsf {
                     meta,
-                    msf: MicrofacetMaskingShadowingMeasurementParams::read_from_vgmo(reader)?,
+                    mmsf: MmsfMeasurementParams::read_from_vgmo(reader)?,
                 }),
             }
         }
@@ -676,11 +685,11 @@ pub mod vgmo {
                 Self::Bsdf { meta, bsdf } => {
                     meta.write(writer).and_then(|_| bsdf.write_to_vgmo(writer))
                 }
-                Self::Adf { meta, adf } => {
-                    meta.write(writer).and_then(|_| adf.write_to_vgmo(writer))
+                Self::Madf { meta, madf } => {
+                    meta.write(writer).and_then(|_| madf.write_to_vgmo(writer))
                 }
-                Self::Msf { meta, msf } => {
-                    meta.write(writer).and_then(|_| msf.write_to_vgmo(writer))
+                Self::Mmsf { meta, mmsf } => {
+                    meta.write(writer).and_then(|_| mmsf.write_to_vgmo(writer))
                 }
             }
         }
@@ -720,51 +729,94 @@ pub mod vgmo {
         }
     }
 
-    /// Header of the VGMO file
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub struct AdfMsfHeader {
-        pub azimuth_range: AngleRange,
-        pub zenith_range: AngleRange,
-        pub sample_count: u32,
+    fn read_madf_mmsf_params_from_vgmo<R: Read>(
+        reader: &mut BufReader<R>,
+    ) -> Result<
+        (
+            RangeByStepSizeInclusive<Radians>,
+            RangeByStepSizeInclusive<Radians>,
+        ),
+        std::io::Error,
+    > {
+        let mut buf = [0u8; 40];
+        reader.read_exact(&mut buf)?;
+        let azimuth = RangeByStepSizeInclusive::new(
+            rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap())),
+            rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap())),
+            rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap())),
+        );
+        assert_eq!(
+            azimuth.step_count() as u32,
+            u32::from_le_bytes(buf[12..16].try_into().unwrap())
+        );
+        let zenith = RangeByStepSizeInclusive::new(
+            rad!(f32::from_le_bytes(buf[16..20].try_into().unwrap())),
+            rad!(f32::from_le_bytes(buf[20..24].try_into().unwrap())),
+            rad!(f32::from_le_bytes(buf[24..28].try_into().unwrap())),
+        );
+        assert_eq!(
+            zenith.step_count() as u32,
+            u32::from_le_bytes(buf[28..32].try_into().unwrap())
+        );
+        let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
+        assert_eq!(
+            sample_count as usize,
+            azimuth.step_count() * zenith.step_count()
+        );
+        Ok((azimuth, zenith))
     }
 
-    impl AdfMsfHeader {
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; 40];
-            reader.read_exact(&mut buf)?;
-            let azimuth_range = AngleRange {
-                start: f32::from_le_bytes(buf[0..4].try_into().unwrap()),
-                end: f32::from_le_bytes(buf[4..8].try_into().unwrap()),
-                bin_width: f32::from_le_bytes(buf[8..12].try_into().unwrap()),
-                bin_count: u32::from_le_bytes(buf[12..16].try_into().unwrap()),
-            };
-            let zenith_range = AngleRange {
-                start: f32::from_le_bytes(buf[16..20].try_into().unwrap()),
-                end: f32::from_le_bytes(buf[20..24].try_into().unwrap()),
-                bin_width: f32::from_le_bytes(buf[24..28].try_into().unwrap()),
-                bin_count: u32::from_le_bytes(buf[28..32].try_into().unwrap()),
-            };
-            let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
+    pub fn write_madf_mmsf_params_to_vgmo<W: Write>(
+        azimuth: &RangeByStepSizeInclusive<Radians>,
+        zenith: &RangeByStepSizeInclusive<Radians>,
+        writer: &mut BufWriter<W>,
+    ) -> Result<(), WriteFileErrorKind> {
+        let mut header = [0x20; 40];
+        header[0..4].copy_from_slice(&azimuth.start.value.to_le_bytes());
+        header[4..8].copy_from_slice(&azimuth.stop.value.to_le_bytes());
+        header[8..12].copy_from_slice(&azimuth.step_size().value.to_le_bytes());
+        header[12..16].copy_from_slice(&azimuth.step_count_wrapped().to_le_bytes());
+        header[16..20].copy_from_slice(&zenith.start.value.to_le_bytes());
+        header[20..24].copy_from_slice(&zenith.stop.value.to_le_bytes());
+        header[24..28].copy_from_slice(&zenith.step_size().value.to_le_bytes());
+        header[28..32].copy_from_slice(&zenith.step_count().to_le_bytes());
+        header[32..36].copy_from_slice(
+            &((zenith.step_count() * azimuth.step_count_wrapped()) as u32).to_le_bytes(),
+        );
+        header[39] = 0x0A; // LF
+        writer.write_all(&header).map_err(|err| err.into())
+    }
+
+    impl MadfMeasurementParams {
+        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(reader)?;
+            Ok(Self { azimuth, zenith })
+        }
+
+        pub fn write_to_vgmo<W: Write>(
+            &self,
+            writer: &mut BufWriter<W>,
+        ) -> Result<(), WriteFileErrorKind> {
+            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer)
+        }
+    }
+
+    impl MmsfMeasurementParams {
+        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(reader)?;
             Ok(Self {
-                azimuth_range,
-                zenith_range,
-                sample_count,
+                azimuth,
+                zenith,
+                resolution: 512,
             })
         }
 
-        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            let mut header = [0x20; 40];
-            header[0..4].copy_from_slice(&self.azimuth_range.start.to_le_bytes());
-            header[4..8].copy_from_slice(&self.azimuth_range.end.to_le_bytes());
-            header[8..12].copy_from_slice(&self.azimuth_range.bin_width.to_le_bytes());
-            header[12..16].copy_from_slice(&self.azimuth_range.bin_count.to_le_bytes());
-            header[16..20].copy_from_slice(&self.zenith_range.start.to_le_bytes());
-            header[20..24].copy_from_slice(&self.zenith_range.end.to_le_bytes());
-            header[24..28].copy_from_slice(&self.zenith_range.bin_width.to_le_bytes());
-            header[28..32].copy_from_slice(&self.zenith_range.bin_count.to_le_bytes());
-            header[32..36].copy_from_slice(&self.sample_count.to_le_bytes());
-            header[39] = 0x0A; // LF
-            writer.write_all(&header).map_err(|err| err.into())
+        pub fn write_to_vgmo<W: Write>(
+            &self,
+            writer: &mut BufWriter<W>,
+        ) -> Result<(), WriteFileErrorKind> {
+            // TODO: write resolution for MMSF
+            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer)
         }
     }
 
@@ -790,12 +842,25 @@ pub mod vgmo {
         samples: &[f32],
     ) -> Result<(), WriteFileErrorKind> {
         header.write(writer)?;
+        let zenith_bin_count = match header {
+            Header::Bsdf { .. } => {
+                todo!()
+            }
+            Header::Madf {
+                madf: MadfMeasurementParams { zenith, .. },
+                ..
+            }
+            | Header::Mmsf {
+                mmsf: MmsfMeasurementParams { zenith, .. },
+                ..
+            } => zenith.step_count(),
+        };
         write_data_samples(
             writer,
             header.meta().encoding,
             header.meta().compression,
             samples,
-            header.zenith_range.bin_count,
+            zenith_bin_count as u32,
         )
         .map_err(|err| err.into())
     }
@@ -805,13 +870,13 @@ pub mod vgmo {
     /// Returns the header and the measurement samples.
     pub fn read<R: Read>(
         reader: &mut BufReader<R>,
-    ) -> Result<(AdfMsfHeader, Vec<f32>), ReadFileErrorKind> {
-        let header = AdfMsfHeader::read(reader)?;
+    ) -> Result<(Header, Vec<f32>), ReadFileErrorKind> {
+        let header = Header::read(reader)?;
         let samples = read_data_samples(
             reader,
-            header.sample_count as usize,
-            header.encoding,
-            header.compression,
+            header.sample_count() as usize,
+            header.meta().encoding,
+            header.meta().compression,
         )?;
         Ok((header, samples))
     }

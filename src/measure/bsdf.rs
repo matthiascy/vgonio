@@ -6,7 +6,7 @@ use crate::{
     measure::Patch,
     msurf::MicroSurface,
     units::Nanometres,
-    RangeByStepSizeExclusive,
+    RangeByStepSizeInclusive,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -335,26 +335,24 @@ pub fn measure_bsdf_optix_rt(
 
 /// Structure to sample over a spectrum.
 pub(crate) struct SpectrumSampler {
-    range: RangeByStepSizeExclusive<Nanometres>,
-    num_samples: usize,
+    range: RangeByStepSizeInclusive<Nanometres>,
 }
 
-impl From<RangeByStepSizeExclusive<Nanometres>> for SpectrumSampler {
-    fn from(range: RangeByStepSizeExclusive<Nanometres>) -> Self {
-        let num_samples = ((range.stop - range.start) / range.step_size) as usize + 1;
-        Self { range, num_samples }
-    }
+impl From<RangeByStepSizeInclusive<Nanometres>> for SpectrumSampler {
+    fn from(range: RangeByStepSizeInclusive<Nanometres>) -> Self { Self { range } }
 }
 
 impl SpectrumSampler {
     /// Returns the nth wavelength of the spectrum.
     pub fn nth_sample(&self, n: usize) -> Nanometres {
-        self.range.start + self.range.step_size * n as f32
+        self.range.start + *self.range.step_size() * n as f32
     }
 
     /// Returns the spectrum's whole wavelength range.
     pub fn samples(&self) -> Vec<Nanometres> {
-        (0..self.num_samples).map(|i| self.nth_sample(i)).collect()
+        (0..self.range.step_count())
+            .map(|i| self.nth_sample(i))
+            .collect()
     }
 }
 

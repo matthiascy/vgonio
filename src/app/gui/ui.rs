@@ -1,31 +1,24 @@
-use super::{simulation::SimulationWorkspace, state::GuiRenderer, VgonioEvent};
+use super::{state::GuiRenderer, VgonioEvent};
 use crate::{
     app::{
-        cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
             gizmo::NavigationGizmo,
-            icons,
             icons::Icon,
             outliner::Outliner,
             tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
-            DebuggingInspector, VgonioGuiApp,
+            DebuggingInspector,
         },
         Config,
     },
     error::Error,
-    msurf::MicroSurface,
 };
 use egui::NumExt;
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use glam::Mat4;
 use std::{
-    cell::RefCell,
-    collections::{
-        hash_map::{Entry, OccupiedEntry},
-        HashMap,
-    },
+    collections::HashMap,
     fmt::Write,
     ops::Deref,
     sync::{Arc, Mutex},

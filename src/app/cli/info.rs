@@ -5,8 +5,8 @@ use crate::{
     },
     error::Error,
     measure::measurement::{
-        BsdfMeasurementParams, Measurement, MeasurementKindDescription,
-        MicrofacetAreaDistributionMeasurementParams, MicrofacetMaskingShadowingMeasurementParams,
+        BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementKindDescription,
+        MmsfMeasurementParams,
     },
 };
 use std::{
@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
 };
 
-impl Display for MicrofacetAreaDistributionMeasurementParams {
+impl Display for MadfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -22,17 +22,17 @@ impl Display for MicrofacetAreaDistributionMeasurementParams {
              polar angle    : {} ~ {} per {}, {} bins\n",
             self.azimuth.start.prettified(),
             self.azimuth.stop.prettified(),
-            self.azimuth.step_size.prettified(),
-            self.azimuth_step_count_inclusive(),
+            self.azimuth.step_size().prettified(),
+            self.azimuth.step_count_wrapped(),
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
-            self.zenith.step_size.prettified(),
-            self.zenith_step_count_inclusive()
+            self.zenith.step_size().prettified(),
+            self.zenith.step_count(),
         )
     }
 }
 
-impl Display for MicrofacetMaskingShadowingMeasurementParams {
+impl Display for MmsfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -40,12 +40,12 @@ impl Display for MicrofacetMaskingShadowingMeasurementParams {
              bins\n    - polar angle    : {} ~ {} per {}, {} bins\n    - resolution     : {} x {}",
             self.azimuth.start.prettified(),
             self.azimuth.stop.prettified(),
-            self.azimuth.step_size.prettified(),
-            self.azimuth_step_count_inclusive(),
+            self.azimuth.step_size().prettified(),
+            self.azimuth.step_count_wrapped(),
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
-            self.zenith.step_size.prettified(),
-            self.zenith_step_count_inclusive(),
+            self.zenith.step_size().prettified(),
+            self.zenith.step_count(),
             self.resolution,
             self.resolution
         )
@@ -82,11 +82,11 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         println!(
             "Microfacet distribution default parameters:\n\n{}",
-            MicrofacetAreaDistributionMeasurementParams::default()
+            MadfMeasurementParams::default()
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
-            MicrofacetMaskingShadowingMeasurementParams::default()
+            MmsfMeasurementParams::default()
         );
         // TODO: print default parameters for brdf measurement (prettified
         // version)
@@ -96,18 +96,14 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
-                desc: MeasurementKindDescription::Madf(
-                    MicrofacetAreaDistributionMeasurementParams::default(),
-                ),
+                desc: MeasurementKindDescription::Madf(MadfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                desc: MeasurementKindDescription::Mmsf(
-                    MicrofacetMaskingShadowingMeasurementParams::default(),
-                ),
+                desc: MeasurementKindDescription::Mmsf(MmsfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
