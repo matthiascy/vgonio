@@ -1,14 +1,18 @@
-use crate::math::NumericCast;
+use crate::{
+    math,
+    math::NumericCast,
+    units::{Angle, AngleUnit},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
-    ops::{Deref, Div, Sub},
+    ops::{Add, Deref, Div, Mul, Sub},
     str::FromStr,
 };
 
 /// Defines a range of values with a given step size or count.
-struct RangeInner<T, U> {
+pub struct RangeInner<T, U> {
     /// Initial value of the range.
     pub start: T,
     /// Final value of the range.
@@ -60,11 +64,24 @@ impl<T: PartialEq, U: PartialEq> PartialEq for RangeInner<T, U> {
 impl<T: PartialEq + Eq, U: PartialEq + Eq> Eq for RangeInner<T, U> {}
 
 impl<T, U> RangeInner<T, U> {
-    /// Returns the initial value of the range.
-    pub const fn start(&self) -> &T { &self.start }
-
-    /// Returns the final value of the range.
-    pub const fn stop(&self) -> &T { &self.stop }
+    // /// Returns the initial value of the range.
+    // pub const fn start(&self) -> &T { &self.start }
+    //
+    // /// Returns the initial value of the range.
+    // pub const fn start_mut(&mut self) -> &mut T { &mut self.start }
+    //
+    // /// Returns the final value of the range.
+    // pub const fn stop(&self) -> &T { &self.stop }
+    //
+    // /// Returns the final value of the range.
+    // pub const fn stop_mut(&mut self) -> &mut T { &mut self.stop }
+    //
+    // /// Returns the step size or count.
+    // pub const fn step_size_or_count(&self) -> &U { &self.step_size_or_count }
+    //
+    // /// Returns the step size or count.
+    // pub const fn step_size_or_count_mut(&mut self) -> &mut U { &mut
+    // self.step_size_or_count }
 
     /// Returns the span of the range.
     pub const fn span(&self) -> T
@@ -73,13 +90,6 @@ impl<T, U> RangeInner<T, U> {
     {
         self.stop - self.start
     }
-
-    /// Returns all possible values in the range, including the start and stop
-    /// values.
-    pub fn values_inclusive(&self) -> impl Iterator<Item = T> { todo!() }
-
-    /// Returns all possible values in the range, excluding the stop value.
-    pub fn values_exclusive(&self) -> impl Iterator<Item = T> { todo!() }
 
     /// Returns the range as a `std::ops::Range`.
     pub fn range_bound(&self) -> std::ops::Range<T> { self.start..self.stop }
@@ -123,103 +133,165 @@ impl<T, U> From<RangeInner<T, U>> for (T, T, U) {
 /// The range is always inclusive, even if the step size does not divide the
 /// range evenly.
 #[derive(Clone, Copy, Default, PartialEq)]
-pub struct RangeByStepSizeInclusive<T: Copy + Clone> {
-    inner: RangeInner<T, T>,
-}
+pub struct RangeByStepSizeInclusive<T: Copy + Clone>(RangeInner<T, T>);
 
 impl<T: Copy + Clone> Eq for RangeByStepSizeInclusive<T> where T: PartialEq + Eq {}
 
 impl<T: Copy + Clone> Deref for RangeByStepSizeInclusive<T> {
     type Target = RangeInner<T, T>;
 
-    fn deref(&self) -> &Self::Target { &self.inner }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-macro impl_range_by_step_size_common_methods($self:ident, $T:ident) {
-    /// Create a new range.
-    pub const fn new(start: $T, stop: $T, step_size: $T) -> Self {
-        Self {
-            inner: RangeInner {
-                start,
-                stop,
-                step_size_or_count: step_size,
-            },
-        }
+impl<T: Copy + Clone + Debug> Debug for RangeByStepSizeInclusive<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RangeByStepSizeInclusive")
+            .field("start", &self.start)
+            .field("stop", &self.stop)
+            .field("step_size", &self.step_size_or_count)
+            .finish()
     }
-
-    /// Returns the step size of the range.
-    pub const fn step_size(&self) -> &$T { &self.inner.step_size_or_count }
 }
 
 impl<T: Copy + Clone> RangeByStepSizeInclusive<T> {
-    impl_range_by_step_size_common_methods!(self, T);
+    /// Creates a new range with the given start, stop and step size.
+    pub const fn new(start: T, stop: T, step_size: T) -> Self {
+        Self(RangeInner {
+            start,
+            stop,
+            step_size_or_count: step_size,
+        })
+    }
+
+    /// Returns the step size of the range.
+    pub const fn step_size(&self) -> &T { &self.0.step_size_or_count }
+
+    /// Returns the step size of the range.
+    pub const fn step_size_mut(&mut self) -> &mut T { &mut self.0.step_size_or_count }
 
     /// Returns the step count of the range.
     pub fn step_count(&self) -> usize
     where
         T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
     {
-        let step_size = self.inner.step_size_or_count.cast();
-        let start = self.inner.start.cast();
-        let stop = self.inner.stop.cast();
+        let step_size = self.0.step_size_or_count.cast();
+        let start = self.0.start.cast();
+        let stop = self.0.stop.cast();
         (((stop - start) / step_size).ceil() as usize).min(2)
+    }
+
+    /// Returns all possible values of the range.
+    pub fn values(&self) -> impl Iterator<Item = T>
+    where
+        T: Add<Output = T>
+            + Sub<Output = T>
+            + Div<Output = T>
+            + Mul<Output = T>
+            + NumericCast<f32>
+            + Ord,
+        usize: NumericCast<T>,
+    {
+        let step_size = self.0.step_size_or_count;
+        let start = self.0.start;
+        let stop = self.0.stop;
+        let step_count = self.step_count();
+        (0..step_count).map(move |i| std::cmp::min(start + step_size * i.cast(), stop))
     }
 }
 
 /// Defines a left inclusive, right exclusive range [a, b) of values with a
 /// given step.
-#[derive(Debug, Copy, Clone, Default, PartialEq)]
-pub struct RangeByStepSizeExclusive<T: Copy + Clone> {
-    inner: RangeInner<T, T>,
-}
+#[derive(Copy, Clone, Default, PartialEq)]
+pub struct RangeByStepSizeExclusive<T: Copy + Clone>(RangeInner<T, T>);
 
 impl<T: Copy + Clone> Eq for RangeByStepSizeExclusive<T> where T: PartialEq + Eq {}
 
-impl<T: Copy + Clone> RangeByStepSizeExclusive<T> {
-    impl_range_by_step_size_common_methods!(self, T);
+impl<T: Copy + Clone> Deref for RangeByStepSizeExclusive<T> {
+    type Target = RangeInner<T, T>;
 
-    /// Returns the step count of the exclusive range.
-    pub fn step_count(&self) -> usize
-    where
-        T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
-    {
-        let step_size = self.inner.step_size_or_count.cast();
-        let start = self.inner.start.cast();
-        let stop = self.inner.stop.cast();
-        ((stop - start) / step_size).ceil() as usize
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<T: Copy + Clone + Debug> Debug for RangeByStepSizeExclusive<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RangeByStepSizeExclusive")
+            .field("start", &self.start)
+            .field("stop", &self.stop)
+            .field("step_size", &self.step_size_or_count)
+            .finish()
     }
 }
 
-macro impl_display_serialisation($($t:ident<$tp:ident>, $string:literal, $symbol:literal);*) {
+impl<T: Copy + Clone> RangeByStepSizeExclusive<T> {
+    /// Creates a new range with the given start, stop and step size.
+    pub const fn new(start: T, stop: T, step_size: T) -> Self {
+        Self(RangeInner {
+            start,
+            stop,
+            step_size_or_count: step_size,
+        })
+    }
+
+    /// Returns the step size of the range.
+    pub const fn step_size(&self) -> &T { &self.0.step_size_or_count }
+
+    /// Returns the step size of the range.
+    pub const fn step_size_mut(&mut self) -> &mut T { &mut self.0.step_size_or_count }
+
+    /// Returns the step count of the exclusive range.
+    pub const fn step_count(&self) -> usize
+    where
+        T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
+    {
+        let step_size = self.0.step_size_or_count.cast();
+        let start = self.0.start.cast();
+        let stop = self.0.stop.cast();
+        ((stop - start) / step_size).ceil() as usize
+    }
+
+    /// Returns all possible values of the range.
+    pub fn values(&self) -> impl Iterator<Item = T>
+    where
+        T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
+        usize: NumericCast<T>,
+    {
+        let step_size = self.0.step_size_or_count;
+        let start = self.0.start;
+        let step_count = self.step_count();
+        (0..step_count).map(move |i| start + step_size * i.cast())
+    }
+}
+
+macro impl_display_serialisation($($t:ident<$T:ident>, $string:literal, $open_symbol:literal, $split_char:literal, $step_type:ident);*) {
     $(
-        impl<$tp> Display for $t<$tp>
+        impl<$T> Display for $t<$T>
         where
-            $tp: Display + Copy,
+            $T: Display + Copy + Clone,
         {
             fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 write!(
                     f,
                     stringify!($string),
-                    self.inner.start, self.inner.stop, self.inner.step_size_or_count
+                    self.0.start, self.0.stop, self.0.step_size_or_count
                 )
             }
         }
 
-        impl<$tp> Serialize for $t<$tp>
+        impl<$T> Serialize for $t<$T>
         where
-            $tp: Serialize + Copy + Display,
+            $T: Serialize + Copy + Display + Clone,
         {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: serde::Serializer,
             {
-                serializer.serialize_str(&format!(stringify!($string), self.start, self.stop, self.step_size))
+                serializer.serialize_str(&format!(stringify!($string), self.0.start, self.0.stop, self.0.step_size_or_count))
             }
         }
 
-        impl<'a, $tp> TryFrom<&'a str> for RangeByStepSizeInclusive<$tp>
+        impl<'a, $T> TryFrom<&'a str> for $t<$T>
         where
-            $tp: Copy + FromStr,
+            $T: Copy + Clone + FromStr,
         {
             type Error = String;
 
@@ -229,50 +301,50 @@ macro impl_display_serialisation($($t:ident<$tp:ident>, $string:literal, $symbol
                     .next()
                     .ok_or_else(|| format!("Invalid range: {value}"))?
                     .trim_matches('[')
-                    .parse::<$tp>()
+                    .parse::<$T>()
                     .map_err(|_| format!("Invalid range start value: {value}"))?;
                 let mut parts = parts
                     .next()
                     .ok_or_else(|| format!("Invalid range: {value}"))?
                     .trim()
-                    .split('/');
+                    .split($split_char);
                 let stop = parts
                     .next()
                     .ok_or_else(|| format!("Invalid range: {value}"))?
-                    .trim_end_matches($symbol)
-                    .parse::<$tp>()
+                    .trim_end_matches($open_symbol)
+                    .parse::<$T>()
                     .map_err(|_| format!("Invalid range stop value: {value}"))?;
                 let step_size = parts
                     .next()
                     .ok_or_else(|| format!("Invalid range: {value}"))?
                     .trim()
-                    .parse::<$tp>()
-                    .map_err(|_| format!("Invalid range step size value: {value}"))?;
+                    .parse::<$step_type>()
+                    .map_err(|_| format!("Invalid range step size/count value: {value}"))?;
                 Ok(Self::new(start, stop, step_size))
             }
         }
 
-        impl<'d, $tp> Deserialize<'d> for $t<$tp>
+        impl<'d, $T> Deserialize<'d> for $t<$T>
         where
-            $tp: Deserialize<'d> + Copy + FromStr,
+            $T: Deserialize<'d> + Copy + FromStr + Clone,
         {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
                 D: serde::Deserializer<'d>,
             {
-                struct RangeByStepSizeVisitor<$tp>(std::marker::PhantomData<$tp>);
+                struct RangeVisitor<$T>(std::marker::PhantomData<$T>);
 
-                impl<'de, $tp> serde::de::Visitor<'de> for RangeByStepSizeVisitor<$tp>
+                impl<'de, $T> serde::de::Visitor<'de> for RangeVisitor<$T>
                 where
-                    $tp: Copy + Deserialize<'de> + FromStr,
+                    $T: Copy + Deserialize<'de> + FromStr,
                 {
-                    type Value = RangeByStepSize<$tp>;
+                    type Value = $t<$T>;
 
                     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                         write!(
                             formatter,
-                            "a range by step size in the form of '[start, stop{} / step",
-                            stringify!($symbol)
+                            "a range by step size in the form of '[start, stop{} {} step",
+                            stringify!($open_symbol), stringify!($split_char)
                         )
                     }
 
@@ -280,41 +352,39 @@ macro impl_display_serialisation($($t:ident<$tp:ident>, $string:literal, $symbol
                     where
                         E: serde::de::Error,
                     {
-                        $t::<$tp>::try_from(v).map_err(|e| E::custom(e))
+                        $t::<$T>::try_from(v).map_err(|e| E::custom(e))
                     }
                 }
-                deserializer.deserialize_str(RangeByStepSizeVisitor::<$tp>(core::marker::PhantomData))
+                deserializer.deserialize_str(RangeVisitor::<$T>(core::marker::PhantomData))
             }
         }
     )*
 }
 
-impl_display_serialisation!(RangeByStepSizeExclusive<T>, "[{}, {}) / {}", ')'; RangeByStepSizeInclusive<T>, "[{}, {}] / {}", ']');
+impl_display_serialisation!(RangeByStepSizeExclusive<T>, "[{}, {}) / {}", ')', '/', T; RangeByStepSizeInclusive<T>, "[{}, {}] / {}", ']', '/', T);
 
 /// Defines a range from a start value to a stop value with a given step size.
 ///
 /// Left of the range is always inclusive, right of the range can be inclusive
 /// or exclusive.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum RangeByStepSize<T> {
+#[derive(Copy, Clone, PartialEq)]
+pub enum RangeByStepSize<T: Copy + Clone> {
     Inclusive(RangeByStepSizeInclusive<T>),
     Exclusive(RangeByStepSizeExclusive<T>),
 }
 
-impl<T> Deref for RangeByStepSize<T> {
-    type Target = RangeInner<T, T>;
-
-    fn deref(&self) -> &Self::Target {
+impl<T: Copy + Clone + Debug> Debug for RangeByStepSize<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            RangeByStepSize::Inclusive(range) => &range.inner,
-            RangeByStepSize::Exclusive(range) => &range.inner,
+            RangeByStepSize::Inclusive(range) => write!(f, "{:?}", range),
+            RangeByStepSize::Exclusive(range) => write!(f, "{:?}", range),
         }
     }
 }
 
 impl<T> Serialize for RangeByStepSize<T>
 where
-    T: Serialize + Copy + Display,
+    T: Serialize + Copy + Clone + Display,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -427,148 +497,207 @@ where
     }
 }
 
-// ------
-
-macro impl_step_count_for_range_by_step_size($self:ident) {{
-    #[cfg(debug_assertions)]
-    assert!(
-        $self.step_size.value() > 0.0,
-        "step_size must not be greater than 0.0"
-    );
-    let count = $self.span() / $self.step_size;
-    if count == 0.0 {
-        1
-    } else {
-        count.ceil() as usize
-    }
-}}
-
-impl<A: AngleUnit> RangeByStepSizeExclusive<Angle<A>> {
+impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// Returns the number of steps in this range of angles.
-    pub fn step_count(&self) -> usize { impl_step_count_for_range_by_step_size!(self) }
+    /// If the range's stop value is the same as the start value after wrapping
+    /// it to the range [0, 2π), the range is considered to be a full circle.
+    pub const fn step_count_wrapped(&self) -> usize {
+        let start = self.start.to_radians().value;
+        let stop = self.stop.to_radians().value;
+        let step_size = self.0.step_size_or_count.to_radians().value;
+        if math::wrap_angle_to_tau_exclusive(stop) == math::wrap_angle_to_tau_exclusive(start) {
+            ((stop - start) / step_size).ceil() as usize
+        } else {
+            (((stop - start) / step_size).ceil() as usize).min(2)
+        }
+    }
 }
 
-impl<A: LengthMeasurement> RangeByStepSizeExclusive<Length<A>> {
-    /// Returns the number of steps in this range of lengths.
-    pub fn step_count(&self) -> usize { impl_step_count_for_range_by_step_size!(self) }
+/// Defines a left inclusive, right inclusive range [a, b] of values with a
+/// given number of steps.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct RangeByStepCountInclusive<T: Copy + Clone>(RangeInner<T, usize>);
+
+impl<T: Copy + Clone> Eq for RangeByStepCountInclusive<T> where T: PartialEq + Eq {}
+
+impl<T: Copy + Clone> Deref for RangeByStepCountInclusive<T> {
+    type Target = RangeInner<T, usize>;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
+    pub const fn new(start: T, stop: T, step_count: usize) -> Self {
+        Self(RangeInner {
+            start,
+            stop,
+            step_size_or_count: step_count,
+        })
+    }
+
+    /// Returns the number of steps in this range.
+    pub const fn step_count(&self) -> &usize { &self.step_size_or_count }
+
+    /// Returns the number of steps in this range.
+    pub const fn step_count_mut(&mut self) -> &mut usize { &mut self.step_size_or_count }
+
+    /// Returns all possible values in this range.
+    pub fn values(&self) -> impl Iterator<Item = T>
+    where
+        T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
+        f32: NumericCast<T>,
+        usize: NumericCast<T>,
+    {
+        let step_size = self.step_size();
+        let start = self.0.start;
+        (0..self.0.step_size_or_count).map(move |i| start + step_size * i.cast())
+    }
+
+    /// Returns the step size of this range.
+    pub fn step_size(&self) -> T
+    where
+        T: Div<Output = T> + Sub<Output = T> + NumericCast<f32>,
+        f32: NumericCast<T>,
+    {
+        (self.span().cast() / (self.step_size_or_count as f32 - 1.0f32)).cast()
+    }
 }
 
 /// Defines a left inclusive, right exclusive range [a, b) of values with a
 /// given number of steps.
-#[derive(Debug, Copy, Clone)]
-pub struct RangeByStepCountExclusive<T: Copy + Clone> {
-    /// Initial value of the range.
-    pub start: T,
-
-    /// Final value of the range.
-    pub stop: T,
-
-    /// Number of samples.
-    pub step_count: usize,
-}
-
-impl<T: Copy + Clone> PartialEq for RangeByStepCountExclusive<T>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start && self.stop == other.stop && self.step_count == other.step_count
-    }
-}
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
+pub struct RangeByStepCountExclusive<T: Copy + Clone>(RangeInner<T, usize>);
 
 impl<T: Copy + Clone> Eq for RangeByStepCountExclusive<T> where T: PartialEq + Eq {}
 
+impl<T: Copy + Clone> Deref for RangeByStepCountExclusive<T> {
+    type Target = RangeInner<T, usize>;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
 impl<T: Copy + Clone> RangeByStepCountExclusive<T> {
-    /// Create a new range.
-    pub fn new(start: T, stop: T, step_count: usize) -> Self {
-        Self {
+    pub const fn new(start: T, stop: T, step_count: usize) -> Self {
+        Self(RangeInner {
             start,
             stop,
-            step_count,
+            step_size_or_count: step_count,
+        })
+    }
+
+    /// Returns the number of steps in this range.
+    pub const fn step_count(&self) -> usize { self.step_size_or_count }
+
+    /// Returns all possible values in this range.
+    pub fn values(&self) -> impl Iterator<Item = T>
+    where
+        T: Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + NumericCast<f32>,
+        f32: NumericCast<T>,
+        usize: NumericCast<T>,
+    {
+        let step_size = self.step_size();
+        let start = self.0.start;
+        (0..self.0.step_size_or_count).map(move |i| start + step_size * i.cast())
+    }
+
+    /// Returns the step size of this range.
+    pub fn step_size(&self) -> T
+    where
+        T: Div<Output = T> + Sub<Output = T>,
+        usize: NumericCast<T>,
+    {
+        self.0.span() / self.0.step_size_or_count.cast()
+    }
+}
+
+impl_display_serialisation!(RangeByStepCountExclusive<T>, "[{}, {}) | {}", ')', '|', usize; RangeByStepCountInclusive<T>, "[{}, {}] | {}", ']', '|', usize);
+
+/// Defines a range of values with a given number of steps.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum RangeByStepCount<T: Copy + Clone> {
+    Inclusive(RangeByStepCountInclusive<T>),
+    Exclusive(RangeByStepCountExclusive<T>),
+}
+
+impl<T> Serialize for RangeByStepCount<T>
+where
+    T: Serialize + Copy + Clone + Display,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            RangeByStepCount::Inclusive(range) => range.serialize(serializer),
+            RangeByStepCount::Exclusive(range) => range.serialize(serializer),
         }
     }
 }
 
-impl<T: Copy> From<(T, T, usize)> for RangeByStepCountExclusive<T> {
-    fn from(vals: (T, T, usize)) -> Self {
-        Self {
-            start: vals.0,
-            stop: vals.1,
-            step_count: vals.2,
-        }
-    }
-}
-
-impl<T: Copy> From<RangeByStepCountExclusive<T>> for (T, T, usize) {
-    fn from(range: RangeByStepCountExclusive<T>) -> Self {
-        (range.start, range.stop, range.step_count)
-    }
-}
-
-impl<T: Default + Copy> Default for RangeByStepCountExclusive<T> {
-    fn default() -> Self {
-        Self {
-            start: T::default(),
-            stop: T::default(),
-            step_count: 1,
-        }
-    }
-}
-
-impl<'a, T> TryFrom<&'a str> for RangeByStepCountExclusive<T>
+impl<'a, T> TryFrom<&'a str> for RangeByStepCount<T>
 where
     T: Copy + FromStr,
 {
     type Error = String;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut parts = value.split('~');
+        let mut parts = value.split(',');
         let start = parts
             .next()
             .ok_or_else(|| format!("Invalid range: {value}"))?
-            .trim()
+            .trim_matches('[')
             .parse::<T>()
             .map_err(|_| format!("Invalid range start value: {value}"))?;
         let mut parts = parts
             .next()
             .ok_or_else(|| format!("Invalid range: {value}"))?
-            .split(',');
-        let stop = parts
+            .trim()
+            .split('|');
+        let stop_str = parts
             .next()
             .ok_or_else(|| format!("Invalid range: {value}"))?
-            .trim()
-            .parse::<T>()
-            .map_err(|_| format!("Invalid range stop value: {value}"))?;
+            .trim();
         let step_count = parts
             .next()
             .ok_or_else(|| format!("Invalid range: {value}"))?
             .trim()
             .parse::<usize>()
-            .map_err(|_| format!("Invalid range step count: {value}"))?;
-        Ok(Self {
-            start,
-            stop,
-            step_count,
-        })
+            .map_err(|_| format!("Invalid range step size value: {value}"))?;
+
+        match stop_str.chars().last() {
+            None => {
+                return Err(format!("Invalid range stop value: {value}"));
+            }
+            Some(s) => {
+                match s {
+                    ']' => {
+                        // Inclusive
+                        let stop = stop_str[..stop_str.len() - 1]
+                            .parse::<T>()
+                            .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                        Ok(Self::Inclusive(RangeByStepCountInclusive::new(
+                            start, stop, step_count,
+                        )))
+                    }
+                    ')' => {
+                        // Exclusive
+                        let stop = stop_str[..stop_str.len() - 1]
+                            .parse::<T>()
+                            .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                        Ok(Self::Exclusive(RangeByStepCountExclusive::new(
+                            start, stop, step_count,
+                        )))
+                    }
+                    _ => {
+                        return Err(format!("Invalid range stop value: {value}"));
+                    }
+                }
+            }
+        }
     }
 }
 
-impl<T> Serialize for RangeByStepCountExclusive<T>
-where
-    T: Copy + Serialize + Display,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!(
-            "{} ~ {}, {}",
-            self.start, self.stop, self.step_count
-        ))
-    }
-}
-
-impl<'d, T> Deserialize<'d> for RangeByStepCountExclusive<T>
+impl<'d, T> Deserialize<'d> for RangeByStepCount<T>
 where
     T: Deserialize<'d> + Copy + FromStr,
 {
@@ -582,13 +711,13 @@ where
         where
             T: Copy + Deserialize<'de> + FromStr,
         {
-            type Value = RangeByStepCountExclusive<T>;
+            type Value = RangeByStepCount<T>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(
                     formatter,
-                    "a range by step size in the from of 'start to stop per
-step'"
+                    "a range by step size in the form of '[start, stop] | step or '[start, stop) \
+                     | step'"
                 )
             }
 
@@ -596,24 +725,104 @@ step'"
             where
                 E: serde::de::Error,
             {
-                RangeByStepCountExclusive::<T>::try_from(v).map_err(|e| E::custom(e))
+                RangeByStepCount::<T>::try_from(v).map_err(|e| E::custom(e))
             }
         }
         deserializer.deserialize_str(RangeByStepCountVisitor::<T>(core::marker::PhantomData))
     }
 }
 
-impl RangeByStepCountExclusive<f32> {
-    /// Returns the step between two consecutive values in the range.
-    #[inline]
-    pub fn step_size(&self) -> f32 { self.span() / self.step_count as f32 }
+/// Defines a range of values either by a step size or by a step count.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum SteppedRange<T: Copy + Clone> {
+    ByStepSize(RangeByStepSize<T>),
+    ByStepCount(RangeByStepCount<T>),
 }
 
-impl<A: LengthMeasurement> RangeByStepCountExclusive<Length<A>> {
-    /// Returns the size of the step bewteen two consecutive values in the
-    /// range.
-    #[inline]
-    pub fn step_size(&self) -> Length<A> { self.span() / self.step_count as f32 }
+impl<T> Serialize for SteppedRange<T>
+where
+    T: Serialize + Copy + Clone + Display,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            SteppedRange::ByStepSize(range) => range.serialize(serializer),
+            SteppedRange::ByStepCount(range) => range.serialize(serializer),
+        }
+    }
+}
+
+impl<'a, T> TryFrom<&'a str> for SteppedRange<T>
+where
+    T: Copy + FromStr,
+{
+    type Error = String;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        if value.contains('|') {
+            Ok(Self::ByStepCount(RangeByStepCount::try_from(value)?))
+        } else {
+            Ok(Self::ByStepSize(RangeByStepSize::try_from(value)?))
+        }
+    }
+}
+
+impl<'d, T> Deserialize<'d> for SteppedRange<T>
+where
+    T: Deserialize<'d> + Copy + FromStr,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'d>,
+    {
+        struct SteppedRangeVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<'de, T> serde::de::Visitor<'de> for SteppedRangeVisitor<T>
+        where
+            T: Copy + Deserialize<'de> + FromStr,
+        {
+            type Value = SteppedRange<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(
+                    formatter,
+                    "a range by step size in the form of '[start, stop] | step_count', '[start, \
+                     stop) | step_count', '[start, stop) / step_size' or '[start, stop] / \
+                     step_size'"
+                )
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                SteppedRange::<T>::try_from(v).map_err(|e| E::custom(e))
+            }
+        }
+        deserializer.deserialize_str(SteppedRangeVisitor::<T>(core::marker::PhantomData))
+    }
+}
+
+#[cfg(test)]
+mod range_by_step_count_inclusive_tests {
+    use super::*;
+
+    #[test]
+    fn test_step_size() {
+        let range = RangeByStepCountInclusive::new(0, 10, 3);
+        assert_eq!(range.step_size(), 3);
+
+        let range = RangeByStepCountInclusive::new(0, 10, 4);
+        assert_eq!(range.step_size(), 2);
+
+        let range = RangeByStepCountInclusive::new(0, 10, 5);
+        assert_eq!(range.step_size(), 2);
+
+        let range = RangeByStepCountInclusive::new(1.0, 13.0, 6);
+        assert_eq!(range.step_size(), 2.0);
+    }
 }
 
 #[test]
@@ -648,87 +857,4 @@ fn range_by_step_count_try_from_str_with_angle() {
     assert_eq!(range.start, radians!(0.0));
     assert_eq!(range.stop, radians!(1.0));
     assert_eq!(range.step_count, 4);
-}
-
-pub enum RangeByStepCount<T> {
-    Inclusive(RangeByStepCountInclusive<T>),
-    Exclusive(RangeByStepCountExclusive<T>),
-}
-
-pub enum SteppedRange<T> {
-    ByStepSize(RangeByStepSize<T>),
-    ByStepCount(RangeByStepCount<T>),
-}
-
-/// Defines a inclusive range [a, b] of values with a given step count.
-#[derive(Clone, Copy, Default, PartialEq)]
-pub struct RangeByStepCountInclusive<T: Copy + Clone> {
-    inner: RangeInner<T, usize>,
-}
-
-impl<T: Copy + Clone> Eq for RangeByStepCountInclusive<T> where T: PartialEq + Eq {}
-
-impl<T: Copy + Clone> Deref for RangeByStepCountInclusive<T> {
-    type Target = RangeInner<T, usize>;
-
-    fn deref(&self) -> &Self::Target { &self.inner }
-}
-
-impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
-    /// Create a new range.
-    pub const fn new(start: T, stop: T, step_count: usize) -> Self {
-        Self {
-            inner: RangeInner {
-                start,
-                stop,
-                step_size_or_count: step_count,
-            },
-        }
-    }
-
-    /// Returns the step count of the range.
-    pub const fn step_count(&self) -> usize { self.inner.step_size_or_count }
-
-    /// Returns the step size of the range.
-    pub fn step_size(&self) -> T
-    where
-        T: Div<Output = T> + Sub<Output = T>,
-        usize: NumericCast<T>,
-    {
-        let step_size = (self.inner.stop - self.inner.start) / self.inner.step_size_or_count.cast();
-        step_size
-    }
-}
-
-impl<T> Display for RangeByStepCountInclusive<T>
-where
-    T: Display + Copy,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "[{}, {}], {}",
-            self.inner.start, self.inner.stop, self.inner.step_size_or_count
-        )
-    }
-}
-
-#[cfg(test)]
-mod range_by_step_count_inclusive_tests {
-    use super::*;
-
-    #[test]
-    fn test_step_size() {
-        let range = RangeByStepCountInclusive::new(0, 10, 3);
-        assert_eq!(range.step_size(), 3);
-
-        let range = RangeByStepCountInclusive::new(0, 10, 4);
-        assert_eq!(range.step_size(), 2);
-
-        let range = RangeByStepCountInclusive::new(0, 10, 5);
-        assert_eq!(range.step_size(), 2);
-
-        let range = RangeByStepCountInclusive::new(1.0, 13.0, 6);
-        assert_eq!(range.step_size(), 2.0);
-    }
 }
