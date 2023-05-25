@@ -117,7 +117,7 @@ impl SimulationPanel {
             });
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, _ui: &mut egui::Ui) {
         // TODO:
         // egui::Grid::new("simulation_pane_grid")
         //     .num_columns(2)
@@ -526,7 +526,7 @@ impl SimulationWorkspace {
                     .show(ui, |ui| {
                         ui.label("Scale factor:");
                         {
-                            let res = ui.add(egui::Slider::new(
+                            let _res = ui.add(egui::Slider::new(
                                 &mut self.surface_scale_factor,
                                 0.05..=1.2,
                             ));

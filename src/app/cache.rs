@@ -421,7 +421,7 @@ impl Cache {
         match self.resolve_path(path, config) {
             None => Err(Error::Any("Failed to load measurement data!".to_string())),
             Some(filepath) => {
-                if let Some((hdl, data)) = self
+                if let Some((hdl, _)) = self
                     .measurements_data
                     .iter()
                     .find(|(_, d)| d.source.path() == Some(&filepath))

@@ -5,6 +5,7 @@ use crate::{
         Plottable, PlottingMode,
     },
     math,
+    math::NumericCast,
     measure::measurement::MeasurementData,
     units::{rad, Radians},
     RangeByStepSizeInclusive,
@@ -96,13 +97,13 @@ impl PlottingInspector {
         text: &str,
     ) {
         if ui.button(text).clicked() {
-            let opposite = math::calculate_opposite_angle(initial);
+            let opposite = math::calculate_opposite_angle(initial.value);
             println!(
                 "initial = {}, index = {} | opposite = {}, index = {}",
                 initial.to_degrees(),
                 range.index_of(initial),
                 opposite.to_degrees(),
-                range.index_of(opposite),
+                range.index_of(opposite.into()),
             );
         }
     }
@@ -149,17 +150,17 @@ impl Tool for PlottingInspector {
                     .as_any()
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
-                let zenith_bin_width_rad = *measured.zenith.step_size();
+                let zenith_bin_width_rad = measured.zenith.step_size().cast();
                 ui.allocate_ui_with_layout(
                     Vec2::new(ui.available_width(), 48.0),
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label("microfacet normal: ");
-                        let mut opposite = math::calculate_opposite_angle(self.azimuth_m);
+                        let mut opposite = math::calculate_opposite_angle(self.azimuth_m.value);
                         PlottingInspector::angle_knob(
                             ui,
                             false,
-                            &mut opposite.value,
+                            &mut opposite,
                             measured.azimuth.map(|x| x.value).range_bound_inclusive(),
                             measured.azimuth.step_size().value,
                             48.0,
@@ -190,19 +191,19 @@ impl Tool for PlottingInspector {
                     let data_opposite_part = opposite.map(|data| {
                         data.iter()
                             .rev()
-                            .zip(measured.zenith.values().map(|x| x.value * -1.0).rev())
-                            .map(|(y, x)| [x as f64, *y as f64])
+                            .zip(measured.zenith.values_rev().map(|x| -x))
+                            .map(|(y, x)| [x.value as f64, *y as f64])
                     });
 
                     let data_starting_part = starting
                         .iter()
-                        .zip(measured.zenith.angles())
-                        .map(|(y, x)| [x as f64, *y as f64]);
+                        .zip(measured.zenith.values())
+                        .map(|(y, x)| [x.value as f64, *y as f64]);
 
                     match data_opposite_part {
                         None => data_starting_part.collect(),
                         Some(opposite) => opposite
-                            .take(measured.zenith.bin_count as usize - 1)
+                            .take(measured.zenith.step_count() - 1)
                             .chain(data_starting_part)
                             .collect(),
                     }
@@ -298,7 +299,7 @@ impl Tool for PlottingInspector {
                     .as_any()
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
-                let zenith_bin_width_rad = measured.zenith.bin_width;
+                let zenith_bin_width_rad = measured.zenith.step_size().value;
                 ui.allocate_ui_with_layout(
                     Vec2::new(ui.available_width(), 48.0),
                     egui::Layout::left_to_right(Align::Center),
@@ -307,18 +308,18 @@ impl Tool for PlottingInspector {
                         PlottingInspector::angle_knob(
                             ui,
                             true,
-                            &mut self.zenith_m,
-                            measured.zenith.range_inclusive(),
-                            measured.zenith.bin_width as _,
+                            &mut self.zenith_m.value,
+                            measured.zenith.range_bound_inclusive_f32(),
+                            measured.zenith.step_size().value,
                             48.0,
                             |v| format!("θ = {:>6.2}°", v.to_degrees()),
                         );
                         PlottingInspector::angle_knob(
                             ui,
                             true,
-                            &mut self.azimuth_m,
-                            measured.azimuth.range_inclusive(),
-                            measured.azimuth.bin_width,
+                            &mut self.azimuth_m.value,
+                            measured.azimuth.range_bound_inclusive_f32(),
+                            measured.azimuth.step_size().value,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -343,22 +344,22 @@ impl Tool for PlottingInspector {
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label("incident direction: ");
-                        let mut opposite = math::calculate_opposite_angle(self.azimuth_i);
+                        let mut opposite = math::calculate_opposite_angle(self.azimuth_i.value);
                         PlottingInspector::angle_knob(
                             ui,
                             false,
                             &mut opposite,
-                            measured.azimuth.range_inclusive(),
-                            measured.azimuth.bin_width,
+                            measured.azimuth.range_bound_inclusive_f32(),
+                            measured.azimuth.step_size().value,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
                         PlottingInspector::angle_knob(
                             ui,
                             true,
-                            &mut self.azimuth_i,
-                            measured.azimuth.range_inclusive(),
-                            measured.azimuth.bin_width,
+                            &mut self.azimuth_i.value,
+                            measured.azimuth.range_bound_inclusive_f32(),
+                            measured.azimuth.step_size().value,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -372,23 +373,26 @@ impl Tool for PlottingInspector {
                     },
                 );
                 let data: Vec<_> = {
-                    let (starting, opposite) =
-                        measured.msf_data_slice(self.azimuth_m, self.zenith_m, self.azimuth_i);
+                    let (starting, opposite) = measured.msf_data_slice(
+                        self.azimuth_m.value,
+                        self.zenith_m.value,
+                        self.azimuth_i.value,
+                    );
                     let data_opposite_part = opposite.map(|data| {
                         data.iter()
                             .rev()
-                            .zip(measured.zenith.rev_negative_angles())
-                            .map(|(y, x)| [x as f64, *y as f64])
+                            .zip(measured.zenith.values_rev().map(|v| -v))
+                            .map(|(y, x)| [x.value as f64, *y as f64])
                     });
                     let data_starting_part = starting
                         .iter()
-                        .zip(measured.zenith.angles())
-                        .map(|(y, x)| [x as f64, *y as f64]);
+                        .zip(measured.zenith.values())
+                        .map(|(y, x)| [x.value as f64, *y as f64]);
 
                     match data_opposite_part {
                         None => data_starting_part.collect(),
                         Some(opposite) => opposite
-                            .take(measured.zenith.bin_count as usize - 1)
+                            .take(measured.zenith.step_count() as usize - 1)
                             .chain(data_starting_part)
                             .collect(),
                     }

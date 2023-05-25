@@ -711,7 +711,7 @@ impl MeasurementData {
                         azimuth, zenith, ..
                     },
             } => Ok(MeasurementData {
-                kind: header.meta().kind,
+                kind: meta.kind,
                 azimuth,
                 zenith,
                 source: MeasurementDataSource::Loaded(path),
@@ -739,14 +739,15 @@ impl MeasurementData {
     pub fn adf_data_slice(&self, azimuth_m: f32) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         let azimuth_m = crate::math::wrap_angle_to_tau_exclusive(azimuth_m);
-        let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
+        let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
         let opposite_azimuth_m = math::calculate_opposite_angle(azimuth_m);
-        let opposite_index =
-            if self.azimuth.start <= opposite_azimuth_m && opposite_azimuth_m <= self.azimuth.end {
-                Some(self.azimuth.angle_index(opposite_azimuth_m))
-            } else {
-                None
-            };
+        let opposite_index = if self.azimuth.start.value <= opposite_azimuth_m
+            && opposite_azimuth_m <= self.azimuth.stop.value
+        {
+            Some(self.azimuth.index_of(opposite_azimuth_m.into()))
+        } else {
+            None
+        };
         (
             self.adf_data_slice_inner(azimuth_m_idx),
             opposite_index.map(|index| self.adf_data_slice_inner(index)),
@@ -758,11 +759,11 @@ impl MeasurementData {
     pub fn adf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         debug_assert!(
-            azimuth_idx < self.azimuth.bin_count as usize,
+            azimuth_idx < self.azimuth.step_count(),
             "index out of range"
         );
-        &self.data[azimuth_idx * self.zenith.bin_count as usize
-            ..(azimuth_idx + 1) * self.zenith.bin_count as usize]
+        &self.data
+            [azimuth_idx * self.zenith.step_count()..(azimuth_idx + 1) * self.zenith.step_count()]
     }
 
     /// Returns the Masking Shadowing Function data slice for the given
@@ -784,17 +785,18 @@ impl MeasurementData {
         );
         let azimuth_m = math::wrap_angle_to_tau_exclusive(azimuth_m);
         let azimuth_i = math::wrap_angle_to_tau_exclusive(azimuth_i);
-        let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.end);
-        let azimuth_m_idx = self.azimuth.angle_index(azimuth_m);
-        let zenith_m_idx = self.zenith.angle_index(zenith_m);
-        let azimuth_i_idx = self.azimuth.angle_index(azimuth_i);
+        let zenith_m = zenith_m.clamp(self.zenith.start.value, self.zenith.stop.value);
+        let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
+        let zenith_m_idx = self.zenith.index_of(zenith_m.into());
+        let azimuth_i_idx = self.azimuth.index_of(azimuth_i.into());
         let opposite_azimuth_i = math::calculate_opposite_angle(azimuth_i);
-        let opposite_azimuth_i_idx =
-            if self.azimuth.start <= opposite_azimuth_i && opposite_azimuth_i <= self.azimuth.end {
-                Some(self.azimuth.angle_index(opposite_azimuth_i))
-            } else {
-                None
-            };
+        let opposite_azimuth_i_idx = if self.azimuth.start.value <= opposite_azimuth_i
+            && opposite_azimuth_i <= self.azimuth.stop.value
+        {
+            Some(self.azimuth.index_of(opposite_azimuth_i.into()))
+        } else {
+            None
+        };
         (
             self.msf_data_slice_inner(azimuth_m_idx, zenith_m_idx, azimuth_i_idx),
             opposite_azimuth_i_idx
@@ -812,22 +814,22 @@ impl MeasurementData {
     ) -> &[f32] {
         debug_assert!(self.kind == MeasurementKind::MicrofacetMaskingShadowing);
         debug_assert!(
-            azimuth_m_idx < self.azimuth.bin_count as usize,
+            azimuth_m_idx < self.azimuth.step_count(),
             "index out of range"
         );
         debug_assert!(
-            azimuth_i_idx < self.azimuth.bin_count as usize,
+            azimuth_i_idx < self.azimuth.step_count(),
             "index out of range"
         );
         debug_assert!(
-            zenith_m_idx < self.zenith.bin_count as usize,
+            zenith_m_idx < self.zenith.step_count(),
             "index out of range"
         );
-        let zenith_bin_count = self.zenith.bin_count as usize;
-        let azimuth_bin_count = self.azimuth.bin_count as usize;
+        let zenith_bin_count = self.zenith.step_count();
+        let azimuth_bin_count = self.azimuth.step_count();
         let offset = azimuth_m_idx * zenith_bin_count * azimuth_bin_count * zenith_bin_count
             + zenith_m_idx * azimuth_bin_count * zenith_bin_count
             + azimuth_i_idx * zenith_bin_count;
-        &self.data[offset..offset + self.zenith.bin_count as usize]
+        &self.data[offset..offset + self.zenith.step_count()]
     }
 }

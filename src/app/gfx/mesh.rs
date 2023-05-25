@@ -61,7 +61,7 @@ impl RenderableMesh {
         let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
         Self {
-            uuid: Uuid::new_v4(),
+            uuid: id,
             msurf: Some(surf.uuid),
             vertices_count: vertices_count as u32,
             indices_count: indices_count as u32,

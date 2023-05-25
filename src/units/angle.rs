@@ -105,6 +105,9 @@ impl<A: AngleUnit> Angle<A> {
     #[inline(always)]
     pub const fn is_positive(&self) -> bool { self.value > 0.0 }
 
+    /// Returns the minimum of the two angles.
+    pub fn min(&self, other: Self) -> Self { Self::new(self.value.min(other.value)) }
+
     /// Prints the angle in human readable format in degrees.
     #[inline]
     pub fn prettified(&self) -> String {
@@ -346,8 +349,12 @@ impl<A: AngleUnit> core::ops::Neg for Angle<A> {
 
 super::impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
 
-impl NumericCast<Angle<URadian>> for usize {
+impl const NumericCast<Angle<URadian>> for usize {
     fn cast(&self) -> Angle<URadian> { Angle::new(*self as f32) }
+}
+
+impl<A: AngleUnit> const NumericCast<f32> for Angle<A> {
+    fn cast(&self) -> f32 { self.value }
 }
 
 #[cfg(test)]

@@ -517,7 +517,7 @@ pub mod vgmo {
         units::{rad, Radians},
         RangeByStepSizeInclusive,
     };
-    use std::{io::BufWriter, ops::RangeInclusive};
+    use std::io::BufWriter;
 
     // // TODO: replace with RangeByStepCount or RangeByStepSize
     // /// The range of the angle in the measurement, in radians.

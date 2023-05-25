@@ -1568,14 +1568,7 @@ pub fn measure_masking_shadowing(
         }
 
         results.push(MicrofacetMaskingShadowing {
-            azimuth_start: desc.azimuth.start,
-            azimuth_stop: desc.azimuth.stop,
-            azimuth_bin_width: desc.azimuth.step_size,
-            zenith_start: desc.zenith.start,
-            zenith_stop: desc.zenith.stop,
-            zenith_bin_size: desc.zenith.step_size,
-            azimuth_bins_count_inclusive: desc.azimuth_step_count_inclusive(),
-            zenith_bins_count_inclusive: desc.zenith_step_count_inclusive(),
+            params: desc,
             samples: measurement,
         });
     }

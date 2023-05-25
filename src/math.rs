@@ -1,6 +1,6 @@
 use crate::{
     ulp_eq,
-    units::{rad, radians, Radians},
+    units::{radians, Radians},
     Handedness, SphericalCoord,
 };
 use cfg_if::cfg_if;
@@ -8,13 +8,14 @@ pub use glam::*;
 use std::f32::consts::{PI, TAU};
 
 /// Trait for converting from one primitive numeric type to another.
+#[const_trait]
 pub trait NumericCast<T> {
     fn cast(&self) -> T;
 }
 
 macro impl_as_primitive($t0:ty as $($t1:ty),*) {
     $(
-        impl NumericCast<$t1> for $t0 {
+        impl const NumericCast<$t1> for $t0 {
             fn cast(&self) -> $t1 {
                 *self as $t1
             }
@@ -422,9 +423,7 @@ pub const fn wrap_angle_to_tau_inclusive(angle: f32) -> f32 {
 /// Returns the opposite angle of the given angle in radians.
 ///
 /// The returned angle is always within the range [0, 2π).
-pub const fn calculate_opposite_angle(angle: Radians) -> Radians {
-    rad!(wrap_angle_to_tau_exclusive(angle.value + PI))
-}
+pub const fn calculate_opposite_angle(angle: f32) -> f32 { wrap_angle_to_tau_exclusive(angle + PI) }
 
 #[test]
 fn test_wrap_angle_to_tau_exclusive() {

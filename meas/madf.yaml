@@ -1,7 +1,7 @@
 ---
 type: !microfacet-area-distribution-function # !madf
-  azimuth: 0 rad ~ 360 deg / 30 deg
-  zenith: 0 rad ~ 90 deg / 2 deg
+  azimuth: [0 rad, 360 deg] / 30 deg
+  zenith: [0 rad, 90 deg] / 2 deg
 surfaces:
   - usr://surfaces/Aluminium65bar100.txt
 #  - usr://surfaces/AluminiumMirror.txt
