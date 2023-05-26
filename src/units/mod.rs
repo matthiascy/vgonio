@@ -32,25 +32,6 @@ macro impl_ops {
             )*
         }
     },
-    // ($($op:ident),* for $t:ident where A, B: $unit_trait:ident => $output:ty) => {
-    //     paste::paste! {
-    //         $(
-    //             impl<A: $unit_trait, B: $unit_trait> core::ops::$op<$t<B>> for $t<A>
-    //             where $t<A>: From<$t<B>>
-    //             {
-    //                 type Output = $output;
-    //
-    //                 fn [<$op:lower>](self, rhs: $t<B>) -> Self::Output {
-    //                     let rhs: $t<A> = rhs.into();
-    //                     $t {
-    //                         value: self.value.[<$op:lower>](rhs.value),
-    //                         unit: core::marker::PhantomData,
-    //                     }
-    //                 }
-    //             }
-    //         )*
-    //     }
-    // }
 }
 
 macro impl_ops_with_f32($($op:ident),* for $t:ident where A: $unit_trait:ident) {

@@ -117,15 +117,15 @@ impl Emitter {
 
     /// All possible measurement positions of the emitter.
     pub fn meas_points(&self) -> Vec<SphericalCoord> {
-        let n_zenith = (self.zenith.span() / *self.zenith.step_size()).ceil() as usize;
-        let n_azimuth = (self.azimuth.span() / *self.azimuth.step_size()).ceil() as usize;
+        let n_zenith = (self.zenith.span() / self.zenith.step_size).ceil() as usize;
+        let n_azimuth = (self.azimuth.span() / self.azimuth.step_size).ceil() as usize;
 
         (0..n_zenith)
             .flat_map(|i_theta| {
                 (0..n_azimuth).map(move |i_phi| SphericalCoord {
                     radius: 1.0,
-                    zenith: self.zenith.start + i_theta as f32 * *self.zenith.step_size(),
-                    azimuth: self.azimuth.start + i_phi as f32 * *self.azimuth.step_size(),
+                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
+                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
                 })
             })
             .collect()

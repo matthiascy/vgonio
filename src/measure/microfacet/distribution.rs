@@ -99,9 +99,9 @@ pub fn measure_area_distribution(
             }
             let surface = surface.as_ref().unwrap();
             let macro_area = surface.macro_surface_area();
-            let solid_angle = units::solid_angle_of_spherical_cap(*desc.zenith.step_size()).value();
+            let solid_angle = units::solid_angle_of_spherical_cap(desc.zenith.step_size).value();
             let divisor = macro_area * solid_angle;
-            let half_zenith_bin_size_cos = (*desc.zenith.step_size() / 2.0).cos();
+            let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
             log::debug!("-- macro surface area: {}", macro_area);
             log::debug!("-- solid angle per measurement: {}", solid_angle);
             let samples = (0..desc.azimuth.step_count_wrapped())
@@ -110,8 +110,8 @@ pub fn measure_area_distribution(
                     // hemisphere. The center of the zenith/azimuth bin are at the zenith/azimuth
                     // angle calculated below.
                     (0..desc.zenith.step_count()).map(move |zenith_idx| {
-                        let azimuth = azimuth_idx as f32 * *desc.azimuth.step_size();
-                        let zenith = zenith_idx as f32 * *desc.zenith.step_size();
+                        let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
+                        let zenith = zenith_idx as f32 * desc.zenith.step_size;
                         let dir = math::spherical_to_cartesian(
                             1.0,
                             zenith,

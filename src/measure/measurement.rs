@@ -6,7 +6,6 @@ use crate::{
     },
     io,
     io::vgmo::Header,
-    math,
     measure::{
         bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
         RtcMethod,
@@ -192,8 +191,8 @@ impl BsdfMeasurementParams {
         }
 
         if !(emitter.radius().is_valid()
-            && *emitter.zenith.step_size() > rad!(0.0)
-            && *emitter.azimuth.step_size() > rad!(0.0))
+            && emitter.zenith.step_size > rad!(0.0)
+            && emitter.azimuth.step_size > rad!(0.0))
         {
             return Err(Error::InvalidEmitter(
                 "emitter's radius, zenith step size and azimuth step size must be positive",
@@ -340,7 +339,7 @@ impl MadfMeasurementParams {
                 "Microfacet distribution measurement: zenith angle must be in the range [0°, 90°]",
             ));
         }
-        if !(*self.azimuth.step_size() > rad!(0.0) && *self.zenith.step_size() > rad!(0.0)) {
+        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
             return Err(Error::InvalidParameter(
                 "Microfacet distribution measurement: azimuth and zenith step sizes must be \
                  positive!",
@@ -376,7 +375,7 @@ impl MmsfMeasurementParams {
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
     pub fn measurement_location_count(&self) -> usize {
-        self.azimuth.step_count_wrapped() * self.zenith.step_count()
+        self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
     }
 
     // /// Returns the number of samples that will be taken along the zenith angle.
@@ -421,7 +420,7 @@ impl MmsfMeasurementParams {
                  90°]",
             ));
         }
-        if !(*self.azimuth.step_size() > rad!(0.0) && *self.zenith.step_size() > rad!(0.0)) {
+        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
             return Err(Error::InvalidParameter(
                 "Microfacet shadowing-masking measurement: azimuth and zenith step sizes must be \
                  positive!",
@@ -741,10 +740,10 @@ impl MeasurementData {
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
         let opposite_azimuth_m = azimuth_m.opposite();
-        let opposite_index = if self.azimuth.start.value <= opposite_azimuth_m
-            && opposite_azimuth_m <= self.azimuth.stop.value
+        let opposite_index = if self.azimuth.start <= opposite_azimuth_m
+            && opposite_azimuth_m <= self.azimuth.stop
         {
-            Some(self.azimuth.index_of(opposite_azimuth_m.into()))
+            Some(self.azimuth.index_of(opposite_azimuth_m))
         } else {
             None
         };
@@ -759,11 +758,11 @@ impl MeasurementData {
     pub fn adf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         debug_assert!(
-            azimuth_idx < self.azimuth.step_count(),
+            azimuth_idx < self.azimuth.step_count_wrapped(),
             "index out of range"
         );
-        &self.data
-            [azimuth_idx * self.zenith.step_count()..(azimuth_idx + 1) * self.zenith.step_count()]
+        &self.data[azimuth_idx * self.zenith.step_count_wrapped()
+            ..(azimuth_idx + 1) * self.zenith.step_count_wrapped()]
     }
 
     /// Returns the Masking Shadowing Function data slice for the given
@@ -785,15 +784,15 @@ impl MeasurementData {
         );
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_i = azimuth_i.wrap_to_tau();
-        let zenith_m = zenith_m.clamp(self.zenith.start.value, self.zenith.stop.value);
-        let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
-        let zenith_m_idx = self.zenith.index_of(zenith_m.into());
-        let azimuth_i_idx = self.azimuth.index_of(azimuth_i.into());
+        let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.stop);
+        let azimuth_m_idx = self.azimuth.index_of(azimuth_m);
+        let zenith_m_idx = self.zenith.index_of(zenith_m);
+        let azimuth_i_idx = self.azimuth.index_of(azimuth_i);
         let opposite_azimuth_i = azimuth_i.opposite();
-        let opposite_azimuth_i_idx = if self.azimuth.start.value <= opposite_azimuth_i
-            && opposite_azimuth_i <= self.azimuth.stop.value
+        let opposite_azimuth_i_idx = if self.azimuth.start <= opposite_azimuth_i
+            && opposite_azimuth_i <= self.azimuth.stop
         {
-            Some(self.azimuth.index_of(opposite_azimuth_i.into()))
+            Some(self.azimuth.index_of(opposite_azimuth_i))
         } else {
             None
         };
@@ -814,22 +813,22 @@ impl MeasurementData {
     ) -> &[f32] {
         debug_assert!(self.kind == MeasurementKind::MicrofacetMaskingShadowing);
         debug_assert!(
-            azimuth_m_idx < self.azimuth.step_count(),
+            azimuth_m_idx < self.azimuth.step_count_wrapped(),
             "index out of range"
         );
         debug_assert!(
-            azimuth_i_idx < self.azimuth.step_count(),
+            azimuth_i_idx < self.azimuth.step_count_wrapped(),
             "index out of range"
         );
         debug_assert!(
-            zenith_m_idx < self.zenith.step_count(),
+            zenith_m_idx < self.zenith.step_count_wrapped(),
             "index out of range"
         );
-        let zenith_bin_count = self.zenith.step_count();
-        let azimuth_bin_count = self.azimuth.step_count();
+        let zenith_bin_count = self.zenith.step_count_wrapped();
+        let azimuth_bin_count = self.azimuth.step_count_wrapped();
         let offset = azimuth_m_idx * zenith_bin_count * azimuth_bin_count * zenith_bin_count
             + zenith_m_idx * azimuth_bin_count * zenith_bin_count
             + azimuth_i_idx * zenith_bin_count;
-        &self.data[offset..offset + self.zenith.step_count()]
+        &self.data[offset..offset + self.zenith.step_count_wrapped()]
     }
 }

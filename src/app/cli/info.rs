@@ -22,11 +22,11 @@ impl Display for MadfMeasurementParams {
              polar angle    : {} ~ {} per {}, {} bins\n",
             self.azimuth.start.prettified(),
             self.azimuth.stop.prettified(),
-            self.azimuth.step_size().prettified(),
+            self.azimuth.step_size.prettified(),
             self.azimuth.step_count_wrapped(),
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
-            self.zenith.step_size().prettified(),
+            self.zenith.step_size.prettified(),
             self.zenith.step_count(),
         )
     }
@@ -40,11 +40,11 @@ impl Display for MmsfMeasurementParams {
              bins\n    - polar angle    : {} ~ {} per {}, {} bins\n    - resolution     : {} x {}",
             self.azimuth.start.prettified(),
             self.azimuth.stop.prettified(),
-            self.azimuth.step_size().prettified(),
+            self.azimuth.step_size.prettified(),
             self.azimuth.step_count_wrapped(),
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
-            self.zenith.step_size().prettified(),
+            self.zenith.step_size.prettified(),
             self.zenith.step_count(),
             self.resolution,
             self.resolution

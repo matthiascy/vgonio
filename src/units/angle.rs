@@ -29,6 +29,15 @@ pub trait AngleUnit: Debug + Copy + Clone {
 
     /// The conversion factor to degrees.
     const FACTOR_TO_DEG: f32 = 1.0 / Self::FACTOR_FROM_DEG;
+
+    /// The value of 2*PI in the unit.
+    const TAU: f32;
+
+    /// The value of PI in the unit.
+    const PI: f32;
+
+    /// The value of PI/2 in the unit.
+    const FRAC_PI_2: f32;
 }
 
 impl AngleUnit for URadian {
@@ -36,6 +45,9 @@ impl AngleUnit for URadian {
     const SYMBOLS: &'static [&'static str] = &["rad"];
     const FACTOR_FROM_RAD: f32 = 1.0;
     const FACTOR_FROM_DEG: f32 = 1.0 / 180.0 * std::f32::consts::PI;
+    const TAU: f32 = 2.0 * std::f32::consts::PI;
+    const PI: f32 = std::f32::consts::PI;
+    const FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2;
 }
 
 impl AngleUnit for UDegree {
@@ -43,6 +55,9 @@ impl AngleUnit for UDegree {
     const SYMBOLS: &'static [&'static str] = &["deg", "°"];
     const FACTOR_FROM_RAD: f32 = 180.0 / std::f32::consts::PI;
     const FACTOR_FROM_DEG: f32 = 1.0;
+    const TAU: f32 = 360.0;
+    const PI: f32 = 180.0;
+    const FRAC_PI_2: f32 = 90.0;
 }
 
 /// Angle with unit.
@@ -90,6 +105,18 @@ impl<A: AngleUnit> Angle<A> {
     /// Zero angle.
     pub const ZERO: Self = Self::new(0.0);
 
+    /// PI in radians.
+    pub const PI: Self = Self::new(A::PI);
+
+    /// PI/2 in radians.
+    pub const HALF_PI: Self = Self::new(A::FRAC_PI_2);
+
+    /// 2 * PI in radians.
+    pub const TWO_PI: Self = Self::new(A::TAU);
+
+    /// 2 * PI in radians.
+    pub const TAU: Self = Self::new(A::TAU);
+
     /// Create a new angle with unit.
     pub const fn new(value: f32) -> Self {
         Angle {
@@ -113,11 +140,11 @@ impl<A: AngleUnit> Angle<A> {
 
     /// Converts the angle to radians.
     #[inline]
-    pub fn to_radians(&self) -> Angle<URadian> { Angle::new(self.value * A::FACTOR_TO_RAD) }
+    pub const fn to_radians(&self) -> Angle<URadian> { Angle::new(self.value * A::FACTOR_TO_RAD) }
 
     /// Converts the angle to degrees.
     #[inline]
-    pub fn to_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * A::FACTOR_TO_DEG) }
+    pub const fn to_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * A::FACTOR_TO_DEG) }
 
     super::forward_f32_methods!(
         abs,
@@ -152,41 +179,20 @@ impl<A: AngleUnit> Angle<A> {
         )
         .into()
     }
-}
 
-impl Angle<URadian> {
-    /// PI in radians.
-    pub const PI: Self = Self::new(std::f32::consts::PI);
-    /// PI/2 in radians.
-    pub const HALF_PI: Self = Self::new(std::f32::consts::FRAC_PI_2);
-    /// 2 * PI in radians.
-    pub const TWO_PI: Self = Self::new(std::f32::consts::PI * 2.0);
-    /// 2 * PI in radians.
-    pub const TAU: Self = Self::new(std::f32::consts::TAU);
-    /// Wraps the angle to the range [0, 2PI).
-    pub fn wrap_to_tau(self) -> Self {
-        Self::new(
-            (self.value % std::f32::consts::TAU + std::f32::consts::TAU) % std::f32::consts::TAU,
-        )
-    }
-    /// Returns the opposite angle; i.e. the angle that is formed by the same
-    /// initial and terminal sides but lies in the opposite direction.
-    pub fn opposite(self) -> Self { Self::new(self.value + std::f32::consts::PI) }
-}
-
-impl Angle<UDegree> {
-    /// PI in degrees.
-    pub const PI: Self = Self::new(180.0);
-    /// PI/2 in degrees.
-    pub const HALF_PI: Self = Self::new(90.0);
-    /// 2 * PI in degrees.
-    pub const TWO_PI: Self = Self::new(360.0);
-    /// Wraps the angle to the range [0, 360).
-    pub fn wrap_to_tau(self) -> Self { Self::new((self.value % 360.0 + 360.0) % 360.0) }
+    /// Wraps the angle to the range `[0, 2*PI)`.
+    pub fn wrap_to_tau(self) -> Self { Self::new((self.value % A::TAU + A::TAU) % A::TAU) }
 
     /// Returns the opposite angle; i.e. the angle that is formed by the same
     /// initial and terminal sides but lies in the opposite direction.
-    pub fn opposite(self) -> Self { Self::new(self.value + 180.0) }
+    /// The result is always wrapped to the range [0, 2PI).
+    pub fn opposite(self) -> Self { Self::new(self.value + A::PI).wrap_to_tau() }
+
+    /// Returns the smallest angle between `self` and `other`.
+    pub fn min(self, other: Self) -> Self { Self::new(self.value.min(other.value)) }
+
+    /// Returns the largest angle between `self` and `other`.
+    pub fn max(self, other: Self) -> Self { Self::new(self.value.max(other.value)) }
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
@@ -254,9 +260,27 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
     }
 }
 
-macro forward_common_f32_methods($angle_type:ty, $self:ident) {
-    pub fn min($self, other: Self) -> Self { Self::new(self.value.min(other.value)) }
-    pub fn max($self, other: Self) -> Self { Self::new(self.value.max(other.value)) }
+trait Cond<const B: bool> {}
+
+struct SameUnit<A: AngleUnit, B: AngleUnit>(core::marker::PhantomData<(A, B)>);
+
+impl Cond<true> for SameUnit<URadian, URadian> {}
+impl Cond<true> for SameUnit<UDegree, UDegree> {}
+impl Cond<false> for SameUnit<URadian, UDegree> {}
+impl Cond<false> for SameUnit<UDegree, URadian> {}
+
+impl<A: AngleUnit> From<Angle<URadian>> for Angle<A>
+where
+    SameUnit<A, URadian>: Cond<false>,
+{
+    fn from(value: Angle<URadian>) -> Self { Angle::new(value.value * A::FACTOR_FROM_RAD) }
+}
+
+impl<A: AngleUnit> From<Angle<UDegree>> for Angle<A>
+where
+    SameUnit<A, UDegree>: Cond<false>,
+{
+    fn from(value: Angle<UDegree>) -> Self { Angle::new(value.value * A::FACTOR_FROM_DEG) }
 }
 
 impl Angle<URadian> {
@@ -297,9 +321,13 @@ impl Angle<UDegree> {
 
 /// Type alias for `Angle<Radian>`.
 pub type Radians = Angle<URadian>;
+/// Type alias for `Angle<URadian>`.
+pub type Rads = Angle<URadian>;
 
 /// Type alias for `Angle<Degree>`.
 pub type Degrees = Angle<UDegree>;
+/// Type alias for `Angle<Degree>`.
+pub type Degs = Angle<UDegree>;
 
 /// Helper creating a new `Angle<Radian>`.
 pub macro radians($value:expr) {
@@ -319,14 +347,6 @@ pub macro degrees($value:expr) {
 /// Helper creating a new `Angle<Degree>`.
 pub macro deg($value:expr) {
     $crate::units::Angle::<$crate::units::UDegree>::new($value)
-}
-
-impl From<Angle<UDegree>> for Angle<URadian> {
-    fn from(angle: Angle<UDegree>) -> Self { angle.in_radians() }
-}
-
-impl From<Angle<URadian>> for Angle<UDegree> {
-    fn from(angle: Angle<URadian>) -> Self { angle.in_degrees() }
 }
 
 super::impl_ops!(Add, Sub for Angle where A, B: AngleUnit);
@@ -511,5 +531,23 @@ mod angle_unit_tests {
 
         let e = Radians::PI * -0.5;
         assert!(ulp_eq(e.wrap_to_tau().value, (Radians::PI * 1.5).value));
+    }
+
+    #[test]
+    fn test_opposite_angle() {
+        let angle = rad!(0.0);
+        assert!(ulp_eq(angle.opposite().value, Rads::PI.value));
+
+        let angle = Rads::PI;
+        assert_eq!(angle.opposite(), Rads::ZERO);
+
+        let angle = Rads::HALF_PI;
+        assert!(ulp_eq(angle.opposite().value, std::f32::consts::PI * 1.5));
+
+        let angle = Rads::PI * 1.5;
+        assert!(ulp_eq(angle.opposite().value, std::f32::consts::PI * 0.5));
+
+        let angle = rad!(std::f32::consts::PI * -0.5).wrap_to_tau();
+        assert!(ulp_eq(angle.opposite().value, std::f32::consts::PI * 0.5));
     }
 }

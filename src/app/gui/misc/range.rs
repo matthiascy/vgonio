@@ -7,7 +7,7 @@ pub fn range_ui<T: Copy + egui::emath::Numeric>(
     ui.horizontal(|ui| {
         ui.add(egui::DragValue::new(&mut value.start).prefix("start: "));
         ui.add(egui::DragValue::new(&mut value.stop).prefix("stop: "));
-        ui.add(egui::DragValue::new(value.step_size_mut()).prefix("step: "));
+        ui.add(egui::DragValue::new(&mut value.step_size).prefix("step: "));
     })
     .response
 }

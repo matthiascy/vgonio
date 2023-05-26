@@ -1,7 +1,4 @@
-use crate::{
-    math,
-    units::{rad, Angle, AngleUnit, Radians},
-};
+use crate::units::{rad, Radians};
 use egui::{emath::Rot2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
 use std::f32::consts::TAU;
 
@@ -75,7 +72,7 @@ impl AngleKnobShape {
 }
 
 pub struct AngleKnob<'a> {
-    value: &'a mut Radians,
+    angle: &'a mut Radians,
     diameter: f32,
     interactive: bool,
     winding: AngleKnobWinding,
@@ -93,7 +90,7 @@ impl<'a> AngleKnob<'a> {
 
     pub fn new(value: &'a mut Radians) -> Self {
         Self {
-            value,
+            angle: value,
             diameter: 32.0,
             interactive: true,
             winding: AngleKnobWinding::Clockwise,
@@ -176,7 +173,8 @@ impl<'a> Widget for AngleKnob<'a> {
                 * (response.interact_pointer_pos().unwrap() - rect.center()))
             .angle()
                 * self.winding.to_float();
-            *self.value = constrain_angle_with_snap_wrap(new_val, self.snap, self.min, self.max);
+            *self.angle =
+                constrain_angle_with_snap_wrap(rad!(new_val), self.snap, self.min, self.max);
             response.mark_changed();
         }
 
@@ -205,13 +203,13 @@ impl<'a> Widget for AngleKnob<'a> {
                     ));
                 };
 
-                let min = self.min.unwrap_or(0.0);
-                let max = self.max.unwrap_or(TAU);
+                let min = self.min.unwrap_or(rad!(0.0));
+                let max = self.max.unwrap_or(rad!(TAU));
 
                 if self.show_axes {
                     for axis in 0..self.axis_count {
                         let angle = axis as f32 * (TAU / (self.axis_count as f32));
-                        if (min..=max).contains(&angle) {
+                        if (min..=max).contains(&rad!(angle)) {
                             paint_axis(angle);
                         }
                     }
@@ -223,7 +221,7 @@ impl<'a> Widget for AngleKnob<'a> {
                 let paint_stop = |stop_position: f32| {
                     let stop_stroke = {
                         let stop_alpha = 1.0
-                            - ((stop_position - *self.value).abs() / (TAU * 0.75))
+                            - ((stop_position - self.angle.value).abs() / (TAU * 0.75))
                                 .clamp(0.0, 1.0)
                                 .powf(5.0);
                         // TODO: Semantically correct color
@@ -243,11 +241,11 @@ impl<'a> Widget for AngleKnob<'a> {
                 };
 
                 if let Some(min) = self.min {
-                    paint_stop(min);
+                    paint_stop(min.value);
                 }
 
                 if let Some(max) = self.max {
-                    paint_stop(max);
+                    paint_stop(max.value);
                 }
             }
 
@@ -255,7 +253,7 @@ impl<'a> Widget for AngleKnob<'a> {
                 ui.painter().line_segment(
                     [
                         rect.center(),
-                        rect.center() + angle_to_shape_outline(*self.value),
+                        rect.center() + angle_to_shape_outline(self.angle.value),
                     ],
                     Stroke::new(2.0, Color32::LIGHT_GREEN),
                 );
@@ -268,7 +266,7 @@ impl<'a> Widget for AngleKnob<'a> {
                 );
 
                 ui.painter().circle(
-                    rect.center() + angle_to_shape_outline(*self.value),
+                    rect.center() + angle_to_shape_outline(self.angle.value),
                     self.diameter / 24.0,
                     Color32::LIGHT_GREEN,
                     Stroke::new(2.0, Color32::LIGHT_GREEN),
@@ -287,7 +285,7 @@ pub(crate) fn constrain_angle_with_snap_wrap(
     snap: Option<Radians>,
     min: Option<Radians>,
     max: Option<Radians>,
-) -> f32 {
+) -> Radians {
     let mut val = angle.wrap_to_tau();
 
     if let Some(snap_angle) = snap {

@@ -237,7 +237,7 @@ impl MeasuredDataCollapsableHeader {
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
                                 meas_data.zenith.start.to_degrees(),
                                 meas_data.zenith.stop.to_degrees(),
-                                meas_data.zenith.step_size().to_degrees(),
+                                meas_data.zenith.step_size.to_degrees(),
                             ));
                             ui.end_row();
                             #[cfg(debug_assertions)]
@@ -251,7 +251,7 @@ impl MeasuredDataCollapsableHeader {
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
                                 meas_data.azimuth.start.to_degrees(),
                                 meas_data.azimuth.stop.to_degrees(),
-                                meas_data.azimuth.step_size().to_degrees(),
+                                meas_data.azimuth.step_size.to_degrees(),
                             ));
                             ui.end_row();
                             #[cfg(debug_assertions)]

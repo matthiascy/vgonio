@@ -4,14 +4,13 @@ use crate::{
         widgets::{AngleKnob, AngleKnobWinding},
         Plottable, PlottingMode,
     },
-    math,
     math::NumericCast,
     measure::measurement::MeasurementData,
     units::{rad, Radians},
     RangeByStepSizeInclusive,
 };
 use egui::{plot::*, Align, Context, Ui, Vec2, Widget, WidgetText};
-use std::{any::Any, f32::consts::TAU, ops::RangeInclusive, rc::Rc};
+use std::{any::Any, ops::RangeInclusive, rc::Rc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PlotType {
@@ -74,7 +73,7 @@ impl PlottingInspector {
         range: RangeInclusive<f32>,
         snap: Radians,
         diameter: f32,
-        formatter: impl Fn(Radians) -> String,
+        formatter: impl Fn(f32) -> String,
     ) {
         ui.add(
             AngleKnob::new(angle)
@@ -86,7 +85,7 @@ impl PlottingInspector {
                 .diameter(diameter)
                 .axis_count((Radians::TAU / snap).ceil() as u32),
         );
-        ui.label(formatter(*angle));
+        ui.label(formatter(angle.value()));
     }
 
     #[cfg(debug_assertions)]
@@ -150,19 +149,19 @@ impl Tool for PlottingInspector {
                     .as_any()
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
-                let zenith_bin_width_rad = measured.zenith.step_size().cast();
+                let zenith_bin_width_rad = measured.zenith.step_size.cast();
                 ui.allocate_ui_with_layout(
                     Vec2::new(ui.available_width(), 48.0),
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label("microfacet normal: ");
-                        let mut opposite = self.azimuth_m.wrap_to_tau();
+                        let mut opposite = self.azimuth_m.wrap_to_tau().opposite();
                         PlottingInspector::angle_knob(
                             ui,
                             false,
                             &mut opposite,
                             measured.azimuth.map(|x| x.value).range_bound_inclusive(),
-                            measured.azimuth.step_size(),
+                            measured.azimuth.step_size,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -171,7 +170,7 @@ impl Tool for PlottingInspector {
                             true,
                             &mut self.azimuth_m,
                             measured.azimuth.map(|x| x.value).range_bound_inclusive(),
-                            measured.azimuth.step_size(),
+                            measured.azimuth.step_size,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -203,7 +202,7 @@ impl Tool for PlottingInspector {
                     match data_opposite_part {
                         None => data_starting_part.collect(),
                         Some(opposite) => opposite
-                            .take(measured.zenith.step_count() - 1)
+                            .take(measured.zenith.step_count_wrapped() - 1)
                             .chain(data_starting_part)
                             .collect(),
                     }
@@ -299,7 +298,7 @@ impl Tool for PlottingInspector {
                     .as_any()
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
-                let zenith_bin_width_rad = measured.zenith.step_size().value;
+                let zenith_bin_width_rad = measured.zenith.step_size.value;
                 ui.allocate_ui_with_layout(
                     Vec2::new(ui.available_width(), 48.0),
                     egui::Layout::left_to_right(Align::Center),
@@ -310,7 +309,7 @@ impl Tool for PlottingInspector {
                             true,
                             &mut self.zenith_m,
                             measured.zenith.range_bound_inclusive_f32(),
-                            measured.zenith.step_size(),
+                            measured.zenith.step_size,
                             48.0,
                             |v| format!("θ = {:>6.2}°", v.to_degrees()),
                         );
@@ -319,7 +318,7 @@ impl Tool for PlottingInspector {
                             true,
                             &mut self.azimuth_m,
                             measured.azimuth.range_bound_inclusive_f32(),
-                            measured.azimuth.step_size(),
+                            measured.azimuth.step_size,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -350,7 +349,7 @@ impl Tool for PlottingInspector {
                             false,
                             &mut opposite,
                             measured.azimuth.range_bound_inclusive_f32(),
-                            measured.azimuth.step_size(),
+                            measured.azimuth.step_size,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -359,7 +358,7 @@ impl Tool for PlottingInspector {
                             true,
                             &mut self.azimuth_i,
                             measured.azimuth.range_bound_inclusive_f32(),
-                            measured.azimuth.step_size(),
+                            measured.azimuth.step_size,
                             48.0,
                             |v| format!("φ = {:>6.2}°", v.to_degrees()),
                         );
@@ -389,7 +388,7 @@ impl Tool for PlottingInspector {
                     match data_opposite_part {
                         None => data_starting_part.collect(),
                         Some(opposite) => opposite
-                            .take(measured.zenith.step_count() as usize - 1)
+                            .take(measured.zenith.step_count_wrapped() - 1)
                             .chain(data_starting_part)
                             .collect(),
                     }

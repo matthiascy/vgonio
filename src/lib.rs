@@ -85,6 +85,7 @@ pub enum MaterialKind {
 }
 
 impl Medium {
+    /// Returns the catalog of the medium.
     pub fn kind(&self) -> MaterialKind {
         match self {
             Self::Air | Self::Vacuum => MaterialKind::Insulator,
@@ -315,18 +316,14 @@ impl SphericalPartition {
             SphericalPartition::EqualAngle { zenith: theta, .. } => {
                 format!(
                     "{}° - {}°, step size {}°",
-                    theta.start,
-                    theta.stop,
-                    theta.step_size()
+                    theta.start, theta.stop, theta.step_size
                 )
             }
             SphericalPartition::EqualArea { zenith: theta, .. }
             | SphericalPartition::EqualProjectedArea { zenith: theta, .. } => {
                 format!(
                     "{}° - {}°, samples count {}",
-                    theta.start,
-                    theta.stop,
-                    theta.step_count()
+                    theta.start, theta.stop, theta.step_count
                 )
             }
         }
@@ -340,9 +337,7 @@ impl SphericalPartition {
             | SphericalPartition::EqualProjectedArea { azimuth: phi, .. } => {
                 format!(
                     "{}° - {}°, step size {}°",
-                    phi.start,
-                    phi.stop,
-                    phi.step_size()
+                    phi.start, phi.stop, phi.step_size
                 )
             }
         }
@@ -365,12 +360,12 @@ impl SphericalPartition {
                     for i_phi in 0..n_azimuth - 1 {
                         patches.push(Patch::new_partitioned(
                             (
-                                i_theta as f32 * *zenith.step_size() + zenith.start,
-                                (i_theta + 1) as f32 * *zenith.step_size() + zenith.start,
+                                i_theta as f32 * zenith.step_size + zenith.start,
+                                (i_theta + 1) as f32 * zenith.step_size + zenith.start,
                             ),
                             (
-                                i_phi as f32 * *azimuth.step_size() + azimuth.start,
-                                (i_phi + 1) as f32 * *azimuth.step_size() + azimuth.start,
+                                i_phi as f32 * azimuth.step_size + azimuth.start,
+                                (i_phi + 1) as f32 * azimuth.step_size + azimuth.start,
                             ),
                             Handedness::RightHandedYUp,
                         ));
@@ -381,10 +376,10 @@ impl SphericalPartition {
             SphericalPartition::EqualArea { zenith, azimuth } => {
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
-                let count = zenith.step_count();
+                let count = zenith.step_count;
                 let phi_start = azimuth.start;
                 let phi_stop = azimuth.stop;
-                let phi_step = *azimuth.step_size();
+                let phi_step = azimuth.step_size;
                 // TODO: revision
                 // Uniformly divide the azimuthal angle. Suppose r == 1
                 // Spherical cap area = 2πrh, where r is the radius of the sphere on which
@@ -392,9 +387,9 @@ impl SphericalPartition {
                 // to the bottom of the cap.
                 let h_start = 1.0 - theta_start.cos();
                 let h_stop = 1.0 - theta_stop.cos();
-                let h_step = (h_stop - h_start) / *count as f32;
+                let h_step = (h_stop - h_start) / count as f32;
 
-                let n_theta = *count;
+                let n_theta = count;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
@@ -420,10 +415,10 @@ impl SphericalPartition {
             SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
-                let count = zenith.step_count();
+                let count = zenith.step_count;
                 let phi_start = azimuth.start;
                 let phi_stop = azimuth.stop;
-                let phi_step = *azimuth.step_size();
+                let phi_step = azimuth.step_size;
                 // TODO: revision
                 // Non-uniformly divide the radius of the disk after the projection.
                 // Disk area is linearly proportional to squared radius.
@@ -432,8 +427,8 @@ impl SphericalPartition {
                 let r_stop = theta_stop.sin();
                 let r_start_sqr = r_start * r_start;
                 let r_stop_sqr = r_stop * r_stop;
-                let factor = 1.0 / *count as f32;
-                let n_theta = *count;
+                let factor = 1.0 / count as f32;
+                let n_theta = count;
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);

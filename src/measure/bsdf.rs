@@ -345,7 +345,7 @@ impl From<RangeByStepSizeInclusive<Nanometres>> for SpectrumSampler {
 impl SpectrumSampler {
     /// Returns the nth wavelength of the spectrum.
     pub fn nth_sample(&self, n: usize) -> Nanometres {
-        self.range.start + *self.range.step_size() * n as f32
+        self.range.start + self.range.step_size * n as f32
     }
 
     /// Returns the spectrum's whole wavelength range.

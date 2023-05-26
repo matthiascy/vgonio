@@ -130,16 +130,16 @@ impl Collector {
             CollectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => {
-                let n_zenith = (zenith.span() / *zenith.step_size()).ceil() as usize;
-                let n_azimuth = (azimuth.span() / *azimuth.step_size()).ceil() as usize;
+                let n_zenith = (zenith.span() / zenith.step_size).ceil() as usize;
+                let n_azimuth = (azimuth.span() / azimuth.step_size).ceil() as usize;
 
                 let patches = (0..n_zenith)
                     .flat_map(|i_theta| {
                         (0..n_azimuth).map(move |i_phi| {
                             let spherical = SphericalCoord {
                                 radius: 1.0,
-                                zenith: zenith.start + i_theta as f32 * *zenith.step_size(),
-                                azimuth: azimuth.start + i_phi as f32 * *azimuth.step_size(),
+                                zenith: zenith.start + i_theta as f32 * zenith.step_size,
+                                azimuth: azimuth.start + i_phi as f32 * azimuth.step_size,
                             };
                             let cartesian = spherical.to_cartesian(Handedness::RightHandedYUp);
                             let shape = self.scheme.shape().unwrap();

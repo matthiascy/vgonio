@@ -5,7 +5,6 @@ use crate::{
 };
 use cfg_if::cfg_if;
 pub use glam::*;
-use std::f32::consts::{PI, TAU};
 
 /// Trait for converting from one primitive numeric type to another.
 #[const_trait]
@@ -404,31 +403,4 @@ fn test_quadratic() {
 /// TODO: add a tolerance parameter or error bound
 pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
     ulp_eq(a.x, b.x) && ulp_eq(a.y, b.y) && ulp_eq(a.z, b.z)
-}
-
-#[test]
-fn test_opposite_angle() {
-    let angle = 0.0;
-    assert!(ulp_eq(calculate_opposite_angle(angle), PI));
-
-    let angle = std::f32::consts::PI;
-    assert_eq!(calculate_opposite_angle(angle), 0.0);
-
-    let angle = std::f32::consts::PI * 0.5;
-    assert!(ulp_eq(
-        calculate_opposite_angle(angle),
-        std::f32::consts::PI * 1.5
-    ));
-
-    let angle = std::f32::consts::PI * 1.5;
-    assert!(ulp_eq(
-        calculate_opposite_angle(angle),
-        std::f32::consts::PI * 0.5
-    ));
-
-    let angle = wrap_angle_to_tau_exclusive(std::f32::consts::PI * -0.5);
-    assert!(ulp_eq(
-        calculate_opposite_angle(angle),
-        std::f32::consts::PI * 0.5
-    ));
 }

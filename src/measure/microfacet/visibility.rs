@@ -1449,7 +1449,7 @@ pub fn measure_masking_shadowing(
         let facets_idx_num = surface.facets.len() as u32;
         let diagonal = // surface.bounds.max_extent()
             (surface.bounds.max - surface.bounds.min).max_element() * std::f32::consts::SQRT_2;
-        let half_zenith_bin_size_cos = (*desc.zenith.step_size() / 2.0).cos();
+        let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
         let proj_mat =
             Projection::orthographic_matrix(diagonal * 0.5, diagonal * 1.5, diagonal, diagonal);
         #[rustfmt::skip]
@@ -1460,9 +1460,9 @@ pub fn measure_masking_shadowing(
         let meas_points = (0..desc.measurement_location_count())
             .map(|i| {
                 let azimuth =
-                    *desc.azimuth.step_size() * (i / desc.zenith.step_count()) as f32;
+                    desc.azimuth.step_size * (i / desc.zenith.step_count()) as f32;
                 let zenith =
-                    *desc.zenith.step_size() * (i % desc.zenith.step_count()) as f32;
+                    desc.zenith.step_size * (i % desc.zenith.step_count()) as f32;
                 let view_dir =
                     math::spherical_to_cartesian(1.0, zenith, azimuth, handedness).normalize();
                 let pos = view_dir * diagonal;
