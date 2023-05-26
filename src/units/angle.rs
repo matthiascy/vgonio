@@ -105,9 +105,6 @@ impl<A: AngleUnit> Angle<A> {
     #[inline(always)]
     pub const fn is_positive(&self) -> bool { self.value > 0.0 }
 
-    /// Returns the minimum of the two angles.
-    pub fn min(&self, other: Self) -> Self { Self::new(self.value.min(other.value)) }
-
     /// Prints the angle in human readable format in degrees.
     #[inline]
     pub fn prettified(&self) -> String {
@@ -164,6 +161,17 @@ impl Angle<URadian> {
     pub const HALF_PI: Self = Self::new(std::f32::consts::FRAC_PI_2);
     /// 2 * PI in radians.
     pub const TWO_PI: Self = Self::new(std::f32::consts::PI * 2.0);
+    /// 2 * PI in radians.
+    pub const TAU: Self = Self::new(std::f32::consts::TAU);
+    /// Wraps the angle to the range [0, 2PI).
+    pub fn wrap_to_tau(self) -> Self {
+        Self::new(
+            (self.value % std::f32::consts::TAU + std::f32::consts::TAU) % std::f32::consts::TAU,
+        )
+    }
+    /// Returns the opposite angle; i.e. the angle that is formed by the same
+    /// initial and terminal sides but lies in the opposite direction.
+    pub fn opposite(self) -> Self { Self::new(self.value + std::f32::consts::PI) }
 }
 
 impl Angle<UDegree> {
@@ -173,6 +181,12 @@ impl Angle<UDegree> {
     pub const HALF_PI: Self = Self::new(90.0);
     /// 2 * PI in degrees.
     pub const TWO_PI: Self = Self::new(360.0);
+    /// Wraps the angle to the range [0, 360).
+    pub fn wrap_to_tau(self) -> Self { Self::new((self.value % 360.0 + 360.0) % 360.0) }
+
+    /// Returns the opposite angle; i.e. the angle that is formed by the same
+    /// initial and terminal sides but lies in the opposite direction.
+    pub fn opposite(self) -> Self { Self::new(self.value + 180.0) }
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
@@ -238,6 +252,11 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
 
         deserializer.deserialize_str(AngleVisitor::<A>(core::marker::PhantomData))
     }
+}
+
+macro forward_common_f32_methods($angle_type:ty, $self:ident) {
+    pub fn min($self, other: Self) -> Self { Self::new(self.value.min(other.value)) }
+    pub fn max($self, other: Self) -> Self { Self::new(self.value.max(other.value)) }
 }
 
 impl Angle<URadian> {
@@ -474,5 +493,23 @@ mod angle_unit_tests {
 
         let deserialized3: Degrees = serde_yaml::from_str("180.0 degrees").unwrap();
         assert_eq!(a, deserialized3);
+    }
+
+    #[test]
+    fn wrapping() {
+        let a = Radians::new(0.0);
+        assert_eq!(a.wrap_to_tau(), a);
+
+        let b = Radians::PI;
+        assert!(ulp_eq(b.wrap_to_tau().value, Radians::PI.value));
+
+        let c = Radians::TAU;
+        assert_eq!(c.wrap_to_tau(), a);
+
+        let d = Radians::PI * 3.0;
+        assert!(ulp_eq(d.wrap_to_tau().value, Radians::PI.value));
+
+        let e = Radians::PI * -0.5;
+        assert!(ulp_eq(e.wrap_to_tau().value, (Radians::PI * 1.5).value));
     }
 }

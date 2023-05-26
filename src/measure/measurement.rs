@@ -736,11 +736,11 @@ impl MeasurementData {
     /// # Arguments
     ///
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
-    pub fn adf_data_slice(&self, azimuth_m: f32) -> (&[f32], Option<&[f32]>) {
+    pub fn adf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
-        let azimuth_m = crate::math::wrap_angle_to_tau_exclusive(azimuth_m);
+        let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
-        let opposite_azimuth_m = math::calculate_opposite_angle(azimuth_m);
+        let opposite_azimuth_m = azimuth_m.opposite();
         let opposite_index = if self.azimuth.start.value <= opposite_azimuth_m
             && opposite_azimuth_m <= self.azimuth.stop.value
         {
@@ -775,21 +775,21 @@ impl MeasurementData {
     /// the given azimuthal angle, if exists.
     pub fn msf_data_slice(
         &self,
-        azimuth_m: f32,
-        zenith_m: f32,
-        azimuth_i: f32,
+        azimuth_m: Radians,
+        zenith_m: Radians,
+        azimuth_i: Radians,
     ) -> (&[f32], Option<&[f32]>) {
         debug_assert!(
             self.kind == MeasurementKind::MicrofacetMaskingShadowing,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
-        let azimuth_m = math::wrap_angle_to_tau_exclusive(azimuth_m);
-        let azimuth_i = math::wrap_angle_to_tau_exclusive(azimuth_i);
+        let azimuth_m = azimuth_m.wrap_to_tau();
+        let azimuth_i = azimuth_i.wrap_to_tau();
         let zenith_m = zenith_m.clamp(self.zenith.start.value, self.zenith.stop.value);
         let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
         let zenith_m_idx = self.zenith.index_of(zenith_m.into());
         let azimuth_i_idx = self.azimuth.index_of(azimuth_i.into());
-        let opposite_azimuth_i = math::calculate_opposite_angle(azimuth_i);
+        let opposite_azimuth_i = azimuth_i.opposite();
         let opposite_azimuth_i_idx = if self.azimuth.start.value <= opposite_azimuth_i
             && opposite_azimuth_i <= self.azimuth.stop.value
         {

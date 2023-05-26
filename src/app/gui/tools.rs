@@ -32,7 +32,7 @@ pub(crate) fn trace_ray_grid_dbg(ray: Ray, max_bounces: u32, grid_rt: &Multileve
 pub(crate) fn trace_ray_standard_dbg(
     ray: Ray,
     max_bounces: u32,
-    surface: &MicroSurfaceMesh,
+    surface: &crate::msurf::MicroSurfaceMesh,
 ) -> Vec<Ray> {
     // let mut embree_rt = EmbreeRT::new(Config::default());
     // let scn_id = embree_rt.create_scene();

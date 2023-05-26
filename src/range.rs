@@ -149,7 +149,7 @@ impl<T: Copy + Clone> RangeByStepSizeInclusive<T> {
     }
 
     /// Returns the step size of the range.
-    pub const fn step_size(&self) -> &T { &self.0.step_size_or_count }
+    pub const fn step_size(&self) -> T { self.0.step_size_or_count }
 
     /// Returns the step size of the range.
     pub fn step_size_mut(&mut self) -> &mut T { &mut self.0.step_size_or_count }
@@ -202,7 +202,7 @@ where
         let step_size = self.0.step_size_or_count.cast();
         let start = self.0.start.cast();
         let stop = self.0.stop.cast();
-        (((stop - start) / step_size).ceil() as usize).min(2)
+        (((stop - start) / step_size).round() as usize + 1).max(2)
     }
 }
 
@@ -244,7 +244,7 @@ impl<T: Copy + Clone> RangeByStepSizeExclusive<T> {
     }
 
     /// Returns the step size of the range.
-    pub const fn step_size(&self) -> &T { &self.0.step_size_or_count }
+    pub const fn step_size(&self) -> T { &self.0.step_size_or_count }
 
     /// Returns the step size of the range.
     pub fn step_size_mut(&mut self) -> &mut T { &mut self.0.step_size_or_count }
@@ -305,7 +305,7 @@ macro impl_display_serialisation($($t:ident<$T:ident>, $string:literal, $open_sy
             fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 write!(
                     f,
-                    stringify!($string),
+                    $string,
                     self.0.start, self.0.stop, self.0.step_size_or_count
                 )
             }
@@ -319,7 +319,7 @@ macro impl_display_serialisation($($t:ident<$T:ident>, $string:literal, $open_sy
             where
                 S: serde::Serializer,
             {
-                serializer.serialize_str(&format!(stringify!($string), self.0.start, self.0.stop, self.0.step_size_or_count))
+                serializer.serialize_str(&format!($string, self.0.start, self.0.stop, self.0.step_size_or_count))
             }
         }
 
@@ -331,11 +331,6 @@ macro impl_display_serialisation($($t:ident<$T:ident>, $string:literal, $open_sy
 
             fn try_from(value: &'a str) -> Result<Self, Self::Error> {
                 let mut parts = value.split(',');
-                println!("parts: {:?}", parts);
-                let start = parts
-                    .next()
-                    .ok_or_else(|| format!("Invalid range: {value}"))?;
-                println!("start: {:?}", start);
                 let start = parts
                     .next()
                     .ok_or_else(|| format!("Invalid range: {value}"))?
@@ -349,12 +344,8 @@ macro impl_display_serialisation($($t:ident<$T:ident>, $string:literal, $open_sy
                     .split($split_char);
                 let stop = parts
                     .next()
-                    .ok_or_else(|| format!("Invalid range: {value}"))?;
-                println!("stop: {:?}", stop);
-                let stop = parts
-                    .next()
                     .ok_or_else(|| format!("Invalid range: {value}"))?
-                    .trim_end_matches($open_symbol)
+                    .trim().trim_end_matches($open_symbol)
                     .parse::<$T>()
                     .map_err(|_| format!("Invalid range stop value: {value}"))?;
                 let step_size = parts
@@ -387,7 +378,7 @@ macro impl_display_serialisation($($t:ident<$T:ident>, $string:literal, $open_sy
                         write!(
                             formatter,
                             "a range by step size in the form of '[start, stop{} {} step",
-                            stringify!($open_symbol), stringify!($split_char)
+                            $open_symbol, $split_char
                         )
                     }
 
@@ -412,7 +403,9 @@ impl_display_serialisation!(RangeByStepSizeExclusive<T>, "[{}, {}) / {}", ')', '
 /// or exclusive.
 #[derive(Copy, Clone, PartialEq)]
 pub enum RangeByStepSize<T: Copy + Clone> {
+    /// Defines a right inclusive range.
     Inclusive(RangeByStepSizeInclusive<T>),
+    /// Defines a right exclusive range.
     Exclusive(RangeByStepSizeExclusive<T>),
 }
 
@@ -425,7 +418,24 @@ impl<T: Copy + Clone + Debug> Debug for RangeByStepSize<T> {
     }
 }
 
+impl<T: Copy + Clone + Display> Display for RangeByStepSize<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            RangeByStepSize::Inclusive(range) => write!(f, "{}", range),
+            RangeByStepSize::Exclusive(range) => write!(f, "{}", range),
+        }
+    }
+}
+
 impl<T: Copy + Clone> RangeByStepSize<T> {
+    pub fn new_inclusive(start: T, stop: T, step_size: T) -> Self {
+        Self::Inclusive(RangeByStepSizeInclusive::new(start, stop, step_size))
+    }
+
+    pub fn new_exclusive(start: T, stop: T, step_size: T) -> Self {
+        Self::Exclusive(RangeByStepSizeExclusive::new(start, stop, step_size))
+    }
+
     pub fn start(&self) -> T {
         match self {
             RangeByStepSize::Inclusive(range) => range.0.start,
@@ -582,14 +592,14 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// If the range's stop value is the same as the start value after wrapping
     /// it to the range [0, 2π), the range is considered to be a full circle.
     pub fn step_count_wrapped(&self) -> usize {
-        let start = self.start.to_radians().value;
-        let stop = self.stop.to_radians().value;
-        let step_size = self.0.step_size_or_count.to_radians().value;
+        let start = self.start.to_radians();
+        let stop = self.stop.to_radians();
+        let step_size = self.0.step_size_or_count.to_radians();
         let span = stop - start;
-        if math::wrap_angle_to_tau_exclusive(stop) == math::wrap_angle_to_tau_exclusive(start) {
-            (span / step_size).ceil() as usize
+        if stop.wrap_to_tau() == start.wrap_to_tau() {
+            (span / step_size).round() as usize
         } else {
-            ((span / step_size).ceil() as usize).min(2)
+            ((span / step_size).round() as usize + 1).max(2)
         }
     }
 
@@ -637,7 +647,7 @@ impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
     }
 
     /// Returns the number of steps in this range.
-    pub const fn step_count(&self) -> &usize { &self.0.step_size_or_count }
+    pub const fn step_count(&self) -> usize { self.0.step_size_or_count }
 
     /// Returns the number of steps in this range.
     pub fn step_count_mut(&mut self) -> &mut usize { &mut self.0.step_size_or_count }
@@ -645,7 +655,7 @@ impl<T: Copy + Clone> RangeByStepCountInclusive<T> {
 
 impl<T> RangeByStepCountInclusive<T>
 where
-    T: Div<Output = T> + Sub<Output = T> + NumericCast<f32> + Copy + Clone,
+    T: NumericCast<f32> + Copy + Clone + Sub<Output = T>,
     f32: NumericCast<T>,
 {
     /// Returns the step size of this range.
@@ -700,11 +710,13 @@ impl<T: Copy + Clone> RangeByStepCountExclusive<T> {
 
 impl<T> RangeByStepCountExclusive<T>
 where
-    T: Div<Output = T> + Sub<Output = T> + Copy + Clone,
-    usize: NumericCast<T>,
+    T: NumericCast<f32> + Copy + Clone + Sub<Output = T>,
+    f32: NumericCast<T>,
 {
     /// Returns the step size of this range.
-    pub fn step_size(&self) -> T { self.0.span() / self.0.step_size_or_count.cast() }
+    pub fn step_size(&self) -> T {
+        (self.0.span().cast() / self.0.step_size_or_count as f32).cast()
+    }
 }
 
 impl<T: Copy + Clone> RangeByStepCountExclusive<T>
@@ -728,6 +740,36 @@ impl_display_serialisation!(RangeByStepCountExclusive<T>, "[{}, {}) | {}", ')', 
 pub enum RangeByStepCount<T: Copy + Clone> {
     Inclusive(RangeByStepCountInclusive<T>),
     Exclusive(RangeByStepCountExclusive<T>),
+}
+
+impl<T: Copy + Clone> RangeByStepCount<T> {
+    /// Creates a new right inclusive range.
+    pub fn new_inclusive(start: T, stop: T, step_count: usize) -> Self {
+        Self::Inclusive(RangeByStepCountInclusive::new(start, stop, step_count))
+    }
+
+    /// Creates a new right exclusive range.
+    pub fn new_exclusive(start: T, stop: T, step_count: usize) -> Self {
+        Self::Exclusive(RangeByStepCountExclusive::new(start, stop, step_count))
+    }
+
+    pub fn step_count(&self) -> usize {
+        match self {
+            RangeByStepCount::Inclusive(range) => range.step_count(),
+            RangeByStepCount::Exclusive(range) => range.step_count(),
+        }
+    }
+
+    pub fn step_size(&self) -> T
+    where
+        T: NumericCast<f32> + Copy + Clone + Sub<Output = T>,
+        f32: NumericCast<T>,
+    {
+        match self {
+            RangeByStepCount::Inclusive(range) => range.step_size(),
+            RangeByStepCount::Exclusive(range) => range.step_size(),
+        }
+    }
 }
 
 impl<T> Serialize for RangeByStepCount<T>
@@ -917,86 +959,61 @@ where
 }
 
 #[cfg(test)]
-mod range_by_step_count_inclusive_tests {
+mod range_by_step_count_tests {
     use super::*;
 
     #[test]
-    fn test_serialization() {
+    fn serialization_inclusive() {
         let range = RangeByStepCountInclusive::new(0, 10, 3);
         let serialized = serde_yaml::to_string(&range).unwrap();
-        assert_eq!(serialized, "[0 ~ 10] | 3");
+        assert_eq!(serialized, "'[0, 10] | 3'\n");
         let deserialized: RangeByStepCountInclusive<i32> =
             serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, range);
+
+        let range = RangeByStepCount::new_inclusive(0, 10, 3);
+        let serialized = serde_yaml::to_string(&range).unwrap();
+        assert_eq!(serialized, "'[0, 10] | 3'\n");
+        let deserialized: RangeByStepCount<i32> = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(deserialized, range);
     }
 
     #[test]
     fn test_step_size() {
         let range = RangeByStepCountInclusive::new(0, 10, 3);
-        assert_eq!(range.step_size(), 3);
+        assert_eq!(range.step_size(), 5);
 
         let range = RangeByStepCountInclusive::new(0, 10, 4);
-        assert_eq!(range.step_size(), 2);
+        assert_eq!(range.step_size(), 3);
 
         let range = RangeByStepCountInclusive::new(0, 10, 5);
         assert_eq!(range.step_size(), 2);
 
-        let range = RangeByStepCountInclusive::new(1.0, 13.0, 6);
+        let range = RangeByStepCountInclusive::new(1.0, 13.0, 7);
         assert_eq!(range.step_size(), 2.0);
+
+        let range = RangeByStepCountExclusive::new(1.0, 13.0, 8);
+        assert_eq!(range.step_size(), 1.5);
     }
-}
-
-#[test]
-fn range_by_step_size_exclusive_try_from_str() {
-    let range = RangeByStepSizeExclusive::<f32>::try_from("[0.0, 1.0) / 0.1").unwrap();
-    assert_eq!(range.start, 0.0);
-    assert_eq!(range.stop, 1.0);
-    assert_eq!(*range.step_size(), 0.1);
-}
-
-#[test]
-fn range_by_step_size_try_from_str_with_angle() {
-    use crate::units::{radians, Radians, URadian};
-    let range = RangeByStepSizeExclusive::<Radians>::try_from("[0.0rad, 1.0rad) / 0.1rad").unwrap();
-    assert_eq!(range.start, radians!(0.0));
-    assert_eq!(range.stop, radians!(1.0));
-    assert_eq!(*range.step_size(), Angle::<URadian>::new(0.1));
-}
-
-#[test]
-fn range_by_step_count_try_from_str() {
-    let range = RangeByStepCountExclusive::<f32>::try_from("0.0 ~ 1.0, 19").unwrap();
-    assert_eq!(range.start, 0.0);
-    assert_eq!(range.stop, 1.0);
-    assert_eq!(range.step_count(), 19);
-}
-
-#[test]
-fn range_by_step_count_try_from_str_with_angle() {
-    use crate::units::{radians, Radians};
-    let range = RangeByStepCountExclusive::<Radians>::try_from("0.0rad ~ 1.0rad, 4").unwrap();
-    assert_eq!(range.start, radians!(0.0));
-    assert_eq!(range.stop, radians!(1.0));
-    assert_eq!(range.step_count(), 4);
 }
 
 #[cfg(test)]
 mod range_by_step_size_tests {
     use super::*;
-    use crate::units::{degrees, radians, Degrees};
+    use crate::units::{deg, degrees, rad, radians, Degrees};
 
     #[test]
     fn try_from_str_inclusive() {
-        let range = RangeByStepSize::<f32>::try_from("[0.0, 10.0] / 0.1").unwrap();
+        let range = RangeByStepSize::<f32>::try_from("[0.0, 12.0] / 0.3").unwrap();
         assert_eq!(range.start(), 0.0);
-        assert_eq!(range.stop(), 10.0);
-        assert_eq!(range.step_size(), 0.1);
+        assert_eq!(range.stop(), 12.0);
+        assert_eq!(range.step_size(), 0.3);
         assert!(!range.is_exclusive());
 
-        let range = RangeByStepSizeInclusive::<f32>::try_from("[0.0, 10.0] / 0.1").unwrap();
+        let range = RangeByStepSizeInclusive::<f32>::try_from("[0.0, 16.0] / 0.2").unwrap();
         assert_eq!(range.start, 0.0);
-        assert_eq!(range.stop, 10.0);
-        assert_eq!(*range.step_size(), 0.1);
+        assert_eq!(range.stop, 16.0);
+        assert_eq!(*range.step_size(), 0.2);
     }
 
     #[test]
@@ -1006,6 +1023,11 @@ mod range_by_step_size_tests {
         assert_eq!(range.stop(), 1.0);
         assert_eq!(range.step_size(), 0.1);
         assert!(range.is_exclusive());
+
+        let range = RangeByStepSizeExclusive::<f32>::try_from("[0.0, 1.0) / 0.1").unwrap();
+        assert_eq!(range.start, 0.0);
+        assert_eq!(range.stop, 1.0);
+        assert_eq!(*range.step_size(), 0.1);
     }
 
     #[test]
@@ -1024,5 +1046,68 @@ mod range_by_step_size_tests {
         assert_eq!(range.stop(), degrees!(360.0));
         assert_eq!(range.step_size(), degrees!(10.0));
         assert!(range.is_exclusive());
+    }
+
+    #[test]
+    fn serialisation_exclusive() {
+        let range = RangeByStepSize::new_exclusive(0.0, 20.0, 0.5);
+        let serialized = serde_yaml::to_string(&range).unwrap();
+        assert_eq!(
+            serialized, "'[0, 20) / 0.5'\n",
+            "serilisation failed: {}",
+            serialized
+        );
+        let deserialized: RangeByStepSize<f32> = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(
+            deserialized, range,
+            "deserilisation failed: {}",
+            deserialized
+        );
+    }
+
+    #[test]
+    fn serialisation_inclusive() {
+        let range = RangeByStepSize::new_inclusive(0.0, 20.0, 0.5);
+        let serialized = serde_yaml::to_string(&range).unwrap();
+        assert_eq!(
+            serialized, "'[0, 20] / 0.5'\n",
+            "serilisation failed: {}",
+            serialized
+        );
+        let deserialized: RangeByStepSize<f32> = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(
+            deserialized, range,
+            "deserilisation failed: {}",
+            deserialized
+        );
+    }
+
+    #[test]
+    fn display() {
+        let range = RangeByStepSize::new_exclusive(0.5, 20.5, 0.5);
+        assert_eq!(format!("{}", range), "[0.5, 20.5) / 0.5");
+        let range = RangeByStepSize::new_inclusive(0.5, 20.5, 0.5);
+        assert_eq!(format!("{}", range), "[0.5, 20.5] / 0.5");
+    }
+
+    #[test]
+    fn step_count() {
+        let range = RangeByStepSizeInclusive::new(0.0, 10.0, 1.0);
+        assert_eq!(range.step_count(), 11);
+        let range = RangeByStepSizeInclusive::new(0.0, 10.0, 2.0);
+        assert_eq!(range.step_count(), 6);
+
+        let range =
+            RangeByStepSizeInclusive::new(rad!(0.0), Radians::HALF_PI, deg!(30.0).to_radians());
+        assert_eq!(range.step_count(), 4);
+        assert_eq!(range.step_count_wrapped(), 4);
+
+        let range = RangeByStepSizeInclusive::new(rad!(0.0), Radians::TAU, deg!(30.0).to_radians());
+        assert_eq!(range.step_count(), 13);
+        assert_eq!(range.step_count_wrapped(), 12);
+
+        let range = RangeByStepSizeInclusive::new(deg!(0.0), deg!(360.0), deg!(90.0));
+        assert_eq!(range.step_count(), 5);
+        assert_eq!(range.step_count_wrapped(), 4);
     }
 }

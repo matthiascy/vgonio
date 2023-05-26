@@ -1,4 +1,7 @@
-use crate::math;
+use crate::{
+    math,
+    units::{rad, Angle, AngleUnit, Radians},
+};
 use egui::{emath::Rot2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
 use std::f32::consts::TAU;
 
@@ -72,15 +75,15 @@ impl AngleKnobShape {
 }
 
 pub struct AngleKnob<'a> {
-    value: &'a mut f32,
+    value: &'a mut Radians,
     diameter: f32,
     interactive: bool,
     winding: AngleKnobWinding,
     shape: AngleKnobShape,
     orientation: AngleKnobOrientation,
-    min: Option<f32>,
-    max: Option<f32>,
-    snap: Option<f32>,
+    min: Option<Radians>,
+    max: Option<Radians>,
+    snap: Option<Radians>,
     show_axes: bool,
     axis_count: u32,
 }
@@ -88,7 +91,7 @@ pub struct AngleKnob<'a> {
 impl<'a> AngleKnob<'a> {
     pub const RESOLUTION: usize = 32;
 
-    pub fn new(value: &'a mut f32) -> Self {
+    pub fn new(value: &'a mut Radians) -> Self {
         Self {
             value,
             diameter: 32.0,
@@ -119,17 +122,17 @@ impl<'a> AngleKnob<'a> {
         self
     }
 
-    pub fn min(mut self, min: Option<f32>) -> Self {
+    pub fn min(mut self, min: Option<Radians>) -> Self {
         self.min = min;
         self
     }
 
-    pub fn max(mut self, max: Option<f32>) -> Self {
+    pub fn max(mut self, max: Option<Radians>) -> Self {
         self.max = max;
         self
     }
 
-    pub fn snap(mut self, snap: Option<f32>) -> Self {
+    pub fn snap(mut self, snap: Option<Radians>) -> Self {
         self.snap = snap;
         self
     }
@@ -280,15 +283,15 @@ impl<'a> Widget for AngleKnob<'a> {
 /// Constrains an angle to the range `[min, max]` and snaps it to the nearest
 /// multiple of `snap`.
 pub(crate) fn constrain_angle_with_snap_wrap(
-    value: f32,
-    snap: Option<f32>,
-    min: Option<f32>,
-    max: Option<f32>,
+    angle: Radians,
+    snap: Option<Radians>,
+    min: Option<Radians>,
+    max: Option<Radians>,
 ) -> f32 {
-    let mut val = math::wrap_angle_to_tau_exclusive(value);
+    let mut val = angle.wrap_to_tau();
 
     if let Some(snap_angle) = snap {
-        debug_assert!(snap_angle > 0.0, "snap angle must be positive");
+        debug_assert!(snap_angle > rad!(0.0), "snap angle must be positive");
         val = (val / snap_angle).round() * snap_angle;
     }
 
