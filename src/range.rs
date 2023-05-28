@@ -1,9 +1,8 @@
 use crate::{
     math::NumericCast,
-    ulp_eq,
     units::{Angle, AngleUnit, Radians},
 };
-use approx::{AbsDiffEq, UlpsEq};
+use approx::AbsDiffEq;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -185,115 +184,206 @@ where {
     }
 }
 
-macro_rules! impl_display_serialisation {
-    ($($t:ident<$T:ident>, $open_symbol:literal, $split_char:literal, $step_type:ident, $step_size_or_count:ident);*) => {
-        $(
-            paste::paste! {
-                impl<$T> Display for $t<$T>
+macro_rules! impl_serialisation {
+    (@inclusive $range:ident<$T:ident>, $split_char:literal, $step_type:ident, $step:ident) => {
+        impl<$T> Display for $range<$T>
+        where
+            $T: Display + Copy + Clone,
+        {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                write!(
+                    f,
+                    "{} .. ={} {} {}",
+                    self.start, self.stop, $split_char, self.$step
+                )
+            }
+        }
+
+        impl<'a, $T> TryFrom<&'a str> for $range<$T>
+        where
+            $T: Copy + Clone + FromStr,
+        {
+            type Error = String;
+
+            fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+                let mut parts = value.split(&"..");
+                let start = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .parse::<$T>()
+                    .map_err(|_| format!("Invalid range start value: {value}"))?;
+                let mut parts = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .split($split_char);
+                let stop = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .trim_matches('=')
+                    .parse::<$T>()
+                    .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                let step = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .parse::<$step_type>()
+                    .map_err(|_| format!("Invalid range step size/count value: {value}"))?;
+                Ok(Self::new(start, stop, step))
+            }
+        }
+
+        impl<$T> Serialize for $range<$T>
+        where
+            $T: Serialize + Copy + Display + Clone,
+        {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(&format!("{}", self))
+            }
+        }
+
+        impl<'d, $T> Deserialize<'d> for $range<$T>
+        where
+            $T: Deserialize<'d> + Copy + FromStr + Clone,
+        {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'d>,
+            {
+                struct RangeVisitor<$T>(std::marker::PhantomData<$T>);
+
+                impl<'de, $T> serde::de::Visitor<'de> for RangeVisitor<$T>
                 where
-                    $T: Display + Copy + Clone,
+                    $T: Copy + Deserialize<'de> + FromStr,
                 {
-                    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                    type Value = $range<$T>;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                         write!(
-                            f,
-                            "[{}, {}{} {} {}",
-                            self.start, self.stop, $open_symbol, $split_char,
-                            self.[<step_ $step_size_or_count>]
+                            formatter,
+                            "an inclusive range by step size in the form of \"start .. =stop {} \
+                             step\"",
+                            $split_char
                         )
                     }
-                }
 
-                impl<$T> Serialize for $t<$T>
-                where
-                    $T: Serialize + Copy + Display + Clone,
-                {
-                    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
                     where
-                        S: serde::Serializer,
+                        E: serde::de::Error,
                     {
-                        serializer.serialize_str(&format!(
-                            "[{}, {}{} {} {}",
-                            self.start, self.stop, $open_symbol, $split_char,
-                            self.[<step_ $step_size_or_count>]
-                        ))
+                        $range::<$T>::try_from(v).map_err(|e| E::custom(e))
                     }
                 }
-
-                impl<'a, $T> TryFrom<&'a str> for $t<$T>
-                where
-                    $T: Copy + Clone + FromStr,
-                {
-                    type Error = String;
-
-                    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-                        let mut parts = value.split(',');
-                        let start = parts
-                        .next()
-                        .ok_or_else(|| format!("Invalid range: {value}"))?
-                        .trim_matches('[')
-                        .parse::<$T>()
-                        .map_err(|_| format!("Invalid range start value: {value}"))?;
-                        let mut parts = parts
-                        .next()
-                        .ok_or_else(|| format!("Invalid range: {value}"))?
-                        .trim()
-                        .split($split_char);
-                        let stop = parts
-                        .next()
-                        .ok_or_else(|| format!("Invalid range: {value}"))?
-                        .trim().trim_end_matches($open_symbol)
-                        .parse::<$T>()
-                        .map_err(|_| format!("Invalid range stop value: {value}"))?;
-                        let [<step_ $step_size_or_count>] = parts
-                        .next()
-                        .ok_or_else(|| format!("Invalid range: {value}"))?
-                        .trim()
-                        .parse::<$step_type>()
-                        .map_err(|_| format!("Invalid range step size/count value: {value}"))?;
-                        Ok(Self::new(start, stop, [<step_ $step_size_or_count>]))
-                    }
-                }
-
-                impl<'d, $T> Deserialize<'d> for $t<$T>
-                where
-                    $T: Deserialize<'d> + Copy + FromStr + Clone,
-                {
-                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                    where
-                        D: serde::Deserializer<'d>,
-                    {
-                        struct RangeVisitor<$T>(std::marker::PhantomData<$T>);
-
-                        impl<'de, $T> serde::de::Visitor<'de> for RangeVisitor<$T>
-                        where
-                            $T: Copy + Deserialize<'de> + FromStr,
-                        {
-                            type Value = $t<$T>;
-
-                            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                                write!(
-                                    formatter,
-                                    "a range by step size in the form of \"[start, stop{} {} step\"",
-                                    $open_symbol, $split_char
-                                )
-                            }
-
-                            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                            where
-                                E: serde::de::Error,
-                            {
-                                $t::<$T>::try_from(v).map_err(|e| E::custom(e))
-                            }
-                        }
-                        deserializer.deserialize_str(RangeVisitor::<$T>(core::marker::PhantomData))
-                    }
-                }
+                deserializer.deserialize_str(RangeVisitor::<$T>(core::marker::PhantomData))
             }
-        )*
+        }
+    };
+    (@exclusive $range:ident<$T:ident>, $split_char:literal, $step_type:ident, $step:ident) => {
+        impl<$T> Display for $range<$T>
+        where
+            $T: Display + Copy + Clone,
+        {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                write!(
+                    f,
+                    "{} .. {} {} {}",
+                    self.start, self.stop, $split_char, self.$step
+                )
+            }
+        }
+
+        impl<'a, $T> TryFrom<&'a str> for $range<$T>
+        where
+            $T: Copy + Clone + FromStr,
+        {
+            type Error = String;
+
+            fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+                let mut parts = value.split(&"..");
+                let start = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .parse::<$T>()
+                    .map_err(|_| format!("Invalid range start value: {value}"))?;
+                let mut parts = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .split($split_char);
+                let stop = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .parse::<$T>()
+                    .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                let step = parts
+                    .next()
+                    .ok_or_else(|| format!("Invalid range: {value}"))?
+                    .trim()
+                    .parse::<$step_type>()
+                    .map_err(|_| format!("Invalid range step size/count value: {value}"))?;
+                Ok(Self::new(start, stop, step))
+            }
+        }
+
+        impl<$T> Serialize for $range<$T>
+        where
+            $T: Serialize + Copy + Display + Clone,
+        {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(&format!("{}", self))
+            }
+        }
+
+        impl<'d, $T> Deserialize<'d> for $range<$T>
+        where
+            $T: Deserialize<'d> + Copy + FromStr + Clone,
+        {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'d>,
+            {
+                struct RangeVisitor<$T>(std::marker::PhantomData<$T>);
+
+                impl<'de, $T> serde::de::Visitor<'de> for RangeVisitor<$T>
+                where
+                    $T: Copy + Deserialize<'de> + FromStr,
+                {
+                    type Value = $range<$T>;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        write!(
+                            formatter,
+                            "an inclusive range by step size in the form of \"start .. stop {} \
+                             step\"",
+                            $split_char
+                        )
+                    }
+
+                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        $range::<$T>::try_from(v).map_err(|e| E::custom(e))
+                    }
+                }
+                deserializer.deserialize_str(RangeVisitor::<$T>(core::marker::PhantomData))
+            }
+        }
     };
 }
 
-impl_display_serialisation!(RangeByStepSizeExclusive<T>, ')', '/', T, size; RangeByStepSizeInclusive<T>, ']', '/', T, size);
+impl_serialisation!(@exclusive RangeByStepSizeExclusive<T>, '/', T, step_size);
+impl_serialisation!(@inclusive RangeByStepSizeInclusive<T>, '/', T, step_size);
 
 impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// Returns the number of steps in this range of angles.
@@ -456,7 +546,11 @@ where
     }
 }
 
-impl_display_serialisation!(RangeByStepCountExclusive<T>, ')', '|', usize, count; RangeByStepCountInclusive<T>, ']', '|', usize, count);
+// impl_serialisation!(exclusive, RangeByStepCountExclusive<T>, '|', usize,
+// step_count;     inclusive, RangeByStepCountInclusive<T>, '|', usize,
+// step_count;);
+impl_serialisation!(@exclusive RangeByStepCountExclusive<T>, '|', usize, step_count);
+impl_serialisation!(@inclusive RangeByStepCountInclusive<T>, '|', usize, step_count);
 
 /// Defines a range from a start value to a stop value with a given step size.
 ///
@@ -492,11 +586,11 @@ where
     type Error = String;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut parts = value.split(',');
+        let mut parts = value.split(&"..");
         let start = parts
             .next()
             .ok_or_else(|| format!("Invalid range: {value}"))?
-            .trim_matches('[')
+            .trim()
             .parse::<T>()
             .map_err(|_| format!("Invalid range start value: {value}"))?;
         let mut parts = parts
@@ -517,35 +611,26 @@ where
             .parse::<T>()
             .map_err(|_| format!("Invalid range step size value: {value}"))?;
 
-        match stop_str.chars().last() {
-            None => {
-                return Err(format!("Invalid range stop value: {value}"));
+        match stop_str.chars().next() {
+            Some('=') => {
+                // Inclusive
+                let stop = stop_str[1..]
+                    .parse::<T>()
+                    .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                Ok(Self::Inclusive(RangeByStepSizeInclusive::new(
+                    start, stop, step_size,
+                )))
             }
-            Some(s) => {
-                match s {
-                    ']' => {
-                        // Inclusive
-                        let stop = stop_str[..stop_str.len() - 1]
-                            .parse::<T>()
-                            .map_err(|_| format!("Invalid range stop value: {value}"))?;
-                        Ok(Self::Inclusive(RangeByStepSizeInclusive::new(
-                            start, stop, step_size,
-                        )))
-                    }
-                    ')' => {
-                        // Exclusive
-                        let stop = stop_str[..stop_str.len() - 1]
-                            .parse::<T>()
-                            .map_err(|_| format!("Invalid range stop value: {value}"))?;
-                        Ok(Self::Exclusive(RangeByStepSizeExclusive::new(
-                            start, stop, step_size,
-                        )))
-                    }
-                    _ => {
-                        return Err(format!("Invalid range stop value: {value}"));
-                    }
-                }
+            Some(_) => {
+                // Exclusive
+                let stop = stop_str[..]
+                    .parse::<T>()
+                    .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                Ok(Self::Exclusive(RangeByStepSizeExclusive::new(
+                    start, stop, step_size,
+                )))
             }
+            None => Err(format!("Invalid range stop value: {value}")),
         }
     }
 }
@@ -569,7 +654,7 @@ where
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(
                     formatter,
-                    "a range by step size in the form of '[start, stop] / step or '[start, stop) \
+                    "a range by step size in the form of 'start .. stop / step' or 'start .. stop \
                      / step'"
                 )
             }
@@ -630,11 +715,11 @@ where
     type Error = String;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut parts = value.split(',');
+        let mut parts = value.split(&"..");
         let start = parts
             .next()
             .ok_or_else(|| format!("Invalid range: {value}"))?
-            .trim_matches('[')
+            .trim()
             .parse::<T>()
             .map_err(|_| format!("Invalid range start value: {value}"))?;
         let mut parts = parts
@@ -653,35 +738,26 @@ where
             .parse::<usize>()
             .map_err(|_| format!("Invalid range step size value: {value}"))?;
 
-        match stop_str.chars().last() {
-            None => {
-                return Err(format!("Invalid range stop value: {value}"));
+        match stop_str.chars().next() {
+            Some('=') => {
+                // Inclusive
+                let stop = stop_str[1..]
+                    .parse::<T>()
+                    .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                Ok(Self::Inclusive(RangeByStepCountInclusive::new(
+                    start, stop, step_count,
+                )))
             }
-            Some(s) => {
-                match s {
-                    ']' => {
-                        // Inclusive
-                        let stop = stop_str[..stop_str.len() - 1]
-                            .parse::<T>()
-                            .map_err(|_| format!("Invalid range stop value: {value}"))?;
-                        Ok(Self::Inclusive(RangeByStepCountInclusive::new(
-                            start, stop, step_count,
-                        )))
-                    }
-                    ')' => {
-                        // Exclusive
-                        let stop = stop_str[..stop_str.len() - 1]
-                            .parse::<T>()
-                            .map_err(|_| format!("Invalid range stop value: {value}"))?;
-                        Ok(Self::Exclusive(RangeByStepCountExclusive::new(
-                            start, stop, step_count,
-                        )))
-                    }
-                    _ => {
-                        return Err(format!("Invalid range stop value: {value}"));
-                    }
-                }
+            Some(_) => {
+                // Exclusive
+                let stop = stop_str[..]
+                    .parse::<T>()
+                    .map_err(|_| format!("Invalid range stop value: {value}"))?;
+                Ok(Self::Exclusive(RangeByStepCountExclusive::new(
+                    start, stop, step_count,
+                )))
             }
+            None => Err(format!("Invalid range stop value: {value}")),
         }
     }
 }
@@ -900,16 +976,34 @@ mod range_by_step_count_tests {
     fn serialization_inclusive() {
         let range = RangeByStepCountInclusive::new(0, 10, 3);
         let serialized = serde_yaml::to_string(&range).unwrap();
-        assert_eq!(serialized, "[0, 10] | 3");
+        assert_eq!(serialized, "0 .. =10 | 3\n");
         let deserialized: RangeByStepCountInclusive<i32> =
             serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(deserialized, range);
 
         let range = RangeByStepCount::new_inclusive(0, 10, 3);
         let serialized = serde_yaml::to_string(&range).unwrap();
-        assert_eq!(serialized, "[0, 10] | 3");
+        assert_eq!(serialized, "0 .. =10 | 3\n");
         let deserialized: RangeByStepCount<i32> = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(deserialized, range);
+        assert!(deserialized.is_inclusive());
+    }
+
+    #[test]
+    fn serialization_exclusive() {
+        let range = RangeByStepCountExclusive::new(0, 10, 3);
+        let serialized = serde_yaml::to_string(&range).unwrap();
+        assert_eq!(serialized, "0 .. 10 | 3\n");
+        let deserialized: RangeByStepCountExclusive<i32> =
+            serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, range);
+
+        let range = RangeByStepCount::new_exclusive(0, 10, 3);
+        let serialized = serde_yaml::to_string(&range).unwrap();
+        assert_eq!(serialized, "0 .. 10 | 3\n");
+        let deserialized: RangeByStepCount<i32> = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, range);
+        assert!(deserialized.is_exclusive());
     }
 
     #[test]
@@ -938,13 +1032,13 @@ mod range_by_step_size_tests {
 
     #[test]
     fn try_from_str_inclusive() {
-        let range = RangeByStepSize::<f32>::try_from("[0.0, 12.0] / 0.3").unwrap();
+        let range = RangeByStepSize::<f32>::try_from("0.0 .. =12.0 / 0.3").unwrap();
         assert_eq!(range.start(), 0.0);
         assert_eq!(range.stop(), 12.0);
         assert_eq!(range.step_size(), 0.3);
         assert!(!range.is_exclusive());
 
-        let range = RangeByStepSizeInclusive::<f32>::try_from("[0.0, 16.0] / 0.2").unwrap();
+        let range = RangeByStepSizeInclusive::<f32>::try_from("0.0 .. =16.0 / 0.2").unwrap();
         assert_eq!(range.start, 0.0);
         assert_eq!(range.stop, 16.0);
         assert_eq!(range.step_size, 0.2);
@@ -952,13 +1046,13 @@ mod range_by_step_size_tests {
 
     #[test]
     fn try_from_str_exclusive() {
-        let range = RangeByStepSize::<f32>::try_from("[0.0, 1.0) / 0.1").unwrap();
+        let range = RangeByStepSize::<f32>::try_from("0.0 .. 1.0 / 0.1").unwrap();
         assert_eq!(range.start(), 0.0);
         assert_eq!(range.stop(), 1.0);
         assert_eq!(range.step_size(), 0.1);
         assert!(range.is_exclusive());
 
-        let range = RangeByStepSizeExclusive::<f32>::try_from("[0.0, 1.0) / 0.1").unwrap();
+        let range = RangeByStepSizeExclusive::<f32>::try_from("0.0 .. 1.0 / 0.1").unwrap();
         assert_eq!(range.start, 0.0);
         assert_eq!(range.stop, 1.0);
         assert_eq!(range.step_size, 0.1);
@@ -966,7 +1060,7 @@ mod range_by_step_size_tests {
 
     #[test]
     fn try_from_str_inclusive_angle() {
-        let range = RangeByStepSize::<Radians>::try_from("[0.0 rad, 10.0rad] / 0.1deg").unwrap();
+        let range = RangeByStepSize::<Radians>::try_from("0.0 rad .. =10.0rad / 0.1deg").unwrap();
         assert_eq!(range.start(), radians!(0.0));
         assert_eq!(range.stop(), radians!(10.0));
         assert_eq!(range.step_size(), degrees!(0.1).to_radians());
@@ -975,7 +1069,7 @@ mod range_by_step_size_tests {
 
     #[test]
     fn try_from_str_exclusive_angle() {
-        let range = RangeByStepSize::<Degrees>::try_from("[0.0rad, 360 deg) / 10.0deg").unwrap();
+        let range = RangeByStepSize::<Degrees>::try_from("0.0rad .. 360 deg / 10.0deg").unwrap();
         assert_eq!(range.start(), degrees!(0.0));
         assert_eq!(range.stop(), degrees!(360.0));
         assert_eq!(range.step_size(), degrees!(10.0));
@@ -987,7 +1081,7 @@ mod range_by_step_size_tests {
         let range = RangeByStepSize::new_exclusive(0.0, 20.0, 0.5);
         let serialized = serde_yaml::to_string(&range).unwrap();
         assert_eq!(
-            serialized, "[0, 20) / 0.5",
+            serialized, "0 .. 20 / 0.5\n",
             "serilisation failed: {}",
             serialized
         );
@@ -1000,11 +1094,23 @@ mod range_by_step_size_tests {
     }
 
     #[test]
+    fn deserialisation_exclusive() {
+        let range_str = "0 .. 20 / 0.5";
+        let deserialized: RangeByStepSize<f32> = serde_yaml::from_str(&range_str).unwrap();
+        let range = RangeByStepSize::new_exclusive(0.0, 20.0, 0.5);
+        assert_eq!(
+            deserialized, range,
+            "deserilisation failed: {}",
+            deserialized
+        );
+    }
+
+    #[test]
     fn serialisation_inclusive() {
         let range = RangeByStepSizeInclusive::new(0.0, 20.0, 0.5f32);
         let serialized = serde_yaml::to_string(&range).unwrap();
         assert_eq!(
-            serialized, "[0, 20] / 0.5",
+            serialized, "0 .. =20 / 0.5\n",
             "serilisation failed: {}",
             serialized
         );
@@ -1020,9 +1126,9 @@ mod range_by_step_size_tests {
     #[test]
     fn display() {
         let range = RangeByStepSize::new_exclusive(0.5, 20.5, 0.5);
-        assert_eq!(format!("{}", range), "[0.5, 20.5) / 0.5");
+        assert_eq!(format!("{}", range), "0.5 .. 20.5 / 0.5");
         let range = RangeByStepSize::new_inclusive(0.5, 20.5, 0.5);
-        assert_eq!(format!("{}", range), "[0.5, 20.5] / 0.5");
+        assert_eq!(format!("{}", range), "0.5 .. =20.5 / 0.5");
     }
 
     #[test]

@@ -276,7 +276,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                 );
             }
             MeasurementKindDescription::Madf(measurement) => {
-                measure_microfacet_normal_distribution(
+                measure_microfacet_area_distribution(
                     measurement,
                     &surfaces,
                     &cache,
@@ -366,7 +366,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
 
 /// Measures the microfacet normal distribution of the given micro-surface and
 /// saves the result to the given output directory.
-fn measure_microfacet_normal_distribution(
+fn measure_microfacet_area_distribution(
     measurement: MadfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
@@ -376,7 +376,7 @@ fn measure_microfacet_normal_distribution(
     compression: CompressionScheme,
 ) -> Result<(), Error> {
     println!(
-        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet normal distribution:
+        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet area distribution:
     • parameters:
       + azimuth: {} ~ {} per {}
       + zenith: {} ~ {} per {}",

@@ -496,10 +496,10 @@ impl VisibilityEstimator {
             label: Some("ve_bake_depth_maps_encoder"),
         });
 
-        encoder.push_debug_group("oc_depth_maps_bake");
+        // encoder.push_debug_group("oc_depth_maps_bake");
 
         for i in 0..self.num_measurement_points {
-            encoder.push_debug_group(&format!("oc_depth_maps_bake_{i}"));
+            //encoder.push_debug_group(&format!("oc_depth_maps_bake_{i}"));
             encoder.copy_buffer_to_buffer(
                 &self.measurement_points_buffer,
                 i as u64 * Uniforms::SIZE_IN_BYTES,
@@ -527,9 +527,9 @@ impl VisibilityEstimator {
                 pass.set_index_buffer(facets_idx_buf.slice(..), Self::INDEX_FORMAT);
                 pass.draw_indexed(0..facets_idx_num, 0, 0..1);
             }
-            encoder.pop_debug_group();
+            //encoder.pop_debug_group();
         }
-        encoder.pop_debug_group();
+        //encoder.pop_debug_group();
 
         self.depth_attachment.copy_to_storage(&mut encoder);
         queue.submit(Some(encoder.finish()));
@@ -550,9 +550,9 @@ impl VisibilityEstimator {
             label: Some("visibility_estimation_render_encoder"),
         });
 
-        encoder.push_debug_group("oc_render_pass");
+        //encoder.push_debug_group("oc_render_pass");
         for i in 0..self.num_measurement_points {
-            encoder.push_debug_group(&format!("oc_render_pass_{i}"));
+            //encoder.push_debug_group(&format!("oc_render_pass_{i}"));
             encoder.copy_buffer_to_buffer(
                 &self.measurement_points_buffer,
                 i as u64 * Uniforms::SIZE_IN_BYTES,
@@ -611,9 +611,9 @@ impl VisibilityEstimator {
                 render_pass.set_index_buffer(visible_facets_idx_buf.slice(..), Self::INDEX_FORMAT);
                 render_pass.draw_indexed(0..visible_facets_idx_num, 0, 0..1);
             }
-            encoder.pop_debug_group();
+            //encoder.pop_debug_group();
         }
-        encoder.pop_debug_group();
+        //encoder.pop_debug_group();
 
         self.color_attachments[0].copy_to_storage(&mut encoder);
         self.color_attachments[1].copy_to_storage(&mut encoder);
