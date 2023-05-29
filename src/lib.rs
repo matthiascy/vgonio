@@ -195,18 +195,19 @@ impl SphericalCoord {
 /// The domain of the spherical coordinate.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[repr(u8)]
 pub enum SphericalDomain {
     /// Simulation happens only on upper part of the sphere.
     #[serde(rename = "upper_hemisphere")]
-    Upper,
+    Upper = 0x01,
 
     /// Simulation happens only on lower part of the sphere.
     #[serde(rename = "lower_hemisphere")]
-    Lower,
+    Lower = 0x02,
 
     /// Simulation happens on the whole sphere.
     #[serde(rename = "whole_sphere")]
-    Whole,
+    Whole = 0x00,
 }
 
 impl Display for SphericalDomain {
@@ -265,6 +266,7 @@ impl SphericalDomain {
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[repr(u8)]
 pub enum SphericalPartition {
     /// The collector is partitioned into a number of regions with the same
     /// angular interval.
@@ -274,7 +276,7 @@ pub enum SphericalPartition {
 
         /// Range of interest of the azimuthal angle φ.
         azimuth: RangeByStepSizeInclusive<Radians>,
-    },
+    } = 0x00,
 
     /// The collector is partitioned into a number of regions with the same
     /// area (solid angle), azimuthal angle φ is divided into equal intervals;
@@ -285,7 +287,7 @@ pub enum SphericalPartition {
 
         /// Range of interest interval of the azimuthal angle φ.
         azimuth: RangeByStepSizeInclusive<Radians>,
-    },
+    } = 0x01,
 
     /// The collector is partitioned into a number of regions with the same
     /// projected area (projected solid angle).
@@ -295,7 +297,7 @@ pub enum SphericalPartition {
 
         /// Range of interest interval of the azimuthal angle φ.
         azimuth: RangeByStepSizeInclusive<Radians>,
-    },
+    } = 0x02,
 }
 
 impl SphericalPartition {

@@ -511,108 +511,67 @@ pub mod vgms {
 pub mod vgmo {
     use super::*;
     use crate::{
-        measure::measurement::{
-            BsdfMeasurementParams, MadfMeasurementParams, MeasurementKind, MmsfMeasurementParams,
+        math::NumericCast,
+        measure::{
+            bsdf::BsdfKind,
+            emitter::RegionShape,
+            measurement::{
+                BsdfMeasurementParams, MadfMeasurementParams, MeasurementKind,
+                MmsfMeasurementParams, Radius, SimulationKind,
+            },
+            Collector, CollectorScheme, Emitter,
         },
-        units::{rad, Radians},
-        RangeByStepSizeInclusive,
+        units::{mm, rad, Angle, AngleUnit, Radians},
+        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
+        SphericalPartition,
     };
+    use byteorder::WriteBytesExt;
     use std::io::BufWriter;
 
-    // // TODO: replace with RangeByStepCount or RangeByStepSize
-    // /// The range of the angle in the measurement, in radians.
-    // #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    // pub struct AngleRange {
-    //     /// The start angle of the measurement, in radians.
-    //     pub start: f32,
-    //     /// The end angle of the measurement, in radians.
-    //     pub end: f32,
-    //     /// The number of angle bins of the measurement.
-    //     pub bin_count: u32,
-    //     /// The width of each angle bin, in radians.
-    //     pub bin_width: f32,
-    // }
-    //
-    // impl AngleRange {
-    //     /// Returns all the possible angles as an iterator.
-    //     pub fn angles(&self) -> impl Iterator<Item = f32> {
-    //         let start = self.start;
-    //         let end = self.end;
-    //         let bin_width = self.bin_width;
-    //         (0..self.bin_count).map(move |i| (start + bin_width * i as
-    // f32).min(end))     }
-    //
-    //     /// Returns negative values of all the possible angles as an iterator in
-    //     /// reverse order.
-    //     pub fn rev_negative_angles(&self) -> impl Iterator<Item = f32> {
-    //         let start = self.start;
-    //         let end = self.end;
-    //         let bin_width = self.bin_width;
-    //         (0..self.bin_count)
-    //             .map(move |i| (start - bin_width * i as f32).max(-end))
-    //             .rev()
-    //     }
-    //
-    //     /// Returns the inclusive range of the angle.
-    //     pub fn range_inclusive(&self) -> RangeInclusive<f32> {
-    // self.start..=self.end }
-    //
-    //     /// Returns the index of the angle in the range of the measurement.
-    //     ///
-    //     /// The index of the bin is determined by testing if the angle falls
-    //     /// inside half of the bin width from the bin boundary.
-    //     pub fn angle_index(&self, angle: f32) -> usize {
-    //         ((angle - self.start) / self.bin_width).round() as usize %
-    // self.bin_count as usize     }
-    // }
-    //
-    // #[test]
-    // fn angle_range() {
-    //     let range = AngleRange {
-    //         start: 0.0,
-    //         end: 90.0,
-    //         bin_count: 19,
-    //         bin_width: 5.0,
-    //     };
-    //     let angles: Vec<_> = range.angles().collect();
-    //     assert_eq!(angles.len(), 19);
-    //     assert_eq!(angles[0], 0.0);
-    //     assert_eq!(angles[1], 5.0);
-    //     assert_eq!(angles.last(), Some(&90.0));
-    //
-    //     let angles: Vec<_> = range.rev_negative_angles().collect();
-    //     assert_eq!(angles.len(), 19);
-    //     assert_eq!(angles[0], -90.0);
-    //     assert_eq!(angles[1], -85.0);
-    //     assert_eq!(angles.last(), Some(&0.0));
-    // }
-    //
-    // #[test]
-    // fn test_angle_index() {
-    //     let range = AngleRange {
-    //         start: 0.0,
-    //         end: 360.0,
-    //         bin_count: 12,
-    //         bin_width: 30.0,
-    //     };
-    //     assert_eq!(range.angle_index(0.0), 0);
-    //     assert_eq!(range.angle_index(12.0), 0);
-    //     assert_eq!(range.angle_index(15.0), 1);
-    //     assert_eq!(range.angle_index(30.0), 1);
-    //     assert_eq!(range.angle_index(30.01), 1);
-    //     assert_eq!(range.angle_index(45.0), 2);
-    //     assert_eq!(range.angle_index(60.0), 2);
-    //     assert_eq!(range.angle_index(90.0), 3);
-    //
-    //     let range = AngleRange {
-    //         start: 0.0,
-    //         end: std::f32::consts::TAU,
-    //         bin_count: 12,
-    //         bin_width: 30.0f32.to_radians(),
-    //     };
-    //     assert_eq!(range.angle_index(0.0), 0);
-    //     assert_eq!(range.angle_index(10.0f32.to_radians()), 0);
-    // }
+    impl<T> RangeByStepSizeInclusive<T>
+    where
+        T: ~const NumericCast<f32> + Copy + Clone,
+    {
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= 16,
+                "RangeByStepSizeInclusive needs at least 16 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&self.start.to_le_bytes());
+            buf[4..8].copy_from_slice(&self.end.to_le_bytes());
+            buf[8..12].copy_from_slice(&step_size.to_le_bytes());
+            buf[12..16].copy_from_slice(&self.step_count().to_le_bytes());
+        }
+    }
+
+    impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= 16,
+                "RangeByStepSizeInclusive needs at least 16 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&self.start.to_le_bytes());
+            buf[4..8].copy_from_slice(&self.end.to_le_bytes());
+            buf[8..12].copy_from_slice(&step_size.to_le_bytes());
+            buf[12..16].copy_from_slice(&self.step_count_wrapped().to_le_bytes());
+        }
+    }
+
+    impl<T> RangeByStepCountInclusive<T>
+    where
+        T: ~const NumericCast<f32> + Copy + Clone,
+    {
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= 16,
+                "RangeByStepCountInclusive needs at least 16 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&self.start.to_le_bytes());
+            buf[4..8].copy_from_slice(&self.end.to_le_bytes());
+            buf[8..12].copy_from_slice(&self.step_size().to_le_bytes());
+            buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
+        }
+    }
 
     /// First 8 bytes of the header.
     ///
@@ -861,10 +820,164 @@ pub mod vgmo {
         }
     }
 
+    impl RegionShape {
+        pub const REQUIRED_SIZE: usize = 20;
+
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "RegionShape needs at least 20 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&(self as u32).to_le_bytes());
+            match self.shape {
+                RegionShape::SphericalCap { zenith } => {
+                    buf[4..8].copy_from_slice(&zenith.value.to_le_bytes());
+                }
+                RegionShape::SphericalRect { zenith, azimuth } => {
+                    buf[4..8].copy_from_slice(&zenith.0.value().to_le_bytes());
+                    buf[8..12].copy_from_slice(&zenith.1.value().to_le_bytes());
+                    buf[12..16].copy_from_slice(&azimuth.0.value().to_le_bytes());
+                    buf[16..20].copy_from_slice(&azimuth.1.value().to_le_bytes());
+                }
+            }
+        }
+    }
+
+    impl Emitter {
+        pub const REQUIRED_SIZE: usize = 80;
+
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "Emitter needs at least 80 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
+            buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
+            buf[8..12].copy_from_slice(&self.radius.value().to_le_bytes());
+            self.zenith.write_to_buf(&mut buf[12..12 + 16]);
+            self.azimuth.write_to_buf(&mut buf[28..28 + 16]);
+            self.shape.write_to_buf(&mut buf[44..44 + 20]);
+            self.spectrum.write_to_buf(&mut buf[64..64 + 16]);
+        }
+    }
+
+    impl SphericalPartition {
+        /// The required size of the buffer to write the partition to.
+        pub const REQUIRED_SIZE: usize = 36;
+
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "SphericalPartition needs at least 36 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&(self as u32).to_le_bytes());
+            match self {
+                SphericalPartition::EqualAngle { zenith, azimuth }
+                | SphericalPartition::EqualArea { zenith, azimuth }
+                | SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                    zenith.write_to_buf(&mut buf[4..4 + 16]);
+                    azimuth.write_to_buf(&mut buf[20..20 + 16]);
+                }
+            }
+        }
+    }
+
+    impl CollectorScheme {
+        pub const REQUIRED_SIZE: usize = 60;
+
+        /// The size of the buffer required to write the partitioned region.
+        pub const PARTITIONED_REGION_SIZE: usize = 44;
+
+        /// The size of the buffer required to write the single region.
+        pub const SINGLE_REGION_SIZE: usize = 60;
+
+        pub fn read_from_buf(&self, buf: &[u8]) -> Self {}
+
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "CollectorScheme needs at least 60 bytes of space"
+            );
+            buf[0..4].copy_from_slice(&(self as u32).to_le_bytes());
+            match self {
+                CollectorScheme::Partitioned { domain, partition } => {
+                    buf[4..8].copy_from_slice(&(domain as u32).to_le_bytes());
+                    partition.write_to_buf(&mut buf[8..8 + SphericalPartition::REQUIRED_SIZE]);
+                }
+                CollectorScheme::SingleRegion {
+                    domain,
+                    shape,
+                    zenith,
+                    azimuth,
+                } => {
+                    buf[4..8].copy_from_slice(&(domain as u32).to_le_bytes());
+                    shape.write_to_buf(&mut buf[8..8 + RegionShape::REQUIRED_SIZE]);
+                    zenith.write_to_buf(&mut buf[28..28 + 16]);
+                    azimuth.write_to_buf(&mut buf[44..44 + 16]);
+                }
+            }
+        }
+    }
+
+    impl Collector {
+        pub const REQUIRED_SIZE: usize = 4 + CollectorScheme::REQUIRED_SIZE;
+
+        pub fn read_from_buf(&self, buf: &[u8]) -> Self {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "Collector needs at least 64 bytes of space"
+            );
+            let radius = {
+                let val = f32::from_le_bytes(buf[0..4].try_into().unwrap());
+                if val.is_infinite() {
+                    Radius::Auto(mm!(0.0))
+                } else {
+                    Radius::Fixed(mm!(val))
+                }
+            };
+            let scheme =
+                CollectorScheme::read_from_buf(&buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
+            Self { radius, scheme }
+        }
+
+        pub const fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "Collector needs at least 64 bytes of space"
+            );
+            match self.radius {
+                Radius::Auto(_) => {
+                    buf[0..4].copy_from_slice(&f32::INFINITY.to_le_bytes());
+                }
+                Radius::Fixed(r) => {
+                    buf[0..4].copy_from_slice(&r.value().to_le_bytes());
+                }
+            }
+            buf[0..4].copy_from_slice(&self.radius.value().to_le_bytes());
+            self.scheme
+                .write_to_buf(&mut buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
+        }
+    }
+
     impl BsdfMeasurementParams {
         /// Reads the BSDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            todo!("Read BSDF measurement parameters from VGMO file")
+            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4];
+            reader.read_exact(&mut buf)?;
+            let kind = BsdfKind::from(buf[0]);
+            let incident_medium = Medium::from(buf[1]);
+            let transmitted_medium = Medium::from(buf[2]);
+            let sim_kind = SimulationKind::from(buf[3]);
+            let emitter = Emitter::read_from_buf(&buf[4..4 + Emitter::REQUIRED_SIZE]);
+            let collector = Collector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
+            Ok(Self {
+                kind,
+                incident_medium,
+                transmitted_medium,
+                sim_kind,
+                emitter,
+                collector,
+            })
         }
 
         /// Writes the BSDF measurement parameters to the given writer.
@@ -872,7 +985,16 @@ pub mod vgmo {
             &self,
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
-            todo!("Write BSDF measurement parameters to VGMO file")
+            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4];
+            buf[0] = self.kind as u8;
+            buf[1] = self.incident_medium as u8;
+            buf[2] = self.transmitted_medium as u8;
+            buf[3] = self.sim_kind as u8;
+            self.emitter
+                .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
+            self.collector
+                .write_to_buf(&mut buf[4 + Emitter::REQUIRED_SIZE..]);
+            writer.write_all(&buf).map_err(|err| err.into())
         }
     }
 

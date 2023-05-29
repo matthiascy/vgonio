@@ -1,7 +1,7 @@
 use crate::{
     measure::{emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
-    RangeByStepSizeExclusive, SphericalDomain, SphericalPartition,
+    RangeByStepSizeExclusive, RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
 };
 use glam::{Vec3, Vec3A};
 use std::ops::{Deref, DerefMut};
@@ -41,6 +41,7 @@ pub struct Collector {
 /// Strategy for data collection.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[repr(u8)]
 pub enum CollectorScheme {
     /// The patches are subdivided using a spherical partition.
     Partitioned {
@@ -48,7 +49,7 @@ pub enum CollectorScheme {
         domain: SphericalDomain,
         /// Spherical partition of the collector.
         partition: SphericalPartition,
-    },
+    } = 0x00,
     /// The collector is represented by a single shape on the surface of the
     /// sphere.
     SingleRegion {
@@ -58,11 +59,11 @@ pub enum CollectorScheme {
         shape: RegionShape,
         /// Collector's possible positions in spherical coordinates (inclination
         /// angle range).
-        zenith: RangeByStepSizeExclusive<Radians>,
+        zenith: RangeByStepSizeInclusive<Radians>,
         /// Collector's possible positions in spherical coordinates (azimuthal
         /// angle range).
-        azimuth: RangeByStepSizeExclusive<Radians>,
-    },
+        azimuth: RangeByStepSizeInclusive<Radians>,
+    } = 0x01,
 }
 
 impl CollectorScheme {

@@ -546,9 +546,6 @@ where
     }
 }
 
-// impl_serialisation!(exclusive, RangeByStepCountExclusive<T>, '|', usize,
-// step_count;     inclusive, RangeByStepCountInclusive<T>, '|', usize,
-// step_count;);
 impl_serialisation!(@exclusive RangeByStepCountExclusive<T>, '|', usize, step_count);
 impl_serialisation!(@inclusive RangeByStepCountInclusive<T>, '|', usize, step_count);
 

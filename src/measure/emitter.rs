@@ -54,6 +54,7 @@ pub struct Emitter {
 
 /// Represents the shape of a region on the surface of a sphere.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[repr(u8)]
 #[serde(rename_all = "snake_case")]
 pub enum RegionShape {
     /// A patch has a disk shape on the surface of the sphere.
@@ -61,7 +62,7 @@ pub enum RegionShape {
     SphericalCap {
         /// Maximum zenith angle of the spherical cap.
         zenith: Radians,
-    },
+    } = 0x00,
     /// A patch has a rectangular shape on the surface of the sphere.
     #[serde(rename = "rect")]
     SphericalRect {
@@ -70,7 +71,7 @@ pub enum RegionShape {
 
         /// Azimuthal angle range of the patch (in radians).
         azimuth: (Radians, Radians),
-    },
+    } = 0x01,
 }
 
 impl RegionShape {
