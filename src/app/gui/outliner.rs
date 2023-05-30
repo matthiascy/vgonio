@@ -196,16 +196,13 @@ impl MeasuredDataCollapsableHeader {
         data: Weak<MeasurementData>,
         plots: &mut Vec<(Weak<MeasurementData>, PlottingInspector)>,
     ) {
-        let meas_data = data.upgrade().unwrap();
-        let id = ui.make_persistent_id(&meas_data.name);
+        let measured = data.upgrade().unwrap();
+        let id = ui.make_persistent_id(&measured.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
                 ui.vertical_centered_justified(|ui| {
                     ui.horizontal(|ui| {
-                        if ui
-                            .selectable_label(self.selected, &meas_data.name)
-                            .clicked()
-                        {
+                        if ui.selectable_label(self.selected, &measured.name).clicked() {
                             self.selected = !self.selected;
                         }
                     })
@@ -216,10 +213,10 @@ impl MeasuredDataCollapsableHeader {
                     .num_columns(2)
                     .show(ui, |ui| {
                         ui.label("Type:");
-                        ui.label(format!("{}", meas_data.kind));
+                        ui.label(format!("{}", measured.kind));
                         ui.end_row();
                         ui.label("Source:");
-                        match meas_data.source {
+                        match measured.source {
                             MeasurementDataSource::Loaded(_) => {
                                 ui.label("loaded");
                             }
@@ -229,35 +226,37 @@ impl MeasuredDataCollapsableHeader {
                         }
                         ui.end_row();
 
-                        if meas_data.kind == MeasurementKind::MicrofacetAreaDistribution
-                            || meas_data.kind == MeasurementKind::MicrofacetMaskingShadowing
+                        if measured.kind == MeasurementKind::MicrofacetAreaDistribution
+                            || measured.kind == MeasurementKind::MicrofacetMaskingShadowing
                         {
+                            let zenith = measured.data.madf_or_mmsf_zenith().unwrap();
+                            let azimuth = measured.data.madf_or_mmsf_azimuth().unwrap();
                             ui.label("θ:");
                             ui.label(format!(
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
-                                meas_data.zenith.start.to_degrees(),
-                                meas_data.zenith.stop.to_degrees(),
-                                meas_data.zenith.step_size.to_degrees(),
+                                zenith.start.to_degrees(),
+                                zenith.stop.to_degrees(),
+                                zenith.step_size.to_degrees(),
                             ));
                             ui.end_row();
                             #[cfg(debug_assertions)]
                             {
                                 ui.label("θ bins:");
-                                ui.label(format!("{}", meas_data.zenith.step_count()));
+                                ui.label(format!("{}", zenith.step_count_wrapped()));
                                 ui.end_row()
                             }
                             ui.label("φ:");
                             ui.label(format!(
                                 "{:.2}° ~ {:.2}°, every {:.2}°",
-                                meas_data.azimuth.start.to_degrees(),
-                                meas_data.azimuth.stop.to_degrees(),
-                                meas_data.azimuth.step_size.to_degrees(),
+                                azimuth.start.to_degrees(),
+                                azimuth.stop.to_degrees(),
+                                azimuth.step_size.to_degrees(),
                             ));
                             ui.end_row();
                             #[cfg(debug_assertions)]
                             {
                                 ui.label("φ bins:");
-                                ui.label(format!("{}", meas_data.azimuth.step_count_wrapped()));
+                                ui.label(format!("{}", azimuth.step_count_wrapped()));
                                 ui.end_row()
                             }
                         }
@@ -268,7 +267,7 @@ impl MeasuredDataCollapsableHeader {
                     if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
                         plots.push((
                             data.clone(),
-                            PlottingInspector::new(meas_data.name.clone(), meas_data.clone()),
+                            PlottingInspector::new(measured.name.clone(), measured.clone()),
                         ));
                     }
                 }

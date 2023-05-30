@@ -27,7 +27,7 @@ impl Display for MadfMeasurementParams {
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
             self.zenith.step_size.prettified(),
-            self.zenith.step_count(),
+            self.zenith.step_count_wrapped(),
         )
     }
 }
@@ -45,7 +45,7 @@ impl Display for MmsfMeasurementParams {
             self.zenith.start.prettified(),
             self.zenith.stop.prettified(),
             self.zenith.step_size.prettified(),
-            self.zenith.step_count(),
+            self.zenith.step_count_wrapped(),
             self.resolution,
             self.resolution
         )

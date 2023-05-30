@@ -7,8 +7,11 @@ use crate::{
     io,
     io::vgmo::Header,
     measure::{
-        bsdf::BsdfKind, collector::CollectorScheme, emitter::RegionShape, Collector, Emitter,
-        RtcMethod,
+        bsdf::{BsdfKind, BsdfMeasurementData},
+        collector::CollectorScheme,
+        emitter::RegionShape,
+        microfacet::{MicrofacetAreaDistribution, MicrofacetMaskingShadowing},
+        Collector, Emitter, RtcMethod,
     },
     msurf::MicroSurface,
     units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
@@ -83,16 +86,18 @@ pub enum SimulationKind {
     WaveOptics,
 }
 
-impl From<u8> for SimulationKind {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for SimulationKind {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0x00 => Self::GeomOptics(RtcMethod::Grid),
+            0x00 => Ok(Self::GeomOptics(RtcMethod::Grid)),
             #[cfg(feature = "embree")]
-            0x01 => Self::GeomOptics(RtcMethod::Embree),
+            0x01 => Ok(Self::GeomOptics(RtcMethod::Embree)),
             #[cfg(feature = "optix")]
-            0x02 => Self::GeomOptics(RtcMethod::Optix),
-            0x03 => Self::WaveOptics,
-            _ => panic!("Invalid simulation kind {}", value),
+            0x02 => Ok(Self::GeomOptics(RtcMethod::Optix)),
+            0x03 => Ok(Self::WaveOptics),
+            _ => Err(format!("Invalid simulation kind {}", value)),
         }
     }
 }
@@ -305,8 +310,8 @@ impl MadfMeasurementParams {
     // ///
     // /// Here one is added to the zenith step count to account for the zenith
     // /// angle of 90°.
-    // pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count()
-    // + 1 }
+    // pub fn zenith_step_count_inclusive(&self) -> usize {
+    // self.zenith.step_count_wrapped() + 1 }
 
     // /// Returns the number of samples that will be taken along the azimuth
     // /// angle.
@@ -317,9 +322,9 @@ impl MadfMeasurementParams {
     // /// azimuth angle of 0°.
     // pub fn azimuth_step_count_inclusive(&self) -> usize {
     //     if self.azimuth.start == Radians::ZERO && self.azimuth.stop ==
-    // Radians::TWO_PI {         self.azimuth.step_count()
+    // Radians::TWO_PI {         self.azimuth.step_count_wrapped()
     //     } else {
-    //         self.azimuth.step_count() + 1
+    //         self.azimuth.step_count_wrapped() + 1
     //     }
     // }
 
@@ -377,28 +382,6 @@ impl MmsfMeasurementParams {
     pub fn measurement_location_count(&self) -> usize {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
     }
-
-    // /// Returns the number of samples that will be taken along the zenith angle.
-    // ///
-    // /// Here one is added to the zenith step count to account for the zenith
-    // /// angle of 90°.
-    // pub fn zenith_step_count_inclusive(&self) -> usize { self.zenith.step_count()
-    // + 1 }
-    //
-    // /// Returns the number of samples that will be taken along the azimuth
-    // /// angle.
-    // ///
-    // /// Here no additional step is added to the azimuth step count due to that
-    // /// in most cases the azimuth angle sampling range will be [0°, 360°] and
-    // /// thus the azimuth angle of 360° will be sampled as it is the same as the
-    // /// azimuth angle of 0°.
-    // pub fn azimuth_step_count_inclusive(&self) -> usize {
-    //     if self.azimuth.start == Radians::ZERO && self.azimuth.stop ==
-    // Radians::TWO_PI {         self.azimuth.step_count()
-    //     } else {
-    //         self.azimuth.step_count() + 1
-    //     }
-    // }
 
     /// Validate the parameters when reading from a file.
     pub fn validate(self) -> Result<Self, Error> {
@@ -647,19 +630,59 @@ impl MeasurementDataSource {
     }
 }
 
+/// Measurement data.
+#[derive(Debug, Clone)]
+pub enum MeasuredData {
+    Madf(MicrofacetAreaDistribution),
+    Mmsf(MicrofacetMaskingShadowing),
+    Bsdf(BsdfMeasurementData),
+}
+
+impl MeasuredData {
+    /// Returns the zenith range of the measurement data if it is a MADF or
+    /// MMSF.
+    pub fn madf_or_mmsf_zenith(&self) -> Option<&RangeByStepSizeInclusive<Radians>> {
+        match self {
+            MeasuredData::Madf(madf) => Some(&madf.params.zenith),
+            MeasuredData::Mmsf(mmsf) => Some(&mmsf.params.zenith),
+            MeasuredData::Bsdf(_) => None,
+        }
+    }
+
+    /// Returns the azimuth range of the measurement data if it is a MADF or
+    /// MMSF.
+    pub fn madf_or_mmsf_azimuth(&self) -> Option<&RangeByStepSizeInclusive<Radians>> {
+        match self {
+            MeasuredData::Madf(madf) => Some(&madf.params.azimuth),
+            MeasuredData::Mmsf(mmsf) => Some(&mmsf.params.azimuth),
+            MeasuredData::Bsdf(_) => None,
+        }
+    }
+
+    /// Returns the samples of the measurement data.
+    pub fn samples(&self) -> &[f32] {
+        match self {
+            MeasuredData::Madf(madf) => &madf.samples,
+            MeasuredData::Mmsf(mmsf) => &mmsf.samples,
+            MeasuredData::Bsdf(bsdf) => todo!("implement this"),
+        }
+    }
+}
+
 // TODO: add support for storing data in the memory in a compressed
 //       format(maybe LZ4).
 /// Structure for storing measurement data in the memory especially
 /// when loading from a file.
 #[derive(Debug, Clone)]
 pub struct MeasurementData {
+    /// Kind of measurement.
     pub kind: MeasurementKind,
-    pub azimuth: RangeByStepSizeInclusive<Radians>,
-    pub zenith: RangeByStepSizeInclusive<Radians>,
-    pub source: MeasurementDataSource,
     /// Internal tag for displaying the measurement data in the GUI.
     pub name: String,
-    pub data: Vec<f32>,
+    /// Origin of the measurement data.
+    pub source: MeasurementDataSource,
+    /// Measurement data.
+    pub data: MeasuredData,
 }
 
 impl Asset for MeasurementData {}
@@ -699,23 +722,23 @@ impl MeasurementData {
             Header::Bsdf { .. } => {
                 todo!("BSDF measurement data is not supported yet")
             }
-            Header::Madf {
-                meta,
-                madf: MadfMeasurementParams { azimuth, zenith },
-            }
-            | Header::Mmsf {
-                meta,
-                mmsf:
-                    MmsfMeasurementParams {
-                        azimuth, zenith, ..
-                    },
-            } => Ok(MeasurementData {
+            Header::Madf { meta, madf } => Ok(MeasurementData {
                 kind: meta.kind,
-                azimuth,
-                zenith,
                 source: MeasurementDataSource::Loaded(path),
                 name,
-                data,
+                data: MeasuredData::Madf(MicrofacetAreaDistribution {
+                    params: madf,
+                    samples: data,
+                }),
+            }),
+            Header::Mmsf { meta, mmsf } => Ok(MeasurementData {
+                kind: meta.kind,
+                source: MeasurementDataSource::Loaded(path),
+                name,
+                data: MeasuredData::Mmsf(MicrofacetMaskingShadowing {
+                    params: mmsf,
+                    samples: data,
+                }),
             }),
         }
     }
@@ -737,13 +760,14 @@ impl MeasurementData {
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn adf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
+        let self_azimuth = self.data.madf_or_mmsf_azimuth().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
-        let azimuth_m_idx = self.azimuth.index_of(azimuth_m.into());
+        let azimuth_m_idx = self_azimuth.index_of(azimuth_m.into());
         let opposite_azimuth_m = azimuth_m.opposite();
-        let opposite_index = if self.azimuth.start <= opposite_azimuth_m
-            && opposite_azimuth_m <= self.azimuth.stop
+        let opposite_index = if self_azimuth.start <= opposite_azimuth_m
+            && opposite_azimuth_m <= self_azimuth.stop
         {
-            Some(self.azimuth.index_of(opposite_azimuth_m))
+            Some(self_azimuth.index_of(opposite_azimuth_m))
         } else {
             None
         };
@@ -756,13 +780,15 @@ impl MeasurementData {
     /// Returns a data slice of the Area Distribution Function for the given
     /// azimuthal angle index.
     pub fn adf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
+        let self_azimuth = self.data.madf_or_mmsf_azimuth().unwrap();
         debug_assert!(self.kind == MeasurementKind::MicrofacetAreaDistribution);
         debug_assert!(
-            azimuth_idx < self.azimuth.step_count_wrapped(),
+            azimuth_idx < self_azimuth.step_count_wrapped(),
             "index out of range"
         );
-        &self.data[azimuth_idx * self.zenith.step_count_wrapped()
-            ..(azimuth_idx + 1) * self.zenith.step_count_wrapped()]
+        let self_zenith = self.data.madf_or_mmsf_zenith().unwrap();
+        &self.data.samples()[azimuth_idx * self_zenith.step_count_wrapped()
+            ..(azimuth_idx + 1) * self_zenith.step_count_wrapped()]
     }
 
     /// Returns the Masking Shadowing Function data slice for the given
@@ -782,17 +808,19 @@ impl MeasurementData {
             self.kind == MeasurementKind::MicrofacetMaskingShadowing,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
+        let self_azimuth = self.data.madf_or_mmsf_azimuth().unwrap();
+        let self_zenith = self.data.madf_or_mmsf_zenith().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_i = azimuth_i.wrap_to_tau();
-        let zenith_m = zenith_m.clamp(self.zenith.start, self.zenith.stop);
-        let azimuth_m_idx = self.azimuth.index_of(azimuth_m);
-        let zenith_m_idx = self.zenith.index_of(zenith_m);
-        let azimuth_i_idx = self.azimuth.index_of(azimuth_i);
+        let zenith_m = zenith_m.clamp(self_zenith.start, self_zenith.stop);
+        let azimuth_m_idx = self_azimuth.index_of(azimuth_m);
+        let zenith_m_idx = self_zenith.index_of(zenith_m);
+        let azimuth_i_idx = self_azimuth.index_of(azimuth_i);
         let opposite_azimuth_i = azimuth_i.opposite();
-        let opposite_azimuth_i_idx = if self.azimuth.start <= opposite_azimuth_i
-            && opposite_azimuth_i <= self.azimuth.stop
+        let opposite_azimuth_i_idx = if self_azimuth.start <= opposite_azimuth_i
+            && opposite_azimuth_i <= self_azimuth.stop
         {
-            Some(self.azimuth.index_of(opposite_azimuth_i))
+            Some(self_azimuth.index_of(opposite_azimuth_i))
         } else {
             None
         };
@@ -811,24 +839,26 @@ impl MeasurementData {
         zenith_m_idx: usize,
         azimuth_i_idx: usize,
     ) -> &[f32] {
+        let self_azimuth = self.data.madf_or_mmsf_azimuth().unwrap();
+        let self_zenith = self.data.madf_or_mmsf_zenith().unwrap();
         debug_assert!(self.kind == MeasurementKind::MicrofacetMaskingShadowing);
         debug_assert!(
-            azimuth_m_idx < self.azimuth.step_count_wrapped(),
+            azimuth_m_idx < self_azimuth.step_count_wrapped(),
             "index out of range"
         );
         debug_assert!(
-            azimuth_i_idx < self.azimuth.step_count_wrapped(),
+            azimuth_i_idx < self_azimuth.step_count_wrapped(),
             "index out of range"
         );
         debug_assert!(
-            zenith_m_idx < self.zenith.step_count_wrapped(),
+            zenith_m_idx < self_zenith.step_count_wrapped(),
             "index out of range"
         );
-        let zenith_bin_count = self.zenith.step_count_wrapped();
-        let azimuth_bin_count = self.azimuth.step_count_wrapped();
+        let zenith_bin_count = self_zenith.step_count_wrapped();
+        let azimuth_bin_count = self_azimuth.step_count_wrapped();
         let offset = azimuth_m_idx * zenith_bin_count * azimuth_bin_count * zenith_bin_count
             + zenith_m_idx * azimuth_bin_count * zenith_bin_count
             + azimuth_i_idx * zenith_bin_count;
-        &self.data[offset..offset + self.zenith.step_count_wrapped()]
+        &self.data.samples()[offset..offset + zenith_bin_count]
     }
 }

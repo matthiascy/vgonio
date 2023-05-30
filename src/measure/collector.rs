@@ -98,6 +98,26 @@ impl CollectorScheme {
             Self::SingleRegion { .. } => true,
         }
     }
+
+    /// Returns the number of samples collected by the collector.
+    pub fn total_sample_count(&self) -> usize {
+        match self {
+            CollectorScheme::Partitioned { partition, .. } => match partition {
+                SphericalPartition::EqualAngle { zenith, azimuth } => {
+                    zenith.step_count_wrapped() * azimuth.step_count_wrapped()
+                }
+                SphericalPartition::EqualArea { zenith, azimuth } => {
+                    zenith.step_count * azimuth.step_count_wrapped()
+                }
+                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                    zenith.step_count * azimuth.step_count_wrapped()
+                }
+            },
+            CollectorScheme::SingleRegion {
+                zenith, azimuth, ..
+            } => zenith.step_count_wrapped() * azimuth.step_count_wrapped(),
+        }
+    }
 }
 
 /// Energy after a ray is reflected by the micro-surface.
@@ -221,7 +241,7 @@ impl Collector {
         //
         // Each element of the vector is a tuple containing the index of the
         // trajectory, the intersection point and the number of bounces.
-        let mut unit_dirs = trajectories
+        let unit_dirs = trajectories
             .iter()
             .enumerate()
             .filter_map(|(i, trajectory)| {
@@ -388,7 +408,9 @@ impl DerefMut for CollectorPatches {
 /// It could be a single region or a partitioned region.
 #[derive(Debug, Copy, Clone)]
 pub enum Patch {
+    /// A patch from spherical partitioning.
     Partitioned(PatchPartitioned),
+    /// A patch from a single region.
     SingleRegion(PatchSingleRegion),
 }
 

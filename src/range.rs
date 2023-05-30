@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
+    marker::PhantomData,
     ops::{Add, Div, Mul, RangeInclusive, Sub},
     str::FromStr,
 };

@@ -2,6 +2,7 @@
 
 #![feature(async_closure)]
 #![feature(const_fn_floating_point_arithmetic)]
+#![feature(const_mut_refs)]
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
 #![feature(vec_push_within_capacity)]
@@ -216,6 +217,19 @@ impl Display for SphericalDomain {
             Self::Upper => write!(f, "upper hemisphere"),
             Self::Lower => write!(f, "lower hemisphere"),
             Self::Whole => write!(f, "whole sphere"),
+        }
+    }
+}
+
+impl TryFrom<u8> for SphericalDomain {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x01 => Ok(Self::Upper),
+            0x02 => Ok(Self::Lower),
+            0x00 => Ok(Self::Whole),
+            _ => Err(format!("unknown spherical domain: {}", value)),
         }
     }
 }

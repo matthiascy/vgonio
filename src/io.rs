@@ -511,7 +511,6 @@ pub mod vgms {
 pub mod vgmo {
     use super::*;
     use crate::{
-        math::NumericCast,
         measure::{
             bsdf::BsdfKind,
             emitter::RegionShape,
@@ -521,55 +520,85 @@ pub mod vgmo {
             },
             Collector, CollectorScheme, Emitter,
         },
-        units::{mm, rad, Angle, AngleUnit, Radians},
-        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
-        SphericalPartition,
+        ulp_eq,
+        units::{
+            mm, rad, solid_angle_of_region, solid_angle_of_spherical_cap, Nanometres, Radians,
+        },
+        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
     };
-    use byteorder::WriteBytesExt;
     use std::io::BufWriter;
 
-    impl<T> RangeByStepSizeInclusive<T>
-    where
-        T: ~const NumericCast<f32> + Copy + Clone,
-    {
+    macro_rules! impl_range_by_step_size_inclusive_read_write {
+        ($($T:ty, $step_count:ident);*) => {
+            $(paste::paste! {
+                impl RangeByStepSizeInclusive<$T> {
+                    #[doc = "Writes the RangeByStepSizeInclusive<`" $T "`> into the given buffer, following the order: start, stop, step_size, step_count."]
+                    pub fn write_to_buf(&self, buf: &mut [u8]) {
+                        debug_assert!(
+                            buf.len() >= 16,
+                            "RangeByStepSizeInclusive needs at least 16 bytes of space"
+                        );
+                        buf[0..4].copy_from_slice(&self.start.value.to_le_bytes());
+                        buf[4..8].copy_from_slice(&self.stop.value.to_le_bytes());
+                        buf[8..12].copy_from_slice(&self.step_size.value.to_le_bytes());
+                        buf[12..16].copy_from_slice(&(self.$step_count() as u32).to_le_bytes());
+                    }
+
+                    #[doc = "Reads the RangeByStepSizeInclusive<`" $T "`> from the given buffer, checking that the step count matches the expected value."]
+                    pub fn read_from_buf(buf: &[u8]) -> Self {
+                        debug_assert!(
+                            buf.len() >= 16,
+                            "RangeByStepSizeInclusive needs at least 16 bytes of space"
+                        );
+                        let start = <$T>::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+                        let end = <$T>::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+                        let step_size = <$T>::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                        let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+                        let range = Self::new(start, end, step_size);
+                        assert_eq!(
+                            step_count,
+                            range.$step_count() as u32,
+                            "RangeByStepSizeInclusive: step count mismatch"
+                        );
+                        range
+                    }
+                }
+            })*
+        };
+    }
+
+    impl_range_by_step_size_inclusive_read_write!(
+        Radians, step_count_wrapped;
+        Nanometres, step_count
+    );
+
+    impl RangeByStepCountInclusive<Radians> {
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= 16,
-                "RangeByStepSizeInclusive needs at least 16 bytes of space"
+                "RangeByStepCountInclusive<Radians> needs at least 16 bytes of space"
             );
-            buf[0..4].copy_from_slice(&self.start.to_le_bytes());
-            buf[4..8].copy_from_slice(&self.end.to_le_bytes());
-            buf[8..12].copy_from_slice(&step_size.to_le_bytes());
-            buf[12..16].copy_from_slice(&self.step_count().to_le_bytes());
+            buf[0..4].copy_from_slice(&self.start.value.to_le_bytes());
+            buf[4..8].copy_from_slice(&self.stop.value.to_le_bytes());
+            buf[8..12].copy_from_slice(&self.step_size().value.to_le_bytes());
+            buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
         }
-    }
 
-    impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
-        pub fn write_to_buf(&self, buf: &mut [u8]) {
-            debug_assert!(
-                buf.len() >= 16,
-                "RangeByStepSizeInclusive needs at least 16 bytes of space"
-            );
-            buf[0..4].copy_from_slice(&self.start.to_le_bytes());
-            buf[4..8].copy_from_slice(&self.end.to_le_bytes());
-            buf[8..12].copy_from_slice(&step_size.to_le_bytes());
-            buf[12..16].copy_from_slice(&self.step_count_wrapped().to_le_bytes());
-        }
-    }
-
-    impl<T> RangeByStepCountInclusive<T>
-    where
-        T: ~const NumericCast<f32> + Copy + Clone,
-    {
-        pub fn write_to_buf(&self, buf: &mut [u8]) {
+        pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= 16,
                 "RangeByStepCountInclusive needs at least 16 bytes of space"
             );
-            buf[0..4].copy_from_slice(&self.start.to_le_bytes());
-            buf[4..8].copy_from_slice(&self.end.to_le_bytes());
-            buf[8..12].copy_from_slice(&self.step_size().to_le_bytes());
-            buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
+            let start = Radians::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+            let end = Radians::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+            let step_size = Radians::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+            let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+            let range = Self::new(start, end, step_count as usize);
+            assert!(
+                ulp_eq(range.step_size().value, step_size.value),
+                "RangeByStepCountInclusive<Radians>: step size mismatch"
+            );
+            range
         }
     }
 
@@ -611,7 +640,11 @@ pub mod vgmo {
 
         pub fn sample_count(&self) -> usize {
             match self {
-                Self::Bsdf { bsdf, .. } => todo!(),
+                Self::Bsdf { bsdf, .. } => {
+                    bsdf.emitter.azimuth.step_count_wrapped()
+                        * bsdf.emitter.zenith.step_count_wrapped()
+                        * bsdf.collector.scheme.total_sample_count()
+                }
                 Self::Madf { madf, .. } => {
                     madf.zenith.step_count_wrapped() * madf.azimuth.step_count_wrapped()
                 }
@@ -717,39 +750,14 @@ pub mod vgmo {
     > {
         let mut buf = [0u8; 40];
         reader.read_exact(&mut buf)?;
-        let azimuth = RangeByStepSizeInclusive::new(
-            rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap())),
-            rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap())),
-            rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap())),
-        );
-        debug_assert_eq!(
-            azimuth.step_count_wrapped() as u32,
-            u32::from_le_bytes(buf[12..16].try_into().unwrap())
-        );
-        let zenith = RangeByStepSizeInclusive::new(
-            rad!(f32::from_le_bytes(buf[16..20].try_into().unwrap())),
-            rad!(f32::from_le_bytes(buf[20..24].try_into().unwrap())),
-            rad!(f32::from_le_bytes(buf[24..28].try_into().unwrap())),
-        );
-        debug_assert_eq!(
-            zenith.step_count_wrapped() as u32,
-            u32::from_le_bytes(buf[28..32].try_into().unwrap())
-        );
+        let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
+        let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
         let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
         #[cfg(debug_assertions)]
-        {
-            if is_madf {
-                debug_assert_eq!(
-                    sample_count as usize,
-                    madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf)
-                );
-            } else {
-                debug_assert_eq!(
-                    sample_count as usize,
-                    madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf)
-                );
-            }
-        }
+        debug_assert_eq!(
+            sample_count as usize,
+            madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf)
+        );
         Ok((azimuth, zenith))
     }
 
@@ -760,14 +768,8 @@ pub mod vgmo {
         is_madf: bool,
     ) -> Result<(), WriteFileErrorKind> {
         let mut header = [0x20; 40];
-        header[0..4].copy_from_slice(&azimuth.start.value.to_le_bytes());
-        header[4..8].copy_from_slice(&azimuth.stop.value.to_le_bytes());
-        header[8..12].copy_from_slice(&azimuth.step_size.value.to_le_bytes());
-        header[12..16].copy_from_slice(&(azimuth.step_count_wrapped() as u32).to_le_bytes());
-        header[16..20].copy_from_slice(&zenith.start.value.to_le_bytes());
-        header[20..24].copy_from_slice(&zenith.stop.value.to_le_bytes());
-        header[24..28].copy_from_slice(&zenith.step_size.value.to_le_bytes());
-        header[28..32].copy_from_slice(&(zenith.step_count_wrapped() as u32).to_le_bytes());
+        azimuth.write_to_buf(&mut header[0..16]);
+        zenith.write_to_buf(&mut header[16..32]);
         header[32..36].copy_from_slice(
             &(madf_or_mmsf_samples_count(zenith, azimuth, is_madf) as u32).to_le_bytes(),
         );
@@ -823,17 +825,46 @@ pub mod vgmo {
     impl RegionShape {
         pub const REQUIRED_SIZE: usize = 20;
 
+        pub fn read_from_buf(buf: &[u8]) -> Self {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "RegionShape needs at least 20 bytes of space"
+            );
+            match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
+                0x00 => {
+                    // Spherical cap
+                    let zenith = rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+                    RegionShape::SphericalCap { zenith }
+                }
+                0x01 => {
+                    // Spherical rectangle
+                    let zenith_start = rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+                    let zenith_stop = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                    let azimuth_start = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
+                    let azimuth_stop = rad!(f32::from_le_bytes(buf[16..20].try_into().unwrap()));
+                    RegionShape::SphericalRect {
+                        zenith: (zenith_start, zenith_stop),
+                        azimuth: (azimuth_start, azimuth_stop),
+                    }
+                }
+                _ => {
+                    panic!("Invalid region shape");
+                }
+            }
+        }
+
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
                 "RegionShape needs at least 20 bytes of space"
             );
-            buf[0..4].copy_from_slice(&(self as u32).to_le_bytes());
-            match self.shape {
+            match self {
                 RegionShape::SphericalCap { zenith } => {
+                    buf[0..4].fill(0x00);
                     buf[4..8].copy_from_slice(&zenith.value.to_le_bytes());
                 }
                 RegionShape::SphericalRect { zenith, azimuth } => {
+                    buf[0..4].copy_from_slice(&0x01u32.to_le_bytes());
                     buf[4..8].copy_from_slice(&zenith.0.value().to_le_bytes());
                     buf[8..12].copy_from_slice(&zenith.1.value().to_le_bytes());
                     buf[12..16].copy_from_slice(&azimuth.0.value().to_le_bytes());
@@ -846,6 +877,36 @@ pub mod vgmo {
     impl Emitter {
         pub const REQUIRED_SIZE: usize = 80;
 
+        pub fn read_from_buf(buf: &[u8]) -> Self {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "Emitter needs at least 80 bytes of space"
+            );
+            let num_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+            let max_bounces = u32::from_le_bytes(buf[4..8].try_into().unwrap());
+            let radius = mm!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+            let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[12..12 + 16]);
+            let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[28..28 + 16]);
+            let shape = RegionShape::read_from_buf(&buf[44..44 + 20]);
+            let spectrum = RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[64..64 + 16]);
+            let solid_angle = match shape {
+                RegionShape::SphericalCap { zenith } => solid_angle_of_spherical_cap(zenith),
+                RegionShape::SphericalRect { zenith, azimuth } => {
+                    solid_angle_of_region(zenith, azimuth)
+                }
+            };
+            Self {
+                num_rays,
+                max_bounces,
+                radius: Radius::Fixed(radius),
+                zenith,
+                azimuth,
+                shape,
+                spectrum,
+                solid_angle,
+            }
+        }
+
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
@@ -853,7 +914,7 @@ pub mod vgmo {
             );
             buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
             buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
-            buf[8..12].copy_from_slice(&self.radius.value().to_le_bytes());
+            buf[8..12].copy_from_slice(&self.radius.value().value.to_le_bytes());
             self.zenith.write_to_buf(&mut buf[12..12 + 16]);
             self.azimuth.write_to_buf(&mut buf[28..28 + 16]);
             self.shape.write_to_buf(&mut buf[44..44 + 20]);
@@ -865,16 +926,59 @@ pub mod vgmo {
         /// The required size of the buffer to write the partition to.
         pub const REQUIRED_SIZE: usize = 36;
 
+        /// Reads a partition from a buffer.
+        pub fn read_from_buf(buf: &[u8]) -> Self {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "SphericalPartition needs at least 36 bytes of space"
+            );
+            let partition_type = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+            match partition_type {
+                0x00 => {
+                    // EqualAngle
+                    let zenith =
+                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[4..4 + 16]);
+                    let azimuth =
+                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
+                    SphericalPartition::EqualAngle { zenith, azimuth }
+                }
+                0x01 => {
+                    // EqualArea
+                    let zenith =
+                        RangeByStepCountInclusive::<Radians>::read_from_buf(&buf[4..4 + 16]);
+                    let azimuth =
+                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
+                    SphericalPartition::EqualArea { zenith, azimuth }
+                }
+                0x02 => {
+                    // EqualProjectedArea
+                    let zenith = RangeByStepCountInclusive::read_from_buf(&buf[4..4 + 16]);
+                    let azimuth =
+                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
+                    SphericalPartition::EqualProjectedArea { zenith, azimuth }
+                }
+                _ => panic!("Invalid partition type: {}", partition_type),
+            }
+        }
+
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
                 "SphericalPartition needs at least 36 bytes of space"
             );
-            buf[0..4].copy_from_slice(&(self as u32).to_le_bytes());
             match self {
-                SphericalPartition::EqualAngle { zenith, azimuth }
-                | SphericalPartition::EqualArea { zenith, azimuth }
-                | SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                SphericalPartition::EqualAngle { zenith, azimuth } => {
+                    buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
+                    zenith.write_to_buf(&mut buf[4..4 + 16]);
+                    azimuth.write_to_buf(&mut buf[20..20 + 16]);
+                }
+                SphericalPartition::EqualArea { zenith, azimuth } => {
+                    buf[0..4].copy_from_slice(&(0x01u32).to_le_bytes());
+                    zenith.write_to_buf(&mut buf[4..4 + 16]);
+                    azimuth.write_to_buf(&mut buf[20..20 + 16]);
+                }
+                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                    buf[0..4].copy_from_slice(&(0x02u32).to_le_bytes());
                     zenith.write_to_buf(&mut buf[4..4 + 16]);
                     azimuth.write_to_buf(&mut buf[20..20 + 16]);
                 }
@@ -883,6 +987,7 @@ pub mod vgmo {
     }
 
     impl CollectorScheme {
+        /// The size of the buffer required to write the collector scheme.
         pub const REQUIRED_SIZE: usize = 60;
 
         /// The size of the buffer required to write the partitioned region.
@@ -891,17 +996,57 @@ pub mod vgmo {
         /// The size of the buffer required to write the single region.
         pub const SINGLE_REGION_SIZE: usize = 60;
 
-        pub fn read_from_buf(&self, buf: &[u8]) -> Self {}
+        /// Reads the collector scheme from a buffer.
+        pub fn read_from_buf(buf: &[u8]) -> Self {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "CollectorScheme needs at least 60 bytes of space"
+            );
+            match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
+                0x00 => {
+                    // Partitioned
+                    let domain = (u32::from_le_bytes(buf[4..8].try_into().unwrap()) as u8)
+                        .try_into()
+                        .unwrap();
+                    let partition = SphericalPartition::read_from_buf(
+                        &buf[8..8 + SphericalPartition::REQUIRED_SIZE],
+                    );
+                    CollectorScheme::Partitioned { domain, partition }
+                }
+                0x01 => {
+                    // Single Region
+                    let domain = (u32::from_le_bytes(buf[4..8].try_into().unwrap()) as u8)
+                        .try_into()
+                        .unwrap();
+                    let shape = RegionShape::read_from_buf(&buf[8..8 + RegionShape::REQUIRED_SIZE]);
+                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                        &buf[8 + RegionShape::REQUIRED_SIZE..8 + RegionShape::REQUIRED_SIZE + 16],
+                    );
+                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                        &buf[8 + RegionShape::REQUIRED_SIZE + 16
+                            ..8 + RegionShape::REQUIRED_SIZE + 32],
+                    );
+                    CollectorScheme::SingleRegion {
+                        domain,
+                        shape,
+                        zenith,
+                        azimuth,
+                    }
+                }
+                _ => panic!("Invalid collector scheme type"),
+            }
+        }
 
+        /// Writes the collector scheme to a buffer.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
                 "CollectorScheme needs at least 60 bytes of space"
             );
-            buf[0..4].copy_from_slice(&(self as u32).to_le_bytes());
             match self {
                 CollectorScheme::Partitioned { domain, partition } => {
-                    buf[4..8].copy_from_slice(&(domain as u32).to_le_bytes());
+                    buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
+                    buf[4..8].copy_from_slice(&(*domain as u32).to_le_bytes());
                     partition.write_to_buf(&mut buf[8..8 + SphericalPartition::REQUIRED_SIZE]);
                 }
                 CollectorScheme::SingleRegion {
@@ -910,7 +1055,8 @@ pub mod vgmo {
                     zenith,
                     azimuth,
                 } => {
-                    buf[4..8].copy_from_slice(&(domain as u32).to_le_bytes());
+                    buf[0..4].copy_from_slice(&(0x01u32).to_le_bytes());
+                    buf[4..8].copy_from_slice(&(*domain as u32).to_le_bytes());
                     shape.write_to_buf(&mut buf[8..8 + RegionShape::REQUIRED_SIZE]);
                     zenith.write_to_buf(&mut buf[28..28 + 16]);
                     azimuth.write_to_buf(&mut buf[44..44 + 16]);
@@ -920,9 +1066,11 @@ pub mod vgmo {
     }
 
     impl Collector {
+        /// The size of the buffer required to write the collector.
         pub const REQUIRED_SIZE: usize = 4 + CollectorScheme::REQUIRED_SIZE;
 
-        pub fn read_from_buf(&self, buf: &[u8]) -> Self {
+        /// Reads the collector from a buffer.
+        pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
                 "Collector needs at least 64 bytes of space"
@@ -940,7 +1088,8 @@ pub mod vgmo {
             Self { radius, scheme }
         }
 
-        pub const fn write_to_buf(&self, buf: &mut [u8]) {
+        /// Writes the collector to a buffer.
+        pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
                 "Collector needs at least 64 bytes of space"
@@ -953,7 +1102,7 @@ pub mod vgmo {
                     buf[0..4].copy_from_slice(&r.value().to_le_bytes());
                 }
             }
-            buf[0..4].copy_from_slice(&self.radius.value().to_le_bytes());
+            buf[0..4].copy_from_slice(&self.radius.value().value.to_le_bytes());
             self.scheme
                 .write_to_buf(&mut buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
         }
@@ -967,7 +1116,7 @@ pub mod vgmo {
             let kind = BsdfKind::from(buf[0]);
             let incident_medium = Medium::from(buf[1]);
             let transmitted_medium = Medium::from(buf[2]);
-            let sim_kind = SimulationKind::from(buf[3]);
+            let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
             let emitter = Emitter::read_from_buf(&buf[4..4 + Emitter::REQUIRED_SIZE]);
             let collector = Collector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
             Ok(Self {
@@ -989,7 +1138,10 @@ pub mod vgmo {
             buf[0] = self.kind as u8;
             buf[1] = self.incident_medium as u8;
             buf[2] = self.transmitted_medium as u8;
-            buf[3] = self.sim_kind as u8;
+            buf[3] = match self.sim_kind {
+                SimulationKind::GeomOptics(method) => method as u8,
+                SimulationKind::WaveOptics => 0x03,
+            };
             self.emitter
                 .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
             self.collector

@@ -396,6 +396,10 @@ impl<A: AngleUnit> const NumericCast<f32> for Angle<A> {
     fn cast(&self) -> f32 { self.value }
 }
 
+impl<A: AngleUnit> const NumericCast<Angle<A>> for f32 {
+    fn cast(&self) -> Angle<A> { Angle::new(*self) }
+}
+
 #[cfg(test)]
 mod angle_unit_tests {
     use super::*;

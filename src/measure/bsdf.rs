@@ -16,6 +16,11 @@ use std::{
 
 use super::measurement::BsdfMeasurementParams;
 
+#[derive(Debug, Clone)]
+pub struct BsdfMeasurementData {
+    // TODO: implement
+}
+
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -72,6 +77,7 @@ impl From<u8> for BsdfKind {
     }
 }
 
+/// Stores the data per wavelength for a spectrum.
 #[derive(Debug)]
 pub struct PerWavelength<T>(pub Vec<T>);
 
@@ -83,6 +89,7 @@ where
 }
 
 impl<T> PerWavelength<T> {
+    /// Creates a new empty `PerWavelength`.
     pub fn empty() -> Self { Self(Vec::new()) }
 }
 
@@ -156,7 +163,7 @@ impl<PerPatchData: Debug> Debug for BsdfMeasurementPoint<PerPatchData> {
 impl<PerPatchData: Clone> Clone for BsdfMeasurementPoint<PerPatchData> {
     fn clone(&self) -> Self {
         Self {
-            patch: self.patch.clone(),
+            patch: self.patch,
             data: self.data.clone(),
         }
     }
@@ -166,7 +173,7 @@ impl<PerPatchData: Clone> Clone for BsdfMeasurementPoint<PerPatchData> {
 /// a microfacet surface.
 #[cfg(feature = "embree")]
 pub fn measure_bsdf_embree_rt(
-    mut desc: BsdfMeasurementParams,
+    desc: BsdfMeasurementParams,
     cache: &Cache,
     surfaces: &[Handle<MicroSurface>],
 ) {

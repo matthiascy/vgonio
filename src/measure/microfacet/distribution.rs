@@ -24,7 +24,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct MicrofacetAreaDistribution {
     /// The measurement parameters.
-    params: MadfMeasurementParams,
+    pub params: MadfMeasurementParams,
     /// The distribution data. The first index is the azimuthal angle, and the
     /// second index is the zenith angle.
     pub samples: Vec<f32>,
@@ -40,7 +40,7 @@ impl MicrofacetAreaDistribution {
     ) -> Result<(), Error> {
         assert_eq!(
             self.samples.len(),
-            self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count(),
+            self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped(),
             "The number of samples does not match the number of bins."
         );
         let file = std::fs::OpenOptions::new()
@@ -109,7 +109,7 @@ pub fn measure_area_distribution(
                     // NOTE: the zenith angle is measured from the top of the
                     // hemisphere. The center of the zenith/azimuth bin are at the zenith/azimuth
                     // angle calculated below.
-                    (0..desc.zenith.step_count()).map(move |zenith_idx| {
+                    (0..desc.zenith.step_count_wrapped()).map(move |zenith_idx| {
                         let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
                         let zenith = zenith_idx as f32 * desc.zenith.step_size;
                         let dir = math::spherical_to_cartesian(
