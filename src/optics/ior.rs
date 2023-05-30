@@ -1,15 +1,21 @@
 //! Index of refraction.
 
 use crate::{
+    ulp_eq,
     units::{nanometres, Length, LengthMeasurement, Nanometres},
     MaterialKind, Medium,
 };
-use std::{cmp::Ordering, collections::HashMap, path::Path};
+use std::{
+    cmp::Ordering,
+    collections::HashMap,
+    fmt::{Debug, Display, Formatter},
+    path::Path,
+};
 
 /// Material's complex refractive index which varies with wavelength of the
 /// light. Wavelengths are in *nanometres*; 0.0 means that the refractive index
 /// is constant over all the wavelengths.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct RefractiveIndex {
     /// corresponding wavelength in nanometres.
     pub wavelength: Nanometres,
@@ -19,6 +25,16 @@ pub struct RefractiveIndex {
 
     /// Extinction coefficient.
     pub k: f32,
+}
+
+impl Debug for RefractiveIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "IOR({}, η={}, κ={})", self.wavelength, self.eta, self.k)
+    }
+}
+
+impl Display for RefractiveIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{:?}", self) }
 }
 
 impl PartialOrd for RefractiveIndex {
@@ -42,6 +58,7 @@ impl RefractiveIndexDatabase {
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
     pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndex> {
+        log::trace!("get_ior_of({:?}, {})", medium, wavelength);
         let refractive_indices = self
             .0
             .get(&medium)
@@ -54,8 +71,9 @@ impl RefractiveIndexDatabase {
             .unwrap();
         let ior_after = refractive_indices[i];
 
+        log::trace!("ior_after: {:?}", ior_after);
         // If the first wavelength is equal to the given one, return it.
-        if ior_after.wavelength.abs_diff_eq(&wavelength, f32::EPSILON) {
+        if ulp_eq(ior_after.wavelength.value, wavelength.value) {
             Some(ior_after)
         } else {
             // Otherwise, interpolate between the two closest refractive indices.

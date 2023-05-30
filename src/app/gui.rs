@@ -1125,10 +1125,7 @@ impl VgonioGuiApp {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", path);
                         match self.cache.load_micro_surface(&self.config, &path) {
-                            Ok((surf, mesh)) => {
-                                // self.state.simulation_workspace.update_surface_list(
-                                //     &cache.borrow().loaded_micro_surface_paths().unwrap(),
-                                // );
+                            Ok((surf, _)) => {
                                 let _ = self
                                     .cache
                                     .create_micro_surface_renderable_mesh(

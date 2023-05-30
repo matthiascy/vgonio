@@ -152,8 +152,6 @@ impl Emitter {
                     )
                 }
                 RegionShape::SphericalRect { zenith, azimuth } => {
-                    let zenith_range = zenith.0.value..zenith.1.value;
-                    let azimuth_range = azimuth.0.value..azimuth.1.value;
                     (zenith.0, zenith.1, azimuth.0, azimuth.1)
                 }
             }

@@ -573,6 +573,8 @@ pub mod vgmo {
     );
 
     impl RangeByStepCountInclusive<Radians> {
+        /// Writes the RangeByStepCountInclusive<Radians> into the given buffer,
+        /// following the order: start, stop, step_size, step_count.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= 16,
@@ -584,6 +586,8 @@ pub mod vgmo {
             buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
         }
 
+        /// Reads the RangeByStepCountInclusive<Radians> from the given buffer,
+        /// checking that the step size matches the expected value.
         pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= 16,
@@ -643,6 +647,7 @@ pub mod vgmo {
                 Self::Bsdf { bsdf, .. } => {
                     bsdf.emitter.azimuth.step_count_wrapped()
                         * bsdf.emitter.zenith.step_count_wrapped()
+                        * bsdf.emitter.spectrum.step_count()
                         * bsdf.collector.scheme.total_sample_count()
                 }
                 Self::Madf { madf, .. } => {
@@ -875,8 +880,10 @@ pub mod vgmo {
     }
 
     impl Emitter {
+        /// The required size of the buffer to read or write an emitter.
         pub const REQUIRED_SIZE: usize = 80;
 
+        /// Reads an emitter from the given buffer.
         pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
@@ -907,6 +914,7 @@ pub mod vgmo {
             }
         }
 
+        /// Writes the emitter to the given buffer.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
@@ -961,6 +969,7 @@ pub mod vgmo {
             }
         }
 
+        /// Writes the partition to a buffer.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,

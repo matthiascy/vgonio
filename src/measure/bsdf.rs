@@ -1,3 +1,6 @@
+//! Measurement of the BSDF (bidirectional scattering distribution function) of
+//! micro-surfaces.
+
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -339,29 +342,6 @@ pub fn measure_bsdf_optix_rt(
 // coherent tracing
 // Approach 2: trace each filtered ray with incoherent context
 // Approach 3: using heightfield tracing method to trace rays
-
-/// Structure to sample over a spectrum.
-pub(crate) struct SpectrumSampler {
-    range: RangeByStepSizeInclusive<Nanometres>,
-}
-
-impl From<RangeByStepSizeInclusive<Nanometres>> for SpectrumSampler {
-    fn from(range: RangeByStepSizeInclusive<Nanometres>) -> Self { Self { range } }
-}
-
-impl SpectrumSampler {
-    /// Returns the nth wavelength of the spectrum.
-    pub fn nth_sample(&self, n: usize) -> Nanometres {
-        self.range.start + self.range.step_size * n as f32
-    }
-
-    /// Returns the spectrum's whole wavelength range.
-    pub fn samples(&self) -> Vec<Nanometres> {
-        (0..self.range.step_count())
-            .map(|i| self.nth_sample(i))
-            .collect()
-    }
-}
 
 // fn trace_one_ray_grid_tracing(
 //     ray: Ray,

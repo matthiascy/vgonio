@@ -9,7 +9,7 @@ use crate::{
     units::{rad, Radians},
     RangeByStepSizeInclusive,
 };
-use egui::{plot::*, Align, Context, Ui, Vec2, Widget, WidgetText};
+use egui::{plot::*, Align, Context, Ui, Vec2};
 use std::{any::Any, ops::RangeInclusive, rc::Rc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,19 +51,6 @@ impl PlottingInspector {
             zenith_m: rad!(0.0),
             azimuth_i: rad!(0.0),
         }
-    }
-
-    fn angle_slider(
-        value: &mut f32,
-        range: RangeInclusive<f32>,
-        step: f64,
-        text: impl Into<WidgetText>,
-    ) -> impl Widget + '_ {
-        egui::Slider::new(value, range)
-            .clamp_to_range(true)
-            .step_by(step)
-            .custom_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-            .text(text)
     }
 
     fn angle_knob(

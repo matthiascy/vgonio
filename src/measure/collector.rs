@@ -1,7 +1,7 @@
 use crate::{
     measure::{emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
-    RangeByStepSizeExclusive, RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
+    RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
 };
 use glam::{Vec3, Vec3A};
 use std::ops::{Deref, DerefMut};
@@ -10,7 +10,7 @@ use crate::{
     app::cache::Cache,
     math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength, SpectrumSampler},
+        bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength},
         measurement::BsdfMeasurementParams,
         rtc::Trajectory,
     },
@@ -195,7 +195,7 @@ impl Collector {
             "Collector patches do not match the collector scheme"
         );
 
-        let spectrum = SpectrumSampler::from(desc.emitter.spectrum).samples();
+        let spectrum = desc.emitter.spectrum.values().collect::<Vec<_>>();
         let n_wavelengths = spectrum.len();
         log::debug!("spectrum samples: {:?}", spectrum);
 
@@ -205,10 +205,12 @@ impl Collector {
             .iors
             .ior_of_spectrum(desc.incident_medium, &spectrum)
             .expect("incident medium IOR not found");
+        log::debug!("incident medium IORs: {:?}", iors_i);
         let iors_t = cache
             .iors
             .ior_of_spectrum(desc.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
+        log::debug!("transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
         let radius = match self.radius {

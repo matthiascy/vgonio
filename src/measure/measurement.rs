@@ -622,6 +622,7 @@ pub enum MeasurementDataSource {
 }
 
 impl MeasurementDataSource {
+    /// Returns the path to the measurement data if it is loaded from a file.
     pub fn path(&self) -> Option<&Path> {
         match self {
             MeasurementDataSource::Loaded(p) => Some(p.as_path()),
@@ -633,8 +634,11 @@ impl MeasurementDataSource {
 /// Measurement data.
 #[derive(Debug, Clone)]
 pub enum MeasuredData {
+    /// Micro-facet area distribution.
     Madf(MicrofacetAreaDistribution),
+    /// Micro-facet shadowing-masking function.
     Mmsf(MicrofacetMaskingShadowing),
+    /// Bidirectional scattering distribution function.
     Bsdf(BsdfMeasurementData),
 }
 

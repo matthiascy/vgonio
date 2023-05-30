@@ -156,7 +156,7 @@ impl<'a> AngleKnob<'a> {
 }
 
 impl<'a> Widget for AngleKnob<'a> {
-    fn ui(mut self, ui: &mut Ui) -> Response {
+    fn ui(self, ui: &mut Ui) -> Response {
         let desired_size = Vec2::splat(self.diameter);
         let (rect, mut response) = ui.allocate_exact_size(
             desired_size,
@@ -169,7 +169,7 @@ impl<'a> Widget for AngleKnob<'a> {
         let rot = self.orientation.rot2();
 
         if response.clicked() || response.dragged() {
-            let mut new_val = (rot.inverse()
+            let new_val = (rot.inverse()
                 * (response.interact_pointer_pos().unwrap() - rect.center()))
             .angle()
                 * self.winding.to_float();

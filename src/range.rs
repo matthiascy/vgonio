@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
-    marker::PhantomData,
     ops::{Add, Div, Mul, RangeInclusive, Sub},
     str::FromStr,
 };
@@ -136,7 +135,7 @@ where
         let step_size = self.step_size.cast();
         let start = self.start.cast();
         let stop = self.stop.cast();
-        (((stop - start) / step_size).round() as usize + 1).max(2)
+        (((stop - start) / step_size).round() as usize).max(2) + 1
     }
 }
 
@@ -1135,6 +1134,9 @@ mod range_by_step_size_tests {
         assert_eq!(range.step_count(), 11);
         let range = RangeByStepSizeInclusive::new(0.0, 10.0, 2.0);
         assert_eq!(range.step_count(), 6);
+
+        let range = RangeByStepSizeInclusive::new(380.0, 780.0, 300.0);
+        assert_eq!(range.step_count(), 3);
 
         let range =
             RangeByStepSizeInclusive::new(rad!(0.0), Rads::HALF_PI, deg!(30.0).to_radians());
