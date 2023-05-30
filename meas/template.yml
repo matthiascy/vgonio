@@ -1,40 +1,39 @@
 --- # separator of multiple measurements
 type: !microfacet-distribution # microfacet distribution function (NDF)
-  azimuth: 0 rad ~ 6.2831855 rad / 0.087266475 rad
-  zenith: 0 rad ~ 1.5707964 rad / 0.03490659 rad
+  azimuth: 0 rad .. =6.2831855 rad / 0.087266475 rad
+  zenith: 0 rad .. =1.5707964 rad / 0.03490659 rad
 surfaces:
 - path/to/surface1
 - path/to/surface2
 --- # separator of multiple measurements
-type: !microfacet-shadowing-masking # microfacet shadowing-masking function
-  azimuth: 0 rad ~ 6.2831855 rad / 0.087266475 rad
-  zenith: 0 rad ~ 1.5707964 rad / 0.03490659 rad
+type: !microfacet-masking-shadowing-function # or !mmsf
+  azimuth: 0 rad .. =6.2831855 rad / 0.087266475 rad
+  zenith: 0 rad .. =1.5707964 rad / 0.03490659 rad
 surfaces:
 - path/to/surface1
 - path/to/surface2
 --- # separator of multiple measurements
 type: !bsdf # bsdf measurement
-  bsdf_kind: in-plane-brdf # type of bsdf
-  sim_kind: !geom-optics
-    method: grid
+  kind: brdf # type of bsdf
+  sim_kind: !geom-optics grid # embree/grid/optix # !wave_optics
   incident_medium: air
   transmitted_medium: air
   emitter:
     num_rays: 1000
     max_bounces: 10
     radius: auto
-    zenith: 0 rad ~ 1.5707965 rad / 0.087266475 rad
-    azimuth: 0 rad ~ 6.283186 rad / 2.0943954 rad
-    shape: !disk
+    zenith: 0 rad .. =1.5707965 rad / 0.087266475 rad
+    azimuth: 0 rad .. =6.283186 rad / 2.0943954 rad
+    shape: !cap
       zenith: 0.087266475 rad
-    spectrum: 400 nm ~ 700 nm / 1 nm
+    spectrum: 400 nm .. =700 nm / 1 nm
   collector:
     radius: auto
     scheme: !partitioned
       domain: upper_hemisphere
       partition: !equal_area
-        zenith: 0 rad ~ 1.5707965 rad, 0
-        azimuth: 0 rad ~ 0 rad / 0 rad
+        zenith: 0 rad .. =1.5707965 rad | 6
+        azimuth: 0 rad .. =0 rad / 0 rad
 surfaces:
 - path/to/surface1
 - path/to/surface2
