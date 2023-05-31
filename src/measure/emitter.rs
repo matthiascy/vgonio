@@ -118,15 +118,13 @@ impl Emitter {
 
     /// All possible measurement positions of the emitter.
     pub fn meas_points(&self) -> Vec<SphericalCoord> {
-        let n_zenith = (self.zenith.span() / self.zenith.step_size).ceil() as usize;
-        let n_azimuth = (self.azimuth.span() / self.azimuth.step_size).ceil() as usize;
-
-        (0..n_zenith)
-            .flat_map(|i_theta| {
-                (0..n_azimuth).map(move |i_phi| SphericalCoord {
+        self.azimuth
+            .values()
+            .flat_map(|azimuth| {
+                self.zenith.values().map(move |zenith| SphericalCoord {
                     radius: 1.0,
-                    zenith: self.zenith.start + i_theta as f32 * self.zenith.step_size,
-                    azimuth: self.azimuth.start + i_phi as f32 * self.azimuth.step_size,
+                    zenith,
+                    azimuth,
                 })
             })
             .collect()
@@ -187,11 +185,7 @@ impl Emitter {
         pos: SphericalCoord,
         radius: f32,
     ) -> Vec<Ray> {
-        log::trace!(
-            "Emitting rays from position {:?} with radius: {}",
-            pos,
-            radius
-        );
+        log::trace!("Emitting rays from {} with radius = {}", pos, radius);
         let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
         let dir = -pos.to_cartesian(Handedness::RightHandedYUp);

@@ -206,11 +206,10 @@ pub fn measure_bsdf(
         let elapsed = t.elapsed();
 
         log::debug!(
-            "emitted {} rays with dir: {} from pos: ({}° {}°) in {:?} secs.",
+            "emitted {} rays with dir: {} from: {} in {} secs.",
             num_emitted_rays,
             emitted_rays[0].dir,
-            pos.zenith.in_degrees().value(),
-            pos.azimuth.in_degrees().value(),
+            pos,
             elapsed.as_secs_f64(),
         );
 

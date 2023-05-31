@@ -32,7 +32,7 @@ use crate::{
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::{Debug, Display},
+    fmt::{Debug, Display, Formatter},
     str::FromStr,
 };
 
@@ -155,7 +155,7 @@ fn test_approx_eq() {
 }
 
 /// Spherical coordinate in radians.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct SphericalCoord {
     /// Radius of the sphere.
     pub radius: f32,
@@ -190,6 +190,28 @@ impl SphericalCoord {
     /// Convert from a cartesian coordinate.
     pub fn from_cartesian(cartesian: Vec3, radius: f32, handedness: Handedness) -> Self {
         cartesian_to_spherical(cartesian, radius, handedness)
+    }
+}
+
+impl Debug for SphericalCoord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ ρ: {}, θ: {}, φ: {} }}",
+            self.radius, self.zenith, self.azimuth
+        )
+    }
+}
+
+impl Display for SphericalCoord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ ρ: {}, θ: {}, φ: {} }}",
+            self.radius,
+            self.zenith.in_degrees().prettified(),
+            self.azimuth.in_degrees().prettified()
+        )
     }
 }
 
