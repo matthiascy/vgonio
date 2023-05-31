@@ -13,8 +13,8 @@ use crate::{
         microfacet::{MicrofacetAreaDistribution, MicrofacetMaskingShadowing},
         Collector, Emitter, RtcMethod,
     },
-    msurf::MicroSurface,
-    units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle},
+    msurf::{MicroSurface, MicroSurfaceMesh},
+    units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle, UMillimetre},
     Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
@@ -71,6 +71,15 @@ impl Radius {
         match self {
             Radius::Auto(value) => *value,
             Radius::Fixed(value) => *value,
+        }
+    }
+
+    /// Evaluate the radius for the given `MicroSurfaceMesh` and return the
+    /// value of the radius in the same unit as the `MicroSurfaceMesh`.
+    pub fn eval(&self, mesh: &MicroSurfaceMesh) -> f32 {
+        match self {
+            Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
+            Radius::Fixed(r) => mesh.unit.factor_convert_from::<UMillimetre>() * r.value,
         }
     }
 }

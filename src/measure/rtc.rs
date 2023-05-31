@@ -2,7 +2,10 @@
 
 use approx::RelativeEq;
 use glam::{Vec3, Vec3A};
-use std::ops::{Add, Deref, DerefMut, Mul};
+use std::{
+    fmt::{Debug, Formatter},
+    ops::{Add, Deref, DerefMut, Mul},
+};
 
 #[cfg(feature = "embree")]
 pub mod embr;
@@ -148,7 +151,7 @@ struct LastHit {
 }
 
 /// Records the status of a traced ray.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct TrajectoryNode {
     /// The origin of the ray.
     pub org: Vec3A,
@@ -157,6 +160,16 @@ pub struct TrajectoryNode {
     /// The cosine of the incident angle (always positive),
     /// only has value if the ray has hit the micro-surface.
     pub cos: Option<f32>,
+}
+
+impl Debug for TrajectoryNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "TrajectoryNode {{ org: {}, dir: {}, cos: {:?} }}",
+            self.org, self.dir, self.cos
+        )
+    }
 }
 
 /// Records the trajectory of a ray from the moment it is spawned.

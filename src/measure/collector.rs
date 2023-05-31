@@ -213,16 +213,9 @@ impl Collector {
         log::debug!("transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
-        let radius = match self.radius {
-            // FIXME: max_extent() updated, thus 2.5 is not a good choice
-            Radius::Auto(_) => um!(mesh.bounds.max_extent() * 2.5),
-            Radius::Fixed(r) => r.in_micrometres(),
-        };
-
+        let radius = self.radius.eval(mesh);
         let domain = self.scheme.domain();
-
         let max_bounces = desc.emitter.max_bounces as usize;
-
         let mut stats = BsdfStats {
             n_emitted: desc.emitter.num_rays,
             n_received: 0,
@@ -265,7 +258,7 @@ impl Collector {
                             // Collect's center is at (0, 0, 0).
                             let a = last.dir.dot(last.dir);
                             let b = 2.0 * last.dir.dot(last.org);
-                            let c = last.org.dot(last.org) - sqr(radius.as_f32());
+                            let c = last.org.dot(last.org) - sqr(radius);
                             let p = match solve_quadratic(a, b, c) {
                                 QuadraticSolution::None | QuadraticSolution::One(_) => {
                                     unreachable!(
@@ -352,20 +345,20 @@ impl Collector {
                         .find(|(j, energy)| **j == *i)
                         .unwrap()
                         .1;
-                    for (wavelength_idx, energy) in ray_energy.iter().enumerate() {
+                    for (lambda_idx, energy) in ray_energy.iter().enumerate() {
                         match energy {
                             Energy::Absorbed => continue,
                             Energy::Reflected(e) => {
-                                stats.n_captured[wavelength_idx] += 1;
-                                data[wavelength_idx].total_energy += e;
-                                data[wavelength_idx].total_rays += 1;
-                                data[wavelength_idx].energy_per_bounce[*bounce - 1] += e;
-                                data[wavelength_idx].num_rays_per_bounce[*bounce - 1] += 1;
-                                stats.num_rays_per_bounce[wavelength_idx][*bounce - 1] += 1;
-                                stats.energy_per_bounce[wavelength_idx][*bounce - 1] += e;
+                                stats.n_captured[lambda_idx] += 1;
+                                data[lambda_idx].total_energy += e;
+                                data[lambda_idx].total_rays += 1;
+                                data[lambda_idx].energy_per_bounce[*bounce - 1] += e;
+                                data[lambda_idx].num_rays_per_bounce[*bounce - 1] += 1;
+                                stats.num_rays_per_bounce[lambda_idx][*bounce - 1] += 1;
+                                stats.energy_per_bounce[lambda_idx][*bounce - 1] += e;
                             }
                         }
-                        stats.total_energy_captured[wavelength_idx] += energy.energy();
+                        stats.total_energy_captured[lambda_idx] += energy.energy();
                     }
                 }
                 measurement_point.data = data;

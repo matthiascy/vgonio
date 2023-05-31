@@ -69,12 +69,7 @@ pub struct Angle<A: AngleUnit> {
 
 impl<A: AngleUnit> Debug for Angle<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Angle {{ value: {}, unit: {} }}",
-            self.value,
-            A::SYMBOLS[0]
-        )
+        write!(f, "{} {}", self.value, A::SYMBOLS[0])
     }
 }
 

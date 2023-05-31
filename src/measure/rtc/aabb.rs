@@ -5,7 +5,10 @@ use cfg_if::cfg_if;
 #[cfg(target_arch = "x86")]
 use core::arch::x86::*;
 use glam::Vec3;
-use std::ops::{Index, IndexMut};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    ops::{Index, IndexMut},
+};
 
 use crate::{
     math::rcp,
@@ -15,7 +18,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 /// Axis-aligned bounding box.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Aabb {
     /// Minimum corner of the box.
     pub min: Vec3,
@@ -30,6 +33,18 @@ impl Default for Aabb {
             min: Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
             max: Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
         }
+    }
+}
+
+impl Debug for Aabb {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Aabb {{ {} ~ {} }}", self.min, self.max)
+    }
+}
+
+impl Display for Aabb {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Aabb {{ {} ~ {} }}", self.min, self.max)
     }
 }
 
@@ -385,20 +400,10 @@ pub enum RayAabbIsect {
 
 impl RayAabbIsect {
     /// Returns true if the ray is inside the AABB.
-    pub fn is_inside(&self) -> bool {
-        match self {
-            RayAabbIsect::Inside(_) => true,
-            _ => false,
-        }
-    }
+    pub fn is_inside(&self) -> bool { matches!(self, RayAabbIsect::Inside(_)) }
 
     /// Returns true if the ray is outside the AABB.
-    pub fn is_outside(&self) -> bool {
-        match self {
-            RayAabbIsect::Outside(_) => true,
-            _ => false,
-        }
-    }
+    pub fn is_outside(&self) -> bool { matches!(self, RayAabbIsect::Outside(_)) }
 
     /// Returns the distance from the ray origin to the nearest intersection
     /// point.

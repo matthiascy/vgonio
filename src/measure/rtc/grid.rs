@@ -45,10 +45,7 @@ pub fn measure_bsdf(
 ) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
-    let radius = match desc.emitter.radius {
-        Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
-        Radius::Fixed(r) => mesh.unit.convert_from_factor::<UMillimetre>() * r.as_f32(),
-    };
+    let radius = desc.emitter.radius.eval(mesh);
     let max_bounces = desc.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
     let mut result = vec![];

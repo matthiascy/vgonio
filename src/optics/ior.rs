@@ -58,11 +58,10 @@ impl RefractiveIndexDatabase {
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
     pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndex> {
-        log::trace!("get_ior_of({:?}, {})", medium, wavelength);
         let refractive_indices = self
             .0
             .get(&medium)
-            .expect(format!("unknown medium {:?}", medium).as_str());
+            .unwrap_or_else(|| panic!("unknown medium {:?}", medium));
         // Search for the position of the first wavelength equal or greater than the
         // given one in refractive indices.
         let i = refractive_indices
@@ -70,8 +69,6 @@ impl RefractiveIndexDatabase {
             .position(|ior| ior.wavelength >= wavelength)
             .unwrap();
         let ior_after = refractive_indices[i];
-
-        log::trace!("ior_after: {:?}", ior_after);
         // If the first wavelength is equal to the given one, return it.
         if ulp_eq(ior_after.wavelength.value, wavelength.value) {
             Some(ior_after)

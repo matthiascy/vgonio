@@ -178,14 +178,9 @@ pub fn measure_bsdf(
     scene.set_flags(SceneFlags::ROBUST);
 
     // Calculate emitter's radius to match the surface's dimensions.
-    let radius = match desc.emitter.radius {
-        Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
-        Radius::Fixed(r) => mesh.unit.convert_from_factor::<UMillimetre>() * r.as_f32(),
-    };
-
+    let radius = desc.emitter.radius.eval(mesh);
     log::debug!("mesh extent: {:?}", mesh.bounds);
     log::debug!("emitter radius: {}", radius);
-
     // Upload the surface's mesh to the Embree scene.
     let mut geometry = mesh.as_embree_geometry(&device);
     geometry.set_intersect_filter_function(intersect_filter_stream);
@@ -211,7 +206,7 @@ pub fn measure_bsdf(
         let elapsed = t.elapsed();
 
         log::debug!(
-            "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
+            "emitted {} rays with dir: {} from pos: ({}° {}°) in {:?} secs.",
             num_emitted_rays,
             emitted_rays[0].dir,
             pos.zenith.in_degrees().value(),

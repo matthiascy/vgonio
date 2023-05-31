@@ -61,7 +61,7 @@ impl Display for LengthUnit {
 
 impl LengthUnit {
     /// Returns the conversion factor from the unit to the specified unit.
-    pub const fn convert_to_factor<U: LengthMeasurement>(&self) -> f32 {
+    pub const fn factor_convert_to<U: LengthMeasurement>(&self) -> f32 {
         match self {
             LengthUnit::M => U::FACTOR_FROM_METRE,
             LengthUnit::CM => U::FACTOR_FROM_CENTIMETRE,
@@ -72,7 +72,7 @@ impl LengthUnit {
     }
 
     /// Returns the conversion factor from the specified unit to the unit.
-    pub const fn convert_from_factor<U: LengthMeasurement>(&self) -> f32 {
+    pub const fn factor_convert_from<U: LengthMeasurement>(&self) -> f32 {
         match self {
             LengthUnit::M => U::FACTOR_TO_METRE,
             LengthUnit::CM => U::FACTOR_TO_CENTIMETRE,
@@ -213,13 +213,13 @@ impl<A: LengthMeasurement> Default for Length<A> {
 }
 
 impl<A: LengthMeasurement> Debug for Length<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Length {{ value: {}, unit: {} }}", self.value, A::NAME)
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.value, A::SYMBOL)
     }
 }
 
-impl<A: LengthMeasurement> std::fmt::Display for Length<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<A: LengthMeasurement> Display for Length<A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.value, A::SYMBOL)
     }
 }
@@ -365,7 +365,7 @@ impl<'de, A: LengthMeasurement> serde::Deserialize<'de> for Length<A> {
         impl<'de, T: LengthMeasurement> serde::de::Visitor<'de> for LengthVisitor<T> {
             type Value = Length<T>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 write!(
                     formatter,
                     "a string containing a number and a unit of length"
