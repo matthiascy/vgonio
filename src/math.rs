@@ -1,7 +1,7 @@
 use crate::{
     ulp_eq,
     units::{radians, Radians},
-    Handedness, SphericalCoord,
+    Handedness, RangeByStepSizeInclusive, SphericalCoord,
 };
 use cfg_if::cfg_if;
 pub use glam::*;
@@ -403,4 +403,67 @@ fn test_quadratic() {
 /// TODO: add a tolerance parameter or error bound
 pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
     ulp_eq(a.x, b.x) && ulp_eq(a.y, b.y) && ulp_eq(a.z, b.z)
+}
+
+/// Generates a parametric sphere with the given theta and phi ranges.
+///
+/// Returns a tuple of the vertices and indices.
+pub fn generate_parametric_sphere(
+    theta: RangeByStepSizeInclusive<Radians>,
+    phi: RangeByStepSizeInclusive<Radians>,
+) -> (Vec<Vec3>, Vec<UVec3>) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    let theta_steps = theta.step_count_wrapped() as u32;
+    let phi_steps = phi.step_count_wrapped() as u32;
+
+    for i in 0..theta_steps {
+        let theta = theta.start + theta.step_size * i as f32;
+        for j in 0..phi_steps {
+            let phi = phi.start + phi.step_size * j as f32;
+            vertices.push(spherical_to_cartesian(
+                1.0,
+                theta,
+                phi,
+                Handedness::RightHandedYUp,
+            ));
+        }
+    }
+
+    // Generate indices for a list of triangles,
+    // each cell has max 2 triangles
+    for i in 0..theta_steps {
+        for j in 0..phi_steps {
+            let i0 = i * phi_steps + j;
+            let i1 = i0 + 1;
+            let i2 = (i + 1) * phi_steps + j;
+            let i3 = i2 + 1;
+
+            if i < theta_steps - 1 && j < phi_steps {
+                // First triangle of the cell
+                indices.push(UVec3::new(i0, i2, i1));
+                // Second triangle of the cell
+                indices.push(UVec3::new(i2, i3, i1));
+            }
+        }
+    }
+
+    // for i in 0..theta_steps {
+    //     for j in 0..phi_steps {
+    //         let i0 = i * phi_steps + j;
+    //         let i1 = i0 + 1;
+    //         let i2 = (i + 1) * phi_steps + j;
+    //         let i3 = i2 + 1;
+    //
+    //         if i < theta_steps - 1 && j < phi_steps {
+    //             // First triangle of the cell
+    //             indices.push(UVec3::new(i0, i2, i1));
+    //             // Second triangle of the cell
+    //             indices.push(UVec3::new(i2, i3, i1));
+    //         }
+    //     }
+    // }
+
+    (vertices, indices)
 }

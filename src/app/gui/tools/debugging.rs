@@ -1,21 +1,31 @@
 use crate::app::gui::VgonioEvent;
-use std::{any::Any, default::Default};
+use std::{
+    any::Any,
+    default::Default,
+    sync::{Arc, RwLock},
+};
 use winit::event_loop::EventLoopProxy;
 
 mod microfacet;
 mod ray_tracing;
 mod shadow_map;
 
-use crate::app::gui::{misc::toggle_ui, tools::Tool};
+use crate::{
+    app::{
+        cache::{Cache, Handle},
+        gui::{misc::toggle, tools::Tool},
+    },
+    msurf::MicroSurface,
+};
 use microfacet::MicrofacetMeasurementPane;
-use ray_tracing::RayTracingPane;
+use ray_tracing::BrdfMeasurementPane;
 use shadow_map::ShadowMapPane;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]
 enum PaneKind {
     ShadowMap,
-    RayTracing,
+    Brdf,
     Microfacet,
 }
 
@@ -26,12 +36,14 @@ impl Default for PaneKind {
 // TODO: adaptive image size
 pub(crate) struct DebuggingInspector {
     opened_pane: PaneKind,
-    debug_drawing_enabled: bool,
+    pub debug_drawing_enabled: bool,
     event_loop: EventLoopProxy<VgonioEvent>,
     pub(crate) shadow_map_pane: ShadowMapPane,
-    pub(crate) ray_tracing_pane: RayTracingPane,
+    pub(crate) brdf_pane: BrdfMeasurementPane,
     pub(crate) microfacet_pane: MicrofacetMeasurementPane,
 }
+
+// TODO: offline rendering or egui paint function for shadow map
 
 impl Tool for DebuggingInspector {
     fn name(&self) -> &'static str { "Debugging" }
@@ -46,19 +58,12 @@ impl Tool for DebuggingInspector {
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Debug Draw");
-            if toggle_ui(ui, &mut self.debug_drawing_enabled).changed()
-                && self
-                    .event_loop
-                    .send_event(VgonioEvent::ToggleDebugDrawing)
-                    .is_err()
-            {
-                log::warn!("Failed to send VgonioEvent::ToggleDebugDrawing");
-            }
+            ui.add(toggle(&mut self.debug_drawing_enabled));
         });
 
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.opened_pane, PaneKind::ShadowMap, "Shadow Map");
-            ui.selectable_value(&mut self.opened_pane, PaneKind::RayTracing, "Ray Tracing");
+            ui.selectable_value(&mut self.opened_pane, PaneKind::Brdf, "Ray Tracing");
             ui.selectable_value(&mut self.opened_pane, PaneKind::Microfacet, "Microfacet");
         });
         ui.separator();
@@ -67,8 +72,8 @@ impl Tool for DebuggingInspector {
             PaneKind::ShadowMap => {
                 ui.add(&mut self.shadow_map_pane);
             }
-            PaneKind::RayTracing => {
-                ui.add(&mut self.ray_tracing_pane);
+            PaneKind::Brdf => {
+                ui.add(&mut self.brdf_pane);
             }
             PaneKind::Microfacet => {
                 ui.add(&mut self.microfacet_pane);
@@ -82,14 +87,28 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: true,
             event_loop: event_loop.clone(),
             shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
-            ray_tracing_pane: RayTracingPane::new(event_loop.clone()),
+            brdf_pane: BrdfMeasurementPane::new(event_loop.clone(), cache),
             microfacet_pane: MicrofacetMeasurementPane::new(event_loop),
+        }
+    }
+
+    pub fn update_surfaces(&mut self, surfaces: &Vec<Handle<MicroSurface>>, cache: &Cache) {
+        for surface in surfaces {
+            if !self
+                .brdf_pane
+                .loaded_surfaces
+                .iter()
+                .any(|s| s.surf == *surface)
+            {
+                let record = cache.get_micro_surface_record(*surface).unwrap();
+                self.brdf_pane.loaded_surfaces.push(record.clone());
+            }
         }
     }
 }

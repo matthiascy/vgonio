@@ -224,7 +224,7 @@ pub fn uniform_sampling_on_unit_sphere(
     phi_start: Radians,
     phi_stop: Radians,
     handedness: Handedness,
-) -> Vec<glam::Vec3> {
+) -> Vec<Vec3> {
     use std::f32::consts::PI;
 
     const SEED: u64 = 0;

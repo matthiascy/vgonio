@@ -55,6 +55,12 @@ impl Outliner {
         }
     }
 
+    pub fn surfaces(
+        &self,
+    ) -> &HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)> {
+        &self.surfaces
+    }
+
     /// Returns an iterator over all the visible micro surfaces.
     pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &PerMicroSurfaceState)> {
         self.surfaces
@@ -178,7 +184,9 @@ impl SurfaceCollapsableHeader {
                         ui.add(egui::Label::new("Scale:")).on_hover_text(
                             "Scales the surface visually. Doest not affect the actual surface.",
                         );
-                        ui.add(egui::Slider::new(&mut state.scale, 0.05..=1.5).trailing_fill(true));
+                        ui.add(
+                            egui::Slider::new(&mut state.scale, 0.005..=1.5).trailing_fill(true),
+                        );
                     });
             });
     }

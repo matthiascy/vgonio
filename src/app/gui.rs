@@ -21,8 +21,9 @@ use std::{
     any::Any,
     collections::HashMap,
     default::Default,
+    ops::Deref,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -38,11 +39,11 @@ use crate::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, RenderPass, Texture, VisualGridUniforms, WgpuConfig,
+            GpuContext, RenderPass, SlicedBuffer, Texture, VisualGridUniforms, WgpuConfig,
             DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
-            state::{camera::CameraState, DebugState, DepthMap, GuiContext, InputState},
+            state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
             ui::Theme,
         },
     },
@@ -101,7 +102,6 @@ pub enum VgonioEvent {
         max_bounces: u32,
         method: RtcMethod,
     },
-    ToggleDebugDrawing,
     ToggleSurfaceVisibility,
     UpdateDebugT(f32),
     UpdatePrimId(u32),
@@ -176,7 +176,7 @@ pub struct Context {
 }
 
 /// Rendering resources for loaded [`MicroSurface`].
-struct MicroSurfaceRenderingStates {
+struct MicroSurfaceRenderingState {
     /// Render pipeline for rendering micro surfaces.
     pipeline: wgpu::RenderPipeline,
     /// Bind group containing global uniform buffer.
@@ -192,7 +192,7 @@ struct MicroSurfaceRenderingStates {
     locals_lookup: Vec<Handle<MicroSurface>>,
 }
 
-impl MicroSurfaceRenderingStates {
+impl MicroSurfaceRenderingState {
     pub const INITIAL_MICRO_SURFACE_COUNT: usize = 64;
 
     pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
@@ -354,38 +354,157 @@ impl MicroSurfaceRenderingStates {
     }
 }
 
+struct VisualGridState {
+    pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    uniform_buffer: wgpu::Buffer,
+}
+
+impl VisualGridState {
+    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
+        let vert_shader = ctx
+            .device
+            .create_shader_module(wgpu::include_spirv!(concat!(
+                env!("OUT_DIR"),
+                "/visual_grid.vert.spv"
+            )));
+        let frag_shader = ctx
+            .device
+            .create_shader_module(wgpu::include_spirv!(concat!(
+                env!("OUT_DIR"),
+                "/visual_grid.frag.spv"
+            )));
+        let bind_group_layout = ctx
+            .device
+            .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
+        let pipeline_layout = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("visual_grid_render_pipeline_layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let uniform_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("visual_grid_uniform_buffer"),
+                contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("visual_grid_bind_group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let pipeline = ctx
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("visual_grid_render_pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &vert_shader,
+                    entry_point: "main",
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: Texture::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &frag_shader,
+                    entry_point: "main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: target_format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview: None,
+            });
+        Self {
+            pipeline,
+            bind_group,
+            uniform_buffer,
+        }
+    }
+
+    pub fn update_uniforms(
+        &self,
+        ctx: &GpuContext,
+        view_proj: &ViewProjUniform,
+        view_proj_inv: &ViewProjUniform,
+        color: wgpu::Color,
+        is_dark_mode: bool,
+    ) {
+        ctx.queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::bytes_of(&VisualGridUniforms {
+                view: view_proj.view.to_cols_array(),
+                proj: view_proj.proj.to_cols_array(),
+                view_inv: view_proj_inv.view.to_cols_array(),
+                proj_inv: view_proj_inv.proj.to_cols_array(),
+                grid_line_color: [
+                    color.r as f32,
+                    color.g as f32,
+                    color.b as f32,
+                    if is_dark_mode { 1.0 } else { 0.0 },
+                ],
+            }),
+        );
+    }
+}
+
 /// Vgonio client application with GUI.
 pub struct VgonioGuiApp {
+    /// The time when the application started.
+    pub start_time: Instant,
     /// The application context.
     ctx: Context,
-
     /// Surface for presenting rendered frames.
-    win_surf: WindowSurface,
-
+    canvas: WindowSurface,
     /// The GUI application state.
     ui: VgonioUi,
-
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
-
     /// The cache of the application including preloaded datafiles. See
     /// [`VgonioCache`].
-    cache: Cache,
-
+    cache: Arc<RwLock<Cache>>,
+    /// Input states collected from the window.
     input: InputState,
+    /// Camera state including the view and projection matrices.
     camera: CameraState,
-
-    rendering_states: MicroSurfaceRenderingStates,
-
-    /// Different pipelines with its binding groups used for rendering.
-    passes: HashMap<&'static str, RenderPass>,
-
+    /// State of the micro surface rendering, including the pipeline, binding
+    /// groups, and buffers.
+    msurf_rdr_state: MicroSurfaceRenderingState,
+    /// State of the visual grid rendering, including the pipeline, binding
+    /// groups, and buffers.
+    visual_grid_state: VisualGridState,
+    /// Depth map of the scene. TODO: refactor
     depth_map: DepthMap,
-
-    debug_drawing: DebugState,
-    debug_drawing_enabled: bool,
-    pub start_time: Instant,
-    pub prev_frame_time: Option<f32>,
+    // TODO: add MSAA
+    /// Debug drawing state.
+    dbg_drawing_state: DebugDrawingState,
 }
 
 impl VgonioGuiApp {
@@ -404,30 +523,26 @@ impl VgonioGuiApp {
             ..Default::default()
         };
         let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
-        let win_surf = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
-        let depth_map = DepthMap::new(&gpu_ctx, win_surf.width(), win_surf.height());
+        let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
+        let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
                 0.1,
                 100.0,
                 75.0f32.to_radians(),
-                win_surf.width(),
-                win_surf.height(),
+                canvas.width(),
+                canvas.height(),
             );
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
 
-        let visual_grid_pass = create_visual_grid_pass(&gpu_ctx, win_surf.format());
-
-        let mut passes = HashMap::new();
-        passes.insert("visual_grid", visual_grid_pass);
-        //passes.insert("micro_surface", micro_surface_pass);
+        let visual_grid_state = VisualGridState::new(&gpu_ctx, canvas.format());
 
         let mut gui_ctx = GuiContext::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
-            win_surf.format(),
+            canvas.format(),
             event_loop,
             1,
         );
@@ -436,15 +551,15 @@ impl VgonioGuiApp {
         let cache = {
             let mut _cache = Cache::new(config.cache_dir());
             _cache.load_ior_database(&config);
-            _cache
+            Arc::new(RwLock::new(_cache))
         };
 
         let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
-            //            cache.clone(),
             &gpu_ctx,
             &mut gui_ctx.renderer,
+            cache.clone(),
         );
 
         ui.set_theme(Theme::Light);
@@ -457,41 +572,38 @@ impl VgonioGuiApp {
             cursor_pos: [0.0, 0.0],
         };
 
-        let debug_drawing = DebugState::new(&gpu_ctx, win_surf.format());
-
-        let msurfs_render_state = MicroSurfaceRenderingStates::new(&gpu_ctx, win_surf.format());
+        let dbg_drawing_state = DebugDrawingState::new(&gpu_ctx, canvas.format());
+        let msurf_rdr_state = MicroSurfaceRenderingState::new(&gpu_ctx, canvas.format());
 
         Ok(Self {
+            start_time: Instant::now(),
             ctx: Context {
                 gpu: gpu_ctx,
                 gui: gui_ctx,
             },
             config,
-            ui: ui,
+            ui,
             cache,
             input,
-            passes,
             depth_map,
-            debug_drawing,
-            debug_drawing_enabled: true,
+            dbg_drawing_state,
             camera,
-            start_time: Instant::now(),
-            prev_frame_time: None,
-            win_surf,
-            rendering_states: msurfs_render_state,
+            canvas,
+            msurf_rdr_state,
+            visual_grid_state,
         })
     }
 
     #[inline]
-    pub fn surface_width(&self) -> u32 { self.win_surf.width() }
+    pub fn surface_width(&self) -> u32 { self.canvas.width() }
 
     #[inline]
-    pub fn surface_height(&self) -> u32 { self.win_surf.height() }
+    pub fn surface_height(&self) -> u32 { self.canvas.height() }
 
-    pub fn reconfigure_surface(&mut self) { self.win_surf.reconfigure(&self.ctx.gpu.device); }
+    pub fn reconfigure_surface(&mut self) { self.canvas.reconfigure(&self.ctx.gpu.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
-        if self.win_surf.resize(
+        if self.canvas.resize(
             &self.ctx.gpu.device,
             new_size.width,
             new_size.height,
@@ -561,31 +673,31 @@ impl VgonioGuiApp {
         let current_theme_visuals = self.ui.current_theme_visuals();
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
-        self.ctx.gpu.queue.write_buffer(
-            &self
-                .passes
-                .get("visual_grid")
-                .unwrap()
-                .uniform_buffers
-                .as_ref()
-                .unwrap()[0],
-            0,
-            bytemuck::bytes_of(&VisualGridUniforms {
-                view: view_proj.view.to_cols_array(),
-                proj: view_proj.proj.to_cols_array(),
-                view_inv: view_proj_inv.view.to_cols_array(),
-                proj_inv: view_proj_inv.proj.to_cols_array(),
-                grid_line_color: [
-                    current_theme_visuals.grid_line_color.r as f32,
-                    current_theme_visuals.grid_line_color.g as f32,
-                    current_theme_visuals.grid_line_color.b as f32,
-                    if current_theme_visuals.egui_visuals.dark_mode {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                ],
-            }),
+        self.visual_grid_state.update_uniforms(
+            &self.ctx.gpu,
+            &view_proj,
+            &view_proj_inv,
+            current_theme_visuals.grid_line_color,
+            current_theme_visuals.egui_visuals.dark_mode,
+        );
+        let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
+        let dbg_selected_surface = dbg_tool.brdf_pane.selected_surface;
+        let (dome_radius, lowest, highest, scale) = match dbg_selected_surface {
+            Some(surface) => {
+                let radius = dbg_tool.brdf_pane.dome_radius;
+                let state = self.ui.outliner().surfaces().get(&surface).unwrap();
+                (radius, state.1.min, state.1.max, state.1.scale)
+            }
+            None => (1.0, 0.0, 1.0, 1.0),
+        };
+        self.dbg_drawing_state.update_uniform_buffer(
+            &self.ctx.gpu,
+            &view_proj.view,
+            &view_proj.proj,
+            dome_radius,
+            lowest,
+            highest,
+            scale,
         );
 
         // Update uniform buffer for all visible surfaces.
@@ -594,7 +706,7 @@ impl VgonioGuiApp {
             // Update global uniform buffer.
             log::trace!("Updating global uniform buffer.");
             self.ctx.gpu.queue.write_buffer(
-                &self.rendering_states.global_uniform_buffer,
+                &self.msurf_rdr_state.global_uniform_buffer,
                 0,
                 bytemuck::bytes_of(&view_proj),
             );
@@ -603,7 +715,7 @@ impl VgonioGuiApp {
             for (hdl, state) in visible_surfaces.iter() {
                 let mut buf = [0.0; 20];
                 let local_uniform_buf_index = self
-                    .rendering_states
+                    .msurf_rdr_state
                     .locals_lookup
                     .iter()
                     .position(|h| *h == **hdl)
@@ -619,7 +731,7 @@ impl VgonioGuiApp {
                     state.scale,
                 ]);
                 self.ctx.gpu.queue.write_buffer(
-                    &self.rendering_states.local_uniform_buffer,
+                    &self.msurf_rdr_state.local_uniform_buffer,
                     local_uniform_buf_index as u64 * aligned_size as u64,
                     bytemuck::cast_slice(&buf),
                 );
@@ -640,21 +752,28 @@ impl VgonioGuiApp {
     /// Render the frame to the surface.
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
-        let output_frame = self.win_surf.get_current_texture()?;
+        let output_frame = self.canvas.get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
         let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         // Command encoders for the current frame.
-        let mut encoders =
-            [self
-                .ctx
+        let mut encoders = [
+            self.ctx
                 .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_encoder"),
-                })];
+                }),
+            self.ctx
+                .gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vgonio_dbg_render_encoder"),
+                }),
+        ];
 
+        let cache = self.cache.read().unwrap();
         let visible_surfaces = self.ui.outliner().visible_surfaces();
         {
             let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -686,13 +805,11 @@ impl VgonioGuiApp {
                 MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
 
             if !visible_surfaces.is_empty() {
-                render_pass.set_pipeline(&self.rendering_states.pipeline);
-                render_pass.set_bind_group(0, &self.rendering_states.globals_bind_group, &[]);
+                render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
+                render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
 
                 for (hdl, _) in visible_surfaces.iter() {
-                    let renderable = self
-                        .cache
-                        .get_micro_surface_renderable_mesh_by_surface_id(**hdl);
+                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
                     if renderable.is_none() {
                         log::debug!(
                             "Failed to get renderable mesh for surface {:?}, skipping.",
@@ -701,7 +818,7 @@ impl VgonioGuiApp {
                         continue;
                     }
                     let buf_index = self
-                        .rendering_states
+                        .msurf_rdr_state
                         .locals_lookup
                         .iter()
                         .position(|x| x == *hdl)
@@ -709,7 +826,7 @@ impl VgonioGuiApp {
                     let renderable = renderable.unwrap();
                     render_pass.set_bind_group(
                         1,
-                        &self.rendering_states.locals_bind_group,
+                        &self.msurf_rdr_state.locals_bind_group,
                         &[buf_index as u32 * aligned_micro_surface_uniform_size],
                     );
                     render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
@@ -721,11 +838,52 @@ impl VgonioGuiApp {
                 }
             }
 
-            if self.ui.enable_visual_grid {
-                let pass = self.passes.get("visual_grid").unwrap();
-                render_pass.set_pipeline(&pass.pipeline);
-                render_pass.set_bind_group(0, &pass.bind_groups[0], &[]);
+            if self.ui.visual_grid_enabled {
+                render_pass.set_pipeline(&self.visual_grid_state.pipeline);
+                render_pass.set_bind_group(0, &self.visual_grid_state.bind_group, &[]);
                 render_pass.draw(0..6, 0..1);
+            }
+        }
+
+        let dbg_inspector = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
+        if dbg_inspector.debug_drawing_enabled {
+            let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("debug_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &output_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            if dbg_inspector.brdf_pane.show_dome {
+                render_pass.set_pipeline(&self.dbg_drawing_state.pipeline);
+                render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, self.dbg_drawing_state.vertices.data_slice(..));
+                render_pass.set_index_buffer(
+                    self.dbg_drawing_state.indices.data_slice(..),
+                    wgpu::IndexFormat::Uint32,
+                );
+                self.dbg_drawing_state
+                    .indices
+                    .subslices()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, index_range)| {
+                        let count = ((index_range.end - index_range.start) / 4) as u32;
+                        let index_offset = (index_range.start / 4) as u32;
+                        let vertex_offset =
+                            self.dbg_drawing_state.vertices.subslices()[i].start / 12;
+                        render_pass.draw_indexed(
+                            index_offset..index_offset + count,
+                            vertex_offset as i32,
+                            0..1,
+                        );
+                    });
             }
         }
 
@@ -783,7 +941,7 @@ impl VgonioGuiApp {
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
             window,
-            self.win_surf.screen_descriptor(),
+            self.canvas.screen_descriptor(),
             &output_view,
             |ctx| self.ui.show(ctx),
         );
@@ -800,7 +958,7 @@ impl VgonioGuiApp {
         );
 
         self.depth_map
-            .copy_to_buffer(&self.ctx.gpu, self.win_surf.width(), self.win_surf.height());
+            .copy_to_buffer(&self.ctx.gpu, self.canvas.width(), self.canvas.height());
 
         // Present the frame to the screen.
         output_frame.present();
@@ -818,12 +976,12 @@ impl VgonioGuiApp {
             VgonioEvent::UpdateDepthMap => {
                 self.depth_map.copy_to_buffer(
                     &self.ctx.gpu,
-                    self.win_surf.width(),
-                    self.win_surf.height(),
+                    self.canvas.width(),
+                    self.canvas.height(),
                 );
                 self.ui
                     .tools
-                    .get_tool::<DebuggingInspector>()
+                    .get_tool_mut::<DebuggingInspector>()
                     .unwrap()
                     .shadow_map_pane
                     .update_depth_map(
@@ -831,11 +989,11 @@ impl VgonioGuiApp {
                         &self.ctx.gui,
                         &self.depth_map.depth_attachment_storage,
                         self.depth_map.width,
-                        self.win_surf.height(),
+                        self.canvas.height(),
                     );
             }
             VgonioEvent::UpdateDebugT(t) => {
-                self.debug_drawing.ray_t = t;
+                self.dbg_drawing_state.ray_t = t;
             }
             // VgonioEvent::UpdatePrimId(prim_id) => {
             // if let Some(msurf_view) = &self.msurf {
@@ -939,9 +1097,6 @@ impl VgonioGuiApp {
             //         }
             //     }
             // }
-            VgonioEvent::ToggleDebugDrawing => {
-                self.debug_drawing_enabled = !self.debug_drawing_enabled;
-            }
             VgonioEvent::UpdateSamplingDebugger {
                 count,
                 azimuth,
@@ -964,7 +1119,7 @@ impl VgonioGuiApp {
                         });
                 self.ui
                     .tools
-                    .get_tool::<SamplingInspector>()
+                    .get_tool_mut::<SamplingInspector>()
                     .unwrap()
                     .record_render_pass(&self.ctx.gpu, &mut encoder, &samples);
                 self.ctx.gpu.queue.submit(Some(encoder.finish()));
@@ -1111,6 +1266,8 @@ impl VgonioGuiApp {
                         log::debug!("Opening micro-surface measurement output: {:?}", path);
                         match self
                             .cache
+                            .write()
+                            .unwrap()
                             .load_micro_surface_measurement(&self.config, &path)
                         {
                             Ok(hdl) => {
@@ -1124,10 +1281,10 @@ impl VgonioGuiApp {
                     "vgms" | "txt" => {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", path);
-                        match self.cache.load_micro_surface(&self.config, &path) {
+                        let mut locked_cache = self.cache.write().unwrap();
+                        match locked_cache.load_micro_surface(&self.config, &path) {
                             Ok((surf, _)) => {
-                                let _ = self
-                                    .cache
+                                let _ = locked_cache
                                     .create_micro_surface_renderable_mesh(
                                         &self.ctx.gpu.device,
                                         surf,
@@ -1152,13 +1309,17 @@ impl VgonioGuiApp {
                 log::warn!("File {:?} has no extension, ignoring", path);
             }
         }
+        let cache = self.cache.read().unwrap();
+        self.ui.outliner_mut().update_surfaces(&surfaces, &cache);
+        self.msurf_rdr_state.update_locals_lookup(&surfaces);
         self.ui
             .outliner_mut()
-            .update_surfaces(&surfaces, &self.cache);
-        self.rendering_states.update_locals_lookup(&surfaces);
+            .update_measurement_data(&measurements, &cache);
         self.ui
-            .outliner_mut()
-            .update_measurement_data(&measurements, &self.cache);
+            .tools
+            .get_tool_mut::<DebuggingInspector>()
+            .unwrap()
+            .update_surfaces(&surfaces, &cache);
     }
 }
 
@@ -1179,94 +1340,6 @@ impl MicroSurfaceUniforms {
         } else {
             size + alignment - remainder
         }
-    }
-}
-
-fn create_visual_grid_pass(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> RenderPass {
-    let grid_vert_shader = ctx
-        .device
-        .create_shader_module(wgpu::include_spirv!(concat!(
-            env!("OUT_DIR"),
-            "/visual_grid.vert.spv"
-        )));
-    let grid_frag_shader = ctx
-        .device
-        .create_shader_module(wgpu::include_spirv!(concat!(
-            env!("OUT_DIR"),
-            "/visual_grid.frag.spv"
-        )));
-    let bind_group_layout = ctx
-        .device
-        .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
-    let pipeline_layout = ctx
-        .device
-        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("grid_render_pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-    let uniform_buffer = ctx
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("grid_uniform_buffer"),
-            contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-    let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("grid_bind_group"),
-        layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: uniform_buffer.as_entire_binding(),
-        }],
-    });
-    let pipeline = ctx
-        .device
-        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("grid_render_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &grid_vert_shader,
-                entry_point: "main",
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &grid_frag_shader,
-                entry_point: "main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-        });
-
-    RenderPass {
-        pipeline,
-        bind_groups: vec![bind_group],
-        uniform_buffers: Some(vec![uniform_buffer]),
     }
 }
 

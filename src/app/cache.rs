@@ -127,42 +127,6 @@ impl MicroSurfaceRecord {
     pub fn path(&self) -> &Path { &self.path }
 }
 
-// impl Debug for Handle<MicroSurface> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "MicroSurface<{}>", self.id())
-//     }
-// }
-//
-// impl Display for Handle<MicroSurface> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "MicroSurface<{}>", self.id())
-//     }
-// }
-//
-// impl Debug for Handle<MicroSurfaceMesh> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "MicroSurfaceMesh<{}>", self.id())
-//     }
-// }
-//
-// impl Display for Handle<MicroSurfaceMesh> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "MicroSurfaceMesh<{}>", self.id())
-//     }
-// }
-//
-// impl Debug for Handle<RenderableMesh> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "RenderableMesh<{}>", self.id())
-//     }
-// }
-//
-// impl Display for Handle<RenderableMesh> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "RenderableMesh<{}>", self.id())
-//     }
-// }
-
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
 #[derive(Debug)]

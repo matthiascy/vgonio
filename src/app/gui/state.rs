@@ -15,7 +15,14 @@ use crate::app::{
     gui::VgonioEvent,
 };
 
-use crate::{app::gfx::remap_depth, measure::rtc::Ray};
+use crate::{
+    app::gfx::{remap_depth, SlicedBuffer},
+    math::generate_parametric_sphere,
+    measure::rtc::Ray,
+    units::Radians,
+    RangeByStepSizeInclusive,
+};
+use glam::{Mat4, Vec3};
 use std::{default::Default, path::Path, sync::Arc};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
@@ -206,7 +213,18 @@ impl DepthMap {
     }
 }
 
-pub struct DebugState {
+pub struct DebugDrawingState {
+    /// Giant buffer for all vertices data except for the micro surfaces.
+    pub vertices: SlicedBuffer,
+    /// Giant buffer for all indices data except for the micro surfaces.
+    pub indices: SlicedBuffer,
+    /// Basic render pipeline for debug drawing.
+    pub pipeline: wgpu::RenderPipeline,
+    /// Bind group for basic render pipeline.
+    pub bind_group: wgpu::BindGroup,
+    /// Uniform buffer for basic render pipeline.
+    pub uniform_buffer: wgpu::Buffer,
+
     /// Vertex buffer storing all vertices.
     pub rays_vertex_buf: wgpu::Buffer,
     pub rays_vertex_count: u32,
@@ -223,7 +241,7 @@ pub struct DebugState {
     pub drawing_msurf_prims: bool,
 }
 
-impl DebugState {
+impl DebugDrawingState {
     pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
         use wgpu::util::DeviceExt;
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
@@ -281,7 +299,129 @@ impl DebugState {
                 | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
+
+        let mut vertices = SlicedBuffer::new(
+            &ctx.device,
+            4096,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            Some("debug-drawing-vertices-buffer"),
+        );
+
+        let mut indices = SlicedBuffer::new(
+            &ctx.device,
+            4096,
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            Some("debug-drawing-indices-buffer"),
+        );
+
+        let hemisphere = generate_parametric_sphere(
+            RangeByStepSizeInclusive::new(
+                Radians::ZERO,
+                Radians::HALF_PI,
+                Radians::from_degrees(15.0),
+            ),
+            RangeByStepSizeInclusive::new(
+                Radians::ZERO,
+                Radians::TWO_PI,
+                Radians::from_degrees(30.0),
+            ),
+        );
+
+        ctx.queue
+            .write_buffer(vertices.buffer(), 0, bytemuck::cast_slice(&hemisphere.0));
+        ctx.queue
+            .write_buffer(indices.buffer(), 0, bytemuck::cast_slice(&hemisphere.1));
+
+        vertices
+            .subslices_mut()
+            .push(0..hemisphere.0.len() as u64 * std::mem::size_of::<f32>() as u64 * 3);
+        indices
+            .subslices_mut()
+            .push(0..hemisphere.1.len() as u64 * std::mem::size_of::<u32>() as u64 * 3);
+
+        let (pipeline, bind_group, uniform_buffer) = {
+            let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("debug-drawing-basic-uniform-buffer"),
+                size: std::mem::size_of::<[f32; 16 * 3 + 4]>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let bind_group_layout =
+                ctx.device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("debug-drawing-basic-bind-group-layout"),
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                    });
+            let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("debug-drawing-basic-bind-group"),
+                layout: &bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                }],
+            });
+            let module = ctx
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("debug-drawing-basic-shader"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        include_str!("../gui/assets/shaders/wgsl/default.wgsl").into(),
+                    ),
+                });
+            let pipeline = ctx
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("debug-drawing-basic-pipeline"),
+                    layout: Some(&ctx.device.create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("debug-drawing-basic-pipeline-layout"),
+                            bind_group_layouts: &[&bind_group_layout],
+                            push_constant_ranges: &[],
+                        },
+                    )),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: "vs_main",
+                        buffers: &[vert_buffer_layout.clone()],
+                    },
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: None,
+                        polygon_mode: wgpu::PolygonMode::Line,
+                        ..Default::default()
+                    },
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: "fs_main",
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: target_format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    multiview: None,
+                });
+            (pipeline, bind_group, uniform_buffer)
+        };
+
         Self {
+            vertices,
+            indices,
+            pipeline,
+            bind_group,
+            uniform_buffer,
             rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-rays-vert-buffer"),
                 size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays
@@ -413,17 +553,38 @@ impl DebugState {
         }
     }
 
-    pub fn update_uniform_buffer(&mut self, ctx: &GpuContext, uniform: &[f32; 16 * 3 + 4]) {
-        ctx.queue.write_buffer(
-            &self.rays_rp.uniform_buffers.as_ref().unwrap()[0],
-            0,
-            bytemuck::cast_slice(uniform),
+    pub fn update_uniform_buffer(
+        &mut self,
+        ctx: &GpuContext,
+        view_mat: &Mat4,
+        proj_mat: &Mat4,
+        dome_radius: f32,
+        lowest: f32,
+        highest: f32,
+        scale: f32,
+    ) {
+        // ctx.queue.write_buffer(
+        //     &self.rays_rp.uniform_buffers.as_ref().unwrap()[0],
+        //     0,
+        //     bytemuck::cast_slice(uniform),
+        // );
+        // ctx.queue.write_buffer(
+        //     &self.msurf_prim_rp.uniform_buffers.as_ref().unwrap()[0],
+        //     0,
+        //     bytemuck::cast_slice(uniform),
+        // );
+        let mut buf = [0f32; 3 * 16 + 4];
+        buf[0..16].copy_from_slice(
+            &Mat4::from_scale(Vec3::new(dome_radius, dome_radius, dome_radius)).to_cols_array(),
         );
-        ctx.queue.write_buffer(
-            &self.msurf_prim_rp.uniform_buffers.as_ref().unwrap()[0],
-            0,
-            bytemuck::cast_slice(uniform),
-        );
+        buf[16..32].copy_from_slice(&view_mat.to_cols_array());
+        buf[32..48].copy_from_slice(&proj_mat.to_cols_array());
+        buf[48] = lowest;
+        buf[49] = highest;
+        buf[50] = highest - lowest;
+        buf[51] = scale;
+        ctx.queue
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&buf));
     }
 }
 

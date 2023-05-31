@@ -279,6 +279,8 @@ where
 }
 
 impl Angle<URadian> {
+    /// Creates a new angle from degrees.
+    pub fn from_degrees(value: f32) -> Self { Self::new(value * UDegree::FACTOR_TO_RAD) }
     /// Converts to degrees.
     pub fn in_degrees(&self) -> Angle<UDegree> { Angle::new(self.value * UDegree::FACTOR_FROM_RAD) }
     /// Computes the sine of the angle.
@@ -296,6 +298,8 @@ impl Angle<URadian> {
 }
 
 impl Angle<UDegree> {
+    /// Creates a new angle from radians.
+    pub fn from_radians(value: f32) -> Self { Self::new(value * URadian::FACTOR_TO_DEG) }
     /// Converts to radians.
     pub const fn in_radians(&self) -> Angle<URadian> {
         Angle::new(self.value * URadian::FACTOR_FROM_DEG)

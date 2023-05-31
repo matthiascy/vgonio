@@ -7,11 +7,14 @@ use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
     measure::rtc::Ray,
 };
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use winit::event_loop::EventLoopProxy;
 
-use crate::measure::rtc::grid::MultilevelGrid;
+use crate::{app::cache::Cache, measure::rtc::grid::MultilevelGrid};
 pub(crate) use debugging::DebuggingInspector;
 pub(crate) use plotting::PlottingInspector;
 pub(crate) use sampling::SamplingInspector;
@@ -66,11 +69,12 @@ impl Tools {
         event_loop: EventLoopProxy<VgonioEvent>,
         gpu: &GpuContext,
         gui: &mut GuiRenderer,
+        cache: Arc<RwLock<Cache>>,
     ) -> Self {
         Self {
             windows: vec![
                 Box::<Scratch>::default(),
-                Box::new(DebuggingInspector::new(event_loop.clone())),
+                Box::new(DebuggingInspector::new(event_loop.clone(), cache)),
                 Box::new(PlottingInspector::new("Graph".to_string(), Rc::new(()))),
                 Box::new(SamplingInspector::new(
                     gpu,
@@ -99,7 +103,14 @@ impl Tools {
         }
     }
 
-    pub fn get_tool<T: 'static>(&mut self) -> Option<&mut T> {
+    pub fn get_tool<T: 'static>(&self) -> Option<&T> {
+        self.windows
+            .iter()
+            .find(|w| w.as_any().type_id() == std::any::TypeId::of::<T>())
+            .and_then(|w| w.as_any().downcast_ref::<T>())
+    }
+
+    pub fn get_tool_mut<T: 'static>(&mut self) -> Option<&mut T> {
         self.windows
             .iter_mut()
             .find(|w| w.as_any().type_id() == std::any::TypeId::of::<T>())

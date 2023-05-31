@@ -1,11 +1,17 @@
 use crate::{
-    app::gui::{
-        misc::{input3_spherical, input3_xyz},
-        VgonioEvent,
+    app::{
+        cache::{Cache, Handle, MicroSurfaceRecord},
+        gui::{
+            misc::{input3_spherical, input3_xyz, toggle, toggle_ui},
+            VgonioEvent,
+        },
     },
-    measure::{rtc::Ray, RtcMethod},
+    measure::{measurement::Radius, rtc::Ray, RtcMethod},
+    msurf::MicroSurface,
+    units::{mm, UMillimetre},
 };
 use glam::{IVec2, Vec3};
+use std::sync::{Arc, Mutex, RwLock};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -14,7 +20,10 @@ enum RayMode {
     Spherical,
 }
 
-pub(crate) struct RayTracingPane {
+pub(crate) struct BrdfMeasurementPane {
+    pub dome_radius: f32,
+    pub show_dome: bool,
+    cache: Arc<RwLock<Cache>>,
     ray_origin_cartesian: Vec3,
     ray_origin_spherical: Vec3,
     ray_target: Vec3,
@@ -24,12 +33,17 @@ pub(crate) struct RayTracingPane {
     prim_id: u32,
     cell_pos: IVec2,
     t: f32,
+    pub loaded_surfaces: Vec<MicroSurfaceRecord>,
+    pub selected_surface: Option<Handle<MicroSurface>>,
     event_loop: EventLoopProxy<VgonioEvent>,
 }
 
-impl RayTracingPane {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+impl BrdfMeasurementPane {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
+            dome_radius: 0.0,
+            show_dome: false,
+            cache,
             ray_origin_cartesian: Vec3::new(0.0, 5.0, 0.0),
             ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),
             ray_target: Default::default(),
@@ -39,13 +53,67 @@ impl RayTracingPane {
             prim_id: 0,
             cell_pos: Default::default(),
             t: 10.0,
+            loaded_surfaces: vec![],
+            selected_surface: None,
             event_loop,
         }
     }
 }
 
-impl egui::Widget for &mut RayTracingPane {
+impl egui::Widget for &mut BrdfMeasurementPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        ui.horizontal(|ui| {
+            ui.label("MicroSurface");
+            egui::ComboBox::from_id_source("MicroSurface")
+                .selected_text(format!(
+                    "{}",
+                    match self.selected_surface {
+                        None => "None",
+                        Some(hdl) => {
+                            let record =
+                                self.loaded_surfaces.iter().find(|s| s.surf == hdl).unwrap();
+                            record.name()
+                        }
+                    }
+                ))
+                .show_ui(ui, |ui| {
+                    for record in &self.loaded_surfaces {
+                        ui.selectable_value(
+                            &mut self.selected_surface,
+                            Some(record.surf),
+                            format!("{}", record.name()),
+                        );
+                    }
+                });
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Dome Radius:");
+            ui.add(
+                egui::DragValue::new(&mut self.dome_radius)
+                    .speed(0.1)
+                    .clamp_range(0.0..=10000.0),
+            );
+            if ui.button("eval").clicked() {
+                let record = self
+                    .loaded_surfaces
+                    .iter()
+                    .find(|s| s.surf == self.selected_surface.unwrap_or(Handle::default()));
+                match record {
+                    None => {
+                        log::warn!("No surface selected");
+                    }
+                    Some(record) => {
+                        let cache = self.cache.read().unwrap();
+                        let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
+                        self.dome_radius = Radius::Auto(mm!(
+                            self.dome_radius * mesh.unit.factor_convert_to::<UMillimetre>()
+                        ))
+                        .eval(mesh);
+                    }
+                }
+            }
+            ui.add(toggle(&mut self.show_dome));
+        });
         ui.horizontal_wrapped(|ui| {
             ui.label("Method");
             #[cfg(feature = "embree")]

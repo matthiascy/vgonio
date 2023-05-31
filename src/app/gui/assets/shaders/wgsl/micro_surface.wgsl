@@ -5,7 +5,6 @@ struct Globals {
 
 struct Locals {
     model: mat4x4<f32>,
-//    info: vec4<f32>,
     lowest: f32,
     highest: f32,
     span: f32,

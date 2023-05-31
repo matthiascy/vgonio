@@ -1,6 +1,7 @@
 use super::{state::GuiRenderer, VgonioEvent};
 use crate::{
     app::{
+        cache::Cache,
         gfx::GpuContext,
         gui::{
             gizmo::NavigationGizmo,
@@ -21,7 +22,7 @@ use std::{
     collections::HashMap,
     fmt::Write,
     ops::Deref,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 use winit::event_loop::EventLoopProxy;
 
@@ -240,7 +241,7 @@ pub struct VgonioUi {
     image_cache: Arc<Mutex<ImageCache>>,
 
     /// Visibility of the visual grid.
-    pub enable_visual_grid: bool,
+    pub visual_grid_enabled: bool,
 
     pub right_panel_expanded: bool,
     pub left_panel_expanded: bool,
@@ -271,18 +272,19 @@ impl VgonioUi {
         config: Arc<Config>,
         gpu: &GpuContext,
         gui: &mut GuiRenderer,
+        cache: Arc<RwLock<Cache>>,
     ) -> Self {
         Self {
             config,
             event_loop: event_loop.clone(),
-            tools: Tools::new(event_loop.clone(), gpu, gui),
+            tools: Tools::new(event_loop.clone(), gpu, gui, cache),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
             drag_drop: FileDragDrop::new(event_loop),
             theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             outliner: Outliner::new(),
             image_cache: Arc::new(Mutex::new(Default::default())),
-            enable_visual_grid: true,
+            visual_grid_enabled: true,
             right_panel_expanded: true,
             left_panel_expanded: false,
         }
@@ -452,7 +454,7 @@ impl VgonioUi {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("     Visual grid");
                         ui.add_space(5.0);
-                        ui.add(super::misc::toggle(&mut self.enable_visual_grid));
+                        ui.add(super::misc::toggle(&mut self.visual_grid_enabled));
                     });
                 }
 
