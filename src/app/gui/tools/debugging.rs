@@ -1,4 +1,5 @@
 use crate::app::gui::VgonioEvent;
+use egui_toast::Toasts;
 use std::{
     any::Any,
     default::Default,
@@ -6,19 +7,19 @@ use std::{
 };
 use winit::event_loop::EventLoopProxy;
 
+mod brdf_measurement;
 mod microfacet;
-mod ray_tracing;
 mod shadow_map;
 
 use crate::{
     app::{
         cache::{Cache, Handle},
-        gui::{misc::toggle, tools::Tool},
+        gui::{tools::Tool, widgets::ToggleSwitch},
     },
     msurf::MicroSurface,
 };
+use brdf_measurement::BrdfMeasurementPane;
 use microfacet::MicrofacetMeasurementPane;
-use ray_tracing::BrdfMeasurementPane;
 use shadow_map::ShadowMapPane;
 
 #[non_exhaustive]
@@ -58,7 +59,7 @@ impl Tool for DebuggingInspector {
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Debug Draw");
-            ui.add(toggle(&mut self.debug_drawing_enabled));
+            ui.add(ToggleSwitch::new(&mut self.debug_drawing_enabled));
         });
 
         ui.horizontal(|ui| {
@@ -87,13 +88,17 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RwLock<Cache>>) -> Self {
+    pub fn new(
+        event_loop: EventLoopProxy<VgonioEvent>,
+        toasts: Arc<RwLock<Toasts>>,
+        cache: Arc<RwLock<Cache>>,
+    ) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: true,
             event_loop: event_loop.clone(),
             shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
-            brdf_pane: BrdfMeasurementPane::new(event_loop.clone(), cache),
+            brdf_pane: BrdfMeasurementPane::new(event_loop.clone(), toasts, cache),
             microfacet_pane: MicrofacetMeasurementPane::new(event_loop),
         }
     }

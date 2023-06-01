@@ -8,15 +8,17 @@ use crate::{
             icons::Icon,
             outliner::Outliner,
             tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
+            widgets::ToggleSwitch,
             DebuggingInspector,
         },
         Config,
     },
     error::Error,
 };
-use egui::NumExt;
+use egui::{Align2, Direction, NumExt};
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
+use egui_toast::Toasts;
 use glam::Mat4;
 use std::{
     collections::HashMap,
@@ -245,6 +247,9 @@ pub struct VgonioUi {
 
     pub right_panel_expanded: bool,
     pub left_panel_expanded: bool,
+
+    /// The toast manager.
+    toasts: Arc<RwLock<Toasts>>,
 }
 
 #[repr(u8)]
@@ -274,10 +279,15 @@ impl VgonioUi {
         gui: &mut GuiRenderer,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
+        let toasts = Arc::new(RwLock::new(
+            Toasts::new()
+                .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
+                .direction(Direction::BottomUp),
+        ));
         Self {
             config,
             event_loop: event_loop.clone(),
-            tools: Tools::new(event_loop.clone(), gpu, gui, cache),
+            tools: Tools::new(event_loop.clone(), gpu, gui, toasts.clone(), cache),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
             drag_drop: FileDragDrop::new(event_loop),
             theme: ThemeState::default(),
@@ -287,6 +297,7 @@ impl VgonioUi {
             visual_grid_enabled: true,
             right_panel_expanded: true,
             left_panel_expanded: false,
+            toasts,
         }
     }
 
@@ -317,6 +328,7 @@ impl VgonioUi {
                 .resizable(true)
                 .show(ctx, |ui| self.outliner.ui(ui));
         }
+        self.toasts.write().unwrap().show(ctx);
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
@@ -454,7 +466,7 @@ impl VgonioUi {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("     Visual grid");
                         ui.add_space(5.0);
-                        ui.add(super::misc::toggle(&mut self.visual_grid_enabled));
+                        ui.add(ToggleSwitch::new(&mut self.visual_grid_enabled));
                     });
                 }
 

@@ -1,5 +1,8 @@
 use crate::{
-    app::{cache::Cache, gui::VgonioEvent},
+    app::{
+        cache::Cache,
+        gui::{widgets::ToggleSwitch, VgonioEvent},
+    },
     measure::measurement::{BsdfMeasurementParams, Measurement},
 };
 use std::{
@@ -556,7 +559,7 @@ impl SimulationWorkspace {
 
                         ui.label("Surface Visibility");
                         {
-                            let res = ui.add(super::misc::toggle(&mut self.surface_visible));
+                            let res = ui.add(ToggleSwitch::new(&mut self.surface_visible));
                             if res.changed()
                                 && self
                                     .event_loop

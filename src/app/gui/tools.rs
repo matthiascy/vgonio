@@ -7,6 +7,7 @@ use crate::{
     app::{gfx::GpuContext, gui::VgonioEvent},
     measure::rtc::Ray,
 };
+use egui_toast::Toasts;
 use std::{
     rc::Rc,
     sync::{Arc, Mutex, RwLock},
@@ -69,12 +70,13 @@ impl Tools {
         event_loop: EventLoopProxy<VgonioEvent>,
         gpu: &GpuContext,
         gui: &mut GuiRenderer,
+        toasts: Arc<RwLock<Toasts>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         Self {
             windows: vec![
                 Box::<Scratch>::default(),
-                Box::new(DebuggingInspector::new(event_loop.clone(), cache)),
+                Box::new(DebuggingInspector::new(event_loop.clone(), toasts, cache)),
                 Box::new(PlottingInspector::new("Graph".to_string(), Rc::new(()))),
                 Box::new(SamplingInspector::new(
                     gpu,

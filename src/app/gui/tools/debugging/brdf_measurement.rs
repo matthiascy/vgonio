@@ -2,7 +2,8 @@ use crate::{
     app::{
         cache::{Cache, Handle, MicroSurfaceRecord},
         gui::{
-            misc::{input3_spherical, input3_xyz, toggle, toggle_ui},
+            misc::{input3_spherical, input3_xyz},
+            widgets::ToggleSwitch,
             VgonioEvent,
         },
     },
@@ -10,6 +11,7 @@ use crate::{
     msurf::MicroSurface,
     units::{mm, UMillimetre},
 };
+use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::{IVec2, Vec3};
 use std::sync::{Arc, Mutex, RwLock};
 use winit::event_loop::EventLoopProxy;
@@ -21,6 +23,7 @@ enum RayMode {
 }
 
 pub(crate) struct BrdfMeasurementPane {
+    toasts: Arc<RwLock<Toasts>>,
     pub dome_radius: f32,
     pub show_dome: bool,
     cache: Arc<RwLock<Cache>>,
@@ -39,8 +42,13 @@ pub(crate) struct BrdfMeasurementPane {
 }
 
 impl BrdfMeasurementPane {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RwLock<Cache>>) -> Self {
+    pub fn new(
+        event_loop: EventLoopProxy<VgonioEvent>,
+        toasts: Arc<RwLock<Toasts>>,
+        cache: Arc<RwLock<Cache>>,
+    ) -> Self {
         Self {
+            toasts,
             dome_radius: 1.0,
             show_dome: false,
             cache,
@@ -100,7 +108,14 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                     .find(|s| s.surf == self.selected_surface.unwrap_or(Handle::default()));
                 match record {
                     None => {
-                        log::warn!("No surface selected");
+                        self.toasts.write().unwrap().add(Toast {
+                            kind: ToastKind::Warning,
+                            text: "No surface selected to evaluate the dome radius".into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(3.0)
+                                .show_progress(true)
+                                .show_icon(true),
+                        });
                     }
                     Some(record) => {
                         let cache = self.cache.read().unwrap();
@@ -112,7 +127,7 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                     }
                 }
             }
-            ui.add(toggle(&mut self.show_dome));
+            ui.add(ToggleSwitch::new(&mut self.show_dome));
         });
         ui.horizontal_wrapped(|ui| {
             ui.label("Method");
