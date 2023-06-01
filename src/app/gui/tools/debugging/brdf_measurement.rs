@@ -13,7 +13,7 @@ use crate::{
 };
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::{IVec2, Vec3};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

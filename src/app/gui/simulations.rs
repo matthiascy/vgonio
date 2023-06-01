@@ -1,9 +1,20 @@
+mod bsdf;
+mod madf;
+mod mmsf;
+
 use crate::{
     app::{
-        cache::Cache,
-        gui::{widgets::ToggleSwitch, VgonioEvent},
+        cache::{Cache, Handle},
+        gui::{
+            simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
+            widgets::ToggleSwitch,
+            VgonioEvent,
+        },
     },
-    measure::measurement::{BsdfMeasurementParams, Measurement},
+    measure::measurement::{
+        BsdfMeasurementParams, MadfMeasurementParams, Measurement, MmsfMeasurementParams,
+    },
+    msurf::MicroSurface,
 };
 use std::{
     fmt::{Display, Formatter},
@@ -11,6 +22,59 @@ use std::{
     sync::{Arc, Mutex},
 };
 use winit::event_loop::EventLoopProxy;
+
+pub struct Simulations {
+    pub bsdf_sim: BsdfSimulation,
+    pub madf_sim: MadfSimulation,
+    pub mmsf_sim: MmsfSimulation,
+    pub states: [bool; 3],
+}
+
+impl Simulations {
+    pub fn new() -> Self {
+        Simulations {
+            bsdf_sim: BsdfSimulation::new(),
+            madf_sim: MadfSimulation::new(),
+            mmsf_sim: MmsfSimulation::new(),
+            states: [false; 3],
+        }
+    }
+
+    pub fn show_bsdf_sim(&mut self, ctx: &egui::Context) {
+        egui::Window::new("BSDF Simulation")
+            .open(&mut self.states[0])
+            .show(ctx, |ui| self.bsdf_sim.ui(ui));
+    }
+
+    pub fn show_madf_sim(&mut self, ctx: &egui::Context) {
+        egui::Window::new("NDF Simulation")
+            .open(&mut self.states[1])
+            .resizable(false)
+            .show(ctx, |ui| self.madf_sim.ui(ui));
+    }
+
+    pub fn show_mmsf_sim(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Masking/Shadowing Simulation")
+            .open(&mut self.states[2])
+            .show(ctx, |ui| self.mmsf_sim.ui(ui));
+    }
+
+    pub fn show_all(&mut self, ctx: &egui::Context) {
+        self.show_bsdf_sim(ctx);
+        self.show_madf_sim(ctx);
+        self.show_mmsf_sim(ctx);
+    }
+
+    pub fn open_bsdf_sim(&mut self) { self.states[0] = true; }
+
+    pub fn open_madf_sim(&mut self) { self.states[1] = true; }
+
+    pub fn open_mmsf_sim(&mut self) { self.states[2] = true; }
+
+    pub fn update_loaded_surfaces(&mut self, surfs: &Vec<Handle<MicroSurface>>) {
+        self.madf_sim.update_loaded_surfaces(surfs);
+    }
+}
 
 /// Helper enum used in GUI to specify the radius of the emitter/detector.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

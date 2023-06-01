@@ -2,7 +2,7 @@ mod gizmo;
 mod icons;
 mod misc;
 pub mod outliner;
-mod simulation;
+mod simulations;
 pub mod state;
 mod tools;
 mod ui;
@@ -1310,16 +1310,11 @@ impl VgonioGuiApp {
             }
         }
         let cache = self.cache.read().unwrap();
-        self.ui.outliner_mut().update_surfaces(&surfaces, &cache);
         self.msurf_rdr_state.update_locals_lookup(&surfaces);
+        self.ui.update_loaded_surfaces(&surfaces, &cache);
         self.ui
             .outliner_mut()
             .update_measurement_data(&measurements, &cache);
-        self.ui
-            .tools
-            .get_tool_mut::<DebuggingInspector>()
-            .unwrap()
-            .update_surfaces(&surfaces, &cache);
     }
 }
 

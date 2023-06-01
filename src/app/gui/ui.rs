@@ -1,12 +1,13 @@
 use super::{state::GuiRenderer, VgonioEvent};
 use crate::{
     app::{
-        cache::Cache,
+        cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
             gizmo::NavigationGizmo,
             icons::Icon,
             outliner::Outliner,
+            simulations::Simulations,
             tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
             widgets::ToggleSwitch,
             DebuggingInspector,
@@ -14,11 +15,12 @@ use crate::{
         Config,
     },
     error::Error,
+    msurf::MicroSurface,
 };
 use egui::{Align2, Direction, NumExt};
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
-use egui_toast::Toasts;
+use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::Mat4;
 use std::{
     collections::HashMap,
@@ -248,6 +250,8 @@ pub struct VgonioUi {
     pub right_panel_expanded: bool,
     pub left_panel_expanded: bool,
 
+    pub simulations: Simulations,
+
     /// The toast manager.
     toasts: Arc<RwLock<Toasts>>,
 }
@@ -297,6 +301,7 @@ impl VgonioUi {
             visual_grid_enabled: true,
             right_panel_expanded: true,
             left_panel_expanded: false,
+            simulations: Simulations::new(),
             toasts,
         }
     }
@@ -311,10 +316,9 @@ impl VgonioUi {
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.menu_bar(ui);
+                    self.vgonio_menu(ui);
                 });
             });
-
         self.tools.show(ctx);
         //self.simulation_workspace.show(ctx);
         self.drag_drop.show(ctx);
@@ -328,6 +332,9 @@ impl VgonioUi {
                 .resizable(true)
                 .show(ctx, |ui| self.outliner.ui(ui));
         }
+
+        self.simulations.show_all(ctx);
+
         self.toasts.write().unwrap().show(ctx);
     }
 
@@ -338,6 +345,15 @@ impl VgonioUi {
     pub fn outliner(&self) -> &Outliner { &self.outliner }
 
     pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
+
+    pub fn update_loaded_surfaces(&mut self, surfaces: &Vec<Handle<MicroSurface>>, cache: &Cache) {
+        self.outliner_mut().update_surfaces(&surfaces, &cache);
+        self.tools
+            .get_tool_mut::<DebuggingInspector>()
+            .unwrap()
+            .update_surfaces(surfaces, cache);
+        self.simulations.update_loaded_surfaces(surfaces);
+    }
 }
 
 impl VgonioUi {
@@ -371,7 +387,7 @@ impl VgonioUi {
         response
     }
 
-    fn menu_bar(&mut self, ui: &mut egui::Ui) {
+    fn vgonio_menu(&mut self, ui: &mut egui::Ui) {
         ui.set_height(28.0);
         let icon_image = if self.theme.current_theme() == Theme::Dark {
             self.icon_image(&Icon::VGONIO_MENU_DARK)
@@ -384,27 +400,37 @@ impl VgonioUi {
 
         ui.menu_image_button(texture_id, image_size, |ui| {
             if ui.button("About").clicked() {
-                println!("TODO: about, print build info");
+                self.toasts.write().unwrap().add(Toast {
+                    kind: ToastKind::Info,
+                    text: "TODO: about".into(),
+                    options: ToastOptions::default()
+                        .duration_in_seconds(3.0)
+                        .show_progress(true)
+                        .show_icon(true),
+                });
             }
 
             ui.menu_button("New", |ui| {
                 ui.menu_button("Measurement", |ui| {
-                    if ui.button("BRDF").clicked() {
-                        println!("TODO: new angle measurement");
+                    if ui.button("BSDF").clicked() {
+                        self.simulations.open_bsdf_sim();
                     }
-                    if ui.button("Area Distribution").clicked() {
-                        println!("TODO: new distance measurement");
+                    if ui.button("NDF").clicked() {
+                        self.simulations.open_madf_sim();
                     }
                     if ui.button("Masking/Shadowing").clicked() {
-                        println!("TODO: new angle measurement");
+                        self.simulations.open_mmsf_sim();
                     }
                 });
-
-                if ui.button("General").clicked() {
-                    println!("TODO: new general file")
-                }
-                if ui.button("Height field").clicked() {
-                    println!("TODO: new height field");
+                if ui.button("Micro-surface").clicked() {
+                    self.toasts.write().unwrap().add(Toast {
+                        kind: ToastKind::Info,
+                        text: "TODO: new height field".into(),
+                        options: ToastOptions::default()
+                            .duration_in_seconds(3.0)
+                            .show_progress(true)
+                            .show_icon(true),
+                    });
                 }
             });
             if ui.button("Open...").clicked() {
@@ -432,7 +458,14 @@ impl VgonioUi {
             ui.menu_button("Recent...", |ui| {
                 for i in 0..10 {
                     if ui.button(format!("item {i}")).clicked() {
-                        println!("TODO: open item {i}");
+                        self.toasts.write().unwrap().add(Toast {
+                            kind: ToastKind::Info,
+                            text: format!("TODO: open recent item {i}").into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(3.0)
+                                .show_progress(true)
+                                .show_icon(true),
+                        });
                     }
                 }
             });
@@ -441,17 +474,38 @@ impl VgonioUi {
 
             {
                 if ui.button("Save...").clicked() {
-                    println!("TODO: save");
+                    self.toasts.write().unwrap().add(Toast {
+                        kind: ToastKind::Info,
+                        text: "TODO: save".into(),
+                        options: ToastOptions::default()
+                            .duration_in_seconds(3.0)
+                            .show_progress(true)
+                            .show_icon(true),
+                    });
                 }
             }
 
             ui.menu_button("Edit", |ui| {
                 {
                     if ui.button("     Undo").clicked() {
-                        println!("TODO: undo");
+                        self.toasts.write().unwrap().add(Toast {
+                            kind: ToastKind::Info,
+                            text: "TODO: undo".into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(3.0)
+                                .show_progress(true)
+                                .show_icon(true),
+                        });
                     }
                     if ui.button("     Redo").clicked() {
-                        println!("TODO: file");
+                        self.toasts.write().unwrap().add(Toast {
+                            kind: ToastKind::Info,
+                            text: "TODO: redo".into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(3.0)
+                                .show_progress(true)
+                                .show_icon(true),
+                        });
                     }
                 }
 
@@ -473,7 +527,14 @@ impl VgonioUi {
                 ui.separator();
 
                 if ui.button("\u{2699} Preferences").clicked() {
-                    println!("TODO: open preferences window");
+                    self.toasts.write().unwrap().add(Toast {
+                        kind: ToastKind::Info,
+                        text: "TODO: open preferences window".into(),
+                        options: ToastOptions::default()
+                            .duration_in_seconds(3.0)
+                            .show_progress(true)
+                            .show_icon(true),
+                    });
                 }
             });
             ui.menu_button("Tools", |ui| {
