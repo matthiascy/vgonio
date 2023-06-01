@@ -408,20 +408,25 @@ pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
 /// Generates a parametric sphere with the given theta and phi ranges.
 ///
 /// Returns a tuple of the vertices and indices.
-pub fn generate_parametric_sphere(
-    theta: RangeByStepSizeInclusive<Radians>,
-    phi: RangeByStepSizeInclusive<Radians>,
-) -> (Vec<Vec3>, Vec<UVec3>) {
+pub fn generate_parametric_hemisphere(theta_steps: u32, phi_steps: u32) -> (Vec<Vec3>, Vec<UVec3>) {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    let theta_steps = theta.step_count_wrapped() as u32;
-    let phi_steps = phi.step_count_wrapped() as u32;
+    let theta_step_size = Radians::HALF_PI / theta_steps as f32;
+    let phi_step_size = Radians::TWO_PI / phi_steps as f32;
 
-    for i in 0..theta_steps {
-        let theta = theta.start + theta.step_size * i as f32;
+    // Generate top vertex
+    vertices.push(spherical_to_cartesian(
+        1.0,
+        Radians::ZERO,
+        Radians::ZERO,
+        Handedness::RightHandedYUp,
+    ));
+
+    for i in 1..=theta_steps {
+        let theta = theta_step_size * i as f32;
         for j in 0..phi_steps {
-            let phi = phi.start + phi.step_size * j as f32;
+            let phi = phi_step_size * j as f32;
             vertices.push(spherical_to_cartesian(
                 1.0,
                 theta,
@@ -431,39 +436,26 @@ pub fn generate_parametric_sphere(
         }
     }
 
-    // Generate indices for a list of triangles,
-    // each cell has max 2 triangles
-    for i in 0..theta_steps {
-        for j in 0..phi_steps {
-            let i0 = i * phi_steps + j;
-            let i1 = i0 + 1;
-            let i2 = (i + 1) * phi_steps + j;
-            let i3 = i2 + 1;
+    let offset = 1;
 
-            if i < theta_steps - 1 && j < phi_steps {
-                // First triangle of the cell
-                indices.push(UVec3::new(i0, i2, i1));
-                // Second triangle of the cell
-                indices.push(UVec3::new(i2, i3, i1));
-            }
-        }
+    // Generate indices top strip
+    for i in 0..phi_steps {
+        let i1 = i + offset;
+        let i2 = i1 % phi_steps + offset;
+        indices.push(UVec3::new(0, i1, i2));
     }
 
-    // for i in 0..theta_steps {
-    //     for j in 0..phi_steps {
-    //         let i0 = i * phi_steps + j;
-    //         let i1 = i0 + 1;
-    //         let i2 = (i + 1) * phi_steps + j;
-    //         let i3 = i2 + 1;
-    //
-    //         if i < theta_steps - 1 && j < phi_steps {
-    //             // First triangle of the cell
-    //             indices.push(UVec3::new(i0, i2, i1));
-    //             // Second triangle of the cell
-    //             indices.push(UVec3::new(i2, i3, i1));
-    //         }
-    //     }
-    // }
+    // Generate indices for the rest of the cells, each cell has max 2 triangles
+    for i in 1..theta_steps {
+        for j in 0..phi_steps {
+            let i0 = (i - 1) * phi_steps + j + offset;
+            let i1 = i * phi_steps + j + offset;
+            let i2 = i * phi_steps + (j + 1) % phi_steps + offset;
+            let i3 = (i - 1) * phi_steps + (j + 1) % phi_steps + offset;
+            indices.push(UVec3::new(i0, i2, i1));
+            indices.push(UVec3::new(i0, i3, i2));
+        }
+    }
 
     (vertices, indices)
 }

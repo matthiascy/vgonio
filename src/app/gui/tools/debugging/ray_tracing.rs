@@ -41,7 +41,7 @@ pub(crate) struct BrdfMeasurementPane {
 impl BrdfMeasurementPane {
     pub fn new(event_loop: EventLoopProxy<VgonioEvent>, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
-            dome_radius: 0.0,
+            dome_radius: 1.0,
             show_dome: false,
             cache,
             ray_origin_cartesian: Vec3::new(0.0, 5.0, 0.0),

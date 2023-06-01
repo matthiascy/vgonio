@@ -17,7 +17,7 @@ use crate::app::{
 
 use crate::{
     app::gfx::{remap_depth, SlicedBuffer},
-    math::generate_parametric_sphere,
+    math::generate_parametric_hemisphere,
     measure::rtc::Ray,
     units::Radians,
     RangeByStepSizeInclusive,
@@ -314,18 +314,7 @@ impl DebugDrawingState {
             Some("debug-drawing-indices-buffer"),
         );
 
-        let hemisphere = generate_parametric_sphere(
-            RangeByStepSizeInclusive::new(
-                Radians::ZERO,
-                Radians::HALF_PI,
-                Radians::from_degrees(15.0),
-            ),
-            RangeByStepSizeInclusive::new(
-                Radians::ZERO,
-                Radians::TWO_PI,
-                Radians::from_degrees(30.0),
-            ),
-        );
+        let hemisphere = generate_parametric_hemisphere(6, 12);
 
         ctx.queue
             .write_buffer(vertices.buffer(), 0, bytemuck::cast_slice(&hemisphere.0));
