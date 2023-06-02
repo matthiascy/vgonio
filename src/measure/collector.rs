@@ -75,11 +75,46 @@ impl CollectorScheme {
         }
     }
 
+    pub(crate) fn domain_mut(&mut self) -> &mut SphericalDomain {
+        match self {
+            Self::Partitioned { domain, .. } => domain,
+            Self::SingleRegion { domain, .. } => domain,
+        }
+    }
+
     /// Returns the shape of the collector only if it is a single region.
     pub fn shape(&self) -> Option<RegionShape> {
         match self {
             Self::Partitioned { .. } => None,
             Self::SingleRegion { shape, .. } => Some(*shape),
+        }
+    }
+
+    pub(crate) fn shape_mut(&mut self) -> Option<&mut RegionShape> {
+        match self {
+            Self::Partitioned { .. } => None,
+            Self::SingleRegion { shape, .. } => Some(shape),
+        }
+    }
+
+    pub(crate) fn zenith_mut(&mut self) -> Option<&mut RangeByStepSizeInclusive<Radians>> {
+        match self {
+            Self::Partitioned { .. } => None,
+            Self::SingleRegion { zenith, .. } => Some(zenith),
+        }
+    }
+
+    pub(crate) fn azimuth_mut(&mut self) -> Option<&mut RangeByStepSizeInclusive<Radians>> {
+        match self {
+            Self::Partitioned { .. } => None,
+            Self::SingleRegion { azimuth, .. } => Some(azimuth),
+        }
+    }
+
+    pub(crate) fn partition_mut(&mut self) -> Option<&mut SphericalPartition> {
+        match self {
+            Self::Partitioned { partition, .. } => Some(partition),
+            Self::SingleRegion { .. } => None,
         }
     }
 
@@ -116,6 +151,22 @@ impl CollectorScheme {
             CollectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => zenith.step_count_wrapped() * azimuth.step_count_wrapped(),
+        }
+    }
+
+    pub fn default_partition() -> Self {
+        Self::Partitioned {
+            domain: SphericalDomain::default(),
+            partition: SphericalPartition::default(),
+        }
+    }
+
+    pub fn default_single_region() -> Self {
+        Self::SingleRegion {
+            domain: SphericalDomain::default(),
+            shape: RegionShape::default_spherical_cap(),
+            zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::from_degrees(5.0)),
+            azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::from_degrees(15.0)),
         }
     }
 }

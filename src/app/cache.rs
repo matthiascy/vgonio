@@ -116,6 +116,21 @@ pub struct MicroSurfaceRecord {
     pub renderable: Handle<RenderableMesh>,
 }
 
+impl Hash for MicroSurfaceRecord {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.surf.hash(state) }
+}
+
+impl PartialEq<Self> for MicroSurfaceRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+            && self.surf == other.surf
+            && self.mesh == other.mesh
+            && self.renderable == other.renderable
+    }
+}
+
+impl Eq for MicroSurfaceRecord {}
+
 impl MicroSurfaceRecord {
     pub fn name(&self) -> &str {
         self.path
@@ -244,6 +259,16 @@ impl Cache {
         handle: Handle<MicroSurface>,
     ) -> Option<&MicroSurfaceRecord> {
         self.records.get(&handle)
+    }
+
+    pub fn get_micro_surface_records<'a, T>(&self, handles: T) -> Vec<MicroSurfaceRecord>
+    where
+        T: Iterator<Item = &'a Handle<MicroSurface>>,
+    {
+        handles
+            .filter_map(|hdl| self.records.get(hdl))
+            .cloned()
+            .collect()
     }
 
     /// Returns a micro-surface profile [`RenderableMesh`] from the cache

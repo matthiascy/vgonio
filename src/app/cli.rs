@@ -366,7 +366,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
 
 /// Measures the microfacet normal distribution of the given micro-surface and
 /// saves the result to the given output directory.
-fn measure_microfacet_area_distribution(
+pub(crate) fn measure_microfacet_area_distribution(
     measurement: MadfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,

@@ -81,15 +81,13 @@ impl MicrofacetAreaDistribution {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    desc: MadfMeasurementParams,
+    params: MadfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MicrofacetAreaDistribution> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet area distribution...");
     let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    //let azimuth_step_count_inclusive = desc.azimuth_step_count_inclusive();
-    //let zenith_step_count_inclusive = desc.zenith_step_count_inclusive();
     surfaces
         .iter()
         .filter_map(|surface| {
@@ -99,19 +97,19 @@ pub fn measure_area_distribution(
             }
             let surface = surface.as_ref().unwrap();
             let macro_area = surface.macro_surface_area();
-            let solid_angle = units::solid_angle_of_spherical_cap(desc.zenith.step_size).value();
+            let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
             let divisor = macro_area * solid_angle;
-            let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
+            let half_zenith_bin_size_cos = (params.zenith.step_size / 2.0).cos();
             log::debug!("-- macro surface area: {}", macro_area);
             log::debug!("-- solid angle per measurement: {}", solid_angle);
-            let samples = (0..desc.azimuth.step_count_wrapped())
+            let samples = (0..params.azimuth.step_count_wrapped())
                 .flat_map(move |azimuth_idx| {
                     // NOTE: the zenith angle is measured from the top of the
                     // hemisphere. The center of the zenith/azimuth bin are at the zenith/azimuth
                     // angle calculated below.
-                    (0..desc.zenith.step_count_wrapped()).map(move |zenith_idx| {
-                        let azimuth = azimuth_idx as f32 * desc.azimuth.step_size;
-                        let zenith = zenith_idx as f32 * desc.zenith.step_size;
+                    (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
+                        let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
+                        let zenith = zenith_idx as f32 * params.zenith.step_size;
                         let dir = math::spherical_to_cartesian(
                             1.0,
                             zenith,
@@ -147,10 +145,7 @@ pub fn measure_area_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            Some(MicrofacetAreaDistribution {
-                params: desc,
-                samples,
-            })
+            Some(MicrofacetAreaDistribution { params, samples })
         })
         .collect()
 }

@@ -293,7 +293,7 @@ impl VgonioUi {
             event_loop: event_loop.clone(),
             tools: Tools::new(event_loop.clone(), gpu, gui, toasts.clone(), cache),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
-            drag_drop: FileDragDrop::new(event_loop),
+            drag_drop: FileDragDrop::new(event_loop.clone()),
             theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             outliner: Outliner::new(),
@@ -301,7 +301,7 @@ impl VgonioUi {
             visual_grid_enabled: true,
             right_panel_expanded: true,
             left_panel_expanded: false,
-            simulations: Simulations::new(),
+            simulations: Simulations::new(event_loop),
             toasts,
         }
     }
@@ -346,13 +346,13 @@ impl VgonioUi {
 
     pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
 
-    pub fn update_loaded_surfaces(&mut self, surfaces: &Vec<Handle<MicroSurface>>, cache: &Cache) {
-        self.outliner_mut().update_surfaces(&surfaces, &cache);
+    pub fn update_loaded_surfaces(&mut self, surfaces: &[Handle<MicroSurface>], cache: &Cache) {
+        self.outliner_mut().update_surfaces(surfaces, cache);
         self.tools
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()
             .update_surfaces(surfaces, cache);
-        self.simulations.update_loaded_surfaces(surfaces);
+        self.simulations.update_loaded_surfaces(surfaces, cache);
     }
 }
 

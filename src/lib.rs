@@ -216,11 +216,12 @@ impl Display for SphericalCoord {
 }
 
 /// The domain of the spherical coordinate.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum SphericalDomain {
     /// Simulation happens only on upper part of the sphere.
+    #[default]
     #[serde(rename = "upper_hemisphere")]
     Upper = 0x01,
 
@@ -336,6 +337,23 @@ pub enum SphericalPartition {
     } = 0x02,
 }
 
+impl Default for SphericalPartition {
+    fn default() -> Self {
+        SphericalPartition::EqualAngle {
+            zenith: RangeByStepSizeInclusive::new(
+                Radians::ZERO,
+                Radians::HALF_PI,
+                Radians::from_degrees(5.0),
+            ),
+            azimuth: RangeByStepSizeInclusive::new(
+                Radians::ZERO,
+                Radians::TWO_PI,
+                Radians::from_degrees(15.0),
+            ),
+        }
+    }
+}
+
 impl SphericalPartition {
     /// Returns human-friendly description of the partition.
     pub fn kind_str(&self) -> &'static str {
@@ -378,6 +396,27 @@ impl SphericalPartition {
                     phi.start, phi.stop, phi.step_size
                 )
             }
+        }
+    }
+
+    pub const fn is_equal_angle(&self) -> bool {
+        match self {
+            SphericalPartition::EqualAngle { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub const fn is_equal_area(&self) -> bool {
+        match self {
+            SphericalPartition::EqualArea { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub const fn is_equal_projected_area(&self) -> bool {
+        match self {
+            SphericalPartition::EqualProjectedArea { .. } => true,
+            _ => false,
         }
     }
 }

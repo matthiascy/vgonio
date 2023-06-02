@@ -1,18 +1,28 @@
-use crate::{app::cache::Handle, measure::measurement::MadfMeasurementParams, msurf::MicroSurface};
-use egui::{epaint::ahash::HashSet, WidgetType::CollapsingHeader};
+use crate::{
+    app::{
+        cache::{Cache, Handle},
+        gui::{simulations::SurfaceSelector, VgonioEvent},
+    },
+    measure::measurement::MadfMeasurementParams,
+    msurf::MicroSurface,
+};
+use egui::Color32;
+use std::collections::{HashMap, HashSet};
+use winit::event_loop::EventLoopProxy;
 
+#[derive(Debug)]
 pub struct MadfSimulation {
     pub params: MadfMeasurementParams,
-    pub loaded: HashSet<Handle<MicroSurface>>,
-    pub selected: HashSet<Handle<MicroSurface>>,
+    pub(crate) selector: SurfaceSelector,
+    event_loop: EventLoopProxy<VgonioEvent>,
 }
 
 impl MadfSimulation {
-    pub fn new() -> Self {
+    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
             params: MadfMeasurementParams::default(),
-            loaded: HashSet::default(),
-            selected: HashSet::default(),
+            event_loop,
+            selector: SurfaceSelector::default(),
         }
     }
 
@@ -28,49 +38,17 @@ impl MadfSimulation {
                 self.params.azimuth.ui(ui);
                 ui.end_row();
                 ui.label("Micro-surfaces:");
-                egui::CollapsingHeader::new("micro-surfaces")
-                    .default_open(self.selected.len() < 3)
-                    .show(ui, |ui| {
-                        ui.columns(1, |uis| {
-                            let ui = &mut uis[0];
-                            for hdl in &self.loaded {
-                                ui.label(hdl.to_string());
-                            }
-                        });
-                    });
-                ui.columns(1, |uis| {
-                    let ui = &mut uis[0];
-                    if self.selected.is_empty() {
-                        ui.label("No micro-surface selected");
-                    } else {
-                        for hdl in &self.selected {
-                            ui.label(hdl.to_string());
-                        }
-                    }
-                });
+                self.selector.ui("micro_surface_selector", ui);
                 ui.end_row();
-                ui.label("");
-                ui.horizontal_centered(|ui| {
-                    egui::ComboBox::from_label("Add").show_ui(ui, |ui| {
-                        // for hdl in &self.loaded {
-                        //     ui.selectable_value(hdl, hdl.to_string(),
-                        // hdl.to_string());
-                        // }
-                    });
-                    if ui.button("Clear").clicked() {
-                        println!("Clear micro-surface");
-                    }
-                    if ui.button("Remove").clicked() {
-                        println!("Remove micro-surface");
-                    }
-                });
             });
-        if ui.button("Run").clicked() {
-            println!("Run Madf simulation");
+        if ui.button("Simulate").clicked() {
+            // TODO: launch simulation on a separate thread and show progress bar
+            self.event_loop
+                .send_event(VgonioEvent::MeasureAreaDistribution {
+                    params: self.params,
+                    surfaces: self.selector.selected.clone().into_iter().collect(),
+                })
+                .unwrap();
         }
-    }
-
-    pub fn update_loaded_surfaces(&mut self, loaded: &Vec<Handle<MicroSurface>>) {
-        self.loaded.extend(loaded.iter().cloned());
     }
 }

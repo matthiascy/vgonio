@@ -64,9 +64,10 @@ pub enum RegionShape {
         zenith: Radians,
     } = 0x00,
     /// A patch has a rectangular shape on the surface of the sphere.
+    /// TODO: refactor
     #[serde(rename = "rect")]
     SphericalRect {
-        /// Polar angle range of the patch (in radians).
+        /// Polar angle range of the patch (in radiansf).
         zenith: (Radians, Radians),
 
         /// Azimuthal angle range of the patch (in radians).
@@ -75,12 +76,60 @@ pub enum RegionShape {
 }
 
 impl RegionShape {
+    pub fn default_spherical_cap() -> Self {
+        Self::SphericalCap {
+            zenith: Radians::from_degrees(5.0),
+        }
+    }
+
+    pub fn default_spherical_rect() -> Self {
+        Self::SphericalRect {
+            zenith: (Radians::from_degrees(5.0), Radians::from_degrees(10.0)),
+            azimuth: (Radians::from_degrees(0.0), Radians::from_degrees(360.0)),
+        }
+    }
+
     /// Create a new spherical cap emitter.
     pub fn spherical_cap(zenith: Radians) -> Self { Self::SphericalCap { zenith } }
 
     /// Create a new spherical rectangle emitter.
     pub fn spherical_rect(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
         Self::SphericalRect { zenith, azimuth }
+    }
+
+    pub fn zenith(&self) -> (Radians, Radians) {
+        match self {
+            Self::SphericalCap { zenith } => (radians!(0.0), *zenith),
+            Self::SphericalRect { zenith, .. } => *zenith,
+        }
+    }
+
+    pub fn cap_zenith_mut(&mut self) -> Option<&mut Radians> {
+        match self {
+            Self::SphericalCap { zenith } => Some(zenith),
+            Self::SphericalRect { .. } => None,
+        }
+    }
+
+    pub fn rect_zenith_mut(&mut self) -> Option<(&mut Radians, &mut Radians)> {
+        match self {
+            Self::SphericalCap { .. } => None,
+            Self::SphericalRect { zenith, .. } => Some((&mut zenith.0, &mut zenith.1)),
+        }
+    }
+
+    pub fn rect_azimuth_mut(&mut self) -> Option<(&mut Radians, &mut Radians)> {
+        match self {
+            Self::SphericalCap { .. } => None,
+            Self::SphericalRect { azimuth, .. } => Some((&mut azimuth.0, &mut azimuth.1)),
+        }
+    }
+
+    pub fn azimuth(&self) -> (Radians, Radians) {
+        match self {
+            Self::SphericalCap { zenith } => (radians!(0.0), radians!(2.0 * std::f32::consts::PI)),
+            Self::SphericalRect { azimuth, .. } => *azimuth,
+        }
     }
 
     pub fn solid_angle(&self) -> SolidAngle {
@@ -94,6 +143,10 @@ impl RegionShape {
             }
         }
     }
+
+    pub fn is_spherical_cap(&self) -> bool { matches!(self, Self::SphericalCap { .. }) }
+
+    pub fn is_spherical_rect(&self) -> bool { matches!(self, Self::SphericalRect { .. }) }
 }
 
 #[derive(Debug, Clone)]

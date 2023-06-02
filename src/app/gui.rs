@@ -12,6 +12,7 @@ mod widgets;
 
 use crate::{
     error::Error,
+    measure,
     measure::{rtc::Ray, RtcMethod},
     units::degrees,
     Handedness,
@@ -37,6 +38,7 @@ use wgpu::util::DeviceExt;
 use crate::{
     app::{
         cache::{Cache, Handle},
+        cli,
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
             GpuContext, RenderPass, SlicedBuffer, Texture, VisualGridUniforms, WgpuConfig,
@@ -47,6 +49,7 @@ use crate::{
             ui::Theme,
         },
     },
+    measure::measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
     msurf::MicroSurface,
     units::Degrees,
 };
@@ -110,6 +113,18 @@ pub enum VgonioEvent {
         count: u32,
         azimuth: (f32, f32),
         zenith: (f32, f32),
+    },
+    MeasureAreaDistribution {
+        params: MadfMeasurementParams,
+        surfaces: Vec<Handle<MicroSurface>>,
+    },
+    MeasureMaskingShadowing {
+        params: MmsfMeasurementParams,
+        surfaces: Vec<Handle<MicroSurface>>,
+    },
+    MeasureBsdf {
+        params: BsdfMeasurementParams,
+        surfaces: Vec<Handle<MicroSurface>>,
     },
     CheckVisibleFacets {
         m_azimuth: Degrees,
@@ -1102,7 +1117,7 @@ impl VgonioGuiApp {
                 azimuth,
                 zenith,
             } => {
-                let samples = crate::measure::emitter::uniform_sampling_on_unit_sphere(
+                let samples = measure::emitter::uniform_sampling_on_unit_sphere(
                     count as usize,
                     degrees!(zenith.0).into(),
                     degrees!(zenith.1).into(),
@@ -1213,6 +1228,15 @@ impl VgonioGuiApp {
             //         }
             //     }
             // },
+            VgonioEvent::MeasureAreaDistribution { params, surfaces } => {
+                println!("Measuring area distribution");
+            }
+            VgonioEvent::MeasureMaskingShadowing { params, surfaces } => {
+                println!("Measuring masking/shadowing");
+            }
+            VgonioEvent::MeasureBsdf { params, surfaces } => {
+                println!("Measuring BSDF");
+            }
             _ => {}
         }
     }

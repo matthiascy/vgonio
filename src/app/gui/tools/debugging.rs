@@ -103,7 +103,7 @@ impl DebuggingInspector {
         }
     }
 
-    pub fn update_surfaces(&mut self, surfaces: &Vec<Handle<MicroSurface>>, cache: &Cache) {
+    pub fn update_surfaces(&mut self, surfaces: &[Handle<MicroSurface>], cache: &Cache) {
         for surface in surfaces {
             if !self
                 .brdf_pane

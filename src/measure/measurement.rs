@@ -74,6 +74,13 @@ impl Radius {
         }
     }
 
+    pub fn value_mut(&mut self) -> &mut Millimetres {
+        match self {
+            Radius::Auto(value) => value,
+            Radius::Fixed(value) => value,
+        }
+    }
+
     /// Evaluate the radius for the given `MicroSurfaceMesh` and return the
     /// value of the radius in the same unit as the `MicroSurfaceMesh`.
     pub fn eval(&self, mesh: &MicroSurfaceMesh) -> f32 {

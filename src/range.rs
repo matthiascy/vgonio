@@ -417,6 +417,16 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     pub fn range_bound_inclusive_f32(&self) -> RangeInclusive<f32> {
         self.start.value..=self.stop.value
     }
+
+    /// Constructs a new range of angles from 0 to 2π with the given step size.
+    pub const fn zero_to_tau(step_size: Angle<A>) -> RangeByStepSizeInclusive<Angle<A>> {
+        RangeByStepSizeInclusive::new(Angle::ZERO, Angle::TAU, step_size)
+    }
+
+    /// Constructs a new range of angles from 0 to π/2 with the given step size.
+    pub const fn zero_to_half_pi(step_size: Angle<A>) -> RangeByStepSizeInclusive<Angle<A>> {
+        RangeByStepSizeInclusive::new(Angle::ZERO, Angle::HALF_PI, step_size)
+    }
 }
 
 /// Defines a left inclusive, right inclusive range [a, b] of values with a
