@@ -54,19 +54,6 @@ impl MicrofacetAreaDistribution {
                 encoding,
                 compression,
             },
-            // azimuth_range: AngleRange {
-            //     start: self.azimuth_start.value,
-            //     end: self.azimuth_stop.value,
-            //     bin_count: self.azimuth_bins_count_inclusive as u32,
-            //     bin_width: self.azimuth_bin_width.value,
-            // },
-            // zenith_range: AngleRange {
-            //     start: self.zenith_start.value,
-            //     end: self.zenith_stop.value,
-            //     bin_count: self.zenith_bins_count_inclusive as u32,
-            //     bin_width: self.zenith_bin_width.value,
-            // },
-            // sample_count: self.samples.len() as u32,
             madf: self.params,
         };
         let mut writer = BufWriter::new(file);

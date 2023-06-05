@@ -17,7 +17,8 @@ use crate::{
         CollectorScheme, RtcMethod,
     },
     msurf::MicroSurface,
-    Error, Handedness, SphericalPartition,
+    units::{Length, LengthMeasurement, LengthUnit, Radians},
+    Error, Handedness, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
 };
 
 use super::{args::GenerateOptions, cache::Handle};
@@ -138,46 +139,31 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         SphericalPartition::EqualAngle { zenith, azimuth } => {
                             format!(
                                 "        - domain: {}\n        - partition: {}\n          - polar \
-                                 angle: {} ~ {}, per {}\n          - azimuthal angle {} ~ {}, per \
-                                 {}",
+                                 angle: {}\n          - azimuthal angle: {}",
                                 domain,
                                 "equal angle",
-                                zenith.start.prettified(),
-                                zenith.stop.prettified(),
-                                zenith.step_size.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.step_size.prettified()
+                                zenith.pretty_print(),
+                                azimuth.pretty_print(),
                             )
                         }
                         SphericalPartition::EqualArea { zenith, azimuth } => {
                             format!(
                                 "        - domain: {}\n        - partition: {}\n          - polar \
-                                 angle: {} ~ {}, {} steps\n          - azimuthal angle: {} ~ {}, \
-                                 per {}",
+                                 angle: {}\n          - azimuthal angle: {}",
                                 domain,
                                 "equal area",
-                                zenith.start.prettified(),
-                                zenith.stop.prettified(),
-                                zenith.step_count,
-                                azimuth.start.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.step_size.prettified()
+                                zenith.pretty_print(),
+                                azimuth.pretty_print(),
                             )
                         }
                         SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
                             format!(
                                 "        - domain: {}\n        - partition: {}\n          - polar \
-                                 angle: {} - {}, {} steps\n          - azimuthal angle {} - {}, \
-                                 per {}",
+                                 angle: {}\n          - azimuthal angle: {}",
                                 domain,
                                 "equal projected area",
-                                zenith.start.prettified(),
-                                zenith.stop.prettified(),
-                                zenith.step_count,
-                                azimuth.start.prettified(),
-                                azimuth.stop.prettified(),
-                                azimuth.step_size.prettified()
+                                zenith.pretty_print(),
+                                azimuth.pretty_print(),
                             )
                         }
                     },
@@ -203,9 +189,9 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         - radius: {}
         - num rays: {}
         - max bounces: {}
-        - spectrum: {} ~ {} per {}
-        - polar angle: {} ~ {} per {}
-        - azimuthal angle: {} ~ {} per {}
+        - spectrum: {}
+        - polar angle: {}
+        - azimuthal angle: {}
       + collector:
         - radius: {}\n{}",
                     chrono::DateTime::<chrono::Utc>::from(start),
@@ -214,15 +200,9 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     measurement.emitter.radius(),
                     measurement.emitter.num_rays,
                     measurement.emitter.max_bounces,
-                    measurement.emitter.spectrum.start,
-                    measurement.emitter.spectrum.stop,
-                    measurement.emitter.spectrum.step_size,
-                    measurement.emitter.zenith.start.prettified(),
-                    measurement.emitter.zenith.stop.prettified(),
-                    measurement.emitter.zenith.step_size.prettified(),
-                    measurement.emitter.azimuth.start.prettified(),
-                    measurement.emitter.azimuth.stop.prettified(),
-                    measurement.emitter.azimuth.step_size.prettified(),
+                    measurement.emitter.spectrum,
+                    measurement.emitter.zenith.pretty_print(),
+                    measurement.emitter.azimuth.pretty_print(),
                     measurement.collector.radius,
                     collector_info
                 );
@@ -552,5 +532,11 @@ fn resolve_output_dir(config: &Config, output_dir: &Option<PathBuf>) -> Result<P
             Ok(path)
         }
         None => Ok(config.output_dir().to_path_buf()),
+    }
+}
+
+impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
+    pub fn prettified(&self) -> String {
+        format!("{} ~ {} per {}", self.start, self.stop, self.step_size)
     }
 }

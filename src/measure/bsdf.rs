@@ -9,7 +9,6 @@ use crate::{
     measure::Patch,
     msurf::MicroSurface,
     units::Nanometres,
-    RangeByStepSizeInclusive,
 };
 use serde::{Deserialize, Serialize};
 use std::{

@@ -385,6 +385,41 @@ macro_rules! impl_serialisation {
 impl_serialisation!(@exclusive RangeByStepSizeExclusive<T>, '/', T, step_size);
 impl_serialisation!(@inclusive RangeByStepSizeInclusive<T>, '/', T, step_size);
 
+macro_rules! impl_angle_related_common_methods {
+    (@by_step_size $($range:ident, $inclusive:literal);*) => {
+        $(
+            impl<A: AngleUnit> $range<Angle<A>> {
+                /// Pretty prints the range of angles.
+                pub fn pretty_print(&self) -> String {
+                    format!(
+                        "{}° .. {}{}° per {}°",
+                        self.start.to_degrees().value,
+                        $inclusive,
+                        self.stop.to_degrees().value,
+                        self.step_size.to_degrees().value
+                    )
+                }
+            }
+        )*
+    };
+    (@by_step_count $($range:ident, $inclusive:literal);*) => {
+        $(
+            impl<A: AngleUnit> $range<Angle<A>> {
+                /// Pretty prints the range of angles.
+                pub fn pretty_print(&self) -> String {
+                    format!(
+                        "{}° ..{}{}° in {} steps",
+                        self.start.to_degrees().value,
+                        $inclusive,
+                        self.stop.to_degrees().value,
+                        self.step_count
+                    )
+                }
+            }
+        )*
+    };
+}
+
 impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// Returns the number of steps in this range of angles.
     /// If the range's stop value is the same as the start value after wrapping
@@ -428,6 +463,8 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         RangeByStepSizeInclusive::new(Angle::ZERO, Angle::HALF_PI, step_size)
     }
 }
+
+impl_angle_related_common_methods!(@by_step_size RangeByStepSizeInclusive, " ="; RangeByStepSizeExclusive, " ");
 
 /// Defines a left inclusive, right inclusive range [a, b] of values with a
 /// given number of steps.
@@ -558,6 +595,8 @@ where
 
 impl_serialisation!(@exclusive RangeByStepCountExclusive<T>, '|', usize, step_count);
 impl_serialisation!(@inclusive RangeByStepCountInclusive<T>, '|', usize, step_count);
+
+impl_angle_related_common_methods!(@by_step_count RangeByStepCountInclusive, " ="; RangeByStepCountExclusive, " ");
 
 /// Defines a range from a start value to a stop value with a given step size.
 ///

@@ -405,9 +405,9 @@ pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
     ulp_eq(a.x, b.x) && ulp_eq(a.y, b.y) && ulp_eq(a.z, b.z)
 }
 
-/// Generates a parametric sphere with the given theta and phi ranges.
+/// Generates a parametric hemisphere with the given theta and phi steps.
 ///
-/// Returns a tuple of the vertices and indices.
+/// Returns a tuple of the vertices and indices of the triangulated hemisphere.
 pub fn generate_parametric_hemisphere(theta_steps: u32, phi_steps: u32) -> (Vec<Vec3>, Vec<UVec3>) {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
