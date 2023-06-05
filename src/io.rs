@@ -241,6 +241,66 @@ impl CompressionScheme {
     pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
 }
 
+impl MeasuredData {
+    /// Write the measured data to a VGMO file.
+    pub fn write_to_file(
+        &self,
+        filepath: &Path,
+        encoding: FileEncoding,
+        compression: CompressionScheme,
+    ) -> Result<(), Error> {
+        let header = match self {
+            MeasuredData::Madf(adf) => {
+                assert_eq!(
+                    adf.samples.len(),
+                    adf.params.azimuth.step_count_wrapped()
+                        * adf.params.zenith.step_count_wrapped(),
+                    "Writing a ADF requires the number of samples to match the number of bins."
+                );
+                vgmo::Header::Madf {
+                    meta: vgmo::HeaderMeta {
+                        kind: MeasurementKind::MicrofacetAreaDistribution,
+                        encoding,
+                        compression,
+                    },
+                    madf: adf.params,
+                }
+            }
+            MeasuredData::Mmsf(msf) => {
+                use std::io::BufWriter;
+                assert_eq!(
+                    msf.samples.len(),
+                    msf.bins_count(),
+                    "Writing a MSF requires the number of samples to match the number of bins."
+                );
+                vgmo::Header::Mmsf {
+                    meta: vgmo::HeaderMeta {
+                        kind: MeasurementKind::MicrofacetMaskingShadowing,
+                        encoding,
+                        compression,
+                    },
+                    mmsf: msf.params,
+                }
+            }
+            MeasuredData::Bsdf(_) => {
+                todo!()
+            }
+        };
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(filepath)?;
+        let mut writer = BufWriter::new(file);
+        vgmo::write(&mut writer, header, &self.samples()).map_err(|err| {
+            Error::WriteFile(WriteFileError {
+                path: filepath.to_path_buf().into_boxed_path(),
+                kind: err,
+            })
+        })
+    }
+}
+
 /// Write the data samples to the given writer.
 fn write_data_samples<W: Write>(
     writer: &mut BufWriter<W>,
@@ -397,7 +457,12 @@ where
     Ok(())
 }
 
-use crate::{error::Error, msurf::MicroSurface, units::LengthUnit};
+use crate::{
+    error::Error,
+    measure::measurement::{MeasuredData, MeasurementKind},
+    msurf::MicroSurface,
+    units::LengthUnit,
+};
 
 /// Micro-surface file format.
 pub mod vgms {

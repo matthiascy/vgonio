@@ -9,7 +9,7 @@ use crate::{
     },
     io::{vgmo, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MeasurementKind, MmsfMeasurementParams},
+    measure::measurement::{MeasuredData, MeasurementKind, MmsfMeasurementParams},
     msurf::MicroSurface,
     units::Radians,
     Error, Handedness,
@@ -1346,37 +1346,6 @@ impl MicrofacetMaskingShadowing {
     pub fn bins_count(&self) -> usize {
         (self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped()).pow(2)
     }
-
-    /// Saves the microfacet shadowing and masking function.
-    pub fn write_to_file(
-        &self,
-        filepath: &Path,
-        encoding: FileEncoding,
-        compression: CompressionScheme,
-    ) -> Result<(), Error> {
-        use std::io::BufWriter;
-        assert_eq!(self.samples.len(), self.bins_count());
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(filepath)?;
-        let mut writer = BufWriter::new(file);
-        let header = vgmo::Header::Mmsf {
-            meta: vgmo::HeaderMeta {
-                kind: MeasurementKind::MicrofacetMaskingShadowing,
-                encoding,
-                compression,
-            },
-            mmsf: self.params,
-        };
-        vgmo::write(&mut writer, header, &self.samples).map_err(|err| {
-            Error::WriteFile(WriteFileError {
-                path: filepath.to_path_buf().into_boxed_path(),
-                kind: err,
-            })
-        })
-    }
 }
 
 /// Measurement of microfacet shadowing and masking function.
@@ -1385,7 +1354,7 @@ pub fn measure_masking_shadowing(
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     handedness: Handedness,
-) -> Vec<MicrofacetMaskingShadowing> {
+) -> Vec<MeasuredData> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {
         device_descriptor: wgpu::DeviceDescriptor {
@@ -1551,10 +1520,10 @@ pub fn measure_masking_shadowing(
                 .expect("Failed to save color attachment");
         }
 
-        results.push(MicrofacetMaskingShadowing {
+        results.push(MeasuredData::Mmsf(MicrofacetMaskingShadowing {
             params: desc,
             samples: measurement,
-        });
+        }));
     }
     results
 }

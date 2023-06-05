@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     io::{vgmo, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MadfMeasurementParams, MeasurementKind},
+    measure::measurement::{MadfMeasurementParams, MeasuredData, MeasurementKind},
     msurf::MicroSurface,
     units::{self, Radians},
     Handedness,
@@ -30,48 +30,12 @@ pub struct MicrofacetAreaDistribution {
     pub samples: Vec<f32>,
 }
 
-impl MicrofacetAreaDistribution {
-    /// Save the microfacet distribution to a file
-    pub fn write_to_file(
-        &self,
-        filepath: &Path,
-        encoding: FileEncoding,
-        compression: CompressionScheme,
-    ) -> Result<(), Error> {
-        assert_eq!(
-            self.samples.len(),
-            self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped(),
-            "The number of samples does not match the number of bins."
-        );
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(filepath)?;
-        let header = vgmo::Header::Madf {
-            meta: vgmo::HeaderMeta {
-                kind: MeasurementKind::MicrofacetAreaDistribution,
-                encoding,
-                compression,
-            },
-            madf: self.params,
-        };
-        let mut writer = BufWriter::new(file);
-        vgmo::write(&mut writer, header, &self.samples).map_err(|err| {
-            Error::WriteFile(WriteFileError {
-                path: filepath.to_path_buf().into_boxed_path(),
-                kind: err,
-            })
-        })
-    }
-}
-
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
     params: MadfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
-) -> Vec<MicrofacetAreaDistribution> {
+) -> Vec<MeasuredData> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet area distribution...");
     let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
@@ -132,7 +96,10 @@ pub fn measure_area_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            Some(MicrofacetAreaDistribution { params, samples })
+            Some(MeasuredData::Madf(MicrofacetAreaDistribution {
+                params,
+                samples,
+            }))
         })
         .collect()
 }

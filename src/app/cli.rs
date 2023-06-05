@@ -11,8 +11,8 @@ use crate::{
     measure::{
         self,
         measurement::{
-            BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementKindDescription,
-            MmsfMeasurementParams, SimulationKind,
+            BsdfMeasurementParams, MadfMeasurementParams, MeasuredData, Measurement,
+            MeasurementData, MeasurementKindDescription, MmsfMeasurementParams, SimulationKind,
         },
         CollectorScheme, RtcMethod,
     },
@@ -130,10 +130,12 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         .unwrap()
         .iter()
         .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
+
+    let start_time = Instant::now();
     for (measurement, surfaces) in tasks {
-        match measurement.desc {
+        let measurement_start_time = std::time::SystemTime::now();
+        let measured_data = match measurement.desc {
             MeasurementKindDescription::Bsdf(measurement) => {
-                let start = std::time::SystemTime::now();
                 let collector_info = match measurement.collector.scheme {
                     CollectorScheme::Partitioned { domain, partition } => match partition {
                         SphericalPartition::EqualAngle { zenith, azimuth } => {
@@ -194,7 +196,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         - azimuthal angle: {}
       + collector:
         - radius: {}\n{}",
-                    chrono::DateTime::<chrono::Utc>::from(start),
+                    chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
                     measurement.incident_medium,
                     measurement.transmitted_medium,
                     measurement.emitter.radius(),
@@ -221,11 +223,13 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                                     &cache,
                                     &surfaces,
                                 );
+                                todo!("return data")
                             }
                             #[cfg(feature = "optix")]
                             RtcMethod::Optix => {
                                 println!("      {BRIGHT_YELLOW}>{RESET} Using OptiX ray tracing");
                                 todo!("optix");
+                                todo!("return data")
                             }
                             RtcMethod::Grid => {
                                 println!(
@@ -233,6 +237,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                                      tracing"
                                 );
                                 measure::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
+                                todo!("return data")
                             }
                         }
                     }
@@ -244,52 +249,66 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         todo!("wave optics");
                     }
                 }
-                println!("    {BRIGHT_YELLOW}>{RESET} Saving results...");
-                // todo: save to file
-                println!(
-                    "      {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
-                    config.output_dir().display()
-                );
-                println!(
-                    "    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s",
-                    start.elapsed().unwrap().as_secs_f32()
-                );
             }
             MeasurementKindDescription::Madf(measurement) => {
-                measure_microfacet_area_distribution(
-                    measurement,
-                    &surfaces,
-                    &cache,
-                    &config,
-                    &opts.output,
-                    opts.encoding,
-                    opts.compression,
-                )
-                .map_err(|err| {
-                    eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
-                    err
-                })?;
+                println!(
+                    "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet area distribution:
+    • parameters:
+      + azimuth: {}
+      + zenith: {}",
+                    measurement.azimuth.pretty_print(),
+                    measurement.zenith.pretty_print(),
+                );
+                measure::microfacet::measure_area_distribution(measurement, &surfaces, &cache)
             }
             MeasurementKindDescription::Mmsf(measurement) => {
-                measure_microfacet_masking_shadowing(
+                println!(
+                    "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
+    • parameters:
+      + azimuth: {}
+      + zenith: {}
+      + resolution: {} x {}",
+                    measurement.azimuth.pretty_print(),
+                    measurement.zenith.pretty_print(),
+                    measurement.resolution,
+                    measurement.resolution
+                );
+                measure::microfacet::measure_masking_shadowing(
                     measurement,
                     &surfaces,
                     &cache,
-                    &config,
-                    &opts.output,
-                    opts.encoding,
-                    opts.compression,
+                    Handedness::RightHandedYUp,
                 )
-                .map_err(|err| {
-                    eprintln!("  {BRIGHT_RED}✗{RESET} {err}");
-                    err
-                })?;
             }
-        }
+        };
+
+        println!(
+            "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+            measurement_start_time.elapsed().unwrap().as_secs_f32()
+        );
+
+        write_measured_data_to_file(
+            &measured_data,
+            &surfaces,
+            &cache,
+            &config,
+            opts.encoding,
+            opts.compression,
+            &opts.output,
+        )?;
+
+        println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     }
+
+    println!(
+        "    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s",
+        start_time.elapsed().as_secs_f32()
+    );
+
     Ok(())
 }
 
+// TODO: use vgms file format
 /// Generates a micro-surface using 2D gaussian distribution.
 fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
     let mut data: Vec<f32> = Vec::with_capacity((opts.res_x * opts.res_y) as usize);
@@ -344,57 +363,56 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
     Ok(())
 }
 
-/// Measures the microfacet normal distribution of the given micro-surface and
-/// saves the result to the given output directory.
-pub(crate) fn measure_microfacet_area_distribution(
-    measurement: MadfMeasurementParams,
+/// Writes the measured data to a file.
+fn write_measured_data_to_file(
+    data: &[MeasuredData],
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
-    output: &Option<PathBuf>,
     encoding: FileEncoding,
     compression: CompressionScheme,
+    output: &Option<PathBuf>,
 ) -> Result<(), Error> {
-    println!(
-        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet area distribution:
-    • parameters:
-      + azimuth: {} ~ {} per {}
-      + zenith: {} ~ {} per {}",
-        measurement.azimuth.start.prettified(),
-        measurement.azimuth.stop.prettified(),
-        measurement.azimuth.step_size.prettified(),
-        measurement.zenith.start.prettified(),
-        measurement.zenith.stop.prettified(),
-        measurement.zenith.step_size.prettified()
-    );
-    let start_time = Instant::now();
-    let distributions =
-        measure::microfacet::measure_area_distribution(measurement, surfaces, cache);
-    let duration = Instant::now() - start_time;
-    println!(
-        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
-        duration.as_secs_f32()
-    );
     let output_dir = resolve_output_dir(config, output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-    for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
-        let filename = format!(
-            "microfacet-area-distribution-{}.vgmo",
-            cache
-                .get_micro_surface_filepath(*surface)
-                .unwrap()
-                .file_stem()
-                .unwrap()
-                .to_ascii_lowercase()
-                .to_str()
-                .unwrap()
-        );
+    for (measured, surface) in data.iter().zip(surfaces.iter()) {
+        let filename = match measured {
+            MeasuredData::Madf(_) => {
+                format!(
+                    "microfacet-area-distribution-{}.vgmo",
+                    cache
+                        .get_micro_surface_filepath(*surface)
+                        .unwrap()
+                        .file_stem()
+                        .unwrap()
+                        .to_ascii_lowercase()
+                        .to_str()
+                        .unwrap()
+                )
+            }
+            MeasuredData::Mmsf(_) => {
+                format!(
+                    "microfacet-masking-shadowing-{}.vgmo",
+                    cache
+                        .get_micro_surface_filepath(*surface)
+                        .unwrap()
+                        .file_stem()
+                        .unwrap()
+                        .to_ascii_lowercase()
+                        .to_str()
+                        .unwrap()
+                )
+            }
+            MeasuredData::Bsdf(_) => {
+                todo!()
+            }
+        };
         let filepath = output_dir.join(filename);
         println!(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        distrib
+        measured
             .write_to_file(&filepath, encoding, compression)
             .unwrap_or_else(|err| {
                 eprintln!(
@@ -402,80 +420,12 @@ pub(crate) fn measure_microfacet_area_distribution(
                     filepath.display(),
                     err
                 );
-            })
-    }
-    println!("    {BRIGHT_CYAN}✓{RESET} Done!");
-    Ok(())
-}
-
-/// Measures the microfacet masking-shadowing function of the given
-/// micro-surface and saves the result to the given output directory.
-fn measure_microfacet_masking_shadowing(
-    measurement: MmsfMeasurementParams,
-    surfaces: &[Handle<MicroSurface>],
-    cache: &Cache,
-    config: &Config,
-    output: &Option<PathBuf>,
-    encoding: FileEncoding,
-    compression: CompressionScheme,
-) -> Result<(), Error> {
-    println!(
-        "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
-    • parameters:
-      + azimuth: {} ~ {} per {}
-      + zenith: {} ~ {} per {}
-      + resolution: {} x {}",
-        measurement.azimuth.start.prettified(),
-        measurement.azimuth.stop.prettified(),
-        measurement.azimuth.step_size.prettified(),
-        measurement.zenith.start.prettified(),
-        measurement.zenith.stop.prettified(),
-        measurement.zenith.step_size.prettified(),
-        measurement.resolution,
-        measurement.resolution
-    );
-    let start_time = Instant::now();
-    let distributions = measure::microfacet::measure_masking_shadowing(
-        measurement,
-        surfaces,
-        cache,
-        Handedness::RightHandedYUp,
-    );
-    let duration = Instant::now() - start_time;
-    println!(
-        "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
-        duration.as_secs_f32()
-    );
-    let output_dir = resolve_output_dir(config, output)?;
-    println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-    for (distrib, surface) in distributions.iter().zip(surfaces.iter()) {
-        let filename = format!(
-            "microfacet-masking-shadowing-{}.vgmo",
-            cache
-                .get_micro_surface_filepath(*surface)
-                .unwrap()
-                .file_stem()
-                .unwrap()
-                .to_ascii_lowercase()
-                .to_str()
-                .unwrap()
-        );
-        let filepath = output_dir.join(filename);
+            });
         println!(
-            "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
-            filepath.display()
+            "      {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
+            output_dir.display()
         );
-        distrib
-            .write_to_file(&filepath, encoding, compression)
-            .unwrap_or_else(|err| {
-                eprintln!(
-                    "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-                    filepath.display(),
-                    err
-                );
-            })
     }
-    println!("    {BRIGHT_CYAN}✓{RESET} Done!");
     Ok(())
 }
 
