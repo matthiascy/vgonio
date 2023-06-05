@@ -21,4 +21,5 @@ type: !bsdf
         zenith: 0 rad .. 90 deg | 6
         azimuth: 0rad .. 90deg / 120 deg
 surfaces:
-  - usr://surfaces/aluminium65bar100.vgms
+  # - usr://surfaces/aluminium65bar100.vgms
+  - usr://surfaces/generated/4x4.txt

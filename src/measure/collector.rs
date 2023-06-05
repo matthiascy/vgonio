@@ -234,10 +234,22 @@ impl Collector {
     }
 
     /// Collects the ray-tracing data.
+    ///
+    /// Returns the collected data and the statistics of the BSDF.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The parameters of the BSDF measurement.
+    /// * `mesh` - The micro-surface mesh.
+    /// * `position` - The measurement position.
+    /// * `trajectories` - The trajectories of the rays.
+    /// * `patches` - The patches of the collector.
+    /// * `cache` - The cache where all the data are stored.
     pub fn collect(
         &self,
-        desc: &BsdfMeasurementParams,
+        params: &BsdfMeasurementParams,
         mesh: &MicroSurfaceMesh,
+        position: SphericalCoord,
         trajectories: &[Trajectory],
         patches: &CollectorPatches,
         cache: &Cache,
@@ -247,7 +259,12 @@ impl Collector {
             "Collector patches do not match the collector scheme"
         );
 
-        let spectrum = desc.emitter.spectrum.values().collect::<Vec<_>>();
+        log::debug!(
+            "collecting data for BSDF measurement at position {}",
+            position
+        );
+
+        let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
         let n_wavelengths = spectrum.len();
         log::debug!("spectrum samples: {:?}", spectrum);
 
@@ -255,27 +272,27 @@ impl Collector {
         // wavelength.
         let iors_i = cache
             .iors
-            .ior_of_spectrum(desc.incident_medium, &spectrum)
+            .ior_of_spectrum(params.incident_medium, &spectrum)
             .expect("incident medium IOR not found");
         log::debug!("incident medium IORs: {:?}", iors_i);
         let iors_t = cache
             .iors
-            .ior_of_spectrum(desc.transmitted_medium, &spectrum)
+            .ior_of_spectrum(params.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
         log::debug!("transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
         let radius = self.radius.eval(mesh);
         let domain = self.scheme.domain();
-        let max_bounces = desc.emitter.max_bounces as usize;
+        let max_bounces = params.emitter.max_bounces as usize;
         let mut stats = BsdfStats {
-            n_emitted: desc.emitter.num_rays,
+            n_emitted: params.emitter.num_rays,
             n_received: 0,
             wavelength: spectrum.clone(),
             n_reflected: PerWavelength(vec![0; n_wavelengths]),
             n_absorbed: PerWavelength(vec![0; n_wavelengths]),
             n_captured: PerWavelength(vec![0; n_wavelengths]),
-            total_energy_emitted: desc.emitter.num_rays as f32,
+            total_energy_emitted: params.emitter.num_rays as f32,
             total_energy_captured: PerWavelength(vec![0.0; n_wavelengths]),
             num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
             energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
@@ -326,6 +343,8 @@ impl Collector {
                 }
             })
             .collect::<Vec<_>>();
+
+        log::trace!("unit_dirs: {:?}", unit_dirs);
 
         // Calculate the energy of the rays (with wavelength) that intersected the
         // collector's surface.
@@ -387,7 +406,7 @@ impl Collector {
             .for_each(|(measurement_point, dirs)| {
                 let mut data = PerWavelength(vec![
                     PatchBounceEnergy::empty(
-                        desc.emitter.max_bounces as usize
+                        params.emitter.max_bounces as usize
                     );
                     spectrum.len()
                 ]);

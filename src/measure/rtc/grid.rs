@@ -183,7 +183,7 @@ pub fn measure_bsdf(
         result.push(
             params
                 .collector
-                .collect(params, mesh, &trajectories, patches, cache),
+                .collect(params, mesh, pos, &trajectories, patches, cache),
         );
     }
 

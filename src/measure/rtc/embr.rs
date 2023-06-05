@@ -335,11 +335,13 @@ pub fn measure_bsdf(
             .into_iter()
             .flat_map(|d| d.trajectory)
             .collect::<Vec<_>>();
-        result.push(
+        let collected =
             params
                 .collector
-                .collect(params, mesh, &trajectories, &patches, &cache),
-        );
+                .collect(params, mesh, pos, &trajectories, &patches, &cache);
+        log::trace!("collected: {:?}", collected.0);
+        log::trace!("collected stats: {:?}", collected.1);
+        result.push(collected);
     }
     result
 }
