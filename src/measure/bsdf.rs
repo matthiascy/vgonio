@@ -6,8 +6,13 @@ use crate::{
         cache::{Cache, Handle},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
-    measure::Patch,
-    msurf::MicroSurface,
+    measure::{
+        collector::CollectorPatches,
+        emitter::EmitterSamples,
+        measurement::{MeasuredData, SimulationKind},
+        Patch, RtcMethod,
+    },
+    msurf::{MicroSurface, MicroSurfaceMesh},
     units::Nanometres,
 };
 use serde::{Deserialize, Serialize};
@@ -20,7 +25,11 @@ use super::measurement::BsdfMeasurementParams;
 
 #[derive(Debug, Clone)]
 pub struct BsdfMeasurementData {
-    // TODO: implement
+    pub params: BsdfMeasurementParams,
+    /// The BSDF data.
+    pub bsdf_samples: Vec<f32>,
+    pub bounces_histogram: Vec<f32>,
+    pub bounces_energy_histogram: Vec<f32>,
 }
 
 /// Type of the BSDF to be measured.
@@ -171,57 +180,93 @@ impl<PerPatchData: Clone> Clone for BsdfMeasurementPoint<PerPatchData> {
     }
 }
 
-/// Measurement of the BSDF (bidirectional scattering distribution function) of
-/// a microfacet surface.
-#[cfg(feature = "embree")]
-pub fn measure_bsdf_embree_rt(
-    desc: BsdfMeasurementParams,
-    cache: &Cache,
+/// Measures the BSDF of a surface using geometric ray tracing methods.
+pub fn measure_bsdf_rt(
+    params: BsdfMeasurementParams,
     surfaces: &[Handle<MicroSurface>],
-) {
-    let msurfs = cache.get_micro_surfaces(surfaces);
+    sim_kind: SimulationKind,
+    cache: &Cache,
+) -> Vec<MeasuredData> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    let samples = desc.emitter.generate_samples();
-    let patches = desc.collector.generate_patches();
+    let surfaces = cache.get_micro_surfaces(surfaces);
+    let samples = params.emitter.generate_samples();
+    let patches = params.collector.generate_patches();
 
-    for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
-        if surf.is_none() || mesh.is_none() {
-            log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
-            continue;
+    match sim_kind {
+        SimulationKind::GeomOptics(method) => {
+            println!(
+                "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
+                params.kind
+            );
+            match method {
+                #[cfg(feature = "embree")]
+                RtcMethod::Embree => {
+                    measure_bsdf_embree_rt(params, &surfaces, &meshes, samples, patches, cache)
+                }
+                #[cfg(feature = "optix")]
+                RtcMethod::Optix => {
+                    measure_bsdf_optix_rt(params, &surfaces, &meshes, samples, patches, cache)
+                }
+                RtcMethod::Grid => {
+                    measure_bsdf_grid_rt(params, &surfaces, &meshes, samples, patches, cache)
+                }
+            }
         }
-
-        let surf = surf.unwrap();
-        let mesh = mesh.unwrap();
-        println!(
-            "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
-            surf.path.as_ref().unwrap().display()
-        );
-        let t = std::time::Instant::now();
-        let data_stats =
-            crate::measure::rtc::embr::measure_bsdf(&desc, mesh, &samples, &patches, cache);
-        for d in data_stats {
-            println!("Stats: {:?} | {:?}", d.0, d.1);
+        SimulationKind::WaveOptics => {
+            println!(
+                "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
+                params.kind
+            );
+            todo!("Wave optics simulation is not yet implemented")
         }
-        // TODO: Save data and stats to file.
-        println!(
-            "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
-            t.elapsed().as_secs_f32()
-        );
     }
 }
 
-/// Brdf measurement of a microfacet surface using the grid ray tracing.
-pub fn measure_bsdf_grid_rt(
-    desc: BsdfMeasurementParams,
+/// Measurement of the BSDF (bidirectional scattering distribution function) of
+/// a microfacet surface.
+#[cfg(feature = "embree")]
+fn measure_bsdf_embree_rt(
+    params: BsdfMeasurementParams,
+    surfaces: &[Option<&MicroSurface>],
+    meshes: &[Option<&MicroSurfaceMesh>],
+    samples: EmitterSamples,
+    patches: CollectorPatches,
     cache: &Cache,
-    surfaces: &[Handle<MicroSurface>],
-) {
-    let msurfs = cache.get_micro_surfaces(surfaces);
-    let meshes = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    let samples = desc.emitter.generate_samples();
-    let patches = desc.collector.generate_patches();
+) -> Vec<MeasuredData> {
+    surfaces
+        .iter()
+        .zip(meshes)
+        .filter_map(|(surf, mesh)| {
+            if surf.is_none() || mesh.is_none() {
+                log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
+                return None;
+            }
 
-    for (surf, mesh) in msurfs.iter().zip(meshes.iter()) {
+            let surface = surf.unwrap();
+            let mesh = mesh.unwrap();
+
+            log::info!(
+                "Measuring surface {}",
+                surface.path.as_ref().unwrap().display()
+            );
+            let data_stats =
+                crate::measure::rtc::embr::measure_bsdf(&params, mesh, &samples, &patches, cache);
+
+            todo!()
+        })
+        .collect()
+}
+
+/// Brdf measurement of a microfacet surface using the grid ray tracing.
+fn measure_bsdf_grid_rt(
+    params: BsdfMeasurementParams,
+    surfaces: &[Option<&MicroSurface>],
+    meshes: &[Option<&MicroSurfaceMesh>],
+    samples: EmitterSamples,
+    patches: CollectorPatches,
+    cache: &Cache,
+) -> Vec<MeasuredData> {
+    for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
             continue;
@@ -233,21 +278,25 @@ pub fn measure_bsdf_grid_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::grid::measure_bsdf(&desc, surf, mesh, &samples, &patches, cache);
+        crate::measure::rtc::grid::measure_bsdf(&params, surf, mesh, &samples, &patches, cache);
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()
         );
     }
+    todo!()
 }
 
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.
 #[cfg(feature = "optix")]
-pub fn measure_bsdf_optix_rt(
-    _desc: BsdfMeasurementParams,
+fn measure_bsdf_optix_rt(
+    _params: BsdfMeasurementParams,
+    _surfaces: &[Option<&MicroSurface>],
+    _meshes: &[Option<&MicroSurfaceMesh>],
+    _samples: EmitterSamples,
+    _patches: CollectorPatches,
     _cache: &Cache,
-    _surfaces: &[Handle<MicroSurface>],
-) {
+) -> Vec<MeasuredData> {
     todo!()
 }
 

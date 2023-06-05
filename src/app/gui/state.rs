@@ -19,8 +19,6 @@ use crate::{
     app::gfx::{remap_depth, SlicedBuffer},
     math::generate_parametric_hemisphere,
     measure::rtc::Ray,
-    units::Radians,
-    RangeByStepSizeInclusive,
 };
 use glam::{Mat4, Vec3};
 use std::{default::Default, path::Path, sync::Arc};

@@ -192,16 +192,12 @@ impl Emitter {
         // Generates uniformly distributed samples using rejection sampling.
         let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
             match self.shape {
-                RegionShape::SphericalCap { zenith } => {
-                    let zenith_range = 0.0..zenith.value;
-                    let azimuth_range = 0.0..(2.0 * std::f32::consts::PI);
-                    (
-                        radians!(0.0),
-                        zenith,
-                        radians!(0.0),
-                        radians!(2.0 * std::f32::consts::PI),
-                    )
-                }
+                RegionShape::SphericalCap { zenith } => (
+                    radians!(0.0),
+                    zenith,
+                    radians!(0.0),
+                    radians!(2.0 * std::f32::consts::PI),
+                ),
                 RegionShape::SphericalRect { zenith, azimuth } => {
                     (zenith.0, zenith.1, azimuth.0, azimuth.1)
                 }

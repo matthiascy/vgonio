@@ -36,7 +36,7 @@ pub struct RayStreamData {
 
 /// Measures the BSDF of the given micro-surface mesh.
 pub fn measure_bsdf(
-    desc: &BsdfMeasurementParams,
+    params: &BsdfMeasurementParams,
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     samples: &EmitterSamples,
@@ -45,12 +45,12 @@ pub fn measure_bsdf(
 ) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
-    let radius = desc.emitter.radius.eval(mesh);
-    let max_bounces = desc.emitter.max_bounces;
+    let radius = params.emitter.radius.eval(mesh);
+    let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
     let mut result = vec![];
 
-    for pos in desc.emitter.meas_points() {
+    for pos in params.emitter.meas_points() {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
             pos.zenith.in_degrees().value(),
@@ -58,7 +58,7 @@ pub fn measure_bsdf(
         );
 
         let t = Instant::now();
-        let emitted_rays = desc.emitter.emit_rays_with_radius(samples, pos, radius);
+        let emitted_rays = params.emitter.emit_rays_with_radius(samples, pos, radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 
@@ -181,8 +181,9 @@ pub fn measure_bsdf(
             .flat_map(|data| data.trajectory)
             .collect::<Vec<_>>();
         result.push(
-            desc.collector
-                .collect(desc, mesh, &trajectories, patches, cache),
+            params
+                .collector
+                .collect(params, mesh, &trajectories, patches, cache),
         );
     }
 

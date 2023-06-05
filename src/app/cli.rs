@@ -12,13 +12,12 @@ use crate::{
         self,
         measurement::{
             BsdfMeasurementParams, MadfMeasurementParams, MeasuredData, Measurement,
-            MeasurementData, MeasurementKindDescription, MmsfMeasurementParams, SimulationKind,
+            MeasurementKindDescription, MmsfMeasurementParams,
         },
-        CollectorScheme, RtcMethod,
+        CollectorScheme,
     },
     msurf::MicroSurface,
-    units::{Length, LengthMeasurement, LengthUnit, Radians},
-    Error, Handedness, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
+    Error, Handedness, SphericalPartition,
 };
 
 use super::{args::GenerateOptions, cache::Handle};
@@ -208,47 +207,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     measurement.collector.radius,
                     collector_info
                 );
-                match measurement.sim_kind {
-                    SimulationKind::GeomOptics(method) => {
-                        println!(
-                            "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
-                            measurement.kind
-                        );
-                        match method {
-                            #[cfg(feature = "embree")]
-                            RtcMethod::Embree => {
-                                println!("      {BRIGHT_YELLOW}>{RESET} Using Embree ray tracing");
-                                measure::bsdf::measure_bsdf_embree_rt(
-                                    measurement,
-                                    &cache,
-                                    &surfaces,
-                                );
-                                todo!("return data")
-                            }
-                            #[cfg(feature = "optix")]
-                            RtcMethod::Optix => {
-                                println!("      {BRIGHT_YELLOW}>{RESET} Using OptiX ray tracing");
-                                todo!("optix");
-                                todo!("return data")
-                            }
-                            RtcMethod::Grid => {
-                                println!(
-                                    "      {BRIGHT_YELLOW}>{RESET} Using customised grid ray \
-                                     tracing"
-                                );
-                                measure::bsdf::measure_bsdf_grid_rt(measurement, &cache, &surfaces);
-                                todo!("return data")
-                            }
-                        }
-                    }
-                    SimulationKind::WaveOptics => {
-                        println!(
-                            "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
-                            measurement.kind
-                        );
-                        todo!("wave optics");
-                    }
-                }
+                measure::bsdf::measure_bsdf_rt(measurement, &surfaces, measurement.sim_kind, &cache)
             }
             MeasurementKindDescription::Madf(measurement) => {
                 println!(
@@ -482,11 +441,5 @@ fn resolve_output_dir(config: &Config, output_dir: &Option<PathBuf>) -> Result<P
             Ok(path)
         }
         None => Ok(config.output_dir().to_path_buf()),
-    }
-}
-
-impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
-    pub fn prettified(&self) -> String {
-        format!("{} ~ {} per {}", self.start, self.stop, self.step_size)
     }
 }

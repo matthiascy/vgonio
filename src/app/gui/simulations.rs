@@ -7,23 +7,13 @@ use crate::{
         cache::{Cache, Handle},
         gui::{
             simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
-            widgets::ToggleSwitch,
             VgonioEvent,
         },
-    },
-    measure::measurement::{
-        BsdfMeasurementParams, MadfMeasurementParams, Measurement, MmsfMeasurementParams,
     },
     msurf::MicroSurface,
 };
 use egui::{epaint::ahash::HashSet, Color32};
-use std::{
-    collections::HashMap,
-    fmt::{Display, Formatter},
-    hash::Hash,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, hash::Hash};
 use winit::event_loop::EventLoopProxy;
 
 /// A helper struct used in GUI to select surfaces.

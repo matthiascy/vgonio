@@ -20,11 +20,9 @@ use crate::{
 use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
     any::Any,
-    collections::HashMap,
     default::Default,
-    ops::Deref,
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -38,11 +36,9 @@ use wgpu::util::DeviceExt;
 use crate::{
     app::{
         cache::{Cache, Handle},
-        cli,
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, RenderPass, SlicedBuffer, Texture, VisualGridUniforms, WgpuConfig,
-            DEFAULT_BIND_GROUP_LAYOUT_DESC,
+            GpuContext, Texture, VisualGridUniforms, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
@@ -1230,12 +1226,29 @@ impl VgonioGuiApp {
             // },
             VgonioEvent::MeasureAreaDistribution { params, surfaces } => {
                 println!("Measuring area distribution");
+                measure::microfacet::measure_area_distribution(
+                    params,
+                    &surfaces,
+                    &self.cache.read().unwrap(),
+                );
             }
             VgonioEvent::MeasureMaskingShadowing { params, surfaces } => {
                 println!("Measuring masking/shadowing");
+                measure::microfacet::measure_masking_shadowing(
+                    params,
+                    &surfaces,
+                    &self.cache.read().unwrap(),
+                    Handedness::RightHandedYUp,
+                );
             }
             VgonioEvent::MeasureBsdf { params, surfaces } => {
                 println!("Measuring BSDF");
+                measure::bsdf::measure_bsdf_rt(
+                    params,
+                    &surfaces,
+                    params.sim_kind,
+                    &self.cache.read().unwrap(),
+                );
             }
             _ => {}
         }

@@ -16,7 +16,6 @@ use crate::{
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
-    units::um,
     Handedness, SphericalCoord,
 };
 use serde::{Deserialize, Serialize};
@@ -154,6 +153,7 @@ impl CollectorScheme {
         }
     }
 
+    /// Returns the default value of [`CollectorScheme::Partitioned`].
     pub fn default_partition() -> Self {
         Self::Partitioned {
             domain: SphericalDomain::default(),
@@ -161,6 +161,7 @@ impl CollectorScheme {
         }
     }
 
+    /// Returns the default value of [`CollectorScheme::SingleRegion`].
     pub fn default_single_region() -> Self {
         Self::SingleRegion {
             domain: SphericalDomain::default(),
@@ -567,6 +568,7 @@ impl Patch {
         })
     }
 
+    /// Returns the default value of [`Self::SingleRegion`] variant.
     pub fn new_single_region(
         shape: RegionShape,
         zenith: Radians,
@@ -584,6 +586,7 @@ impl Patch {
         })
     }
 
+    /// Checks if a unit vector (ray direction) falls into the patch.
     pub fn contains(&self, unit_vector: Vec3A) -> bool {
         match self {
             Self::Partitioned(p) => p.contains(unit_vector),
@@ -591,6 +594,7 @@ impl Patch {
         }
     }
 
+    /// Returns the patch as a partitioned patch.
     pub fn as_partitioned(&self) -> Option<&PatchPartitioned> {
         match self {
             Self::Partitioned(p) => Some(p),
@@ -598,6 +602,7 @@ impl Patch {
         }
     }
 
+    /// Returns the patch as a single region patch.
     pub fn as_single_region(&self) -> Option<&PatchSingleRegion> {
         match self {
             Self::SingleRegion(p) => Some(p),

@@ -27,6 +27,7 @@ pub enum BufferType {
     Vertex,
 }
 
+// TODO: to be removed
 /// Represents a rendering pipeline and its associated bind group (shader
 /// input).
 pub struct RenderPass {

@@ -1,13 +1,7 @@
 use crate::{
-    app::{
-        cache::{Cache, Handle},
-        gui::{simulations::SurfaceSelector, VgonioEvent},
-    },
+    app::gui::{simulations::SurfaceSelector, VgonioEvent},
     measure::measurement::MadfMeasurementParams,
-    msurf::MicroSurface,
 };
-use egui::Color32;
-use std::collections::{HashMap, HashSet};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug)]

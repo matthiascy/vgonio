@@ -267,7 +267,6 @@ impl MeasuredData {
                 }
             }
             MeasuredData::Mmsf(msf) => {
-                use std::io::BufWriter;
                 assert_eq!(
                     msf.samples.len(),
                     msf.bins_count(),

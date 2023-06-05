@@ -7,7 +7,7 @@ pub use input::{input, input3_spherical, input3_ui, input3_xyz, input_ui};
 
 use crate::{
     units::{Angle, AngleUnit, Length, LengthMeasurement},
-    RangeByStepCountInclusive, RangeByStepSizeExclusive, RangeByStepSizeInclusive,
+    RangeByStepCountInclusive, RangeByStepSizeInclusive,
 };
 
 impl<T: Copy + Numeric> RangeByStepSizeInclusive<T> {

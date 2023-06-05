@@ -9,12 +9,11 @@ use crate::{
         bsdf::{BsdfMeasurementPoint, BsdfStats},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
-        measurement::{BsdfMeasurementParams, Radius},
+        measurement::BsdfMeasurementParams,
         rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
-    units::UMillimetre,
 };
 use embree::{
     BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
@@ -167,7 +166,7 @@ fn intersect_filter_stream<'a>(
 /// * `emitter_samples` - The emitter samples.
 /// * `collector_patches` - The collector patches.
 pub fn measure_bsdf(
-    desc: &BsdfMeasurementParams,
+    params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     samples: &EmitterSamples,
     patches: &CollectorPatches,
@@ -178,7 +177,7 @@ pub fn measure_bsdf(
     scene.set_flags(SceneFlags::ROBUST);
 
     // Calculate emitter's radius to match the surface's dimensions.
-    let radius = desc.emitter.radius.eval(mesh);
+    let radius = params.emitter.radius.eval(mesh);
     log::debug!("mesh extent: {:?}", mesh.bounds);
     log::debug!("emitter radius: {}", radius);
     // Upload the surface's mesh to the Embree scene.
@@ -189,11 +188,11 @@ pub fn measure_bsdf(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    let max_bounces = desc.emitter.max_bounces;
+    let max_bounces = params.emitter.max_bounces;
 
     let mut result = vec![];
     // Iterate over every incident direction.
-    for pos in desc.emitter.meas_points() {
+    for pos in params.emitter.meas_points() {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
             pos.zenith.in_degrees().value(),
@@ -201,7 +200,7 @@ pub fn measure_bsdf(
         );
 
         let t = Instant::now();
-        let emitted_rays = desc.emitter.emit_rays_with_radius(&samples, pos, radius);
+        let emitted_rays = params.emitter.emit_rays_with_radius(&samples, pos, radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 
@@ -337,8 +336,9 @@ pub fn measure_bsdf(
             .flat_map(|d| d.trajectory)
             .collect::<Vec<_>>();
         result.push(
-            desc.collector
-                .collect(desc, mesh, &trajectories, &patches, &cache),
+            params
+                .collector
+                .collect(params, mesh, &trajectories, &patches, &cache),
         );
     }
     result

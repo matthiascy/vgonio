@@ -10,11 +10,11 @@ use crate::{
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
-use egui::Ui;
 use std::hash::Hash;
 use winit::event_loop::EventLoopProxy;
 
 impl BsdfKind {
+    /// Creates the UI for selecting the BSDF kind.
     pub fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
         egui::ComboBox::from_id_source(id_source)
             .selected_text(format!("{}", self))
@@ -29,6 +29,7 @@ impl BsdfKind {
 }
 
 impl Medium {
+    /// Creates the UI for selecting the medium.
     pub fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
         egui::ComboBox::from_id_source(id_source)
             .selected_text(format!("{:?}", self))
@@ -42,6 +43,7 @@ impl Medium {
 }
 
 impl Radius {
+    /// Creates the UI radius input.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         let is_auto = self.is_auto();
         ui.horizontal(|ui| {
@@ -74,6 +76,7 @@ impl Radius {
 }
 
 impl RegionShape {
+    /// Creates the UI for parameterizing the region shape.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         let zenith = self.zenith();
         let azimuth = self.azimuth();
@@ -126,6 +129,7 @@ impl RegionShape {
 }
 
 impl Emitter {
+    /// Creates the UI for parameterizing the emitter.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Emitter")
             .default_open(true)
@@ -175,6 +179,7 @@ impl Emitter {
 }
 
 impl SphericalDomain {
+    /// Creates the UI for parameterizing the spherical domain.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui
@@ -205,6 +210,7 @@ impl SphericalDomain {
 }
 
 impl CollectorScheme {
+    /// Creates the UI for parameterizing the collector scheme.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Collector Scheme")
             .default_open(true)
@@ -334,6 +340,7 @@ impl CollectorScheme {
 }
 
 impl Collector {
+    /// Creates the UI for parameterizing the collector.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Collector")
             .default_open(true)
@@ -358,6 +365,7 @@ pub struct BsdfSimulation {
 }
 
 impl BsdfSimulation {
+    /// Creates a new BSDF simulation UI.
     pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
         Self {
             params: BsdfMeasurementParams::default(),
@@ -366,6 +374,7 @@ impl BsdfSimulation {
         }
     }
 
+    /// UI for BSDF simulation parameters.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("bsdf_sim_grid")
             .striped(true)

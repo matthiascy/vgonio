@@ -1,15 +1,10 @@
 // NOTE(yang): The number of bins is determined by the bin size and the range of
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
-
-use std::{io::BufWriter, path::Path};
-
 use crate::{
     app::cache::{Cache, Handle},
-    error::Error,
-    io::{vgmo, CompressionScheme, FileEncoding, WriteFileError},
     math,
-    measure::measurement::{MadfMeasurementParams, MeasuredData, MeasurementKind},
+    measure::measurement::{MadfMeasurementParams, MeasuredData},
     msurf::MicroSurface,
     units::{self, Radians},
     Handedness,
@@ -46,7 +41,7 @@ pub fn measure_area_distribution(
                 log::debug!("Skipping a surface because it is not loaded {:?}.", surface);
                 return None;
             }
-            let surface = surface.as_ref().unwrap();
+            let surface = surface.unwrap();
             let macro_area = surface.macro_surface_area();
             let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
             let divisor = macro_area * solid_angle;

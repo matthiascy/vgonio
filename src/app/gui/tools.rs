@@ -10,7 +10,7 @@ use crate::{
 use egui_toast::Toasts;
 use std::{
     rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use winit::event_loop::EventLoopProxy;
