@@ -11,7 +11,7 @@ use crate::{
     app::cache::Cache,
     math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfMeasurementStatsRT, PerWavelength},
+        bsdf::{BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
         measurement::BsdfMeasurementParams,
         rtc::Trajectory,
     },
@@ -257,10 +257,8 @@ impl Collector {
         trajectories: &[Trajectory],
         patches: &CollectorPatches,
         cache: &Cache,
-    ) -> (
-        Vec<BsdfMeasurementPoint<PatchBounceEnergy>>,
-        BsdfMeasurementStatsRT,
-    ) {
+    ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
+        // TODO: use generic type for the data point
         debug_assert!(
             patches.matches_scheme(&self.scheme),
             "Collector patches do not match the collector scheme"
@@ -293,18 +291,7 @@ impl Collector {
         log::trace!("collector radius: {}", radius);
         let domain = self.scheme.domain();
         let max_bounces = params.emitter.max_bounces as usize;
-        let mut stats = BsdfMeasurementStatsRT {
-            n_emitted: params.emitter.num_rays,
-            n_received: 0,
-            wavelength: spectrum.clone(),
-            n_reflected: PerWavelength(vec![0; n_wavelengths]),
-            n_absorbed: PerWavelength(vec![0; n_wavelengths]),
-            n_captured: PerWavelength(vec![0; n_wavelengths]),
-            total_energy_emitted: params.emitter.num_rays as f32,
-            total_energy_captured: PerWavelength(vec![0.0; n_wavelengths]),
-            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
-            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
-        };
+        let mut stats = BsdfMeasurementStatsPoint::new(n_wavelengths, max_bounces);
 
         #[derive(Debug, Copy, Clone)]
         struct OutgoingDir {
@@ -409,14 +396,6 @@ impl Collector {
             }
         }
 
-        let mut measurement_points = patches
-            .iter()
-            .map(|patch| BsdfMeasurementPoint {
-                patch: *patch,
-                data: PerWavelength(vec![]),
-            })
-            .collect::<Vec<_>>();
-
         // For each patch, collect the rays that intersect it using the
         // outgoing_dirs vector.
         let outgoing_dirs_per_patch = patches
@@ -450,12 +429,11 @@ impl Collector {
 
         log::trace!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
 
-        measurement_points
-            .iter_mut()
-            .zip(outgoing_dirs_per_patch)
-            .for_each(|(measurement_point, dirs)| {
-                let mut data = PerWavelength(vec![
-                    PatchBounceEnergy::empty(
+        let data = outgoing_dirs_per_patch
+            .iter()
+            .map(|dirs| {
+                let mut data_per_patch = PerWavelength(vec![
+                    BounceAndEnergy::empty(
                         params.emitter.max_bounces as usize
                     );
                     spectrum.len()
@@ -471,10 +449,10 @@ impl Collector {
                             Energy::Absorbed => continue,
                             Energy::Reflected(e) => {
                                 stats.n_captured[lambda_idx] += 1;
-                                data[lambda_idx].total_energy += e;
-                                data[lambda_idx].total_rays += 1;
-                                data[lambda_idx].energy_per_bounce[*bounce - 1] += e;
-                                data[lambda_idx].num_rays_per_bounce[*bounce - 1] += 1;
+                                data_per_patch[lambda_idx].total_energy += e;
+                                data_per_patch[lambda_idx].total_rays += 1;
+                                data_per_patch[lambda_idx].energy_per_bounce[*bounce - 1] += e;
+                                data_per_patch[lambda_idx].num_rays_per_bounce[*bounce - 1] += 1;
                                 stats.num_rays_per_bounce[lambda_idx][*bounce - 1] += 1;
                                 stats.energy_per_bounce[lambda_idx][*bounce - 1] += e;
                             }
@@ -482,10 +460,10 @@ impl Collector {
                         stats.total_energy_captured[lambda_idx] += energy.energy();
                     }
                 }
-                measurement_point.data = data;
-            });
-
-        (measurement_points, stats)
+                data_per_patch
+            })
+            .collect::<Vec<_>>();
+        BsdfMeasurementDataPoint { data, stats }
     }
 }
 
@@ -677,9 +655,12 @@ impl Patch {
     }
 }
 
+/// Represents the data that a patch can carry.
+pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
+
 /// Bounce and energy of a patch.
 #[derive(Debug, Clone)]
-pub struct PatchBounceEnergy {
+pub struct BounceAndEnergy {
     /// Number of rays hitting the patch at the given bounce.
     pub num_rays_per_bounce: Vec<u32>,
     /// Total energy of rays hitting the patch at the given bounce.
@@ -690,7 +671,7 @@ pub struct PatchBounceEnergy {
     pub total_rays: u32,
 }
 
-impl PatchBounceEnergy {
+impl BounceAndEnergy {
     pub fn empty(bounces: usize) -> Self {
         Self {
             num_rays_per_bounce: vec![0; bounces],
@@ -700,3 +681,5 @@ impl PatchBounceEnergy {
         }
     }
 }
+
+impl PerPatchData for BounceAndEnergy {}

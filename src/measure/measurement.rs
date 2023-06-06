@@ -10,7 +10,7 @@ use crate::{
         bsdf::{BsdfKind, BsdfMeasurementData},
         collector::CollectorScheme,
         emitter::RegionShape,
-        microfacet::{MicrofacetAreaDistribution, MicrofacetMaskingShadowing},
+        microfacet::{MadfMeasurementData, MmsfMeasurementData},
         Collector, Emitter, RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
@@ -651,9 +651,9 @@ impl MeasurementDataSource {
 #[derive(Debug, Clone)]
 pub enum MeasuredData {
     /// Micro-facet area distribution.
-    Madf(MicrofacetAreaDistribution),
+    Madf(MadfMeasurementData),
     /// Micro-facet shadowing-masking function.
-    Mmsf(MicrofacetMaskingShadowing),
+    Mmsf(MmsfMeasurementData),
     /// Bidirectional scattering distribution function.
     Bsdf(BsdfMeasurementData),
 }
@@ -746,7 +746,7 @@ impl MeasurementData {
                 kind: meta.kind,
                 source: MeasurementDataSource::Loaded(path),
                 name,
-                data: MeasuredData::Madf(MicrofacetAreaDistribution {
+                data: MeasuredData::Madf(MadfMeasurementData {
                     params: madf,
                     samples: data,
                 }),
@@ -755,7 +755,7 @@ impl MeasurementData {
                 kind: meta.kind,
                 source: MeasurementDataSource::Loaded(path),
                 name,
-                data: MeasuredData::Mmsf(MicrofacetMaskingShadowing {
+                data: MeasuredData::Mmsf(MmsfMeasurementData {
                     params: mmsf,
                     samples: data,
                 }),

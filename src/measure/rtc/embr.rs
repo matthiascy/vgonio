@@ -6,8 +6,8 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfMeasurementStatsRT},
-        collector::{CollectorPatches, PatchBounceEnergy},
+        bsdf::BsdfMeasurementData,
+        collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::BsdfMeasurementParams,
         rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
@@ -171,10 +171,7 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) -> Vec<(
-    Vec<BsdfMeasurementPoint<PatchBounceEnergy>>,
-    BsdfMeasurementStatsRT,
-)> {
+) -> BsdfMeasurementData {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -193,7 +190,7 @@ pub fn measure_bsdf(
 
     let max_bounces = params.emitter.max_bounces;
 
-    let mut result = vec![];
+    let mut data = vec![];
     // Iterate over every incident direction.
     for pos in params.emitter.meas_points() {
         println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
@@ -335,12 +332,27 @@ pub fn measure_bsdf(
             .into_iter()
             .flat_map(|d| d.trajectory)
             .collect::<Vec<_>>();
-        let collected = params
-            .collector
-            .collect(params, mesh, pos, &trajectories, patches, cache);
-        log::trace!("collected: {:?}", collected.0);
-        log::debug!("collected stats: {:#?}", collected.1);
-        result.push(collected);
+
+        #[cfg(debug_assertions)]
+        {
+            let collected =
+                params
+                    .collector
+                    .collect(params, mesh, pos, &trajectories, patches, cache);
+            log::debug!("collected stats: {:#?}", collected.stats);
+            log::trace!("collected: {:?}", collected.data);
+            data.push(collected);
+        }
+        #[cfg(not(debug_assertions))]
+        result.push(
+            params
+                .collector
+                .collect(params, mesh, pos, &trajectories, patches, cache),
+        );
     }
-    result
+
+    BsdfMeasurementData {
+        params: *params,
+        data,
+    }
 }

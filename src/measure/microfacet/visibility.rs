@@ -1330,7 +1330,7 @@ impl MeasurementPoint {
 ///
 /// This structure holds the data for G1(i, m).
 #[derive(Debug, Clone)]
-pub struct MicrofacetMaskingShadowing {
+pub struct MmsfMeasurementData {
     /// The measurement parameters.
     pub params: MmsfMeasurementParams,
     /// The distribution data. The outermost dimension is the view direction
@@ -1340,7 +1340,7 @@ pub struct MicrofacetMaskingShadowing {
     pub samples: Vec<f32>,
 }
 
-impl MicrofacetMaskingShadowing {
+impl MmsfMeasurementData {
     /// Returns the number of measurement bins.
     pub fn bins_count(&self) -> usize {
         (self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped()).pow(2)
@@ -1519,7 +1519,7 @@ pub fn measure_masking_shadowing(
                 .expect("Failed to save color attachment");
         }
 
-        results.push(MeasuredData::Mmsf(MicrofacetMaskingShadowing {
+        results.push(MeasuredData::Mmsf(MmsfMeasurementData {
             params: desc,
             samples: measurement,
         }));

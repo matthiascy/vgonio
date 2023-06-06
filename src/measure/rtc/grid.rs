@@ -1,5 +1,7 @@
 //! Customised grid ray tracing for micro-surface measurements.
 
+// TODO: verification
+
 use crate::{
     app::{
         cache::Cache,
@@ -7,8 +9,8 @@ use crate::{
     },
     math::{close_enough, rcp},
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfMeasurementStatsRT},
-        collector::{CollectorPatches, PatchBounceEnergy},
+        bsdf::BsdfMeasurementData,
+        collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, Radius},
         rtc,
@@ -42,16 +44,13 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) -> Vec<(
-    Vec<BsdfMeasurementPoint<PatchBounceEnergy>>,
-    BsdfMeasurementStatsRT,
-)> {
+) -> BsdfMeasurementData {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
     let radius = params.emitter.radius.eval(mesh);
     let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
-    let mut result = vec![];
+    let mut data = vec![];
 
     for pos in params.emitter.meas_points() {
         println!(
@@ -183,14 +182,17 @@ pub fn measure_bsdf(
             .into_iter()
             .flat_map(|data| data.trajectory)
             .collect::<Vec<_>>();
-        result.push(
+        data.push(
             params
                 .collector
                 .collect(params, mesh, pos, &trajectories, patches, cache),
         );
     }
 
-    result
+    BsdfMeasurementData {
+        params: *params,
+        data,
+    }
 }
 
 /// Base grid cell (the smallest unit of the grid).

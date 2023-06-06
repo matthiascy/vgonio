@@ -7,29 +7,36 @@ use crate::{
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     measure::{
-        collector::CollectorPatches,
+        collector::{BounceAndEnergy, CollectorPatches, PerPatchData},
         emitter::EmitterSamples,
         measurement::{MeasuredData, SimulationKind},
-        Patch, RtcMethod,
+        rtc::embr,
+        RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
-    units::Nanometres,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::{write, Debug, Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
 };
 
 use super::measurement::BsdfMeasurementParams;
 
+/// BSDF measurement data.
+///
+/// Number of emitted rays, wavelengths, and bounces are invariant over
+/// emitter's position.
+///
+/// At each emitter's position, each emitted ray carries an initial energy
+/// equals to 1.
 #[derive(Debug, Clone)]
 pub struct BsdfMeasurementData {
+    /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
-    /// The BSDF data.
-    pub bsdf_samples: Vec<f32>,
-    pub bounces_histogram: Vec<f32>,
-    pub bounces_energy_histogram: Vec<f32>,
+    /// The BSDF data per emitter's position. The order of the data point
+    /// follows the order of collector's patches.
+    pub data: Vec<BsdfMeasurementDataPoint<BounceAndEnergy>>,
 }
 
 /// Type of the BSDF to be measured.
@@ -114,66 +121,67 @@ impl<T> DerefMut for PerWavelength<T> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-/// BSDF measurement statistics for all possible emitter's positions.
+/// BSDF measurement statistics for a single emitter's position.
 #[derive(Clone)]
-pub struct BsdfMeasurementStatsRT {
-    /// Number of emitted rays; invariant over wavelength.
-    pub n_emitted: u32,
-
+pub struct BsdfMeasurementStatsPoint {
     /// Number of emitted rays that hit the surface; invariant over wavelength.
     pub n_received: u32,
-
-    /// Wavelengths of emitted rays.
-    pub wavelength: Vec<Nanometres>,
-
     /// Number of emitted rays that hit the surface and were absorbed;
     pub n_absorbed: PerWavelength<u32>,
-
     /// Number of emitted rays that hit the surface and were reflected.
     pub n_reflected: PerWavelength<u32>,
-
     /// Number of emitted rays captured by the collector.
     pub n_captured: PerWavelength<u32>,
-
-    /// Initial energy of emitted rays per wavelength; invariant over
-    /// wavelength.
-    pub total_energy_emitted: f32,
-
     /// Energy captured by the collector; variant over wavelength.
     pub total_energy_captured: PerWavelength<f32>,
-
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength.
     pub num_rays_per_bounce: PerWavelength<Vec<u32>>,
-
     /// Histogram of energy of reflected rays by number of bounces, variant
     /// over wavelength.
     pub energy_per_bounce: PerWavelength<Vec<f32>>,
 }
 
-impl Debug for BsdfMeasurementStatsRT {
+impl BsdfMeasurementStatsPoint {
+    /// Creates an empty `BsdfMeasurementStatsPoint`.
+    ///
+    /// # Arguments
+    /// * `n_wavelengths`: Number of wavelengths.
+    /// * `max_bounces`: Maximum number of bounces.
+    pub fn new(n_wavelengths: usize, max_bounces: usize) -> Self {
+        Self {
+            n_received: 0,
+            n_absorbed: PerWavelength(vec![0; n_wavelengths]),
+            n_reflected: PerWavelength(vec![0; n_wavelengths]),
+            n_captured: PerWavelength(vec![0; n_wavelengths]),
+            total_energy_captured: PerWavelength(vec![0.0; n_wavelengths]),
+            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
+            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
+        }
+    }
+}
+
+impl Default for BsdfMeasurementStatsPoint {
+    fn default() -> Self { Self::new(0, 0) }
+}
+
+impl Debug for BsdfMeasurementStatsPoint {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            r#"BsdfMeasurementStatsRT:
-    - n_emitted: {},
+            r#"BsdfMeasurementPointStats:
     - n_received: {},
-    - wavelength: {:?},
     - n_absorbed: {:?},
     - n_reflected: {:?},
     - n_captured: {:?},
-    - total_energy_emitted: {},
     - total_energy_captured: {:?},
     - num_rays_per_bounce: {:?},
     - energy_per_bounce: {:?},
 "#,
-            self.n_emitted,
             self.n_received,
-            self.wavelength,
             self.n_absorbed,
             self.n_reflected,
             self.n_captured,
-            self.total_energy_emitted,
             self.total_energy_captured,
             self.num_rays_per_bounce,
             self.energy_per_bounce
@@ -181,33 +189,31 @@ impl Debug for BsdfMeasurementStatsRT {
     }
 }
 
-/// Bsdf measurement point and its data.
-pub struct BsdfMeasurementPoint<PerPatchData> {
-    /// Patch containing the measurement point.
-    pub patch: Patch,
-
+/// Measurement data for a single emitter's position.
+///
+/// It contains the statistics of the measurement and the data collected
+/// for all the patches of the collector.
+#[derive(Clone)]
+pub struct BsdfMeasurementDataPoint<PatchData>
+where
+    PatchData: PerPatchData,
+{
+    /// Statistics of the measurement at the point.
+    pub stats: BsdfMeasurementStatsPoint,
+    /// A list of data collected for each patch of the collector.
     /// Per patch data. This is used to either store the measured data for each
     /// patch in case the collector is partitioned or for the collector's
     /// region at different places in the scene. You need to check the collector
     /// to know which one is the case and how to interpret the data.
-    pub data: PerWavelength<PerPatchData>,
+    pub data: Vec<PerWavelength<PatchData>>,
 }
 
-impl<PerPatchData: Debug> Debug for BsdfMeasurementPoint<PerPatchData> {
+impl<PatchData: Debug + PerPatchData> Debug for BsdfMeasurementDataPoint<PatchData> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BsdfMeasurementPoint")
-            .field("patch", &self.patch)
+            .field("stats", &self.stats)
             .field("data", &self.data)
             .finish()
-    }
-}
-
-impl<PerPatchData: Clone> Clone for BsdfMeasurementPoint<PerPatchData> {
-    fn clone(&self) -> Self {
-        Self {
-            patch: self.patch,
-            data: self.data.clone(),
-        }
     }
 }
 
@@ -272,18 +278,15 @@ fn measure_bsdf_embree_rt(
                 log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
                 return None;
             }
-
             let surface = surf.unwrap();
             let mesh = mesh.unwrap();
-
             log::info!(
                 "Measuring surface {}",
                 surface.path.as_ref().unwrap().display()
             );
-            let data_stats =
-                crate::measure::rtc::embr::measure_bsdf(&params, mesh, &samples, &patches, cache);
-
-            todo!()
+            Some(MeasuredData::Bsdf(embr::measure_bsdf(
+                &params, mesh, &samples, &patches, cache,
+            )))
         })
         .collect()
 }

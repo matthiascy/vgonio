@@ -17,7 +17,7 @@ use crate::{
 /// precisely, the relative total facet surface area per unit solid angle of
 /// surface normals pointed in any given direction.
 #[derive(Debug, Clone)]
-pub struct MicrofacetAreaDistribution {
+pub struct MadfMeasurementData {
     /// The measurement parameters.
     pub params: MadfMeasurementParams,
     /// The distribution data. The first index is the azimuthal angle, and the
@@ -91,10 +91,7 @@ pub fn measure_area_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            Some(MeasuredData::Madf(MicrofacetAreaDistribution {
-                params,
-                samples,
-            }))
+            Some(MeasuredData::Madf(MadfMeasurementData { params, samples }))
         })
         .collect()
 }
