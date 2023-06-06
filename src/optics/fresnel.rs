@@ -541,7 +541,7 @@ pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k
 /// # Notes
 ///
 /// Because reflectance from a conductor to a dielectric is not implemented yet,
-/// `cos_i` must be positive in this case.
+/// thus `cos_i` must be positive in case from a dielectric to a conductor.
 pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -> f32 {
     debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
     match (ior_i.is_insulator(), ior_t.is_insulator()) {

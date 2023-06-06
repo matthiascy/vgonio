@@ -7,7 +7,7 @@ use crate::{
     },
     math::{close_enough, rcp},
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfStats},
+        bsdf::{BsdfMeasurementPoint, BsdfMeasurementStatsRT},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, Radius},
@@ -42,7 +42,10 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
+) -> Vec<(
+    Vec<BsdfMeasurementPoint<PatchBounceEnergy>>,
+    BsdfMeasurementStatsRT,
+)> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
     let radius = params.emitter.radius.eval(mesh);

@@ -17,7 +17,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::{Debug, Display, Formatter},
+    fmt::{write, Debug, Display, Formatter},
     ops::{Deref, DerefMut},
 };
 
@@ -114,8 +114,9 @@ impl<T> DerefMut for PerWavelength<T> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-#[derive(Debug, Clone)]
-pub struct BsdfStats {
+/// BSDF measurement statistics for all possible emitter's positions.
+#[derive(Clone)]
+pub struct BsdfMeasurementStatsRT {
     /// Number of emitted rays; invariant over wavelength.
     pub n_emitted: u32,
 
@@ -148,6 +149,36 @@ pub struct BsdfStats {
     /// Histogram of energy of reflected rays by number of bounces, variant
     /// over wavelength.
     pub energy_per_bounce: PerWavelength<Vec<f32>>,
+}
+
+impl Debug for BsdfMeasurementStatsRT {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            r#"BsdfMeasurementStatsRT:
+    - n_emitted: {},
+    - n_received: {},
+    - wavelength: {:?},
+    - n_absorbed: {:?},
+    - n_reflected: {:?},
+    - n_captured: {:?},
+    - total_energy_emitted: {},
+    - total_energy_captured: {:?},
+    - num_rays_per_bounce: {:?},
+    - energy_per_bounce: {:?},
+"#,
+            self.n_emitted,
+            self.n_received,
+            self.wavelength,
+            self.n_absorbed,
+            self.n_reflected,
+            self.n_captured,
+            self.total_energy_emitted,
+            self.total_energy_captured,
+            self.num_rays_per_bounce,
+            self.energy_per_bounce
+        )
+    }
 }
 
 /// Bsdf measurement point and its data.

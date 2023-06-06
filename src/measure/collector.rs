@@ -1,4 +1,5 @@
 use crate::{
+    math,
     measure::{emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
     RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
@@ -10,7 +11,7 @@ use crate::{
     app::cache::Cache,
     math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfStats, PerWavelength},
+        bsdf::{BsdfMeasurementPoint, BsdfMeasurementStatsRT, PerWavelength},
         measurement::BsdfMeasurementParams,
         rtc::Trajectory,
     },
@@ -196,13 +197,17 @@ impl Energy {
 impl Collector {
     /// Generates the patches of the collector.
     pub fn generate_patches(&self) -> CollectorPatches {
+        log::debug!("Generating patches of the collector.");
         match self.scheme {
             CollectorScheme::Partitioned { domain, partition } => {
+                log::trace!("Generating patches of the partitioned collector.");
                 CollectorPatches(partition.generate_patches_over_domain(&domain))
             }
             CollectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => {
+                // TODO: verification
+                log::trace!("Generating patches of the single region collector.");
                 let n_zenith = (zenith.span() / zenith.step_size).ceil() as usize;
                 let n_azimuth = (azimuth.span() / azimuth.step_size).ceil() as usize;
 
@@ -217,7 +222,6 @@ impl Collector {
                             let cartesian = spherical.to_cartesian(Handedness::RightHandedYUp);
                             let shape = self.scheme.shape().unwrap();
                             let solid_angle = shape.solid_angle();
-                            (spherical, cartesian);
                             Patch::SingleRegion(PatchSingleRegion {
                                 zenith: spherical.zenith,
                                 azimuth: spherical.azimuth,
@@ -253,7 +257,10 @@ impl Collector {
         trajectories: &[Trajectory],
         patches: &CollectorPatches,
         cache: &Cache,
-    ) -> (Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats) {
+    ) -> (
+        Vec<BsdfMeasurementPoint<PatchBounceEnergy>>,
+        BsdfMeasurementStatsRT,
+    ) {
         debug_assert!(
             patches.matches_scheme(&self.scheme),
             "Collector patches do not match the collector scheme"
@@ -283,9 +290,10 @@ impl Collector {
 
         // Calculate the radius of the collector.
         let radius = self.radius.eval(mesh);
+        log::trace!("collector radius: {}", radius);
         let domain = self.scheme.domain();
         let max_bounces = params.emitter.max_bounces as usize;
-        let mut stats = BsdfStats {
+        let mut stats = BsdfMeasurementStatsRT {
             n_emitted: params.emitter.num_rays,
             n_received: 0,
             wavelength: spectrum.clone(),
@@ -298,6 +306,12 @@ impl Collector {
             energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
         };
 
+        #[derive(Debug, Copy, Clone)]
+        struct OutgoingDir {
+            idx: usize,
+            dir: Vec3A,
+            bounce: usize,
+        }
         // Convert the last rays of the trajectories into a vector located
         // at the collector's center and pointing to the intersection point
         // of the last ray with the collector's surface. For later use classify
@@ -305,7 +319,7 @@ impl Collector {
         //
         // Each element of the vector is a tuple containing the index of the
         // trajectory, the intersection point and the number of bounces.
-        let unit_dirs = trajectories
+        let outgoing_dirs = trajectories
             .iter()
             .enumerate()
             .filter_map(|(i, trajectory)| {
@@ -335,28 +349,35 @@ impl Collector {
                                          have more than one intersection point."
                                     )
                                 }
-                                QuadraticSolution::Two(t, _) => last.org + last.dir * t,
+                                QuadraticSolution::Two(_, t) => last.org + last.dir * t,
                             };
-                            Some((i, p.normalize(), trajectory.len() - 1))
+                            // Returns the index of the ray, the unit vector pointing to the
+                            // collector's surface, and the number of
+                            // bounces.
+                            Some(OutgoingDir {
+                                idx: i,
+                                dir: p.normalize(),
+                                bounce: trajectory.len() - 1,
+                            })
                         }
                     }
                 }
             })
             .collect::<Vec<_>>();
 
-        log::trace!("unit_dirs: {:?}", unit_dirs);
+        log::trace!("outgoing_dirs: {:?}", outgoing_dirs);
 
         // Calculate the energy of the rays (with wavelength) that intersected the
         // collector's surface.
         // Outer index: ray index, inner index: wavelength index.
-        let ray_energy_per_wavelength = unit_dirs
+        let ray_energy_per_wavelength = outgoing_dirs
             .iter()
-            .map(|(idx, vector, _)| {
-                let trajectory = &trajectories[*idx];
+            .map(|outgoing| {
+                let trajectory = &trajectories[outgoing.idx];
                 let mut energy = Vec::with_capacity(n_wavelengths);
                 energy.resize(n_wavelengths, Energy::Reflected(1.0));
-                for node in trajectories[*idx].iter().take(trajectory.len() - 1) {
-                    for (i, lambda) in spectrum.iter().enumerate() {
+                for node in trajectories[outgoing.idx].iter().take(trajectory.len() - 1) {
+                    for i in 0..spectrum.len() {
                         match energy[i] {
                             Energy::Absorbed => continue,
                             Energy::Reflected(ref mut e) => {
@@ -369,14 +390,18 @@ impl Collector {
                         }
                     }
                 }
-                (idx, energy)
+                (outgoing.idx, energy)
             })
             .collect::<Vec<_>>();
 
-        // per ray
-        for ray_energy in &ray_energy_per_wavelength {
-            // per wavelength
-            for (idx_wavelength, energy) in ray_energy.1.iter().enumerate() {
+        log::trace!("ray_energy_per_wavelength: {:?}", ray_energy_per_wavelength);
+
+        // Calculate the energy of the rays (with wavelength) that intersected the
+        // collector's surface.
+        for (_, energies) in &ray_energy_per_wavelength {
+            // per ray
+            for (idx_wavelength, energy) in energies.iter().enumerate() {
+                // per wavelength
                 match energy {
                     Energy::Absorbed => stats.n_absorbed[idx_wavelength] += 1,
                     Energy::Reflected(_) => stats.n_reflected[idx_wavelength] += 1,
@@ -392,17 +417,42 @@ impl Collector {
             })
             .collect::<Vec<_>>();
 
-        let dirs_per_patch = patches.iter().map(|patch| {
-            // Retrieve the ray indices (of trajectories) that intersect the patch.
-            unit_dirs
-                .iter()
-                .filter_map(|(i, v, bounce)| patch.contains(*v).then(|| (*i, *bounce)))
-                .collect::<Vec<_>>()
-        });
+        // For each patch, collect the rays that intersect it using the
+        // outgoing_dirs vector.
+        let outgoing_dirs_per_patch = patches
+            .iter()
+            .map(|patch| {
+                // Retrieve the ray indices (of trajectories) that intersect the patch.
+                outgoing_dirs
+                    .iter()
+                    .filter_map(|outgoing| {
+                        log::trace!(
+                            "    - outgoing.dir: {:?}, in spherical: {:?}",
+                            outgoing.dir,
+                            math::cartesian_to_spherical(
+                                outgoing.dir.into(),
+                                1.0,
+                                Handedness::RightHandedYUp
+                            )
+                        );
+                        log::trace!("    - patch: {:?}", patch);
+                        log::trace!(
+                            "    - patch.contains(outgoing.dir): {:?}",
+                            patch.contains(outgoing.dir)
+                        );
+                        patch
+                            .contains(outgoing.dir)
+                            .then_some((outgoing.idx, outgoing.bounce))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        log::trace!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
 
         measurement_points
             .iter_mut()
-            .zip(dirs_per_patch)
+            .zip(outgoing_dirs_per_patch)
             .for_each(|(measurement_point, dirs)| {
                 let mut data = PerWavelength(vec![
                     PatchBounceEnergy::empty(
@@ -413,7 +463,7 @@ impl Collector {
                 for (i, bounce) in dirs.iter() {
                     let ray_energy = &ray_energy_per_wavelength
                         .iter()
-                        .find(|(j, energy)| **j == *i)
+                        .find(|(j, energy)| *j == *i)
                         .unwrap()
                         .1;
                     for (lambda_idx, energy) in ray_energy.iter().enumerate() {
@@ -437,10 +487,6 @@ impl Collector {
 
         (measurement_points, stats)
     }
-
-    // todo: pub fn collect_grid_rt
-
-    pub fn save_stats(&self, _path: &str) { todo!("Collector::save_stats") }
 }
 
 /// Represents patches on the surface of the spherical [`Collector`].
@@ -539,6 +585,7 @@ pub struct PatchSingleRegion {
 impl PatchSingleRegion {
     /// Checks if a unit vector (ray direction) falls into the patch.
     pub fn contains(&self, unit_vector: Vec3A) -> bool {
+        // TODO: check if this is correct
         match self.shape {
             RegionShape::SphericalCap { zenith } => {
                 unit_vector.dot(self.unit_vector) > zenith.cos()

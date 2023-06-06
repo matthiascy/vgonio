@@ -79,21 +79,28 @@ pub fn spherical_to_cartesian(
 /// * `azimuth` - azimuthal angle
 pub fn cartesian_to_spherical(v: Vec3, radius: f32, handedness: Handedness) -> SphericalCoord {
     let (zenith, azimuth) = match handedness {
-        Handedness::RightHandedZUp => {
-            let zenith = radians!((v.z * rcp(radius)).acos());
-            let azimuth = radians!(v.y.atan2(v.x));
-            (zenith, azimuth)
-        }
-        Handedness::RightHandedYUp => {
-            let zenith = radians!((v.y * rcp(radius)).acos());
-            let azimuth = radians!(v.z.atan2(v.x));
-            (zenith, azimuth)
-        }
+        Handedness::RightHandedZUp => (
+            radians!((v.z * rcp(radius)).acos()),
+            radians!(v.y.atan2(v.x)),
+        ),
+        Handedness::RightHandedYUp => (
+            radians!((v.y * rcp(radius)).acos()),
+            radians!(v.z.atan2(v.x)),
+        ),
     };
+
     SphericalCoord {
         radius,
-        zenith,
-        azimuth,
+        zenith: if zenith < radians!(0.0) {
+            zenith + Radians::PI
+        } else {
+            zenith
+        },
+        azimuth: if azimuth < radians!(0.0) {
+            azimuth + Radians::TAU
+        } else {
+            azimuth
+        },
     }
 }
 
@@ -101,6 +108,20 @@ pub fn cartesian_to_spherical(v: Vec3, radius: f32, handedness: Handedness) -> S
 #[test]
 fn spherical_cartesian_conversion() {
     use crate::{ulp_eq, units::degrees};
+
+    println!(
+        "{:?}",
+        spherical_to_cartesian(
+            1.0,
+            radians!(0.0),
+            radians!(0.0),
+            Handedness::RightHandedYUp
+        )
+    );
+    println!(
+        "{:?}",
+        cartesian_to_spherical(Vec3::new(0.0, 1.0, 0.0), 1.0, Handedness::RightHandedYUp)
+    );
 
     let r = 1.0;
     let zenith = radians!(0.0);

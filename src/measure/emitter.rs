@@ -171,8 +171,17 @@ impl Emitter {
 
     /// All possible measurement positions of the emitter.
     pub fn meas_points(&self) -> Vec<SphericalCoord> {
+        println!(
+            "azimuth: {:?}",
+            self.azimuth.values_wrapped().collect::<Vec<_>>()
+        );
+        println!(
+            "zenith: {:?}, {}",
+            self.zenith.values().collect::<Vec<_>>(),
+            self.zenith.step_count()
+        );
         self.azimuth
-            .values()
+            .values_wrapped()
             .flat_map(|azimuth| {
                 self.zenith.values().map(move |zenith| SphericalCoord {
                     radius: 1.0,

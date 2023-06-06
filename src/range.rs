@@ -1,5 +1,6 @@
 use crate::{
     math::NumericCast,
+    ulp_eq,
     units::{Angle, AngleUnit, Radians},
 };
 use approx::AbsDiffEq;
@@ -135,7 +136,11 @@ where
         let step_size = self.step_size.cast();
         let start = self.start.cast();
         let stop = self.stop.cast();
-        (((stop - start) / step_size).round() as usize).max(2) + 1
+        if ulp_eq(step_size, stop - start) {
+            2
+        } else {
+            (((stop - start) / step_size).round() as usize).max(2) + 1
+        }
     }
 }
 
@@ -435,6 +440,16 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         } else {
             ((self.span() / self.step_size).round() as usize + 1).max(2)
         }
+    }
+
+    /// Returns an iterator over the values of the range of angles.
+    /// The range is considered to be a full circle if the stop value is the
+    /// same as the start value after wrapping it to the range [0, 2π).
+    pub fn values_wrapped(&self) -> impl Iterator<Item = Angle<A>> {
+        let step_size = self.step_size;
+        let step_count = self.step_count_wrapped();
+        let start = self.start;
+        (0..step_count).map(move |i| start + step_size * i as f32)
     }
 
     /// Returns the index of the angle in the range of the measurement.
@@ -1208,5 +1223,8 @@ mod range_by_step_size_tests {
 
         let range = RangeByStepSizeInclusive::new(0.0, 10.0, 2.5);
         assert_eq!(range.step_count(), 5);
+
+        let range = RangeByStepSizeInclusive::new(0.0, 10.0, 10.0);
+        assert_eq!(range.step_count(), 2);
     }
 }

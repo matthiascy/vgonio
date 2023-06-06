@@ -235,7 +235,7 @@ pub enum SphericalDomain {
 }
 
 impl Display for SphericalDomain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Upper => write!(f, "upper hemisphere"),
             Self::Lower => write!(f, "lower hemisphere"),
@@ -258,6 +258,13 @@ impl TryFrom<u8> for SphericalDomain {
 }
 
 impl SphericalDomain {
+    /// Range of zenith angle in radians of the upper hemisphere.
+    pub const ZENITH_RANGE_UPPER_DOMAIN: (Radians, Radians) = (Radians::ZERO, Radians::HALF_PI);
+    /// Range of zenith angle in radians of the lower hemisphere.
+    pub const ZENITH_RANGE_LOWER_DOMAIN: (Radians, Radians) = (Radians::HALF_PI, Radians::PI);
+    /// Range of zenith angle in radians of the whole sphere.
+    pub const ZENITH_RANGE_WHOLE_DOMAIN: (Radians, Radians) = (Radians::ZERO, Radians::TWO_PI);
+
     /// Clamps the given azimuthal and zenith angle to shape's boundaries.
     ///
     /// # Arguments
@@ -270,30 +277,23 @@ impl SphericalDomain {
     /// `(zenith, azimuth)` - clamped zenith and azimuth angles in radians.
     #[inline]
     pub fn clamp(&self, zenith: Radians, azimuth: Radians) -> (Radians, Radians) {
-        let (zenith_min, zenith_max) = match self {
-            SphericalDomain::Upper => (Radians::ZERO, Radians::HALF_PI),
-            SphericalDomain::Lower => (Radians::HALF_PI, Radians::PI),
-            SphericalDomain::Whole => (Radians::ZERO, Radians::PI),
-        };
-
-        (
-            zenith.clamp(zenith_min, zenith_max),
-            azimuth.clamp(Radians::ZERO, Radians::TWO_PI),
-        )
+        (self.clamp_zenith(zenith), self.clamp_azimuth(azimuth))
     }
 
     /// Clamps the given zenith angle to shape's boundaries.
+    #[inline]
     pub fn clamp_zenith(&self, zenith: Radians) -> Radians {
         let (zenith_min, zenith_max) = match self {
-            SphericalDomain::Upper => (Radians::ZERO, Radians::HALF_PI),
-            SphericalDomain::Lower => (Radians::HALF_PI, Radians::PI),
-            SphericalDomain::Whole => (Radians::ZERO, Radians::PI),
+            SphericalDomain::Upper => Self::ZENITH_RANGE_UPPER_DOMAIN,
+            SphericalDomain::Lower => Self::ZENITH_RANGE_LOWER_DOMAIN,
+            SphericalDomain::Whole => Self::ZENITH_RANGE_WHOLE_DOMAIN,
         };
 
         zenith.clamp(zenith_min, zenith_max)
     }
 
     /// Clamps the given azimuthal angle to shape's boundaries.
+    #[inline]
     pub fn clamp_azimuth(&self, azimuth: Radians) -> Radians {
         azimuth.clamp(Radians::ZERO, Radians::TWO_PI)
     }
@@ -399,25 +399,19 @@ impl SphericalPartition {
         }
     }
 
+    /// Checks if the partition is equal angle.
     pub const fn is_equal_angle(&self) -> bool {
-        match self {
-            SphericalPartition::EqualAngle { .. } => true,
-            _ => false,
-        }
+        matches!(self, SphericalPartition::EqualAngle { .. })
     }
 
+    /// Checks if the partition is equal area.
     pub const fn is_equal_area(&self) -> bool {
-        match self {
-            SphericalPartition::EqualArea { .. } => true,
-            _ => false,
-        }
+        matches!(self, SphericalPartition::EqualArea { .. })
     }
 
+    /// Checks if the partition is equal projected area.
     pub const fn is_equal_projected_area(&self) -> bool {
-        match self {
-            SphericalPartition::EqualProjectedArea { .. } => true,
-            _ => false,
-        }
+        matches!(self, SphericalPartition::EqualProjectedArea { .. })
     }
 }
 
@@ -429,12 +423,14 @@ impl SphericalPartition {
         // REVIEW: this function is not very efficient, it can be improved
         match self {
             SphericalPartition::EqualAngle { zenith, azimuth } => {
-                let n_zenith = zenith.step_count();
-                let n_azimuth = azimuth.step_count();
+                log::trace!("Generating patches over domain: {:?}", self);
+                let n_zenith = zenith.step_count() - 1; // because of inclusive range, TODO: refactor
+                let n_azimuth = azimuth.step_count() - 1; // because of inclusive range, TODO: refactor
 
+                log::trace!("Number of patches: {}", n_zenith * n_azimuth);
                 let mut patches = Vec::with_capacity(n_zenith * n_azimuth);
-                for i_theta in 0..n_zenith - 1 {
-                    for i_phi in 0..n_azimuth - 1 {
+                for i_theta in 0..n_zenith {
+                    for i_phi in 0..n_azimuth {
                         patches.push(Patch::new_partitioned(
                             (
                                 i_theta as f32 * zenith.step_size + zenith.start,
@@ -451,6 +447,7 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualArea { zenith, azimuth } => {
+                log::trace!("Generating patches over domain: {:?}", self);
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
                 let count = zenith.step_count;
@@ -490,6 +487,7 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                log::trace!("Generating patches over domain: {:?}", self);
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
                 let count = zenith.step_count;

@@ -6,7 +6,7 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::{BsdfMeasurementPoint, BsdfStats},
+        bsdf::{BsdfMeasurementPoint, BsdfMeasurementStatsRT},
         collector::{CollectorPatches, PatchBounceEnergy},
         emitter::EmitterSamples,
         measurement::BsdfMeasurementParams,
@@ -171,7 +171,10 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) -> Vec<(Vec<BsdfMeasurementPoint<PatchBounceEnergy>>, BsdfStats)> {
+) -> Vec<(
+    Vec<BsdfMeasurementPoint<PatchBounceEnergy>>,
+    BsdfMeasurementStatsRT,
+)> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -193,11 +196,7 @@ pub fn measure_bsdf(
     let mut result = vec![];
     // Iterate over every incident direction.
     for pos in params.emitter.meas_points() {
-        println!(
-            "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
-            pos.zenith.in_degrees().value(),
-            pos.azimuth.in_degrees().value()
-        );
+        println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
 
         let t = Instant::now();
         let emitted_rays = params.emitter.emit_rays_with_radius(&samples, pos, radius);
@@ -285,11 +284,11 @@ pub fn measure_bsdf(
                     }
 
                     log::trace!(
-                        "------------ bounce {}, active rays {}\n {:?} | {:?}",
+                        "------------ bounce {}, active rays {}\n {:?} | {}",
                         bounces,
                         active_rays,
                         ctx.ext.trajectory,
-                        ctx.ext.trajectory.len() - 1,
+                        ctx.ext.trajectory.len(),
                     );
                     log::trace!("validities: {:?}", validities);
 
@@ -322,12 +321,13 @@ pub fn measure_bsdf(
                 }
 
                 log::trace!(
-                    "------------ result {}, active rays {}\n {:?} | {:?}\n{:?}",
+                    "------------ result {}, active rays: {}, valid rays: {:?}\ntrajectory: {:?} \
+                     | {}",
                     bounces,
                     active_rays,
+                    validities,
                     data.trajectory,
-                    data.trajectory.len() - 1,
-                    validities
+                    data.trajectory.len(),
                 );
             });
         // Extract the trajectory of each ray.
@@ -335,12 +335,11 @@ pub fn measure_bsdf(
             .into_iter()
             .flat_map(|d| d.trajectory)
             .collect::<Vec<_>>();
-        let collected =
-            params
-                .collector
-                .collect(params, mesh, pos, &trajectories, &patches, &cache);
+        let collected = params
+            .collector
+            .collect(params, mesh, pos, &trajectories, patches, cache);
         log::trace!("collected: {:?}", collected.0);
-        log::trace!("collected stats: {:?}", collected.1);
+        log::debug!("collected stats: {:#?}", collected.1);
         result.push(collected);
     }
     result
