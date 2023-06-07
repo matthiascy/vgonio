@@ -12,7 +12,7 @@ use crate::{
         self,
         measurement::{
             BsdfMeasurementParams, MadfMeasurementParams, MeasuredData, Measurement,
-            MeasurementKindDescription, MmsfMeasurementParams,
+            MeasurementData, MeasurementKind, MeasurementKindDescription, MmsfMeasurementParams,
         },
         CollectorScheme,
     },
@@ -232,6 +232,12 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     measurement.resolution,
                     measurement.resolution
                 );
+
+                #[cfg(debug_assertions)]
+                log::warn!(
+                    "Debug mode is enabled. Measuring MMSF in debug mode is not recommended."
+                );
+
                 measure::microfacet::measure_masking_shadowing(
                     measurement,
                     &surfaces,
@@ -324,7 +330,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
 
 /// Writes the measured data to a file.
 fn write_measured_data_to_file(
-    data: &[MeasuredData],
+    data: &[MeasurementData],
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -334,9 +340,9 @@ fn write_measured_data_to_file(
 ) -> Result<(), Error> {
     let output_dir = resolve_output_dir(config, output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
-    for (measured, surface) in data.iter().zip(surfaces.iter()) {
-        let filename = match measured {
-            MeasuredData::Madf(_) => {
+    for (measurement, surface) in data.iter().zip(surfaces.iter()) {
+        let filename = match measurement.kind() {
+            MeasurementKind::MicrofacetAreaDistribution => {
                 format!(
                     "microfacet-area-distribution-{}.vgmo",
                     cache
@@ -349,7 +355,7 @@ fn write_measured_data_to_file(
                         .unwrap()
                 )
             }
-            MeasuredData::Mmsf(_) => {
+            MeasurementKind::MicrofacetMaskingShadowing => {
                 format!(
                     "microfacet-masking-shadowing-{}.vgmo",
                     cache
@@ -362,8 +368,18 @@ fn write_measured_data_to_file(
                         .unwrap()
                 )
             }
-            MeasuredData::Bsdf(_) => {
-                todo!()
+            MeasurementKind::Bsdf => {
+                format!(
+                    "bsdf-{}.vgmo",
+                    cache
+                        .get_micro_surface_filepath(*surface)
+                        .unwrap()
+                        .file_stem()
+                        .unwrap()
+                        .to_ascii_lowercase()
+                        .to_str()
+                        .unwrap()
+                )
             }
         };
         let filepath = output_dir.join(filename);
@@ -371,7 +387,7 @@ fn write_measured_data_to_file(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        measured
+        measurement
             .write_to_file(&filepath, encoding, compression)
             .unwrap_or_else(|err| {
                 eprintln!(

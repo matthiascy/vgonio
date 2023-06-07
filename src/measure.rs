@@ -1,7 +1,7 @@
 //! Acquisition related.
 
 pub mod bsdf;
-mod collector;
+pub(crate) mod collector;
 pub(crate) mod emitter; // TODO: maybe make private
 pub mod measurement;
 pub mod microfacet;

@@ -266,6 +266,22 @@ impl MicroSurface {
         }
     }
 
+    /// Returns the filename of the micro-surface if it is loaded from a file.
+    pub fn file_name(&self) -> Option<&str> {
+        match self.path {
+            Some(ref path) => path.file_name().and_then(|s| s.to_str()),
+            None => None,
+        }
+    }
+
+    /// Returns the file stem of the micro-surface if it is loaded from a file.
+    pub fn file_stem(&self) -> Option<&str> {
+        match self.path {
+            Some(ref path) => path.file_stem().and_then(|s| s.to_str()),
+            None => None,
+        }
+    }
+
     /// Returns the dimension of the surface (rows * du, cols * dv)
     /// # Examples
     ///

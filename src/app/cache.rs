@@ -354,9 +354,7 @@ impl Cache {
         &self,
         handle: Handle<MeasurementData>,
     ) -> Option<Weak<MeasurementData>> {
-        self.measurements_data
-            .get(&handle)
-            .map(|h| Rc::downgrade(h))
+        self.measurements_data.get(&handle).map(Rc::downgrade)
     }
 
     /// Loads a surface from its relevant place and returns its cache handle.

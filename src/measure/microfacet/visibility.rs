@@ -8,7 +8,9 @@ use crate::{
         },
     },
     math,
-    measure::measurement::{MeasuredData, MmsfMeasurementParams},
+    measure::measurement::{
+        MeasuredData, MeasurementData, MeasurementDataSource, MmsfMeasurementParams,
+    },
     msurf::MicroSurface,
     units::Radians,
     Error, Handedness,
@@ -1330,7 +1332,7 @@ impl MeasurementPoint {
 ///
 /// This structure holds the data for G1(i, m).
 #[derive(Debug, Clone)]
-pub struct MmsfMeasurementData {
+pub struct MeasuredMmsfData {
     /// The measurement parameters.
     pub params: MmsfMeasurementParams,
     /// The distribution data. The outermost dimension is the view direction
@@ -1340,9 +1342,9 @@ pub struct MmsfMeasurementData {
     pub samples: Vec<f32>,
 }
 
-impl MmsfMeasurementData {
+impl MeasuredMmsfData {
     /// Returns the number of measurement bins.
-    pub fn bins_count(&self) -> usize {
+    pub fn expected_samples_count(&self) -> usize {
         (self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped()).pow(2)
     }
 }
@@ -1350,10 +1352,10 @@ impl MmsfMeasurementData {
 /// Measurement of microfacet shadowing and masking function.
 pub fn measure_masking_shadowing(
     desc: MmsfMeasurementParams,
-    surfaces: &[Handle<MicroSurface>],
+    handles: &[Handle<MicroSurface>],
     cache: &Cache,
     handedness: Handedness,
-) -> Vec<MeasuredData> {
+) -> Vec<MeasurementData> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {
         device_descriptor: wgpu::DeviceDescriptor {
@@ -1376,31 +1378,32 @@ pub fn measure_masking_shadowing(
         desc.resolution,
         desc.measurement_location_count() as u32,
     );
-    let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    let mut results = Vec::with_capacity(surfaces.len());
-    for surface in surfaces {
-        if surface.is_none() {
+    let surfaces = cache.get_micro_surfaces(handles);
+    let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
+    let mut results = Vec::with_capacity(meshes.len());
+
+    for ((hdl, surface), mesh) in handles.iter().zip(surfaces.iter()).zip(meshes.iter()) {
+        if mesh.is_none() {
             continue;
         }
 
-        let surface = surface.unwrap();
+        let mesh = mesh.unwrap();
         let facets_vtx_buf = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("surface_vertex_buffer"),
-                contents: bytemuck::cast_slice(&surface.verts),
+                contents: bytemuck::cast_slice(&mesh.verts),
                 usage: wgpu::BufferUsages::VERTEX,
             });
         let facets_idx_buf = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("surface_index_buffer"),
-                contents: bytemuck::cast_slice(&surface.facets),
+                contents: bytemuck::cast_slice(&mesh.facets),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        let facets_idx_num = surface.facets.len() as u32;
-        let diagonal = // surface.bounds.max_extent()
-            (surface.bounds.max - surface.bounds.min).max_element() * std::f32::consts::SQRT_2;
+        let facets_idx_num = mesh.facets.len() as u32;
+        let diagonal = (mesh.bounds.max - mesh.bounds.min).max_element() * std::f32::consts::SQRT_2;
         let half_zenith_bin_size_cos = (desc.zenith.step_size / 2.0).cos();
         let proj_mat =
             Projection::orthographic_matrix(diagonal * 0.5, diagonal * 1.5, diagonal, diagonal);
@@ -1452,7 +1455,7 @@ pub fn measure_masking_shadowing(
         let measurement = meas_points
             .iter()
             .flat_map(|mp| {
-                let visible_facets_indices = surface
+                let visible_facets_indices = mesh
                     .facet_normals
                     .iter()
                     .enumerate()
@@ -1461,9 +1464,9 @@ pub fn measure_masking_shadowing(
                     })
                     .flat_map(|idx| {
                         [
-                            surface.facets[idx * 3],
-                            surface.facets[idx * 3 + 1],
-                            surface.facets[idx * 3 + 2],
+                            mesh.facets[idx * 3],
+                            mesh.facets[idx * 3 + 1],
+                            mesh.facets[idx * 3 + 2],
                         ]
                     })
                     .collect::<Vec<_>>();
@@ -1519,10 +1522,14 @@ pub fn measure_masking_shadowing(
                 .expect("Failed to save color attachment");
         }
 
-        results.push(MeasuredData::Mmsf(MmsfMeasurementData {
-            params: desc,
-            samples: measurement,
-        }));
+        results.push(MeasurementData {
+            name: surface.unwrap().file_stem().unwrap().to_owned(),
+            source: MeasurementDataSource::Measured(*hdl),
+            measured: MeasuredData::Mmsf(MeasuredMmsfData {
+                params: desc,
+                samples: measurement,
+            }),
+        });
     }
     results
 }

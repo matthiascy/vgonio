@@ -4,7 +4,9 @@
 use crate::{
     app::cache::{Cache, Handle},
     math,
-    measure::measurement::{MadfMeasurementParams, MeasuredData},
+    measure::measurement::{
+        MadfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource,
+    },
     msurf::MicroSurface,
     units::{self, Radians},
     Handedness,
@@ -17,7 +19,7 @@ use crate::{
 /// precisely, the relative total facet surface area per unit solid angle of
 /// surface normals pointed in any given direction.
 #[derive(Debug, Clone)]
-pub struct MadfMeasurementData {
+pub struct MeasuredMadfData {
     /// The measurement parameters.
     pub params: MadfMeasurementParams,
     /// The distribution data. The first index is the azimuthal angle, and the
@@ -25,24 +27,33 @@ pub struct MadfMeasurementData {
     pub samples: Vec<f32>,
 }
 
+impl MeasuredMadfData {
+    pub fn expected_samples_count(&self) -> usize {
+        self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped()
+    }
+}
+
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
     params: MadfMeasurementParams,
-    surfaces: &[Handle<MicroSurface>],
+    handles: &[Handle<MicroSurface>],
     cache: &Cache,
-) -> Vec<MeasuredData> {
+) -> Vec<MeasurementData> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet area distribution...");
-    let surfaces = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    surfaces
+    let surfaces = cache.get_micro_surfaces(handles);
+    let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
+    handles
         .iter()
-        .filter_map(|surface| {
-            if surface.is_none() {
-                log::debug!("Skipping a surface because it is not loaded {:?}.", surface);
+        .zip(surfaces.iter())
+        .zip(meshes.iter())
+        .filter_map(|((hdl, surface), mesh)| {
+            if surface.is_none() || mesh.is_none() {
+                log::debug!("Skipping a surface because it is not loaded {:?}.", mesh);
                 return None;
             }
-            let surface = surface.unwrap();
-            let macro_area = surface.macro_surface_area();
+            let mesh = mesh.unwrap();
+            let macro_area = mesh.macro_surface_area();
             let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
             let divisor = macro_area * solid_angle;
             let half_zenith_bin_size_cos = (params.zenith.step_size / 2.0).cos();
@@ -63,7 +74,7 @@ pub fn measure_area_distribution(
                             Handedness::RightHandedYUp,
                         )
                         .normalize();
-                        let facets_surface_area = surface
+                        let facets_surface_area = mesh
                             .facet_normals
                             .par_iter()
                             .enumerate()
@@ -74,10 +85,7 @@ pub fn measure_area_distribution(
                                     None
                                 }
                             })
-                            .fold(
-                                || 0.0,
-                                |area, facet| area + surface.facet_surface_area(facet),
-                            )
+                            .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
                             .reduce(|| 0.0, |a, b| a + b);
                         let value = facets_surface_area / divisor;
                         log::trace!(
@@ -91,7 +99,11 @@ pub fn measure_area_distribution(
                     })
                 })
                 .collect::<Vec<_>>();
-            Some(MeasuredData::Madf(MadfMeasurementData { params, samples }))
+            Some(MeasurementData {
+                name: surface.unwrap().file_stem().unwrap().to_owned(),
+                source: MeasurementDataSource::Measured(*hdl),
+                measured: MeasuredData::Madf(MeasuredMadfData { params, samples }),
+            })
         })
         .collect()
 }

@@ -6,7 +6,7 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::BsdfMeasurementData,
+        bsdf::MeasuredBsdfData,
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::BsdfMeasurementParams,
@@ -171,7 +171,7 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) -> BsdfMeasurementData {
+) -> MeasuredBsdfData {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -196,7 +196,7 @@ pub fn measure_bsdf(
         println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
 
         let t = Instant::now();
-        let emitted_rays = params.emitter.emit_rays_with_radius(&samples, pos, radius);
+        let emitted_rays = params.emitter.emit_rays_with_radius(samples, pos, radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 
@@ -351,8 +351,8 @@ pub fn measure_bsdf(
         );
     }
 
-    BsdfMeasurementData {
+    MeasuredBsdfData {
         params: *params,
-        data,
+        samples: data,
     }
 }

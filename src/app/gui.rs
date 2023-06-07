@@ -1231,6 +1231,7 @@ impl VgonioGuiApp {
                     &surfaces,
                     &self.cache.read().unwrap(),
                 );
+                todo!("Save area distribution to file or display it in a window");
             }
             VgonioEvent::MeasureMaskingShadowing { params, surfaces } => {
                 println!("Measuring masking/shadowing");
@@ -1240,6 +1241,7 @@ impl VgonioGuiApp {
                     &self.cache.read().unwrap(),
                     Handedness::RightHandedYUp,
                 );
+                todo!("Save area distribution to file or display it in a window");
             }
             VgonioEvent::MeasureBsdf { params, surfaces } => {
                 println!("Measuring BSDF");
@@ -1249,6 +1251,7 @@ impl VgonioGuiApp {
                     params.sim_kind,
                     &self.cache.read().unwrap(),
                 );
+                todo!("Save area distribution to file or display it in a window");
             }
             _ => {}
         }

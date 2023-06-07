@@ -171,11 +171,11 @@ impl Emitter {
 
     /// All possible measurement positions of the emitter.
     pub fn meas_points(&self) -> Vec<SphericalCoord> {
-        println!(
+        log::trace!(
             "azimuth: {:?}",
             self.azimuth.values_wrapped().collect::<Vec<_>>()
         );
-        println!(
+        log::trace!(
             "zenith: {:?}, {}",
             self.zenith.values().collect::<Vec<_>>(),
             self.zenith.step_count()

@@ -217,11 +217,12 @@ impl MeasuredDataCollapsableHeader {
                 });
             })
             .body(|ui| {
+                let measurement_kind = measured.kind();
                 egui::Grid::new("measurement_data_body")
                     .num_columns(2)
                     .show(ui, |ui| {
                         ui.label("Type:");
-                        ui.label(format!("{}", measured.kind));
+                        ui.label(format!("{}", measurement_kind));
                         ui.end_row();
                         ui.label("Source:");
                         match measured.source {
@@ -234,11 +235,11 @@ impl MeasuredDataCollapsableHeader {
                         }
                         ui.end_row();
 
-                        if measured.kind == MeasurementKind::MicrofacetAreaDistribution
-                            || measured.kind == MeasurementKind::MicrofacetMaskingShadowing
+                        if measurement_kind == MeasurementKind::MicrofacetAreaDistribution
+                            || measurement_kind == MeasurementKind::MicrofacetMaskingShadowing
                         {
-                            let zenith = measured.data.madf_or_mmsf_zenith().unwrap();
-                            let azimuth = measured.data.madf_or_mmsf_azimuth().unwrap();
+                            let zenith = measured.measured.madf_or_mmsf_zenith().unwrap();
+                            let azimuth = measured.measured.madf_or_mmsf_azimuth().unwrap();
                             ui.label("θ:");
                             ui.label(format!(
                                 "{:.2}° ~ {:.2}°, every {:.2}°",

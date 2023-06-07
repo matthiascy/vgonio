@@ -457,7 +457,7 @@ impl Collector {
                                 stats.energy_per_bounce[lambda_idx][*bounce - 1] += e;
                             }
                         }
-                        stats.total_energy_captured[lambda_idx] += energy.energy();
+                        stats.captured_energy[lambda_idx] += energy.energy();
                     }
                 }
                 data_per_patch
@@ -659,16 +659,19 @@ impl Patch {
 pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
 
 /// Bounce and energy of a patch.
+///
+/// Length of `num_rays_per_bounce` and `energy_per_bounce` is equal to the
+/// maximum number of bounces.
 #[derive(Debug, Clone)]
 pub struct BounceAndEnergy {
+    /// Total number of rays that hit the patch.
+    pub total_rays: u32,
+    /// Total energy of rays that hit the patch.
+    pub total_energy: f32,
     /// Number of rays hitting the patch at the given bounce.
     pub num_rays_per_bounce: Vec<u32>,
     /// Total energy of rays hitting the patch at the given bounce.
     pub energy_per_bounce: Vec<f32>,
-    /// Total energy of rays that hit the patch.
-    pub total_energy: f32,
-    /// Total number of rays that hit the patch.
-    pub total_rays: u32,
 }
 
 impl BounceAndEnergy {
@@ -679,6 +682,17 @@ impl BounceAndEnergy {
             total_energy: 0.0,
             total_rays: 0,
         }
+    }
+
+    pub const fn calc_size_in_bytes(bounces: usize) -> usize { 8 * bounces + 8 }
+}
+
+impl PartialEq for BounceAndEnergy {
+    fn eq(&self, other: &Self) -> bool {
+        self.total_rays == other.total_rays
+            && self.total_energy == other.total_energy
+            && self.num_rays_per_bounce == other.num_rays_per_bounce
+            && self.energy_per_bounce == other.energy_per_bounce
     }
 }
 

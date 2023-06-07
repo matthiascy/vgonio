@@ -136,8 +136,8 @@ impl Tool for PlottingInspector {
                     .as_any()
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
-                let zenith = measured.data.madf_or_mmsf_zenith().unwrap();
-                let azimuth = measured.data.madf_or_mmsf_azimuth().unwrap();
+                let zenith = measured.measured.madf_or_mmsf_zenith().unwrap();
+                let azimuth = measured.measured.madf_or_mmsf_azimuth().unwrap();
                 let zenith_bin_width_rad = zenith.step_size.cast();
                 ui.allocate_ui_with_layout(
                     Vec2::new(ui.available_width(), 48.0),
@@ -287,8 +287,8 @@ impl Tool for PlottingInspector {
                     .as_any()
                     .downcast_ref::<MeasurementData>()
                     .unwrap();
-                let zenith = measured.data.madf_or_mmsf_zenith().unwrap();
-                let azimuth = measured.data.madf_or_mmsf_azimuth().unwrap();
+                let zenith = measured.measured.madf_or_mmsf_zenith().unwrap();
+                let azimuth = measured.measured.madf_or_mmsf_azimuth().unwrap();
                 let zenith_bin_width_rad = zenith.step_size.value;
                 ui.allocate_ui_with_layout(
                     Vec2::new(ui.available_width(), 48.0),

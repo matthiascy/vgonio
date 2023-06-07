@@ -9,7 +9,7 @@ use crate::{
     },
     math::{close_enough, rcp},
     measure::{
-        bsdf::BsdfMeasurementData,
+        bsdf::MeasuredBsdfData,
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, Radius},
@@ -44,7 +44,7 @@ pub fn measure_bsdf(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-) -> BsdfMeasurementData {
+) -> MeasuredBsdfData {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
     let radius = params.emitter.radius.eval(mesh);
@@ -189,9 +189,9 @@ pub fn measure_bsdf(
         );
     }
 
-    BsdfMeasurementData {
+    MeasuredBsdfData {
         params: *params,
-        data,
+        samples: data,
     }
 }
 

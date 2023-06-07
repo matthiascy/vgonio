@@ -1,6 +1,8 @@
 //! Measurement of the BSDF (bidirectional scattering distribution function) of
 //! micro-surfaces.
 
+#[cfg(feature = "embree")]
+use crate::measure::rtc::embr;
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -9,8 +11,7 @@ use crate::{
     measure::{
         collector::{BounceAndEnergy, CollectorPatches, PerPatchData},
         emitter::EmitterSamples,
-        measurement::{MeasuredData, SimulationKind},
-        rtc::embr,
+        measurement::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
         RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
@@ -31,12 +32,22 @@ use super::measurement::BsdfMeasurementParams;
 /// At each emitter's position, each emitted ray carries an initial energy
 /// equals to 1.
 #[derive(Debug, Clone)]
-pub struct BsdfMeasurementData {
+pub struct MeasuredBsdfData {
     /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
-    /// The BSDF data per emitter's position. The order of the data point
-    /// follows the order of collector's patches.
-    pub data: Vec<BsdfMeasurementDataPoint<BounceAndEnergy>>,
+    /// The BSDF data per emitter's position (incident direction). The first
+    /// index is the azimuthal angle, and the second index is the zenith angle.
+    /// The order of the data point follows the order of collector's patches.
+    pub samples: Vec<BsdfMeasurementDataPoint<BounceAndEnergy>>,
+}
+
+impl MeasuredBsdfData {
+    /// Returns the expected count of measured samples.
+    /// It's related to emitter's positions.
+    pub fn expected_samples_count(&self) -> usize {
+        self.params.emitter.azimuth.step_count_wrapped()
+            * self.params.emitter.zenith.step_count_wrapped()
+    }
 }
 
 /// Type of the BSDF to be measured.
@@ -121,6 +132,12 @@ impl<T> DerefMut for PerWavelength<T> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
+impl<T: PartialEq> PartialEq for PerWavelength<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.len() == other.0.len() && self.0.iter().zip(other.0.iter()).all(|(a, b)| a == b)
+    }
+}
+
 /// BSDF measurement statistics for a single emitter's position.
 #[derive(Clone)]
 pub struct BsdfMeasurementStatsPoint {
@@ -133,13 +150,25 @@ pub struct BsdfMeasurementStatsPoint {
     /// Number of emitted rays captured by the collector.
     pub n_captured: PerWavelength<u32>,
     /// Energy captured by the collector; variant over wavelength.
-    pub total_energy_captured: PerWavelength<f32>,
+    pub captured_energy: PerWavelength<f32>,
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength.
     pub num_rays_per_bounce: PerWavelength<Vec<u32>>,
     /// Histogram of energy of reflected rays by number of bounces, variant
     /// over wavelength.
     pub energy_per_bounce: PerWavelength<Vec<f32>>,
+}
+
+impl PartialEq for BsdfMeasurementStatsPoint {
+    fn eq(&self, other: &Self) -> bool {
+        self.n_received == other.n_received
+            && self.n_absorbed == other.n_absorbed
+            && self.n_reflected == other.n_reflected
+            && self.n_captured == other.n_captured
+            && self.captured_energy == other.captured_energy
+            && self.num_rays_per_bounce == other.num_rays_per_bounce
+            && self.energy_per_bounce == other.energy_per_bounce
+    }
 }
 
 impl BsdfMeasurementStatsPoint {
@@ -154,10 +183,16 @@ impl BsdfMeasurementStatsPoint {
             n_absorbed: PerWavelength(vec![0; n_wavelengths]),
             n_reflected: PerWavelength(vec![0; n_wavelengths]),
             n_captured: PerWavelength(vec![0; n_wavelengths]),
-            total_energy_captured: PerWavelength(vec![0.0; n_wavelengths]),
+            captured_energy: PerWavelength(vec![0.0; n_wavelengths]),
             num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
             energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
         }
+    }
+
+    /// Calculates the size in bytes of the `BsdfMeasurementStatsPoint` for the
+    /// given number of wavelengths and maximum number of bounces.
+    pub fn calc_size_in_bytes(n_wavelength: usize, bounces: usize) -> usize {
+        4 + (n_wavelength * 4) * 4 + (n_wavelength * bounces * 4) * 2
     }
 }
 
@@ -182,7 +217,7 @@ impl Debug for BsdfMeasurementStatsPoint {
             self.n_absorbed,
             self.n_reflected,
             self.n_captured,
-            self.total_energy_captured,
+            self.captured_energy,
             self.num_rays_per_bounce,
             self.energy_per_bounce
         )
@@ -217,15 +252,19 @@ impl<PatchData: Debug + PerPatchData> Debug for BsdfMeasurementDataPoint<PatchDa
     }
 }
 
+impl<PatchData: PerPatchData + PartialEq> PartialEq for BsdfMeasurementDataPoint<PatchData> {
+    fn eq(&self, other: &Self) -> bool { self.stats == other.stats && self.data == other.data }
+}
+
 /// Measures the BSDF of a surface using geometric ray tracing methods.
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
-    surfaces: &[Handle<MicroSurface>],
+    handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
     cache: &Cache,
-) -> Vec<MeasuredData> {
-    let meshes = cache.get_micro_surface_meshes_by_surfaces(surfaces);
-    let surfaces = cache.get_micro_surfaces(surfaces);
+) -> Vec<MeasurementData> {
+    let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
+    let surfaces = cache.get_micro_surfaces(handles);
     let samples = params.emitter.generate_samples();
     let patches = params.collector.generate_patches();
 
@@ -237,9 +276,9 @@ pub fn measure_bsdf_rt(
             );
             match method {
                 #[cfg(feature = "embree")]
-                RtcMethod::Embree => {
-                    measure_bsdf_embree_rt(params, &surfaces, &meshes, samples, patches, cache)
-                }
+                RtcMethod::Embree => measure_bsdf_embree_rt(
+                    params, handles, &surfaces, &meshes, samples, patches, cache,
+                ),
                 #[cfg(feature = "optix")]
                 RtcMethod::Optix => {
                     measure_bsdf_optix_rt(params, &surfaces, &meshes, samples, patches, cache)
@@ -264,16 +303,18 @@ pub fn measure_bsdf_rt(
 #[cfg(feature = "embree")]
 fn measure_bsdf_embree_rt(
     params: BsdfMeasurementParams,
+    handles: &[Handle<MicroSurface>],
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
     samples: EmitterSamples,
     patches: CollectorPatches,
     cache: &Cache,
-) -> Vec<MeasuredData> {
-    surfaces
+) -> Vec<MeasurementData> {
+    handles
         .iter()
+        .zip(surfaces.iter())
         .zip(meshes)
-        .filter_map(|(surf, mesh)| {
+        .filter_map(|((hdl, surf), mesh)| {
             if surf.is_none() || mesh.is_none() {
                 log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
                 return None;
@@ -284,9 +325,13 @@ fn measure_bsdf_embree_rt(
                 "Measuring surface {}",
                 surface.path.as_ref().unwrap().display()
             );
-            Some(MeasuredData::Bsdf(embr::measure_bsdf(
-                &params, mesh, &samples, &patches, cache,
-            )))
+            Some(MeasurementData {
+                name: surface.file_stem().unwrap().to_owned(),
+                source: MeasurementDataSource::Measured(*hdl),
+                measured: MeasuredData::Bsdf(embr::measure_bsdf(
+                    &params, mesh, &samples, &patches, cache,
+                )),
+            })
         })
         .collect()
 }
@@ -299,7 +344,7 @@ fn measure_bsdf_grid_rt(
     samples: EmitterSamples,
     patches: CollectorPatches,
     cache: &Cache,
-) -> Vec<MeasuredData> {
+) -> Vec<MeasurementData> {
     for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
@@ -330,7 +375,7 @@ fn measure_bsdf_optix_rt(
     _samples: EmitterSamples,
     _patches: CollectorPatches,
     _cache: &Cache,
-) -> Vec<MeasuredData> {
+) -> Vec<MeasurementData> {
     todo!()
 }
 
@@ -452,3 +497,17 @@ fn measure_bsdf_optix_rt(
 //         record
 //     }
 // }
+
+#[test]
+fn test_bsdf_measurement_stats_point() {
+    assert_eq!(
+        BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 10),
+        388,
+        "Size of stats point is incorrect."
+    );
+    assert_eq!(
+        BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 100),
+        3268,
+        "Size of stats point is incorrect."
+    );
+}
