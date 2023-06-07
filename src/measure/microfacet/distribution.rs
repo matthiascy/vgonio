@@ -27,12 +27,6 @@ pub struct MeasuredMadfData {
     pub samples: Vec<f32>,
 }
 
-impl MeasuredMadfData {
-    pub fn expected_samples_count(&self) -> usize {
-        self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped()
-    }
-}
-
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
     params: MadfMeasurementParams,

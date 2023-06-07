@@ -11,8 +11,8 @@ use crate::{
     measure::{
         self,
         measurement::{
-            BsdfMeasurementParams, MadfMeasurementParams, MeasuredData, Measurement,
-            MeasurementData, MeasurementKind, MeasurementKindDescription, MmsfMeasurementParams,
+            BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementData,
+            MeasurementKind, MeasurementKindDescription, MmsfMeasurementParams,
         },
         CollectorScheme,
     },

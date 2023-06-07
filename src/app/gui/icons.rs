@@ -19,6 +19,7 @@ impl Icon {
         include_bytes!("assets/icons/vgonio_menu_dark.png"),
     );
 
+    #[allow(dead_code)]
     pub const BOTTOM_PANEL_TOGGLE: Icon = Icon::new(
         "bottom_panel_toggle",
         include_bytes!("assets/icons/bottom_panel_toggle.png"),

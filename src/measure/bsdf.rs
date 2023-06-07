@@ -41,15 +41,6 @@ pub struct MeasuredBsdfData {
     pub samples: Vec<BsdfMeasurementDataPoint<BounceAndEnergy>>,
 }
 
-impl MeasuredBsdfData {
-    /// Returns the expected count of measured samples.
-    /// It's related to emitter's positions.
-    pub fn expected_samples_count(&self) -> usize {
-        self.params.emitter.azimuth.step_count_wrapped()
-            * self.params.emitter.zenith.step_count_wrapped()
-    }
-}
-
 /// Type of the BSDF to be measured.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

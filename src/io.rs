@@ -402,7 +402,7 @@ use crate::{
     error::Error,
     measure::{
         bsdf::MeasuredBsdfData,
-        measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
+        measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
         microfacet::{MeasuredMadfData, MeasuredMmsfData},
     },
     msurf::MicroSurface,
@@ -523,7 +523,7 @@ pub mod vgmo {
     use crate::{
         measure::{
             bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            collector::{BounceAndEnergy, PerPatchData},
+            collector::BounceAndEnergy,
             emitter::RegionShape,
             measurement::{
                 BsdfMeasurementParams, MadfMeasurementParams, MeasurementKind,
@@ -1451,7 +1451,6 @@ pub mod vgmo {
             let size = Self::calc_size_in_bytes(n_wavelength, bounces, collector_sample_count);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
-            println!("size: {} =? buf_len: {}", size, buf.len());
             let stats_size = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
             let stats = BsdfMeasurementStatsPoint::read_from_buf(
                 &buf[0..stats_size],
@@ -1467,13 +1466,6 @@ pub mod vgmo {
                     let offset = stats_size
                         + i * n_wavelength * bounce_and_energy_size
                         + j * bounce_and_energy_size;
-                    println!(
-                        "i = {}, j = {}, offset: {} ~ {}",
-                        i,
-                        j,
-                        offset,
-                        offset + bounce_and_energy_size
-                    );
                     let bounce_and_energy = BounceAndEnergy::read_from_buf(
                         &buf[offset..offset + bounce_and_energy_size],
                         bounces,
@@ -1532,7 +1524,7 @@ pub mod vgmo {
 
             match meta.encoding {
                 FileEncoding::Ascii => {
-                    todo!()
+                    todo!("Ascii encoding is not supported yet")
                 }
                 FileEncoding::Binary => {
                     let n_wavelength = params.emitter.spectrum.step_count();
@@ -1582,7 +1574,7 @@ pub mod vgmo {
 
             match encoding {
                 FileEncoding::Ascii => {
-                    todo!()
+                    todo!("Ascii encoding is not supported yet")
                 }
                 FileEncoding::Binary => {
                     for sample in &self.samples {
@@ -1675,7 +1667,7 @@ pub mod vgmo {
                 MeasuredData::Madf(adf) => {
                     assert_eq!(
                         adf.samples.len(),
-                        adf.expected_samples_count(),
+                        adf.params.samples_count(),
                         "Writing a ADF requires the number of samples to match the number of bins."
                     );
                     Header::Madf {
@@ -1690,7 +1682,7 @@ pub mod vgmo {
                 MeasuredData::Mmsf(msf) => {
                     assert_eq!(
                         msf.samples.len(),
-                        msf.expected_samples_count(),
+                        msf.params.samples_count(),
                         "Writing a MSF requires the number of samples to match the number of bins."
                     );
                     Header::Mmsf {
@@ -1705,7 +1697,7 @@ pub mod vgmo {
                 MeasuredData::Bsdf(bsdf) => {
                     assert_eq!(
                         bsdf.samples.len(),
-                        bsdf.expected_samples_count(),
+                        bsdf.params.bsdf_data_samples_count(),
                         "Writing a BSDF requires the number of samples to match the number of \
                          bins."
                     );

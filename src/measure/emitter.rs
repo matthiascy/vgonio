@@ -127,7 +127,7 @@ impl RegionShape {
 
     pub fn azimuth(&self) -> (Radians, Radians) {
         match self {
-            Self::SphericalCap { zenith } => (radians!(0.0), radians!(2.0 * std::f32::consts::PI)),
+            Self::SphericalCap { .. } => (radians!(0.0), radians!(2.0 * std::f32::consts::PI)),
             Self::SphericalRect { azimuth, .. } => *azimuth,
         }
     }
@@ -168,6 +168,14 @@ impl Emitter {
 
     /// Updates the radius of the emitter.
     pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
+
+    /// Returns the number of measured BSDF samples. Each sample is a
+    /// measurement of the BSDF at a specific position of the emitter; it
+    /// contains the measured value for each wavelength for each collector
+    /// position.
+    pub fn bsdf_data_samples_count(&self) -> usize {
+        self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
+    }
 
     /// All possible measurement positions of the emitter.
     pub fn meas_points(&self) -> Vec<SphericalCoord> {

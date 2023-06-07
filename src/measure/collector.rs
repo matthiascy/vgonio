@@ -441,7 +441,7 @@ impl Collector {
                 for (i, bounce) in dirs.iter() {
                     let ray_energy = &ray_energy_per_wavelength
                         .iter()
-                        .find(|(j, energy)| *j == *i)
+                        .find(|(j, _)| *j == *i)
                         .unwrap()
                         .1;
                     for (lambda_idx, energy) in ray_energy.iter().enumerate() {

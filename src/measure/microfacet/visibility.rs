@@ -1342,13 +1342,6 @@ pub struct MeasuredMmsfData {
     pub samples: Vec<f32>,
 }
 
-impl MeasuredMmsfData {
-    /// Returns the number of measurement bins.
-    pub fn expected_samples_count(&self) -> usize {
-        (self.params.azimuth.step_count_wrapped() * self.params.zenith.step_count_wrapped()).pow(2)
-    }
-}
-
 /// Measurement of microfacet shadowing and masking function.
 pub fn measure_masking_shadowing(
     desc: MmsfMeasurementParams,

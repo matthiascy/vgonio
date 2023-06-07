@@ -4,8 +4,6 @@ use crate::{
         cache::{Asset, Handle},
         gui::{Plottable, PlottingMode},
     },
-    io,
-    io::vgmo::Header,
     measure::{
         bsdf::{BsdfKind, MeasuredBsdfData},
         collector::CollectorScheme,
@@ -23,7 +21,7 @@ use std::{
     any::Any,
     fmt::{Display, Formatter},
     fs::File,
-    hash::{Hash, Hasher},
+    hash::Hash,
     io::BufReader,
     path::{Path, PathBuf},
 };
@@ -67,7 +65,7 @@ impl Radius {
         }
     }
 
-    /// Get the radius value without the unit.
+    /// Get the radius value.
     pub fn value(&self) -> Millimetres {
         match self {
             Radius::Auto(value) => *value,
@@ -75,6 +73,7 @@ impl Radius {
         }
     }
 
+    /// Get a mutable reference to the radius value.
     pub fn value_mut(&mut self) -> &mut Millimetres {
         match self {
             Radius::Auto(value) => value,
@@ -198,6 +197,9 @@ impl Default for BsdfMeasurementParams {
 }
 
 impl BsdfMeasurementParams {
+    /// Returns the number of samples for the emitter.
+    pub fn bsdf_data_samples_count(&self) -> usize { self.emitter.bsdf_data_samples_count() }
+
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, Error> {
         log::info!("Validating measurement description...");
@@ -676,12 +678,13 @@ impl MeasuredData {
         }
     }
 
+    // TODO: to be removed
     /// Returns the samples of the measurement data.
     pub fn samples(&self) -> &[f32] {
         match self {
             MeasuredData::Madf(madf) => &madf.samples,
             MeasuredData::Mmsf(mmsf) => &mmsf.samples,
-            MeasuredData::Bsdf(bsdf) => todo!("implement this"),
+            MeasuredData::Bsdf(_bsdf) => todo!("implement this"),
         }
     }
 }
