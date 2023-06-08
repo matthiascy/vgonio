@@ -1,9 +1,6 @@
 //! Measurement parameters.
 use crate::{
-    app::{
-        cache::{Asset, Handle},
-        gui::{Plottable, PlottingMode},
-    },
+    app::cache::{Asset, Handle},
     measure::{
         bsdf::{BsdfKind, MeasuredBsdfData},
         collector::CollectorScheme,
@@ -704,20 +701,6 @@ pub struct MeasurementData {
 }
 
 impl Asset for MeasurementData {}
-
-impl Plottable for MeasurementData {
-    fn mode(&self) -> PlottingMode {
-        match self.kind() {
-            MeasurementKind::Bsdf => PlottingMode::Bsdf,
-            MeasurementKind::MicrofacetAreaDistribution => PlottingMode::Adf,
-            MeasurementKind::MicrofacetMaskingShadowing => PlottingMode::Msf,
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-}
 
 impl MeasurementData {
     /// Returns the kind of the measurement data.

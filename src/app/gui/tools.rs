@@ -17,7 +17,7 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::{app::cache::Cache, measure::rtc::grid::MultilevelGrid};
 pub(crate) use debugging::DebuggingInspector;
-pub(crate) use plotting::PlottingInspector;
+pub(crate) use plotting::*;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
 
@@ -77,7 +77,6 @@ impl Tools {
             windows: vec![
                 Box::<Scratch>::default(),
                 Box::new(DebuggingInspector::new(event_loop.clone(), toasts, cache)),
-                Box::new(PlottingInspector::new("Graph".to_string(), Rc::new(()))),
                 Box::new(SamplingInspector::new(
                     gpu,
                     gui,

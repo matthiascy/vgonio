@@ -544,9 +544,6 @@ impl VgonioUi {
                 if ui.button("Scratch").clicked() {
                     self.tools.toggle::<Scratch>();
                 }
-                if ui.button("\u{1F5E0} Plotting").clicked() {
-                    self.tools.toggle::<PlottingInspector>();
-                }
                 if ui.button("\u{1F41B} Debugging").clicked() {
                     self.tools.toggle::<DebuggingInspector>();
                 }

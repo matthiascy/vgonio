@@ -1,9 +1,12 @@
 use crate::{
     app::{
         cache::{Cache, Handle},
-        gui::tools::{PlottingInspector, Tool},
+        gui::tools::{
+            BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls, PlottingInspector,
+            PlottingWidget, Tool,
+        },
     },
-    measure::measurement::{MeasurementData, MeasurementDataSource, MeasurementKind},
+    measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
     msurf::MicroSurface,
     units::LengthUnit,
 };
@@ -38,7 +41,7 @@ pub struct Outliner {
     /// States of the measured data.
     measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
     /// Plotting inspectors, linked to the measurement data they are inspecting.
-    plotting_inspectors: Vec<(Weak<MeasurementData>, PlottingInspector)>,
+    plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
 }
 
 impl Default for Outliner {
@@ -115,6 +118,16 @@ impl Outliner {
     }
 }
 
+fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool) {
+    ui.vertical_centered_justified(|ui| {
+        ui.horizontal(|ui| {
+            if ui.selectable_label(*selected, name).clicked() {
+                *selected = !*selected;
+            }
+        })
+    });
+}
+
 pub struct SurfaceCollapsableHeader {
     selected: bool,
 }
@@ -124,13 +137,7 @@ impl SurfaceCollapsableHeader {
         let id = ui.make_persistent_id(&state.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                ui.vertical_centered_justified(|ui| {
-                    ui.horizontal(|ui| {
-                        if ui.selectable_label(self.selected, &state.name).clicked() {
-                            self.selected = !self.selected;
-                        }
-                    })
-                });
+                header_content(ui, &state.name, &mut self.selected);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.checkbox(&mut state.visible, "");
                 })
@@ -202,19 +209,13 @@ impl MeasuredDataCollapsableHeader {
         &mut self,
         ui: &mut egui::Ui,
         data: Weak<MeasurementData>,
-        plots: &mut Vec<(Weak<MeasurementData>, PlottingInspector)>,
+        plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
     ) {
         let measured = data.upgrade().unwrap();
         let id = ui.make_persistent_id(&measured.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                ui.vertical_centered_justified(|ui| {
-                    ui.horizontal(|ui| {
-                        if ui.selectable_label(self.selected, &measured.name).clicked() {
-                            self.selected = !self.selected;
-                        }
-                    })
-                });
+                header_content(ui, &measured.name, &mut self.selected);
             })
             .body(|ui| {
                 let measurement_kind = measured.kind();
@@ -274,10 +275,38 @@ impl MeasuredDataCollapsableHeader {
                 if ui.button("Plot").clicked() {
                     self.show_plot = true;
                     if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
-                        plots.push((
-                            data.clone(),
-                            PlottingInspector::new(measured.name.clone(), measured.clone()),
-                        ));
+                        match &measured.measured {
+                            MeasuredData::Madf(_) => {
+                                plots.push((
+                                    data.clone(),
+                                    Box::new(PlottingInspector::new(
+                                        measured.name.clone(),
+                                        measured.clone(),
+                                        MadfPlottingControls::default(),
+                                    )),
+                                ));
+                            }
+                            MeasuredData::Mmsf(_) => {
+                                plots.push((
+                                    data.clone(),
+                                    Box::new(PlottingInspector::new(
+                                        measured.name.clone(),
+                                        measured.clone(),
+                                        MmsfPlottingControls::default(),
+                                    )),
+                                ));
+                            }
+                            MeasuredData::Bsdf(_) => {
+                                plots.push((
+                                    data.clone(),
+                                    Box::new(PlottingInspector::new(
+                                        measured.name.clone(),
+                                        measured.clone(),
+                                        BsdfPlottingControls::default(),
+                                    )),
+                                ));
+                            }
+                        }
                     }
                 }
             });

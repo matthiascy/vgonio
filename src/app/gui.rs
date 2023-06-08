@@ -1377,22 +1377,3 @@ impl MicroSurfaceUniforms {
         }
     }
 }
-
-pub enum PlottingMode {
-    None,
-    Adf,
-    Bsdf,
-    Msf,
-}
-
-pub trait Plottable {
-    fn mode(&self) -> PlottingMode { PlottingMode::None }
-    fn as_any(&self) -> &dyn std::any::Any;
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
-}
-
-impl Plottable for () {
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-}

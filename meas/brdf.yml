@@ -22,5 +22,5 @@ type: !bsdf
         azimuth: 0rad .. 360deg / 120 deg
 surfaces:
   # - usr://surfaces/aluminium65bar100.vgms
-  # - usr://surfaces/8x8_flat.vgms
-  - usr://surfaces/generated/8x8_flat.txt
+  - usr://surfaces/8x8_flat.vgms
+  # - usr://surfaces/generated/8x8_flat.txt
