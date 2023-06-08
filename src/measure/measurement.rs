@@ -655,22 +655,43 @@ impl MeasuredData {
         }
     }
 
+    pub fn bsdf_data(&self) -> Option<&MeasuredBsdfData> {
+        match self {
+            MeasuredData::Bsdf(bsdf) => Some(bsdf),
+            _ => None,
+        }
+    }
+
+    pub fn madf_data(&self) -> Option<&MeasuredMadfData> {
+        match self {
+            MeasuredData::Madf(madf) => Some(madf),
+            _ => None,
+        }
+    }
+
+    pub fn mmsf_data(&self) -> Option<&MeasuredMmsfData> {
+        match self {
+            MeasuredData::Mmsf(mmsf) => Some(mmsf),
+            _ => None,
+        }
+    }
+
     /// Returns the zenith range of the measurement data if it is a MADF or
     /// MMSF.
-    pub fn madf_or_mmsf_zenith(&self) -> Option<&RangeByStepSizeInclusive<Radians>> {
+    pub fn madf_or_mmsf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Madf(madf) => Some(&madf.params.zenith),
-            MeasuredData::Mmsf(mmsf) => Some(&mmsf.params.zenith),
+            MeasuredData::Madf(madf) => Some(madf.params.zenith),
+            MeasuredData::Mmsf(mmsf) => Some(mmsf.params.zenith),
             MeasuredData::Bsdf(_) => None,
         }
     }
 
     /// Returns the azimuth range of the measurement data if it is a MADF or
     /// MMSF.
-    pub fn madf_or_mmsf_azimuth(&self) -> Option<&RangeByStepSizeInclusive<Radians>> {
+    pub fn madf_or_mmsf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Madf(madf) => Some(&madf.params.azimuth),
-            MeasuredData::Mmsf(mmsf) => Some(&mmsf.params.azimuth),
+            MeasuredData::Madf(madf) => Some(madf.params.azimuth),
+            MeasuredData::Mmsf(mmsf) => Some(mmsf.params.azimuth),
             MeasuredData::Bsdf(_) => None,
         }
     }
@@ -714,7 +735,7 @@ impl MeasurementData {
     /// data slice for the azimuthal angle that is 180 degrees away from
     /// the given azimuthal angle, if exists.
     ///
-    /// Azimuthal angle will be wrapped around to the range [0, 2π].
+    /// Azimuthal angle will be wrapped around to the range [0, 2π).
     ///
     /// 2π will be mapped to 0.
     ///

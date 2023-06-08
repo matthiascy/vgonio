@@ -1,7 +1,7 @@
 use crate::{
     math::NumericCast,
     ulp_eq,
-    units::{Angle, AngleUnit, Radians},
+    units::{Angle, AngleUnit, Length, LengthMeasurement, Nanometres, Radians},
 };
 use approx::AbsDiffEq;
 use serde::{Deserialize, Serialize};
@@ -554,7 +554,7 @@ impl_range_by_step_count_sub_types!(
 
 impl<T> RangeByStepCountInclusive<T>
 where
-    T: NumericCast<f32> + Copy + Clone + Sub<Output = T>,
+    T: ~const NumericCast<f32> + Copy + Clone + Sub<Output = T>,
     f32: NumericCast<T>,
 {
     /// Returns the step size of this range.
@@ -1029,6 +1029,25 @@ impl_range_by_step!(
     RangeByStepSize<T>, size, T, #[doc = "Returns the step size of the range."]
 );
 
+impl<T> From<RangeByStepCountInclusive<T>> for RangeByStepSizeInclusive<T>
+where
+    T: NumericCast<f32> + Copy + Clone + Sub<Output = T>,
+    f32: NumericCast<T>,
+{
+    fn from(range: RangeByStepCountInclusive<T>) -> Self {
+        Self::new(range.start, range.stop, range.step_size())
+    }
+}
+
+impl<T> From<RangeByStepSizeInclusive<T>> for RangeByStepCountInclusive<T>
+where
+    T: ~const NumericCast<f32> + Copy + Clone,
+{
+    fn from(value: RangeByStepSizeInclusive<T>) -> Self {
+        Self::new(value.start, value.stop, value.step_count())
+    }
+}
+
 #[cfg(test)]
 mod range_by_step_count_tests {
     use super::*;
@@ -1083,6 +1102,13 @@ mod range_by_step_count_tests {
 
         let range = RangeByStepCountExclusive::new(1.0, 13.0, 8);
         assert_eq!(range.step_size(), 1.5);
+    }
+
+    #[test]
+    fn test_conversion() {
+        let range = RangeByStepCountInclusive::new(0, 10, 3);
+        let range: RangeByStepSizeInclusive<i32> = range.into();
+        assert_eq!(range, RangeByStepSizeInclusive::new(0, 10, 5));
     }
 }
 
