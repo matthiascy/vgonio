@@ -141,7 +141,7 @@ pub struct BsdfMeasurementStatsPoint {
     /// Number of emitted rays captured by the collector.
     pub n_captured: PerWavelength<u32>,
     /// Energy captured by the collector; variant over wavelength.
-    pub captured_energy: PerWavelength<f32>,
+    pub e_captured: PerWavelength<f32>,
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength.
     pub num_rays_per_bounce: PerWavelength<Vec<u32>>,
@@ -156,7 +156,7 @@ impl PartialEq for BsdfMeasurementStatsPoint {
             && self.n_absorbed == other.n_absorbed
             && self.n_reflected == other.n_reflected
             && self.n_captured == other.n_captured
-            && self.captured_energy == other.captured_energy
+            && self.e_captured == other.e_captured
             && self.num_rays_per_bounce == other.num_rays_per_bounce
             && self.energy_per_bounce == other.energy_per_bounce
     }
@@ -174,7 +174,7 @@ impl BsdfMeasurementStatsPoint {
             n_absorbed: PerWavelength(vec![0; n_wavelengths]),
             n_reflected: PerWavelength(vec![0; n_wavelengths]),
             n_captured: PerWavelength(vec![0; n_wavelengths]),
-            captured_energy: PerWavelength(vec![0.0; n_wavelengths]),
+            e_captured: PerWavelength(vec![0.0; n_wavelengths]),
             num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
             energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
         }
@@ -208,7 +208,7 @@ impl Debug for BsdfMeasurementStatsPoint {
             self.n_absorbed,
             self.n_reflected,
             self.n_captured,
-            self.captured_energy,
+            self.e_captured,
             self.num_rays_per_bounce,
             self.energy_per_bounce
         )

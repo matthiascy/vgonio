@@ -1295,7 +1295,7 @@ pub mod vgmo {
             self.n_captured
                 .write_to_buf(&mut buf[offset..offset + n_wavelength * 4]);
             offset += n_wavelength * 4;
-            self.captured_energy
+            self.e_captured
                 .write_to_buf(&mut buf[offset..offset + n_wavelength * 4]);
             offset += n_wavelength * 4;
             for i in 0..n_wavelength {
@@ -1375,7 +1375,7 @@ pub mod vgmo {
                 n_absorbed,
                 n_reflected,
                 n_captured,
-                captured_energy,
+                e_captured: captured_energy,
                 num_rays_per_bounce: PerWavelength(num_rays_per_bounce),
                 energy_per_bounce: PerWavelength(energy_per_bounce),
             })
@@ -2035,7 +2035,7 @@ mod tests {
             n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
             n_reflected: PerWavelength(vec![5, 6, 7, 8]),
             n_captured: PerWavelength(vec![9, 10, 11, 12]),
-            captured_energy: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
+            e_captured: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
             num_rays_per_bounce: PerWavelength(vec![
                 vec![17, 18, 19],
                 vec![22, 23, 24],
@@ -2081,7 +2081,7 @@ mod tests {
                 n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
                 n_reflected: PerWavelength(vec![5, 6, 7, 8]),
                 n_captured: PerWavelength(vec![9, 10, 11, 12]),
-                captured_energy: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
+                e_captured: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
                 num_rays_per_bounce: PerWavelength(vec![
                     vec![17, 18, 19],
                     vec![22, 23, 24],

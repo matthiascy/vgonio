@@ -5,10 +5,10 @@ type: !bsdf
   incident_medium: air
   transmitted_medium: aluminium
   emitter:
-    num_rays: 1000
+    num_rays: 10000
     max_bounces: 10
     radius: auto
-    zenith: 0deg .. =90deg / 90deg
+    zenith: 0deg .. =90deg / 15deg
     azimuth: 0deg .. =360deg / 360deg
     shape: !cap
       zenith: 10deg
@@ -21,6 +21,6 @@ type: !bsdf
         zenith: 0 rad .. 90 deg / 30 deg
         azimuth: 0rad .. 360deg / 120 deg
 surfaces:
-  # - usr://surfaces/aluminium65bar100.vgms
-  - usr://surfaces/8x8_flat.vgms
+  - usr://surfaces/aluminium65bar100.vgms
+  # - usr://surfaces/8x8_flat.vgms
   # - usr://surfaces/generated/8x8_flat.txt

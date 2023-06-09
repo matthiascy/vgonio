@@ -28,7 +28,9 @@ pub trait PlottingWidget {
             .open(open)
             .resizable(true)
             .show(ctx, |ui| {
+                // egui::ScrollArea::new([false, true]).show(ui, |ui| {
                 self.ui(ui);
+                // });
             });
     }
 }
@@ -532,10 +534,6 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
         });
         let is_3d = self.controls.mode == BsdfPlotMode::Slice3D;
 
-        if !is_3d {
-            self.plot_type_ui(ui);
-        }
-
         let bsdf_data = self.data.measured.bsdf_data().unwrap();
         let zenith_i = bsdf_data.params.emitter.zenith;
         let azimuth_i = bsdf_data.params.emitter.azimuth;
@@ -617,17 +615,22 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
         }
 
         let zenith_i_count = zenith_i.step_count_wrapped();
+        let zenith_i_idx = zenith_i.index_of(self.controls.zenith_i);
         let azimuth_i_idx = azimuth_i.index_of(self.controls.azimuth_i);
-        let bsdf_data_point = &bsdf_data.samples[azimuth_i_idx * zenith_i_count];
+        let data_point = &bsdf_data.samples[azimuth_i_idx * zenith_i_count + zenith_i_idx];
         let spectrum = bsdf_data.params.emitter.spectrum;
         let wavelengths = spectrum
             .values()
             .map(|w| w.value / 100.0)
             .collect::<Vec<_>>();
         let num_rays = bsdf_data.params.emitter.num_rays;
-        let max_bounces = bsdf_data.params.emitter.max_bounces;
 
-        let per_wavelength_plot = Plot::new("num_rays_per_wavelength_plot")
+        // Figure of per wavelength plot, it contains:
+        // - the number of absorbed rays per wavelength
+        // - the number of reflected rays per wavelength
+        // - the number of captured rays per wavelength
+        // - the number of captured energy per wavelength
+        let per_wavelength_plot = Plot::new("per_wavelength_plot")
             .center_y_axis(false)
             .data_aspect(1.0)
             .legend(
@@ -640,17 +643,24 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 let mut marks = vec![];
                 let (min, max) = input.bounds;
                 let min = min as u32;
-                let max = max as u32;
-                for i in min..=max {
-                    let step_size = if i % 2 == 0 {
-                        2.0
-                    } else if i % 1 == 0 {
-                        1.0
-                    } else {
-                        continue;
-                    };
+                let n = max as u32 - min;
+                for i in 0..=n * 2 {
                     marks.push(GridMark {
-                        value: i as f64,
+                        value: i as f64 * 0.5 + min as f64,
+                        step_size: 0.5,
+                    })
+                }
+                marks
+            })
+            .y_grid_spacer(move |input| {
+                let mut marks = vec![];
+                let (min, max) = input.bounds;
+                let min = min as u32 * 10;
+                let max = max as u32 * 10;
+                for i in min..=max {
+                    let step_size = if i % 2 == 0 { 0.2 } else { continue };
+                    marks.push(GridMark {
+                        value: i as f64 * 0.1,
                         step_size,
                     })
                 }
@@ -663,16 +673,25 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 CoordinatesFormatter::new(move |p, _| format!("λ = {:.0}nm", p.x * 100.0,)),
             )
             .label_formatter(move |name, value| {
-                format!(
-                    "{}: λ = {:.0}, n = {:.0})",
-                    name,
-                    value.x * 100.0,
-                    value.y * num_rays as f64
-                )
+                if name.starts_with("E") {
+                    format!(
+                        "{}: λ = {:.0}, e = {:.2}%)",
+                        name,
+                        value.x * 100.0,
+                        value.y * 100.0
+                    )
+                } else {
+                    format!(
+                        "{}: λ = {:.0}, n = {:.0})",
+                        name,
+                        value.x * 100.0,
+                        value.y * num_rays as f64
+                    )
+                }
             })
-            .min_size(Vec2::new(400.0, 220.0));
+            .min_size(Vec2::new(400.0, 240.0));
 
-        let per_bounce_plot = Plot::new("num_rays_per_bounce")
+        let per_bounce_plot = Plot::new("per_bounce_plot")
             .center_y_axis(false)
             .data_aspect(2.5)
             .legend(
@@ -711,25 +730,26 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 }
                 marks
             })
-            .min_size(Vec2::new(400.0, 220.0));
+            .min_size(Vec2::new(400.0, 240.0));
 
+        // Figure of bsdf measurement statistics
         egui::CollapsingHeader::new("Stats")
             .default_open(true)
             .show(ui, |ui| {
                 egui::Grid::new("stats_grid").num_columns(2).show(ui, |ui| {
                     ui.label("Received rays:");
-                    ui.label(format!("{}", bsdf_data_point.stats.n_received))
+                    ui.label(format!("{}", data_point.stats.n_received))
                         .on_hover_text(
                             "Number of emitted rays that hit the surface; invariant over \
                              wavelength",
                         );
                     ui.end_row();
 
-                    ui.label("Ray Count: ");
+                    ui.label("Per Wavelength: ");
                     let n_reflected = wavelengths
                         .iter()
                         .zip(
-                            bsdf_data_point
+                            data_point
                                 .stats
                                 .n_reflected
                                 .iter()
@@ -741,7 +761,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     let n_absorbed = wavelengths
                         .iter()
                         .zip(
-                            bsdf_data_point
+                            data_point
                                 .stats
                                 .n_absorbed
                                 .iter()
@@ -753,7 +773,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     let n_captured = wavelengths
                         .iter()
                         .zip(
-                            bsdf_data_point
+                            data_point
                                 .stats
                                 .n_captured
                                 .iter()
@@ -762,39 +782,60 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                         .map(|(s, n)| [*s as f64, n])
                         .collect::<Vec<_>>();
 
+                    // Calculate the captured energy per wavelength by dividing the captured energy
+                    // by the number of captured rays per wavelength
+                    let e_captured = wavelengths
+                        .iter()
+                        .zip(data_point.stats.e_captured.iter())
+                        .zip(data_point.stats.n_captured.iter())
+                        .map(|((l, e), n)| [*l as f64, *e as f64 / *n as f64])
+                        .collect::<Vec<_>>();
+
                     per_wavelength_plot.show(ui, |plot_ui| {
-                        plot_ui.line(Line::new(n_captured.clone()).name("Captured").width(2.0));
+                        plot_ui.line(Line::new(n_captured.clone()).name("Nº Captured").width(2.0));
                         plot_ui.points(
                             Points::new(n_captured)
-                                .shape(MarkerShape::Cross)
+                                .shape(MarkerShape::Circle)
                                 .radius(4.0)
-                                .name("Captured"),
+                                .name("Nº Captured"),
                         );
 
-                        plot_ui.line(Line::new(n_absorbed.clone()).name("Absorbed").width(2.0));
+                        plot_ui.line(Line::new(n_absorbed.clone()).name("Nº Absorbed").width(2.0));
                         plot_ui.points(
                             Points::new(n_absorbed)
                                 .shape(MarkerShape::Diamond)
                                 .radius(4.0)
-                                .name("Absorbed"),
+                                .name("Nº Absorbed"),
                         );
 
-                        plot_ui.line(Line::new(n_reflected.clone()).name("Reflected").width(2.0));
+                        plot_ui.line(
+                            Line::new(n_reflected.clone())
+                                .name("Nº Reflected")
+                                .width(2.0),
+                        );
                         plot_ui.points(
                             Points::new(n_reflected)
                                 .shape(MarkerShape::Square)
                                 .radius(4.0)
-                                .name("Reflected"),
+                                .name("Nº Reflected"),
+                        );
+
+                        plot_ui.line(Line::new(e_captured.clone()).name("E Captured").width(2.0));
+                        plot_ui.points(
+                            Points::new(e_captured)
+                                .shape(MarkerShape::Cross)
+                                .radius(4.0)
+                                .name("E Captured"),
                         );
                     });
                     ui.end_row();
 
-                    ui.label("Ray Bounces:");
-                    let bar_charts = bsdf_data_point
+                    ui.label("Per Bounce:");
+                    let num_rays_bar_charts = data_point
                         .stats
                         .num_rays_per_bounce
                         .iter()
-                        .zip(bsdf_data_point.stats.n_reflected.iter())
+                        .zip(data_point.stats.n_reflected.iter())
                         .zip(wavelengths.iter())
                         .map(|((per_bounce_data, total), lambda)| {
                             BarChart::new(
@@ -809,24 +850,66 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                                     })
                                     .collect(),
                             )
-                            .name(format!("λ = {}", lambda))
+                            .name(format!("Nº of rays, λ = {}", lambda))
                             .element_formatter(Box::new(
                                 |bar, chart| -> String {
-                                    format!("{:.0}%", (bar.value / 2.0) * 100.0)
+                                    format!(
+                                        "bounce = {:.0}, number of rays = {:.0}%",
+                                        bar.argument + 0.5,
+                                        (bar.value / 2.0) * 100.0
+                                    )
+                                },
+                            ))
+                        });
+
+                    let energy_bar_charts = data_point
+                        .stats
+                        .energy_per_bounce
+                        .iter()
+                        .zip(data_point.stats.e_captured.iter())
+                        .zip(wavelengths.iter())
+                        .map(|((energy_per_bounce, total), lambda)| {
+                            BarChart::new(
+                                energy_per_bounce
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, e)| {
+                                        // Center the bar on the bounce number
+                                        // and scale the percentage to the range [0, 2]
+                                        Bar::new(i as f64 + 0.5, (*e as f64 / *total as f64) * 2.0)
+                                            .width(1.0)
+                                    })
+                                    .collect(),
+                            )
+                            .name(format!("Energy, λ = {}", lambda))
+                            .element_formatter(Box::new(
+                                |bar, chart| -> String {
+                                    format!(
+                                        "bounce = {:.0}, energy = {:.0}%",
+                                        bar.argument + 0.5,
+                                        (bar.value / 2.0) * 100.0
+                                    )
                                 },
                             ))
                         });
 
                     per_bounce_plot.show(ui, |plot_ui| {
-                        for bar_chart in bar_charts {
+                        for bar_chart in num_rays_bar_charts {
+                            plot_ui.bar_chart(bar_chart);
+                        }
+                        for bar_chart in energy_bar_charts {
                             plot_ui.bar_chart(bar_chart);
                         }
                     });
                     ui.end_row();
-
-                    ui.label("Ray Energy:");
-                    ui.end_row();
                 });
+            });
+
+        // Actual BSDF plot
+        egui::CollapsingHeader::new("BSDF")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.label("BSDF");
             });
     }
 }

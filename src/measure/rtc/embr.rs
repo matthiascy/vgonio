@@ -344,7 +344,7 @@ pub fn measure_bsdf(
             data.push(collected);
         }
         #[cfg(not(debug_assertions))]
-        result.push(
+        data.push(
             params
                 .collector
                 .collect(params, mesh, pos, &trajectories, patches, cache),

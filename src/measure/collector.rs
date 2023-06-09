@@ -457,7 +457,7 @@ impl Collector {
                                 stats.energy_per_bounce[lambda_idx][*bounce - 1] += e;
                             }
                         }
-                        stats.captured_energy[lambda_idx] += energy.energy();
+                        stats.e_captured[lambda_idx] += energy.energy();
                     }
                 }
                 data_per_patch
