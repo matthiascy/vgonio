@@ -1,14 +1,21 @@
+use egui::PointerButton;
+use glam::Vec3;
 use std::{borrow::Cow, sync::Arc};
 
 use wgpu::util::DeviceExt;
 use winit::event_loop::EventLoopProxy;
 
-use crate::app::{
-    gfx::{
-        camera::{Camera, Projection},
-        GpuContext, Texture,
+use crate::{
+    app::{
+        gfx::{
+            camera::{Camera, Projection},
+            GpuContext, Texture,
+        },
+        gui::{state::GuiRenderer, VgonioEvent},
     },
-    gui::{state::GuiRenderer, VgonioEvent},
+    measure,
+    units::deg,
+    Handedness,
 };
 
 use super::Tool;
@@ -21,6 +28,8 @@ use super::Tool;
 /// then displays it on the screen by using directly the texture as an egui
 /// image.
 pub struct SamplingInspector {
+    gpu: Arc<GpuContext>,
+    proj_view_model: glam::Mat4,
     pub color_attachment_id: egui::TextureId,
     pub color_attachment: Texture,
     pub depth_attachment: Texture,
@@ -29,6 +38,7 @@ pub struct SamplingInspector {
     pub pipeline: wgpu::RenderPipeline,
     pub vertex_buffer: wgpu::Buffer,
     pub event_loop: EventLoopProxy<VgonioEvent>,
+    samples: Vec<Vec3>,
     sample_count: u32,
     azimuth_min: f32, // in degrees
     azimuth_max: f32, // in degrees
@@ -40,6 +50,9 @@ impl Tool for SamplingInspector {
     fn name(&self) -> &'static str { "Sampling" }
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
+        self.event_loop
+            .send_event(VgonioEvent::SetSamplingDebuggerRendering(*open))
+            .unwrap();
         egui::Window::new(self.name()).open(open).show(ctx, |ui| {
             self.ui(ui);
         });
@@ -88,15 +101,28 @@ impl Tool for SamplingInspector {
             );
         });
         if ui.button("Unit Sphere").clicked() {
-            self.event_loop
-                .send_event(VgonioEvent::UpdateSamplingDebugger {
-                    count: self.sample_count,
-                    azimuth: (self.azimuth_min, self.azimuth_max),
-                    zenith: (self.zenith_min, self.zenith_max),
-                })
-                .unwrap();
+            self.samples = measure::emitter::uniform_sampling_on_unit_sphere(
+                self.sample_count as usize,
+                deg!(self.zenith_min).into(),
+                deg!(self.zenith_max).into(),
+                deg!(self.azimuth_min).into(),
+                deg!(self.azimuth_max).into(),
+                Handedness::RightHandedYUp,
+            );
         }
-        ui.add(egui::Image::new(self.color_attachment_id, [256.0, 256.0]));
+        let response = ui.add(
+            egui::Image::new(self.color_attachment_id, [256.0, 256.0]).sense(egui::Sense::drag()),
+        );
+        if response.dragged_by(PointerButton::Primary) {
+            let delta = response.drag_delta();
+            self.proj_view_model *= glam::Mat4::from_rotation_y(delta.x / 256.0)
+                * glam::Mat4::from_rotation_x(delta.y / 256.0);
+            self.gpu.queue.write_buffer(
+                &self.uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[self.proj_view_model.to_cols_array()]),
+            );
+        }
     }
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
@@ -108,7 +134,7 @@ struct Vertex([f32; 3]);
 
 impl SamplingInspector {
     pub fn new(
-        gpu: &GpuContext,
+        gpu: Arc<GpuContext>,
         gui: &mut GuiRenderer,
         output_format: wgpu::TextureFormat,
         event_loop: EventLoopProxy<VgonioEvent>,
@@ -119,9 +145,9 @@ impl SamplingInspector {
             glam::Vec3::Y,
         );
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);
-        let proj_mat = projection.matrix(crate::app::gfx::camera::ProjectionKind::Perspective);
-        let view_mat = camera.view_matrix();
-        let matrix = proj_mat * view_mat;
+        let proj_view_model = projection
+            .matrix(crate::app::gfx::camera::ProjectionKind::Perspective)
+            * camera.view_matrix();
         let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sampling-debugger-sampler"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -165,7 +191,7 @@ impl SamplingInspector {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("sampling-debugger-uniform-buffer"),
-                contents: bytemuck::cast_slice(&matrix.to_cols_array()),
+                contents: bytemuck::cast_slice(&proj_view_model.to_cols_array()),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
         let uniform_bind_group_layout =
@@ -259,6 +285,7 @@ impl SamplingInspector {
         });
 
         Self {
+            gpu,
             color_attachment,
             depth_attachment,
             uniform_buffer,
@@ -272,26 +299,24 @@ impl SamplingInspector {
             zenith_min: 0.0,
             zenith_max: 180.0,
             sample_count: 1024,
+            samples: vec![],
+            proj_view_model,
         }
     }
 
-    pub fn record_render_pass(
-        &mut self,
-        gpu: &GpuContext,
-        encoder: &mut wgpu::CommandEncoder,
-        samples: &[glam::Vec3],
-    ) {
-        let count = samples.len() as u32;
+    pub fn record_render_pass(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        let count = self.samples.len() as u32;
         if count as u64 * std::mem::size_of::<Vertex>() as u64 > self.vertex_buffer.size() {
-            self.vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            self.vertex_buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("sampling-debugger-vertex-buffer"),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 size: std::mem::size_of::<Vertex>() as u64 * count as u64,
                 mapped_at_creation: false,
             });
         }
-        gpu.queue
-            .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(samples));
+        self.gpu
+            .queue
+            .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&self.samples));
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("sampling-debugger-render-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -315,5 +340,19 @@ impl SamplingInspector {
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..count, 0..1);
+    }
+
+    pub fn render(&mut self) {
+        if self.samples.is_empty() {
+            return;
+        }
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("sampling-debugger-command-encoder"),
+            });
+        self.record_render_pass(&mut encoder);
+        self.gpu.queue.submit(std::iter::once(encoder.finish()));
     }
 }

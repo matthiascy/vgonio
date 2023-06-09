@@ -110,6 +110,7 @@ pub enum VgonioEvent {
         azimuth: (f32, f32),
         zenith: (f32, f32),
     },
+    SetSamplingDebuggerRendering(bool),
     MeasureAreaDistribution {
         params: MadfMeasurementParams,
         surfaces: Vec<Handle<MicroSurface>>,
@@ -181,7 +182,7 @@ pub fn run(config: Config) -> Result<(), Error> {
 /// Contains all the resources needed for rendering.
 pub struct Context {
     /// GPU context for rendering.
-    gpu: GpuContext,
+    gpu: Arc<GpuContext>,
     /// GUI context for rendering.
     gui: GuiContext,
 }
@@ -534,6 +535,7 @@ impl VgonioGuiApp {
             ..Default::default()
         };
         let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
+        let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
         let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
         let camera = {
@@ -568,7 +570,7 @@ impl VgonioGuiApp {
         let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
-            &gpu_ctx,
+            gpu_ctx.clone(),
             &mut gui_ctx.renderer,
             cache.clone(),
         );
@@ -756,6 +758,14 @@ impl VgonioGuiApp {
         self.input.cursor_delta = [0.0, 0.0];
 
         self.render(window)?;
+
+        if self.dbg_drawing_state.sampling_debug_enabled {
+            self.ui
+                .tools
+                .get_tool_mut::<SamplingInspector>()
+                .unwrap()
+                .render();
+        }
 
         Ok(())
     }
@@ -1113,27 +1123,37 @@ impl VgonioGuiApp {
                 azimuth,
                 zenith,
             } => {
-                let samples = measure::emitter::uniform_sampling_on_unit_sphere(
-                    count as usize,
-                    degrees!(zenith.0).into(),
-                    degrees!(zenith.1).into(),
-                    degrees!(azimuth.0).into(),
-                    degrees!(azimuth.1).into(),
-                    Handedness::RightHandedYUp,
-                );
-                let mut encoder =
-                    self.ctx
-                        .gpu
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Sampling Debugger Encoder"),
-                        });
-                self.ui
-                    .tools
-                    .get_tool_mut::<SamplingInspector>()
-                    .unwrap()
-                    .record_render_pass(&self.ctx.gpu, &mut encoder, &samples);
-                self.ctx.gpu.queue.submit(Some(encoder.finish()));
+                // let samples =
+                // measure::emitter::uniform_sampling_on_unit_sphere(
+                //     count as usize,
+                //     degrees!(zenith.0).into(),
+                //     degrees!(zenith.1).into(),
+                //     degrees!(azimuth.0).into(),
+                //     degrees!(azimuth.1).into(),
+                //     Handedness::RightHandedYUp,
+                // );
+                // let mut encoder =
+                //     self.ctx
+                //         .gpu
+                //         .device
+                //         .create_command_encoder(&
+                // wgpu::CommandEncoderDescriptor {
+                // label: Some("Sampling Debugger Encoder"),
+                //         });
+                // self.ui
+                //     .tools
+                //     .get_tool_mut::<SamplingInspector>()
+                //     .unwrap()
+                //     .record_render_pass(&self.ctx.gpu, &mut encoder,
+                // &samples); self.ctx.gpu.queue.
+                // submit(Some(encoder.finish())); self.ui
+                //     .tools
+                //     .get_tool_mut::<SamplingInspector>()
+                //     .unwrap()
+                //     .render(&self.ctx.gpu, &samples);
+            }
+            VgonioEvent::SetSamplingDebuggerRendering(state) => {
+                self.dbg_drawing_state.sampling_debug_enabled = state;
             }
             // VgonioEvent::CheckVisibleFacets {
             //     m_azimuth,

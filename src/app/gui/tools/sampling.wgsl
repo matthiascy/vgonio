@@ -1,9 +1,9 @@
 @group(0) @binding(0)
-var<uniform> proj_view_matrix : mat4x4<f32>;
+var<uniform> model_view_project : mat4x4<f32>;
 
 @vertex
 fn vs_main(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
-    return proj_view_matrix * vec4<f32>(position, 1.0);
+    return model_view_project * vec4<f32>(position, 1.0);
 }
 
 @fragment

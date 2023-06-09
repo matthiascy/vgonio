@@ -279,7 +279,7 @@ impl VgonioUi {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
         config: Arc<Config>,
-        gpu: &GpuContext,
+        gpu: Arc<GpuContext>,
         gui: &mut GuiRenderer,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {

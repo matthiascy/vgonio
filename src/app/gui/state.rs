@@ -223,6 +223,9 @@ pub struct DebugDrawingState {
     /// Uniform buffer for basic render pipeline.
     pub uniform_buffer: wgpu::Buffer,
 
+    /// If true, the offline rendering of [`SamplingDebugger`] is enabled.
+    pub sampling_debug_enabled: bool,
+
     /// Vertex buffer storing all vertices.
     pub rays_vertex_buf: wgpu::Buffer,
     pub rays_vertex_count: u32,
@@ -409,6 +412,7 @@ impl DebugDrawingState {
             pipeline,
             bind_group,
             uniform_buffer,
+            sampling_debug_enabled: false,
             rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-rays-vert-buffer"),
                 size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays

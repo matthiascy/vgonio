@@ -68,7 +68,7 @@ pub struct Tools {
 impl Tools {
     pub fn new(
         event_loop: EventLoopProxy<VgonioEvent>,
-        gpu: &GpuContext,
+        gpu: Arc<GpuContext>,
         gui: &mut GuiRenderer,
         toasts: Arc<RwLock<Toasts>>,
         cache: Arc<RwLock<Cache>>,
