@@ -1,7 +1,13 @@
 use crate::{
-    app::gui::{
-        tools::Tool,
-        widgets::{AngleKnob, AngleKnobWinding},
+    app::{
+        gfx::GpuContext,
+        gui::{
+            bsdf_viewer::BsdfViewer,
+            state::GuiRenderer,
+            tools::Tool,
+            widgets::{AngleKnob, AngleKnobWinding},
+            VgonioEventLoop,
+        },
     },
     math::NumericCast,
     measure::{
@@ -12,7 +18,13 @@ use crate::{
     RangeByStepSizeInclusive, SphericalPartition,
 };
 use egui::{plot::*, Align, Context, TextBuffer, Ui, Vec2};
-use std::{any::Any, fmt::format, ops::RangeInclusive, rc::Rc};
+use std::{
+    any::Any,
+    fmt::format,
+    ops::RangeInclusive,
+    rc::Rc,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PlotType {
@@ -65,15 +77,17 @@ pub struct BsdfPlottingControls {
     zenith_i: Radians,
     azimuth_o: Radians,
     mode: BsdfPlotMode,
+    view_id: egui::TextureId,
 }
 
-impl Default for BsdfPlottingControls {
-    fn default() -> Self {
+impl BsdfPlottingControls {
+    pub fn new(view_id: egui::TextureId) -> Self {
         Self {
             azimuth_i: rad!(0.0),
             zenith_i: rad!(0.0),
             azimuth_o: rad!(0.0),
             mode: BsdfPlotMode::Slice2D,
+            view_id,
         }
     }
 }

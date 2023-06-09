@@ -7,7 +7,7 @@ use crate::{
         cache::{Cache, Handle},
         gui::{
             simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
-            VgonioEvent,
+            VgonioEvent, VgonioEventLoop,
         },
     },
     msurf::MicroSurface,
@@ -89,7 +89,8 @@ pub struct Simulations {
 }
 
 impl Simulations {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: VgonioEventLoop) -> Self {
+        log::info!("Initializing simulations");
         Simulations {
             bsdf_sim: BsdfSimulation::new(event_loop.clone()),
             madf_sim: MadfSimulation::new(event_loop.clone()),

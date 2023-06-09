@@ -1,3 +1,4 @@
+mod bsdf_viewer;
 mod gizmo;
 mod icons;
 mod misc;
@@ -41,6 +42,7 @@ use crate::{
             GpuContext, Texture, VisualGridUniforms, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
+            bsdf_viewer::BsdfViewer,
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
             ui::Theme,
         },
@@ -52,7 +54,7 @@ use crate::{
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
     window::{Window, WindowBuilder},
 };
 
@@ -129,6 +131,9 @@ pub enum VgonioEvent {
         opening_angle: Degrees,
     },
 }
+
+/// Event loop proxy with Vgonio events.
+pub type VgonioEventLoop = EventLoopProxy<VgonioEvent>;
 
 use self::tools::SamplingInspector;
 
@@ -512,6 +517,10 @@ pub struct VgonioGuiApp {
     /// State of the visual grid rendering, including the pipeline, binding
     /// groups, and buffers.
     visual_grid_state: VisualGridState,
+
+    // /// State of the BSDF viewer, including the pipeline, binding groups, and
+    // /// buffers.
+    // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// Depth map of the scene. TODO: refactor
     depth_map: DepthMap,
     // TODO: add MSAA
@@ -552,7 +561,7 @@ impl VgonioGuiApp {
 
         let visual_grid_state = VisualGridState::new(&gpu_ctx, canvas.format());
 
-        let mut gui_ctx = GuiContext::new(
+        let gui_ctx = GuiContext::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             canvas.format(),
@@ -567,11 +576,19 @@ impl VgonioGuiApp {
             Arc::new(RwLock::new(_cache))
         };
 
+        // let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
+        //     gpu_ctx.clone(),
+        //     gui_ctx.renderer.clone(),
+        //     canvas.format(),
+        //     event_loop.create_proxy(),
+        // )));
+
         let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
             gpu_ctx.clone(),
-            &mut gui_ctx.renderer,
+            gui_ctx.renderer.clone(),
+            // bsdf_viewer.clone(),
             cache.clone(),
         );
 
@@ -604,6 +621,7 @@ impl VgonioGuiApp {
             canvas,
             msurf_rdr_state,
             visual_grid_state,
+            // bsdf_viewer,
         })
     }
 

@@ -21,7 +21,11 @@ use crate::{
     measure::rtc::Ray,
 };
 use glam::{Mat4, Vec3};
-use std::{default::Default, path::Path, sync::Arc};
+use std::{
+    default::Default,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
 use super::EventResponse;
@@ -588,7 +592,7 @@ pub struct GuiContext {
     /// Context for GUI painting.
     context: RawGuiContext,
     /// Rendering state for the GUI.
-    pub renderer: GuiRenderer, // TODO: make private
+    pub renderer: Arc<RwLock<GuiRenderer>>, // TODO: make private
 }
 
 pub struct GuiRenderOutput {
@@ -609,7 +613,12 @@ impl GuiContext {
         msaa_samples: u32,
     ) -> Self {
         let context = RawGuiContext::new(event_loop);
-        let renderer = GuiRenderer::new(&device, surface_format, None, msaa_samples);
+        let renderer = Arc::new(RwLock::new(GuiRenderer::new(
+            &device,
+            surface_format,
+            None,
+            msaa_samples,
+        )));
         Self {
             device,
             queue,
@@ -632,6 +641,7 @@ impl GuiContext {
         target: &wgpu::TextureView,
         ui: impl FnOnce(&egui::Context),
     ) -> GuiRenderOutput {
+        let mut renderer = self.renderer.write().unwrap();
         let mut ui_cmd_encoder =
             self.device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -645,10 +655,9 @@ impl GuiContext {
 
         let user_cmds = {
             for (id, image_delta) in &output.textures_delta.set {
-                self.renderer
-                    .update_texture(&self.device, &self.queue, *id, image_delta);
+                renderer.update_texture(&self.device, &self.queue, *id, image_delta);
             }
-            self.renderer.update_buffers(
+            renderer.update_buffers(
                 &self.device,
                 &self.queue,
                 &mut ui_cmd_encoder,
@@ -670,13 +679,12 @@ impl GuiContext {
                 })],
                 depth_stencil_attachment: None,
             });
-            self.renderer
-                .render(&mut render_pass, &primitives, &screen_desc);
+            renderer.render(&mut render_pass, &primitives, &screen_desc);
         }
 
         {
             for id in &output.textures_delta.free {
-                self.renderer.remove_texture(*id);
+                renderer.remove_texture(*id);
             }
         }
 

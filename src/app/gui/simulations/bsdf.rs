@@ -1,5 +1,5 @@
 use crate::{
-    app::gui::{misc, simulations::SurfaceSelector, VgonioEvent},
+    app::gui::{misc, simulations::SurfaceSelector, VgonioEvent, VgonioEventLoop},
     measure::{
         bsdf::BsdfKind,
         emitter::RegionShape,
@@ -361,12 +361,12 @@ impl Collector {
 pub struct BsdfSimulation {
     pub params: BsdfMeasurementParams,
     pub(crate) selector: SurfaceSelector,
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
 }
 
 impl BsdfSimulation {
     /// Creates a new BSDF simulation UI.
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             params: BsdfMeasurementParams::default(),
             selector: Default::default(),

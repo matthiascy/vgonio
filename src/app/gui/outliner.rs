@@ -1,16 +1,26 @@
 use crate::{
     app::{
         cache::{Cache, Handle},
-        gui::tools::{
-            BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls, PlottingInspector,
-            PlottingWidget, Tool,
+        gfx::GpuContext,
+        gui::{
+            bsdf_viewer::BsdfViewer,
+            state::GuiRenderer,
+            tools::{
+                BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
+                PlottingInspector, PlottingWidget, Tool,
+            },
+            VgonioEventLoop,
         },
     },
     measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
     msurf::MicroSurface,
     units::LengthUnit,
 };
-use std::{collections::HashMap, rc::Weak};
+use std::{
+    collections::HashMap,
+    rc::Weak,
+    sync::{Arc, RwLock},
+};
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]
@@ -36,6 +46,10 @@ pub struct PerMicroSurfaceState {
 /// It will reads the micro-surfaces from the cache and display them in a tree
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
+    gpu_ctx: Arc<GpuContext>,
+    gui_rdr: Arc<RwLock<GuiRenderer>>,
+    event_loop: VgonioEventLoop,
+    // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// States of the micro surfaces, indexed by their ids.
     surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
     /// States of the measured data.
@@ -44,14 +58,20 @@ pub struct Outliner {
     plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
 }
 
-impl Default for Outliner {
-    fn default() -> Self { Self::new() }
-}
-
 impl Outliner {
     /// Creates a new outliner.
-    pub fn new() -> Self {
+    pub fn new(
+        gpu_ctx: Arc<GpuContext>,
+        gui_rdr: Arc<RwLock<GuiRenderer>>,
+        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        event_loop: VgonioEventLoop,
+    ) -> Self {
+        log::info!("Creating outliner");
         Self {
+            gpu_ctx,
+            gui_rdr,
+            event_loop,
+            // bsdf_viewer,
             surfaces: HashMap::new(),
             measurements: Default::default(),
             plotting_inspectors: vec![],
@@ -210,6 +230,7 @@ impl MeasuredDataCollapsableHeader {
         ui: &mut egui::Ui,
         data: Weak<MeasurementData>,
         plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
+        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     ) {
         let measured = data.upgrade().unwrap();
         let id = ui.make_persistent_id(&measured.name);
@@ -302,7 +323,10 @@ impl MeasuredDataCollapsableHeader {
                                     Box::new(PlottingInspector::new(
                                         measured.name.clone(),
                                         measured.clone(),
-                                        BsdfPlottingControls::default(),
+                                        BsdfPlottingControls::new(
+                                            egui::TextureId::User(10001),
+                                            // bsdf_viewer.write().unwrap().create_new_view(),
+                                        ),
                                     )),
                                 ));
                             }
@@ -331,7 +355,12 @@ impl Outliner {
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     for (data, hdr) in self.measurements.iter_mut() {
-                        hdr.ui(ui, data.clone(), &mut self.plotting_inspectors);
+                        hdr.ui(
+                            ui,
+                            data.clone(),
+                            &mut self.plotting_inspectors,
+                            // self.bsdf_viewer.clone(),
+                        );
                     }
                 })
             });

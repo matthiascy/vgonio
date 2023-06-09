@@ -15,7 +15,10 @@ use std::{
 
 use winit::event_loop::EventLoopProxy;
 
-use crate::{app::cache::Cache, measure::rtc::grid::MultilevelGrid};
+use crate::{
+    app::{cache::Cache, gui::VgonioEventLoop},
+    measure::rtc::grid::MultilevelGrid,
+};
 pub(crate) use debugging::DebuggingInspector;
 pub(crate) use plotting::*;
 pub(crate) use sampling::SamplingInspector;
@@ -67,12 +70,13 @@ pub struct Tools {
 
 impl Tools {
     pub fn new(
-        event_loop: EventLoopProxy<VgonioEvent>,
+        event_loop: VgonioEventLoop,
         gpu: Arc<GpuContext>,
         gui: &mut GuiRenderer,
         toasts: Arc<RwLock<Toasts>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
+        log::info!("Initializing tools...");
         Self {
             windows: vec![
                 Box::<Scratch>::default(),

@@ -29,6 +29,7 @@ impl Default for NavigationGizmo {
 
 impl NavigationGizmo {
     pub fn new(orientation: GizmoOrientation) -> Self {
+        log::info!("Creating NavigationGizmo");
         Self {
             model_matrix: Mat4::IDENTITY,
             view_matrix: Mat4::IDENTITY,

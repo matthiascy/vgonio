@@ -1,6 +1,6 @@
 use crate::app::{
     gfx::{remap_depth, GpuContext},
-    gui::{state::GuiContext, VgonioEvent},
+    gui::{state::GuiContext, VgonioEvent, VgonioEventLoop},
 };
 use egui::{Sense, TextureFilter};
 use winit::event_loop::EventLoopProxy;
@@ -10,13 +10,13 @@ const IMG_HEIGHT: usize = 270;
 
 pub(crate) struct ShadowMapPane {
     /// The event loop proxy used to send events to the main event loop.
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
     depth_map_image: image::RgbaImage,
     depth_map_handle: Option<egui::TextureHandle>,
 }
 
 impl ShadowMapPane {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             event_loop,
             depth_map_handle: None,

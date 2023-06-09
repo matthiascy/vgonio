@@ -1,5 +1,5 @@
 use crate::{
-    app::gui::{simulations::SurfaceSelector, VgonioEvent},
+    app::gui::{simulations::SurfaceSelector, VgonioEvent, VgonioEventLoop},
     measure::measurement::MmsfMeasurementParams,
 };
 use winit::event_loop::EventLoopProxy;
@@ -7,11 +7,11 @@ use winit::event_loop::EventLoopProxy;
 pub struct MmsfSimulation {
     pub params: MmsfMeasurementParams,
     pub(crate) selector: SurfaceSelector,
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
 }
 
 impl MmsfSimulation {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             params: MmsfMeasurementParams::default(),
             event_loop,

@@ -4,7 +4,7 @@ use crate::{
         gui::{
             misc::{input3_spherical, input3_xyz},
             widgets::ToggleSwitch,
-            VgonioEvent,
+            VgonioEvent, VgonioEventLoop,
         },
     },
     measure::{measurement::Radius, rtc::Ray, RtcMethod},
@@ -38,12 +38,12 @@ pub(crate) struct BrdfMeasurementPane {
     t: f32,
     pub loaded_surfaces: Vec<MicroSurfaceRecord>,
     pub selected_surface: Option<Handle<MicroSurface>>,
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
 }
 
 impl BrdfMeasurementPane {
     pub fn new(
-        event_loop: EventLoopProxy<VgonioEvent>,
+        event_loop: VgonioEventLoop,
         toasts: Arc<RwLock<Toasts>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {

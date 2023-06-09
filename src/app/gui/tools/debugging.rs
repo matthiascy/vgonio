@@ -1,4 +1,4 @@
-use crate::app::gui::VgonioEvent;
+use crate::app::gui::{VgonioEvent, VgonioEventLoop};
 use egui_toast::Toasts;
 use std::{
     any::Any,
@@ -38,7 +38,7 @@ impl Default for PaneKind {
 pub(crate) struct DebuggingInspector {
     opened_pane: PaneKind,
     pub debug_drawing_enabled: bool,
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
     pub(crate) shadow_map_pane: ShadowMapPane,
     pub(crate) brdf_pane: BrdfMeasurementPane,
     pub(crate) microfacet_pane: MicrofacetMeasurementPane,
@@ -89,7 +89,7 @@ impl Tool for DebuggingInspector {
 
 impl DebuggingInspector {
     pub fn new(
-        event_loop: EventLoopProxy<VgonioEvent>,
+        event_loop: VgonioEventLoop,
         toasts: Arc<RwLock<Toasts>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {

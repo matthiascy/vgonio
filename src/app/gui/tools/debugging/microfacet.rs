@@ -1,19 +1,19 @@
 use crate::{
-    app::gui::VgonioEvent,
+    app::gui::{VgonioEvent, VgonioEventLoop},
     units::{degrees, Degrees},
 };
 use egui::{Response, Ui};
 use winit::event_loop::EventLoopProxy;
 
 pub struct MicrofacetMeasurementPane {
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
     m_azimuth: Degrees,
     m_zenith: Degrees,
     opening_angle: Degrees,
 }
 
 impl MicrofacetMeasurementPane {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             event_loop,
             m_azimuth: degrees!(0.0),

@@ -4,13 +4,14 @@ use crate::{
         cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
+            bsdf_viewer::BsdfViewer,
             gizmo::NavigationGizmo,
             icons::Icon,
             outliner::Outliner,
             simulations::Simulations,
             tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
             widgets::ToggleSwitch,
-            DebuggingInspector,
+            DebuggingInspector, VgonioEventLoop,
         },
         Config,
     },
@@ -32,12 +33,13 @@ use winit::event_loop::EventLoopProxy;
 
 /// Implementation of the drag and drop functionality.
 pub struct FileDragDrop {
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
     files: Vec<egui::DroppedFile>,
 }
 
 impl FileDragDrop {
-    pub fn new(event_loop: EventLoopProxy<VgonioEvent>) -> Self {
+    pub fn new(event_loop: VgonioEventLoop) -> Self {
+        log::info!("Initialized file drag and drop");
         Self {
             event_loop,
             files: vec![],
@@ -225,7 +227,7 @@ pub struct VgonioUi {
     config: Arc<Config>,
 
     /// Event loop proxy for sending user defined events.
-    event_loop: EventLoopProxy<VgonioEvent>,
+    event_loop: VgonioEventLoop,
 
     theme: ThemeState,
 
@@ -277,12 +279,14 @@ impl Deref for ThemeVisuals {
 
 impl VgonioUi {
     pub fn new(
-        event_loop: EventLoopProxy<VgonioEvent>,
+        event_loop: VgonioEventLoop,
         config: Arc<Config>,
         gpu: Arc<GpuContext>,
-        gui: &mut GuiRenderer,
+        gui: Arc<RwLock<GuiRenderer>>,
+        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
+        log::info!("Initializing UI");
         let toasts = Arc::new(RwLock::new(
             Toasts::new()
                 .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
@@ -291,12 +295,18 @@ impl VgonioUi {
         Self {
             config,
             event_loop: event_loop.clone(),
-            tools: Tools::new(event_loop.clone(), gpu, gui, toasts.clone(), cache),
+            tools: Tools::new(
+                event_loop.clone(),
+                gpu.clone(),
+                &mut gui.write().unwrap(),
+                toasts.clone(),
+                cache,
+            ),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
             drag_drop: FileDragDrop::new(event_loop.clone()),
             theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            outliner: Outliner::new(),
+            outliner: Outliner::new(gpu, gui.clone(), event_loop.clone()),
             image_cache: Arc::new(Mutex::new(Default::default())),
             visual_grid_enabled: true,
             right_panel_expanded: true,

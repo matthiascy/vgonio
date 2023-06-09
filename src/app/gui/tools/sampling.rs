@@ -11,7 +11,7 @@ use crate::{
             camera::{Camera, Projection},
             GpuContext, Texture,
         },
-        gui::{state::GuiRenderer, VgonioEvent},
+        gui::{state::GuiRenderer, VgonioEvent, VgonioEventLoop},
     },
     measure,
     units::deg,
@@ -37,7 +37,7 @@ pub struct SamplingInspector {
     pub uniform_bind_group: wgpu::BindGroup,
     pub pipeline: wgpu::RenderPipeline,
     pub vertex_buffer: wgpu::Buffer,
-    pub event_loop: EventLoopProxy<VgonioEvent>,
+    pub event_loop: VgonioEventLoop,
     samples: Vec<Vec3>,
     sample_count: u32,
     azimuth_min: f32, // in degrees
@@ -137,7 +137,7 @@ impl SamplingInspector {
         gpu: Arc<GpuContext>,
         gui: &mut GuiRenderer,
         output_format: wgpu::TextureFormat,
-        event_loop: EventLoopProxy<VgonioEvent>,
+        event_loop: VgonioEventLoop,
     ) -> SamplingInspector {
         let camera = Camera::new(
             glam::Vec3::new(2.0, 1.5, 2.0),
