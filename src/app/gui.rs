@@ -814,6 +814,7 @@ impl VgonioGuiApp {
         self.input.scroll_delta = 0.0;
         self.input.cursor_delta = [0.0, 0.0];
 
+        // Update the renderings.
         self.render(window)?;
 
         // Rendering the SamplingInspector is done after the main render pass.

@@ -23,6 +23,7 @@ use crate::{
 use glam::{Mat4, Vec3};
 use std::{
     default::Default,
+    ops::Range,
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -226,9 +227,10 @@ pub struct DebugDrawingState {
     pub bind_group: wgpu::BindGroup,
     /// Uniform buffer for basic render pipeline.
     pub uniform_buffer: wgpu::Buffer,
-
     /// If true, the offline rendering of [`SamplingDebugger`] is enabled.
     pub sampling_debug_enabled: bool,
+    /// The range of points of the vertices to be drawn. TODO: implement this.
+    pub points_ranges: Vec<Range<u32>>,
 
     /// Vertex buffer storing all vertices.
     pub rays_vertex_buf: wgpu::Buffer,
@@ -558,16 +560,6 @@ impl DebugDrawingState {
         highest: f32,
         scale: f32,
     ) {
-        // ctx.queue.write_buffer(
-        //     &self.rays_rp.uniform_buffers.as_ref().unwrap()[0],
-        //     0,
-        //     bytemuck::cast_slice(uniform),
-        // );
-        // ctx.queue.write_buffer(
-        //     &self.msurf_prim_rp.uniform_buffers.as_ref().unwrap()[0],
-        //     0,
-        //     bytemuck::cast_slice(uniform),
-        // );
         let mut buf = [0f32; 3 * 16 + 4];
         buf[0..16].copy_from_slice(
             &Mat4::from_scale(Vec3::new(dome_radius, dome_radius, dome_radius)).to_cols_array(),

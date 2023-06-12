@@ -7,7 +7,11 @@ use crate::{
             VgonioEvent, VgonioEventLoop,
         },
     },
-    measure::{measurement::Radius, rtc::Ray, RtcMethod},
+    measure::{
+        measurement::{BsdfMeasurementParams, Radius},
+        rtc::Ray,
+        Emitter, RtcMethod,
+    },
     msurf::MicroSurface,
     units::{mm, UMillimetre},
 };
@@ -31,11 +35,12 @@ pub(crate) struct BrdfMeasurementPane {
     ray_origin_spherical: Vec3,
     ray_target: Vec3,
     ray_mode: RayMode,
-    max_bounces: u32,
     method: RtcMethod,
     prim_id: u32,
     cell_pos: IVec2,
     t: f32,
+
+    params: BsdfMeasurementParams,
 
     pub loaded_surfaces: Vec<MicroSurfaceRecord>,
     pub selected_surface: Option<Handle<MicroSurface>>,
@@ -52,17 +57,19 @@ impl BrdfMeasurementPane {
             ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),
             ray_target: Default::default(),
             ray_mode: RayMode::Cartesian,
-            max_bounces: 20,
             method: RtcMethod::Grid,
             prim_id: 0,
             cell_pos: Default::default(),
             t: 10.0,
+            params: BsdfMeasurementParams::default(),
             loaded_surfaces: vec![],
             selected_surface: None,
             event_loop,
         }
     }
 }
+
+// TODO: merge dome radius and emitter radius
 
 impl egui::Widget for &mut BrdfMeasurementPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
@@ -124,9 +131,54 @@ impl egui::Widget for &mut BrdfMeasurementPane {
             }
             ui.add(ToggleSwitch::new(&mut self.show_dome));
         });
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Emitter:");
-        });
+
+        egui::CollapsingHeader::new("Emitter")
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("emitter_grid")
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("Number of rays: ");
+                        ui.add(
+                            egui::DragValue::new(&mut self.params.emitter.num_rays)
+                                .speed(1.0)
+                                .clamp_range(1..=100_000_000),
+                        );
+                        ui.end_row();
+
+                        ui.label("Max. bounces: ");
+                        ui.add(
+                            egui::DragValue::new(&mut self.params.emitter.max_bounces)
+                                .speed(1.0)
+                                .clamp_range(1..=100),
+                        );
+                        ui.end_row();
+
+                        ui.label("Distance:")
+                            .on_hover_text("Distance from emitter to the surface.");
+                        self.params.emitter.radius.ui(ui);
+                        ui.end_row();
+
+                        ui.label("Azimuthal range φ: ");
+                        self.params.emitter.azimuth.ui(ui);
+                        ui.end_row();
+
+                        ui.label("Zenith range θ: ");
+                        self.params.emitter.zenith.ui(ui);
+                        ui.end_row();
+
+                        ui.label("Region shape: ");
+                        self.params.emitter.shape.ui(ui);
+                        ui.end_row();
+
+                        ui.label("Wavelength range: ");
+                        self.params.emitter.spectrum.ui(ui);
+                        ui.end_row();
+
+                        if ui.button("Display Measurement Points") {}
+                    });
+            });
+
         ui.horizontal_wrapped(|ui| {
             ui.label("Method");
             #[cfg(feature = "embree")]
@@ -134,15 +186,6 @@ impl egui::Widget for &mut BrdfMeasurementPane {
             #[cfg(feature = "optix")]
             ui.selectable_value(&mut self.method, RtcMethod::Optix, "OptiX");
             ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
-        });
-
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Max bounces");
-            ui.add(
-                egui::DragValue::new(&mut self.max_bounces)
-                    .clamp_range(1..=32)
-                    .speed(1),
-            );
         });
 
         ui.horizontal_wrapped(|ui| {
@@ -265,7 +308,7 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                 };
                 let event = VgonioEvent::TraceRayDbg {
                     ray,
-                    max_bounces: self.max_bounces,
+                    max_bounces: self.params.emitter.max_bounces,
                     method: self.method,
                 };
                 if self.event_loop.send_event(event).is_err() {
