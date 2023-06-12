@@ -112,6 +112,7 @@ pub enum VgonioEvent {
         azimuth: (f32, f32),
         zenith: (f32, f32),
     },
+    BsdfViewer(BsdfViewerEvent),
     SetSamplingDebuggerRendering(bool),
     MeasureAreaDistribution {
         params: MadfMeasurementParams,
@@ -129,6 +130,28 @@ pub enum VgonioEvent {
         m_azimuth: Degrees,
         m_zenith: Degrees,
         opening_angle: Degrees,
+    },
+}
+
+/// Events used by BSDF viewer.`
+#[derive(Debug)]
+pub enum BsdfViewerEvent {
+    /// Enable/disable the rendering of a texture.
+    ToggleView(egui::TextureId),
+    /// Update the BSDF data buffer for a texture.
+    UpdateBuffer {
+        /// ID of the texture
+        id: egui::TextureId,
+        /// Buffer containing the BSDF data.
+        buffer: Option<wgpu::Buffer>,
+        /// Number of vertices in the buffer.
+        count: u32,
+    },
+    Rotate {
+        /// ID of the texture
+        id: egui::TextureId,
+        /// Rotation angle in radians.
+        angle: f32,
     },
 }
 
@@ -518,9 +541,10 @@ pub struct VgonioGuiApp {
     /// groups, and buffers.
     visual_grid_state: VisualGridState,
 
-    // /// State of the BSDF viewer, including the pipeline, binding groups, and
-    // /// buffers.
-    // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+    /// State of the BSDF viewer, including the pipeline, binding groups, and
+    /// buffers.
+    bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+
     /// Depth map of the scene. TODO: refactor
     depth_map: DepthMap,
     // TODO: add MSAA
@@ -576,19 +600,18 @@ impl VgonioGuiApp {
             Arc::new(RwLock::new(_cache))
         };
 
-        // let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
-        //     gpu_ctx.clone(),
-        //     gui_ctx.renderer.clone(),
-        //     canvas.format(),
-        //     event_loop.create_proxy(),
-        // )));
+        let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
+            gpu_ctx.clone(),
+            gui_ctx.renderer.clone(),
+            event_loop.create_proxy(),
+        )));
 
         let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
-            // bsdf_viewer.clone(),
+            bsdf_viewer.clone(),
             cache.clone(),
         );
 
@@ -621,7 +644,7 @@ impl VgonioGuiApp {
             canvas,
             msurf_rdr_state,
             visual_grid_state,
-            // bsdf_viewer,
+            bsdf_viewer,
         })
     }
 
@@ -769,6 +792,7 @@ impl VgonioGuiApp {
             }
         }
 
+        // Update GUI context.
         self.ctx.gui.update(window);
 
         // Reset mouse movement
@@ -777,6 +801,7 @@ impl VgonioGuiApp {
 
         self.render(window)?;
 
+        // Rendering the SamplingInspector is done after the main render pass.
         if self.dbg_drawing_state.sampling_debug_enabled {
             self.ui
                 .tools
@@ -784,6 +809,8 @@ impl VgonioGuiApp {
                 .unwrap()
                 .render();
         }
+
+        self.bsdf_viewer.write().unwrap().render();
 
         Ok(())
     }
@@ -925,57 +952,6 @@ impl VgonioGuiApp {
                     });
             }
         }
-
-        // if self.debug_drawing_enabled {
-        // if let Some(ref msurf_view) = self.msurf {
-        //     let renderable = cache
-        //         .micro_surface_renderable_mesh(msurf_view.renderable)
-        //         .expect("Failed to get renderable mesh");
-        //     let mut render_pass =
-        // encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
-        //         label: Some("Render Pass"),
-        //         color_attachments: &[Some(wgpu::RenderPassColorAttachment
-        // {             view: &output_view,
-        //             resolve_target: None,
-        //             ops: wgpu::Operations {
-        //                 load: wgpu::LoadOp::Load,
-        //                 store: true,
-        //             },
-        //         })],
-        //         depth_stencil_attachment: None,
-        //     });
-        //     if !self.debug_drawing.drawing_msurf_prims {
-        //         render_pass.set_pipeline(&self.debug_drawing.rays_rp.
-        // pipeline);         render_pass.set_bind_group(0,
-        // &self.debug_drawing.rays_rp.bind_groups[0], &[]);
-        //         render_pass.set_vertex_buffer(0,
-        // self.debug_drawing.rays_vertex_buf.slice(..));
-        //         render_pass.draw(0..self.debug_drawing.rays_vertex_count,
-        // 0..1);     } else {
-        //         render_pass.set_pipeline(&self.debug_drawing.
-        // msurf_prim_rp.pipeline);         render_pass.
-        // set_bind_group(             0,
-        //             &self.debug_drawing.msurf_prim_rp.bind_groups[0],
-        //             &[],
-        //         );
-        //         render_pass.set_vertex_buffer(0,
-        // renderable.vertex_buffer.slice(..));
-        //         render_pass.set_index_buffer(
-        //             self.debug_drawing.msurf_prim_index_buf.slice(..),
-        //             renderable.index_format,
-        //         );
-        //         if self.debug_drawing.multiple_prims {
-        //             render_pass.draw_indexed(
-        //                 3..3 + self.debug_drawing.msurf_prim_index_count,
-        //                 0,
-        //                 0..1,
-        //             );
-        //         } else {
-        //             render_pass.draw_indexed(0..3, 0, 0..1);
-        //         }
-        //     }
-        // }
-        // }
 
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
@@ -1170,6 +1146,22 @@ impl VgonioGuiApp {
                 //     .unwrap()
                 //     .render(&self.ctx.gpu, &samples);
             }
+            VgonioEvent::BsdfViewer(event) => match event {
+                BsdfViewerEvent::ToggleView(id) => {
+                    self.bsdf_viewer.write().unwrap().toggle_view(id);
+                }
+                BsdfViewerEvent::UpdateBuffer { id, buffer, count } => {
+                    log::debug!("Updating buffer for id: {:?}", id);
+                    self.bsdf_viewer
+                        .write()
+                        .unwrap()
+                        .update_bsdf_data_buffer(id, buffer, count);
+                }
+                BsdfViewerEvent::Rotate { id, angle } => {
+                    log::debug!("Rotating bsdf viewer id: {:?}", id);
+                    self.bsdf_viewer.write().unwrap().rotate(id, angle);
+                }
+            },
             VgonioEvent::SetSamplingDebuggerRendering(state) => {
                 self.dbg_drawing_state.sampling_debug_enabled = state;
             }
@@ -1404,6 +1396,8 @@ struct MicroSurfaceUniforms {
 }
 
 impl MicroSurfaceUniforms {
+    /// Returns the size of the uniforms in bytes, aligned to the device's
+    /// `min_uniform_buffer_offset_alignment`.
     fn aligned_size(device: &wgpu::Device) -> u32 {
         let alignment = device.limits().min_uniform_buffer_offset_alignment;
         let size = std::mem::size_of::<MicroSurfaceUniforms>() as u32;

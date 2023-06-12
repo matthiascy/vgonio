@@ -47,9 +47,8 @@ pub struct PerMicroSurfaceState {
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
     gpu_ctx: Arc<GpuContext>,
-    gui_rdr: Arc<RwLock<GuiRenderer>>,
     event_loop: VgonioEventLoop,
-    // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+    bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// States of the micro surfaces, indexed by their ids.
     surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
     /// States of the measured data.
@@ -62,16 +61,14 @@ impl Outliner {
     /// Creates a new outliner.
     pub fn new(
         gpu_ctx: Arc<GpuContext>,
-        gui_rdr: Arc<RwLock<GuiRenderer>>,
-        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         event_loop: VgonioEventLoop,
     ) -> Self {
         log::info!("Creating outliner");
         Self {
             gpu_ctx,
-            gui_rdr,
             event_loop,
-            // bsdf_viewer,
+            bsdf_viewer,
             surfaces: HashMap::new(),
             measurements: Default::default(),
             plotting_inspectors: vec![],
@@ -230,7 +227,9 @@ impl MeasuredDataCollapsableHeader {
         ui: &mut egui::Ui,
         data: Weak<MeasurementData>,
         plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
-        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        gpu: Arc<GpuContext>,
+        event_loop: VgonioEventLoop,
     ) {
         let measured = data.upgrade().unwrap();
         let id = ui.make_persistent_id(&measured.name);
@@ -304,6 +303,8 @@ impl MeasuredDataCollapsableHeader {
                                         measured.name.clone(),
                                         measured.clone(),
                                         MadfPlottingControls::default(),
+                                        gpu,
+                                        event_loop,
                                     )),
                                 ));
                             }
@@ -314,6 +315,8 @@ impl MeasuredDataCollapsableHeader {
                                         measured.name.clone(),
                                         measured.clone(),
                                         MmsfPlottingControls::default(),
+                                        gpu,
+                                        event_loop,
                                     )),
                                 ));
                             }
@@ -324,9 +327,10 @@ impl MeasuredDataCollapsableHeader {
                                         measured.name.clone(),
                                         measured.clone(),
                                         BsdfPlottingControls::new(
-                                            egui::TextureId::User(10001),
-                                            // bsdf_viewer.write().unwrap().create_new_view(),
+                                            bsdf_viewer.write().unwrap().create_new_view(),
                                         ),
+                                        gpu,
+                                        event_loop,
                                     )),
                                 ));
                             }
@@ -359,7 +363,9 @@ impl Outliner {
                             ui,
                             data.clone(),
                             &mut self.plotting_inspectors,
-                            // self.bsdf_viewer.clone(),
+                            self.bsdf_viewer.clone(),
+                            self.gpu_ctx.clone(),
+                            self.event_loop.clone(),
                         );
                     }
                 })

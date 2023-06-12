@@ -641,7 +641,6 @@ impl GuiContext {
         target: &wgpu::TextureView,
         ui: impl FnOnce(&egui::Context),
     ) -> GuiRenderOutput {
-        let mut renderer = self.renderer.write().unwrap();
         let mut ui_cmd_encoder =
             self.device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -653,44 +652,48 @@ impl GuiContext {
 
         let primitives = self.context.inner.tessellate(output.shapes);
 
-        let user_cmds = {
-            for (id, image_delta) in &output.textures_delta.set {
-                renderer.update_texture(&self.device, &self.queue, *id, image_delta);
-            }
-            renderer.update_buffers(
-                &self.device,
-                &self.queue,
-                &mut ui_cmd_encoder,
-                &primitives,
-                &screen_desc,
-            )
-        };
-
         {
-            let mut render_pass = ui_cmd_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("gui_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-            renderer.render(&mut render_pass, &primitives, &screen_desc);
-        }
+            let mut renderer = self.renderer.write().unwrap();
+            let user_cmds = {
+                for (id, image_delta) in &output.textures_delta.set {
+                    renderer.update_texture(&self.device, &self.queue, *id, image_delta);
+                }
+                renderer.update_buffers(
+                    &self.device,
+                    &self.queue,
+                    &mut ui_cmd_encoder,
+                    &primitives,
+                    &screen_desc,
+                )
+            };
 
-        {
-            for id in &output.textures_delta.free {
-                renderer.remove_texture(*id);
+            {
+                let mut render_pass =
+                    ui_cmd_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("gui_render_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: target,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: true,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                    });
+                renderer.render(&mut render_pass, &primitives, &screen_desc);
             }
-        }
 
-        GuiRenderOutput {
-            user_cmds,
-            ui_cmd: ui_cmd_encoder.finish(),
+            {
+                for id in &output.textures_delta.free {
+                    renderer.remove_texture(*id);
+                }
+            }
+
+            GuiRenderOutput {
+                user_cmds,
+                ui_cmd: ui_cmd_encoder.finish(),
+            }
         }
     }
 

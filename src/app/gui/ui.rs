@@ -283,7 +283,7 @@ impl VgonioUi {
         config: Arc<Config>,
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
-        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing UI");
@@ -306,7 +306,7 @@ impl VgonioUi {
             drag_drop: FileDragDrop::new(event_loop.clone()),
             theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            outliner: Outliner::new(gpu, gui.clone(), event_loop.clone()),
+            outliner: Outliner::new(gpu, bsdf_viewer, event_loop.clone()),
             image_cache: Arc::new(Mutex::new(Default::default())),
             visual_grid_enabled: true,
             right_panel_expanded: true,

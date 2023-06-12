@@ -6,18 +6,19 @@ use crate::{
             state::GuiRenderer,
             tools::Tool,
             widgets::{AngleKnob, AngleKnobWinding},
-            VgonioEventLoop,
+            BsdfViewerEvent, VgonioEvent, VgonioEventLoop,
         },
     },
     math::NumericCast,
+    measure,
     measure::{
-        measurement::{MeasuredData, MeasurementData},
+        measurement::{MeasuredData, MeasurementData, MeasurementKind},
         CollectorScheme,
     },
-    units::{rad, Radians},
-    RangeByStepSizeInclusive, SphericalPartition,
+    units::{deg, rad, Radians},
+    Handedness, RangeByStepSizeInclusive, SphericalPartition,
 };
-use egui::{plot::*, Align, Context, TextBuffer, Ui, Vec2};
+use egui::{plot::*, Align, Context, PointerButton, Response, TextBuffer, Ui, Vec2};
 use std::{
     any::Any,
     fmt::format,
@@ -25,6 +26,7 @@ use std::{
     rc::Rc,
     sync::{Arc, RwLock},
 };
+use wgpu::util::DeviceExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PlotType {
@@ -40,9 +42,11 @@ pub trait PlottingWidget {
             .open(open)
             .resizable(true)
             .show(ctx, |ui| {
-                // egui::ScrollArea::new([false, true]).show(ui, |ui| {
-                self.ui(ui);
-                // });
+                egui::ScrollArea::new([false, true])
+                    .min_scrolled_height(640.0)
+                    .show(ui, |ui| {
+                        self.ui(ui);
+                    });
             });
     }
 }
@@ -58,6 +62,10 @@ pub struct PlottingInspector<C: PlottingControls> {
     legend: Legend,
     /// The type of plot to be displayed
     plot_type: PlotType,
+    /// The event loop.
+    event_loop: VgonioEventLoop,
+    /// GPU context.
+    gpu: Arc<GpuContext>,
     /// Controlling parameters for the plot.
     controls: C,
 }
@@ -78,6 +86,7 @@ pub struct BsdfPlottingControls {
     azimuth_o: Radians,
     mode: BsdfPlotMode,
     view_id: egui::TextureId,
+    changed: bool,
 }
 
 impl BsdfPlottingControls {
@@ -88,6 +97,7 @@ impl BsdfPlottingControls {
             azimuth_o: rad!(0.0),
             mode: BsdfPlotMode::Slice2D,
             view_id,
+            changed: true,
         }
     }
 }
@@ -136,7 +146,13 @@ impl PlottingControls for MadfPlottingControls {}
 impl PlottingControls for MmsfPlottingControls {}
 
 impl<C: PlottingControls> PlottingInspector<C> {
-    pub fn new(name: String, data: Rc<MeasurementData>, controls: C) -> Self {
+    pub fn new(
+        name: String,
+        data: Rc<MeasurementData>,
+        controls: C,
+        gpu: Arc<GpuContext>,
+        event_loop: VgonioEventLoop,
+    ) -> Self {
         Self {
             name,
             data,
@@ -145,6 +161,8 @@ impl<C: PlottingControls> PlottingInspector<C> {
                 .background_alpha(1.0)
                 .position(Corner::RightTop),
             plot_type: PlotType::Line,
+            event_loop,
+            gpu,
             controls,
         }
     }
@@ -157,8 +175,8 @@ impl<C: PlottingControls> PlottingInspector<C> {
         snap: Radians,
         diameter: f32,
         formatter: impl Fn(f32) -> String,
-    ) {
-        ui.add(
+    ) -> Response {
+        let response = ui.add(
             AngleKnob::new(angle)
                 .interactive(interactive)
                 .min(Some((*range.start()).into()))
@@ -169,6 +187,7 @@ impl<C: PlottingControls> PlottingInspector<C> {
                 .axis_count((Radians::TAU / snap).ceil() as u32),
         );
         ui.label(formatter(angle.value()));
+        response
     }
 
     #[cfg(debug_assertions)]
@@ -563,13 +582,14 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 zenith, azimuth, ..
             } => (zenith, azimuth),
         };
+
         // Incident direction controls
         ui.allocate_ui_with_layout(
             Vec2::new(ui.available_width(), 48.0),
             egui::Layout::left_to_right(Align::Center),
             |ui| {
                 ui.label("Incident direction: ");
-                Self::angle_knob(
+                let r0 = Self::angle_knob(
                     ui,
                     true,
                     &mut self.controls.zenith_i,
@@ -577,8 +597,9 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     zenith_i.step_size,
                     48.0,
                     |v| format!("θ = {:>6.2}°", v.to_degrees()),
-                );
-                Self::angle_knob(
+                )
+                .changed();
+                let r1 = Self::angle_knob(
                     ui,
                     true,
                     &mut self.controls.azimuth_i,
@@ -586,7 +607,8 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     azimuth_i.step_size,
                     48.0,
                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                );
+                )
+                .changed();
                 #[cfg(debug_assertions)]
                 {
                     Self::debug_print_angle(self.controls.zenith_i, &zenith_i, ui, "debug_print_θ");
@@ -597,6 +619,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                         "debug_print_φ",
                     );
                 }
+                self.controls.changed |= r0 || r1;
             },
         );
 
@@ -606,7 +629,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 egui::Layout::left_to_right(Align::Center),
                 |ui| {
                     ui.label("Outgoing direction: ");
-                    Self::angle_knob(
+                    let r0 = Self::angle_knob(
                         ui,
                         true,
                         &mut self.controls.azimuth_o,
@@ -614,7 +637,8 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                         azimuth_o.step_size,
                         48.0,
                         |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                    );
+                    )
+                    .changed();
                     #[cfg(debug_assertions)]
                     {
                         Self::debug_print_angle_pair(
@@ -624,6 +648,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                             "debug_print_φ",
                         );
                     }
+                    self.controls.changed |= r0;
                 },
             );
         }
@@ -638,6 +663,34 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             .map(|w| w.value / 100.0)
             .collect::<Vec<_>>();
         let num_rays = bsdf_data.params.emitter.num_rays;
+
+        if self.controls.changed {
+            let samples = measure::emitter::uniform_sampling_on_unit_sphere(
+                1024,
+                deg!(0.0).into(),
+                deg!(90.0).into(),
+                deg!(0.0).into(),
+                deg!(360.0).into(),
+                Handedness::RightHandedYUp,
+            );
+            let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("bsdf_view_buffer_{:?}", self.controls.view_id)),
+                size: std::mem::size_of::<glam::Vec3>() as u64 * samples.len() as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.gpu
+                .queue
+                .write_buffer(&buffer, 0, bytemuck::cast_slice(&samples));
+            self.event_loop
+                .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::UpdateBuffer {
+                    id: self.controls.view_id,
+                    buffer: Some(buffer),
+                    count: samples.len() as u32,
+                }))
+                .unwrap();
+            self.controls.changed = false;
+        }
 
         // Figure of per wavelength plot, it contains:
         // - the number of absorbed rays per wavelength
@@ -920,11 +973,31 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             });
 
         // Actual BSDF plot
-        egui::CollapsingHeader::new("BSDF")
-            .default_open(true)
+        let collapsing = egui::CollapsingHeader::new("BSDF");
+        let response = collapsing
             .show(ui, |ui| {
-                ui.label("BSDF");
-            });
+                let response = ui.add(
+                    egui::Image::new(self.controls.view_id, [256.0, 256.0])
+                        .sense(egui::Sense::click_and_drag()),
+                );
+                if response.dragged_by(PointerButton::Primary) {
+                    self.event_loop
+                        .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
+                            id: self.controls.view_id,
+                            angle: response.drag_delta().x / 256.0 * std::f32::consts::PI,
+                        }))
+                        .unwrap()
+                }
+            })
+            .header_response;
+
+        if response.changed() {
+            self.event_loop
+                .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::ToggleView(
+                    self.controls.view_id,
+                )))
+                .unwrap()
+        }
     }
 }
 

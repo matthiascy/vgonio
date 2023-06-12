@@ -5,6 +5,7 @@ use std::sync::Arc;
 // attachments)
 // TODO: avoid creating a sampler for each texture (use a cache)
 // TODO: remove inner sampler of Texture.
+#[derive(Debug)]
 pub struct Texture {
     /// Image (data) allocated on GPU. It holds the pixels and main
     /// memory of the texture, but doesn't contain a lot information

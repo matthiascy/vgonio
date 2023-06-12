@@ -115,8 +115,9 @@ impl Tool for SamplingInspector {
         );
         if response.dragged_by(PointerButton::Primary) {
             let delta = response.drag_delta();
-            self.proj_view_model *= glam::Mat4::from_rotation_y(delta.x / 256.0)
-                * glam::Mat4::from_rotation_x(delta.y / 256.0);
+            self.proj_view_model *=
+                glam::Mat4::from_rotation_y(delta.x / 256.0 * std::f32::consts::PI)
+                    * glam::Mat4::from_rotation_x(delta.y / 256.0 * std::f32::consts::PI);
             self.gpu.queue.write_buffer(
                 &self.uniform_buffer,
                 0,

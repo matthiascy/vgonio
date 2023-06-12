@@ -480,3 +480,9 @@ pub fn generate_parametric_hemisphere(theta_steps: u32, phi_steps: u32) -> (Vec<
 
     (vertices, indices)
 }
+
+/// Calculates the size of a buffer that is aligned to the given alignment.
+pub fn calc_aligned_size(size: u32, alignment: u32) -> u32 {
+    let mask = alignment - 1;
+    (size + mask) & !mask
+}
