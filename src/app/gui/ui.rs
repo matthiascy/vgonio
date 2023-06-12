@@ -30,6 +30,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 use winit::event_loop::EventLoopProxy;
+use VgonioEvent::Notify;
 
 /// Implementation of the drag and drop functionality.
 pub struct FileDragDrop {
@@ -253,9 +254,6 @@ pub struct VgonioUi {
     pub left_panel_expanded: bool,
 
     pub simulations: Simulations,
-
-    /// The toast manager.
-    toasts: Arc<RwLock<Toasts>>,
 }
 
 #[repr(u8)]
@@ -287,11 +285,6 @@ impl VgonioUi {
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing UI");
-        let toasts = Arc::new(RwLock::new(
-            Toasts::new()
-                .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
-                .direction(Direction::BottomUp),
-        ));
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -299,7 +292,6 @@ impl VgonioUi {
                 event_loop.clone(),
                 gpu.clone(),
                 &mut gui.write().unwrap(),
-                toasts.clone(),
                 cache,
             ),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
@@ -312,7 +304,6 @@ impl VgonioUi {
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
-            toasts,
         }
     }
 
@@ -344,8 +335,6 @@ impl VgonioUi {
         }
 
         self.simulations.show_all(ctx);
-
-        self.toasts.write().unwrap().show(ctx);
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
@@ -410,14 +399,13 @@ impl VgonioUi {
 
         ui.menu_image_button(texture_id, image_size, |ui| {
             if ui.button("About").clicked() {
-                self.toasts.write().unwrap().add(Toast {
-                    kind: ToastKind::Info,
-                    text: "TODO: about".into(),
-                    options: ToastOptions::default()
-                        .duration_in_seconds(3.0)
-                        .show_progress(true)
-                        .show_icon(true),
-                });
+                self.event_loop
+                    .send_event(Notify {
+                        kind: ToastKind::Info,
+                        text: "TODO: about".to_string(),
+                        time: 0.0,
+                    })
+                    .unwrap();
             }
 
             ui.menu_button("New", |ui| {
@@ -433,14 +421,13 @@ impl VgonioUi {
                     }
                 });
                 if ui.button("Micro-surface").clicked() {
-                    self.toasts.write().unwrap().add(Toast {
-                        kind: ToastKind::Info,
-                        text: "TODO: new height field".into(),
-                        options: ToastOptions::default()
-                            .duration_in_seconds(3.0)
-                            .show_progress(true)
-                            .show_icon(true),
-                    });
+                    self.event_loop
+                        .send_event(VgonioEvent::Notify {
+                            kind: ToastKind::Info,
+                            text: "TODO: new height field".to_string(),
+                            time: 3.0,
+                        })
+                        .unwrap();
                 }
             });
             if ui.button("Open...").clicked() {
@@ -468,14 +455,13 @@ impl VgonioUi {
             ui.menu_button("Recent...", |ui| {
                 for i in 0..10 {
                     if ui.button(format!("item {i}")).clicked() {
-                        self.toasts.write().unwrap().add(Toast {
-                            kind: ToastKind::Info,
-                            text: format!("TODO: open recent item {i}").into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(3.0)
-                                .show_progress(true)
-                                .show_icon(true),
-                        });
+                        self.event_loop
+                            .send_event(VgonioEvent::Notify {
+                                kind: ToastKind::Info,
+                                text: format!("TODO: open recent item {i}"),
+                                time: 3.0,
+                            })
+                            .unwrap();
                     }
                 }
             });
@@ -484,38 +470,35 @@ impl VgonioUi {
 
             {
                 if ui.button("Save...").clicked() {
-                    self.toasts.write().unwrap().add(Toast {
-                        kind: ToastKind::Info,
-                        text: "TODO: save".into(),
-                        options: ToastOptions::default()
-                            .duration_in_seconds(3.0)
-                            .show_progress(true)
-                            .show_icon(true),
-                    });
+                    self.event_loop
+                        .send_event(VgonioEvent::Notify {
+                            kind: ToastKind::Info,
+                            text: "TODO: save".into(),
+                            time: 3.0,
+                        })
+                        .unwrap();
                 }
             }
 
             ui.menu_button("Edit", |ui| {
                 {
                     if ui.button("     Undo").clicked() {
-                        self.toasts.write().unwrap().add(Toast {
-                            kind: ToastKind::Info,
-                            text: "TODO: undo".into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(3.0)
-                                .show_progress(true)
-                                .show_icon(true),
-                        });
+                        self.event_loop
+                            .send_event(VgonioEvent::Notify {
+                                kind: ToastKind::Info,
+                                text: "TODO: undo".into(),
+                                time: 3.0,
+                            })
+                            .unwrap();
                     }
                     if ui.button("     Redo").clicked() {
-                        self.toasts.write().unwrap().add(Toast {
-                            kind: ToastKind::Info,
-                            text: "TODO: redo".into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(3.0)
-                                .show_progress(true)
-                                .show_icon(true),
-                        });
+                        self.event_loop
+                            .send_event(VgonioEvent::Notify {
+                                kind: ToastKind::Info,
+                                text: "TODO: redo".into(),
+                                time: 3.0,
+                            })
+                            .unwrap();
                     }
                 }
 
@@ -537,14 +520,13 @@ impl VgonioUi {
                 ui.separator();
 
                 if ui.button("\u{2699} Preferences").clicked() {
-                    self.toasts.write().unwrap().add(Toast {
-                        kind: ToastKind::Info,
-                        text: "TODO: open preferences window".into(),
-                        options: ToastOptions::default()
-                            .duration_in_seconds(3.0)
-                            .show_progress(true)
-                            .show_icon(true),
-                    });
+                    self.event_loop
+                        .send_event(VgonioEvent::Notify {
+                            kind: ToastKind::Info,
+                            text: "TODO: open preferences window".into(),
+                            time: 3.0,
+                        })
+                        .unwrap();
                 }
             });
             ui.menu_button("Tools", |ui| {

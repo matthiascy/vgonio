@@ -18,6 +18,8 @@ use crate::{
     units::degrees,
     Handedness,
 };
+use egui::{Align2, CursorIcon::Text};
+use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
     any::Any,
@@ -130,6 +132,11 @@ pub enum VgonioEvent {
         m_azimuth: Degrees,
         m_zenith: Degrees,
         opening_angle: Degrees,
+    },
+    Notify {
+        kind: ToastKind,
+        text: String,
+        time: f32,
     },
 }
 
@@ -550,6 +557,9 @@ pub struct VgonioGuiApp {
     // TODO: add MSAA
     /// Debug drawing state.
     dbg_drawing_state: DebugDrawingState,
+
+    /// Notification manager.
+    toasts: Toasts,
 }
 
 impl VgonioGuiApp {
@@ -628,6 +638,10 @@ impl VgonioGuiApp {
         let dbg_drawing_state = DebugDrawingState::new(&gpu_ctx, canvas.format());
         let msurf_rdr_state = MicroSurfaceRenderingState::new(&gpu_ctx, canvas.format());
 
+        let toasts = Toasts::new()
+            .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
+            .direction(egui::Direction::BottomUp);
+
         Ok(Self {
             start_time: Instant::now(),
             ctx: Context {
@@ -645,6 +659,7 @@ impl VgonioGuiApp {
             msurf_rdr_state,
             visual_grid_state,
             bsdf_viewer,
+            toasts,
         })
     }
 
@@ -958,7 +973,10 @@ impl VgonioGuiApp {
             window,
             self.canvas.screen_descriptor(),
             &output_view,
-            |ctx| self.ui.show(ctx),
+            |ctx| {
+                self.ui.show(ctx);
+                self.toasts.show(ctx);
+            },
         );
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
@@ -1162,6 +1180,16 @@ impl VgonioGuiApp {
                     self.bsdf_viewer.write().unwrap().rotate(id, angle);
                 }
             },
+            VgonioEvent::Notify { kind, text, time } => {
+                self.toasts.add(Toast {
+                    kind,
+                    text: text.into(),
+                    options: ToastOptions::default()
+                        .duration_in_seconds(time as f64)
+                        .show_progress(true)
+                        .show_icon(true),
+                });
+            }
             VgonioEvent::SetSamplingDebuggerRendering(state) => {
                 self.dbg_drawing_state.sampling_debug_enabled = state;
             }

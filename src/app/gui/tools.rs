@@ -73,14 +73,13 @@ impl Tools {
         event_loop: VgonioEventLoop,
         gpu: Arc<GpuContext>,
         gui: &mut GuiRenderer,
-        toasts: Arc<RwLock<Toasts>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing tools...");
         Self {
             windows: vec![
                 Box::<Scratch>::default(),
-                Box::new(DebuggingInspector::new(event_loop.clone(), toasts, cache)),
+                Box::new(DebuggingInspector::new(event_loop.clone(), cache)),
                 Box::new(SamplingInspector::new(
                     gpu,
                     gui,

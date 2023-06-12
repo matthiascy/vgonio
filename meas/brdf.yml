@@ -8,8 +8,8 @@ type: !bsdf
     num_rays: 10000
     max_bounces: 10
     radius: auto
-    zenith: 0deg .. =90deg / 15deg
-    azimuth: 0deg .. =360deg / 360deg
+    zenith: 0deg .. =90deg / 5deg
+    azimuth: 0deg .. =360deg / 90deg
     shape: !cap
       zenith: 10deg
     spectrum: 380 nm .. =780 nm / 300 nm
@@ -18,8 +18,8 @@ type: !bsdf
     scheme: !partitioned
       domain: upper_hemisphere
       partition: !equal_angle
-        zenith: 0 rad .. 90 deg / 30 deg
-        azimuth: 0rad .. 360deg / 120 deg
+        zenith: 0 rad .. 90 deg / 5 deg
+        azimuth: 0rad .. 360deg / 30 deg
 surfaces:
   - usr://surfaces/aluminium65bar100.vgms
   # - usr://surfaces/8x8_flat.vgms

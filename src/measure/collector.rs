@@ -75,18 +75,18 @@ impl CollectorScheme {
         }
     }
 
-    pub(crate) fn domain_mut(&mut self) -> &mut SphericalDomain {
-        match self {
-            Self::Partitioned { domain, .. } => domain,
-            Self::SingleRegion { domain, .. } => domain,
-        }
-    }
-
     /// Returns the shape of the collector only if it is a single region.
     pub fn shape(&self) -> Option<RegionShape> {
         match self {
             Self::Partitioned { .. } => None,
             Self::SingleRegion { shape, .. } => Some(*shape),
+        }
+    }
+
+    pub(crate) fn domain_mut(&mut self) -> &mut SphericalDomain {
+        match self {
+            Self::Partitioned { domain, .. } => domain,
+            Self::SingleRegion { domain, .. } => domain,
         }
     }
 
@@ -131,6 +131,32 @@ impl CollectorScheme {
         match self {
             Self::Partitioned { .. } => false,
             Self::SingleRegion { .. } => true,
+        }
+    }
+
+    /// Returns the zenith angle range of the collector. If the collector is`
+    /// partitioned, the angle value is located at the center of each patch.
+    /// If the collector is a single region, the angle range is each
+    /// possible position of the collector.
+    pub fn ranges(
+        &self,
+    ) -> (
+        RangeByStepSizeInclusive<Radians>,
+        RangeByStepSizeInclusive<Radians>,
+    ) {
+        match self {
+            CollectorScheme::Partitioned { partition, .. } => match partition {
+                SphericalPartition::EqualAngle { zenith, azimuth } => {
+                    (zenith.clone(), azimuth.clone())
+                }
+                SphericalPartition::EqualArea { zenith, azimuth }
+                | SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                    (zenith.clone().into(), azimuth.clone())
+                }
+            },
+            CollectorScheme::SingleRegion {
+                zenith, azimuth, ..
+            } => (zenith.clone(), azimuth.clone()),
         }
     }
 
@@ -196,6 +222,10 @@ impl Energy {
 
 impl Collector {
     /// Generates the patches of the collector.
+    ///
+    /// The patches are generated based on the scheme of the collector. They are
+    /// used to collect the data. The patches are generated in the order of
+    /// the azimuth angle first, then the zenith angle.
     pub fn generate_patches(&self) -> CollectorPatches {
         log::debug!("Generating patches of the collector.");
         match self.scheme {
@@ -211,9 +241,9 @@ impl Collector {
                 let n_zenith = (zenith.span() / zenith.step_size).ceil() as usize;
                 let n_azimuth = (azimuth.span() / azimuth.step_size).ceil() as usize;
 
-                let patches = (0..n_zenith)
-                    .flat_map(|i_theta| {
-                        (0..n_azimuth).map(move |i_phi| {
+                let patches = (0..n_azimuth)
+                    .flat_map(|i_phi| {
+                        (0..n_zenith).map(move |i_theta| {
                             let spherical = SphericalCoord {
                                 radius: 1.0,
                                 zenith: zenith.start + i_theta as f32 * zenith.step_size,

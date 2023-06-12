@@ -419,6 +419,8 @@ impl SphericalPartition {
 impl SphericalPartition {
     /// Generate patches over the spherical shape. The angle range of the
     /// partition is limited by `SphericalDomain`.
+    ///
+    /// The patches are generated in the order of first azimuth, then zenith.
     pub fn generate_patches_over_domain(&self, _domain: &SphericalDomain) -> Vec<Patch> {
         // REVIEW: this function is not very efficient, it can be improved
         match self {
@@ -429,8 +431,8 @@ impl SphericalPartition {
 
                 log::trace!("Number of patches: {}", n_zenith * n_azimuth);
                 let mut patches = Vec::with_capacity(n_zenith * n_azimuth);
-                for i_theta in 0..n_zenith {
-                    for i_phi in 0..n_azimuth {
+                for i_phi in 0..n_azimuth {
+                    for i_theta in 0..n_zenith {
                         patches.push(Patch::new_partitioned(
                             (
                                 i_theta as f32 * zenith.step_size + zenith.start,
@@ -467,8 +469,8 @@ impl SphericalPartition {
                 let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
 
                 let mut patches = Vec::with_capacity(n_theta * n_phi);
-                for i_theta in 0..n_theta {
-                    for i_phi in 0..n_phi {
+                for i_phi in 0..n_phi {
+                    for i_theta in 0..n_theta {
                         patches.push(Patch::new_partitioned(
                             (
                                 (1.0 - (h_step * i_theta as f32 + h_start)).acos().into(),
@@ -515,15 +517,15 @@ impl SphericalPartition {
                     r.asin()
                 };
 
-                for i in 0..n_theta {
-                    // Linearly interpolate squared radius range.
-                    // Projected area is proportional to squared radius.
-                    //                 1st           2nd           3rd
-                    // O- - - - | - - - I - - - | - - - I - - - | - - - I - - -|
-                    //     r_start_sqr                               r_stop_sqr
-                    let theta = calc_theta(i);
-                    let theta_next = calc_theta(i + 1);
-                    for i_phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
+                for i_phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
+                    for i in 0..n_theta {
+                        // Linearly interpolate squared radius range.
+                        // Projected area is proportional to squared radius.
+                        //                 1st           2nd           3rd
+                        // O- - - - | - - - I - - - | - - - I - - - | - - - I - - -|
+                        //     r_start_sqr                               r_stop_sqr
+                        let theta = calc_theta(i);
+                        let theta_next = calc_theta(i + 1);
                         patches.push(Patch::new_partitioned(
                             (theta.into(), theta_next.into()),
                             (

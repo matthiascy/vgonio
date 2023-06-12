@@ -133,8 +133,15 @@ fn intersect_filter_stream<'a>(
                 };
                 let point = v0 * (1.0 - u - v) + v1 * u + v2 * v;
                 // spawn a new ray from the intersection point
-                let normal = hits.unit_normal(i).into();
-                let ray_dir = rays.unit_dir(i).into();
+                let normal: Vec3A = hits.unit_normal(i).into();
+                let ray_dir: Vec3A = rays.unit_dir(i).into();
+
+                if ray_dir.dot(normal) > 0.0 {
+                    log::trace!("ray {} hit backface", ray_id);
+                    valid[i] = ValidMask::Invalid as i32;
+                    continue;
+                }
+
                 let new_dir = fresnel::reflect(ray_dir, normal);
                 let last_id = ctx.ext.trajectory[ray_id as usize].len() - 1;
                 ctx.ext.trajectory[ray_id as usize][last_id].cos = Some(ray_dir.dot(normal));

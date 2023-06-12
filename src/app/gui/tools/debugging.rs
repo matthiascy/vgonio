@@ -88,17 +88,13 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(
-        event_loop: VgonioEventLoop,
-        toasts: Arc<RwLock<Toasts>>,
-        cache: Arc<RwLock<Cache>>,
-    ) -> Self {
+    pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: true,
             event_loop: event_loop.clone(),
             shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
-            brdf_pane: BrdfMeasurementPane::new(event_loop.clone(), toasts, cache),
+            brdf_pane: BrdfMeasurementPane::new(event_loop.clone(), cache),
             microfacet_pane: MicrofacetMeasurementPane::new(event_loop),
         }
     }

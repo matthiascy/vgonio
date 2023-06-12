@@ -9,6 +9,7 @@ use crate::{
             BsdfViewerEvent, VgonioEvent, VgonioEventLoop,
         },
     },
+    math,
     math::NumericCast,
     measure,
     measure::{
@@ -19,6 +20,7 @@ use crate::{
     Handedness, RangeByStepSizeInclusive, SphericalPartition,
 };
 use egui::{plot::*, Align, Context, PointerButton, Response, TextBuffer, Ui, Vec2};
+use glam::Vec3;
 use std::{
     any::Any,
     fmt::format,
@@ -566,7 +568,6 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             ui.selectable_value(&mut self.controls.mode, BsdfPlotMode::Slice3D, "Slice 3D");
         });
         let is_3d = self.controls.mode == BsdfPlotMode::Slice3D;
-
         let bsdf_data = self.data.measured.bsdf_data().unwrap();
         let zenith_i = bsdf_data.params.emitter.zenith;
         let azimuth_i = bsdf_data.params.emitter.azimuth;
@@ -665,28 +666,48 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
         let num_rays = bsdf_data.params.emitter.num_rays;
 
         if self.controls.changed {
-            let samples = measure::emitter::uniform_sampling_on_unit_sphere(
-                1024,
-                deg!(0.0).into(),
-                deg!(90.0).into(),
-                deg!(0.0).into(),
-                deg!(360.0).into(),
-                Handedness::RightHandedYUp,
+            let (zenith_range, azimuth_range) = bsdf_data.params.collector.scheme.ranges();
+            let count = bsdf_data.params.collector.scheme.total_sample_count();
+            debug_assert_eq!(
+                count,
+                zenith_range.step_count_wrapped() * azimuth_range.step_count_wrapped()
             );
+            let mut samples_per_wavelength = vec![vec![Vec3::ZERO; count]; wavelengths.len()];
+            let zenith_range_step_count = zenith_range.step_count_wrapped();
+            for (lambda_idx, samples) in samples_per_wavelength.iter_mut().enumerate() {
+                for (azimuth_idx, azimuth) in azimuth_range.values_wrapped().enumerate() {
+                    for (zenith_idx, zenith) in zenith_range.values_wrapped().enumerate() {
+                        let idx = azimuth_idx * zenith_range_step_count + zenith_idx;
+                        let mut coord = math::spherical_to_cartesian(
+                            1.0,
+                            zenith,
+                            azimuth,
+                            Handedness::RightHandedYUp,
+                        );
+                        coord.y = data_point.data
+                            [azimuth_idx * zenith_range_step_count + zenith_idx]
+                            .0[lambda_idx]
+                            .total_energy;
+                        samples[idx] = coord;
+                    }
+                }
+            }
             let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("bsdf_view_buffer_{:?}", self.controls.view_id)),
-                size: std::mem::size_of::<glam::Vec3>() as u64 * samples.len() as u64,
+                size: std::mem::size_of::<glam::Vec3>() as u64 * count as u64,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            self.gpu
-                .queue
-                .write_buffer(&buffer, 0, bytemuck::cast_slice(&samples));
+            self.gpu.queue.write_buffer(
+                &buffer,
+                0,
+                bytemuck::cast_slice(&samples_per_wavelength[0]),
+            );
             self.event_loop
                 .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::UpdateBuffer {
                     id: self.controls.view_id,
                     buffer: Some(buffer),
-                    count: samples.len() as u32,
+                    count: samples_per_wavelength[0].len() as u32,
                 }))
                 .unwrap();
             self.controls.changed = false;
@@ -976,18 +997,31 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
         let collapsing = egui::CollapsingHeader::new("BSDF");
         let response = collapsing
             .show(ui, |ui| {
-                let response = ui.add(
-                    egui::Image::new(self.controls.view_id, [256.0, 256.0])
-                        .sense(egui::Sense::click_and_drag()),
-                );
-                if response.dragged_by(PointerButton::Primary) {
-                    self.event_loop
-                        .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
-                            id: self.controls.view_id,
-                            angle: response.drag_delta().x / 256.0 * std::f32::consts::PI,
-                        }))
-                        .unwrap()
-                }
+                egui::Grid::new("bsdf_grid")
+                    .striped(true)
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("Energy");
+                        let response = ui.add(
+                            egui::Image::new(self.controls.view_id, [256.0, 256.0])
+                                .sense(egui::Sense::click_and_drag()),
+                        );
+                        if response.dragged_by(PointerButton::Primary) {
+                            let delta_x = response.drag_delta().x;
+                            if delta_x != 0.0 {
+                                self.event_loop
+                                    .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
+                                        id: self.controls.view_id,
+                                        angle: delta_x / 256.0 * std::f32::consts::PI,
+                                    }))
+                                    .unwrap()
+                            }
+                        }
+                        ui.end_row();
+
+                        ui.label("Rays");
+                        ui.end_row();
+                    });
             })
             .header_response;
 
