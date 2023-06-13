@@ -175,7 +175,7 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                         self.params.emitter.spectrum.ui(ui);
                         ui.end_row();
 
-                        if ui.button("Display Measurement Points") {}
+                        // if ui.button("Display Measurement Points") {}
                     });
             });
 

@@ -419,6 +419,7 @@ impl DebugDrawingState {
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
+            points_ranges: vec![],
             rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-rays-vert-buffer"),
                 size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays
