@@ -4,9 +4,10 @@ use crate::{
         gui::{
             misc::{input3_spherical, input3_xyz},
             widgets::ToggleSwitch,
-            VgonioEvent, VgonioEventLoop,
+            DebuggingEvent, VgonioEvent, VgonioEventLoop,
         },
     },
+    math,
     measure::{
         measurement::{BsdfMeasurementParams, Radius},
         rtc::Ray,
@@ -14,6 +15,7 @@ use crate::{
     },
     msurf::MicroSurface,
     units::{mm, UMillimetre},
+    Handedness,
 };
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::{IVec2, Vec3};
@@ -175,7 +177,36 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                         self.params.emitter.spectrum.ui(ui);
                         ui.end_row();
 
-                        // if ui.button("Display Measurement Points") {}
+                        if ui.button("GenerateSamples").clicked() {
+                            let samples = self.params.emitter.generate_samples();
+                            self.event_loop
+                                .send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateEmitterSamples(samples),
+                                ))
+                                .unwrap();
+                        }
+
+                        if ui.button("Display Measurement Points").clicked() {
+                            let points = self
+                                .params
+                                .emitter
+                                .meas_points()
+                                .into_iter()
+                                .map(|s| {
+                                    math::spherical_to_cartesian(
+                                        self.dome_radius,
+                                        s.zenith,
+                                        s.azimuth,
+                                        Handedness::RightHandedYUp,
+                                    )
+                                })
+                                .collect();
+                            self.event_loop
+                                .send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateEmitterPoints(points),
+                                ))
+                                .unwrap();
+                        }
                     });
             });
 

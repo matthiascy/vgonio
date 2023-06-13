@@ -668,22 +668,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
-name = "duplicate"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de78e66ac9061e030587b2a2e75cc88f22304913c907b11307bca737141230cb"
-dependencies = [
- "heck",
- "proc-macro-error",
-]
-
-[[package]]
-name = "ecolor"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f99fe3cac305af9d6d92971af60d0f7ea4d783201ef1673571567b6699964d9"
-
-[[package]]
 name = "ecolor"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -694,23 +678,12 @@ dependencies = [
 
 [[package]]
 name = "egui"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6412a21e0bde7c0918f7fb44bbbb86b5e1f88e63c026a4e747cc7af02f76dfbe"
-dependencies = [
- "ahash 0.8.3",
- "epaint 0.21.0",
- "nohash-hasher",
-]
-
-[[package]]
-name = "egui"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3aef8ec3ae1b772f340170c65bf27d5b8c28f543a0116c844d2ac08d01123e7"
 dependencies = [
  "ahash 0.8.3",
- "epaint 0.22.0",
+ "epaint",
  "log",
  "nohash-hasher",
 ]
@@ -720,7 +693,7 @@ name = "egui-gizmo"
 version = "0.10.0"
 source = "git+https://github.com/matthiascy/egui-gizmo.git?branch=own#efca395cf7201012be15d909e0f17f6de095aaec"
 dependencies = [
- "egui 0.22.0",
+ "egui",
  "glam",
 ]
 
@@ -730,7 +703,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "909b366a4a320f075c4c1f8dfcd9b3a91701a437b89575343d000e152060cda3"
 dependencies = [
- "egui 0.22.0",
+ "egui",
 ]
 
 [[package]]
@@ -739,22 +712,11 @@ version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a49155fd4a0a4fb21224407a91de0030847972ef90fc64edb63621caea61cb2"
 dependencies = [
- "egui 0.22.0",
+ "egui",
  "instant",
  "log",
  "raw-window-handle",
  "winit",
-]
-
-[[package]]
-name = "egui_dock"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6951209e8e0cee01cfdd60e5a681ccb5b7fa9a2bcca2ca8c3554d9cf66016422"
-dependencies = [
- "duplicate",
- "egui 0.21.0",
- "paste",
 ]
 
 [[package]]
@@ -763,7 +725,7 @@ version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9278f4337b526f0d57e5375e5a7340a311fa6ee8f9fcc75721ac50af13face02"
 dependencies = [
- "egui 0.22.0",
+ "egui",
  "serde",
 ]
 
@@ -772,12 +734,6 @@ name = "either"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
-
-[[package]]
-name = "emath"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8ecd80612937e0267909d5351770fe150004e24dab93954f69ca62eecd3f77e"
 
 [[package]]
 name = "emath"
@@ -808,21 +764,6 @@ dependencies = [
 
 [[package]]
 name = "epaint"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12e78b5c58a1f7f621f9d546add2adce20636422c9b251e29f749e8a2f713c95"
-dependencies = [
- "ab_glyph",
- "ahash 0.8.3",
- "atomic_refcell",
- "ecolor 0.21.0",
- "emath 0.21.0",
- "nohash-hasher",
- "parking_lot",
-]
-
-[[package]]
-name = "epaint"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09333964d4d57f40a85338ba3ca5ed4716070ab184dcfed966b35491c5c64f3b"
@@ -831,8 +772,8 @@ dependencies = [
  "ahash 0.8.3",
  "atomic_refcell",
  "bytemuck",
- "ecolor 0.22.0",
- "emath 0.22.0",
+ "ecolor",
+ "emath",
  "log",
  "nohash-hasher",
  "parking_lot",
@@ -1882,30 +1823,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-dependencies = [
- "proc-macro-error-attr",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
- "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-dependencies = [
- "proc-macro2",
- "quote",
- "version_check",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2605,11 +2522,10 @@ dependencies = [
  "clap",
  "csv",
  "dirs",
- "egui 0.22.0",
+ "egui",
  "egui-gizmo",
  "egui-toast",
  "egui-winit",
- "egui_dock",
  "egui_extras",
  "embree",
  "env_logger",

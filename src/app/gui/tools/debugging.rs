@@ -64,7 +64,7 @@ impl Tool for DebuggingInspector {
 
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.opened_pane, PaneKind::ShadowMap, "Shadow Map");
-            ui.selectable_value(&mut self.opened_pane, PaneKind::Brdf, "Ray Tracing");
+            ui.selectable_value(&mut self.opened_pane, PaneKind::Brdf, "BRDF Measurement");
             ui.selectable_value(&mut self.opened_pane, PaneKind::Microfacet, "Microfacet");
         });
         ui.separator();

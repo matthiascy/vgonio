@@ -1,6 +1,6 @@
 use crate::app::{
     gfx::{remap_depth, GpuContext},
-    gui::{state::GuiContext, VgonioEvent, VgonioEventLoop},
+    gui::{state::GuiContext, DebuggingEvent, VgonioEvent, VgonioEventLoop},
 };
 use egui::{Sense, TextureFilter};
 use winit::event_loop::EventLoopProxy;
@@ -82,7 +82,7 @@ impl egui::Widget for &mut ShadowMapPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         if ui.button("Update").clicked() {
             self.event_loop
-                .send_event(VgonioEvent::UpdateDepthMap)
+                .send_event(VgonioEvent::Debugging(DebuggingEvent::UpdateDepthMap))
                 .unwrap();
         }
 

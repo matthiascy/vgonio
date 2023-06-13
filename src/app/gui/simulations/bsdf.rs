@@ -1,5 +1,5 @@
 use crate::{
-    app::gui::{misc, simulations::SurfaceSelector, VgonioEvent, VgonioEventLoop},
+    app::gui::{misc, simulations::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
     measure::{
         bsdf::BsdfKind,
         emitter::RegionShape,
@@ -405,10 +405,10 @@ impl BsdfSimulation {
         self.params.collector.ui(ui);
         if ui.button("Simulate").clicked() {
             self.event_loop
-                .send_event(VgonioEvent::MeasureBsdf {
+                .send_event(VgonioEvent::Measure(MeasureEvent::Bsdf {
                     params: self.params,
                     surfaces: self.selector.selected.clone().into_iter().collect(),
-                })
+                }))
                 .unwrap();
         }
     }

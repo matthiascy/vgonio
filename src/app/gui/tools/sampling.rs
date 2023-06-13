@@ -11,7 +11,7 @@ use crate::{
             camera::{Camera, Projection},
             GpuContext, Texture,
         },
-        gui::{state::GuiRenderer, VgonioEvent, VgonioEventLoop},
+        gui::{state::GuiRenderer, DebuggingEvent, VgonioEvent, VgonioEventLoop},
     },
     measure,
     units::deg,
@@ -51,7 +51,9 @@ impl Tool for SamplingInspector {
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         self.event_loop
-            .send_event(VgonioEvent::SetSamplingDebuggerRendering(*open))
+            .send_event(VgonioEvent::Debugging(
+                DebuggingEvent::SetSamplingRendering(*open),
+            ))
             .unwrap();
         egui::Window::new(self.name()).open(open).show(ctx, |ui| {
             self.ui(ui);

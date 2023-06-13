@@ -34,6 +34,7 @@ impl SurfaceSelector {
         }
     }
 
+    /// Ui for the surface selector.
     pub fn ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
         let mut to_be_added: Option<Handle<MicroSurface>> = None;
         ui.columns(1, |uis| {

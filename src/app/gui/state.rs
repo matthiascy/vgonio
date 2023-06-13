@@ -18,7 +18,7 @@ use crate::app::{
 use crate::{
     app::gfx::{remap_depth, SlicedBuffer},
     math::generate_parametric_hemisphere,
-    measure::rtc::Ray,
+    measure::{emitter::EmitterSamples, rtc::Ray},
 };
 use glam::{Mat4, Vec3};
 use std::{
@@ -221,16 +221,22 @@ pub struct DebugDrawingState {
     pub vertices: SlicedBuffer,
     /// Giant buffer for all indices data except for the micro surfaces.
     pub indices: SlicedBuffer,
-    /// Basic render pipeline for debug drawing.
-    pub pipeline: wgpu::RenderPipeline,
+    /// Basic render pipeline for debug drawing. Topology = TriangleList,
+    /// PolygonMode = Line
+    pub basic_pipeline: wgpu::RenderPipeline,
+    /// Pipeline for drawing points.
+    pub points_pipeline: wgpu::RenderPipeline,
     /// Bind group for basic render pipeline.
     pub bind_group: wgpu::BindGroup,
     /// Uniform buffer for basic render pipeline.
     pub uniform_buffer: wgpu::Buffer,
     /// If true, the offline rendering of [`SamplingDebugger`] is enabled.
     pub sampling_debug_enabled: bool,
-    /// The range of points of the vertices to be drawn. TODO: implement this.
-    pub points_ranges: Vec<Range<u32>>,
+
+    /// Emitter samples buffer.
+    pub emitter_samples_buffer: Option<wgpu::Buffer>,
+    /// Emitter measurement points buffer.
+    pub emitter_points_buffer: Option<wgpu::Buffer>,
 
     /// Vertex buffer storing all vertices.
     pub rays_vertex_buf: wgpu::Buffer,
@@ -310,7 +316,9 @@ impl DebugDrawingState {
         let mut vertices = SlicedBuffer::new(
             &ctx.device,
             4096,
-            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
             Some("debug-drawing-vertices-buffer"),
         );
 
@@ -335,7 +343,7 @@ impl DebugDrawingState {
             .subslices_mut()
             .push(0..hemisphere.1.len() as u64 * std::mem::size_of::<u32>() as u64 * 3);
 
-        let (pipeline, bind_group, uniform_buffer) = {
+        let (basic_pipeline, points_pipeline, bind_group, uniform_buffer) = {
             let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-drawing-basic-uniform-buffer"),
                 size: std::mem::size_of::<[f32; 16 * 3 + 4]>() as u64,
@@ -373,53 +381,73 @@ impl DebugDrawingState {
                         include_str!("../gui/assets/shaders/wgsl/default.wgsl").into(),
                     ),
                 });
-            let pipeline = ctx
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("debug-drawing-basic-pipeline"),
-                    layout: Some(&ctx.device.create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("debug-drawing-basic-pipeline-layout"),
-                            bind_group_layouts: &[&bind_group_layout],
-                            push_constant_ranges: &[],
+            let pipeline_layout =
+                ctx.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("debug-drawing-shared-pipeline-layout"),
+                        bind_group_layouts: &[&bind_group_layout],
+                        push_constant_ranges: &[],
+                    });
+            let vert_state = wgpu::VertexState {
+                module: &module,
+                entry_point: "vs_main",
+                buffers: &[vert_buffer_layout.clone()],
+            };
+            let frag_state = wgpu::FragmentState {
+                module: &module,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            };
+            let basic_pipeline =
+                ctx.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("debug-drawing-basic-pipeline"),
+                        layout: Some(&pipeline_layout),
+                        vertex: vert_state.clone(),
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            front_face: wgpu::FrontFace::Ccw,
+                            polygon_mode: wgpu::PolygonMode::Line,
+                            ..Default::default()
                         },
-                    )),
-                    vertex: wgpu::VertexState {
-                        module: &module,
-                        entry_point: "vs_main",
-                        buffers: &[vert_buffer_layout.clone()],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,
-                        polygon_mode: wgpu::PolygonMode::Line,
-                        ..Default::default()
-                    },
-                    depth_stencil: None,
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &module,
-                        entry_point: "fs_main",
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: target_format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    multiview: None,
-                });
-            (pipeline, bind_group, uniform_buffer)
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(frag_state.clone()),
+                        multiview: None,
+                    });
+            let points_pipeline =
+                ctx.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("debug-drawing-points-pipeline"),
+                        layout: Some(&pipeline_layout),
+                        vertex: vert_state,
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::PointList,
+                            front_face: wgpu::FrontFace::Ccw,
+                            ..Default::default()
+                        },
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(frag_state),
+                        multiview: None,
+                    });
+            (basic_pipeline, points_pipeline, bind_group, uniform_buffer)
         };
 
         Self {
             vertices,
             indices,
-            pipeline,
+            basic_pipeline,
+            points_pipeline,
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
-            points_ranges: vec![],
+            emitter_samples_buffer: None,
+            emitter_points_buffer: None,
             rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-rays-vert-buffer"),
                 size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays
@@ -573,6 +601,30 @@ impl DebugDrawingState {
         buf[51] = scale;
         ctx.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&buf));
+    }
+
+    pub fn update_emitter_samples(&mut self, ctx: &GpuContext, samples: EmitterSamples) {
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-emitter-samples"),
+            size: samples.len() as u64 * std::mem::size_of::<Vec3>() as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        ctx.queue
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&samples));
+        self.emitter_samples_buffer = Some(buffer);
+    }
+
+    pub fn update_emitter_points(&mut self, ctx: &GpuContext, positions: Vec<Vec3>) {
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-emitter-points"),
+            size: positions.len() as u64 * std::mem::size_of::<Vec3>() as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        ctx.queue
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&positions));
+        self.emitter_points_buffer = Some(buffer);
     }
 }
 

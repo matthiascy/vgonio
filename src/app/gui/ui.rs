@@ -321,11 +321,8 @@ impl VgonioUi {
                 });
             });
         self.tools.show(ctx);
-        //self.simulation_workspace.show(ctx);
         self.drag_drop.show(ctx);
-
         self.navigator.show(ctx);
-
         if self.right_panel_expanded {
             egui::SidePanel::right("vgonio_right_panel")
                 .min_width(300.0)

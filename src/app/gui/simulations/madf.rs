@@ -1,5 +1,5 @@
 use crate::{
-    app::gui::{simulations::SurfaceSelector, VgonioEvent, VgonioEventLoop},
+    app::gui::{simulations::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
     measure::measurement::MadfMeasurementParams,
 };
 use winit::event_loop::EventLoopProxy;
@@ -38,10 +38,10 @@ impl MadfSimulation {
         if ui.button("Simulate").clicked() {
             // TODO: launch simulation on a separate thread and show progress bar
             self.event_loop
-                .send_event(VgonioEvent::MeasureAreaDistribution {
+                .send_event(VgonioEvent::Measure(MeasureEvent::Madf {
                     params: self.params,
                     surfaces: self.selector.selected.clone().into_iter().collect(),
-                })
+                }))
                 .unwrap();
         }
     }

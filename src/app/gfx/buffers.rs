@@ -150,10 +150,14 @@ impl SlicedBuffer {
         required_cap: wgpu::BufferAddress,
         copy: bool,
     ) {
-        assert!(required_cap > self.cap);
+        debug_assert!(required_cap > self.cap);
         let new_cap = (self.cap * 2).at_least(required_cap);
         log::info!("Growing buffer from {} to {}", self.cap, new_cap);
         if copy {
+            debug_assert!(
+                self.usages.contains(wgpu::BufferUsages::COPY_SRC),
+                "Buffer must have COPY_SRC usage to be copied"
+            );
             let new_buf = device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
                 size: new_cap,

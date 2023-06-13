@@ -24,6 +24,7 @@ use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
     any::Any,
     default::Default,
+    ops::Range,
     path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
@@ -47,9 +48,13 @@ use crate::{
             bsdf_viewer::BsdfViewer,
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
             ui::Theme,
+            VgonioEvent::Measure,
         },
     },
-    measure::measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
+    measure::{
+        emitter::EmitterSamples,
+        measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
+    },
     msurf::MicroSurface,
     units::Degrees,
 };
@@ -99,7 +104,6 @@ pub enum VgonioEvent {
     Quit,
     RequestRedraw,
     OpenFiles(Vec<rfd::FileHandle>),
-    UpdateDepthMap,
     TraceRayDbg {
         ray: Ray,
         max_bounces: u32,
@@ -109,30 +113,15 @@ pub enum VgonioEvent {
     UpdateDebugT(f32),
     UpdatePrimId(u32),
     UpdateCellPos(IVec2),
-    UpdateSamplingDebugger {
-        count: u32,
-        azimuth: (f32, f32),
-        zenith: (f32, f32),
-    },
-    BsdfViewer(BsdfViewerEvent),
-    SetSamplingDebuggerRendering(bool),
-    MeasureAreaDistribution {
-        params: MadfMeasurementParams,
-        surfaces: Vec<Handle<MicroSurface>>,
-    },
-    MeasureMaskingShadowing {
-        params: MmsfMeasurementParams,
-        surfaces: Vec<Handle<MicroSurface>>,
-    },
-    MeasureBsdf {
-        params: BsdfMeasurementParams,
-        surfaces: Vec<Handle<MicroSurface>>,
-    },
     CheckVisibleFacets {
         m_azimuth: Degrees,
         m_zenith: Degrees,
         opening_angle: Degrees,
     },
+
+    BsdfViewer(BsdfViewerEvent),
+    Debugging(DebuggingEvent),
+    Measure(MeasureEvent),
     Notify {
         kind: ToastKind,
         text: String,
@@ -159,6 +148,32 @@ pub enum BsdfViewerEvent {
         id: egui::TextureId,
         /// Rotation angle in radians.
         angle: f32,
+    },
+}
+
+/// Events used by debugging tools.
+#[derive(Debug)]
+pub enum DebuggingEvent {
+    /// Enable/disable the rendering of the sampling debugger.
+    SetSamplingRendering(bool),
+    UpdateDepthMap,
+    UpdateEmitterSamples(EmitterSamples),
+    UpdateEmitterPoints(Vec<Vec3>),
+}
+
+#[derive(Debug)]
+pub enum MeasureEvent {
+    Madf {
+        params: MadfMeasurementParams,
+        surfaces: Vec<Handle<MicroSurface>>,
+    },
+    Mmsf {
+        params: MmsfMeasurementParams,
+        surfaces: Vec<Handle<MicroSurface>>,
+    },
+    Bsdf {
+        params: BsdfMeasurementParams,
+        surfaces: Vec<Handle<MicroSurface>>,
     },
 }
 
@@ -927,6 +942,7 @@ impl VgonioGuiApp {
             }
         }
 
+        // TODO: put this inside debug render state or debug inspector
         let dbg_inspector = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         if dbg_inspector.debug_drawing_enabled {
             let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -943,7 +959,7 @@ impl VgonioGuiApp {
             });
 
             if dbg_inspector.brdf_pane.show_dome {
-                render_pass.set_pipeline(&self.dbg_drawing_state.pipeline);
+                render_pass.set_pipeline(&self.dbg_drawing_state.basic_pipeline);
                 render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, self.dbg_drawing_state.vertices.data_slice(..));
                 render_pass.set_index_buffer(
@@ -966,6 +982,27 @@ impl VgonioGuiApp {
                             0..1,
                         );
                     });
+            }
+
+            match &self.dbg_drawing_state.emitter_samples_buffer {
+                None => {}
+                Some(buffer) => {
+                    // Convert range in bytes to range in vertices.
+                    render_pass.set_pipeline(&self.dbg_drawing_state.points_pipeline);
+                    render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, buffer.slice(..));
+                    render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+                }
+            }
+
+            match &self.dbg_drawing_state.emitter_points_buffer {
+                None => {}
+                Some(buffer) => {
+                    render_pass.set_pipeline(&self.dbg_drawing_state.points_pipeline);
+                    render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, buffer.slice(..));
+                    render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+                }
             }
         }
 
@@ -1007,25 +1044,38 @@ impl VgonioGuiApp {
             }
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFiles(files) => self.open_files(files),
-            VgonioEvent::UpdateDepthMap => {
-                self.depth_map.copy_to_buffer(
-                    &self.ctx.gpu,
-                    self.canvas.width(),
-                    self.canvas.height(),
-                );
-                self.ui
-                    .tools
-                    .get_tool_mut::<DebuggingInspector>()
-                    .unwrap()
-                    .shadow_map_pane
-                    .update_depth_map(
+            VgonioEvent::Debugging(event) => match event {
+                DebuggingEvent::SetSamplingRendering(enabled) => {
+                    self.dbg_drawing_state.sampling_debug_enabled = enabled;
+                }
+                DebuggingEvent::UpdateDepthMap => {
+                    self.depth_map.copy_to_buffer(
                         &self.ctx.gpu,
-                        &self.ctx.gui,
-                        &self.depth_map.depth_attachment_storage,
-                        self.depth_map.width,
+                        self.canvas.width(),
                         self.canvas.height(),
                     );
-            }
+                    self.ui
+                        .tools
+                        .get_tool_mut::<DebuggingInspector>()
+                        .unwrap()
+                        .shadow_map_pane
+                        .update_depth_map(
+                            &self.ctx.gpu,
+                            &self.ctx.gui,
+                            &self.depth_map.depth_attachment_storage,
+                            self.depth_map.width,
+                            self.canvas.height(),
+                        );
+                }
+                DebuggingEvent::UpdateEmitterSamples(samples) => {
+                    self.dbg_drawing_state
+                        .update_emitter_samples(&self.ctx.gpu, samples);
+                }
+                DebuggingEvent::UpdateEmitterPoints(positions) => {
+                    self.dbg_drawing_state
+                        .update_emitter_points(&self.ctx.gpu, positions);
+                }
+            },
             VgonioEvent::UpdateDebugT(t) => {
                 self.dbg_drawing_state.ray_t = t;
             }
@@ -1131,40 +1181,6 @@ impl VgonioGuiApp {
             //         }
             //     }
             // }
-            VgonioEvent::UpdateSamplingDebugger {
-                count,
-                azimuth,
-                zenith,
-            } => {
-                // let samples =
-                // measure::emitter::uniform_sampling_on_unit_sphere(
-                //     count as usize,
-                //     degrees!(zenith.0).into(),
-                //     degrees!(zenith.1).into(),
-                //     degrees!(azimuth.0).into(),
-                //     degrees!(azimuth.1).into(),
-                //     Handedness::RightHandedYUp,
-                // );
-                // let mut encoder =
-                //     self.ctx
-                //         .gpu
-                //         .device
-                //         .create_command_encoder(&
-                // wgpu::CommandEncoderDescriptor {
-                // label: Some("Sampling Debugger Encoder"),
-                //         });
-                // self.ui
-                //     .tools
-                //     .get_tool_mut::<SamplingInspector>()
-                //     .unwrap()
-                //     .record_render_pass(&self.ctx.gpu, &mut encoder,
-                // &samples); self.ctx.gpu.queue.
-                // submit(Some(encoder.finish())); self.ui
-                //     .tools
-                //     .get_tool_mut::<SamplingInspector>()
-                //     .unwrap()
-                //     .render(&self.ctx.gpu, &samples);
-            }
             VgonioEvent::BsdfViewer(event) => match event {
                 BsdfViewerEvent::ToggleView(id) => {
                     self.bsdf_viewer.write().unwrap().toggle_view(id);
@@ -1181,6 +1197,37 @@ impl VgonioGuiApp {
                     self.bsdf_viewer.write().unwrap().rotate(id, angle);
                 }
             },
+            VgonioEvent::Measure(event) => match event {
+                MeasureEvent::Madf { params, surfaces } => {
+                    println!("Measuring area distribution");
+                    measure::microfacet::measure_area_distribution(
+                        params,
+                        &surfaces,
+                        &self.cache.read().unwrap(),
+                    );
+                    todo!("Save area distribution to file or display it in a window");
+                }
+                MeasureEvent::Mmsf { params, surfaces } => {
+                    println!("Measuring masking/shadowing");
+                    measure::microfacet::measure_masking_shadowing(
+                        params,
+                        &surfaces,
+                        &self.cache.read().unwrap(),
+                        Handedness::RightHandedYUp,
+                    );
+                    todo!("Save area distribution to file or display it in a window");
+                }
+                MeasureEvent::Bsdf { params, surfaces } => {
+                    println!("Measuring BSDF");
+                    measure::bsdf::measure_bsdf_rt(
+                        params,
+                        &surfaces,
+                        params.sim_kind,
+                        &self.cache.read().unwrap(),
+                    );
+                    todo!("Save area distribution to file or display it in a window");
+                }
+            },
             VgonioEvent::Notify { kind, text, time } => {
                 self.toasts.add(Toast {
                     kind,
@@ -1190,9 +1237,6 @@ impl VgonioGuiApp {
                         .show_progress(true)
                         .show_icon(true),
                 });
-            }
-            VgonioEvent::SetSamplingDebuggerRendering(state) => {
-                self.dbg_drawing_state.sampling_debug_enabled = state;
             }
             // VgonioEvent::CheckVisibleFacets {
             //     m_azimuth,
@@ -1283,35 +1327,6 @@ impl VgonioGuiApp {
             //         }
             //     }
             // },
-            VgonioEvent::MeasureAreaDistribution { params, surfaces } => {
-                println!("Measuring area distribution");
-                measure::microfacet::measure_area_distribution(
-                    params,
-                    &surfaces,
-                    &self.cache.read().unwrap(),
-                );
-                todo!("Save area distribution to file or display it in a window");
-            }
-            VgonioEvent::MeasureMaskingShadowing { params, surfaces } => {
-                println!("Measuring masking/shadowing");
-                measure::microfacet::measure_masking_shadowing(
-                    params,
-                    &surfaces,
-                    &self.cache.read().unwrap(),
-                    Handedness::RightHandedYUp,
-                );
-                todo!("Save area distribution to file or display it in a window");
-            }
-            VgonioEvent::MeasureBsdf { params, surfaces } => {
-                println!("Measuring BSDF");
-                measure::bsdf::measure_bsdf_rt(
-                    params,
-                    &surfaces,
-                    params.sim_kind,
-                    &self.cache.read().unwrap(),
-                );
-                todo!("Save area distribution to file or display it in a window");
-            }
             _ => {}
         }
     }

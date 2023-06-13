@@ -1,5 +1,5 @@
 use crate::{
-    app::gui::{simulations::SurfaceSelector, VgonioEvent, VgonioEventLoop},
+    app::gui::{simulations::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
     measure::measurement::MmsfMeasurementParams,
 };
 use winit::event_loop::EventLoopProxy;
@@ -43,10 +43,10 @@ impl MmsfSimulation {
             });
         if ui.button("Simulate").clicked() {
             self.event_loop
-                .send_event(VgonioEvent::MeasureMaskingShadowing {
+                .send_event(VgonioEvent::Measure(MeasureEvent::Mmsf {
                     params: self.params,
                     surfaces: self.selector.selected.clone().into_iter().collect(),
-                })
+                }))
                 .unwrap();
         }
     }
