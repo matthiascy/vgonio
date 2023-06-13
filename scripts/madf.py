@@ -38,14 +38,14 @@ def read_data(filename):
         print(f"is_compressed = {is_compressed}")
 
         [azimuth_start, azimuth_stop, azimuth_bin_size] = np.degrees(struct.unpack("<fff", header[8:20]))
-        [azimuth_bin_count] = struct.unpack("<I", header[20:24])
+        (azimuth_bin_count,) = struct.unpack("<I", header[20:24])
         print(f"azimuth -- start = {azimuth_start}, stop = {azimuth_stop}, bin_size = {azimuth_bin_size}, count = {azimuth_bin_count}")
 
         [zenith_start, zenith_stop, zenith_bin_size] = np.degrees(struct.unpack("<fff", header[24:36]))
-        zenith_bin_count = int.from_bytes(header[36:40], byteorder='little')
+        (zenith_bin_count,) = struct.unpack("<I", header[36:40])
         print(f"zenith -- start = {zenith_start}, stop = {zenith_stop}, bin_size = {zenith_bin_size}, count = {zenith_bin_count}")
 
-        sample_count = int.from_bytes(header[40:44], byteorder='little')
+        (sample_count,) = struct.unpack("<I", header[40:44])
         print(f"sample_count = {sample_count}")
 
         if sample_count != azimuth_bin_count * zenith_bin_count:
@@ -136,11 +136,13 @@ if __name__ == "__main__":
         ax.set_title(f"Microfacet NDF - {micro_surface_name}")
         ax.plot_trisurf(xs, ys, zs, cmap='viridis', edgecolor='none')
     for phi in args.phi:
+        print(f"Plotting {phi}°")
         figures.append((plt.figure(), f"mndf_phi={phi:.2f}.png"))
         ax = figures[-1][0].add_subplot()
         ax.set_title(f"Microfacet NDF - {micro_surface_name}")
         phi_idx_right = int((phi - azimuth_start) / azimuth_bin_size)
         phi_idx_left = int(((phi - azimuth_start + 180.0) % 360.0) / azimuth_bin_size)
+        print(f"phi_idx_left={phi_idx_left}, phi_idx_right={phi_idx_right}")
         zenith_bins_full_range = np.concatenate([np.flip(zenith_bins[1:]) * -1.0, zenith_bins])
         ticks = np.arange(-90, 90 + zenith_bin_size, 15)
         ax.tick_params(axis='x', which='major', labelsize=10)
