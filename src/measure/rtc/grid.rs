@@ -47,7 +47,7 @@ pub fn measure_bsdf(
 ) -> MeasuredBsdfData {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
-    let radius = params.emitter.radius.eval(mesh);
+    let radius = params.emitter.radius.estimate(mesh);
     let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
     let mut data = vec![];

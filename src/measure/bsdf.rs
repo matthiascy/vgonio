@@ -256,7 +256,7 @@ pub fn measure_bsdf_rt(
 ) -> Vec<MeasurementData> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
-    let samples = params.emitter.generate_samples();
+    let samples = params.emitter.generate_unit_samples();
     let patches = params.collector.generate_patches();
 
     match sim_kind {

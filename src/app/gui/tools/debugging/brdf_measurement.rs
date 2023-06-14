@@ -9,6 +9,7 @@ use crate::{
     },
     math,
     measure::{
+        emitter::RegionShape,
         measurement::{BsdfMeasurementParams, Radius},
         rtc::Ray,
         Emitter, RtcMethod,
@@ -29,7 +30,7 @@ enum RayMode {
 }
 
 pub(crate) struct BrdfMeasurementPane {
-    pub dome_radius: f32,
+    pub auto_radius: f32,
     pub show_dome: bool,
     cache: Arc<RwLock<Cache>>,
 
@@ -52,7 +53,7 @@ pub(crate) struct BrdfMeasurementPane {
 impl BrdfMeasurementPane {
     pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
-            dome_radius: 1.0,
+            auto_radius: 1.0,
             show_dome: false,
             cache,
             ray_origin_cartesian: Vec3::new(0.0, 5.0, 0.0),
@@ -70,8 +71,6 @@ impl BrdfMeasurementPane {
         }
     }
 }
-
-// TODO: merge dome radius and emitter radius
 
 impl egui::Widget for &mut BrdfMeasurementPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
@@ -99,40 +98,6 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                     }
                 });
         });
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Dome Radius:");
-            ui.add(
-                egui::DragValue::new(&mut self.dome_radius)
-                    .speed(0.1)
-                    .clamp_range(0.0..=10000.0),
-            );
-            if ui.button("eval").clicked() {
-                let record = self
-                    .loaded_surfaces
-                    .iter()
-                    .find(|s| s.surf == self.selected_surface.unwrap_or(Handle::default()));
-                match record {
-                    None => {
-                        self.event_loop
-                            .send_event(VgonioEvent::Notify {
-                                kind: ToastKind::Warning,
-                                text: "No surface selected to evaluate the dome radius".to_string(),
-                                time: 3.0,
-                            })
-                            .unwrap();
-                    }
-                    Some(record) => {
-                        let cache = self.cache.read().unwrap();
-                        let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
-                        self.dome_radius = Radius::Auto(mm!(
-                            self.dome_radius * mesh.unit.factor_convert_to::<UMillimetre>()
-                        ))
-                        .eval(mesh);
-                    }
-                }
-            }
-            ui.add(ToggleSwitch::new(&mut self.show_dome));
-        });
 
         egui::CollapsingHeader::new("Emitter")
             .default_open(true)
@@ -158,7 +123,36 @@ impl egui::Widget for &mut BrdfMeasurementPane {
 
                         ui.label("Distance:")
                             .on_hover_text("Distance from emitter to the surface.");
-                        self.params.emitter.radius.ui(ui);
+                        ui.horizontal_wrapped(|ui| {
+                            self.params.emitter.radius.ui(ui);
+                            if ui.button("eval").clicked() {
+                                let record = self.loaded_surfaces.iter().find(|s| {
+                                    s.surf == self.selected_surface.unwrap_or(Handle::default())
+                                });
+                                match record {
+                                    None => {
+                                        self.event_loop
+                                            .send_event(VgonioEvent::Notify {
+                                                kind: ToastKind::Warning,
+                                                text: "No surface selected to evaluate the dome \
+                                                       radius"
+                                                    .to_string(),
+                                                time: 3.0,
+                                            })
+                                            .unwrap();
+                                    }
+                                    Some(record) => {
+                                        let cache = self.cache.read().unwrap();
+                                        let mesh =
+                                            cache.get_micro_surface_mesh(record.mesh).unwrap();
+                                        self.auto_radius =
+                                            self.params.emitter.radius.estimate(mesh);
+                                        log::trace!("evaluated radius: {}", self.auto_radius);
+                                    }
+                                }
+                            }
+                            ui.add(ToggleSwitch::new(&mut self.show_dome));
+                        });
                         ui.end_row();
 
                         ui.label("Azimuthal range φ: ");
@@ -177,16 +171,71 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                         self.params.emitter.spectrum.ui(ui);
                         ui.end_row();
 
-                        if ui.button("GenerateSamples").clicked() {
-                            let samples = self.params.emitter.generate_samples();
-                            self.event_loop
-                                .send_event(VgonioEvent::Debugging(
-                                    DebuggingEvent::UpdateEmitterSamples(samples),
-                                ))
-                                .unwrap();
-                        }
+                        ui.label("Samples: ");
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button("Generate").clicked() {
+                                let samples = self.params.emitter.generate_unit_samples();
+                                let record = self.loaded_surfaces.iter().find(|s| {
+                                    s.surf == self.selected_surface.unwrap_or(Handle::default())
+                                });
+                                match record {
+                                    None => {
+                                        self.event_loop
+                                            .send_event(VgonioEvent::Notify {
+                                                kind: ToastKind::Warning,
+                                                text: "No surface selected to evaluate the radius"
+                                                    .to_string(),
+                                                time: 3.0,
+                                            })
+                                            .unwrap();
+                                    }
+                                    Some(record) => {
+                                        let cache = self.cache.read().unwrap();
+                                        let mesh =
+                                            cache.get_micro_surface_mesh(record.mesh).unwrap();
+                                        let (radius, disk_radius) = match self.params.emitter.shape
+                                        {
+                                            RegionShape::SphericalCap { .. }
+                                            | RegionShape::SphericalRect { .. } => {
+                                                (self.params.emitter.radius.estimate(mesh), None)
+                                            }
+                                            RegionShape::Disk { radius } => (
+                                                self.params.emitter.radius.estimate(mesh),
+                                                Some(radius.estimate_disk_radius(mesh)),
+                                            ),
+                                        };
+                                        log::trace!(
+                                            "evaluated radius: {}, {:?}",
+                                            radius,
+                                            disk_radius
+                                        );
+                                        self.event_loop
+                                            .send_event(VgonioEvent::Debugging(
+                                                DebuggingEvent::UpdateEmitterSamples {
+                                                    samples,
+                                                    radius,
+                                                    disk_radius,
+                                                },
+                                            ))
+                                            .unwrap();
+                                    }
+                                }
+                            }
+                            if ui.button("\u{25C0}").clicked() {
+                                println!("Prev");
+                            }
+                            if ui.button("\u{25B6}").clicked() {
+                                println!("Next");
+                            }
+                        });
+                        ui.end_row();
 
-                        if ui.button("Display Measurement Points").clicked() {
+                        ui.label("Measurement Points: ");
+                        if ui.button("Display").clicked() {
+                            log::debug!(
+                                "Displaying measurement points, radius: {}",
+                                self.auto_radius
+                            );
                             let points = self
                                 .params
                                 .emitter
@@ -194,19 +243,31 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                                 .into_iter()
                                 .map(|s| {
                                     math::spherical_to_cartesian(
-                                        self.dome_radius,
+                                        1.0,
                                         s.zenith,
                                         s.azimuth,
                                         Handedness::RightHandedYUp,
                                     )
                                 })
                                 .collect();
+                            let record = self.loaded_surfaces.iter().find(|s| {
+                                s.surf == self.selected_surface.unwrap_or(Handle::default())
+                            });
+                            if let Some(record) = record {
+                                let cache = self.cache.read().unwrap();
+                                let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
+                                self.auto_radius = self.params.emitter.radius.estimate(mesh);
+                            };
                             self.event_loop
                                 .send_event(VgonioEvent::Debugging(
-                                    DebuggingEvent::UpdateEmitterPoints(points),
+                                    DebuggingEvent::UpdateEmitterPoints {
+                                        points,
+                                        radius: self.auto_radius,
+                                    },
                                 ))
                                 .unwrap();
                         }
+                        ui.end_row();
                     });
             });
 

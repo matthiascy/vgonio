@@ -73,6 +73,14 @@ pub enum RegionShape {
         /// Azimuthal angle range of the patch (in radians).
         azimuth: (Radians, Radians),
     } = 0x01,
+    /// A patch has a disk shape, but the disk is not on the surface of the
+    /// sphere. The radius of the disk is calculated according to the size
+    /// of the surface.
+    Disk {
+        /// Radius of the disk.
+        #[serde(skip)]
+        radius: Radius,
+    } = 0x02,
 }
 
 impl RegionShape {
@@ -97,24 +105,29 @@ impl RegionShape {
         Self::SphericalRect { zenith, azimuth }
     }
 
-    pub fn zenith(&self) -> (Radians, Radians) {
+    pub fn zenith(&self) -> Option<(Radians, Radians)> {
         match self {
-            Self::SphericalCap { zenith } => (radians!(0.0), *zenith),
-            Self::SphericalRect { zenith, .. } => *zenith,
+            Self::SphericalCap { zenith } => Some((radians!(0.0), *zenith)),
+            Self::SphericalRect { zenith, .. } => Some(*zenith),
+            Self::Disk { .. } => None,
         }
     }
 
+    /// Returns the mutable zenith angle of the spherical cap. Used for UI.
     pub fn cap_zenith_mut(&mut self) -> Option<&mut Radians> {
         match self {
             Self::SphericalCap { zenith } => Some(zenith),
             Self::SphericalRect { .. } => None,
+            Self::Disk { .. } => None,
         }
     }
 
+    /// Returns the mutable azimuth angle of the spherical cap. Used for UI.
     pub fn rect_zenith_mut(&mut self) -> Option<(&mut Radians, &mut Radians)> {
         match self {
             Self::SphericalCap { .. } => None,
             Self::SphericalRect { zenith, .. } => Some((&mut zenith.0, &mut zenith.1)),
+            Self::Disk { .. } => None,
         }
     }
 
@@ -122,13 +135,17 @@ impl RegionShape {
         match self {
             Self::SphericalCap { .. } => None,
             Self::SphericalRect { azimuth, .. } => Some((&mut azimuth.0, &mut azimuth.1)),
+            Self::Disk { .. } => None,
         }
     }
 
-    pub fn azimuth(&self) -> (Radians, Radians) {
+    pub fn azimuth(&self) -> Option<(Radians, Radians)> {
         match self {
-            Self::SphericalCap { .. } => (radians!(0.0), radians!(2.0 * std::f32::consts::PI)),
-            Self::SphericalRect { azimuth, .. } => *azimuth,
+            Self::SphericalCap { .. } => {
+                Some((radians!(0.0), radians!(2.0 * std::f32::consts::PI)))
+            }
+            Self::SphericalRect { azimuth, .. } => Some(*azimuth),
+            Self::Disk { .. } => None,
         }
     }
 
@@ -141,12 +158,17 @@ impl RegionShape {
             Self::SphericalRect { zenith, azimuth } => {
                 todo!("calculate solid angle of the rectangular patch")
             }
+            RegionShape::Disk { .. } => {
+                todo!("calculate solid angle of the disk")
+            }
         }
     }
 
     pub fn is_spherical_cap(&self) -> bool { matches!(self, Self::SphericalCap { .. }) }
 
     pub fn is_spherical_rect(&self) -> bool { matches!(self, Self::SphericalRect { .. }) }
+
+    pub fn is_disk(&self) -> bool { matches!(self, Self::Disk { .. }) }
 }
 
 #[derive(Debug, Clone)]
@@ -160,6 +182,10 @@ impl Deref for EmitterSamples {
 
 impl DerefMut for EmitterSamples {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
+impl EmitterSamples {
+    pub fn into_iter(self) -> impl Iterator<Item = Vec3> { self.0.into_iter() }
 }
 
 impl Emitter {
@@ -201,46 +227,49 @@ impl Emitter {
     }
 
     /// Generated samples inside emitter's region.
-    ///
-    /// Samples are generated uniformly distributed on the surface of the
-    /// sphere.
-    pub fn generate_samples(&self) -> EmitterSamples {
+    pub fn generate_unit_samples(&self) -> EmitterSamples {
         let num_samples = self.num_rays as usize;
-        // Generates uniformly distributed samples using rejection sampling.
-        let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
-            match self.shape {
-                RegionShape::SphericalCap { zenith } => (
-                    radians!(0.0),
-                    zenith,
-                    radians!(0.0),
-                    radians!(2.0 * std::f32::consts::PI),
-                ),
-                RegionShape::SphericalRect { zenith, azimuth } => {
-                    (zenith.0, zenith.1, azimuth.0, azimuth.1)
+
+        let samples = if self.shape.is_disk() {
+            uniform_sampling_on_unit_disk(num_samples, Handedness::RightHandedYUp)
+        } else {
+            // Generates uniformly distributed samples using rejection sampling.
+            let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
+                match self.shape {
+                    RegionShape::SphericalCap { zenith } => (
+                        radians!(0.0),
+                        zenith,
+                        radians!(0.0),
+                        radians!(2.0 * std::f32::consts::PI),
+                    ),
+                    RegionShape::SphericalRect { zenith, azimuth } => {
+                        (zenith.0, zenith.1, azimuth.0, azimuth.1)
+                    }
+                    _ => {
+                        unreachable!("Only spherical cap and rectangular patch are supported")
+                    }
                 }
-            }
+            };
+
+            log::info!(
+                "  - Generating {} samples in region θ: {}° ~ {}° φ: {}° ~ {}°",
+                num_samples,
+                zenith_start.in_degrees().value,
+                zenith_stop.in_degrees().value,
+                azimuth_start.in_degrees().value,
+                azimuth_stop.in_degrees().value
+            );
+
+            uniform_sampling_on_unit_sphere(
+                num_samples,
+                zenith_start,
+                zenith_stop,
+                azimuth_start,
+                azimuth_stop,
+                Handedness::RightHandedYUp,
+            )
         };
 
-        log::info!(
-            "  - Generating {} samples in region θ: {}° ~ {}° φ: {}° ~ {}°",
-            num_samples,
-            zenith_start.in_degrees().value,
-            zenith_stop.in_degrees().value,
-            azimuth_start.in_degrees().value,
-            azimuth_stop.in_degrees().value
-        );
-
-        let t = std::time::Instant::now();
-        let samples = uniform_sampling_on_unit_sphere(
-            num_samples,
-            zenith_start,
-            zenith_stop,
-            azimuth_start,
-            azimuth_stop,
-            Handedness::RightHandedYUp,
-        );
-        log::trace!("  - Samples: {:?}", samples);
-        log::info!("  - Done in {} ms", t.elapsed().as_millis());
         EmitterSamples(samples)
     }
 
@@ -284,7 +313,7 @@ impl Emitter {
 /// y = cos theta
 /// z = sin phi * sin theta
 pub fn uniform_sampling_on_unit_sphere(
-    num_samples: usize,
+    num: usize,
     theta_start: Radians,
     theta_stop: Radians,
     phi_start: Radians,
@@ -296,8 +325,8 @@ pub fn uniform_sampling_on_unit_sphere(
     const SEED: u64 = 0;
 
     let range = Uniform::new(0.0, 1.0);
-    let mut samples = Vec::with_capacity(num_samples);
-    samples.resize(num_samples, glam::Vec3::ZERO);
+    let mut samples = Vec::with_capacity(num);
+    samples.resize(num, glam::Vec3::ZERO);
     log::trace!("  - Generating samples following {:?}", handedness);
 
     match handedness {
@@ -349,6 +378,38 @@ pub fn uniform_sampling_on_unit_sphere(
                             j += 1;
                         }
                     }
+                })
+        }
+    }
+
+    samples
+}
+
+pub fn uniform_sampling_on_unit_disk(num: usize, handedness: Handedness) -> Vec<Vec3> {
+    const SEED: u64 = 0;
+
+    let range: Uniform<f32> = Uniform::new(0.0, 1.0);
+    let mut samples = Vec::with_capacity(num);
+    samples.resize(num, glam::Vec3::ZERO);
+
+    match handedness {
+        Handedness::RightHandedZUp => {
+            todo!("uniform_sampling_on_unit_disk for RightHandedZUp")
+        }
+        Handedness::RightHandedYUp => {
+            samples
+                .par_chunks_mut(8192)
+                .enumerate()
+                .for_each(|(i, chunks)| {
+                    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
+                    rng.set_stream(i as u64);
+
+                    chunks.iter_mut().for_each(|v| {
+                        let r = range.sample(&mut rng).sqrt();
+                        let a = range.sample(&mut rng) * std::f32::consts::TAU;
+                        v.x = r * a.cos();
+                        v.z = r * a.sin();
+                    });
                 })
         }
     }

@@ -35,6 +35,10 @@ pub enum Radius {
     Fixed(Millimetres),
 }
 
+impl Default for Radius {
+    fn default() -> Self { Self::Auto(mm!(1.0)) }
+}
+
 impl Display for Radius {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -78,12 +82,22 @@ impl Radius {
         }
     }
 
-    /// Evaluate the radius for the given `MicroSurfaceMesh` and return the
-    /// value of the radius in the same unit as the `MicroSurfaceMesh`.
-    pub fn eval(&self, mesh: &MicroSurfaceMesh) -> f32 {
+    /// Evaluate the radius of the sphere/hemisphere enclosing the surface mesh.
+    ///
+    /// The returned value of the radius in the same unit as the
+    /// `MicroSurfaceMesh`.
+    pub fn estimate(&self, mesh: &MicroSurfaceMesh) -> f32 {
         match self {
             Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
             Radius::Fixed(r) => mesh.unit.factor_convert_from::<UMillimetre>() * r.value,
+        }
+    }
+
+    /// Evaluate the radius for the disk covering the surface mesh.
+    pub fn estimate_disk_radius(&self, mesh: &MicroSurfaceMesh) -> f32 {
+        match self {
+            Radius::Auto(_) => mesh.bounds.max_extent() * 0.55,
+            Radius::Fixed(_) => panic!("Disk radius is not supported for fixed radius"),
         }
     }
 }
@@ -156,7 +170,7 @@ impl Default for BsdfMeasurementParams {
                 azimuth: RangeByStepSizeInclusive::new(
                     deg!(0.0).in_radians(),
                     deg!(360.0).in_radians(),
-                    deg!(120.0).in_radians(),
+                    deg!(60.0).in_radians(),
                 ),
                 shape: RegionShape::SphericalCap {
                     zenith: deg!(5.0).in_radians(),
@@ -241,6 +255,7 @@ impl BsdfMeasurementParams {
                     ));
                 }
             }
+            _ => {}
         }
 
         if emitter.spectrum.start < nanometres!(0.0) || emitter.spectrum.stop < nanometres!(0.0) {
@@ -286,6 +301,7 @@ impl BsdfMeasurementParams {
                     }
                 }
                 RegionShape::SphericalRect { .. } => (true, ""),
+                _ => (true, ""),
             },
         };
 

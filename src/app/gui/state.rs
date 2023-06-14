@@ -235,6 +235,8 @@ pub struct DebugDrawingState {
 
     /// Emitter samples buffer.
     pub emitter_samples_buffer: Option<wgpu::Buffer>,
+    /// Emitter samples uniform buffer.
+    pub emitter_samples_uniform_buffer: Option<wgpu::Buffer>,
     /// Emitter measurement points buffer.
     pub emitter_points_buffer: Option<wgpu::Buffer>,
 
@@ -447,6 +449,7 @@ impl DebugDrawingState {
             uniform_buffer,
             sampling_debug_enabled: false,
             emitter_samples_buffer: None,
+            emitter_samples_uniform_buffer: None,
             emitter_points_buffer: None,
             rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-rays-vert-buffer"),
@@ -579,20 +582,18 @@ impl DebugDrawingState {
         }
     }
 
+    /// Update the uniform buffer for the BSDF measurement debug view.
     pub fn update_uniform_buffer(
         &mut self,
         ctx: &GpuContext,
         view_mat: &Mat4,
         proj_mat: &Mat4,
-        dome_radius: f32,
         lowest: f32,
         highest: f32,
         scale: f32,
     ) {
         let mut buf = [0f32; 3 * 16 + 4];
-        buf[0..16].copy_from_slice(
-            &Mat4::from_scale(Vec3::new(dome_radius, dome_radius, dome_radius)).to_cols_array(),
-        );
+        buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
         buf[16..32].copy_from_slice(&view_mat.to_cols_array());
         buf[32..48].copy_from_slice(&proj_mat.to_cols_array());
         buf[48] = lowest;
@@ -603,27 +604,41 @@ impl DebugDrawingState {
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&buf));
     }
 
-    pub fn update_emitter_samples(&mut self, ctx: &GpuContext, samples: EmitterSamples) {
+    pub fn update_emitter_samples(
+        &mut self,
+        ctx: &GpuContext,
+        samples: EmitterSamples,
+        radius: f32,
+        disk_radius: Option<f32>,
+    ) {
         let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("debug-emitter-samples"),
             size: samples.len() as u64 * std::mem::size_of::<Vec3>() as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let transformed = match disk_radius {
+            None => samples.into_iter().map(|s| s * radius).collect::<Vec<_>>(),
+            Some(disk_radius) => samples
+                .into_iter()
+                .map(|s| Vec3::new(s.x * disk_radius, radius, s.z * disk_radius))
+                .collect::<Vec<_>>(),
+        };
         ctx.queue
-            .write_buffer(&buffer, 0, bytemuck::cast_slice(&samples));
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&transformed));
         self.emitter_samples_buffer = Some(buffer);
     }
 
-    pub fn update_emitter_points(&mut self, ctx: &GpuContext, positions: Vec<Vec3>) {
+    pub fn update_emitter_points(&mut self, ctx: &GpuContext, points: Vec<Vec3>, radius: f32) {
         let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("debug-emitter-points"),
-            size: positions.len() as u64 * std::mem::size_of::<Vec3>() as u64,
+            size: points.len() as u64 * std::mem::size_of::<Vec3>() as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let transformed = points.into_iter().map(|s| s * radius).collect::<Vec<_>>();
         ctx.queue
-            .write_buffer(&buffer, 0, bytemuck::cast_slice(&positions));
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&transformed));
         self.emitter_points_buffer = Some(buffer);
     }
 }

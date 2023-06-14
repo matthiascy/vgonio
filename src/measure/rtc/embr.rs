@@ -184,7 +184,7 @@ pub fn measure_bsdf(
     scene.set_flags(SceneFlags::ROBUST);
 
     // Calculate emitter's radius to match the surface's dimensions.
-    let radius = params.emitter.radius.eval(mesh);
+    let radius = params.emitter.radius.estimate(mesh);
     log::debug!("mesh extent: {:?}", mesh.bounds);
     log::debug!("emitter radius: {}", radius);
     // Upload the surface's mesh to the Embree scene.

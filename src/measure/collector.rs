@@ -317,7 +317,7 @@ impl Collector {
         log::debug!("transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
-        let radius = self.radius.eval(mesh);
+        let radius = self.radius.estimate(mesh);
         log::trace!("collector radius: {}", radius);
         let domain = self.scheme.domain();
         let max_bounces = params.emitter.max_bounces as usize;
@@ -611,6 +611,10 @@ impl PatchSingleRegion {
                     && theta <= zenith_stop
                     && phi >= azimuth_start
                     && phi <= azimuth_stop
+            }
+            RegionShape::Disk { .. } => {
+                log::warn!("Disk region shape is not supported yet");
+                false
             }
         }
     }

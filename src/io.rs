@@ -533,7 +533,8 @@ pub mod vgmo {
         },
         ulp_eq,
         units::{
-            mm, rad, solid_angle_of_region, solid_angle_of_spherical_cap, Nanometres, Radians,
+            mm, rad, solid_angle_of_region, solid_angle_of_spherical_cap, steradians, Nanometres,
+            Radians,
         },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
     };
@@ -886,6 +887,9 @@ pub mod vgmo {
                     buf[12..16].copy_from_slice(&azimuth.0.value().to_le_bytes());
                     buf[16..20].copy_from_slice(&azimuth.1.value().to_le_bytes());
                 }
+                RegionShape::Disk { .. } => {
+                    buf[0..4].copy_from_slice(&0x02u32.to_le_bytes());
+                }
             }
         }
     }
@@ -911,6 +915,10 @@ pub mod vgmo {
                 RegionShape::SphericalCap { zenith } => solid_angle_of_spherical_cap(zenith),
                 RegionShape::SphericalRect { zenith, azimuth } => {
                     solid_angle_of_region(zenith, azimuth)
+                }
+                RegionShape::Disk { .. } => {
+                    log::warn!("Solid angle of disk emitter is not implemented");
+                    steradians!(0.0)
                 }
             };
             Self {

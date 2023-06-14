@@ -157,8 +157,18 @@ pub enum DebuggingEvent {
     /// Enable/disable the rendering of the sampling debugger.
     SetSamplingRendering(bool),
     UpdateDepthMap,
-    UpdateEmitterSamples(EmitterSamples),
-    UpdateEmitterPoints(Vec<Vec3>),
+    UpdateEmitterSamples {
+        /// Emitter samples.
+        samples: EmitterSamples,
+        /// Emitter radius.
+        radius: f32,
+        /// Disk radius if the emitter is a disk.
+        disk_radius: Option<f32>,
+    },
+    UpdateEmitterPoints {
+        points: Vec<Vec3>,
+        radius: f32,
+    },
 }
 
 #[derive(Debug)]
@@ -766,19 +776,17 @@ impl VgonioGuiApp {
         );
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         let dbg_selected_surface = dbg_tool.brdf_pane.selected_surface;
-        let (dome_radius, lowest, highest, scale) = match dbg_selected_surface {
+        let (lowest, highest, scale) = match dbg_selected_surface {
             Some(surface) => {
-                let radius = dbg_tool.brdf_pane.dome_radius;
                 let state = self.ui.outliner().surfaces().get(&surface).unwrap();
-                (radius, state.1.min, state.1.max, state.1.scale)
+                (state.1.min, state.1.max, state.1.scale)
             }
-            None => (1.0, 0.0, 1.0, 1.0),
+            None => (0.0, 1.0, 1.0),
         };
         self.dbg_drawing_state.update_uniform_buffer(
             &self.ctx.gpu,
             &view_proj.view,
             &view_proj.proj,
-            dome_radius,
             lowest,
             highest,
             scale,
@@ -787,8 +795,6 @@ impl VgonioGuiApp {
         // Update uniform buffer for all visible surfaces.
         let visible_surfaces = self.ui.outliner().visible_surfaces();
         if !visible_surfaces.is_empty() {
-            // Update global uniform buffer.
-            log::trace!("Updating global uniform buffer.");
             self.ctx.gpu.queue.write_buffer(
                 &self.msurf_rdr_state.global_uniform_buffer,
                 0,
@@ -1067,13 +1073,21 @@ impl VgonioGuiApp {
                             self.canvas.height(),
                         );
                 }
-                DebuggingEvent::UpdateEmitterSamples(samples) => {
-                    self.dbg_drawing_state
-                        .update_emitter_samples(&self.ctx.gpu, samples);
+                DebuggingEvent::UpdateEmitterSamples {
+                    samples,
+                    radius,
+                    disk_radius,
+                } => {
+                    self.dbg_drawing_state.update_emitter_samples(
+                        &self.ctx.gpu,
+                        samples,
+                        radius,
+                        disk_radius,
+                    );
                 }
-                DebuggingEvent::UpdateEmitterPoints(positions) => {
+                DebuggingEvent::UpdateEmitterPoints { points, radius } => {
                     self.dbg_drawing_state
-                        .update_emitter_points(&self.ctx.gpu, positions);
+                        .update_emitter_points(&self.ctx.gpu, points, radius);
                 }
             },
             VgonioEvent::UpdateDebugT(t) => {

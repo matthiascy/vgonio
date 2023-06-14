@@ -6,7 +6,7 @@ use crate::{
         measurement::{BsdfMeasurementParams, Radius},
         Collector, CollectorScheme, Emitter,
     },
-    units::{mm, Radians},
+    units::{deg, mm, rad, Radians},
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
@@ -78,8 +78,6 @@ impl Radius {
 impl RegionShape {
     /// Creates the UI for parameterizing the region shape.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        let zenith = self.zenith();
-        let azimuth = self.azimuth();
         ui.columns(1, |uis| {
             let ui = &mut uis[0];
             ui.horizontal(|ui| {
@@ -88,7 +86,7 @@ impl RegionShape {
                     .on_hover_text("The emitter is a spherical cap.")
                     .clicked()
                 {
-                    *self = RegionShape::SphericalCap { zenith: zenith.1 }
+                    *self = RegionShape::default_spherical_cap();
                 }
 
                 if ui
@@ -96,7 +94,17 @@ impl RegionShape {
                     .on_hover_text("The emitter is a spherical shell.")
                     .clicked()
                 {
-                    *self = RegionShape::SphericalRect { zenith, azimuth }
+                    *self = RegionShape::default_spherical_rect();
+                }
+
+                if ui
+                    .selectable_label(self.is_disk(), "Disk")
+                    .on_hover_text("The emitter is a disk.")
+                    .clicked()
+                {
+                    *self = RegionShape::Disk {
+                        radius: Default::default(),
+                    }
                 }
             });
             ui.end_row();
@@ -107,7 +115,9 @@ impl RegionShape {
                     ui.label("Zenith range θ: ");
                     ui.add(misc::drag_angle(zenith, "start: "));
                 });
-            } else {
+            }
+
+            if self.is_spherical_rect() {
                 let zenith = self.rect_zenith_mut().unwrap();
                 ui.horizontal(|ui| {
                     ui.label("Zenith range θ: ");
