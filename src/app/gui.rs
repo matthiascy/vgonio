@@ -56,7 +56,7 @@ use crate::{
         measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
     },
     msurf::MicroSurface,
-    units::Degrees,
+    units::{Degrees, Radians},
 };
 use winit::{
     dpi::PhysicalSize,
@@ -162,6 +162,10 @@ pub enum DebuggingEvent {
         samples: EmitterSamples,
         /// Emitter radius.
         radius: f32,
+        /// Emitter position in spherical coordinates.
+        theta: Radians,
+        /// Emitter position in spherical coordinates.
+        phi: Radians,
         /// Disk radius if the emitter is a disk.
         disk_radius: Option<f32>,
     },
@@ -1077,6 +1081,7 @@ impl VgonioGuiApp {
                     samples,
                     radius,
                     disk_radius,
+                    ..
                 } => {
                     self.dbg_drawing_state.update_emitter_samples(
                         &self.ctx.gpu,
