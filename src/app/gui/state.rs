@@ -227,6 +227,8 @@ pub struct DebugDrawingState {
     pub basic_pipeline: wgpu::RenderPipeline,
     /// Pipeline for drawing points.
     pub points_pipeline: wgpu::RenderPipeline,
+    /// Pipeline for drawing lines.
+    pub lines_pipeline: wgpu::RenderPipeline,
     /// Bind group for basic render pipeline.
     pub bind_group: wgpu::BindGroup,
     /// Uniform buffer for basic render pipeline.
@@ -266,14 +268,6 @@ impl DebugDrawingState {
         use wgpu::util::DeviceExt;
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
-        let shader_module = ctx
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("debug-drawing-rays-shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../gui/assets/shaders/wgsl/rays.wgsl").into(),
-                ),
-            });
         let prim_shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -350,7 +344,7 @@ impl DebugDrawingState {
             .subslices_mut()
             .push(0..hemisphere.1.len() as u64 * std::mem::size_of::<u32>() as u64 * 3);
 
-        let (basic_pipeline, points_pipeline, bind_group, uniform_buffer) = {
+        let (basic_pipeline, points_pipeline, lines_pipeline, bind_group, uniform_buffer) = {
             let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-drawing-basic-uniform-buffer"),
                 size: std::mem::size_of::<[f32; 16 * 3 + 4]>() as u64,
@@ -431,9 +425,25 @@ impl DebugDrawingState {
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some("debug-drawing-points-pipeline"),
                         layout: Some(&pipeline_layout),
-                        vertex: vert_state,
+                        vertex: vert_state.clone(),
                         primitive: wgpu::PrimitiveState {
                             topology: wgpu::PrimitiveTopology::PointList,
+                            front_face: wgpu::FrontFace::Ccw,
+                            ..Default::default()
+                        },
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(frag_state.clone()),
+                        multiview: None,
+                    });
+            let lines_pipeline =
+                ctx.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("debug-drawing-lines-pipeline"),
+                        layout: Some(&pipeline_layout),
+                        vertex: vert_state,
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::LineList,
                             front_face: wgpu::FrontFace::Ccw,
                             ..Default::default()
                         },
@@ -442,7 +452,13 @@ impl DebugDrawingState {
                         fragment: Some(frag_state),
                         multiview: None,
                     });
-            (basic_pipeline, points_pipeline, bind_group, uniform_buffer)
+            (
+                basic_pipeline,
+                points_pipeline,
+                lines_pipeline,
+                bind_group,
+                uniform_buffer,
+            )
         };
 
         Self {
@@ -450,6 +466,7 @@ impl DebugDrawingState {
             indices,
             basic_pipeline,
             points_pipeline,
+            lines_pipeline,
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
@@ -717,6 +734,8 @@ impl DebugDrawingState {
             );
         };
     }
+
+    pub fn emit_rays(&self, ctx: &GpuContext) {}
 }
 
 /// Context for rendering the UI.

@@ -179,6 +179,7 @@ pub enum DebuggingEvent {
         orbit_radius: f32,
         disk_radius: Option<f32>,
     },
+    EmitRays,
 }
 
 #[derive(Debug)]
@@ -1124,6 +1125,9 @@ impl VgonioGuiApp {
                         radius,
                         disk_radius,
                     );
+                }
+                DebuggingEvent::EmitRays => {
+                    self.dbg_drawing_state.emit_rays(&self.ctx.gpu);
                 }
             },
             VgonioEvent::UpdateDebugT(t) => {

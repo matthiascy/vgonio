@@ -9,10 +9,10 @@ type: !bsdf
     max_bounces: 10
     radius: auto
     zenith: 0deg .. =90deg / 5deg
-    azimuth: 0deg .. =360deg / 90deg
-    shape: !cap
-      zenith: 10deg
-    spectrum: 380 nm .. =780 nm / 300 nm
+    azimuth: 0deg .. =360deg / 30deg
+    shape: !disk
+      #zenith: 10deg
+    spectrum: 380 nm .. =780 nm / 10 nm
   collector:
     radius: auto
     scheme: !partitioned

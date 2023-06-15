@@ -269,40 +269,48 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                         ui.end_row();
 
                         ui.label("Measurement Points: ");
-                        if ui.button("Display").clicked() {
-                            let points = self
-                                .params
-                                .emitter
-                                .measurement_points()
-                                .into_iter()
-                                .map(|s| {
-                                    math::spherical_to_cartesian(
-                                        1.0,
-                                        s.zenith,
-                                        s.azimuth,
-                                        Handedness::RightHandedYUp,
-                                    )
-                                })
-                                .collect();
-                            let record = self.loaded_surfaces.iter().find(|s| {
-                                s.surf == self.selected_surface.unwrap_or(Handle::default())
-                            });
-                            let radius = if let Some(record) = record {
-                                let cache = self.cache.read().unwrap();
-                                let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
-                                self.params.emitter.radius.estimate(mesh)
-                            } else {
-                                1.0
-                            };
-                            self.event_loop
-                                .send_event(VgonioEvent::Debugging(
-                                    DebuggingEvent::UpdateEmitterPoints {
-                                        points,
-                                        orbit_radius: radius,
-                                    },
-                                ))
-                                .unwrap();
-                        }
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button("Display").clicked() {
+                                let points = self
+                                    .params
+                                    .emitter
+                                    .measurement_points()
+                                    .into_iter()
+                                    .map(|s| {
+                                        math::spherical_to_cartesian(
+                                            1.0,
+                                            s.zenith,
+                                            s.azimuth,
+                                            Handedness::RightHandedYUp,
+                                        )
+                                    })
+                                    .collect();
+                                let record = self.loaded_surfaces.iter().find(|s| {
+                                    s.surf == self.selected_surface.unwrap_or(Handle::default())
+                                });
+                                let radius = if let Some(record) = record {
+                                    let cache = self.cache.read().unwrap();
+                                    let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
+                                    self.params.emitter.radius.estimate(mesh)
+                                } else {
+                                    1.0
+                                };
+                                self.event_loop
+                                    .send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateEmitterPoints {
+                                            points,
+                                            orbit_radius: radius,
+                                        },
+                                    ))
+                                    .unwrap();
+                            }
+
+                            if ui.button("Emit Rays").clicked() {
+                                self.event_loop
+                                    .send_event(VgonioEvent::Debugging(DebuggingEvent::EmitRays))
+                                    .unwrap();
+                            }
+                        });
                         ui.end_row();
                     });
             });

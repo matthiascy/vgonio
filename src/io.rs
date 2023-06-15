@@ -864,6 +864,12 @@ pub mod vgmo {
                         azimuth: (azimuth_start, azimuth_stop),
                     }
                 }
+                0x02 => {
+                    // Disk
+                    RegionShape::Disk {
+                        radius: Radius::Auto(mm!(0.0)),
+                    }
+                }
                 _ => {
                     panic!("Invalid region shape");
                 }
