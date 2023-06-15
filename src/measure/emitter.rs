@@ -1,5 +1,6 @@
 use crate::{
     measure::{measurement::Radius, rtc::Ray},
+    msurf::MicroSurfaceMesh,
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
     Handedness, RangeByStepSizeInclusive, SphericalCoord,
 };
@@ -190,10 +191,10 @@ impl EmitterSamples {
 
 impl Emitter {
     /// Accesses the radius of the emitter.
-    pub fn radius(&self) -> Radius { self.radius }
+    pub fn orbit_radius(&self) -> Radius { self.radius }
 
     /// Updates the radius of the emitter.
-    pub fn set_radius(&mut self, radius: Radius) { self.radius = radius; }
+    pub fn set_orbit_radius(&mut self, radius: Radius) { self.radius = radius; }
 
     /// Returns the number of measured BSDF samples. Each sample is a
     /// measurement of the BSDF at a specific position of the emitter; it
@@ -275,25 +276,61 @@ impl Emitter {
         EmitterSamples(samples)
     }
 
+    /// Estimates the distance from the emitter to the specimen surface.
+    pub fn estimate_orbit_radius(&self, mesh: &MicroSurfaceMesh) -> f32 {
+        self.radius.estimate(mesh)
+    }
+
+    /// Estimates the radius of the emitter's disk if it is a disk.
+    pub fn estimate_disk_radius(&self, mesh: &MicroSurfaceMesh) -> Option<f32> {
+        match self.shape {
+            RegionShape::SphericalCap { .. } | RegionShape::SphericalRect { .. } => None,
+            RegionShape::Disk { radius } => Some(radius.estimate_disk_radius(mesh)),
+        }
+    }
+
     /// Emits rays from the patch located at `pos`.
     pub fn emit_rays_with_radius(
         &self,
         samples: &EmitterSamples,
         pos: SphericalCoord,
-        radius: f32,
+        orbit_radius: f32,
+        disk_radius: Option<f32>,
     ) -> Vec<Ray> {
-        log::trace!("Emitting rays from {} with radius = {}", pos, radius);
+        log::trace!(
+            "Emitting rays from {} with orbit radius = {}, disk radius = {:?}",
+            pos,
+            orbit_radius,
+            disk_radius
+        );
         let mat = Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
             * Mat3::from_axis_angle(-Vec3::Z, pos.azimuth.value);
         let dir = -pos.to_cartesian(Handedness::RightHandedYUp);
 
-        let rays = samples
-            .par_iter()
-            .map(|sample| {
-                let origin = mat * *sample * radius;
-                Ray::new(origin, dir)
-            })
-            .collect();
+        let rays = match disk_radius {
+            None => samples
+                .par_iter()
+                .map(|s| {
+                    let origin = mat * (*s * orbit_radius);
+                    Ray::new(origin, dir)
+                })
+                .collect(),
+            Some(disk_radius) => {
+                let factor = pos.zenith.cos();
+                samples
+                    .iter()
+                    .map(|s| {
+                        let origin = mat
+                            * Vec3::new(
+                                s.x * disk_radius * factor,
+                                orbit_radius,
+                                s.z * disk_radius,
+                            );
+                        Ray::new(origin, dir)
+                    })
+                    .collect()
+            }
+        };
         rays
     }
 }

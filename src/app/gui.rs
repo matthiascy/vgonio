@@ -161,7 +161,7 @@ pub enum DebuggingEvent {
         /// Emitter samples.
         samples: EmitterSamples,
         /// Emitter radius.
-        radius: f32,
+        orbit_radius: f32,
         /// Emitter position in spherical coordinates.
         theta: Radians,
         /// Emitter position in spherical coordinates.
@@ -171,12 +171,12 @@ pub enum DebuggingEvent {
     },
     UpdateEmitterPoints {
         points: Vec<Vec3>,
-        radius: f32,
+        orbit_radius: f32,
     },
     UpdateEmitterPosition {
         zenith: Radians,
         azimuth: Radians,
-        radius: f32,
+        orbit_radius: f32,
         disk_radius: Option<f32>,
     },
 }
@@ -1093,7 +1093,7 @@ impl VgonioGuiApp {
                 }
                 DebuggingEvent::UpdateEmitterSamples {
                     samples,
-                    radius,
+                    orbit_radius: radius,
                     disk_radius,
                     ..
                 } => {
@@ -1104,14 +1104,17 @@ impl VgonioGuiApp {
                         disk_radius,
                     );
                 }
-                DebuggingEvent::UpdateEmitterPoints { points, radius } => {
+                DebuggingEvent::UpdateEmitterPoints {
+                    points,
+                    orbit_radius: radius,
+                } => {
                     self.dbg_drawing_state
                         .update_emitter_points(&self.ctx.gpu, points, radius);
                 }
                 DebuggingEvent::UpdateEmitterPosition {
                     zenith,
                     azimuth,
-                    radius,
+                    orbit_radius: radius,
                     disk_radius,
                 } => {
                     self.dbg_drawing_state.update_emitter_position(

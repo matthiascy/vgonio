@@ -225,7 +225,7 @@ impl BsdfMeasurementParams {
             ));
         }
 
-        if !(emitter.radius().is_valid()
+        if !(emitter.orbit_radius().is_valid()
             && emitter.zenith.step_size > rad!(0.0)
             && emitter.azimuth.step_size > rad!(0.0))
         {

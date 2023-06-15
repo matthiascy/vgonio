@@ -615,7 +615,7 @@ impl DebugDrawingState {
         &mut self,
         ctx: &GpuContext,
         samples: EmitterSamples,
-        radius: f32,
+        orbit_radius: f32,
         disk_radius: Option<f32>,
     ) {
         self.update_emitter_position_and_samples(
@@ -623,7 +623,7 @@ impl DebugDrawingState {
             Some(samples),
             self.emitter_position.0,
             self.emitter_position.1,
-            radius,
+            orbit_radius,
             disk_radius,
         )
     }
@@ -646,10 +646,17 @@ impl DebugDrawingState {
         ctx: &Arc<GpuContext>,
         zenith: Radians,
         azimuth: Radians,
-        radius: f32,
+        orbit_radius: f32,
         disk_radius: Option<f32>,
     ) {
-        self.update_emitter_position_and_samples(ctx, None, zenith, azimuth, radius, disk_radius);
+        self.update_emitter_position_and_samples(
+            ctx,
+            None,
+            zenith,
+            azimuth,
+            orbit_radius,
+            disk_radius,
+        );
         self.emitter_position = (zenith, azimuth);
     }
 
@@ -659,7 +666,7 @@ impl DebugDrawingState {
         samples: Option<EmitterSamples>,
         zenith: Radians,
         azimuth: Radians,
-        radius: f32,
+        orbit_radius: f32,
         disk_radius: Option<f32>,
     ) {
         if let Some(new_samples) = samples {
@@ -693,13 +700,14 @@ impl DebugDrawingState {
                 samples
                     .iter()
                     .map(|s| {
-                        global * Vec3::new(s.x * disk_radius * factor, radius, s.z * disk_radius)
+                        global
+                            * Vec3::new(s.x * disk_radius * factor, orbit_radius, s.z * disk_radius)
                     })
                     .collect::<Vec<_>>()
             } else {
                 samples
                     .iter()
-                    .map(|s| global * (*s * radius))
+                    .map(|s| global * (*s * orbit_radius))
                     .collect::<Vec<_>>()
             };
             ctx.queue.write_buffer(

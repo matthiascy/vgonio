@@ -8,7 +8,7 @@ use crate::{
     measure::{
         bsdf::MeasuredBsdfData,
         collector::CollectorPatches,
-        emitter::EmitterSamples,
+        emitter::{EmitterSamples, RegionShape},
         measurement::BsdfMeasurementParams,
         rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
     },
@@ -184,9 +184,11 @@ pub fn measure_bsdf(
     scene.set_flags(SceneFlags::ROBUST);
 
     // Calculate emitter's radius to match the surface's dimensions.
-    let radius = params.emitter.radius.estimate(mesh);
+    let orbit_radius = params.emitter.estimate_orbit_radius(mesh);
+    let disk_radius = params.emitter.estimate_disk_radius(mesh);
     log::debug!("mesh extent: {:?}", mesh.bounds);
-    log::debug!("emitter radius: {}", radius);
+    log::debug!("emitter orbit radius: {}", orbit_radius);
+    log::debug!("emitter disk radius: {:?}", disk_radius);
     // Upload the surface's mesh to the Embree scene.
     let mut geometry = mesh.as_embree_geometry(&device);
     geometry.set_intersect_filter_function(intersect_filter_stream);
@@ -203,7 +205,10 @@ pub fn measure_bsdf(
         println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
 
         let t = Instant::now();
-        let emitted_rays = params.emitter.emit_rays_with_radius(samples, pos, radius);
+        let emitted_rays =
+            params
+                .emitter
+                .emit_rays_with_radius(samples, pos, orbit_radius, disk_radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 

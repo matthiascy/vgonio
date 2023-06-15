@@ -126,7 +126,7 @@ impl BrdfMeasurementPane {
                     DebuggingEvent::UpdateEmitterPosition {
                         zenith,
                         azimuth,
-                        radius,
+                        orbit_radius: radius,
                         disk_radius,
                     },
                 ))
@@ -250,7 +250,7 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                                         .send_event(VgonioEvent::Debugging(
                                             DebuggingEvent::UpdateEmitterSamples {
                                                 samples,
-                                                radius,
+                                                orbit_radius: radius,
                                                 theta: rad!(0.0),
                                                 phi: rad!(0.0),
                                                 disk_radius,
@@ -296,7 +296,10 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                             };
                             self.event_loop
                                 .send_event(VgonioEvent::Debugging(
-                                    DebuggingEvent::UpdateEmitterPoints { points, radius },
+                                    DebuggingEvent::UpdateEmitterPoints {
+                                        points,
+                                        orbit_radius: radius,
+                                    },
                                 ))
                                 .unwrap();
                         }

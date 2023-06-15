@@ -47,10 +47,14 @@ pub fn measure_bsdf(
 ) -> MeasuredBsdfData {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
-    let radius = params.emitter.radius.estimate(mesh);
+    let orbit_radius = params.emitter.estimate_orbit_radius(mesh);
+    let disk_radius = params.emitter.estimate_disk_radius(mesh);
     let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
     let mut data = vec![];
+    log::debug!("mesh extent: {:?}", mesh.bounds);
+    log::debug!("emitter orbit radius: {}", orbit_radius);
+    log::debug!("emitter disk radius: {:?}", disk_radius);
 
     for pos in params.emitter.measurement_points() {
         println!(
@@ -58,9 +62,11 @@ pub fn measure_bsdf(
             pos.zenith.in_degrees().value(),
             pos.azimuth.in_degrees().value()
         );
-
         let t = Instant::now();
-        let emitted_rays = params.emitter.emit_rays_with_radius(samples, pos, radius);
+        let emitted_rays =
+            params
+                .emitter
+                .emit_rays_with_radius(samples, pos, orbit_radius, disk_radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 

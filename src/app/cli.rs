@@ -198,7 +198,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
                     measurement.incident_medium,
                     measurement.transmitted_medium,
-                    measurement.emitter.radius(),
+                    measurement.emitter.orbit_radius(),
                     measurement.emitter.num_rays,
                     measurement.emitter.max_bounces,
                     measurement.emitter.spectrum,
