@@ -42,6 +42,7 @@ pub(crate) struct BrdfMeasurementPane {
     cell_pos: IVec2,
     t: f32,
 
+    emitter_position_index: i32,
     params: BsdfMeasurementParams,
 
     pub loaded_surfaces: Vec<MicroSurfaceRecord>,
@@ -62,6 +63,7 @@ impl BrdfMeasurementPane {
             prim_id: 0,
             cell_pos: Default::default(),
             t: 10.0,
+            emitter_position_index: 0,
             params: BsdfMeasurementParams::default(),
             loaded_surfaces: vec![],
             selected_surface: None,
@@ -100,6 +102,35 @@ impl BrdfMeasurementPane {
                 log::trace!("evaluated radius: {}, {:?}", radius, disk_radius);
                 Some((radius, disk_radius))
             }
+        }
+    }
+
+    fn update_emitter_position_index(&mut self, delta: i32) {
+        let zenith_step_count = self.params.emitter.zenith.step_count_wrapped();
+        let azimuth_step_count = self.params.emitter.azimuth.step_count_wrapped();
+        self.emitter_position_index = ((self.emitter_position_index + delta).max(0) as usize
+            % (zenith_step_count * azimuth_step_count))
+            as i32;
+        if let Some((radius, disk_radius)) = self.estimate_radius() {
+            log::trace!("updating emitter position index");
+            let azimuth_idx = self.emitter_position_index / zenith_step_count as i32;
+            let zenith_idx = self.emitter_position_index % zenith_step_count as i32;
+            let zenith = self.params.emitter.zenith.step(zenith_idx as usize);
+            let azimuth = self.params.emitter.azimuth.step(azimuth_idx as usize);
+            log::trace!("zenith_step_count: {}", zenith_step_count);
+            log::trace!("pos idx: {}", self.emitter_position_index);
+            log::trace!("azimuth idx: {} = {}", azimuth_idx, azimuth.to_degrees());
+            log::trace!("zenith idx: {} = {}", zenith_idx, zenith.to_degrees());
+            self.event_loop
+                .send_event(VgonioEvent::Debugging(
+                    DebuggingEvent::UpdateEmitterPosition {
+                        zenith,
+                        azimuth,
+                        radius,
+                        disk_radius,
+                    },
+                ))
+                .unwrap();
         }
     }
 }
@@ -229,10 +260,10 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                                 }
                             }
                             if ui.button("\u{25C0}").clicked() {
-                                println!("Prev");
+                                self.update_emitter_position_index(-1);
                             }
                             if ui.button("\u{25B6}").clicked() {
-                                println!("Next");
+                                self.update_emitter_position_index(1);
                             }
                         });
                         ui.end_row();
@@ -242,7 +273,7 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                             let points = self
                                 .params
                                 .emitter
-                                .meas_points()
+                                .measurement_points()
                                 .into_iter()
                                 .map(|s| {
                                     math::spherical_to_cartesian(

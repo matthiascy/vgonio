@@ -19,8 +19,9 @@ use crate::{
     app::gfx::{remap_depth, SlicedBuffer},
     math::generate_parametric_hemisphere,
     measure::{emitter::EmitterSamples, rtc::Ray},
+    units::{rad, Radians},
 };
-use glam::{Mat4, Vec3};
+use glam::{Mat3, Mat4, Vec3};
 use std::{
     default::Default,
     ops::Range,
@@ -233,6 +234,10 @@ pub struct DebugDrawingState {
     /// If true, the offline rendering of [`SamplingDebugger`] is enabled.
     pub sampling_debug_enabled: bool,
 
+    /// Emitter current position.
+    pub emitter_position: (Radians, Radians),
+    /// Emitter samples.
+    pub emitter_samples: Option<EmitterSamples>,
     /// Emitter samples buffer.
     pub emitter_samples_buffer: Option<wgpu::Buffer>,
     /// Emitter samples uniform buffer.
@@ -448,6 +453,8 @@ impl DebugDrawingState {
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
+            emitter_position: (rad!(0.0), rad!(0.0)),
+            emitter_samples: None,
             emitter_samples_buffer: None,
             emitter_samples_uniform_buffer: None,
             emitter_points_buffer: None,
@@ -611,22 +618,14 @@ impl DebugDrawingState {
         radius: f32,
         disk_radius: Option<f32>,
     ) {
-        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("debug-emitter-samples"),
-            size: samples.len() as u64 * std::mem::size_of::<Vec3>() as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let transformed = match disk_radius {
-            None => samples.into_iter().map(|s| s * radius).collect::<Vec<_>>(),
-            Some(disk_radius) => samples
-                .into_iter()
-                .map(|s| Vec3::new(s.x * disk_radius, radius, s.z * disk_radius))
-                .collect::<Vec<_>>(),
-        };
-        ctx.queue
-            .write_buffer(&buffer, 0, bytemuck::cast_slice(&transformed));
-        self.emitter_samples_buffer = Some(buffer);
+        self.update_emitter_position_and_samples(
+            ctx,
+            Some(samples),
+            self.emitter_position.0,
+            self.emitter_position.1,
+            radius,
+            disk_radius,
+        )
     }
 
     pub fn update_emitter_points(&mut self, ctx: &GpuContext, points: Vec<Vec3>, radius: f32) {
@@ -640,6 +639,75 @@ impl DebugDrawingState {
         ctx.queue
             .write_buffer(&buffer, 0, bytemuck::cast_slice(&transformed));
         self.emitter_points_buffer = Some(buffer);
+    }
+
+    pub fn update_emitter_position(
+        &mut self,
+        ctx: &Arc<GpuContext>,
+        zenith: Radians,
+        azimuth: Radians,
+        radius: f32,
+        disk_radius: Option<f32>,
+    ) {
+        self.update_emitter_position_and_samples(ctx, None, zenith, azimuth, radius, disk_radius);
+        self.emitter_position = (zenith, azimuth);
+    }
+
+    fn update_emitter_position_and_samples(
+        &mut self,
+        ctx: &GpuContext,
+        samples: Option<EmitterSamples>,
+        zenith: Radians,
+        azimuth: Radians,
+        radius: f32,
+        disk_radius: Option<f32>,
+    ) {
+        if let Some(new_samples) = samples {
+            if self
+                .emitter_samples_buffer
+                .as_ref()
+                .is_some_and(|buf| buf.size() < new_samples.len() as u64 * 12)
+                || self.emitter_samples_buffer.is_none()
+            {
+                self.emitter_samples_buffer =
+                    Some(ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("debug-emitter-samples"),
+                        size: new_samples.len() as u64 * std::mem::size_of::<Vec3>() as u64,
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }));
+            }
+            ctx.queue.write_buffer(
+                self.emitter_samples_buffer.as_ref().unwrap(),
+                0,
+                bytemuck::cast_slice(&new_samples),
+            );
+            self.emitter_samples = Some(new_samples);
+        }
+
+        if let Some(samples) = &self.emitter_samples {
+            let global = Mat3::from_axis_angle(Vec3::Y, azimuth.value)
+                * Mat3::from_axis_angle(-Vec3::Z, zenith.value);
+            let vertices = if let Some(disk_radius) = disk_radius {
+                let factor = zenith.cos();
+                samples
+                    .iter()
+                    .map(|s| {
+                        global * Vec3::new(s.x * disk_radius * factor, radius, s.z * disk_radius)
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                samples
+                    .iter()
+                    .map(|s| global * (*s * radius))
+                    .collect::<Vec<_>>()
+            };
+            ctx.queue.write_buffer(
+                &self.emitter_samples_buffer.as_ref().unwrap(),
+                0,
+                bytemuck::cast_slice(&vertices),
+            );
+        };
     }
 }
 

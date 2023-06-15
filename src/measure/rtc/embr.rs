@@ -199,7 +199,7 @@ pub fn measure_bsdf(
 
     let mut data = vec![];
     // Iterate over every incident direction.
-    for pos in params.emitter.meas_points() {
+    for pos in params.emitter.measurement_points() {
         println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
 
         let t = Instant::now();

@@ -173,6 +173,12 @@ pub enum DebuggingEvent {
         points: Vec<Vec3>,
         radius: f32,
     },
+    UpdateEmitterPosition {
+        zenith: Radians,
+        azimuth: Radians,
+        radius: f32,
+        disk_radius: Option<f32>,
+    },
 }
 
 #[derive(Debug)]
@@ -1001,7 +1007,15 @@ impl VgonioGuiApp {
                     render_pass.set_pipeline(&self.dbg_drawing_state.points_pipeline);
                     render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
                     render_pass.set_vertex_buffer(0, buffer.slice(..));
-                    render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+                    render_pass.draw(
+                        0..self
+                            .dbg_drawing_state
+                            .emitter_samples
+                            .as_ref()
+                            .unwrap()
+                            .len() as u32,
+                        0..1,
+                    );
                 }
             }
 
@@ -1093,6 +1107,20 @@ impl VgonioGuiApp {
                 DebuggingEvent::UpdateEmitterPoints { points, radius } => {
                     self.dbg_drawing_state
                         .update_emitter_points(&self.ctx.gpu, points, radius);
+                }
+                DebuggingEvent::UpdateEmitterPosition {
+                    zenith,
+                    azimuth,
+                    radius,
+                    disk_radius,
+                } => {
+                    self.dbg_drawing_state.update_emitter_position(
+                        &self.ctx.gpu,
+                        zenith,
+                        azimuth,
+                        radius,
+                        disk_radius,
+                    );
                 }
             },
             VgonioEvent::UpdateDebugT(t) => {

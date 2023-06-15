@@ -52,7 +52,7 @@ pub fn measure_bsdf(
     let grid = MultilevelGrid::new(surf, mesh, 64);
     let mut data = vec![];
 
-    for pos in params.emitter.meas_points() {
+    for pos in params.emitter.measurement_points() {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
             pos.zenith.in_degrees().value(),

@@ -463,6 +463,10 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         ((angle - start).value / step_size.value).round() as usize % self.step_count_wrapped()
     }
 
+    pub fn step(&self, idx: usize) -> Angle<A> {
+        (self.start + self.step_size * idx as f32).min(self.stop)
+    }
+
     /// Returns the range of angles as a range of floating point values.
     pub fn range_bound_inclusive_f32(&self) -> RangeInclusive<f32> {
         self.start.value..=self.stop.value

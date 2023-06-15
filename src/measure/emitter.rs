@@ -3,7 +3,7 @@ use crate::{
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
     Handedness, RangeByStepSizeInclusive, SphericalCoord,
 };
-use glam::Vec3;
+use glam::{Mat3, Vec3};
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
@@ -204,7 +204,7 @@ impl Emitter {
     }
 
     /// All possible measurement positions of the emitter.
-    pub fn meas_points(&self) -> Vec<SphericalCoord> {
+    pub fn measurement_points(&self) -> Vec<SphericalCoord> {
         log::trace!(
             "azimuth: {:?}",
             self.azimuth.values_wrapped().collect::<Vec<_>>()
@@ -227,6 +227,8 @@ impl Emitter {
     }
 
     /// Generated samples inside emitter's region.
+    ///
+    /// The samples are generated in the local coordinate system of the emitter.
     pub fn generate_unit_samples(&self) -> EmitterSamples {
         let num_samples = self.num_rays as usize;
 
@@ -281,8 +283,8 @@ impl Emitter {
         radius: f32,
     ) -> Vec<Ray> {
         log::trace!("Emitting rays from {} with radius = {}", pos, radius);
-        let mat = glam::Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
-            * glam::Mat3::from_axis_angle(glam::Vec3::Z, pos.azimuth.value);
+        let mat = Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
+            * Mat3::from_axis_angle(-Vec3::Z, pos.azimuth.value);
         let dir = -pos.to_cartesian(Handedness::RightHandedYUp);
 
         let rays = samples
@@ -385,6 +387,7 @@ pub fn uniform_sampling_on_unit_sphere(
     samples
 }
 
+/// Generates uniformly distributed samples on the unit disk.
 pub fn uniform_sampling_on_unit_disk(num: usize, handedness: Handedness) -> Vec<Vec3> {
     const SEED: u64 = 0;
 
