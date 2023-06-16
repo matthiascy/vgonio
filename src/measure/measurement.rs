@@ -96,7 +96,7 @@ impl Radius {
     /// Evaluate the radius for the disk covering the surface mesh.
     pub fn estimate_disk_radius(&self, mesh: &MicroSurfaceMesh) -> f32 {
         match self {
-            Radius::Auto(_) => mesh.bounds.max_extent() * 0.55,
+            Radius::Auto(_) => mesh.bounds.max_extent() * 0.7,
             Radius::Fixed(_) => panic!("Disk radius is not supported for fixed radius"),
         }
     }

@@ -29,6 +29,7 @@ use std::{
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
+use wgpu::Buffer;
 
 // #[cfg(feature = "embree")]
 // pub(crate) use tools::trace_ray_standard_dbg;
@@ -48,7 +49,6 @@ use crate::{
             bsdf_viewer::BsdfViewer,
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
             ui::Theme,
-            VgonioEvent::Measure,
         },
     },
     measure::{
@@ -110,7 +110,6 @@ pub enum VgonioEvent {
         method: RtcMethod,
     },
     ToggleSurfaceVisibility,
-    UpdateDebugT(f32),
     UpdatePrimId(u32),
     UpdateCellPos(IVec2),
     CheckVisibleFacets {
@@ -154,20 +153,20 @@ pub enum BsdfViewerEvent {
 /// Events used by debugging tools.
 #[derive(Debug)]
 pub enum DebuggingEvent {
+    ToggleDebugDrawing(bool),
+    ToggleDebugDrawingDome(bool),
     /// Enable/disable the rendering of the sampling debugger.
     SetSamplingRendering(bool),
     UpdateDepthMap,
-    UpdateEmitterSamples {
-        /// Emitter samples.
-        samples: EmitterSamples,
-        /// Emitter radius.
+    UpdateRayParams {
+        t: f32,
         orbit_radius: f32,
-        /// Emitter position in spherical coordinates.
-        theta: Radians,
-        /// Emitter position in spherical coordinates.
-        phi: Radians,
-        /// Disk radius if the emitter is a disk.
-        disk_radius: Option<f32>,
+        shape_radius: Option<f32>,
+    },
+    UpdateEmitterSamples {
+        samples: EmitterSamples,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
     },
     UpdateEmitterPoints {
         points: Vec<Vec3>,
@@ -177,9 +176,12 @@ pub enum DebuggingEvent {
         zenith: Radians,
         azimuth: Radians,
         orbit_radius: f32,
-        disk_radius: Option<f32>,
+        shape_radius: Option<f32>,
     },
-    EmitRays,
+    EmitRays {
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
+    },
 }
 
 #[derive(Debug)]
@@ -608,8 +610,13 @@ impl VgonioGuiApp {
         let wgpu_config = WgpuConfig {
             device_descriptor: wgpu::DeviceDescriptor {
                 label: Some("vgonio-wgpu-device"),
-                features: wgpu::Features::POLYGON_MODE_LINE | wgpu::Features::TIMESTAMP_QUERY,
-                limits: wgpu::Limits::default(),
+                features: wgpu::Features::POLYGON_MODE_LINE
+                    | wgpu::Features::TIMESTAMP_QUERY
+                    | wgpu::Features::PUSH_CONSTANTS,
+                limits: wgpu::Limits {
+                    max_push_constant_size: 256,
+                    ..Default::default()
+                },
             },
             ..Default::default()
         };
@@ -786,7 +793,7 @@ impl VgonioGuiApp {
             current_theme_visuals.egui_visuals.dark_mode,
         );
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
-        let dbg_selected_surface = dbg_tool.brdf_pane.selected_surface;
+        let dbg_selected_surface = dbg_tool.brdf_debugging.selected_surface;
         let (lowest, highest, scale) = match dbg_selected_surface {
             Some(surface) => {
                 let state = self.ui.outliner().surfaces().get(&surface).unwrap();
@@ -796,8 +803,7 @@ impl VgonioGuiApp {
         };
         self.dbg_drawing_state.update_uniform_buffer(
             &self.ctx.gpu,
-            &view_proj.view,
-            &view_proj.proj,
+            &(view_proj.proj * view_proj.view),
             lowest,
             highest,
             scale,
@@ -872,25 +878,18 @@ impl VgonioGuiApp {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         // Command encoders for the current frame.
-        let mut encoders = [
+        let mut main_encoder =
             self.ctx
                 .gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vgonio_render_encoder"),
-                }),
-            self.ctx
-                .gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vgonio_dbg_render_encoder"),
-                }),
-        ];
+                });
 
         let cache = self.cache.read().unwrap();
         let visible_surfaces = self.ui.outliner().visible_surfaces();
         {
-            let mut render_pass = encoders[0].begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
                 color_attachments: &[Some(
                     // This is what [[location(0)]] in the fragment shader targets
@@ -959,77 +958,25 @@ impl VgonioGuiApp {
             }
         }
 
-        // TODO: put this inside debug render state or debug inspector
-        let dbg_inspector = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
-        if dbg_inspector.debug_drawing_enabled {
-            let mut render_pass = encoders[1].begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("debug_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &output_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            if dbg_inspector.brdf_pane.show_dome {
-                render_pass.set_pipeline(&self.dbg_drawing_state.basic_pipeline);
-                render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, self.dbg_drawing_state.vertices.data_slice(..));
-                render_pass.set_index_buffer(
-                    self.dbg_drawing_state.indices.data_slice(..),
-                    wgpu::IndexFormat::Uint32,
-                );
-                self.dbg_drawing_state
-                    .indices
-                    .subslices()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, index_range)| {
-                        let count = ((index_range.end - index_range.start) / 4) as u32;
-                        let index_offset = (index_range.start / 4) as u32;
-                        let vertex_offset =
-                            self.dbg_drawing_state.vertices.subslices()[i].start / 12;
-                        render_pass.draw_indexed(
-                            index_offset..index_offset + count,
-                            vertex_offset as i32,
-                            0..1,
-                        );
-                    });
-            }
-
-            match &self.dbg_drawing_state.emitter_samples_buffer {
-                None => {}
-                Some(buffer) => {
-                    // Convert range in bytes to range in vertices.
-                    render_pass.set_pipeline(&self.dbg_drawing_state.points_pipeline);
-                    render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, buffer.slice(..));
-                    render_pass.draw(
-                        0..self
-                            .dbg_drawing_state
-                            .emitter_samples
-                            .as_ref()
-                            .unwrap()
-                            .len() as u32,
-                        0..1,
-                    );
-                }
-            }
-
-            match &self.dbg_drawing_state.emitter_points_buffer {
-                None => {}
-                Some(buffer) => {
-                    render_pass.set_pipeline(&self.dbg_drawing_state.points_pipeline);
-                    render_pass.set_bind_group(0, &self.dbg_drawing_state.bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, buffer.slice(..));
-                    render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
-                }
-            }
-        }
+        let dbg_drawing_encoder = self.dbg_drawing_state.record_render_pass(
+            &self.ctx.gpu,
+            Some(wgpu::RenderPassColorAttachment {
+                view: &output_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                },
+            }),
+            Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_map.depth_attachment.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        );
 
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
@@ -1042,16 +989,31 @@ impl VgonioGuiApp {
             },
         );
 
+        let command_buffers: Box<dyn Iterator<Item = wgpu::CommandBuffer>> =
+            match dbg_drawing_encoder {
+                None => Box::new(
+                    ui_render_output
+                        .user_cmds
+                        .into_iter()
+                        .chain([main_encoder.finish(), ui_render_output.ui_cmd])
+                        .into_iter(),
+                ),
+                Some(dbg_encoder) => Box::new(
+                    ui_render_output
+                        .user_cmds
+                        .into_iter()
+                        .chain([
+                            main_encoder.finish(),
+                            dbg_encoder.finish(),
+                            ui_render_output.ui_cmd,
+                        ])
+                        .into_iter(),
+                ),
+            };
+
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
-        self.ctx.gpu.queue.submit(
-            ui_render_output.user_cmds.into_iter().chain(
-                encoders
-                    .into_iter()
-                    .map(|enc| enc.finish())
-                    .chain(std::iter::once(ui_render_output.ui_cmd)),
-            ),
-        );
+        self.ctx.gpu.queue.submit(command_buffers);
 
         self.depth_map
             .copy_to_buffer(&self.ctx.gpu, self.canvas.width(), self.canvas.height());
@@ -1094,45 +1056,66 @@ impl VgonioGuiApp {
                 }
                 DebuggingEvent::UpdateEmitterSamples {
                     samples,
-                    orbit_radius: radius,
-                    disk_radius,
-                    ..
+                    orbit_radius,
+                    shape_radius,
                 } => {
                     self.dbg_drawing_state.update_emitter_samples(
                         &self.ctx.gpu,
                         samples,
-                        radius,
-                        disk_radius,
+                        orbit_radius,
+                        shape_radius,
                     );
                 }
                 DebuggingEvent::UpdateEmitterPoints {
                     points,
-                    orbit_radius: radius,
+                    orbit_radius,
                 } => {
-                    self.dbg_drawing_state
-                        .update_emitter_points(&self.ctx.gpu, points, radius);
+                    self.dbg_drawing_state.update_emitter_points(
+                        &self.ctx.gpu,
+                        points,
+                        orbit_radius,
+                    );
                 }
                 DebuggingEvent::UpdateEmitterPosition {
                     zenith,
                     azimuth,
-                    orbit_radius: radius,
-                    disk_radius,
+                    orbit_radius,
+                    shape_radius,
                 } => {
                     self.dbg_drawing_state.update_emitter_position(
                         &self.ctx.gpu,
                         zenith,
                         azimuth,
-                        radius,
-                        disk_radius,
+                        orbit_radius,
+                        shape_radius,
                     );
                 }
-                DebuggingEvent::EmitRays => {
-                    self.dbg_drawing_state.emit_rays(&self.ctx.gpu);
+                DebuggingEvent::EmitRays {
+                    orbit_radius,
+                    shape_radius,
+                } => {
+                    self.dbg_drawing_state
+                        .emit_rays(&self.ctx.gpu, orbit_radius, shape_radius);
+                }
+                DebuggingEvent::ToggleDebugDrawing(status) => {
+                    self.dbg_drawing_state.enabled = status;
+                }
+                DebuggingEvent::ToggleDebugDrawingDome(status) => {
+                    self.dbg_drawing_state.drawing_dome = status;
+                }
+                DebuggingEvent::UpdateRayParams {
+                    t,
+                    orbit_radius,
+                    shape_radius,
+                } => {
+                    self.dbg_drawing_state.update_ray_params(
+                        &self.ctx.gpu,
+                        t,
+                        orbit_radius,
+                        shape_radius,
+                    );
                 }
             },
-            VgonioEvent::UpdateDebugT(t) => {
-                self.dbg_drawing_state.ray_t = t;
-            }
             VgonioEvent::BsdfViewer(event) => match event {
                 BsdfViewerEvent::ToggleView(id) => {
                     self.bsdf_viewer.write().unwrap().toggle_view(id);

@@ -29,9 +29,16 @@ enum RayMode {
     Spherical,
 }
 
-pub(crate) struct BrdfMeasurementPane {
+pub(crate) struct BrdfMeasurementDebugging {
     pub show_dome: bool,
     cache: Arc<RwLock<Cache>>,
+    emitter_position_index: i32,
+    params: BsdfMeasurementParams,
+    pub loaded_surfaces: Vec<MicroSurfaceRecord>,
+    pub selected_surface: Option<Handle<MicroSurface>>,
+    ray_t: f32,
+    orbit_radius: f32,
+    event_loop: VgonioEventLoop,
 
     ray_origin_cartesian: Vec3,
     ray_origin_spherical: Vec3,
@@ -40,17 +47,9 @@ pub(crate) struct BrdfMeasurementPane {
     method: RtcMethod,
     prim_id: u32,
     cell_pos: IVec2,
-    t: f32,
-
-    emitter_position_index: i32,
-    params: BsdfMeasurementParams,
-
-    pub loaded_surfaces: Vec<MicroSurfaceRecord>,
-    pub selected_surface: Option<Handle<MicroSurface>>,
-    event_loop: VgonioEventLoop,
 }
 
-impl BrdfMeasurementPane {
+impl BrdfMeasurementDebugging {
     pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
             show_dome: false,
@@ -62,20 +61,17 @@ impl BrdfMeasurementPane {
             method: RtcMethod::Grid,
             prim_id: 0,
             cell_pos: Default::default(),
-            t: 10.0,
+            ray_t: 1.0,
             emitter_position_index: 0,
             params: BsdfMeasurementParams::default(),
             loaded_surfaces: vec![],
             selected_surface: None,
             event_loop,
+            orbit_radius: 1.0,
         }
     }
 
-    pub fn estimate_radius(&self) -> Option<(f32, Option<f32>)> {
-        let record = self
-            .loaded_surfaces
-            .iter()
-            .find(|s| s.surf == self.selected_surface.unwrap_or(Handle::default()));
+    fn estimate_radii(&self, record: Option<&MicroSurfaceRecord>) -> Option<(f32, Option<f32>)> {
         match record {
             None => {
                 self.event_loop
@@ -99,35 +95,48 @@ impl BrdfMeasurementPane {
                         Some(radius.estimate_disk_radius(mesh)),
                     ),
                 };
-                log::trace!("evaluated radius: {}, {:?}", radius, disk_radius);
+                log::trace!(
+                    "[BsdfMeasurementDebugging] evaluated radius: {}, {:?}",
+                    radius,
+                    disk_radius
+                );
                 Some((radius, disk_radius))
             }
         }
     }
 
     fn update_emitter_position_index(&mut self, delta: i32) {
-        let zenith_step_count = self.params.emitter.zenith.step_count_wrapped();
-        let azimuth_step_count = self.params.emitter.azimuth.step_count_wrapped();
-        self.emitter_position_index = ((self.emitter_position_index + delta).max(0) as usize
-            % (zenith_step_count * azimuth_step_count))
-            as i32;
-        if let Some((radius, disk_radius)) = self.estimate_radius() {
-            log::trace!("updating emitter position index");
+        let record = self
+            .loaded_surfaces
+            .iter()
+            .find(|s| s.surf == self.selected_surface.unwrap_or(Handle::default()));
+        if let Some((orbit_radius, shape_radius)) = self.estimate_radii(record) {
+            self.orbit_radius = orbit_radius;
+            let zenith_step_count = self.params.emitter.zenith.step_count_wrapped();
+            let azimuth_step_count = self.params.emitter.azimuth.step_count_wrapped();
+            self.emitter_position_index = ((self.emitter_position_index + delta).max(0) as usize
+                % (zenith_step_count * azimuth_step_count))
+                as i32;
             let azimuth_idx = self.emitter_position_index / zenith_step_count as i32;
             let zenith_idx = self.emitter_position_index % zenith_step_count as i32;
             let zenith = self.params.emitter.zenith.step(zenith_idx as usize);
             let azimuth = self.params.emitter.azimuth.step(azimuth_idx as usize);
-            log::trace!("zenith_step_count: {}", zenith_step_count);
-            log::trace!("pos idx: {}", self.emitter_position_index);
-            log::trace!("azimuth idx: {} = {}", azimuth_idx, azimuth.to_degrees());
-            log::trace!("zenith idx: {} = {}", zenith_idx, zenith.to_degrees());
+            log::trace!(
+                "[BrdfMeasurementDebugging] updating emitter position index: {}, zenith: {}, \
+                 index={}, azimuth: {}, index={}",
+                self.emitter_position_index,
+                zenith.to_degrees(),
+                zenith_idx,
+                azimuth.to_degrees(),
+                azimuth_idx
+            );
             self.event_loop
                 .send_event(VgonioEvent::Debugging(
                     DebuggingEvent::UpdateEmitterPosition {
                         zenith,
                         azimuth,
-                        orbit_radius: radius,
-                        disk_radius,
+                        orbit_radius,
+                        shape_radius,
                     },
                 ))
                 .unwrap();
@@ -135,31 +144,33 @@ impl BrdfMeasurementPane {
     }
 }
 
-impl egui::Widget for &mut BrdfMeasurementPane {
+impl egui::Widget for &mut BrdfMeasurementDebugging {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
             ui.label("MicroSurface");
-            egui::ComboBox::from_id_source("MicroSurface")
-                .selected_text(format!(
-                    "{}",
-                    match self.selected_surface {
-                        None => "None",
-                        Some(hdl) => {
-                            let record =
-                                self.loaded_surfaces.iter().find(|s| s.surf == hdl).unwrap();
-                            record.name()
+            ui.horizontal_wrapped(|ui| {
+                egui::ComboBox::from_id_source("MicroSurface")
+                    .selected_text(format!(
+                        "{}",
+                        match self.selected_surface {
+                            None => "None",
+                            Some(hdl) => {
+                                let record =
+                                    self.loaded_surfaces.iter().find(|s| s.surf == hdl).unwrap();
+                                record.name()
+                            }
                         }
-                    }
-                ))
-                .show_ui(ui, |ui| {
-                    for record in &self.loaded_surfaces {
-                        ui.selectable_value(
-                            &mut self.selected_surface,
-                            Some(record.surf),
-                            format!("{}", record.name()),
-                        );
-                    }
-                });
+                    ))
+                    .show_ui(ui, |ui| {
+                        for record in &self.loaded_surfaces {
+                            ui.selectable_value(
+                                &mut self.selected_surface,
+                                Some(record.surf),
+                                format!("{}", record.name()),
+                            );
+                        }
+                    });
+            });
         });
 
         egui::CollapsingHeader::new("Emitter")
@@ -188,7 +199,8 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                             .on_hover_text("Distance from emitter to the surface.");
                         ui.horizontal_wrapped(|ui| {
                             self.params.emitter.radius.ui(ui);
-                            if ui.button("eval").clicked() {
+                            #[cfg(debug_assertions)]
+                            if ui.button("debug_eval").clicked() {
                                 let record = self.loaded_surfaces.iter().find(|s| {
                                     s.surf == self.selected_surface.unwrap_or(Handle::default())
                                 });
@@ -221,7 +233,13 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                                     }
                                 }
                             }
-                            ui.add(ToggleSwitch::new(&mut self.show_dome));
+                            if ui.add(ToggleSwitch::new(&mut self.show_dome)).changed() {
+                                self.event_loop
+                                    .send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleDebugDrawingDome(self.show_dome),
+                                    ))
+                                    .unwrap();
+                            }
                         });
                         ui.end_row();
 
@@ -244,16 +262,22 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                         ui.label("Samples: ");
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Generate").clicked() {
-                                if let Some((radius, disk_radius)) = self.estimate_radius() {
-                                    let samples = self.params.emitter.generate_unit_samples();
+                                let record = self.loaded_surfaces.iter().find(|s| {
+                                    s.surf == self.selected_surface.unwrap_or(Handle::default())
+                                });
+                                if let Some((orbit_radius, shape_radius)) =
+                                    self.estimate_radii(record)
+                                {
+                                    self.orbit_radius = orbit_radius;
                                     self.event_loop
                                         .send_event(VgonioEvent::Debugging(
                                             DebuggingEvent::UpdateEmitterSamples {
-                                                samples,
-                                                orbit_radius: radius,
-                                                theta: rad!(0.0),
-                                                phi: rad!(0.0),
-                                                disk_radius,
+                                                samples: self
+                                                    .params
+                                                    .emitter
+                                                    .generate_unit_samples(),
+                                                orbit_radius,
+                                                shape_radius,
                                             },
                                         ))
                                         .unwrap();
@@ -288,27 +312,64 @@ impl egui::Widget for &mut BrdfMeasurementPane {
                                 let record = self.loaded_surfaces.iter().find(|s| {
                                     s.surf == self.selected_surface.unwrap_or(Handle::default())
                                 });
-                                let radius = if let Some(record) = record {
-                                    let cache = self.cache.read().unwrap();
-                                    let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
-                                    self.params.emitter.radius.estimate(mesh)
-                                } else {
-                                    1.0
-                                };
-                                self.event_loop
-                                    .send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateEmitterPoints {
-                                            points,
-                                            orbit_radius: radius,
-                                        },
-                                    ))
-                                    .unwrap();
+                                if let Some((orbit_radius, _)) = self.estimate_radii(record) {
+                                    self.orbit_radius = orbit_radius;
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::UpdateEmitterPoints {
+                                                points,
+                                                orbit_radius,
+                                            },
+                                        ))
+                                        .unwrap();
+                                }
                             }
 
                             if ui.button("Emit Rays").clicked() {
-                                self.event_loop
-                                    .send_event(VgonioEvent::Debugging(DebuggingEvent::EmitRays))
-                                    .unwrap();
+                                let record = self.loaded_surfaces.iter().find(|s| {
+                                    s.surf == self.selected_surface.unwrap_or(Handle::default())
+                                });
+                                if let Some((orbit_radius, shape_radius)) =
+                                    self.estimate_radii(record)
+                                {
+                                    self.orbit_radius = orbit_radius;
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::EmitRays {
+                                                orbit_radius,
+                                                shape_radius,
+                                            },
+                                        ))
+                                        .unwrap();
+                                }
+                            }
+
+                            if ui
+                                .add(
+                                    egui::Slider::new(
+                                        &mut self.ray_t,
+                                        1.0..=self.orbit_radius * 2.0,
+                                    )
+                                    .text("t"),
+                                )
+                                .changed()
+                            {
+                                let record = self.loaded_surfaces.iter().find(|s| {
+                                    s.surf == self.selected_surface.unwrap_or(Handle::default())
+                                });
+                                if let Some((orbit_radius, shape_radius)) =
+                                    self.estimate_radii(record)
+                                {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::UpdateRayParams {
+                                                t: self.ray_t,
+                                                orbit_radius,
+                                                shape_radius,
+                                            },
+                                        ))
+                                        .unwrap();
+                                }
                             }
                         });
                         ui.end_row();
@@ -322,19 +383,6 @@ impl egui::Widget for &mut BrdfMeasurementPane {
             #[cfg(feature = "optix")]
             ui.selectable_value(&mut self.method, RtcMethod::Optix, "OptiX");
             ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
-        });
-
-        ui.horizontal_wrapped(|ui| {
-            ui.label("t");
-            let res = ui.add(egui::DragValue::new(&mut self.t).clamp_range(0.1..=200.0));
-            if res.changed()
-                && self
-                    .event_loop
-                    .send_event(VgonioEvent::UpdateDebugT(self.t))
-                    .is_err()
-            {
-                log::warn!("Failed to send event VgonioEvent::UpdateDebugT");
-            }
         });
 
         if self.method == RtcMethod::Grid {

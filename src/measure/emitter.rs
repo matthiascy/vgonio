@@ -289,25 +289,34 @@ impl Emitter {
         }
     }
 
-    /// Emits rays from the patch located at `pos`.
-    pub fn emit_rays_with_radius(
-        &self,
+    /// Emits rays from the patch located at `pos` with `orbit_radius`.
+    /// If the emitter is a disk, `shape_radius` is used to generate rays on the
+    /// disk.
+    ///
+    /// # Arguments
+    ///
+    /// * `samples` - The samples on the emitter's surface.
+    /// * `position` - Current position of the emitter.
+    /// * `orbit_radius` - The radius of the orbit.
+    /// * `shape_radius` - The radius of the emitter's disk if it is a disk.
+    pub fn emit_rays(
         samples: &EmitterSamples,
-        pos: SphericalCoord,
+        position: SphericalCoord,
         orbit_radius: f32,
-        disk_radius: Option<f32>,
+        shape_radius: Option<f32>,
     ) -> Vec<Ray> {
         log::trace!(
-            "Emitting rays from {} with orbit radius = {}, disk radius = {:?}",
-            pos,
+            "[Emitter] emitting rays from {} with orbit radius = {}, disk radius = {:?}",
+            position,
             orbit_radius,
-            disk_radius
+            shape_radius
         );
-        let mat = Mat3::from_axis_angle(glam::Vec3::Y, pos.zenith.value)
-            * Mat3::from_axis_angle(-Vec3::Z, pos.azimuth.value);
-        let dir = -pos.to_cartesian(Handedness::RightHandedYUp);
+        let mat = Mat3::from_axis_angle(-Vec3::Y, position.azimuth.value)
+            * Mat3::from_axis_angle(-Vec3::Z, position.zenith.value);
+        let dir = -position.to_cartesian(Handedness::RightHandedYUp);
+        log::trace!("[Emitter] emitting rays with dir = {:?}", dir);
 
-        let rays = match disk_radius {
+        let rays = match shape_radius {
             None => samples
                 .par_iter()
                 .map(|s| {
@@ -316,7 +325,7 @@ impl Emitter {
                 })
                 .collect(),
             Some(disk_radius) => {
-                let factor = pos.zenith.cos();
+                let factor = position.zenith.cos();
                 samples
                     .iter()
                     .map(|s| {

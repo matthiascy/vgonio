@@ -15,6 +15,7 @@ use crate::{
         measurement::{BsdfMeasurementParams, Radius},
         rtc,
         rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
+        Emitter,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
     optics::fresnel,
@@ -63,10 +64,7 @@ pub fn measure_bsdf(
             pos.azimuth.in_degrees().value()
         );
         let t = Instant::now();
-        let emitted_rays =
-            params
-                .emitter
-                .emit_rays_with_radius(samples, pos, orbit_radius, disk_radius);
+        let emitted_rays = Emitter::emit_rays(samples, pos, orbit_radius, disk_radius);
         let num_emitted_rays = emitted_rays.len();
         let elapsed = t.elapsed();
 

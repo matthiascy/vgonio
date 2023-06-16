@@ -18,8 +18,9 @@ use crate::app::{
 use crate::{
     app::gfx::{remap_depth, SlicedBuffer},
     math::generate_parametric_hemisphere,
-    measure::{emitter::EmitterSamples, rtc::Ray},
+    measure::{emitter::EmitterSamples, rtc::Ray, Emitter},
     units::{rad, Radians},
+    SphericalCoord,
 };
 use glam::{Mat3, Mat4, Vec3};
 use std::{
@@ -28,6 +29,7 @@ use std::{
     path::Path,
     sync::{Arc, RwLock},
 };
+use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
 use super::EventResponse;
@@ -38,6 +40,43 @@ pub const AZIMUTH_BIN_SIZE_RAD: f32 = (AZIMUTH_BIN_SIZE_DEG as f32 * std::f32::c
 pub const ZENITH_BIN_SIZE_RAD: f32 = (ZENITH_BIN_SIZE_DEG as f32 * std::f32::consts::PI) / 180.0;
 pub const NUM_AZIMUTH_BINS: usize = ((2.0 * std::f32::consts::PI) / AZIMUTH_BIN_SIZE_RAD) as _;
 pub const NUM_ZENITH_BINS: usize = ((0.5 * std::f32::consts::PI) / ZENITH_BIN_SIZE_RAD) as _;
+
+pub const DEBUG_DRAWING_SHADER: &str = r#"
+struct Uniforms {
+    proj_view: mat4x4<f32>,
+    lowest: f32,
+    highest: f32,
+    span: f32,
+    scale: f32,
+}
+
+struct VOut {
+    @builtin(position) position: vec4<f32>,
+}
+
+struct PushConstants {
+    model: mat4x4<f32>,
+    color: vec4<f32>,
+}
+ 
+var<push_constant> pcs: PushConstants;
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+@vertex
+fn vs_main(@location(0) position: vec3<f32>) ->  VOut {
+    var vout: VOut;
+    let scaled = uniforms.scale * position;
+    vout.position = uniforms.proj_view * pcs.model * vec4<f32>(scaled, 1.0);
+
+    return vout;
+}
+
+@fragment
+fn fs_main(vin: VOut) -> @location(0) vec4<f32> {
+    return pcs.color;
+}
+"#;
 
 /// Uniform buffer used when rendering.
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -218,13 +257,17 @@ impl DepthMap {
 }
 
 pub struct DebugDrawingState {
+    /// If true, the debug drawing is enabled.
+    pub(crate) enabled: bool,
+    /// If true, the dome is displayed.
+    pub(crate) drawing_dome: bool,
     /// Giant buffer for all vertices data except for the micro surfaces.
     pub vertices: SlicedBuffer,
     /// Giant buffer for all indices data except for the micro surfaces.
     pub indices: SlicedBuffer,
     /// Basic render pipeline for debug drawing. Topology = TriangleList,
     /// PolygonMode = Line
-    pub basic_pipeline: wgpu::RenderPipeline,
+    pub triangles_pipeline: wgpu::RenderPipeline,
     /// Pipeline for drawing points.
     pub points_pipeline: wgpu::RenderPipeline,
     /// Pipeline for drawing lines.
@@ -236,7 +279,9 @@ pub struct DebugDrawingState {
     /// If true, the offline rendering of [`SamplingDebugger`] is enabled.
     pub sampling_debug_enabled: bool,
 
-    /// Emitter current position.
+    /// Emitter orbit radius.
+    pub emitter_orbit_radius: f32,
+    /// Emitter current position: (zenith, azimuth).
     pub emitter_position: (Radians, Radians),
     /// Emitter samples.
     pub emitter_samples: Option<EmitterSamples>,
@@ -246,15 +291,13 @@ pub struct DebugDrawingState {
     pub emitter_samples_uniform_buffer: Option<wgpu::Buffer>,
     /// Emitter measurement points buffer.
     pub emitter_points_buffer: Option<wgpu::Buffer>,
-
-    /// Vertex buffer storing all vertices.
-    pub rays_vertex_buf: wgpu::Buffer,
-    pub rays_vertex_count: u32,
-    // pub embree_rays: Vec<Ray>,
-    pub rays: Vec<Ray>,
-    /// Render pass for rays drawing.
-    pub rays_rp: RenderPass,
-    pub ray_t: f32,
+    /// Rays emitted from the emitter at the current position.
+    pub emitter_rays: Option<Vec<Ray>>,
+    /// GPU buffer storing all rays emitted from the emitter at the current
+    /// position.
+    pub emitter_rays_buffer: Option<wgpu::Buffer>,
+    /// Ray segment parameter.
+    pub emitter_rays_t: f32,
 
     pub msurf_prim_rp: RenderPass,
     pub msurf_prim_index_buf: wgpu::Buffer,
@@ -264,6 +307,10 @@ pub struct DebugDrawingState {
 }
 
 impl DebugDrawingState {
+    pub const EMITTER_SAMPLES_COLOR: [f32; 4] = [0.27, 1.0, 0.27, 1.0];
+    pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
+    pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
+
     pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
         use wgpu::util::DeviceExt;
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
@@ -290,13 +337,6 @@ impl DebugDrawingState {
                         },
                         count: None,
                     }],
-                });
-        let rays_rp_uniform_buffer =
-            ctx.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("debug-drawing-rays-uniform-buffer"),
-                    contents: bytemuck::cast_slice(&[0.0f32; 16 * 3 + 4]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
         let msurf_prim_rp_uniform_buffer =
             ctx.device
@@ -344,10 +384,10 @@ impl DebugDrawingState {
             .subslices_mut()
             .push(0..hemisphere.1.len() as u64 * std::mem::size_of::<u32>() as u64 * 3);
 
-        let (basic_pipeline, points_pipeline, lines_pipeline, bind_group, uniform_buffer) = {
+        let (triangles_pipeline, points_pipeline, lines_pipeline, bind_group, uniform_buffer) = {
             let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-drawing-basic-uniform-buffer"),
-                size: std::mem::size_of::<[f32; 16 * 3 + 4]>() as u64,
+                size: std::mem::size_of::<[f32; 16 + 4]>() as u64,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
@@ -374,28 +414,35 @@ impl DebugDrawingState {
                     resource: uniform_buffer.as_entire_binding(),
                 }],
             });
-            let module = ctx
+            let shader_module = ctx
                 .device
                 .create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some("debug-drawing-basic-shader"),
-                    source: wgpu::ShaderSource::Wgsl(
-                        include_str!("../gui/assets/shaders/wgsl/default.wgsl").into(),
-                    ),
+                    label: Some("debug-drawing-shader"),
+                    source: wgpu::ShaderSource::Wgsl(DEBUG_DRAWING_SHADER.into()),
                 });
             let pipeline_layout =
                 ctx.device
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some("debug-drawing-shared-pipeline-layout"),
                         bind_group_layouts: &[&bind_group_layout],
-                        push_constant_ranges: &[],
+                        push_constant_ranges: &[
+                            wgpu::PushConstantRange {
+                                stages: wgpu::ShaderStages::VERTEX,
+                                range: 0..64,
+                            },
+                            wgpu::PushConstantRange {
+                                stages: wgpu::ShaderStages::FRAGMENT,
+                                range: 64..80,
+                            },
+                        ],
                     });
             let vert_state = wgpu::VertexState {
-                module: &module,
+                module: &shader_module,
                 entry_point: "vs_main",
                 buffers: &[vert_buffer_layout.clone()],
             };
             let frag_state = wgpu::FragmentState {
-                module: &module,
+                module: &shader_module,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
@@ -403,7 +450,14 @@ impl DebugDrawingState {
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             };
-            let basic_pipeline =
+            let depth_state = wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: Default::default(),
+            };
+            let triangles_pipeline =
                 ctx.device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some("debug-drawing-basic-pipeline"),
@@ -415,7 +469,7 @@ impl DebugDrawingState {
                             polygon_mode: wgpu::PolygonMode::Line,
                             ..Default::default()
                         },
-                        depth_stencil: None,
+                        depth_stencil: Some(depth_state.clone()),
                         multisample: Default::default(),
                         fragment: Some(frag_state.clone()),
                         multiview: None,
@@ -431,7 +485,7 @@ impl DebugDrawingState {
                             front_face: wgpu::FrontFace::Ccw,
                             ..Default::default()
                         },
-                        depth_stencil: None,
+                        depth_stencil: Some(depth_state.clone()),
                         multisample: Default::default(),
                         fragment: Some(frag_state.clone()),
                         multiview: None,
@@ -447,13 +501,13 @@ impl DebugDrawingState {
                             front_face: wgpu::FrontFace::Ccw,
                             ..Default::default()
                         },
-                        depth_stencil: None,
+                        depth_stencil: Some(depth_state),
                         multisample: Default::default(),
                         fragment: Some(frag_state),
                         multiview: None,
                     });
             (
-                basic_pipeline,
+                triangles_pipeline,
                 points_pipeline,
                 lines_pipeline,
                 bind_group,
@@ -462,79 +516,25 @@ impl DebugDrawingState {
         };
 
         Self {
+            enabled: false,
+            drawing_dome: false,
             vertices,
             indices,
-            basic_pipeline,
+            triangles_pipeline,
             points_pipeline,
             lines_pipeline,
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
+            emitter_orbit_radius: 1.0,
             emitter_position: (rad!(0.0), rad!(0.0)),
             emitter_samples: None,
             emitter_samples_buffer: None,
             emitter_samples_uniform_buffer: None,
             emitter_points_buffer: None,
-            rays_vertex_buf: ctx.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("debug-rays-vert-buffer"),
-                size: std::mem::size_of::<f32>() as u64 * 1024, // initial capacity of 1024 rays
-                usage: wgpu::BufferUsages::VERTEX
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::COPY_SRC,
-                mapped_at_creation: false,
-            }),
-            rays_vertex_count: 0,
-            rays: vec![],
-            rays_rp: RenderPass {
-                pipeline: ctx
-                    .device
-                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some("debug-rays-pipeline"),
-                        layout: Some(&ctx.device.create_pipeline_layout(
-                            &wgpu::PipelineLayoutDescriptor {
-                                label: Some("debug-rays-pipeline-layout"),
-                                bind_group_layouts: &[&bind_group_layout],
-                                push_constant_ranges: &[],
-                            },
-                        )),
-                        vertex: wgpu::VertexState {
-                            module: &shader_module,
-                            entry_point: "vs_main",
-                            buffers: &[vert_buffer_layout],
-                        },
-                        primitive: wgpu::PrimitiveState {
-                            topology: wgpu::PrimitiveTopology::LineStrip,
-                            strip_index_format: None,
-                            front_face: wgpu::FrontFace::Ccw,
-                            cull_mode: Some(wgpu::Face::Back),
-                            unclipped_depth: false,
-                            polygon_mode: wgpu::PolygonMode::Line,
-                            conservative: false,
-                        },
-                        depth_stencil: None,
-                        multisample: Default::default(),
-                        fragment: Some(wgpu::FragmentState {
-                            module: &shader_module,
-                            entry_point: "fs_main",
-                            targets: &[Some(wgpu::ColorTargetState {
-                                format: target_format,
-                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                                write_mask: wgpu::ColorWrites::ALL,
-                            })],
-                        }),
-                        multiview: None,
-                    }),
-                bind_groups: vec![ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("debug-rays-bind-group"),
-                    layout: &bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: rays_rp_uniform_buffer.as_entire_binding(),
-                    }],
-                })],
-                uniform_buffers: Some(vec![rays_rp_uniform_buffer]),
-            },
-            ray_t: 0.0,
+            emitter_rays: None,
+            emitter_rays_buffer: None,
+            emitter_rays_t: 1.0,
             msurf_prim_rp: RenderPass {
                 pipeline: ctx
                     .device
@@ -610,20 +610,17 @@ impl DebugDrawingState {
     pub fn update_uniform_buffer(
         &mut self,
         ctx: &GpuContext,
-        view_mat: &Mat4,
-        proj_mat: &Mat4,
+        proj_view_mat: &Mat4,
         lowest: f32,
         highest: f32,
         scale: f32,
     ) {
-        let mut buf = [0f32; 3 * 16 + 4];
-        buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-        buf[16..32].copy_from_slice(&view_mat.to_cols_array());
-        buf[32..48].copy_from_slice(&proj_mat.to_cols_array());
-        buf[48] = lowest;
-        buf[49] = highest;
-        buf[50] = highest - lowest;
-        buf[51] = scale;
+        let mut buf = [0f32; 20];
+        buf[0..16].copy_from_slice(&proj_view_mat.to_cols_array());
+        buf[16] = lowest;
+        buf[17] = highest;
+        buf[18] = highest - lowest;
+        buf[19] = scale;
         ctx.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&buf));
     }
@@ -633,26 +630,34 @@ impl DebugDrawingState {
         ctx: &GpuContext,
         samples: EmitterSamples,
         orbit_radius: f32,
-        disk_radius: Option<f32>,
+        shape_radius: Option<f32>,
     ) {
         self.update_emitter_position_and_samples(
             ctx,
             Some(samples),
-            self.emitter_position.0,
-            self.emitter_position.1,
+            None,
+            None,
             orbit_radius,
-            disk_radius,
-        )
+            shape_radius,
+        );
     }
 
-    pub fn update_emitter_points(&mut self, ctx: &GpuContext, points: Vec<Vec3>, radius: f32) {
+    pub fn update_emitter_points(
+        &mut self,
+        ctx: &GpuContext,
+        points: Vec<Vec3>,
+        orbit_radius: f32,
+    ) {
         let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("debug-emitter-points"),
             size: points.len() as u64 * std::mem::size_of::<Vec3>() as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let transformed = points.into_iter().map(|s| s * radius).collect::<Vec<_>>();
+        let transformed = points
+            .into_iter()
+            .map(|s| s * orbit_radius)
+            .collect::<Vec<_>>();
         ctx.queue
             .write_buffer(&buffer, 0, bytemuck::cast_slice(&transformed));
         self.emitter_points_buffer = Some(buffer);
@@ -664,28 +669,45 @@ impl DebugDrawingState {
         zenith: Radians,
         azimuth: Radians,
         orbit_radius: f32,
-        disk_radius: Option<f32>,
+        shape_radius: Option<f32>,
     ) {
+        log::trace!("Updating emitter position to {}, {}", zenith, azimuth);
         self.update_emitter_position_and_samples(
             ctx,
             None,
-            zenith,
-            azimuth,
+            Some(zenith),
+            Some(azimuth),
             orbit_radius,
-            disk_radius,
+            shape_radius,
         );
-        self.emitter_position = (zenith, azimuth);
+    }
+
+    pub fn update_ray_params(
+        &mut self,
+        ctx: &Arc<GpuContext>,
+        t: f32,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
+    ) {
+        log::trace!(
+            "Updating emitter ray params t to {}, orbit_radius = {}",
+            t,
+            self.emitter_orbit_radius
+        );
+        self.emitter_rays_t = t;
+        self.update_emitter_position_and_samples(ctx, None, None, None, orbit_radius, shape_radius);
     }
 
     fn update_emitter_position_and_samples(
         &mut self,
         ctx: &GpuContext,
         samples: Option<EmitterSamples>,
-        zenith: Radians,
-        azimuth: Radians,
+        zenith: Option<Radians>,
+        azimuth: Option<Radians>,
         orbit_radius: f32,
-        disk_radius: Option<f32>,
+        shape_radius: Option<f32>,
     ) {
+        self.emitter_orbit_radius = orbit_radius;
         if let Some(new_samples) = samples {
             if self
                 .emitter_samples_buffer
@@ -709,22 +731,34 @@ impl DebugDrawingState {
             self.emitter_samples = Some(new_samples);
         }
 
+        if let Some(zenith) = zenith {
+            self.emitter_position.0 = zenith;
+        }
+
+        if let Some(azimuth) = azimuth {
+            self.emitter_position.1 = azimuth;
+        }
+
         if let Some(samples) = &self.emitter_samples {
-            let global = Mat3::from_axis_angle(Vec3::Y, azimuth.value)
+            let (zenith, azimuth) = self.emitter_position;
+            let mat = Mat3::from_axis_angle(-Vec3::Y, azimuth.value)
                 * Mat3::from_axis_angle(-Vec3::Z, zenith.value);
-            let vertices = if let Some(disk_radius) = disk_radius {
-                let factor = zenith.cos();
+            let vertices = if let Some(shape_radius) = shape_radius {
+                let factor = self.emitter_position.0.cos();
                 samples
                     .iter()
                     .map(|s| {
-                        global
-                            * Vec3::new(s.x * disk_radius * factor, orbit_radius, s.z * disk_radius)
+                        mat * Vec3::new(
+                            s.x * shape_radius * factor,
+                            orbit_radius,
+                            s.z * shape_radius,
+                        )
                     })
                     .collect::<Vec<_>>()
             } else {
                 samples
                     .iter()
-                    .map(|s| global * (*s * orbit_radius))
+                    .map(|s| mat * (*s * orbit_radius))
                     .collect::<Vec<_>>()
             };
             ctx.queue.write_buffer(
@@ -733,9 +767,161 @@ impl DebugDrawingState {
                 bytemuck::cast_slice(&vertices),
             );
         };
+
+        if self.emitter_rays.is_some() {
+            self.emit_rays(ctx, orbit_radius, shape_radius);
+        }
     }
 
-    pub fn emit_rays(&self, ctx: &GpuContext) {}
+    pub fn emit_rays(&mut self, ctx: &GpuContext, orbit_radius: f32, shape_radius: Option<f32>) {
+        if self.emitter_samples.is_none() {
+            log::trace!("No emitter samples to emit rays from");
+            return;
+        }
+        log::trace!(
+            "Emitting rays at {} {}",
+            self.emitter_position.0,
+            self.emitter_position.1
+        );
+        self.emitter_rays = Some(Emitter::emit_rays(
+            self.emitter_samples.as_ref().unwrap(),
+            SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
+            orbit_radius,
+            shape_radius,
+        ));
+        let ray_segments = self
+            .emitter_rays
+            .as_ref()
+            .unwrap()
+            .iter()
+            .flat_map(|r| [r.org, r.org + r.dir * self.emitter_rays_t])
+            .collect::<Vec<_>>();
+        self.emitter_rays_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("debug-emitter-rays"),
+                contents: bytemuck::cast_slice(&ray_segments),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            },
+        ));
+    }
+
+    /// Records the render process for the debugging draw calls.
+    ///
+    /// Only records the render pass if the debug renderer is enabled.
+    pub fn record_render_pass(
+        &self,
+        ctx: &GpuContext,
+        color_output: Option<wgpu::RenderPassColorAttachment>,
+        depth_output: Option<wgpu::RenderPassDepthStencilAttachment>,
+    ) -> Option<wgpu::CommandEncoder> {
+        if !self.enabled {
+            return None;
+        }
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("debug-render-pass"),
+            });
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("debug-render-pass"),
+                color_attachments: &[color_output],
+                depth_stencil_attachment: depth_output,
+            });
+
+            if self.drawing_dome {
+                render_pass.set_pipeline(&self.triangles_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, self.vertices.data_slice(..));
+                render_pass
+                    .set_index_buffer(self.indices.data_slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX,
+                    0,
+                    bytemuck::cast_slice(
+                        &Mat4::from_scale(Vec3::splat(self.emitter_orbit_radius)).to_cols_array(),
+                    ),
+                );
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::FRAGMENT,
+                    64,
+                    bytemuck::cast_slice(&Self::EMITTER_POINTS_COLOR),
+                );
+                self.indices
+                    .subslices()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, index_range)| {
+                        let count = ((index_range.end - index_range.start) / 4) as u32;
+                        let index_offset = (index_range.start / 4) as u32;
+                        let vertex_offset = self.vertices.subslices()[i].start / 12;
+                        render_pass.draw_indexed(
+                            index_offset..index_offset + count,
+                            vertex_offset as i32,
+                            0..1,
+                        );
+                    });
+            }
+
+            // Draw emitter samples.
+            if let Some(samples) = &self.emitter_samples_buffer {
+                // Convert range in bytes to range in vertices.
+                render_pass.set_pipeline(&self.points_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, samples.slice(..));
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX,
+                    0,
+                    bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
+                );
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::FRAGMENT,
+                    64,
+                    bytemuck::cast_slice(&Self::EMITTER_SAMPLES_COLOR),
+                );
+                render_pass.draw(0..self.emitter_samples.as_ref().unwrap().len() as u32, 0..1);
+
+                if let Some(rays) = &self.emitter_rays_buffer {
+                    render_pass.set_pipeline(&self.lines_pipeline);
+                    render_pass.set_bind_group(0, &self.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, rays.slice(..));
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::VERTEX,
+                        0,
+                        bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
+                    );
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::FRAGMENT,
+                        64,
+                        bytemuck::cast_slice(&Self::EMITTER_RAYS_COLOR),
+                    );
+                    render_pass.draw(
+                        0..self.emitter_rays.as_ref().unwrap().len() as u32 * 2,
+                        0..1,
+                    );
+                }
+            }
+
+            if let Some(buffer) = &self.emitter_points_buffer {
+                render_pass.set_pipeline(&self.points_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, buffer.slice(..));
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX,
+                    0,
+                    bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
+                );
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::FRAGMENT,
+                    64,
+                    bytemuck::cast_slice(&Self::EMITTER_POINTS_COLOR),
+                );
+                render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+            }
+        }
+
+        Some(encoder)
+    }
 }
 
 /// Context for rendering the UI.

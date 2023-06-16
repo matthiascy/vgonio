@@ -1,4 +1,4 @@
-use crate::app::gui::{VgonioEvent, VgonioEventLoop};
+use crate::app::gui::{DebuggingEvent, VgonioEvent, VgonioEventLoop};
 use egui_toast::Toasts;
 use std::{
     any::Any,
@@ -18,7 +18,7 @@ use crate::{
     },
     msurf::MicroSurface,
 };
-use brdf_measurement::BrdfMeasurementPane;
+use brdf_measurement::BrdfMeasurementDebugging;
 use microfacet::MicrofacetMeasurementPane;
 use shadow_map::ShadowMapPane;
 
@@ -40,7 +40,7 @@ pub(crate) struct DebuggingInspector {
     pub debug_drawing_enabled: bool,
     event_loop: VgonioEventLoop,
     pub(crate) shadow_map_pane: ShadowMapPane,
-    pub(crate) brdf_pane: BrdfMeasurementPane,
+    pub(crate) brdf_debugging: BrdfMeasurementDebugging,
     pub(crate) microfacet_pane: MicrofacetMeasurementPane,
 }
 
@@ -59,7 +59,16 @@ impl Tool for DebuggingInspector {
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Debug Draw");
-            ui.add(ToggleSwitch::new(&mut self.debug_drawing_enabled));
+            if ui
+                .add(ToggleSwitch::new(&mut self.debug_drawing_enabled))
+                .changed()
+            {
+                self.event_loop
+                    .send_event(VgonioEvent::Debugging(DebuggingEvent::ToggleDebugDrawing(
+                        self.debug_drawing_enabled,
+                    )))
+                    .unwrap();
+            }
         });
 
         ui.horizontal(|ui| {
@@ -74,7 +83,7 @@ impl Tool for DebuggingInspector {
                 ui.add(&mut self.shadow_map_pane);
             }
             PaneKind::Brdf => {
-                ui.add(&mut self.brdf_pane);
+                ui.add(&mut self.brdf_debugging);
             }
             PaneKind::Microfacet => {
                 ui.add(&mut self.microfacet_pane);
@@ -91,10 +100,10 @@ impl DebuggingInspector {
     pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
             opened_pane: Default::default(),
-            debug_drawing_enabled: true,
+            debug_drawing_enabled: false,
             event_loop: event_loop.clone(),
             shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
-            brdf_pane: BrdfMeasurementPane::new(event_loop.clone(), cache),
+            brdf_debugging: BrdfMeasurementDebugging::new(event_loop.clone(), cache),
             microfacet_pane: MicrofacetMeasurementPane::new(event_loop),
         }
     }
@@ -102,13 +111,13 @@ impl DebuggingInspector {
     pub fn update_surfaces(&mut self, surfaces: &[Handle<MicroSurface>], cache: &Cache) {
         for surface in surfaces {
             if !self
-                .brdf_pane
+                .brdf_debugging
                 .loaded_surfaces
                 .iter()
                 .any(|s| s.surf == *surface)
             {
                 let record = cache.get_micro_surface_record(*surface).unwrap();
-                self.brdf_pane.loaded_surfaces.push(record.clone());
+                self.brdf_debugging.loaded_surfaces.push(record.clone());
             }
         }
     }

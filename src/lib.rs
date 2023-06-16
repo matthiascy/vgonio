@@ -182,9 +182,7 @@ impl SphericalCoord {
 
     /// Convert to a cartesian coordinate.
     pub fn to_cartesian(&self, handedness: Handedness) -> Vec3 {
-        let theta = self.zenith;
-        let phi = self.azimuth;
-        spherical_to_cartesian(self.radius, theta, phi, handedness)
+        spherical_to_cartesian(self.radius, self.zenith, self.azimuth, handedness)
     }
 
     /// Convert from a cartesian coordinate.
