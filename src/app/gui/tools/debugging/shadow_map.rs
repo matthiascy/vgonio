@@ -3,7 +3,6 @@ use crate::app::{
     gui::{state::GuiContext, DebuggingEvent, VgonioEvent, VgonioEventLoop},
 };
 use egui::{Sense, TextureFilter};
-use winit::event_loop::EventLoopProxy;
 
 const IMG_WIDTH: usize = 480;
 const IMG_HEIGHT: usize = 270;

@@ -1,17 +1,16 @@
 use crate::{
-    app::gui::{misc, simulations::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
+    app::gui::{misc, widgets::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
     measure::{
         bsdf::BsdfKind,
         emitter::RegionShape,
         measurement::{BsdfMeasurementParams, Radius},
         Collector, CollectorScheme, Emitter,
     },
-    units::{deg, mm, rad, Radians},
+    units::{mm, Radians},
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
 use std::hash::Hash;
-use winit::event_loop::EventLoopProxy;
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
@@ -379,7 +378,7 @@ impl BsdfSimulation {
     pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             params: BsdfMeasurementParams::default(),
-            selector: Default::default(),
+            selector: SurfaceSelector::multiple(),
             event_loop,
         }
     }
@@ -417,7 +416,7 @@ impl BsdfSimulation {
             self.event_loop
                 .send_event(VgonioEvent::Measure(MeasureEvent::Bsdf {
                     params: self.params,
-                    surfaces: self.selector.selected.clone().into_iter().collect(),
+                    surfaces: self.selector.selected().collect(),
                 }))
                 .unwrap();
         }

@@ -15,21 +15,17 @@ use crate::{
     error::Error,
     measure,
     measure::{rtc::Ray, RtcMethod},
-    units::degrees,
     Handedness,
 };
-use egui::{Align2, CursorIcon::Text};
+use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
-    any::Any,
     default::Default,
-    ops::Range,
     path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
-use wgpu::Buffer;
 
 // #[cfg(feature = "embree")]
 // pub(crate) use tools::trace_ray_standard_dbg;
@@ -793,8 +789,7 @@ impl VgonioGuiApp {
             current_theme_visuals.egui_visuals.dark_mode,
         );
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
-        let dbg_selected_surface = dbg_tool.brdf_debugging.selected_surface;
-        let (lowest, highest, scale) = match dbg_selected_surface {
+        let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
             Some(surface) => {
                 let state = self.ui.outliner().surfaces().get(&surface).unwrap();
                 (state.1.min, state.1.max, state.1.scale)

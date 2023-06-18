@@ -1,11 +1,9 @@
 use crate::app::gui::{DebuggingEvent, VgonioEvent, VgonioEventLoop};
-use egui_toast::Toasts;
 use std::{
     any::Any,
     default::Default,
     sync::{Arc, RwLock},
 };
-use winit::event_loop::EventLoopProxy;
 
 mod brdf_measurement;
 mod microfacet;
@@ -108,17 +106,7 @@ impl DebuggingInspector {
         }
     }
 
-    pub fn update_surfaces(&mut self, surfaces: &[Handle<MicroSurface>], cache: &Cache) {
-        for surface in surfaces {
-            if !self
-                .brdf_debugging
-                .loaded_surfaces
-                .iter()
-                .any(|s| s.surf == *surface)
-            {
-                let record = cache.get_micro_surface_record(*surface).unwrap();
-                self.brdf_debugging.loaded_surfaces.push(record.clone());
-            }
-        }
+    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>]) {
+        self.brdf_debugging.update_surface_selector(surfs);
     }
 }

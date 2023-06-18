@@ -14,11 +14,8 @@ use crate::{
 use glam::Mat4;
 use std::{
     borrow::Cow,
-    fmt::format,
     sync::{Arc, RwLock},
 };
-use wgpu::util::DeviceExt;
-use winit::event_loop::EventLoopProxy;
 
 pub const SHADER: &str = r#"
 @group(0) @binding(0)

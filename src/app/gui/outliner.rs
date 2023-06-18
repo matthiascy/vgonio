@@ -4,10 +4,9 @@ use crate::{
         gfx::GpuContext,
         gui::{
             bsdf_viewer::BsdfViewer,
-            state::GuiRenderer,
             tools::{
                 BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
-                PlottingInspector, PlottingWidget, Tool,
+                PlottingInspector, PlottingWidget,
             },
             VgonioEventLoop,
         },

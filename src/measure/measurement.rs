@@ -6,16 +6,16 @@ use crate::{
         collector::CollectorScheme,
         emitter::RegionShape,
         microfacet::{MeasuredMadfData, MeasuredMmsfData},
+        rtc::Aabb,
         Collector, Emitter, RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
-    units::{deg, mm, nanometres, rad, Millimetres, Radians, SolidAngle, UMillimetre},
+    units::{deg, mm, nanometres, rad, LengthUnit, Millimetres, Radians, SolidAngle, UMillimetre},
     Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    any::Any,
     fmt::{Display, Formatter},
     fs::File,
     hash::Hash,
@@ -82,7 +82,8 @@ impl Radius {
         }
     }
 
-    /// Evaluate the radius of the sphere/hemisphere enclosing the surface mesh.
+    /// Evaluates the radius of the sphere/hemisphere enclosing the surface
+    /// mesh.
     ///
     /// The returned value of the radius in the same unit as the
     /// `MicroSurfaceMesh`.
@@ -93,10 +94,28 @@ impl Radius {
         }
     }
 
-    /// Evaluate the radius for the disk covering the surface mesh.
+    /// Evaluates the radius of the sphere/hemisphere enclosing the surface mesh
+    /// with the bounds and unit of the given `MicroSurface`.
+    pub fn estimate_with_bounds(&self, bounds: Aabb, unit: LengthUnit) -> f32 {
+        match self {
+            Radius::Auto(_) => bounds.max_extent() * std::f32::consts::SQRT_2,
+            Radius::Fixed(r) => unit.factor_convert_from::<UMillimetre>() * r.value,
+        }
+    }
+
+    /// Evaluates the radius for the disk covering the surface mesh.
     pub fn estimate_disk_radius(&self, mesh: &MicroSurfaceMesh) -> f32 {
         match self {
             Radius::Auto(_) => mesh.bounds.max_extent() * 0.7,
+            Radius::Fixed(_) => panic!("Disk radius is not supported for fixed radius"),
+        }
+    }
+
+    /// Evaluates the radius for the disk covering the surface mesh with the
+    /// bounds of the given `MicroSurface`.
+    pub fn estimate_disk_radius_with_bounds(&self, bounds: Aabb) -> f32 {
+        match self {
+            Radius::Auto(_) => bounds.max_extent() * 0.7,
             Radius::Fixed(_) => panic!("Disk radius is not supported for fixed radius"),
         }
     }

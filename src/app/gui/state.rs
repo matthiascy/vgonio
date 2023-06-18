@@ -25,7 +25,6 @@ use crate::{
 use glam::{Mat3, Mat4, Vec3};
 use std::{
     default::Default,
-    ops::Range,
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -312,7 +311,6 @@ impl DebugDrawingState {
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
 
     pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
-        use wgpu::util::DeviceExt;
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
         let prim_shader_module = ctx
@@ -833,8 +831,8 @@ impl DebugDrawingState {
                 depth_stencil_attachment: depth_output,
             });
 
+            let mut constants = [0.0f32; 20];
             if self.drawing_dome {
-                let mut constants = [0.0f32; 20];
                 render_pass.set_pipeline(&self.triangles_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, self.vertices.data_slice(..));

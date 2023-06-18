@@ -7,72 +7,11 @@ use crate::{
         cache::{Cache, Handle},
         gui::{
             simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
-            VgonioEvent, VgonioEventLoop,
+            VgonioEventLoop,
         },
     },
     msurf::MicroSurface,
 };
-use egui::{epaint::ahash::HashSet, Color32};
-use std::{collections::HashMap, hash::Hash};
-use winit::event_loop::EventLoopProxy;
-
-/// A helper struct used in GUI to select surfaces.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct SurfaceSelector {
-    pub selected: HashSet<Handle<MicroSurface>>,
-    pub surfaces: HashMap<Handle<MicroSurface>, String>,
-}
-
-impl SurfaceSelector {
-    /// Updates the list of surfaces.
-    pub fn update(&mut self, surfs: &[Handle<MicroSurface>], cache: &Cache) {
-        let surfs = surfs
-            .iter()
-            .filter(|hdl| !self.surfaces.iter().any(|(s, _)| s == *hdl));
-        for record in cache.get_micro_surface_records(surfs) {
-            self.surfaces.insert(record.surf, record.name().to_string());
-        }
-    }
-
-    /// Ui for the surface selector.
-    pub fn ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
-        let mut to_be_added: Option<Handle<MicroSurface>> = None;
-        ui.columns(1, |uis| {
-            let ui = &mut uis[0];
-            let selected = self.selected.clone();
-            for hdl in selected.into_iter() {
-                ui.horizontal_wrapped(|ui| {
-                    if ui
-                        .add(
-                            egui::Button::new("\u{2716}")
-                                .fill(Color32::TRANSPARENT)
-                                .rounding(5.0),
-                        )
-                        .clicked()
-                    {
-                        self.selected.remove(&hdl);
-                    }
-                    ui.label(self.surfaces.get(&hdl).unwrap());
-                });
-            }
-            ui.horizontal_wrapped(|ui| {
-                egui::ComboBox::from_id_source(id_source)
-                    .selected_text("Add micro-surface")
-                    .show_ui(ui, |ui| {
-                        for (hdl, name) in &self.surfaces {
-                            ui.selectable_value(&mut to_be_added, Some(*hdl), name);
-                        }
-                        if let Some(hdl) = to_be_added.take() {
-                            self.selected.insert(hdl);
-                        }
-                    });
-                if ui.button("Clear").clicked() {
-                    self.selected.clear();
-                }
-            });
-        });
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SimulationTab {

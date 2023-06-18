@@ -21,7 +21,7 @@ use crate::{
 use egui::{Align2, Direction, NumExt};
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
-use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
+use egui_toast::ToastKind;
 use glam::Mat4;
 use std::{
     collections::HashMap,
@@ -29,8 +29,6 @@ use std::{
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
 };
-use winit::event_loop::EventLoopProxy;
-use VgonioEvent::Notify;
 
 /// Implementation of the drag and drop functionality.
 pub struct FileDragDrop {
@@ -347,7 +345,7 @@ impl VgonioUi {
         self.tools
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()
-            .update_surfaces(surfaces, cache);
+            .update_surfaces(surfaces);
         self.simulations.update_loaded_surfaces(surfaces, cache);
     }
 }
@@ -397,7 +395,7 @@ impl VgonioUi {
         ui.menu_image_button(texture_id, image_size, |ui| {
             if ui.button("About").clicked() {
                 self.event_loop
-                    .send_event(Notify {
+                    .send_event(VgonioEvent::Notify {
                         kind: ToastKind::Info,
                         text: "TODO: about".to_string(),
                         time: 0.0,

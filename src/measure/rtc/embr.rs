@@ -8,7 +8,7 @@ use crate::{
     measure::{
         bsdf::MeasuredBsdfData,
         collector::CollectorPatches,
-        emitter::{EmitterSamples, RegionShape},
+        emitter::EmitterSamples,
         measurement::BsdfMeasurementParams,
         rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
         Emitter,

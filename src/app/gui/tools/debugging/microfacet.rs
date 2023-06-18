@@ -3,7 +3,6 @@ use crate::{
     units::{degrees, Degrees},
 };
 use egui::{Response, Ui};
-use winit::event_loop::EventLoopProxy;
 
 pub struct MicrofacetMeasurementPane {
     event_loop: VgonioEventLoop,

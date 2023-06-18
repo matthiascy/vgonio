@@ -1,8 +1,7 @@
 use crate::{
-    app::gui::{simulations::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
+    app::gui::{widgets::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
     measure::measurement::MmsfMeasurementParams,
 };
-use winit::event_loop::EventLoopProxy;
 
 pub struct MmsfSimulation {
     pub params: MmsfMeasurementParams,
@@ -15,7 +14,7 @@ impl MmsfSimulation {
         Self {
             params: MmsfMeasurementParams::default(),
             event_loop,
-            selector: Default::default(),
+            selector: SurfaceSelector::multiple(),
         }
     }
 
@@ -45,7 +44,7 @@ impl MmsfSimulation {
             self.event_loop
                 .send_event(VgonioEvent::Measure(MeasureEvent::Mmsf {
                     params: self.params,
-                    surfaces: self.selector.selected.clone().into_iter().collect(),
+                    surfaces: self.selector.selected().collect(),
                 }))
                 .unwrap();
         }

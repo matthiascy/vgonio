@@ -3,7 +3,6 @@ use glam::Vec3;
 use std::{borrow::Cow, sync::Arc};
 
 use wgpu::util::DeviceExt;
-use winit::event_loop::EventLoopProxy;
 
 use crate::{
     app::{

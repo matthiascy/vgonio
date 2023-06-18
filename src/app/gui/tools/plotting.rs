@@ -2,8 +2,6 @@ use crate::{
     app::{
         gfx::GpuContext,
         gui::{
-            bsdf_viewer::BsdfViewer,
-            state::GuiRenderer,
             tools::Tool,
             widgets::{AngleKnob, AngleKnobWinding},
             BsdfViewerEvent, VgonioEvent, VgonioEventLoop,
@@ -11,24 +9,13 @@ use crate::{
     },
     math,
     math::NumericCast,
-    measure,
-    measure::{
-        measurement::{MeasuredData, MeasurementData, MeasurementKind},
-        CollectorScheme,
-    },
-    units::{deg, rad, Radians},
+    measure::{measurement::MeasurementData, CollectorScheme},
+    units::{rad, Radians},
     Handedness, RangeByStepSizeInclusive, SphericalPartition,
 };
-use egui::{plot::*, Align, Context, PointerButton, Response, TextBuffer, Ui, Vec2};
+use egui::{plot::*, Align, Context, PointerButton, Response, Ui, Vec2};
 use glam::Vec3;
-use std::{
-    any::Any,
-    fmt::format,
-    ops::RangeInclusive,
-    rc::Rc,
-    sync::{Arc, RwLock},
-};
-use wgpu::util::DeviceExt;
+use std::{any::Any, ops::RangeInclusive, rc::Rc, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PlotType {
