@@ -923,7 +923,7 @@ pub mod vgmo {
                     solid_angle_of_region(zenith, azimuth)
                 }
                 RegionShape::Disk { .. } => {
-                    log::warn!("Solid angle of disk emitter is not implemented");
+                    log::warn!("[TO BE SUPPRESSED] Solid angle of disk emitter is not implemented");
                     steradians!(0.0)
                 }
             };

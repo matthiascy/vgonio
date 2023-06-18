@@ -426,13 +426,17 @@ impl DebugDrawingState {
                         label: Some("debug-drawing-shared-pipeline-layout"),
                         bind_group_layouts: &[&bind_group_layout],
                         push_constant_ranges: &[
+                            // wgpu::PushConstantRange {
+                            //     stages: wgpu::ShaderStages::VERTEX,
+                            //     range: 0..80,
+                            // },
+                            // wgpu::PushConstantRange {
+                            //     stages: wgpu::ShaderStages::FRAGMENT,
+                            //     range: 64..80,
+                            // },
                             wgpu::PushConstantRange {
-                                stages: wgpu::ShaderStages::VERTEX,
-                                range: 0..64,
-                            },
-                            wgpu::PushConstantRange {
-                                stages: wgpu::ShaderStages::FRAGMENT,
-                                range: 64..80,
+                                stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                range: 0..80,
                             },
                         ],
                     });
@@ -830,22 +834,20 @@ impl DebugDrawingState {
             });
 
             if self.drawing_dome {
+                let mut constants = [0.0f32; 20];
                 render_pass.set_pipeline(&self.triangles_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, self.vertices.data_slice(..));
                 render_pass
                     .set_index_buffer(self.indices.data_slice(..), wgpu::IndexFormat::Uint32);
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::VERTEX,
-                    0,
-                    bytemuck::cast_slice(
-                        &Mat4::from_scale(Vec3::splat(self.emitter_orbit_radius)).to_cols_array(),
-                    ),
+                constants[0..16].copy_from_slice(
+                    &Mat4::from_scale(Vec3::splat(self.emitter_orbit_radius)).to_cols_array(),
                 );
+                constants[16..20].copy_from_slice(&Self::EMITTER_POINTS_COLOR);
                 render_pass.set_push_constants(
-                    wgpu::ShaderStages::FRAGMENT,
-                    64,
-                    bytemuck::cast_slice(&Self::EMITTER_POINTS_COLOR),
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    0,
+                    bytemuck::cast_slice(&constants),
                 );
                 self.indices
                     .subslices()
@@ -869,15 +871,12 @@ impl DebugDrawingState {
                 render_pass.set_pipeline(&self.points_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, samples.slice(..));
+                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                constants[16..20].copy_from_slice(&Self::EMITTER_SAMPLES_COLOR);
                 render_pass.set_push_constants(
-                    wgpu::ShaderStages::VERTEX,
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
                     0,
-                    bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
-                );
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::FRAGMENT,
-                    64,
-                    bytemuck::cast_slice(&Self::EMITTER_SAMPLES_COLOR),
+                    bytemuck::cast_slice(&constants),
                 );
                 render_pass.draw(0..self.emitter_samples.as_ref().unwrap().len() as u32, 0..1);
 
@@ -885,15 +884,12 @@ impl DebugDrawingState {
                     render_pass.set_pipeline(&self.lines_pipeline);
                     render_pass.set_bind_group(0, &self.bind_group, &[]);
                     render_pass.set_vertex_buffer(0, rays.slice(..));
+                    constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                    constants[16..20].copy_from_slice(&Self::EMITTER_RAYS_COLOR);
                     render_pass.set_push_constants(
-                        wgpu::ShaderStages::VERTEX,
+                        wgpu::ShaderStages::VERTEX_FRAGMENT,
                         0,
-                        bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
-                    );
-                    render_pass.set_push_constants(
-                        wgpu::ShaderStages::FRAGMENT,
-                        64,
-                        bytemuck::cast_slice(&Self::EMITTER_RAYS_COLOR),
+                        bytemuck::cast_slice(&constants),
                     );
                     render_pass.draw(
                         0..self.emitter_rays.as_ref().unwrap().len() as u32 * 2,
@@ -906,15 +902,12 @@ impl DebugDrawingState {
                 render_pass.set_pipeline(&self.points_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, buffer.slice(..));
+                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                constants[16..20].copy_from_slice(&Self::EMITTER_POINTS_COLOR);
                 render_pass.set_push_constants(
-                    wgpu::ShaderStages::VERTEX,
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
                     0,
-                    bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
-                );
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::FRAGMENT,
-                    64,
-                    bytemuck::cast_slice(&Self::EMITTER_POINTS_COLOR),
+                    bytemuck::cast_slice(&constants),
                 );
                 render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
             }
