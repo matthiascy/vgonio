@@ -16,12 +16,20 @@ use crate::app::{
 };
 
 use crate::{
-    app::gfx::{remap_depth, SlicedBuffer},
-    math::generate_parametric_hemisphere,
-    measure::{emitter::EmitterSamples, rtc::Ray, Emitter},
+    app::{
+        gfx::{remap_depth, SlicedBuffer},
+        gui::{DebuggingEvent, VgonioEventLoop},
+    },
+    math,
+    measure::{
+        emitter::{EmitterSamples, RegionShape},
+        rtc::Ray,
+        CollectorScheme, Emitter,
+    },
     units::{rad, Radians},
-    SphericalCoord,
+    SphericalCoord, SphericalDomain, SphericalPartition,
 };
+use egui_toast::ToastKind;
 use glam::{Mat3, Mat4, Vec3};
 use std::{
     default::Default,
@@ -258,13 +266,8 @@ impl DepthMap {
 pub struct DebugDrawingState {
     /// If true, the debug drawing is enabled.
     pub(crate) enabled: bool,
-    /// If true, the dome is displayed.
-    pub(crate) drawing_dome: bool,
-    /// Giant buffer for all vertices data except for the micro surfaces.
-    pub vertices: SlicedBuffer,
-    /// Giant buffer for all indices data except for the micro surfaces.
-    pub indices: SlicedBuffer,
-    /// Basic render pipeline for debug drawing. Topology = TriangleList,
+    pub(crate) collector_dome_drawing: bool,
+    /// Basic render pipeline1 for debug drawing. Topology = TriangleList,
     /// PolygonMode = Line
     pub triangles_pipeline: wgpu::RenderPipeline,
     /// Pipeline for drawing points.
@@ -280,6 +283,10 @@ pub struct DebugDrawingState {
 
     /// Emitter orbit radius.
     pub emitter_orbit_radius: f32,
+    /// Whether to show emitter measurement points.
+    pub emitter_points_drawing: bool,
+    /// Whether to show emitter rays.
+    pub emitter_rays_drawing: bool,
     /// Emitter current position: (zenith, azimuth).
     pub emitter_position: (Radians, Radians),
     /// Emitter samples.
@@ -298,6 +305,17 @@ pub struct DebugDrawingState {
     /// Ray segment parameter.
     pub emitter_rays_t: f32,
 
+    /// Collector orbit radius.
+    pub collector_orbit_radius: f32,
+    /// Vertex buffer for the collector dome.
+    pub collector_dome_vertex_buffer: wgpu::Buffer,
+    /// Index buffer for the collector dome.
+    pub collector_dome_index_buffer: wgpu::Buffer,
+
+    event_loop: VgonioEventLoop,
+
+    // /// Vertex buffer for points on the collector dome.
+    // pub collector_patch_center_buffer: wgpu::Buffer,
     pub msurf_prim_rp: RenderPass,
     pub msurf_prim_index_buf: wgpu::Buffer,
     pub msurf_prim_index_count: u32,
@@ -310,7 +328,11 @@ impl DebugDrawingState {
     pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
 
-    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        ctx: &GpuContext,
+        target_format: wgpu::TextureFormat,
+        event_loop: VgonioEventLoop,
+    ) -> Self {
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
         let prim_shader_module = ctx
@@ -352,35 +374,23 @@ impl DebugDrawingState {
             mapped_at_creation: false,
         });
 
-        let mut vertices = SlicedBuffer::new(
-            &ctx.device,
-            4096,
-            wgpu::BufferUsages::VERTEX
+        let collector_dome_vertex_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-drawing-collector-dome-vertices-buffer"),
+            size: 1024,
+            usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
-            Some("debug-drawing-vertices-buffer"),
-        );
+            mapped_at_creation: false,
+        });
 
-        let mut indices = SlicedBuffer::new(
-            &ctx.device,
-            4096,
-            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            Some("debug-drawing-indices-buffer"),
-        );
-
-        let hemisphere = generate_parametric_hemisphere(6, 12);
-
-        ctx.queue
-            .write_buffer(vertices.buffer(), 0, bytemuck::cast_slice(&hemisphere.0));
-        ctx.queue
-            .write_buffer(indices.buffer(), 0, bytemuck::cast_slice(&hemisphere.1));
-
-        vertices
-            .subslices_mut()
-            .push(0..hemisphere.0.len() as u64 * std::mem::size_of::<f32>() as u64 * 3);
-        indices
-            .subslices_mut()
-            .push(0..hemisphere.1.len() as u64 * std::mem::size_of::<u32>() as u64 * 3);
+        let mut collector_dome_index_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-drawing-collector-dome-indices-buffer"),
+            size: 1024,
+            usage: wgpu::BufferUsages::INDEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
 
         let (triangles_pipeline, points_pipeline, lines_pipeline, bind_group, uniform_buffer) = {
             let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -519,9 +529,8 @@ impl DebugDrawingState {
 
         Self {
             enabled: false,
-            drawing_dome: false,
-            vertices,
-            indices,
+            collector_dome_vertex_buffer,
+            collector_dome_index_buffer,
             triangles_pipeline,
             points_pipeline,
             lines_pipeline,
@@ -529,6 +538,8 @@ impl DebugDrawingState {
             uniform_buffer,
             sampling_debug_enabled: false,
             emitter_orbit_radius: 1.0,
+            emitter_points_drawing: false,
+            emitter_rays_drawing: false,
             emitter_position: (rad!(0.0), rad!(0.0)),
             emitter_samples: None,
             emitter_samples_buffer: None,
@@ -605,6 +616,10 @@ impl DebugDrawingState {
             msurf_prim_index_count: 0,
             multiple_prims: false,
             drawing_msurf_prims: false,
+            collector_orbit_radius: 1.0,
+            collector_dome_drawing: false,
+            // collector_patch_center_buffer: (),
+            event_loop,
         }
     }
 
@@ -778,6 +793,13 @@ impl DebugDrawingState {
     pub fn emit_rays(&mut self, ctx: &GpuContext, orbit_radius: f32, shape_radius: Option<f32>) {
         if self.emitter_samples.is_none() {
             log::trace!("No emitter samples to emit rays from");
+            self.event_loop
+                .send_event(VgonioEvent::Notify {
+                    kind: ToastKind::Warning,
+                    text: "Generate samples before generate rays".to_string(),
+                    time: 4.0,
+                })
+                .unwrap();
             return;
         }
         log::trace!(
@@ -807,6 +829,36 @@ impl DebugDrawingState {
         ));
     }
 
+    pub fn update_collector_drawing(&mut self, status: bool, scheme: Option<CollectorScheme>) {
+        self.collector_dome_drawing = status;
+        if let Some(scheme) = scheme {
+            // Update the buffer accordingly
+            // self.collector_scheme = scheme;
+            match scheme {
+                CollectorScheme::Partitioned { domain, partition } => match partition {
+                    SphericalPartition::EqualAngle { .. } => {
+                        math::generate_parametric_hemisphere_cells()
+                    }
+                    SphericalPartition::EqualArea { .. } => {}
+                    SphericalPartition::EqualProjectedArea { .. } => {}
+                },
+                CollectorScheme::SingleRegion {
+                    domain,
+                    shape,
+                    zenith,
+                    azimuth,
+                } => {
+                    // let points = match domain {};
+                    match shape {
+                        RegionShape::SphericalCap { .. } => {}
+                        RegionShape::SphericalRect { .. } => {}
+                        RegionShape::Disk { .. } => {}
+                    }
+                }
+            }
+        }
+    }
+
     /// Records the render process for the debugging draw calls.
     ///
     /// Only records the render pass if the debug renderer is enabled.
@@ -832,36 +884,40 @@ impl DebugDrawingState {
             });
 
             let mut constants = [0.0f32; 20];
-            if self.drawing_dome {
-                render_pass.set_pipeline(&self.triangles_pipeline);
-                render_pass.set_bind_group(0, &self.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, self.vertices.data_slice(..));
-                render_pass
-                    .set_index_buffer(self.indices.data_slice(..), wgpu::IndexFormat::Uint32);
-                constants[0..16].copy_from_slice(
-                    &Mat4::from_scale(Vec3::splat(self.emitter_orbit_radius)).to_cols_array(),
-                );
-                constants[16..20].copy_from_slice(&Self::EMITTER_POINTS_COLOR);
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    0,
-                    bytemuck::cast_slice(&constants),
-                );
-                self.indices
-                    .subslices()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, index_range)| {
-                        let count = ((index_range.end - index_range.start) / 4) as u32;
-                        let index_offset = (index_range.start / 4) as u32;
-                        let vertex_offset = self.vertices.subslices()[i].start / 12;
-                        render_pass.draw_indexed(
-                            index_offset..index_offset + count,
-                            vertex_offset as i32,
-                            0..1,
-                        );
-                    });
-            }
+            // if self.drawing_dome {
+            //     render_pass.set_pipeline(&self.lines_pipeline);
+            //     render_pass.set_bind_group(0, &self.bind_group, &[]);
+            //     render_pass.set_vertex_buffer(0,
+            // self.collector_dome_vertex_buffer.data_slice(..));
+            //     render_pass.set_index_buffer(
+            //         self.collector_dome_index_buffer.data_slice(..),
+            //         wgpu::IndexFormat::Uint32,
+            //     );
+            //     constants[0..16].copy_from_slice(
+            //         &Mat4::from_scale(Vec3::splat(self.emitter_orbit_radius)).
+            // to_cols_array(),     );
+            //     constants[16..20].copy_from_slice(&Self::EMITTER_POINTS_COLOR);
+            //     render_pass.set_push_constants(
+            //         wgpu::ShaderStages::VERTEX_FRAGMENT,
+            //         0,
+            //         bytemuck::cast_slice(&constants),
+            //     );
+            //     self.collector_dome_index_buffer
+            //         .subslices()
+            //         .iter()
+            //         .enumerate()
+            //         .for_each(|(i, index_range)| {
+            //             let count = ((index_range.end - index_range.start) / 4) as u32;
+            //             let index_offset = (index_range.start / 4) as u32;
+            //             let vertex_offset =
+            //                 self.collector_dome_vertex_buffer.subslices()[i].start / 12;
+            //             render_pass.draw_indexed(
+            //                 index_offset..index_offset + count,
+            //                 vertex_offset as i32,
+            //                 0..1,
+            //             );
+            //         });
+            // }
 
             // Draw emitter samples.
             if let Some(samples) = &self.emitter_samples_buffer {
@@ -878,7 +934,8 @@ impl DebugDrawingState {
                 );
                 render_pass.draw(0..self.emitter_samples.as_ref().unwrap().len() as u32, 0..1);
 
-                if let Some(rays) = &self.emitter_rays_buffer {
+                if self.emitter_rays_drawing && self.emitter_rays_buffer.is_some() {
+                    let rays = self.emitter_rays_buffer.as_ref().unwrap();
                     render_pass.set_pipeline(&self.lines_pipeline);
                     render_pass.set_bind_group(0, &self.bind_group, &[]);
                     render_pass.set_vertex_buffer(0, rays.slice(..));
@@ -896,7 +953,8 @@ impl DebugDrawingState {
                 }
             }
 
-            if let Some(buffer) = &self.emitter_points_buffer {
+            if self.emitter_points_drawing && self.emitter_points_buffer.is_some() {
+                let buffer = self.emitter_points_buffer.as_ref().unwrap();
                 render_pass.set_pipeline(&self.points_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, buffer.slice(..));
@@ -908,6 +966,10 @@ impl DebugDrawingState {
                     bytemuck::cast_slice(&constants),
                 );
                 render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+            }
+
+            if self.collector_dome_drawing {
+                // TODO: draw collector dome
             }
         }
 

@@ -4,14 +4,14 @@ use crate::{
 };
 use egui::{Response, Ui};
 
-pub struct MicrofacetMeasurementPane {
+pub struct MicrofacetDebugging {
     event_loop: VgonioEventLoop,
     m_azimuth: Degrees,
     m_zenith: Degrees,
     opening_angle: Degrees,
 }
 
-impl MicrofacetMeasurementPane {
+impl MicrofacetDebugging {
     pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             event_loop,
@@ -22,7 +22,7 @@ impl MicrofacetMeasurementPane {
     }
 }
 
-impl egui::Widget for &mut MicrofacetMeasurementPane {
+impl egui::Widget for &mut MicrofacetDebugging {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.horizontal_wrapped(|ui| {
             ui.label("view direction");

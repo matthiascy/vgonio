@@ -428,8 +428,13 @@ pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
 
 /// Generates a parametric hemisphere with the given theta and phi steps.
 ///
+/// The generated vertices are at the exact theta and phi values.
+///
 /// Returns a tuple of the vertices and indices of the triangulated hemisphere.
-pub fn generate_parametric_hemisphere(theta_steps: u32, phi_steps: u32) -> (Vec<Vec3>, Vec<UVec3>) {
+pub fn generate_parametric_hemisphere_triangles(
+    theta_steps: u32,
+    phi_steps: u32,
+) -> (Vec<Vec3>, Vec<UVec3>) {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
@@ -475,6 +480,74 @@ pub fn generate_parametric_hemisphere(theta_steps: u32, phi_steps: u32) -> (Vec<
             let i3 = (i - 1) * phi_steps + (j + 1) % phi_steps + offset;
             indices.push(UVec3::new(i0, i2, i1));
             indices.push(UVec3::new(i0, i3, i2));
+        }
+    }
+
+    (vertices, indices)
+}
+
+/// Generates a parametric hemisphere with the given theta and phi steps.
+///
+/// This is different from `generate_parametric_hemisphere_triangles` in that
+/// the vertices are generated to make sure that the points with exact theta
+/// and phi values are located on the center of each cell. In other words,
+/// the vertices are generated around the center of each cell where the center
+/// is defined by the theta and phi values.
+///
+/// The output is a tuple of the vertices and indices of the lines that connect
+/// the vertices.
+pub fn generate_parametric_hemisphere_cells(
+    theta_steps: u32,
+    phi_steps: u32,
+) -> (Vec<Vec3>, Vec<UVec2>) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    let theta_step_size = Radians::HALF_PI / theta_steps as f32;
+    let phi_step_size = Radians::TWO_PI / phi_steps as f32;
+
+    // Generate top vertex
+    vertices.push(spherical_to_cartesian(
+        1.0,
+        Radians::ZERO,
+        Radians::ZERO,
+        Handedness::RightHandedYUp,
+    ));
+
+    for i in 1..=theta_steps {
+        let theta = theta_step_size * i as f32;
+        for j in 0..phi_steps {
+            let phi = phi_step_size * j as f32;
+            vertices.push(spherical_to_cartesian(
+                1.0,
+                theta,
+                phi,
+                Handedness::RightHandedYUp,
+            ));
+        }
+    }
+
+    let offset = 1;
+
+    // Generate indices top strip
+    for i in 0..phi_steps {
+        let i1 = i + offset;
+        let i2 = i1 % phi_steps + offset;
+        indices.push(UVec2::new(0, i1));
+        indices.push(UVec2::new(i1, i2));
+    }
+
+    // Generate indices for the rest of the cells, each cell has max 2 triangles
+    for i in 1..theta_steps {
+        for j in 0..phi_steps {
+            let i0 = (i - 1) * phi_steps + j + offset;
+            let i1 = i * phi_steps + j + offset;
+            let i2 = i * phi_steps + (j + 1) % phi_steps + offset;
+            let i3 = (i - 1) * phi_steps + (j + 1) % phi_steps + offset;
+            indices.push(UVec2::new(i0, i1));
+            indices.push(UVec2::new(i1, i2));
+            indices.push(UVec2::new(i2, i3));
+            indices.push(UVec2::new(i3, i0));
         }
     }
 

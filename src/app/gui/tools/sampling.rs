@@ -141,11 +141,7 @@ impl SamplingInspector {
         output_format: wgpu::TextureFormat,
         event_loop: VgonioEventLoop,
     ) -> SamplingInspector {
-        let camera = Camera::new(
-            glam::Vec3::new(2.0, 1.5, 2.0),
-            glam::Vec3::ZERO,
-            glam::Vec3::Y,
-        );
+        let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO, Vec3::Y);
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);
         let proj_view_model = projection
             .matrix(crate::app::gfx::camera::ProjectionKind::Perspective)

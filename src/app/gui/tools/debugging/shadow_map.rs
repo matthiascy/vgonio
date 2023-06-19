@@ -7,14 +7,14 @@ use egui::{Sense, TextureFilter};
 const IMG_WIDTH: usize = 480;
 const IMG_HEIGHT: usize = 270;
 
-pub(crate) struct ShadowMapPane {
+pub(crate) struct DepthMapPane {
     /// The event loop proxy used to send events to the main event loop.
     event_loop: VgonioEventLoop,
     depth_map_image: image::RgbaImage,
     depth_map_handle: Option<egui::TextureHandle>,
 }
 
-impl ShadowMapPane {
+impl DepthMapPane {
     pub fn new(event_loop: VgonioEventLoop) -> Self {
         Self {
             event_loop,
@@ -77,7 +77,7 @@ impl ShadowMapPane {
     }
 }
 
-impl egui::Widget for &mut ShadowMapPane {
+impl egui::Widget for &mut DepthMapPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         if ui.button("Update").clicked() {
             self.event_loop

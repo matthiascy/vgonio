@@ -30,20 +30,24 @@ enum RayMode {
 }
 
 pub(crate) struct BrdfMeasurementDebugging {
-    pub show_dome: bool,
     cache: Arc<RwLock<Cache>>,
+    /// The index of the emitter position in the list of emitter measurement
+    /// points. See [Emitter::measurement_points].
     emitter_position_index: i32,
+    emitter_points_drawing: bool,
+    emitter_rays_drawing: bool,
     params: BsdfMeasurementParams,
-    pub(crate) selector: SurfaceSelector,
-    ray_t: f32,
+    selector: SurfaceSelector,
+    ray_params_t: f32,
     orbit_radius: f32,
+    collector_dome_drawing: bool,
     event_loop: VgonioEventLoop,
+    method: RtcMethod,
 
     ray_origin_cartesian: Vec3,
     ray_origin_spherical: Vec3,
     ray_target: Vec3,
     ray_mode: RayMode,
-    method: RtcMethod,
     prim_id: u32,
     cell_pos: IVec2,
 }
@@ -51,7 +55,7 @@ pub(crate) struct BrdfMeasurementDebugging {
 impl BrdfMeasurementDebugging {
     pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
-            show_dome: false,
+            collector_dome_drawing: false,
             cache,
             ray_origin_cartesian: Vec3::new(0.0, 5.0, 0.0),
             ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),
@@ -60,8 +64,10 @@ impl BrdfMeasurementDebugging {
             method: RtcMethod::Grid,
             prim_id: 0,
             cell_pos: Default::default(),
-            ray_t: 1.0,
+            ray_params_t: 1.0,
             emitter_position_index: 0,
+            emitter_points_drawing: false,
+            emitter_rays_drawing: false,
             params: BsdfMeasurementParams::default(),
             event_loop,
             orbit_radius: 1.0,
@@ -84,7 +90,7 @@ impl BrdfMeasurementDebugging {
                     .send_event(VgonioEvent::Notify {
                         kind: ToastKind::Warning,
                         text: "No surface selected to evaluate the radius".to_string(),
-                        time: 3.0,
+                        time: 1.0,
                     })
                     .unwrap();
                 None
@@ -232,13 +238,6 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                     }
                                 }
                             }
-                            if ui.add(ToggleSwitch::new(&mut self.show_dome)).changed() {
-                                self.event_loop
-                                    .send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleDebugDrawingDome(self.show_dome),
-                                    ))
-                                    .unwrap();
-                            }
                         });
                         ui.end_row();
 
@@ -288,9 +287,79 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                         });
                         ui.end_row();
 
-                        ui.label("Measurement Points: ");
+                        ui.label("Sample rays:");
                         ui.horizontal_wrapped(|ui| {
-                            if ui.button("Display").clicked() {
+                            if ui
+                                .add(ToggleSwitch::new(&mut self.emitter_rays_drawing))
+                                .changed()
+                            {
+                                if let Some((orbit_radius, shape_radius)) =
+                                    self.estimate_radii(record.as_ref())
+                                {
+                                    self.orbit_radius = orbit_radius;
+
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::ToggleEmitterRaysDrawing(
+                                                self.emitter_rays_drawing,
+                                            ),
+                                        ))
+                                        .unwrap();
+
+                                    if self.emitter_rays_drawing {
+                                        self.event_loop
+                                            .send_event(VgonioEvent::Debugging(
+                                                DebuggingEvent::EmitRays {
+                                                    orbit_radius,
+                                                    shape_radius,
+                                                },
+                                            ))
+                                            .unwrap();
+                                    }
+                                }
+                            }
+
+                            if ui
+                                .add(
+                                    egui::Slider::new(
+                                        &mut self.ray_params_t,
+                                        1.0..=self.orbit_radius * 2.0,
+                                    )
+                                    .text("t"),
+                                )
+                                .changed()
+                            {
+                                if let Some((orbit_radius, shape_radius)) =
+                                    self.estimate_radii(record.as_ref())
+                                {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::UpdateRayParams {
+                                                t: self.ray_params_t,
+                                                orbit_radius,
+                                                shape_radius,
+                                            },
+                                        ))
+                                        .unwrap();
+                                }
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label("Measurement Points: ");
+                        if ui
+                            .add(ToggleSwitch::new(&mut self.emitter_points_drawing))
+                            .changed()
+                        {
+                            self.event_loop
+                                .send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleEmitterPointsDrawing(
+                                        self.emitter_points_drawing,
+                                    ),
+                                ))
+                                .unwrap();
+
+                            if self.emitter_points_drawing {
                                 let points = self
                                     .params
                                     .emitter
@@ -319,55 +388,37 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                         .unwrap();
                                 }
                             }
-
-                            if ui.button("Emit Rays").clicked() {
-                                if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_radii(record.as_ref())
-                                {
-                                    self.orbit_radius = orbit_radius;
-                                    self.event_loop
-                                        .send_event(VgonioEvent::Debugging(
-                                            DebuggingEvent::EmitRays {
-                                                orbit_radius,
-                                                shape_radius,
-                                            },
-                                        ))
-                                        .unwrap();
-                                }
-                            }
-
-                            if ui
-                                .add(
-                                    egui::Slider::new(
-                                        &mut self.ray_t,
-                                        1.0..=self.orbit_radius * 2.0,
-                                    )
-                                    .text("t"),
-                                )
-                                .changed()
-                            {
-                                if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_radii(record.as_ref())
-                                {
-                                    self.event_loop
-                                        .send_event(VgonioEvent::Debugging(
-                                            DebuggingEvent::UpdateRayParams {
-                                                t: self.ray_t,
-                                                orbit_radius,
-                                                shape_radius,
-                                            },
-                                        ))
-                                        .unwrap();
-                                }
-                            }
-                        });
+                        }
                         ui.end_row();
                     });
             });
 
         egui::CollapsingHeader::new("Collector")
             .default_open(true)
-            .show(ui, |ui| {});
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Visibility:");
+                    if ui
+                        .add(ToggleSwitch::new(&mut self.collector_dome_drawing))
+                        .changed()
+                    {
+                        self.event_loop
+                            .send_event(VgonioEvent::Debugging(
+                                DebuggingEvent::ToggleCollectorDrawing {
+                                    status: self.collector_dome_drawing,
+                                    scheme: self.params.collector.scheme,
+                                },
+                            ))
+                            .unwrap();
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Distance:")
+                        .on_hover_text("Distance from collector to the surface.");
+                    self.params.collector.radius.ui(ui);
+                });
+                self.params.collector.scheme.ui(ui);
+            });
 
         ui.horizontal_wrapped(|ui| {
             ui.label("Method");

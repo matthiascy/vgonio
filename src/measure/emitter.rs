@@ -61,14 +61,15 @@ pub enum RegionShape {
     /// A patch has a disk shape on the surface of the sphere.
     #[serde(rename = "cap")]
     SphericalCap {
-        /// Maximum zenith angle of the spherical cap.
+        /// Maximum zenith angle of the spherical cap. This is half of the
+        /// opening angle of the cap.
         zenith: Radians,
     } = 0x00,
     /// A patch has a rectangular shape on the surface of the sphere.
     /// TODO: refactor
     #[serde(rename = "rect")]
     SphericalRect {
-        /// Polar angle range of the patch (in radiansf).
+        /// Polar angle range of the patch (in radians).
         zenith: (Radians, Radians),
 
         /// Azimuthal angle range of the patch (in radians).
@@ -374,7 +375,7 @@ pub fn uniform_sampling_on_unit_sphere(
 
     let range = Uniform::new(0.0, 1.0);
     let mut samples = Vec::with_capacity(num);
-    samples.resize(num, glam::Vec3::ZERO);
+    samples.resize(num, Vec3::ZERO);
     log::trace!("  - Generating samples following {:?}", handedness);
 
     match handedness {
@@ -393,7 +394,7 @@ pub fn uniform_sampling_on_unit_sphere(
                         if (theta_start..theta_stop).contains(&theta)
                             && (phi_start..phi_stop).contains(&phi)
                         {
-                            chunks[j] = glam::Vec3::new(
+                            chunks[j] = Vec3::new(
                                 theta.sin() * phi.cos(),
                                 theta.sin() * phi.sin(),
                                 theta.cos(),
@@ -418,7 +419,7 @@ pub fn uniform_sampling_on_unit_sphere(
                         if (theta_start..theta_stop).contains(&theta)
                             && (phi_start..phi_stop).contains(&phi)
                         {
-                            chunks[j] = glam::Vec3::new(
+                            chunks[j] = Vec3::new(
                                 theta.sin() * phi.cos(),
                                 theta.cos(),
                                 theta.sin() * phi.sin(),

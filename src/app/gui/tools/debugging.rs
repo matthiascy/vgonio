@@ -17,8 +17,8 @@ use crate::{
     msurf::MicroSurface,
 };
 use brdf_measurement::BrdfMeasurementDebugging;
-use microfacet::MicrofacetMeasurementPane;
-use shadow_map::ShadowMapPane;
+use microfacet::MicrofacetDebugging;
+use shadow_map::DepthMapPane;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]
@@ -37,9 +37,9 @@ pub(crate) struct DebuggingInspector {
     opened_pane: PaneKind,
     pub debug_drawing_enabled: bool,
     event_loop: VgonioEventLoop,
-    pub(crate) shadow_map_pane: ShadowMapPane,
+    pub(crate) depth_map_pane: DepthMapPane,
     pub(crate) brdf_debugging: BrdfMeasurementDebugging,
-    pub(crate) microfacet_pane: MicrofacetMeasurementPane,
+    pub(crate) microfacet_debugging: MicrofacetDebugging,
 }
 
 // TODO: offline rendering or egui paint function for shadow map
@@ -78,13 +78,13 @@ impl Tool for DebuggingInspector {
 
         match self.opened_pane {
             PaneKind::ShadowMap => {
-                ui.add(&mut self.shadow_map_pane);
+                ui.add(&mut self.depth_map_pane);
             }
             PaneKind::Brdf => {
                 ui.add(&mut self.brdf_debugging);
             }
             PaneKind::Microfacet => {
-                ui.add(&mut self.microfacet_pane);
+                ui.add(&mut self.microfacet_debugging);
             }
         }
     }
@@ -100,9 +100,9 @@ impl DebuggingInspector {
             opened_pane: Default::default(),
             debug_drawing_enabled: false,
             event_loop: event_loop.clone(),
-            shadow_map_pane: ShadowMapPane::new(event_loop.clone()),
+            depth_map_pane: DepthMapPane::new(event_loop.clone()),
             brdf_debugging: BrdfMeasurementDebugging::new(event_loop.clone(), cache),
-            microfacet_pane: MicrofacetMeasurementPane::new(event_loop),
+            microfacet_debugging: MicrofacetDebugging::new(event_loop),
         }
     }
 

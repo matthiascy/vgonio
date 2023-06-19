@@ -50,6 +50,7 @@ use crate::{
     measure::{
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
+        CollectorScheme,
     },
     msurf::MicroSurface,
     units::{Degrees, Radians},
@@ -150,7 +151,12 @@ pub enum BsdfViewerEvent {
 #[derive(Debug)]
 pub enum DebuggingEvent {
     ToggleDebugDrawing(bool),
-    ToggleDebugDrawingDome(bool),
+    ToggleCollectorDrawing {
+        status: bool,
+        scheme: CollectorScheme,
+    },
+    ToggleEmitterPointsDrawing(bool),
+    ToggleEmitterRaysDrawing(bool),
     /// Enable/disable the rendering of the sampling debugger.
     SetSamplingRendering(bool),
     UpdateDepthMap,
@@ -674,7 +680,8 @@ impl VgonioGuiApp {
             cursor_pos: [0.0, 0.0],
         };
 
-        let dbg_drawing_state = DebugDrawingState::new(&gpu_ctx, canvas.format());
+        let dbg_drawing_state =
+            DebugDrawingState::new(&gpu_ctx, canvas.format(), event_loop.create_proxy());
         let msurf_rdr_state = MicroSurfaceRenderingState::new(&gpu_ctx, canvas.format());
 
         let toasts = Toasts::new()
@@ -1026,91 +1033,100 @@ impl VgonioGuiApp {
             }
             VgonioEvent::RequestRedraw => {}
             VgonioEvent::OpenFiles(files) => self.open_files(files),
-            VgonioEvent::Debugging(event) => match event {
-                DebuggingEvent::SetSamplingRendering(enabled) => {
-                    self.dbg_drawing_state.sampling_debug_enabled = enabled;
-                }
-                DebuggingEvent::UpdateDepthMap => {
-                    self.depth_map.copy_to_buffer(
-                        &self.ctx.gpu,
-                        self.canvas.width(),
-                        self.canvas.height(),
-                    );
-                    self.ui
-                        .tools
-                        .get_tool_mut::<DebuggingInspector>()
-                        .unwrap()
-                        .shadow_map_pane
-                        .update_depth_map(
+            VgonioEvent::Debugging(event) => {
+                // TODO: handle events inside the DebuggingState.
+                match event {
+                    DebuggingEvent::SetSamplingRendering(enabled) => {
+                        self.dbg_drawing_state.sampling_debug_enabled = enabled;
+                    }
+                    DebuggingEvent::UpdateDepthMap => {
+                        self.depth_map.copy_to_buffer(
                             &self.ctx.gpu,
-                            &self.ctx.gui,
-                            &self.depth_map.depth_attachment_storage,
-                            self.depth_map.width,
+                            self.canvas.width(),
                             self.canvas.height(),
                         );
-                }
-                DebuggingEvent::UpdateEmitterSamples {
-                    samples,
-                    orbit_radius,
-                    shape_radius,
-                } => {
-                    self.dbg_drawing_state.update_emitter_samples(
-                        &self.ctx.gpu,
+                        self.ui
+                            .tools
+                            .get_tool_mut::<DebuggingInspector>()
+                            .unwrap()
+                            .depth_map_pane
+                            .update_depth_map(
+                                &self.ctx.gpu,
+                                &self.ctx.gui,
+                                &self.depth_map.depth_attachment_storage,
+                                self.depth_map.width,
+                                self.canvas.height(),
+                            );
+                    }
+                    DebuggingEvent::UpdateEmitterSamples {
                         samples,
                         orbit_radius,
                         shape_radius,
-                    );
-                }
-                DebuggingEvent::UpdateEmitterPoints {
-                    points,
-                    orbit_radius,
-                } => {
-                    self.dbg_drawing_state.update_emitter_points(
-                        &self.ctx.gpu,
+                    } => {
+                        self.dbg_drawing_state.update_emitter_samples(
+                            &self.ctx.gpu,
+                            samples,
+                            orbit_radius,
+                            shape_radius,
+                        );
+                    }
+                    DebuggingEvent::UpdateEmitterPoints {
                         points,
                         orbit_radius,
-                    );
-                }
-                DebuggingEvent::UpdateEmitterPosition {
-                    zenith,
-                    azimuth,
-                    orbit_radius,
-                    shape_radius,
-                } => {
-                    self.dbg_drawing_state.update_emitter_position(
-                        &self.ctx.gpu,
+                    } => {
+                        self.dbg_drawing_state.update_emitter_points(
+                            &self.ctx.gpu,
+                            points,
+                            orbit_radius,
+                        );
+                    }
+                    DebuggingEvent::ToggleEmitterPointsDrawing(status) => {
+                        self.dbg_drawing_state.emitter_points_drawing = status;
+                    }
+                    DebuggingEvent::UpdateEmitterPosition {
                         zenith,
                         azimuth,
                         orbit_radius,
                         shape_radius,
-                    );
-                }
-                DebuggingEvent::EmitRays {
-                    orbit_radius,
-                    shape_radius,
-                } => {
-                    self.dbg_drawing_state
-                        .emit_rays(&self.ctx.gpu, orbit_radius, shape_radius);
-                }
-                DebuggingEvent::ToggleDebugDrawing(status) => {
-                    self.dbg_drawing_state.enabled = status;
-                }
-                DebuggingEvent::ToggleDebugDrawingDome(status) => {
-                    self.dbg_drawing_state.drawing_dome = status;
-                }
-                DebuggingEvent::UpdateRayParams {
-                    t,
-                    orbit_radius,
-                    shape_radius,
-                } => {
-                    self.dbg_drawing_state.update_ray_params(
-                        &self.ctx.gpu,
+                    } => {
+                        self.dbg_drawing_state.update_emitter_position(
+                            &self.ctx.gpu,
+                            zenith,
+                            azimuth,
+                            orbit_radius,
+                            shape_radius,
+                        );
+                    }
+                    DebuggingEvent::EmitRays {
+                        orbit_radius,
+                        shape_radius,
+                    } => {
+                        self.dbg_drawing_state
+                            .emit_rays(&self.ctx.gpu, orbit_radius, shape_radius);
+                    }
+                    DebuggingEvent::ToggleDebugDrawing(status) => {
+                        self.dbg_drawing_state.enabled = status;
+                    }
+                    DebuggingEvent::ToggleCollectorDrawing { status, scheme } => self
+                        .dbg_drawing_state
+                        .update_collector_drawing(status, Some(scheme)),
+                    DebuggingEvent::UpdateRayParams {
                         t,
                         orbit_radius,
                         shape_radius,
-                    );
+                    } => {
+                        self.dbg_drawing_state.update_ray_params(
+                            &self.ctx.gpu,
+                            t,
+                            orbit_radius,
+                            shape_radius,
+                        );
+                    }
+                    DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
+                        self.dbg_drawing_state.emitter_rays_drawing = status;
+                    }
                 }
-            },
+            }
             VgonioEvent::BsdfViewer(event) => match event {
                 BsdfViewerEvent::ToggleView(id) => {
                     self.bsdf_viewer.write().unwrap().toggle_view(id);
