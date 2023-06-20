@@ -16,10 +16,7 @@ use crate::app::{
 };
 
 use crate::{
-    app::{
-        gfx::{remap_depth, SlicedBuffer},
-        gui::{DebuggingEvent, VgonioEventLoop},
-    },
+    app::{gfx::remap_depth, gui::VgonioEventLoop},
     math,
     math::spherical_to_cartesian,
     measure::{
@@ -28,9 +25,8 @@ use crate::{
         CollectorScheme, Emitter, Patch,
     },
     units::{rad, Radians},
-    Handedness, SphericalCoord, SphericalDomain, SphericalPartition,
+    Handedness, SphericalCoord,
 };
-use egui::Key::N;
 use egui_toast::ToastKind;
 use glam::{Mat3, Mat4, UVec3, Vec3};
 use std::{
@@ -394,7 +390,7 @@ impl DebugDrawingState {
             mapped_at_creation: false,
         });
 
-        let mut collector_shape_index_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        let collector_shape_index_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("debug-drawing-collector-shape-indices-buffer"),
             size: 1024,
             usage: wgpu::BufferUsages::INDEX
@@ -916,11 +912,7 @@ impl DebugDrawingState {
                         },
                     ));
                 }
-                CollectorScheme::SingleRegion {
-                    shape,
-                    zenith,
-                    azimuth,
-                } => match shape {
+                CollectorScheme::SingleRegion { shape, .. } => match shape {
                     RegionShape::SphericalCap { zenith } => {
                         let steps = (zenith.value / 2.0f32.to_radians()) as u32;
                         let (vertices, indices) =

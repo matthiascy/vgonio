@@ -11,8 +11,7 @@ use crate::{
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
     units::{deg, mm, nanometres, rad, LengthUnit, Millimetres, Radians, SolidAngle, UMillimetre},
-    Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
-    SphericalPartition,
+    Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{

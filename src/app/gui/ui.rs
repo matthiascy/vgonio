@@ -9,7 +9,7 @@ use crate::{
             icons::Icon,
             outliner::Outliner,
             simulations::Simulations,
-            tools::{PlottingInspector, SamplingInspector, Scratch, Tools},
+            tools::{SamplingInspector, Scratch, Tools},
             widgets::ToggleSwitch,
             DebuggingInspector, VgonioEventLoop,
         },
@@ -18,7 +18,7 @@ use crate::{
     error::Error,
     msurf::MicroSurface,
 };
-use egui::{Align2, Direction, NumExt};
+use egui::NumExt;
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;

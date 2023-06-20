@@ -3,17 +3,8 @@ mod plotting;
 mod sampling;
 mod scratch;
 
-use crate::{
-    app::{gfx::GpuContext, gui::VgonioEvent},
-    measure::rtc::Ray,
-};
-use egui_toast::Toasts;
-use std::{
-    rc::Rc,
-    sync::{Arc, RwLock},
-};
-
-use winit::event_loop::EventLoopProxy;
+use crate::{app::gfx::GpuContext, measure::rtc::Ray};
+use std::sync::{Arc, RwLock};
 
 use crate::{
     app::{cache::Cache, gui::VgonioEventLoop},

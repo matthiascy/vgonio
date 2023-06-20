@@ -8,20 +8,13 @@ use crate::{
         },
     },
     math,
-    measure::{
-        emitter::RegionShape,
-        measurement::{BsdfMeasurementParams, Radius},
-        rtc::Ray,
-        Emitter, RtcMethod,
-    },
-    msurf::{MicroSurface, MicroSurfaceMesh},
-    units::{mm, rad, UMillimetre},
+    measure::{emitter::RegionShape, measurement::BsdfMeasurementParams, rtc::Ray, RtcMethod},
+    msurf::MicroSurface,
     Handedness,
 };
-use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
+use egui_toast::ToastKind;
 use glam::{IVec2, Vec3};
 use std::sync::{Arc, RwLock};
-use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum RayMode {

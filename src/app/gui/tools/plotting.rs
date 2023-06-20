@@ -785,7 +785,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     })
                     .collect::<Vec<_>>()
             })
-            .x_axis_formatter(|x, r| format!("{}", x))
+            .x_axis_formatter(|x, _| format!("{}", x))
             .y_grid_spacer(move |input| {
                 let (min, max) = input.bounds;
                 let mut i = (min.floor().max(0.0) * 10.0) as u32;
@@ -927,7 +927,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                             )
                             .name(format!("Nº of rays, λ = {}", lambda))
                             .element_formatter(Box::new(
-                                |bar, chart| -> String {
+                                |bar, _| -> String {
                                     format!(
                                         "bounce = {:.0}, number of rays = {:.0}%",
                                         bar.argument + 0.5,
@@ -958,7 +958,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                             )
                             .name(format!("Energy, λ = {}", lambda))
                             .element_formatter(Box::new(
-                                |bar, chart| -> String {
+                                |bar, _| -> String {
                                     format!(
                                         "bounce = {:.0}, energy = {:.0}%",
                                         bar.argument + 0.5,
