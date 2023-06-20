@@ -409,6 +409,7 @@ impl Default for MmsfMeasurementParams {
 }
 
 impl MmsfMeasurementParams {
+    /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         (self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()).pow(2)
     }
@@ -688,6 +689,7 @@ impl MeasuredData {
         }
     }
 
+    /// Returns the BSDF data if it is a BSDF.
     pub fn bsdf_data(&self) -> Option<&MeasuredBsdfData> {
         match self {
             MeasuredData::Bsdf(bsdf) => Some(bsdf),
@@ -695,6 +697,7 @@ impl MeasuredData {
         }
     }
 
+    /// Returns the MADF data if it is a MADF.
     pub fn madf_data(&self) -> Option<&MeasuredMadfData> {
         match self {
             MeasuredData::Madf(madf) => Some(madf),
@@ -702,6 +705,7 @@ impl MeasuredData {
         }
     }
 
+    /// Returns the MMSF data if it is a MMSF.
     pub fn mmsf_data(&self) -> Option<&MeasuredMmsfData> {
         match self {
             MeasuredData::Mmsf(mmsf) => Some(mmsf),

@@ -463,6 +463,7 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         ((angle - start).value / step_size.value).round() as usize % self.step_count_wrapped()
     }
 
+    /// Returns the angle at the given index.
     pub fn step(&self, idx: usize) -> Angle<A> {
         (self.start + self.step_size * idx as f32).min(self.stop)
     }
