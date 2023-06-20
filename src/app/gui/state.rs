@@ -21,16 +21,18 @@ use crate::{
         gui::{DebuggingEvent, VgonioEventLoop},
     },
     math,
+    math::spherical_to_cartesian,
     measure::{
         emitter::{EmitterSamples, RegionShape},
         rtc::Ray,
-        CollectorScheme, Emitter,
+        CollectorScheme, Emitter, Patch,
     },
     units::{rad, Radians},
-    SphericalCoord, SphericalDomain, SphericalPartition,
+    Handedness, SphericalCoord, SphericalDomain, SphericalPartition,
 };
+use egui::Key::N;
 use egui_toast::ToastKind;
-use glam::{Mat3, Mat4, Vec3};
+use glam::{Mat3, Mat4, UVec3, Vec3};
 use std::{
     default::Default,
     path::Path,
@@ -287,6 +289,8 @@ pub struct DebugDrawingState {
     pub emitter_points_drawing: bool,
     /// Whether to show emitter rays.
     pub emitter_rays_drawing: bool,
+    /// Whether to show emitter samples.
+    pub emitter_samples_drawing: bool,
     /// Emitter current position: (zenith, azimuth).
     pub emitter_position: (Radians, Radians),
     /// Emitter samples.
@@ -305,12 +309,18 @@ pub struct DebugDrawingState {
     /// Ray segment parameter.
     pub emitter_rays_t: f32,
 
+    /// Collector shape vertex buffer.
+    pub collector_shape_vertex_buffer: wgpu::Buffer,
+    /// Collector shape index buffer.
+    pub collector_shape_index_buffer: wgpu::Buffer,
+    /// Collector shape/partition scheme.
+    pub collector_scheme: Option<CollectorScheme>,
     /// Collector orbit radius.
     pub collector_orbit_radius: f32,
     /// Vertex buffer for the collector dome.
-    pub collector_dome_vertex_buffer: wgpu::Buffer,
+    pub collector_dome_vertex_buffer: Option<wgpu::Buffer>,
     /// Index buffer for the collector dome.
-    pub collector_dome_index_buffer: wgpu::Buffer,
+    pub collector_dome_index_buffer: Option<wgpu::Buffer>,
 
     event_loop: VgonioEventLoop,
 
@@ -327,6 +337,7 @@ impl DebugDrawingState {
     pub const EMITTER_SAMPLES_COLOR: [f32; 4] = [0.27, 1.0, 0.27, 1.0];
     pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
+    pub const COLLECTOR_COLOR: [f32; 4] = [0.2, 0.5, 0.7, 0.5];
 
     pub fn new(
         ctx: &GpuContext,
@@ -374,8 +385,8 @@ impl DebugDrawingState {
             mapped_at_creation: false,
         });
 
-        let collector_dome_vertex_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("debug-drawing-collector-dome-vertices-buffer"),
+        let collector_shape_vertex_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-drawing-collector-shape-vertices-buffer"),
             size: 1024,
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::COPY_DST
@@ -383,8 +394,8 @@ impl DebugDrawingState {
             mapped_at_creation: false,
         });
 
-        let mut collector_dome_index_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("debug-drawing-collector-dome-indices-buffer"),
+        let mut collector_shape_index_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("debug-drawing-collector-shape-indices-buffer"),
             size: 1024,
             usage: wgpu::BufferUsages::INDEX
                 | wgpu::BufferUsages::COPY_DST
@@ -433,20 +444,10 @@ impl DebugDrawingState {
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some("debug-drawing-shared-pipeline-layout"),
                         bind_group_layouts: &[&bind_group_layout],
-                        push_constant_ranges: &[
-                            // wgpu::PushConstantRange {
-                            //     stages: wgpu::ShaderStages::VERTEX,
-                            //     range: 0..80,
-                            // },
-                            // wgpu::PushConstantRange {
-                            //     stages: wgpu::ShaderStages::FRAGMENT,
-                            //     range: 64..80,
-                            // },
-                            wgpu::PushConstantRange {
-                                stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                range: 0..80,
-                            },
-                        ],
+                        push_constant_ranges: &[wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            range: 0..80,
+                        }],
                     });
             let vert_state = wgpu::VertexState {
                 module: &shader_module,
@@ -529,8 +530,8 @@ impl DebugDrawingState {
 
         Self {
             enabled: false,
-            collector_dome_vertex_buffer,
-            collector_dome_index_buffer,
+            collector_dome_vertex_buffer: None,
+            collector_dome_index_buffer: None,
             triangles_pipeline,
             points_pipeline,
             lines_pipeline,
@@ -540,6 +541,7 @@ impl DebugDrawingState {
             emitter_orbit_radius: 1.0,
             emitter_points_drawing: false,
             emitter_rays_drawing: false,
+            emitter_samples_drawing: false,
             emitter_position: (rad!(0.0), rad!(0.0)),
             emitter_samples: None,
             emitter_samples_buffer: None,
@@ -548,6 +550,7 @@ impl DebugDrawingState {
             emitter_rays: None,
             emitter_rays_buffer: None,
             emitter_rays_t: 1.0,
+            collector_shape_vertex_buffer,
             msurf_prim_rp: RenderPass {
                 pipeline: ctx
                     .device
@@ -620,6 +623,8 @@ impl DebugDrawingState {
             collector_dome_drawing: false,
             // collector_patch_center_buffer: (),
             event_loop,
+            collector_shape_index_buffer,
+            collector_scheme: None,
         }
     }
 
@@ -829,32 +834,144 @@ impl DebugDrawingState {
         ));
     }
 
-    pub fn update_collector_drawing(&mut self, status: bool, scheme: Option<CollectorScheme>) {
+    pub fn update_collector_drawing(
+        &mut self,
+        ctx: &GpuContext,
+        status: bool,
+        scheme: Option<CollectorScheme>,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
+    ) {
+        log::trace!("[DebuggingState] Updating collector drawing");
         self.collector_dome_drawing = status;
+        self.collector_orbit_radius = orbit_radius;
+        println!("Collector orbit radius: {}", orbit_radius);
+        self.collector_scheme = scheme;
         if let Some(scheme) = scheme {
             // Update the buffer accordingly
-            // self.collector_scheme = scheme;
             match scheme {
-                CollectorScheme::Partitioned { domain, partition } => match partition {
-                    SphericalPartition::EqualAngle { .. } => {
-                        math::generate_parametric_hemisphere_cells()
+                CollectorScheme::Partitioned { partition } => {
+                    let patches = partition.generate_patches();
+                    let mut vertices = vec![Vec3::ZERO; patches.len() * 4];
+                    let mut indices = vec![0u32; patches.len() * 8];
+
+                    for (i, patch) in patches.iter().enumerate() {
+                        match patch {
+                            Patch::Partitioned(p) => {
+                                let (phi_a, phi_b) = p.azimuth;
+                                let (theta_a, theta_b) = p.zenith;
+                                vertices[i * 4 + 0] = spherical_to_cartesian(
+                                    1.0,
+                                    theta_a,
+                                    phi_a,
+                                    Handedness::RightHandedYUp,
+                                );
+                                vertices[i * 4 + 1] = spherical_to_cartesian(
+                                    1.0,
+                                    theta_a,
+                                    phi_b,
+                                    Handedness::RightHandedYUp,
+                                );
+                                vertices[i * 4 + 2] = spherical_to_cartesian(
+                                    1.0,
+                                    theta_b,
+                                    phi_b,
+                                    Handedness::RightHandedYUp,
+                                );
+                                vertices[i * 4 + 3] = spherical_to_cartesian(
+                                    1.0,
+                                    theta_b,
+                                    phi_a,
+                                    Handedness::RightHandedYUp,
+                                );
+                                indices[i * 8 + 0] = i as u32 * 4 + 0;
+                                indices[i * 8 + 1] = i as u32 * 4 + 1;
+                                indices[i * 8 + 2] = i as u32 * 4 + 1;
+                                indices[i * 8 + 3] = i as u32 * 4 + 2;
+                                indices[i * 8 + 4] = i as u32 * 4 + 2;
+                                indices[i * 8 + 5] = i as u32 * 4 + 3;
+                                indices[i * 8 + 6] = i as u32 * 4 + 3;
+                                indices[i * 8 + 7] = i as u32 * 4 + 0;
+                            }
+                            Patch::SingleRegion(_) => {
+                                unreachable!(
+                                    "Single region patches should not be present in a partitioned \
+                                     scheme"
+                                )
+                            }
+                        }
                     }
-                    SphericalPartition::EqualArea { .. } => {}
-                    SphericalPartition::EqualProjectedArea { .. } => {}
-                },
+                    self.collector_dome_vertex_buffer = Some(ctx.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("debug-collector-dome"),
+                            contents: bytemuck::cast_slice(&vertices),
+                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        },
+                    ));
+                    self.collector_dome_index_buffer = Some(ctx.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("debug-collector-dome"),
+                            contents: bytemuck::cast_slice(&indices),
+                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                        },
+                    ));
+                }
                 CollectorScheme::SingleRegion {
-                    domain,
                     shape,
                     zenith,
                     azimuth,
-                } => {
-                    // let points = match domain {};
-                    match shape {
-                        RegionShape::SphericalCap { .. } => {}
-                        RegionShape::SphericalRect { .. } => {}
-                        RegionShape::Disk { .. } => {}
+                } => match shape {
+                    RegionShape::SphericalCap { zenith } => {
+                        let steps = (zenith.value / 2.0f32.to_radians()) as u32;
+                        let (vertices, indices) =
+                            math::generate_triangulated_hemisphere(zenith, steps, 18);
+                        self.collector_shape_vertex_buffer =
+                            ctx.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("debug-collector-shape"),
+                                    contents: bytemuck::cast_slice(&vertices),
+                                    usage: wgpu::BufferUsages::VERTEX
+                                        | wgpu::BufferUsages::COPY_DST,
+                                });
+                        self.collector_shape_index_buffer =
+                            ctx.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("debug-collector-shape"),
+                                    contents: bytemuck::cast_slice(&indices),
+                                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                                });
                     }
-                }
+                    RegionShape::SphericalRect { .. } => {
+                        todo!("Implement spherical rect drawing")
+                    }
+                    RegionShape::Disk { .. } => {
+                        log::trace!("[DebuggingState] Generating disk shape");
+                        let mut vertices = vec![Vec3::ZERO; 19];
+                        let mut indices = vec![UVec3::ZERO; 18];
+                        for i in 0..18 {
+                            let angle = i as f32 * std::f32::consts::PI / 9.0;
+                            let x = angle.cos();
+                            let y = angle.sin();
+                            vertices[i + 1] = Vec3::new(x, 0.0, y);
+                            indices[i] = UVec3::new(0, i as u32 + 1, (i + 1) as u32 % 18 + 1);
+                        }
+                        self.collector_shape_vertex_buffer =
+                            ctx.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("debug-collector-shape-vertices"),
+                                    contents: bytemuck::cast_slice(&vertices),
+                                    usage: wgpu::BufferUsages::VERTEX
+                                        | wgpu::BufferUsages::COPY_DST,
+                                });
+                        self.collector_shape_index_buffer =
+                            ctx.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("debug-collector-shape-indices"),
+                                    contents: bytemuck::cast_slice(&indices),
+                                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                                });
+                    }
+                },
             }
         }
     }
@@ -921,18 +1038,20 @@ impl DebugDrawingState {
 
             // Draw emitter samples.
             if let Some(samples) = &self.emitter_samples_buffer {
-                // Convert range in bytes to range in vertices.
-                render_pass.set_pipeline(&self.points_pipeline);
-                render_pass.set_bind_group(0, &self.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, samples.slice(..));
-                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-                constants[16..20].copy_from_slice(&Self::EMITTER_SAMPLES_COLOR);
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    0,
-                    bytemuck::cast_slice(&constants),
-                );
-                render_pass.draw(0..self.emitter_samples.as_ref().unwrap().len() as u32, 0..1);
+                if self.emitter_samples_drawing {
+                    // Convert range in bytes to range in vertices.
+                    render_pass.set_pipeline(&self.points_pipeline);
+                    render_pass.set_bind_group(0, &self.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, samples.slice(..));
+                    constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                    constants[16..20].copy_from_slice(&Self::EMITTER_SAMPLES_COLOR);
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        0,
+                        bytemuck::cast_slice(&constants),
+                    );
+                    render_pass.draw(0..self.emitter_samples.as_ref().unwrap().len() as u32, 0..1);
+                }
 
                 if self.emitter_rays_drawing && self.emitter_rays_buffer.is_some() {
                     let rays = self.emitter_rays_buffer.as_ref().unwrap();
@@ -969,7 +1088,104 @@ impl DebugDrawingState {
             }
 
             if self.collector_dome_drawing {
-                // TODO: draw collector dome
+                if let Some(scheme) = self.collector_scheme {
+                    render_pass.set_bind_group(0, &self.bind_group, &[]);
+                    match scheme {
+                        CollectorScheme::Partitioned { .. } => {
+                            if self.collector_dome_vertex_buffer.is_some()
+                                && self.collector_dome_index_buffer.is_some()
+                            {
+                                let vertex_buffer =
+                                    self.collector_dome_vertex_buffer.as_ref().unwrap();
+                                let index_buffer =
+                                    self.collector_dome_index_buffer.as_ref().unwrap();
+                                render_pass.set_pipeline(&self.lines_pipeline);
+                                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                                render_pass.set_index_buffer(
+                                    index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint32,
+                                );
+                                constants[0..16].copy_from_slice(
+                                    &Mat4::from_scale(Vec3::splat(self.collector_orbit_radius))
+                                        .to_cols_array(),
+                                );
+                                constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
+                                render_pass.set_push_constants(
+                                    wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                    0,
+                                    bytemuck::cast_slice(&constants),
+                                );
+                                render_pass.draw_indexed(
+                                    0..index_buffer.size() as u32 / 4,
+                                    0,
+                                    0..1,
+                                );
+                            }
+                        }
+                        CollectorScheme::SingleRegion {
+                            zenith,
+                            azimuth,
+                            shape,
+                            ..
+                        } => {
+                            render_pass.set_pipeline(&self.triangles_pipeline);
+                            render_pass
+                                .set_vertex_buffer(0, self.collector_shape_vertex_buffer.slice(..));
+                            render_pass.set_index_buffer(
+                                self.collector_shape_index_buffer.slice(..),
+                                wgpu::IndexFormat::Uint32,
+                            );
+                            constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
+                            for phi in azimuth.values_wrapped() {
+                                for theta in zenith.values_wrapped() {
+                                    let mat = match shape {
+                                        RegionShape::SphericalCap { .. } => {
+                                            Mat4::from_axis_angle(-Vec3::Y, phi.value)
+                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value)
+                                                * Mat4::from_scale(Vec3::new(
+                                                    self.collector_orbit_radius,
+                                                    self.collector_orbit_radius,
+                                                    self.collector_orbit_radius,
+                                                ))
+                                        }
+                                        RegionShape::SphericalRect { .. } => {
+                                            log::warn!(
+                                                "SphericalRect collector shape is not supported \
+                                                 yet"
+                                            );
+                                            Mat4::IDENTITY
+                                        }
+                                        RegionShape::Disk { .. } => {
+                                            Mat4::from_axis_angle(-Vec3::Y, phi.value)
+                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value)
+                                                * Mat4::from_translation(Vec3::new(
+                                                    0.0,
+                                                    self.collector_orbit_radius,
+                                                    0.0,
+                                                ))
+                                                * Mat4::from_scale(Vec3::new(
+                                                    self.collector_orbit_radius,
+                                                    self.collector_orbit_radius,
+                                                    self.collector_orbit_radius,
+                                                ))
+                                        }
+                                    };
+                                    constants[0..16].copy_from_slice(&mat.to_cols_array());
+                                    render_pass.set_push_constants(
+                                        wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        0,
+                                        bytemuck::cast_slice(&constants),
+                                    );
+                                    render_pass.draw_indexed(
+                                        0..self.collector_shape_index_buffer.size() as u32 / 4,
+                                        0,
+                                        0..1,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

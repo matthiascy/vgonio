@@ -12,7 +12,7 @@ use crate::{
         bsdf::MeasuredBsdfData,
         collector::CollectorPatches,
         emitter::EmitterSamples,
-        measurement::{BsdfMeasurementParams, Radius},
+        measurement::BsdfMeasurementParams,
         rtc,
         rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
         Emitter,
@@ -20,7 +20,6 @@ use crate::{
     msurf::{MicroSurface, MicroSurfaceMesh},
     optics::fresnel,
     ulp_eq,
-    units::UMillimetre,
 };
 use glam::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use rayon::prelude::*;

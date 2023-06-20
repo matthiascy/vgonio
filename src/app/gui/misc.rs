@@ -11,6 +11,7 @@ use crate::{
 };
 
 impl<T: Copy + Numeric> RangeByStepSizeInclusive<T> {
+    /// Creates the UI for the range.
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
             ui.add(egui::DragValue::new(&mut self.start).prefix("start: "));
@@ -70,6 +71,7 @@ impl<A: AngleUnit> RangeByStepCountInclusive<Angle<A>> {
 }
 
 impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
+    /// Creates the UI for the range.
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
             ui.add(

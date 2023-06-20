@@ -559,7 +559,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
         let zenith_i = bsdf_data.params.emitter.zenith;
         let azimuth_i = bsdf_data.params.emitter.azimuth;
         let (zenith_o, azimuth_o) = match bsdf_data.params.collector.scheme {
-            CollectorScheme::Partitioned { partition, .. } => match partition {
+            CollectorScheme::Partitioned { partition } => match partition {
                 SphericalPartition::EqualAngle { zenith, azimuth } => (zenith, azimuth),
                 SphericalPartition::EqualArea { zenith, azimuth } => (zenith.into(), azimuth),
                 SphericalPartition::EqualProjectedArea { zenith, azimuth } => {

@@ -248,10 +248,6 @@ impl CollectorScheme {
                         });
                         ui.end_row();
 
-                        ui.label("Domain: ");
-                        self.domain_mut().ui(ui);
-                        ui.end_row();
-
                         if self.is_partitioned() {
                             ui.label("Partitioning: ");
                             let partition = self.partition_mut().unwrap();

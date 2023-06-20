@@ -136,12 +136,11 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
         let measured_data = match measurement.desc {
             MeasurementKindDescription::Bsdf(measurement) => {
                 let collector_info = match measurement.collector.scheme {
-                    CollectorScheme::Partitioned { domain, partition } => match partition {
+                    CollectorScheme::Partitioned { partition } => match partition {
                         SphericalPartition::EqualAngle { zenith, azimuth } => {
                             format!(
-                                "        - domain: {}\n        - partition: {}\n          - polar \
-                                 angle: {}\n          - azimuthal angle: {}",
-                                domain,
+                                "        - partition: {}\n          - polar angle: {}\n          \
+                                 - azimuthal angle: {}",
                                 "equal angle",
                                 zenith.pretty_print(),
                                 azimuth.pretty_print(),
@@ -149,9 +148,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         }
                         SphericalPartition::EqualArea { zenith, azimuth } => {
                             format!(
-                                "        - domain: {}\n        - partition: {}\n          - polar \
-                                 angle: {}\n          - azimuthal angle: {}",
-                                domain,
+                                "        - partition: {}\n          - polar angle: {}\n          \
+                                 - azimuthal angle: {}",
                                 "equal area",
                                 zenith.pretty_print(),
                                 azimuth.pretty_print(),
@@ -159,9 +157,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         }
                         SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
                             format!(
-                                "        - domain: {}\n        - partition: {}\n          - polar \
-                                 angle: {}\n          - azimuthal angle: {}",
-                                domain,
+                                "        - partition: {}\n          - polar angle: {}\n          \
+                                 - azimuthal angle: {}",
                                 "equal projected area",
                                 zenith.pretty_print(),
                                 azimuth.pretty_print(),
@@ -169,14 +166,13 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         }
                     },
                     CollectorScheme::SingleRegion {
-                        domain,
                         shape,
                         zenith,
                         azimuth,
                     } => {
                         format!(
-                            "        - domain: {domain}\n- shape: {shape:?}\n- polar angle: \
-                             {zenith:?}\n- azimuthal angle {azimuth:?}\n",
+                            "        - shape: {shape:?}\n- polar angle: {zenith:?}\n- azimuthal \
+                             angle {azimuth:?}\n",
                         )
                     }
                 };

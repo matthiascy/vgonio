@@ -431,14 +431,15 @@ pub fn close_enough(a: &Vec3, b: &Vec3) -> bool {
 /// The generated vertices are at the exact theta and phi values.
 ///
 /// Returns a tuple of the vertices and indices of the triangulated hemisphere.
-pub fn generate_parametric_hemisphere_triangles(
+pub fn generate_triangulated_hemisphere(
+    theta_end: Radians,
     theta_steps: u32,
     phi_steps: u32,
 ) -> (Vec<Vec3>, Vec<UVec3>) {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    let theta_step_size = Radians::HALF_PI / theta_steps as f32;
+    let theta_step_size = theta_end.value / theta_steps as f32;
     let phi_step_size = Radians::TWO_PI / phi_steps as f32;
 
     // Generate top vertex
@@ -455,8 +456,8 @@ pub fn generate_parametric_hemisphere_triangles(
             let phi = phi_step_size * j as f32;
             vertices.push(spherical_to_cartesian(
                 1.0,
-                theta,
-                phi,
+                theta.into(),
+                phi.into(),
                 Handedness::RightHandedYUp,
             ));
         }

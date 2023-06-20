@@ -1022,13 +1022,13 @@ pub mod vgmo {
 
     impl CollectorScheme {
         /// The size of the buffer required to write the collector scheme.
-        pub const REQUIRED_SIZE: usize = 60;
+        pub const REQUIRED_SIZE: usize = 56;
 
         /// The size of the buffer required to write the partitioned region.
-        pub const PARTITIONED_REGION_SIZE: usize = 44;
+        pub const PARTITIONED_REGION_SIZE: usize = 40;
 
         /// The size of the buffer required to write the single region.
-        pub const SINGLE_REGION_SIZE: usize = 60;
+        pub const SINGLE_REGION_SIZE: usize = 56;
 
         /// Reads the collector scheme from a buffer.
         pub fn read_from_buf(buf: &[u8]) -> Self {
@@ -1039,29 +1039,22 @@ pub mod vgmo {
             match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
                 0x00 => {
                     // Partitioned
-                    let domain = (u32::from_le_bytes(buf[4..8].try_into().unwrap()) as u8)
-                        .try_into()
-                        .unwrap();
                     let partition = SphericalPartition::read_from_buf(
-                        &buf[8..8 + SphericalPartition::REQUIRED_SIZE],
+                        &buf[4..4 + SphericalPartition::REQUIRED_SIZE],
                     );
-                    CollectorScheme::Partitioned { domain, partition }
+                    CollectorScheme::Partitioned { partition }
                 }
                 0x01 => {
                     // Single Region
-                    let domain = (u32::from_le_bytes(buf[4..8].try_into().unwrap()) as u8)
-                        .try_into()
-                        .unwrap();
                     let shape = RegionShape::read_from_buf(&buf[8..8 + RegionShape::REQUIRED_SIZE]);
                     let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
-                        &buf[8 + RegionShape::REQUIRED_SIZE..8 + RegionShape::REQUIRED_SIZE + 16],
+                        &buf[4 + RegionShape::REQUIRED_SIZE..4 + RegionShape::REQUIRED_SIZE + 16],
                     );
                     let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
-                        &buf[8 + RegionShape::REQUIRED_SIZE + 16
-                            ..8 + RegionShape::REQUIRED_SIZE + 32],
+                        &buf[4 + RegionShape::REQUIRED_SIZE + 16
+                            ..4 + RegionShape::REQUIRED_SIZE + 32],
                     );
                     CollectorScheme::SingleRegion {
-                        domain,
                         shape,
                         zenith,
                         azimuth,
@@ -1078,22 +1071,20 @@ pub mod vgmo {
                 "CollectorScheme needs at least 60 bytes of space"
             );
             match self {
-                CollectorScheme::Partitioned { domain, partition } => {
+                CollectorScheme::Partitioned { partition } => {
                     buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
-                    buf[4..8].copy_from_slice(&(*domain as u32).to_le_bytes());
-                    partition.write_to_buf(&mut buf[8..8 + SphericalPartition::REQUIRED_SIZE]);
+                    partition.write_to_buf(&mut buf[4..4 + SphericalPartition::REQUIRED_SIZE]);
                 }
                 CollectorScheme::SingleRegion {
-                    domain,
                     shape,
                     zenith,
                     azimuth,
                 } => {
                     buf[0..4].copy_from_slice(&(0x01u32).to_le_bytes());
-                    buf[4..8].copy_from_slice(&(*domain as u32).to_le_bytes());
-                    shape.write_to_buf(&mut buf[8..8 + RegionShape::REQUIRED_SIZE]);
-                    zenith.write_to_buf(&mut buf[28..28 + 16]);
-                    azimuth.write_to_buf(&mut buf[44..44 + 16]);
+                    // buf[4..8].copy_from_slice(&(*domain as u32).to_le_bytes());
+                    shape.write_to_buf(&mut buf[4..4 + RegionShape::REQUIRED_SIZE]);
+                    zenith.write_to_buf(&mut buf[24..24 + 16]);
+                    azimuth.write_to_buf(&mut buf[40..40 + 16]);
                 }
             }
         }
@@ -1145,7 +1136,7 @@ pub mod vgmo {
     impl BsdfMeasurementParams {
         /// Reads the BSDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4];
+            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
             reader.read_exact(&mut buf)?;
             let kind = BsdfKind::from(buf[0]);
             let incident_medium = Medium::from(buf[1]);
@@ -1153,6 +1144,18 @@ pub mod vgmo {
             let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
             let emitter = Emitter::read_from_buf(&buf[4..4 + Emitter::REQUIRED_SIZE]);
             let collector = Collector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
+            let samples_count = u32::from_le_bytes(
+                buf[Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
+                    ..Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!(
+                samples_count,
+                collector.scheme.total_sample_count() as u32,
+                "The number of samples in the VGMO file does not match the number of samples in \
+                 the collector scheme"
+            );
             Ok(Self {
                 kind,
                 incident_medium,
@@ -1168,7 +1171,7 @@ pub mod vgmo {
             &self,
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
-            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4];
+            let mut buf = [0x20; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
             buf[0] = self.kind as u8;
             buf[1] = self.incident_medium as u8;
             buf[2] = self.transmitted_medium as u8;
@@ -1180,6 +1183,12 @@ pub mod vgmo {
                 .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
             self.collector
                 .write_to_buf(&mut buf[4 + Emitter::REQUIRED_SIZE..]);
+            buf[4 + Emitter::REQUIRED_SIZE + Collector::REQUIRED_SIZE
+                ..4 + Emitter::REQUIRED_SIZE + Collector::REQUIRED_SIZE + 4]
+                .copy_from_slice(
+                    &(self.collector.scheme.total_sample_count() as u32).to_le_bytes(),
+                );
+            buf[155] = 0x0A;
             writer.write_all(&buf).map_err(|err| err.into())
         }
     }

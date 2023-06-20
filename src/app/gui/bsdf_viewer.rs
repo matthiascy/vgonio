@@ -4,10 +4,7 @@ use crate::{
             camera::{Camera, Projection},
             GpuContext, Texture,
         },
-        gui::{
-            state::{GuiContext, GuiRenderer},
-            VgonioEvent, VgonioEventLoop,
-        },
+        gui::{state::GuiRenderer, VgonioEventLoop},
     },
     math,
 };
@@ -44,7 +41,6 @@ pub struct BsdfRenderingRecord {
 pub struct BsdfViewer {
     gpu: Arc<GpuContext>,
     gui: Arc<RwLock<GuiRenderer>>,
-    //    proj_view_model: glam::Mat4,
     sampler: Arc<wgpu::Sampler>,
     records: Vec<BsdfRenderingRecord>,
     depth_attachment: Texture,
@@ -337,7 +333,7 @@ impl BsdfViewer {
             .records
             .iter()
             .enumerate()
-            .filter(|(i, record)| record.data.is_some() && record.enabled)
+            .filter(|(_, record)| record.data.is_some() && record.enabled)
             .collect::<Vec<_>>();
 
         if to_be_rendered.is_empty() {

@@ -207,7 +207,6 @@ impl Default for BsdfMeasurementParams {
             collector: Collector {
                 radius: Radius::Auto(mm!(0.0)),
                 scheme: CollectorScheme::Partitioned {
-                    domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualArea {
                         zenith: RangeByStepCountInclusive::new(
                             deg!(0.0).in_radians(),

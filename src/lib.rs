@@ -415,22 +415,23 @@ impl SphericalPartition {
 
 // todo: improve the implementation of this function
 impl SphericalPartition {
-    /// Generate patches over the spherical shape. The angle range of the
-    /// partition is limited by `SphericalDomain`.
+    /// Generate patches over the unit spherical shape.
     ///
     /// The patches are generated in the order of first azimuth, then zenith.
-    pub fn generate_patches_over_domain(&self, _domain: &SphericalDomain) -> Vec<Patch> {
+    pub fn generate_patches(&self) -> Vec<Patch> {
         // REVIEW: this function is not very efficient, it can be improved
         match self {
             SphericalPartition::EqualAngle { zenith, azimuth } => {
-                log::trace!("Generating patches over domain: {:?}", self);
-                let n_zenith = zenith.step_count() - 1; // because of inclusive range, TODO: refactor
-                let n_azimuth = azimuth.step_count() - 1; // because of inclusive range, TODO: refactor
-
-                log::trace!("Number of patches: {}", n_zenith * n_azimuth);
-                let mut patches = Vec::with_capacity(n_zenith * n_azimuth);
-                for i_phi in 0..n_azimuth {
-                    for i_theta in 0..n_zenith {
+                let num_patch_zenith = zenith.step_count() - 1;
+                let num_patch_azimuth = azimuth.step_count() - 1;
+                log::trace!(
+                    "[SphericalPartition] Generating {} patches over domain: {:?}",
+                    num_patch_azimuth * num_patch_zenith,
+                    self,
+                );
+                let mut patches = Vec::with_capacity(num_patch_zenith * num_patch_azimuth);
+                for i_phi in 0..num_patch_azimuth {
+                    for i_theta in 0..num_patch_zenith {
                         patches.push(Patch::new_partitioned(
                             (
                                 i_theta as f32 * zenith.step_size + zenith.start,
@@ -487,6 +488,7 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                // TODO: revision
                 log::trace!("Generating patches over domain: {:?}", self);
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
@@ -494,7 +496,6 @@ impl SphericalPartition {
                 let phi_start = azimuth.start;
                 let phi_stop = azimuth.stop;
                 let phi_step = azimuth.step_size;
-                // TODO: revision
                 // Non-uniformly divide the radius of the disk after the projection.
                 // Disk area is linearly proportional to squared radius.
                 // Calculate radius range.

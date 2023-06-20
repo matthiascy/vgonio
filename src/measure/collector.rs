@@ -2,7 +2,7 @@ use crate::{
     math,
     measure::{emitter::RegionShape, measurement::Radius},
     units::{Radians, SolidAngle},
-    RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
+    RangeByStepSizeInclusive, SphericalPartition,
 };
 use glam::{Vec3, Vec3A};
 use std::ops::{Deref, DerefMut};
@@ -38,6 +38,7 @@ pub struct Collector {
     pub scheme: CollectorScheme,
 }
 
+// TODO: incorporate the domain into the collector
 /// Strategy for data collection.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -45,16 +46,12 @@ pub struct Collector {
 pub enum CollectorScheme {
     /// The patches are subdivided using a spherical partition.
     Partitioned {
-        /// Spherical domain of the collector.
-        domain: SphericalDomain,
-        /// Spherical partition of the collector.
+        /// The spherical partition of the collector.
         partition: SphericalPartition,
     } = 0x00,
     /// The collector is represented by a single shape on the surface of the
     /// sphere.
     SingleRegion {
-        /// Spherical domain of the collector.
-        domain: SphericalDomain,
         /// Shape of the collector.
         shape: RegionShape,
         /// Collector's possible positions in spherical coordinates (inclination
@@ -67,26 +64,11 @@ pub enum CollectorScheme {
 }
 
 impl CollectorScheme {
-    /// Returns the spherical domain of the collector.
-    pub fn domain(&self) -> SphericalDomain {
-        match self {
-            Self::Partitioned { domain, .. } => *domain,
-            Self::SingleRegion { domain, .. } => *domain,
-        }
-    }
-
     /// Returns the shape of the collector only if it is a single region.
     pub fn shape(&self) -> Option<RegionShape> {
         match self {
             Self::Partitioned { .. } => None,
             Self::SingleRegion { shape, .. } => Some(*shape),
-        }
-    }
-
-    pub(crate) fn domain_mut(&mut self) -> &mut SphericalDomain {
-        match self {
-            Self::Partitioned { domain, .. } => domain,
-            Self::SingleRegion { domain, .. } => domain,
         }
     }
 
@@ -113,7 +95,7 @@ impl CollectorScheme {
 
     pub(crate) fn partition_mut(&mut self) -> Option<&mut SphericalPartition> {
         match self {
-            Self::Partitioned { partition, .. } => Some(partition),
+            Self::Partitioned { partition } => Some(partition),
             Self::SingleRegion { .. } => None,
         }
     }
@@ -145,7 +127,7 @@ impl CollectorScheme {
         RangeByStepSizeInclusive<Radians>,
     ) {
         match self {
-            CollectorScheme::Partitioned { partition, .. } => match partition {
+            CollectorScheme::Partitioned { partition } => match partition {
                 SphericalPartition::EqualAngle { zenith, azimuth } => {
                     (zenith.clone(), azimuth.clone())
                 }
@@ -163,7 +145,7 @@ impl CollectorScheme {
     /// Returns the number of samples collected by the collector.
     pub fn total_sample_count(&self) -> usize {
         match self {
-            CollectorScheme::Partitioned { partition, .. } => match partition {
+            CollectorScheme::Partitioned { partition } => match partition {
                 SphericalPartition::EqualAngle { zenith, azimuth } => {
                     zenith.step_count_wrapped() * azimuth.step_count_wrapped()
                 }
@@ -183,7 +165,6 @@ impl CollectorScheme {
     /// Returns the default value of [`CollectorScheme::Partitioned`].
     pub fn default_partition() -> Self {
         Self::Partitioned {
-            domain: SphericalDomain::default(),
             partition: SphericalPartition::default(),
         }
     }
@@ -191,7 +172,6 @@ impl CollectorScheme {
     /// Returns the default value of [`CollectorScheme::SingleRegion`].
     pub fn default_single_region() -> Self {
         Self::SingleRegion {
-            domain: SphericalDomain::default(),
             shape: RegionShape::default_spherical_cap(),
             zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::from_degrees(5.0)),
             azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::from_degrees(15.0)),
@@ -227,42 +207,33 @@ impl Collector {
     /// used to collect the data. The patches are generated in the order of
     /// the azimuth angle first, then the zenith angle.
     pub fn generate_patches(&self) -> CollectorPatches {
-        log::debug!("Generating patches of the collector.");
         match self.scheme {
-            CollectorScheme::Partitioned { domain, partition } => {
-                log::trace!("Generating patches of the partitioned collector.");
-                CollectorPatches(partition.generate_patches_over_domain(&domain))
+            CollectorScheme::Partitioned { partition } => {
+                log::trace!("[Collector] generating patches of the partitioned collector.");
+                CollectorPatches(partition.generate_patches())
             }
             CollectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => {
-                // TODO: verification
-                log::trace!("Generating patches of the single region collector.");
-                let n_zenith = (zenith.span() / zenith.step_size).ceil() as usize;
-                let n_azimuth = (azimuth.span() / azimuth.step_size).ceil() as usize;
-
-                let patches = (0..n_azimuth)
-                    .flat_map(|i_phi| {
-                        (0..n_zenith).map(move |i_theta| {
-                            let spherical = SphericalCoord {
-                                radius: 1.0,
-                                zenith: zenith.start + i_theta as f32 * zenith.step_size,
-                                azimuth: azimuth.start + i_phi as f32 * azimuth.step_size,
-                            };
-                            let cartesian = spherical.to_cartesian(Handedness::RightHandedYUp);
-                            let shape = self.scheme.shape().unwrap();
-                            let solid_angle = shape.solid_angle();
-                            Patch::SingleRegion(PatchSingleRegion {
-                                zenith: spherical.zenith,
-                                azimuth: spherical.azimuth,
-                                shape,
-                                unit_vector: cartesian.into(),
-                                solid_angle,
+                log::trace!("[Collector] generating patches of a single region collector.");
+                CollectorPatches(
+                    azimuth
+                        .values_wrapped()
+                        .flat_map(|phi| {
+                            zenith.values_wrapped().map(move |theta| {
+                                let position = SphericalCoord::new(1.0, theta, phi);
+                                let cartesian = position.to_cartesian(Handedness::RightHandedYUp);
+                                let solid_angle = self.scheme.shape().unwrap().solid_angle();
+                                Patch::SingleRegion(PatchSingleRegion {
+                                    position,
+                                    shape: self.scheme.shape().unwrap(),
+                                    unit_vector: cartesian.into(),
+                                    solid_angle,
+                                })
                             })
                         })
-                    })
-                    .collect();
-                CollectorPatches(patches)
+                        .collect(),
+                )
             }
         }
     }
@@ -319,7 +290,6 @@ impl Collector {
         // Calculate the radius of the collector.
         let radius = self.radius.estimate(mesh);
         log::trace!("collector radius: {}", radius);
-        let domain = self.scheme.domain();
         let max_bounces = params.emitter.max_bounces as usize;
         let mut stats = BsdfMeasurementStatsPoint::new(n_wavelengths, max_bounces);
 
@@ -345,38 +315,29 @@ impl Collector {
                     Some(last) => {
                         stats.n_received += 1;
                         // TODO(yang): take into account the handedness of the coordinate system
-                        let is_in_domain = match domain {
-                            SphericalDomain::Upper => last.dir.dot(Vec3A::Y) >= 0.0,
-                            SphericalDomain::Lower => last.dir.dot(Vec3A::Y) <= 0.0,
-                            SphericalDomain::Whole => true,
+                        // 1. Calculate the intersection point of the last ray with
+                        // the collector's surface. Ray-Sphere intersection.
+                        // Collect's center is at (0, 0, 0).
+                        let a = last.dir.dot(last.dir);
+                        let b = 2.0 * last.dir.dot(last.org);
+                        let c = last.org.dot(last.org) - sqr(radius);
+                        let p = match solve_quadratic(a, b, c) {
+                            QuadraticSolution::None | QuadraticSolution::One(_) => {
+                                unreachable!(
+                                    "Ray starting inside the collector's surface, it should have \
+                                     more than one intersection point."
+                                )
+                            }
+                            QuadraticSolution::Two(_, t) => last.org + last.dir * t,
                         };
-                        if !is_in_domain {
-                            None
-                        } else {
-                            // 1. Calculate the intersection point of the last ray with
-                            // the collector's surface. Ray-Sphere intersection.
-                            // Collect's center is at (0, 0, 0).
-                            let a = last.dir.dot(last.dir);
-                            let b = 2.0 * last.dir.dot(last.org);
-                            let c = last.org.dot(last.org) - sqr(radius);
-                            let p = match solve_quadratic(a, b, c) {
-                                QuadraticSolution::None | QuadraticSolution::One(_) => {
-                                    unreachable!(
-                                        "Ray starting inside the collector's surface, it should \
-                                         have more than one intersection point."
-                                    )
-                                }
-                                QuadraticSolution::Two(_, t) => last.org + last.dir * t,
-                            };
-                            // Returns the index of the ray, the unit vector pointing to the
-                            // collector's surface, and the number of
-                            // bounces.
-                            Some(OutgoingDir {
-                                idx: i,
-                                dir: p.normalize(),
-                                bounce: trajectory.len() - 1,
-                            })
-                        }
+                        // Returns the index of the ray, the unit vector pointing to the
+                        // collector's surface, and the number of
+                        // bounces.
+                        Some(OutgoingDir {
+                            idx: i,
+                            dir: p.normalize(),
+                            bounce: trajectory.len() - 1,
+                        })
                     }
                 }
             })
@@ -574,11 +535,8 @@ impl PatchPartitioned {
 /// Represents a patch issued from a single region of the spherical.
 #[derive(Debug, Copy, Clone)]
 pub struct PatchSingleRegion {
-    /// Polar angle of the patch (in radians).
-    pub zenith: Radians,
-
-    /// Azimuthal angle of the patch (in radians).
-    pub azimuth: Radians,
+    /// Position of the patch.
+    pub position: SphericalCoord,
 
     /// Shape of the patch.
     pub shape: RegionShape,
@@ -654,8 +612,7 @@ impl Patch {
         handedness: Handedness,
     ) -> Self {
         Self::SingleRegion(PatchSingleRegion {
-            zenith,
-            azimuth,
+            position: SphericalCoord::new(1.0, zenith, azimuth),
             shape,
             unit_vector: SphericalCoord::new(1.0, zenith, azimuth)
                 .to_cartesian(handedness)

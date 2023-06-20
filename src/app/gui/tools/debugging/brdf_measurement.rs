@@ -36,6 +36,7 @@ pub(crate) struct BrdfMeasurementDebugging {
     emitter_position_index: i32,
     emitter_points_drawing: bool,
     emitter_rays_drawing: bool,
+    emitter_samples_drawing: bool,
     params: BsdfMeasurementParams,
     selector: SurfaceSelector,
     ray_params_t: f32,
@@ -68,6 +69,7 @@ impl BrdfMeasurementDebugging {
             emitter_position_index: 0,
             emitter_points_drawing: false,
             emitter_rays_drawing: false,
+            emitter_samples_drawing: false,
             params: BsdfMeasurementParams::default(),
             event_loop,
             orbit_radius: 1.0,
@@ -284,6 +286,18 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                             if ui.button("\u{25B6}").clicked() {
                                 self.update_emitter_position_index(1, record.as_ref());
                             }
+                            if ui
+                                .add(ToggleSwitch::new(&mut self.emitter_samples_drawing))
+                                .changed()
+                            {
+                                self.event_loop
+                                    .send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleEmitterSamplesDrawing(
+                                            self.emitter_samples_drawing,
+                                        ),
+                                    ))
+                                    .unwrap();
+                            }
                         });
                         ui.end_row();
 
@@ -398,18 +412,24 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Visibility:");
-                    if ui
-                        .add(ToggleSwitch::new(&mut self.collector_dome_drawing))
-                        .changed()
-                    {
-                        self.event_loop
-                            .send_event(VgonioEvent::Debugging(
-                                DebuggingEvent::ToggleCollectorDrawing {
-                                    status: self.collector_dome_drawing,
-                                    scheme: self.params.collector.scheme,
-                                },
-                            ))
-                            .unwrap();
+                    let toggle_res = ui.add(ToggleSwitch::new(&mut self.collector_dome_drawing));
+                    let button_res = ui.button("Update");
+
+                    if toggle_res.changed() || button_res.clicked() {
+                        if let Some((orbit_radius, shape_radius)) =
+                            self.estimate_radii(record.as_ref())
+                        {
+                            self.event_loop
+                                .send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleCollectorDrawing {
+                                        status: self.collector_dome_drawing,
+                                        scheme: self.params.collector.scheme,
+                                        orbit_radius,
+                                        shape_radius,
+                                    },
+                                ))
+                                .unwrap();
+                        }
                     }
                 });
                 ui.horizontal_wrapped(|ui| {

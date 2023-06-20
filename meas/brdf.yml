@@ -16,7 +16,6 @@ type: !bsdf
   collector:
     radius: auto
     scheme: !partitioned
-      domain: upper_hemisphere
       partition: !equal_angle
         zenith: 0 rad .. 90 deg / 5 deg
         azimuth: 0rad .. 360deg / 30 deg

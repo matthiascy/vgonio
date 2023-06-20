@@ -154,9 +154,12 @@ pub enum DebuggingEvent {
     ToggleCollectorDrawing {
         status: bool,
         scheme: CollectorScheme,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
     },
     ToggleEmitterPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
+    ToggleEmitterSamplesDrawing(bool),
     /// Enable/disable the rendering of the sampling debugger.
     SetSamplingRendering(bool),
     UpdateDepthMap,
@@ -1107,9 +1110,18 @@ impl VgonioGuiApp {
                     DebuggingEvent::ToggleDebugDrawing(status) => {
                         self.dbg_drawing_state.enabled = status;
                     }
-                    DebuggingEvent::ToggleCollectorDrawing { status, scheme } => self
-                        .dbg_drawing_state
-                        .update_collector_drawing(status, Some(scheme)),
+                    DebuggingEvent::ToggleCollectorDrawing {
+                        status,
+                        scheme,
+                        orbit_radius,
+                        shape_radius,
+                    } => self.dbg_drawing_state.update_collector_drawing(
+                        &self.ctx.gpu,
+                        status,
+                        Some(scheme),
+                        orbit_radius,
+                        shape_radius,
+                    ),
                     DebuggingEvent::UpdateRayParams {
                         t,
                         orbit_radius,
@@ -1124,6 +1136,9 @@ impl VgonioGuiApp {
                     }
                     DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
                         self.dbg_drawing_state.emitter_rays_drawing = status;
+                    }
+                    DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
+                        self.dbg_drawing_state.emitter_samples_drawing = status;
                     }
                 }
             }
