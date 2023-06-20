@@ -313,6 +313,8 @@ pub struct DebugDrawingState {
     pub collector_scheme: Option<CollectorScheme>,
     /// Collector orbit radius.
     pub collector_orbit_radius: f32,
+    /// Collector shape radius.
+    pub collector_shape_radius: f32,
     /// Vertex buffer for the collector dome.
     pub collector_dome_vertex_buffer: Option<wgpu::Buffer>,
     /// Index buffer for the collector dome.
@@ -621,6 +623,7 @@ impl DebugDrawingState {
             event_loop,
             collector_shape_index_buffer,
             collector_scheme: None,
+            collector_shape_radius: 1.0,
         }
     }
 
@@ -838,10 +841,18 @@ impl DebugDrawingState {
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) {
-        log::trace!("[DebuggingState] Updating collector drawing");
+        log::trace!("[DebugDrawingState] Updating collector drawing");
         self.collector_dome_drawing = status;
         self.collector_orbit_radius = orbit_radius;
-        println!("Collector orbit radius: {}", orbit_radius);
+        self.collector_shape_radius = shape_radius.unwrap_or(1.0);
+        log::trace!(
+            "[DebugDrawingState] Collector orbit radius: {}",
+            self.collector_orbit_radius
+        );
+        log::trace!(
+            "[DebugDrawingState] Collector shape radius: {}",
+            self.collector_shape_radius
+        );
         self.collector_scheme = scheme;
         if let Some(scheme) = scheme {
             // Update the buffer accordingly
@@ -993,41 +1004,6 @@ impl DebugDrawingState {
             });
 
             let mut constants = [0.0f32; 20];
-            // if self.drawing_dome {
-            //     render_pass.set_pipeline(&self.lines_pipeline);
-            //     render_pass.set_bind_group(0, &self.bind_group, &[]);
-            //     render_pass.set_vertex_buffer(0,
-            // self.collector_dome_vertex_buffer.data_slice(..));
-            //     render_pass.set_index_buffer(
-            //         self.collector_dome_index_buffer.data_slice(..),
-            //         wgpu::IndexFormat::Uint32,
-            //     );
-            //     constants[0..16].copy_from_slice(
-            //         &Mat4::from_scale(Vec3::splat(self.emitter_orbit_radius)).
-            // to_cols_array(),     );
-            //     constants[16..20].copy_from_slice(&Self::EMITTER_POINTS_COLOR);
-            //     render_pass.set_push_constants(
-            //         wgpu::ShaderStages::VERTEX_FRAGMENT,
-            //         0,
-            //         bytemuck::cast_slice(&constants),
-            //     );
-            //     self.collector_dome_index_buffer
-            //         .subslices()
-            //         .iter()
-            //         .enumerate()
-            //         .for_each(|(i, index_range)| {
-            //             let count = ((index_range.end - index_range.start) / 4) as u32;
-            //             let index_offset = (index_range.start / 4) as u32;
-            //             let vertex_offset =
-            //                 self.collector_dome_vertex_buffer.subslices()[i].start / 12;
-            //             render_pass.draw_indexed(
-            //                 index_offset..index_offset + count,
-            //                 vertex_offset as i32,
-            //                 0..1,
-            //             );
-            //         });
-            // }
-
             // Draw emitter samples.
             if let Some(samples) = &self.emitter_samples_buffer {
                 if self.emitter_samples_drawing {
@@ -1156,9 +1132,9 @@ impl DebugDrawingState {
                                                     0.0,
                                                 ))
                                                 * Mat4::from_scale(Vec3::new(
-                                                    self.collector_orbit_radius,
-                                                    self.collector_orbit_radius,
-                                                    self.collector_orbit_radius,
+                                                    self.collector_shape_radius,
+                                                    1.0,
+                                                    self.collector_shape_radius,
                                                 ))
                                         }
                                     };

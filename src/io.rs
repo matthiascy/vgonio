@@ -2195,7 +2195,6 @@ mod tests {
             collector: Collector {
                 radius: Auto(mm!(10.0)),
                 scheme: CollectorScheme::Partitioned {
-                    domain: SphericalDomain::Upper,
                     partition: SphericalPartition::EqualAngle {
                         zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
                         azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
