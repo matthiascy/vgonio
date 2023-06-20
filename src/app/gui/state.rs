@@ -71,8 +71,13 @@ var<push_constant> pcs: PushConstants;
 @vertex
 fn vs_main(@location(0) position: vec3<f32>) ->  VOut {
     var vout: VOut;
-    let scaled = uniforms.scale * position;
-    vout.position = uniforms.proj_view * pcs.model * vec4<f32>(scaled, 1.0);
+    let scale = mat4x4<f32>(
+        vec4<f32>(uniforms.scale, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, uniforms.scale, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, uniforms.scale, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0),
+    );
+    vout.position = uniforms.proj_view * scale * pcs.model * vec4<f32>(position, 1.0);
 
     return vout;
 }
