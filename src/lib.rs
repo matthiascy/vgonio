@@ -27,7 +27,7 @@ use crate::{
     error::Error,
     math::{cartesian_to_spherical, spherical_to_cartesian},
     measure::Patch,
-    units::Radians,
+    units::{rad, Radians},
 };
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
@@ -413,7 +413,6 @@ impl SphericalPartition {
     }
 }
 
-// todo: improve the implementation of this function
 impl SphericalPartition {
     /// Generate patches over the unit spherical shape.
     ///
@@ -425,7 +424,7 @@ impl SphericalPartition {
                 let num_patch_zenith = zenith.step_count() - 1;
                 let num_patch_azimuth = azimuth.step_count() - 1;
                 log::trace!(
-                    "[SphericalPartition] Generating {} patches over domain: {:?}",
+                    "[SphericalPartition] Generating {} EqualAngle patches over domain: {:?}",
                     num_patch_azimuth * num_patch_zenith,
                     self,
                 );
@@ -448,14 +447,16 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualArea { zenith, azimuth } => {
-                log::trace!("Generating patches over domain: {:?}", self);
+                log::trace!(
+                    "[SphericalPartition] Generating EqualArea patches over domain: {:?}",
+                    self
+                );
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
                 let count = zenith.step_count;
                 let phi_start = azimuth.start;
                 let phi_stop = azimuth.stop;
                 let phi_step = azimuth.step_size;
-                // TODO: revision
                 // Uniformly divide the azimuthal angle. Suppose r == 1
                 // Spherical cap area = 2πrh, where r is the radius of the sphere on which
                 // resides the cap, and h is the height from the top of the cap
@@ -488,54 +489,38 @@ impl SphericalPartition {
                 patches
             }
             SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                // TODO: revision
-                log::trace!("Generating patches over domain: {:?}", self);
+                log::trace!(
+                    "[SphericalPartition] Generating EqualProjectedArea patches over domain: {:?}",
+                    self
+                );
                 let theta_start = zenith.start;
                 let theta_stop = zenith.stop;
-                let count = zenith.step_count;
-                let phi_start = azimuth.start;
-                let phi_stop = azimuth.stop;
-                let phi_step = azimuth.step_size;
-                // Non-uniformly divide the radius of the disk after the projection.
-                // Disk area is linearly proportional to squared radius.
-                // Calculate radius range.
-                let r_start = theta_start.sin();
-                let r_stop = theta_stop.sin();
-                let r_start_sqr = r_start * r_start;
-                let r_stop_sqr = r_stop * r_stop;
-                let factor = 1.0 / count as f32;
-                let n_theta = count;
-                let n_phi = ((phi_stop - phi_start) / phi_step).ceil() as usize;
-
-                let mut patches = Vec::with_capacity(n_theta * n_phi);
-
-                let calc_theta = |i: usize| -> f32 {
-                    let r_sqr =
-                        r_start_sqr + (r_stop_sqr - r_start_sqr) * factor * (i as f32 + 0.5);
-                    let r = r_sqr.sqrt();
-                    r.asin()
-                };
-
-                for i_phi in 0..((phi_stop - phi_start) / phi_step).ceil() as usize {
-                    for i in 0..n_theta {
-                        // Linearly interpolate squared radius range.
-                        // Projected area is proportional to squared radius.
-                        //                 1st           2nd           3rd
-                        // O- - - - | - - - I - - - | - - - I - - - | - - - I - - -|
-                        //     r_start_sqr                               r_stop_sqr
-                        let theta = calc_theta(i);
-                        let theta_next = calc_theta(i + 1);
-                        patches.push(Patch::new_partitioned(
-                            (theta.into(), theta_next.into()),
-                            (
-                                phi_start + i_phi as f32 * phi_step,
-                                phi_start + (i_phi as f32 + 1.0) * phi_step,
-                            ),
-                            Handedness::RightHandedYUp,
-                        ));
-                    }
-                }
-                patches
+                let n_theta = zenith.step_count;
+                let n_phi = azimuth.step_count();
+                // Non-uniformly divide the radius of the disk into n_theta parts to
+                // ensure that the projected area of each patch is equal.
+                // Suppose R = 1, the radius of each ring is r_i = sqrt(1 / n_theta)
+                let ring_radius = &(0..=n_theta)
+                    .map(|i| (i as f32 / n_theta as f32).sqrt())
+                    .collect::<Vec<_>>();
+                // Generate the patches
+                (0..n_phi)
+                    .flat_map(move |i_phi| {
+                        (0..n_theta).map(move |i| {
+                            let r_start = ring_radius[i];
+                            let r_stop = ring_radius[i + 1];
+                            let theta_start = (1.0 - r_start).acos();
+                            let theta_stop = (1.0 - r_stop).acos();
+                            let phi_start = azimuth.start + i_phi as f32 * azimuth.step_size;
+                            let phi_stop = azimuth.start + (i_phi + 1) as f32 * azimuth.step_size;
+                            Patch::new_partitioned(
+                                (rad!(theta_start), rad!(theta_stop)),
+                                (phi_start, phi_stop),
+                                Handedness::RightHandedYUp,
+                            )
+                        })
+                    })
+                    .collect::<Vec<_>>()
             }
         }
     }
