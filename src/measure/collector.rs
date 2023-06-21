@@ -264,13 +264,13 @@ impl Collector {
         );
 
         log::debug!(
-            "collecting data for BSDF measurement at position {}",
+            "[Collector] collecting data for BSDF measurement at position {}",
             position
         );
 
         let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
         let n_wavelengths = spectrum.len();
-        log::debug!("spectrum samples: {:?}", spectrum);
+        log::debug!("[Collector] spectrum samples: {:?}", spectrum);
 
         // Get the refractive indices of the incident and transmitted media for each
         // wavelength.
@@ -278,12 +278,12 @@ impl Collector {
             .iors
             .ior_of_spectrum(params.incident_medium, &spectrum)
             .expect("incident medium IOR not found");
-        log::debug!("incident medium IORs: {:?}", iors_i);
+        log::debug!("[Collector] incident medium IORs: {:?}", iors_i);
         let iors_t = cache
             .iors
             .ior_of_spectrum(params.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
-        log::debug!("transmitted medium IORs: {:?}", iors_t);
+        log::debug!("[Collector] transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
         let orbit_radius = self.radius.estimate(mesh);

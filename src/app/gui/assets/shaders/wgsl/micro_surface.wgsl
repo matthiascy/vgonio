@@ -29,7 +29,7 @@ fn vs_main(@location(0) position: vec3<f32>) ->  VOut {
     let span = locals.span * locals.scale;
 
     let c: f32 = (scaled.y - lowest) / span;
-    vout.color = vec3<f32>(c, 1.0 - c, 0.025) * 0.8;
+    vout.color = vec3<f32>(c * 0.75, (1.0 - c) * 0.8, 0.125);
     return vout;
 }
 

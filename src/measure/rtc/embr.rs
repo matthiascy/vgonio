@@ -92,10 +92,12 @@ fn intersect_filter_stream<'a>(
         if hits.is_valid(i) {
             let prim_id = hits.prim_id(i);
             let ray_id = rays.id(i);
+            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
             log::trace!("ray {} -- hit: {}", ray_id, prim_id);
             let last_hit = ctx.ext.last_hit[ray_id as usize];
 
             if prim_id != INVALID_ID && prim_id == last_hit.prim_id {
+                #[cfg(all(debug_assertions, feature = "verbose_debug"))]
                 log::trace!("nudging ray origin");
                 // if the ray hit the same primitive as the previous bounce,
                 // nudging the ray origin slightly along normal direction of
@@ -139,6 +141,7 @@ fn intersect_filter_stream<'a>(
                 let ray_dir: Vec3A = rays.unit_dir(i).into();
 
                 if ray_dir.dot(normal) > 0.0 {
+                    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
                     log::trace!("ray {} hit backface", ray_id);
                     valid[i] = ValidMask::Invalid as i32;
                     continue;
@@ -159,6 +162,7 @@ fn intersect_filter_stream<'a>(
             }
         } else {
             // if the ray didn't hit anything, mark it as invalid
+            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
             log::trace!("ray {} missed", rays.id(i));
             valid[i] = ValidMask::Invalid as i32;
         }
@@ -288,6 +292,7 @@ fn measure_bsdf_at_point_inner(
     let elapsed = t.elapsed();
     let max_bounces = params.emitter.max_bounces;
 
+    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     log::debug!(
         "emitted {} rays with dir: {} from: {} in {} secs.",
         num_emitted_rays,
@@ -332,6 +337,7 @@ fn measure_bsdf_at_point_inner(
         // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
         .enumerate()
         .for_each(|(i, (rays, data))| {
+            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
             log::trace!("stream {} of {}", i, num_streams);
             // Populate embree ray stream with generated rays.
             let chunk_size = rays.len();
@@ -365,14 +371,18 @@ fn measure_bsdf_at_point_inner(
                 if bounces != 0 {
                     ctx.ctx.flags = IntersectContextFlags::INCOHERENT;
                 }
-                log::trace!(
-                    "------------ bounce {}, active rays {}\n {:?} | {}",
-                    bounces,
-                    active_rays,
-                    ctx.ext.trajectory,
-                    ctx.ext.trajectory.len(),
-                );
-                log::trace!("validities: {:?}", validities);
+
+                #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+                {
+                    log::trace!(
+                        "------------ bounce {}, active rays {}\n {:?} | {}",
+                        bounces,
+                        active_rays,
+                        ctx.ext.trajectory,
+                        ctx.ext.trajectory.len(),
+                    );
+                    log::trace!("validities: {:?}", validities);
+                }
 
                 scene.intersect_stream_soa(&mut ctx, &mut ray_hit_n);
 
@@ -402,6 +412,7 @@ fn measure_bsdf_at_point_inner(
                 bounces += 1;
             }
 
+            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
             log::trace!(
                 "------------ result {}, active rays: {}, valid rays: {:?}\ntrajectory: {:?} | {}",
                 bounces,
@@ -417,7 +428,7 @@ fn measure_bsdf_at_point_inner(
         .flat_map(|d| d.trajectory)
         .collect::<Vec<_>>();
 
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     {
         let collected = params
             .collector
@@ -426,7 +437,7 @@ fn measure_bsdf_at_point_inner(
         log::trace!("collected: {:?}", collected.data);
         collected
     }
-    #[cfg(not(debug_assertions))]
+    #[cfg(not(all(debug_assertions, feature = "verbose_debug")))]
     params
         .collector
         .collect(params, mesh, pos, &trajectories, patches, cache)

@@ -27,7 +27,7 @@ use crate::{
         collector::CollectorPatches,
         emitter::{EmitterSamples, RegionShape},
         measurement::BsdfMeasurementParams,
-        rtc::{embr, Ray},
+        rtc::{embr, Ray, RayTrajectoryNode},
         CollectorScheme, Emitter, Patch, RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
@@ -284,8 +284,6 @@ pub struct DebugDrawingState {
     pub points_pipeline: wgpu::RenderPipeline,
     /// Pipeline for drawing lines.
     pub lines_pipeline: wgpu::RenderPipeline,
-    /// Pipeline for drawing lines in strip mode.
-    pub line_strip_pipeline: wgpu::RenderPipeline,
     /// Bind group for basic render pipeline.
     pub bind_group: wgpu::BindGroup,
     /// Uniform buffer for basic render pipeline.
@@ -420,14 +418,7 @@ impl DebugDrawingState {
             mapped_at_creation: false,
         });
 
-        let (
-            triangles_pipeline,
-            points_pipeline,
-            lines_pipeline,
-            line_strip_pipeline,
-            bind_group,
-            uniform_buffer,
-        ) = {
+        let (triangles_pipeline, points_pipeline, lines_pipeline, bind_group, uniform_buffer) = {
             let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-drawing-basic-uniform-buffer"),
                 size: std::mem::size_of::<[f32; 16 + 4]>() as u64,
@@ -543,27 +534,10 @@ impl DebugDrawingState {
                         fragment: Some(frag_state.clone()),
                         multiview: None,
                     });
-            let line_strip_pipeline =
-                ctx.device
-                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some("debug-drawing-line-strip-pipeline"),
-                        layout: Some(&pipeline_layout),
-                        vertex: vert_state,
-                        primitive: wgpu::PrimitiveState {
-                            topology: wgpu::PrimitiveTopology::LineStrip,
-                            front_face: wgpu::FrontFace::Ccw,
-                            ..Default::default()
-                        },
-                        depth_stencil: Some(depth_state),
-                        multisample: Default::default(),
-                        fragment: Some(frag_state),
-                        multiview: None,
-                    });
             (
                 triangles_pipeline,
                 points_pipeline,
                 lines_pipeline,
-                line_strip_pipeline,
                 bind_group,
                 uniform_buffer,
             )
@@ -576,7 +550,6 @@ impl DebugDrawingState {
             triangles_pipeline,
             points_pipeline,
             lines_pipeline,
-            line_strip_pipeline,
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
@@ -1074,7 +1047,26 @@ impl DebugDrawingState {
                 let vertices = measured
                     .trajectories
                     .iter()
-                    .flat_map(|trajectory| trajectory.0.iter().map(|p| p.org.into()))
+                    .flat_map(|trajectory| {
+                        let mut iter = trajectory.0.iter().peekable();
+                        let mut lines: Vec<Vec3> = vec![];
+                        while let Some(node) = iter.next() {
+                            let org: Vec3 = node.org.into();
+                            let dir: Vec3 = node.dir.into();
+                            match iter.peek() {
+                                None => {
+                                    // Last node
+                                    lines.push(org);
+                                    lines.push(org + dir);
+                                }
+                                Some(next) => {
+                                    lines.push(org);
+                                    lines.push(next.org.into());
+                                }
+                            }
+                        }
+                        lines
+                    })
                     .collect::<Vec<Vec3>>();
                 self.collector_ray_trajectories_buffer = Some(ctx.device.create_buffer_init(
                     &wgpu::util::BufferInitDescriptor {
@@ -1171,7 +1163,7 @@ impl DebugDrawingState {
             }
 
             if let Some(buffer) = &self.collector_ray_trajectories_buffer {
-                render_pass.set_pipeline(&self.line_strip_pipeline);
+                render_pass.set_pipeline(&self.lines_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, buffer.slice(..));
                 constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());

@@ -200,7 +200,7 @@ impl Default for BsdfMeasurementParams {
                 spectrum: RangeByStepSizeInclusive::new(
                     nanometres!(400.0),
                     nanometres!(700.0),
-                    nanometres!(1.0),
+                    nanometres!(100.0),
                 ),
             },
             collector: Collector {

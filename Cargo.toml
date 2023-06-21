@@ -49,6 +49,7 @@ wgpu = { version = "0.16", features = ["spirv"] }
 default = []
 embree = ["dep:embree"]
 optix = []
+verbose_debug = []
 
 [build-dependencies]
 shaderc = "0.8"
