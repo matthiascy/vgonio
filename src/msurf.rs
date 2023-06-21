@@ -549,6 +549,22 @@ impl MicroSurface {
 
         (positions, extent)
     }
+
+    /// Resize the heightfield.
+    ///
+    /// The samples will be taken from the top-left corner of the heightfield.
+    /// TODO: add more options for different resizing methods.
+    pub fn resize(&self, rows: usize, cols: usize) -> Self {
+        let mut ms = Self::new(rows, cols, self.du, self.dv, 0.0, self.unit);
+        let min_rows = rows.min(self.rows);
+        let min_cols = cols.min(self.cols);
+        for r in 0..min_rows {
+            for c in 0..min_cols {
+                ms.samples[r * cols + c] = self.samples[r * self.cols + c];
+            }
+        }
+        ms
+    }
 }
 
 /// Generate triangle indices for grid triangulation.

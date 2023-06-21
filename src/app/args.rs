@@ -1,6 +1,10 @@
-use crate::io::{CompressionScheme, FileEncoding};
+use crate::{
+    error::Error,
+    io::{CompressionScheme, FileEncoding},
+};
+use glam::DVec2;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{num::ParseIntError, path::PathBuf, str::FromStr};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]
@@ -79,20 +83,60 @@ pub enum SubCommand {
     Convert(ConvertOptions),
 }
 
+/// Arguments for the `convert --resize` command.
+#[derive(Copy, Clone, Debug)]
+pub struct NewSize(pub u32, pub u32);
+
+impl FromStr for NewSize {
+    type Err = std::io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        println!("s: {}", s);
+        let mut parts = s.trim().split_ascii_whitespace();
+        let width: u32 = parts
+            .next()
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "No input provided for new width",
+            ))?
+            .parse()
+            .map_err(|err| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to parse new width")
+            })?;
+        let height: u32 = parts
+            .next()
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "No input provided for new height",
+            ))?
+            .parse()
+            .map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Failed to parse new height",
+                )
+            })?;
+        Ok(Self(width, height))
+    }
+}
+
 #[derive(clap::Args, Debug)]
-#[clap(about = "Converts non-vgonio files to vgonio files.")]
+#[clap(
+    about = "Converts non-vgonio surface files to vgonio files or resizes vgonio surface files."
+)]
 pub struct ConvertOptions {
     /// Path to input files.
     #[clap(
         short,
         long,
         num_args(1..),
+        required = true,
         help = "Files to be converted."
     )]
     pub inputs: Vec<PathBuf>,
 
     /// Path to output file.
-    #[clap(help = "Path to store converted files.")]
+    #[clap(short, long, help = "Path to store converted files.")]
     pub output: Option<PathBuf>,
 
     #[clap(
@@ -114,19 +158,29 @@ pub struct ConvertOptions {
     #[clap(
         short,
         long,
+        required = true,
         help = "Type of conversion to perform. If not specified, the\nconversion will be inferred \
                 from the file extension."
     )]
     pub kind: ConvertKind,
+
+    #[clap(
+        long,
+        value_name = "WIDTH HEIGHT",
+        num_args(2),
+        help = "Resize the micro-surface profile to the given resolution."
+    )]
+    pub resize: Option<Vec<u32>>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConvertKind {
-    /// Convert a micro-surface profile to .vgms file. Accepts files
-    /// coming from Predicting Appearance from Measured Microgeometry of Metal
-    /// Surfaces, and plain text data coming from µsurf confocal microscope
-    /// system.
-    #[clap(name = "ms")]
+    #[clap(
+        name = "ms",
+        help = "Convert a micro-surface profile to .vgms file. Accepts files coming \
+                from\n\"Predicting Appearance from Measured Microgeometry of Metal \
+                Surfaces\",\nand plain text data coming from µsurf confocal microscope system."
+    )]
     MicroSurfaceProfile,
 }
 

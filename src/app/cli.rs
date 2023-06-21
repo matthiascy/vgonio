@@ -2,7 +2,9 @@ use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 
 use crate::{
     app::{
-        args::{ConvertKind, ConvertOptions, FastMeasurementKind, MeasureOptions, SubCommand},
+        args::{
+            ConvertKind, ConvertOptions, FastMeasurementKind, MeasureOptions, NewSize, SubCommand,
+        },
         cache::{resolve_path, Cache},
         cli::info::print_info,
         Config,
@@ -406,20 +408,33 @@ fn convert(opts: ConvertOptions, config: Config) -> Result<(), Error> {
         let resolved = resolve_path(&config.cwd, Some(&input));
         match opts.kind {
             ConvertKind::MicroSurfaceProfile => {
-                let profile = MicroSurface::read_from_file(&resolved, None)?;
-                let filename = format!(
-                    "{}.vgms",
-                    resolved
-                        .file_stem()
-                        .unwrap()
-                        .to_ascii_lowercase()
-                        .to_str()
-                        .unwrap()
-                );
+                let (profile, filename) = {
+                    let loaded = MicroSurface::read_from_file(&resolved, None)?;
+
+                    let resized = if let Some(new_size) = opts.resize.as_ref() {
+                        let (w, h) = (new_size[0] as usize, new_size[1] as usize);
+                        println!("  {BRIGHT_YELLOW}>{RESET} Resizing to {}x{}...", w, h);
+                        loaded.resize(w, h)
+                    } else {
+                        loaded
+                    };
+
+                    let filename = format!(
+                        "{}_converted.vgms",
+                        resolved
+                            .file_stem()
+                            .unwrap()
+                            .to_ascii_lowercase()
+                            .to_str()
+                            .unwrap()
+                    );
+                    (resized, filename)
+                };
                 println!(
                     "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",
                     resolved, output_dir
                 );
+
                 profile
                     .write_to_file(&output_dir.join(filename), opts.encoding, opts.compression)
                     .unwrap_or_else(|err| {

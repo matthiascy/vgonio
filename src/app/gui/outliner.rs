@@ -36,6 +36,8 @@ pub struct PerMicroSurfaceState {
     pub min: f32,
     /// The highest value of the micro surface.
     pub max: f32,
+    /// Size of the micro-surface.
+    pub size: (u32, u32),
     /// Offset along the Y axis without scaling.
     pub y_offset: f32,
 }
@@ -106,6 +108,7 @@ impl Outliner {
                         unit: surf.unit,
                         min: surf.min,
                         max: surf.max,
+                        size: (surf.rows as u32, surf.cols as u32),
                         y_offset: 0.0,
                     },
                 ));
@@ -165,6 +168,12 @@ impl SurfaceCollapsableHeader {
                     .spacing([40.0, 4.0])
                     .striped(true)
                     .show(ui, |ui| {
+                        ui.add(egui::Label::new("Size:"));
+                        ui.add(egui::Label::new(format!(
+                            "{} x {}",
+                            state.size.0, state.size.1
+                        )));
+                        ui.end_row();
                         ui.add(egui::Label::new("Min:"));
                         ui.add(egui::Label::new(format!("{:.4} {}", state.min, state.unit)));
                         ui.end_row();
