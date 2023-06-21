@@ -16,14 +16,21 @@ use crate::app::{
 };
 
 use crate::{
-    app::{gfx::remap_depth, gui::VgonioEventLoop},
+    app::{
+        cache::{Cache, Handle},
+        gfx::remap_depth,
+        gui::VgonioEventLoop,
+    },
     math,
     math::spherical_to_cartesian,
     measure::{
+        collector::CollectorPatches,
         emitter::{EmitterSamples, RegionShape},
-        rtc::Ray,
-        CollectorScheme, Emitter, Patch,
+        measurement::BsdfMeasurementParams,
+        rtc::{embr, Ray},
+        CollectorScheme, Emitter, Patch, RtcMethod,
     },
+    msurf::{MicroSurface, MicroSurfaceMesh},
     units::{rad, Radians},
     Handedness, SphericalCoord,
 };
@@ -277,6 +284,8 @@ pub struct DebugDrawingState {
     pub points_pipeline: wgpu::RenderPipeline,
     /// Pipeline for drawing lines.
     pub lines_pipeline: wgpu::RenderPipeline,
+    /// Pipeline for drawing lines in strip mode.
+    pub line_strip_pipeline: wgpu::RenderPipeline,
     /// Bind group for basic render pipeline.
     pub bind_group: wgpu::BindGroup,
     /// Uniform buffer for basic render pipeline.
@@ -324,11 +333,14 @@ pub struct DebugDrawingState {
     pub collector_dome_vertex_buffer: Option<wgpu::Buffer>,
     /// Index buffer for the collector dome.
     pub collector_dome_index_buffer: Option<wgpu::Buffer>,
+    /// Collector's patches.
+    pub collector_patches: Option<CollectorPatches>,
+    /// Ray trajectories buffer.
+    pub collector_ray_trajectories_buffer: Option<wgpu::Buffer>,
 
     event_loop: VgonioEventLoop,
+    cache: Arc<RwLock<Cache>>,
 
-    // /// Vertex buffer for points on the collector dome.
-    // pub collector_patch_center_buffer: wgpu::Buffer,
     pub msurf_prim_rp: RenderPass,
     pub msurf_prim_index_buf: wgpu::Buffer,
     pub msurf_prim_index_count: u32,
@@ -341,11 +353,13 @@ impl DebugDrawingState {
     pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
     pub const COLLECTOR_COLOR: [f32; 4] = [0.2, 0.5, 0.7, 0.5];
+    pub const COLLECTOR_RAY_TRAJECTORIES_COLOR: [f32; 4] = [0.6, 0.3, 0.4, 0.3];
 
     pub fn new(
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
         event_loop: VgonioEventLoop,
+        cache: Arc<RwLock<Cache>>,
     ) -> Self {
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
@@ -406,7 +420,14 @@ impl DebugDrawingState {
             mapped_at_creation: false,
         });
 
-        let (triangles_pipeline, points_pipeline, lines_pipeline, bind_group, uniform_buffer) = {
+        let (
+            triangles_pipeline,
+            points_pipeline,
+            lines_pipeline,
+            line_strip_pipeline,
+            bind_group,
+            uniform_buffer,
+        ) = {
             let uniform_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("debug-drawing-basic-uniform-buffer"),
                 size: std::mem::size_of::<[f32; 16 + 4]>() as u64,
@@ -511,9 +532,25 @@ impl DebugDrawingState {
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some("debug-drawing-lines-pipeline"),
                         layout: Some(&pipeline_layout),
-                        vertex: vert_state,
+                        vertex: vert_state.clone(),
                         primitive: wgpu::PrimitiveState {
                             topology: wgpu::PrimitiveTopology::LineList,
+                            front_face: wgpu::FrontFace::Ccw,
+                            ..Default::default()
+                        },
+                        depth_stencil: Some(depth_state.clone()),
+                        multisample: Default::default(),
+                        fragment: Some(frag_state.clone()),
+                        multiview: None,
+                    });
+            let line_strip_pipeline =
+                ctx.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("debug-drawing-line-strip-pipeline"),
+                        layout: Some(&pipeline_layout),
+                        vertex: vert_state,
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::LineStrip,
                             front_face: wgpu::FrontFace::Ccw,
                             ..Default::default()
                         },
@@ -526,6 +563,7 @@ impl DebugDrawingState {
                 triangles_pipeline,
                 points_pipeline,
                 lines_pipeline,
+                line_strip_pipeline,
                 bind_group,
                 uniform_buffer,
             )
@@ -538,6 +576,7 @@ impl DebugDrawingState {
             triangles_pipeline,
             points_pipeline,
             lines_pipeline,
+            line_strip_pipeline,
             bind_group,
             uniform_buffer,
             sampling_debug_enabled: false,
@@ -629,6 +668,9 @@ impl DebugDrawingState {
             collector_shape_index_buffer,
             collector_scheme: None,
             collector_shape_radius: 1.0,
+            collector_ray_trajectories_buffer: None,
+            collector_patches: None,
+            cache,
         }
     }
 
@@ -788,7 +830,7 @@ impl DebugDrawingState {
                     .collect::<Vec<_>>()
             };
             ctx.queue.write_buffer(
-                &self.emitter_samples_buffer.as_ref().unwrap(),
+                self.emitter_samples_buffer.as_ref().unwrap(),
                 0,
                 bytemuck::cast_slice(&vertices),
             );
@@ -843,6 +885,7 @@ impl DebugDrawingState {
         ctx: &GpuContext,
         status: bool,
         scheme: Option<CollectorScheme>,
+        patches: CollectorPatches,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) {
@@ -863,16 +906,14 @@ impl DebugDrawingState {
             // Update the buffer accordingly
             match scheme {
                 CollectorScheme::Partitioned { partition } => {
-                    let patches = partition.generate_patches();
                     let mut vertices = vec![Vec3::ZERO; patches.len() * 4];
                     let mut indices = vec![0u32; patches.len() * 8];
-
                     for (i, patch) in patches.iter().enumerate() {
                         match patch {
                             Patch::Partitioned(p) => {
                                 let (phi_a, phi_b) = p.azimuth;
                                 let (theta_a, theta_b) = p.zenith;
-                                vertices[i * 4 + 0] = spherical_to_cartesian(
+                                vertices[i * 4] = spherical_to_cartesian(
                                     1.0,
                                     theta_a,
                                     phi_a,
@@ -896,14 +937,14 @@ impl DebugDrawingState {
                                     phi_a,
                                     Handedness::RightHandedYUp,
                                 );
-                                indices[i * 8 + 0] = i as u32 * 4 + 0;
+                                indices[i * 8] = i as u32 * 4;
                                 indices[i * 8 + 1] = i as u32 * 4 + 1;
                                 indices[i * 8 + 2] = i as u32 * 4 + 1;
                                 indices[i * 8 + 3] = i as u32 * 4 + 2;
                                 indices[i * 8 + 4] = i as u32 * 4 + 2;
                                 indices[i * 8 + 5] = i as u32 * 4 + 3;
                                 indices[i * 8 + 6] = i as u32 * 4 + 3;
-                                indices[i * 8 + 7] = i as u32 * 4 + 0;
+                                indices[i * 8 + 7] = i as u32 * 4;
                             }
                             Patch::SingleRegion(_) => {
                                 unreachable!(
@@ -982,6 +1023,75 @@ impl DebugDrawingState {
                 },
             }
         }
+        self.collector_patches = Some(patches);
+    }
+
+    /// Updates the ray trajectories for the debugging draw calls.
+    pub fn update_ray_trajectories(
+        &mut self,
+        ctx: &GpuContext,
+        method: RtcMethod,
+        params: BsdfMeasurementParams,
+        surface: Handle<MicroSurface>,
+        mesh: Handle<MicroSurfaceMesh>,
+        position: SphericalCoord,
+    ) {
+        if self.emitter_samples.is_none() {
+            self.event_loop
+                .send_event(VgonioEvent::Notify {
+                    kind: ToastKind::Warning,
+                    text: "Please generate samples before tracing".to_string(),
+                    time: 4.0,
+                })
+                .unwrap();
+            return;
+        }
+
+        if self.collector_patches.is_none() {
+            self.event_loop
+                .send_event(VgonioEvent::Notify {
+                    kind: ToastKind::Warning,
+                    text: "Please generate patches before tracing".to_string(),
+                    time: 4.0,
+                })
+                .unwrap();
+            return;
+        }
+
+        match method {
+            #[cfg(feature = "embree")]
+            RtcMethod::Embree => {
+                let cache = self.cache.read().unwrap();
+                let mesh = cache.get_micro_surface_mesh(mesh).unwrap();
+                let measured = embr::measure_bsdf_at_point(
+                    &params,
+                    mesh,
+                    self.emitter_samples.as_ref().unwrap(),
+                    self.collector_patches.as_ref().unwrap(),
+                    &cache,
+                    SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
+                );
+                let vertices = measured
+                    .trajectories
+                    .iter()
+                    .flat_map(|trajectory| trajectory.0.iter().map(|p| p.org.into()))
+                    .collect::<Vec<Vec3>>();
+                self.collector_ray_trajectories_buffer = Some(ctx.device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("debug-collector-ray-trajectories"),
+                        contents: bytemuck::cast_slice(&vertices),
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    },
+                ));
+            }
+            #[cfg(feature = "optix")]
+            RtcMethod::Optix => {
+                log::info!("OptiX is not supported for ray trajectory drawing");
+            }
+            RtcMethod::Grid => {
+                log::info!("Grid is not supported for ray trajectory drawing");
+            }
+        }
     }
 
     /// Records the render process for the debugging draw calls.
@@ -1052,6 +1162,20 @@ impl DebugDrawingState {
                 render_pass.set_vertex_buffer(0, buffer.slice(..));
                 constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
                 constants[16..20].copy_from_slice(&Self::EMITTER_POINTS_COLOR);
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    0,
+                    bytemuck::cast_slice(&constants),
+                );
+                render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+            }
+
+            if let Some(buffer) = &self.collector_ray_trajectories_buffer {
+                render_pass.set_pipeline(&self.line_strip_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, buffer.slice(..));
+                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                constants[16..20].copy_from_slice(&Self::COLLECTOR_RAY_TRAJECTORIES_COLOR);
                 render_pass.set_push_constants(
                     wgpu::ShaderStages::VERTEX_FRAGMENT,
                     0,

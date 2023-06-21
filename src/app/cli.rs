@@ -2,9 +2,7 @@ use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 
 use crate::{
     app::{
-        args::{
-            ConvertKind, ConvertOptions, FastMeasurementKind, MeasureOptions, NewSize, SubCommand,
-        },
+        args::{ConvertKind, ConvertOptions, FastMeasurementKind, MeasureOptions, SubCommand},
         cache::{resolve_path, Cache},
         cli::info::print_info,
         Config,

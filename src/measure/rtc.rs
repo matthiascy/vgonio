@@ -152,7 +152,7 @@ struct LastHit {
 
 /// Records the status of a traced ray.
 #[derive(Clone, Copy)]
-pub struct TrajectoryNode {
+pub struct RayTrajectoryNode {
     /// The origin of the ray.
     pub org: Vec3A,
     /// The direction of the ray.
@@ -162,7 +162,7 @@ pub struct TrajectoryNode {
     pub cos: Option<f32>,
 }
 
-impl Debug for TrajectoryNode {
+impl Debug for RayTrajectoryNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -176,25 +176,25 @@ impl Debug for TrajectoryNode {
 ///
 /// The trajectory always starts with the ray that is spawned.
 #[derive(Debug, Clone)]
-pub struct Trajectory(pub(crate) Vec<TrajectoryNode>);
+pub struct RayTrajectory(pub(crate) Vec<RayTrajectoryNode>);
 
-impl Deref for Trajectory {
-    type Target = Vec<TrajectoryNode>;
+impl Deref for RayTrajectory {
+    type Target = Vec<RayTrajectoryNode>;
 
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-impl DerefMut for Trajectory {
+impl DerefMut for RayTrajectory {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-impl Trajectory {
+impl RayTrajectory {
     /// Returns `true` if the ray did not hit anything.
     pub fn is_missed(&self) -> bool { self.0.len() <= 1 }
 
     /// Returns the last ray of the trajectory if the ray hit the micro-surface
     /// or was absorbed, `None` in case if the ray did not hit anything.
-    pub fn last(&self) -> Option<&TrajectoryNode> {
+    pub fn last(&self) -> Option<&RayTrajectoryNode> {
         if self.is_missed() {
             None
         } else {
@@ -205,7 +205,7 @@ impl Trajectory {
     /// Returns a mutable reference to the last ray of the trajectory if the ray
     /// hit the micro-surface or was absorbed, `None` in case if the ray did
     /// not hit anything.
-    pub fn last_mut(&mut self) -> Option<&mut TrajectoryNode> {
+    pub fn last_mut(&mut self) -> Option<&mut RayTrajectoryNode> {
         if self.is_missed() {
             None
         } else {

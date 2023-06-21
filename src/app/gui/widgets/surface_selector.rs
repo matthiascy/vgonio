@@ -52,7 +52,7 @@ impl SurfaceSelector {
 
     /// Returns the selected surfaces.
     pub fn selected(&self) -> impl ExactSizeIterator<Item = Handle<MicroSurface>> + '_ {
-        self.selected.iter().map(|s| *s)
+        self.selected.iter().copied()
     }
 
     /// Returns the single selected surface only if the mode of selection is

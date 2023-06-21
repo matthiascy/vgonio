@@ -226,7 +226,7 @@ impl Default for BsdfMeasurementParams {
 
 impl BsdfMeasurementParams {
     /// Returns the number of samples for the emitter.
-    pub fn bsdf_data_samples_count(&self) -> usize { self.emitter.bsdf_data_samples_count() }
+    pub fn bsdf_data_samples_count(&self) -> usize { self.emitter.samples_count() }
 
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, Error> {
@@ -783,7 +783,7 @@ impl MeasurementData {
         debug_assert!(self.kind() == MeasurementKind::MicrofacetAreaDistribution);
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
-        let azimuth_m_idx = self_azimuth.index_of(azimuth_m.into());
+        let azimuth_m_idx = self_azimuth.index_of(azimuth_m);
         let opposite_azimuth_m = azimuth_m.opposite();
         let opposite_index = if self_azimuth.start <= opposite_azimuth_m
             && opposite_azimuth_m <= self_azimuth.stop

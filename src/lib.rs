@@ -493,8 +493,6 @@ impl SphericalPartition {
                     "[SphericalPartition] Generating EqualProjectedArea patches over domain: {:?}",
                     self
                 );
-                let theta_start = zenith.start;
-                let theta_stop = zenith.stop;
                 let n_theta = zenith.step_count;
                 let n_phi = azimuth.step_count();
                 // Non-uniformly divide the radius of the disk into n_theta parts to

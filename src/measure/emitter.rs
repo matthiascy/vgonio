@@ -151,6 +151,7 @@ impl RegionShape {
         }
     }
 
+    // TODO: implement DISK
     pub fn solid_angle(&self) -> SolidAngle {
         match self {
             Self::SphericalCap { zenith } => {
@@ -161,7 +162,8 @@ impl RegionShape {
                 todo!("calculate solid angle of the rectangular patch")
             }
             RegionShape::Disk { .. } => {
-                todo!("calculate solid angle of the disk")
+                log::error!("TODO: calculate solid angle of the disk");
+                steradians!(1.0)
             }
         }
     }
@@ -171,6 +173,13 @@ impl RegionShape {
     pub fn is_spherical_rect(&self) -> bool { matches!(self, Self::SphericalRect { .. }) }
 
     pub fn is_disk(&self) -> bool { matches!(self, Self::Disk { .. }) }
+
+    pub fn disk_radius(&self) -> Option<Radius> {
+        match self {
+            Self::Disk { radius } => Some(*radius),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -201,7 +210,7 @@ impl Emitter {
     /// measurement of the BSDF at a specific position of the emitter; it
     /// contains the measured value for each wavelength for each collector
     /// position.
-    pub fn bsdf_data_samples_count(&self) -> usize {
+    pub fn samples_count(&self) -> usize {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
     }
 

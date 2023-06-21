@@ -13,7 +13,7 @@ use crate::{
     measure::{
         bsdf::{BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
         measurement::BsdfMeasurementParams,
-        rtc::Trajectory,
+        rtc::RayTrajectory,
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
@@ -128,17 +128,15 @@ impl CollectorScheme {
     ) {
         match self {
             CollectorScheme::Partitioned { partition } => match partition {
-                SphericalPartition::EqualAngle { zenith, azimuth } => {
-                    (zenith.clone(), azimuth.clone())
-                }
+                SphericalPartition::EqualAngle { zenith, azimuth } => (*zenith, *azimuth),
                 SphericalPartition::EqualArea { zenith, azimuth }
                 | SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                    (zenith.clone().into(), azimuth.clone())
+                    ((*zenith).into(), *azimuth)
                 }
             },
             CollectorScheme::SingleRegion {
                 zenith, azimuth, ..
-            } => (zenith.clone(), azimuth.clone()),
+            } => (*zenith, *azimuth),
         }
     }
 
@@ -255,7 +253,7 @@ impl Collector {
         params: &BsdfMeasurementParams,
         mesh: &MicroSurfaceMesh,
         position: SphericalCoord,
-        trajectories: &[Trajectory],
+        trajectories: &[RayTrajectory],
         patches: &CollectorPatches,
         cache: &Cache,
     ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
@@ -288,10 +286,19 @@ impl Collector {
         log::debug!("transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
-        let radius = self.radius.estimate(mesh);
-        log::trace!("collector radius: {}", radius);
+        let orbit_radius = self.radius.estimate(mesh);
+        let shape_radius = if let Some(shape) = self.scheme.shape() {
+            shape.disk_radius().map(|r| r.estimate_disk_radius(mesh))
+        } else {
+            None
+        };
         let max_bounces = params.emitter.max_bounces as usize;
         let mut stats = BsdfMeasurementStatsPoint::new(n_wavelengths, max_bounces);
+        log::trace!(
+            "[Collector] Estimated orbit radius: {}, shape radius: {:?}",
+            orbit_radius,
+            shape_radius
+        );
 
         #[derive(Debug, Copy, Clone)]
         struct OutgoingDir {
@@ -320,7 +327,7 @@ impl Collector {
                         // Collect's center is at (0, 0, 0).
                         let a = last.dir.dot(last.dir);
                         let b = 2.0 * last.dir.dot(last.org);
-                        let c = last.org.dot(last.org) - sqr(radius);
+                        let c = last.org.dot(last.org) - sqr(orbit_radius);
                         let p = match solve_quadratic(a, b, c) {
                             QuadraticSolution::None | QuadraticSolution::One(_) => {
                                 unreachable!(
@@ -343,7 +350,7 @@ impl Collector {
             })
             .collect::<Vec<_>>();
 
-        log::trace!("outgoing_dirs: {:?}", outgoing_dirs);
+        // log::trace!("outgoing_dirs: {:?}", outgoing_dirs);
 
         // Calculate the energy of the rays (with wavelength) that intersected the
         // collector's surface.
@@ -372,7 +379,7 @@ impl Collector {
             })
             .collect::<Vec<_>>();
 
-        log::trace!("ray_energy_per_wavelength: {:?}", ray_energy_per_wavelength);
+        // log::trace!("ray_energy_per_wavelength: {:?}", ray_energy_per_wavelength);
 
         // Calculate the energy of the rays (with wavelength) that intersected the
         // collector's surface.
@@ -396,29 +403,33 @@ impl Collector {
                 outgoing_dirs
                     .iter()
                     .filter_map(|outgoing| {
-                        log::trace!(
-                            "    - outgoing.dir: {:?}, in spherical: {:?}",
-                            outgoing.dir,
-                            math::cartesian_to_spherical(
-                                outgoing.dir.into(),
-                                1.0,
-                                Handedness::RightHandedYUp
-                            )
-                        );
-                        log::trace!("    - patch: {:?}", patch);
-                        log::trace!(
-                            "    - patch.contains(outgoing.dir): {:?}",
-                            patch.contains(outgoing.dir)
-                        );
-                        patch
-                            .contains(outgoing.dir)
-                            .then_some((outgoing.idx, outgoing.bounce))
+                        match patch {
+                            Patch::Partitioned(p) => p.contains(outgoing.dir),
+                            Patch::SingleRegion(p) => {
+                                p.contains(outgoing.dir, orbit_radius, shape_radius)
+                            }
+                        }
+                        .then_some((outgoing.idx, outgoing.bounce))
+                        // #[cfg(debug_assertions)]
+                        // {
+                        //     log::trace!(
+                        //         "    - outgoing.dir: {:?}, in spherical:
+                        // {:?}",         outgoing.dir,
+                        //         math::cartesian_to_spherical(
+                        //             outgoing.dir.into(),
+                        //             1.0,
+                        //             Handedness::RightHandedYUp
+                        //         )
+                        //     );
+                        //     log::trace!("    - patch: {:?}", patch);
+                        //     log::trace!("    - patch.contains(outgoing.dir):
+                        // {:?}", contains); }
                     })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
-        log::trace!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
+        // log::trace!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
 
         let data = outgoing_dirs_per_patch
             .iter()
@@ -454,7 +465,12 @@ impl Collector {
                 data_per_patch
             })
             .collect::<Vec<_>>();
-        BsdfMeasurementDataPoint { data, stats }
+        BsdfMeasurementDataPoint {
+            data,
+            stats,
+            #[cfg(debug_assertions)]
+            trajectories: trajectories.to_vec(),
+        }
     }
 }
 
@@ -467,7 +483,7 @@ pub struct CollectorPatches(Vec<Patch>);
 impl CollectorPatches {
     /// Checks if the collector patches match the collector scheme.
     pub fn matches_scheme(&self, scheme: &CollectorScheme) -> bool {
-        debug_assert!(self.0.len() > 0, "Collector patches must not be empty");
+        debug_assert!(!self.0.is_empty(), "Collector patches must not be empty");
         let is_self_partitioned = matches!(self.0[0], Patch::Partitioned(_));
         let is_scheme_partitioned = matches!(scheme, CollectorScheme::Partitioned { .. });
         is_self_partitioned == is_scheme_partitioned
@@ -550,7 +566,12 @@ pub struct PatchSingleRegion {
 
 impl PatchSingleRegion {
     /// Checks if a unit vector (ray direction) falls into the patch.
-    pub fn contains(&self, unit_vector: Vec3A) -> bool {
+    pub fn contains(
+        &self,
+        unit_vector: Vec3A,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
+    ) -> bool {
         // TODO: check if this is correct
         match self.shape {
             RegionShape::SphericalCap { zenith } => {
@@ -571,8 +592,10 @@ impl PatchSingleRegion {
                     && phi <= azimuth_stop
             }
             RegionShape::Disk { .. } => {
-                log::warn!("Disk region shape is not supported yet");
-                false
+                let shape_radius = shape_radius.unwrap();
+                let cos = orbit_radius
+                    / (shape_radius * shape_radius + orbit_radius * orbit_radius).sqrt();
+                unit_vector.dot(self.unit_vector) > cos
             }
         }
     }
@@ -619,14 +642,6 @@ impl Patch {
                 .into(),
             solid_angle: shape.solid_angle(),
         })
-    }
-
-    /// Checks if a unit vector (ray direction) falls into the patch.
-    pub fn contains(&self, unit_vector: Vec3A) -> bool {
-        match self {
-            Self::Partitioned(p) => p.contains(unit_vector),
-            Self::SingleRegion(p) => p.contains(unit_vector),
-        }
     }
 
     /// Returns the patch as a partitioned patch.

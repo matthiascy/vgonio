@@ -14,7 +14,7 @@ use crate::{
         emitter::EmitterSamples,
         measurement::BsdfMeasurementParams,
         rtc,
-        rtc::{Hit, LastHit, Ray, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
+        rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
         Emitter,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
@@ -33,7 +33,7 @@ pub struct RayStreamData {
     /// The last hit of each ray in the stream.
     last_hit: Vec<LastHit>,
     /// The trajectory of each ray in the stream. The trajectory is a list of
-    trajectory: Vec<Trajectory>,
+    trajectory: Vec<RayTrajectory>,
 }
 
 /// Measures the BSDF of the given micro-surface mesh.
@@ -93,7 +93,10 @@ pub fn measure_bsdf(
                     };
                     stream_size
                 ],
-                trajectory: vec![Trajectory(Vec::with_capacity(max_bounces as usize)); stream_size],
+                trajectory: vec![
+                    RayTrajectory(Vec::with_capacity(max_bounces as usize));
+                    stream_size
+                ],
             };
             num_streams
         ];
@@ -150,7 +153,7 @@ pub fn measure_bsdf(
                             let last_node = data.trajectory[i].last_mut().unwrap();
                             last_node.cos = Some(hit.normal.dot(ray.dir));
                             let reflected_dir = fresnel::reflect(ray.dir.into(), hit.normal.into());
-                            data.trajectory[i].push(TrajectoryNode {
+                            data.trajectory[i].push(RayTrajectoryNode {
                                 org: hit.point.into(),
                                 dir: reflected_dir,
                                 cos: None,

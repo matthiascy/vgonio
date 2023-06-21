@@ -6,20 +6,21 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::MeasuredBsdfData,
-        collector::CollectorPatches,
+        bsdf::{BsdfMeasurementDataPoint, MeasuredBsdfData},
+        collector::{BounceAndEnergy, CollectorPatches},
         emitter::EmitterSamples,
         measurement::BsdfMeasurementParams,
-        rtc::{LastHit, Trajectory, TrajectoryNode, MAX_RAY_STREAM_SIZE},
+        rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
         Emitter,
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
+    SphericalCoord,
 };
 use embree::{
     BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
-    IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, SceneFlags, SoAHit, SoARay,
-    ValidMask, ValidityN, INVALID_ID,
+    IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit,
+    SoARay, ValidMask, ValidityN, INVALID_ID,
 };
 use glam::Vec3A;
 use rayon::prelude::*;
@@ -65,7 +66,7 @@ pub struct RayStreamData<'a> {
     /// The trajectory of each ray. Each ray's trajectory is started with the
     /// initial ray and then followed by the rays after each bounce. The cosine
     /// of the incident angle at each bounce is also recorded.
-    trajectory: Vec<Trajectory>,
+    trajectory: Vec<RayTrajectory>,
 }
 
 unsafe impl Send for RayStreamData<'_> {}
@@ -146,7 +147,7 @@ fn intersect_filter_stream<'a>(
                 let new_dir = fresnel::reflect(ray_dir, normal);
                 let last_id = ctx.ext.trajectory[ray_id as usize].len() - 1;
                 ctx.ext.trajectory[ray_id as usize][last_id].cos = Some(ray_dir.dot(normal));
-                ctx.ext.trajectory[ray_id as usize].push(TrajectoryNode {
+                ctx.ext.trajectory[ray_id as usize].push(RayTrajectoryNode {
                     org: point,
                     dir: new_dir,
                     cos: None,
@@ -166,6 +167,9 @@ fn intersect_filter_stream<'a>(
 
 /// Measures the BSDF of a micro-surface mesh.
 ///
+/// Full BSDF means that the BSDF is measured for all the emitter positions
+/// and all the collector patches.
+///
 /// # Arguments
 ///
 /// * `desc` - The BSDF measurement description.
@@ -173,7 +177,7 @@ fn intersect_filter_stream<'a>(
 /// * `cache` - The cache to use.
 /// * `emitter_samples` - The emitter samples.
 /// * `collector_patches` - The collector patches.
-pub fn measure_bsdf(
+pub fn measure_full_bsdf(
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     samples: &EmitterSamples,
@@ -185,11 +189,11 @@ pub fn measure_bsdf(
     scene.set_flags(SceneFlags::ROBUST);
 
     // Calculate emitter's radius to match the surface's dimensions.
-    let orbit_radius = params.emitter.estimate_orbit_radius(mesh);
-    let disk_radius = params.emitter.estimate_disk_radius(mesh);
+    let emitter_orbit_radius = params.emitter.estimate_orbit_radius(mesh);
+    let emitter_shape_radius = params.emitter.estimate_disk_radius(mesh);
     log::debug!("mesh extent: {:?}", mesh.bounds);
-    log::debug!("emitter orbit radius: {}", orbit_radius);
-    log::debug!("emitter disk radius: {:?}", disk_radius);
+    log::debug!("emitter orbit radius: {}", emitter_orbit_radius);
+    log::debug!("emitter disk radius: {:?}", emitter_shape_radius);
     // Upload the surface's mesh to the Embree scene.
     let mut geometry = mesh.as_embree_geometry(&device);
     geometry.set_intersect_filter_function(intersect_filter_stream);
@@ -198,171 +202,232 @@ pub fn measure_bsdf(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    let max_bounces = params.emitter.max_bounces;
-
-    let mut data = vec![];
+    let mut data = Vec::with_capacity(params.emitter.samples_count());
     // Iterate over every incident direction.
     for pos in params.emitter.measurement_points() {
-        println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
-
-        let t = Instant::now();
-        let emitted_rays = Emitter::emit_rays(samples, pos, orbit_radius, disk_radius);
-        let num_emitted_rays = emitted_rays.len();
-        let elapsed = t.elapsed();
-
-        log::debug!(
-            "emitted {} rays with dir: {} from: {} in {} secs.",
-            num_emitted_rays,
-            emitted_rays[0].dir,
+        data.push(measure_bsdf_at_point_inner(
             pos,
-            elapsed.as_secs_f64(),
-        );
-
-        let arc_geom = Arc::new(geometry.clone());
-        let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
-        // In case the number of rays is less than one stream, we need to
-        // adjust the stream size to match the number of rays.
-        let stream_size = if num_streams == 1 {
-            num_emitted_rays
-        } else {
-            MAX_RAY_STREAM_SIZE
-        };
-
-        let mut stream_data = vec![
-            RayStreamData {
-                msurf: arc_geom.clone(),
-                last_hit: vec![
-                    LastHit {
-                        geom_id: INVALID_ID,
-                        prim_id: INVALID_ID,
-                        normal: Vec3A::ZERO,
-                    };
-                    stream_size
-                ],
-                trajectory: vec![Trajectory(Vec::with_capacity(max_bounces as usize)); stream_size],
-            };
-            num_streams
-        ];
-
-        println!(
-            "        {BRIGHT_YELLOW}>{RESET} Trace {} rays ({} streams)",
-            emitted_rays.len(),
-            num_streams
-        );
-
-        emitted_rays
-            .par_chunks(MAX_RAY_STREAM_SIZE)
-            .zip(stream_data.par_iter_mut())
-            // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
-            .enumerate()
-            .for_each(|(i, (rays, data))| {
-                log::trace!("stream {} of {}", i, num_streams);
-                // Populate embree ray stream with generated rays.
-                let chunk_size = rays.len();
-                let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));
-                for (i, mut ray) in ray_hit_n.ray.iter_mut().enumerate() {
-                    ray.set_org(rays[i].org.into());
-                    ray.set_dir(rays[i].dir.into());
-                    ray.set_id(i as u32);
-                    ray.set_tnear(0.0);
-                    ray.set_tfar(f32::INFINITY);
-                }
-
-                for (i, ray) in rays.iter().enumerate() {
-                    data.trajectory[i].push(TrajectoryNode {
-                        org: ray.org.into(),
-                        dir: ray.dir.into(),
-                        cos: None,
-                    });
-                }
-
-                // Trace primary rays with coherent context
-                let mut ctx = QueryContext {
-                    ctx: IntersectContext::coherent(),
-                    ext: data,
-                };
-
-                let mut validities = vec![ValidMask::Valid; chunk_size];
-                let mut bounces = 0;
-                let mut active_rays = validities.len();
-                while bounces < max_bounces && active_rays > 0 {
-                    if bounces != 0 {
-                        ctx.ctx.flags = IntersectContextFlags::INCOHERENT;
-                    }
-
-                    log::trace!(
-                        "------------ bounce {}, active rays {}\n {:?} | {}",
-                        bounces,
-                        active_rays,
-                        ctx.ext.trajectory,
-                        ctx.ext.trajectory.len(),
-                    );
-                    log::trace!("validities: {:?}", validities);
-
-                    scene.intersect_stream_soa(&mut ctx, &mut ray_hit_n);
-
-                    for i in 0..chunk_size {
-                        if validities[i] == ValidMask::Invalid {
-                            continue;
-                        }
-
-                        // Terminate ray if it didn't hit anything.
-                        if !ray_hit_n.hit.is_valid(i) {
-                            validities[i] = ValidMask::Invalid;
-                            active_rays -= 1;
-                            continue;
-                        }
-
-                        // Update the ray with the hit information.
-                        let next_traj = ctx.ext.trajectory[i].last().unwrap();
-                        ray_hit_n.ray.set_org(i, next_traj.org.into());
-                        ray_hit_n.ray.set_dir(i, next_traj.dir.into());
-                        ray_hit_n.ray.set_tnear(i, 0.00001);
-                        ray_hit_n.ray.set_tfar(i, f32::INFINITY);
-                        // Reset the hit information.
-                        ray_hit_n.hit.set_geom_id(i, INVALID_ID);
-                        ray_hit_n.hit.set_prim_id(i, INVALID_ID);
-                    }
-
-                    bounces += 1;
-                }
-
-                log::trace!(
-                    "------------ result {}, active rays: {}, valid rays: {:?}\ntrajectory: {:?} \
-                     | {}",
-                    bounces,
-                    active_rays,
-                    validities,
-                    data.trajectory,
-                    data.trajectory.len(),
-                );
-            });
-        // Extract the trajectory of each ray.
-        let trajectories = stream_data
-            .into_iter()
-            .flat_map(|d| d.trajectory)
-            .collect::<Vec<_>>();
-
-        #[cfg(debug_assertions)]
-        {
-            let collected =
-                params
-                    .collector
-                    .collect(params, mesh, pos, &trajectories, patches, cache);
-            log::debug!("collected stats: {:#?}", collected.stats);
-            log::trace!("collected: {:?}", collected.data);
-            data.push(collected);
-        }
-        #[cfg(not(debug_assertions))]
-        data.push(
-            params
-                .collector
-                .collect(params, mesh, pos, &trajectories, patches, cache),
-        );
+            params,
+            mesh,
+            samples,
+            patches,
+            emitter_orbit_radius,
+            emitter_shape_radius,
+            Arc::new(geometry.clone()),
+            &scene,
+            cache,
+        ))
     }
 
     MeasuredBsdfData {
         params: *params,
         samples: data,
     }
+}
+
+/// Measures the BSDF of micro-surface mesh at the given position.
+/// The BSDF is measured by emitting rays from the given position.
+pub(crate) fn measure_bsdf_at_point(
+    params: &BsdfMeasurementParams,
+    mesh: &MicroSurfaceMesh,
+    samples: &EmitterSamples,
+    patches: &CollectorPatches,
+    cache: &Cache,
+    pos: SphericalCoord,
+) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
+    let device = Device::with_config(Config::default()).unwrap();
+    let mut scene = device.create_scene().unwrap();
+    scene.set_flags(SceneFlags::ROBUST);
+
+    // Calculate emitter's radius to match the surface's dimensions.
+    let emitter_orbit_radius = params.emitter.estimate_orbit_radius(mesh);
+    let emitter_shape_radius = params.emitter.estimate_disk_radius(mesh);
+    log::debug!("mesh extent: {:?}", mesh.bounds);
+    log::debug!("emitter orbit radius: {}", emitter_orbit_radius);
+    log::debug!("emitter disk radius: {:?}", emitter_shape_radius);
+    // Upload the surface's mesh to the Embree scene.
+    let mut geometry = mesh.as_embree_geometry(&device);
+    geometry.set_intersect_filter_function(intersect_filter_stream);
+    geometry.commit();
+
+    scene.attach_geometry(&geometry);
+    scene.commit();
+
+    measure_bsdf_at_point_inner(
+        pos,
+        params,
+        mesh,
+        samples,
+        patches,
+        emitter_orbit_radius,
+        emitter_shape_radius,
+        Arc::new(geometry.clone()),
+        &scene,
+        cache,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn measure_bsdf_at_point_inner(
+    pos: SphericalCoord,
+    params: &BsdfMeasurementParams,
+    mesh: &MicroSurfaceMesh,
+    samples: &EmitterSamples,
+    patches: &CollectorPatches,
+    emitter_orbit_radius: f32,
+    emitter_shape_radius: Option<f32>,
+    geometry: Arc<Geometry>,
+    scene: &Scene,
+    cache: &Cache,
+) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
+    println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
+
+    let t = Instant::now();
+    let emitted_rays = Emitter::emit_rays(samples, pos, emitter_orbit_radius, emitter_shape_radius);
+    let num_emitted_rays = emitted_rays.len();
+    let elapsed = t.elapsed();
+    let max_bounces = params.emitter.max_bounces;
+
+    log::debug!(
+        "emitted {} rays with dir: {} from: {} in {} secs.",
+        num_emitted_rays,
+        emitted_rays[0].dir,
+        pos,
+        elapsed.as_secs_f64(),
+    );
+    let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
+    // In case the number of rays is less than one stream, we need to
+    // adjust the stream size to match the number of rays.
+    let stream_size = if num_streams == 1 {
+        num_emitted_rays
+    } else {
+        MAX_RAY_STREAM_SIZE
+    };
+
+    let mut stream_data = vec![
+        RayStreamData {
+            msurf: geometry.clone(),
+            last_hit: vec![
+                LastHit {
+                    geom_id: INVALID_ID,
+                    prim_id: INVALID_ID,
+                    normal: Vec3A::ZERO,
+                };
+                stream_size
+            ],
+            trajectory: vec![RayTrajectory(Vec::with_capacity(max_bounces as usize)); stream_size],
+        };
+        num_streams
+    ];
+
+    println!(
+        "        {BRIGHT_YELLOW}>{RESET} Trace {} rays ({} streams)",
+        emitted_rays.len(),
+        num_streams
+    );
+
+    emitted_rays
+        .par_chunks(MAX_RAY_STREAM_SIZE)
+        .zip(stream_data.par_iter_mut())
+        // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
+        .enumerate()
+        .for_each(|(i, (rays, data))| {
+            log::trace!("stream {} of {}", i, num_streams);
+            // Populate embree ray stream with generated rays.
+            let chunk_size = rays.len();
+            let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));
+            for (i, mut ray) in ray_hit_n.ray.iter_mut().enumerate() {
+                ray.set_org(rays[i].org.into());
+                ray.set_dir(rays[i].dir.into());
+                ray.set_id(i as u32);
+                ray.set_tnear(0.0);
+                ray.set_tfar(f32::INFINITY);
+            }
+
+            for (i, ray) in rays.iter().enumerate() {
+                data.trajectory[i].push(RayTrajectoryNode {
+                    org: ray.org.into(),
+                    dir: ray.dir.into(),
+                    cos: None,
+                });
+            }
+
+            // Trace primary rays with coherent context
+            let mut ctx = QueryContext {
+                ctx: IntersectContext::coherent(),
+                ext: data,
+            };
+
+            let mut validities = vec![ValidMask::Valid; chunk_size];
+            let mut bounces = 0;
+            let mut active_rays = validities.len();
+            while bounces < max_bounces && active_rays > 0 {
+                if bounces != 0 {
+                    ctx.ctx.flags = IntersectContextFlags::INCOHERENT;
+                }
+                log::trace!(
+                    "------------ bounce {}, active rays {}\n {:?} | {}",
+                    bounces,
+                    active_rays,
+                    ctx.ext.trajectory,
+                    ctx.ext.trajectory.len(),
+                );
+                log::trace!("validities: {:?}", validities);
+
+                scene.intersect_stream_soa(&mut ctx, &mut ray_hit_n);
+
+                for i in 0..chunk_size {
+                    if validities[i] == ValidMask::Invalid {
+                        continue;
+                    }
+
+                    // Terminate ray if it didn't hit anything.
+                    if !ray_hit_n.hit.is_valid(i) {
+                        validities[i] = ValidMask::Invalid;
+                        active_rays -= 1;
+                        continue;
+                    }
+
+                    // Update the ray with the hit information.
+                    let next_traj = ctx.ext.trajectory[i].last().unwrap();
+                    ray_hit_n.ray.set_org(i, next_traj.org.into());
+                    ray_hit_n.ray.set_dir(i, next_traj.dir.into());
+                    ray_hit_n.ray.set_tnear(i, 0.00001);
+                    ray_hit_n.ray.set_tfar(i, f32::INFINITY);
+                    // Reset the hit information.
+                    ray_hit_n.hit.set_geom_id(i, INVALID_ID);
+                    ray_hit_n.hit.set_prim_id(i, INVALID_ID);
+                }
+
+                bounces += 1;
+            }
+
+            log::trace!(
+                "------------ result {}, active rays: {}, valid rays: {:?}\ntrajectory: {:?} | {}",
+                bounces,
+                active_rays,
+                validities,
+                data.trajectory,
+                data.trajectory.len(),
+            );
+        });
+    // Extract the trajectory of each ray.
+    let trajectories = stream_data
+        .into_iter()
+        .flat_map(|d| d.trajectory)
+        .collect::<Vec<_>>();
+
+    #[cfg(debug_assertions)]
+    {
+        let collected = params
+            .collector
+            .collect(params, mesh, pos, &trajectories, patches, cache);
+        log::debug!("collected stats: {:#?}", collected.stats);
+        log::trace!("collected: {:?}", collected.data);
+        collected
+    }
+    #[cfg(not(debug_assertions))]
+    params
+        .collector
+        .collect(params, mesh, pos, &trajectories, patches, cache)
 }

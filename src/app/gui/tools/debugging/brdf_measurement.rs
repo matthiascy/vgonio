@@ -9,11 +9,14 @@ use crate::{
     },
     math,
     measure::{
-        emitter::RegionShape, measurement::BsdfMeasurementParams, rtc::Ray, CollectorScheme,
-        RtcMethod,
+        emitter::RegionShape,
+        measurement::BsdfMeasurementParams,
+        rtc::{embr, Ray},
+        CollectorScheme, RtcMethod,
     },
     msurf::MicroSurface,
-    Handedness,
+    units::Radians,
+    Handedness, SphericalCoord,
 };
 use egui_toast::ToastKind;
 use glam::{IVec2, Vec3};
@@ -58,7 +61,7 @@ impl BrdfMeasurementDebugging {
             ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),
             ray_target: Default::default(),
             ray_mode: RayMode::Cartesian,
-            method: RtcMethod::Grid,
+            method: RtcMethod::Embree,
             prim_id: 0,
             cell_pos: Default::default(),
             ray_params_t: 1.0,
@@ -169,27 +172,32 @@ impl BrdfMeasurementDebugging {
         }
     }
 
+    fn calc_emitter_position(&self) -> (Radians, Radians) {
+        let zenith_step_count = self.params.emitter.zenith.step_count_wrapped();
+        let azimuth_idx = self.emitter_position_index / zenith_step_count as i32;
+        let zenith_idx = self.emitter_position_index % zenith_step_count as i32;
+        let zenith = self.params.emitter.zenith.step(zenith_idx as usize);
+        let azimuth = self.params.emitter.azimuth.step(azimuth_idx as usize);
+        log::trace!(
+            "[BrdfMeasurementDebugging] calc emitter position index: {}, zenith: {}, index={}, \
+             azimuth: {}, index={}",
+            self.emitter_position_index,
+            zenith.to_degrees(),
+            zenith_idx,
+            azimuth.to_degrees(),
+            azimuth_idx
+        );
+        (zenith, azimuth)
+    }
+
     fn update_emitter_position_index(&mut self, delta: i32, record: Option<&MicroSurfaceRecord>) {
         if let Some((orbit_radius, shape_radius)) = self.estimate_emitter_radii(record) {
-            self.orbit_radius = orbit_radius;
-            let zenith_step_count = self.params.emitter.zenith.step_count_wrapped();
-            let azimuth_step_count = self.params.emitter.azimuth.step_count_wrapped();
             self.emitter_position_index = ((self.emitter_position_index + delta).max(0) as usize
-                % (zenith_step_count * azimuth_step_count))
+                % (self.params.emitter.zenith.step_count_wrapped()
+                    * self.params.emitter.azimuth.step_count_wrapped()))
                 as i32;
-            let azimuth_idx = self.emitter_position_index / zenith_step_count as i32;
-            let zenith_idx = self.emitter_position_index % zenith_step_count as i32;
-            let zenith = self.params.emitter.zenith.step(zenith_idx as usize);
-            let azimuth = self.params.emitter.azimuth.step(azimuth_idx as usize);
-            log::trace!(
-                "[BrdfMeasurementDebugging] updating emitter position index: {}, zenith: {}, \
-                 index={}, azimuth: {}, index={}",
-                self.emitter_position_index,
-                zenith.to_degrees(),
-                zenith_idx,
-                azimuth.to_degrees(),
-                azimuth_idx
-            );
+            self.orbit_radius = orbit_radius;
+            let (zenith, azimuth) = self.calc_emitter_position();
             self.event_loop
                 .send_event(VgonioEvent::Debugging(
                     DebuggingEvent::UpdateEmitterPosition {
@@ -207,7 +215,7 @@ impl BrdfMeasurementDebugging {
 impl egui::Widget for &mut BrdfMeasurementDebugging {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
-            ui.label("MicroSurface");
+            ui.label("MicroSurface: ");
             self.selector
                 .ui("brdf_measurement_debugging_surface_selector", ui);
         });
@@ -219,7 +227,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                 .read()
                 .unwrap()
                 .get_micro_surface_record(s)
-                .map(|r| r.clone())
+                .cloned()
         });
 
         egui::CollapsingHeader::new("Emitter")
@@ -466,6 +474,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                     DebuggingEvent::ToggleCollectorDrawing {
                                         status: self.collector_dome_drawing,
                                         scheme: self.params.collector.scheme,
+                                        patches: self.params.collector.generate_patches(),
                                         orbit_radius,
                                         shape_radius,
                                     },
@@ -481,14 +490,33 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                 });
                 self.params.collector.scheme.ui(ui);
             });
+        ui.separator();
 
         ui.horizontal_wrapped(|ui| {
-            ui.label("Method");
+            ui.label("Tracing Method: ");
             #[cfg(feature = "embree")]
             ui.selectable_value(&mut self.method, RtcMethod::Embree, "Embree");
             #[cfg(feature = "optix")]
             ui.selectable_value(&mut self.method, RtcMethod::Optix, "OptiX");
             ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
+            if ui.button("Simulate").clicked() {
+                if let Some(record) = record {
+                    let (zenith, azimuth) = self.calc_emitter_position();
+                    self.event_loop
+                        .send_event(VgonioEvent::Debugging(DebuggingEvent::MeasureOnePoint {
+                            method: self.method,
+                            params: self.params,
+                            surface: record.surf,
+                            mesh: record.mesh,
+                            position: SphericalCoord {
+                                radius: 1.0,
+                                zenith,
+                                azimuth,
+                            },
+                        }))
+                        .unwrap();
+                }
+            }
         });
 
         if self.method == RtcMethod::Grid {
@@ -579,10 +607,8 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
             if ui.button("Trace").clicked() {
                 let ray = match self.ray_mode {
                     RayMode::Cartesian => Ray::new(
-                        self.ray_origin_cartesian.into(),
-                        (self.ray_target - self.ray_origin_cartesian)
-                            .normalize()
-                            .into(),
+                        self.ray_origin_cartesian,
+                        (self.ray_target - self.ray_origin_cartesian).normalize(),
                     ),
                     RayMode::Spherical => {
                         let r = self.ray_origin_spherical.x;
@@ -593,7 +619,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                             r * theta.cos(),
                             r * theta.sin() * phi.sin(),
                         );
-                        Ray::new(origin.into(), (self.ray_target - origin).normalize().into())
+                        Ray::new(origin, (self.ray_target - origin).normalize())
                     }
                 };
                 let event = VgonioEvent::TraceRayDbg {

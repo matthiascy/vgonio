@@ -375,26 +375,38 @@ where
 
     use byteorder::{LittleEndian, ReadBytesExt};
 
-    for i in 0..count {
-        samples[i] = reader.read_f32::<LittleEndian>().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                ParseError {
-                    line: u32::MAX,
-                    position: i as u32 * 4,
-                    kind: ParseErrorKind::NotEnoughData,
-                    encoding: FileEncoding::Binary,
+    let results = samples
+        .iter_mut()
+        .enumerate()
+        .map(|(i, sample)| {
+            let parsed = reader.read_f32::<LittleEndian>().map_err(|e| {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    ParseError {
+                        line: u32::MAX,
+                        position: i as u32 * 4,
+                        kind: ParseErrorKind::NotEnoughData,
+                        encoding: FileEncoding::Binary,
+                    }
+                } else {
+                    ParseError {
+                        line: u32::MAX,
+                        position: i as u32 * 4,
+                        kind: ParseErrorKind::ParseFloat,
+                        encoding: FileEncoding::Binary,
+                    }
                 }
-            } else {
-                ParseError {
-                    line: u32::MAX,
-                    position: i as u32 * 4,
-                    kind: ParseErrorKind::ParseFloat,
-                    encoding: FileEncoding::Binary,
+            });
+            match parsed {
+                Ok(parsed) => {
+                    *sample = parsed;
+                    Ok(())
                 }
+                Err(err) => Err(err),
             }
-        })?;
-    }
+        })
+        .collect::<Result<Vec<_>, ParseError>>();
 
+    results?;
     Ok(())
 }
 
@@ -1413,15 +1425,13 @@ pub mod vgmo {
             let total_energy = f32::from_le_bytes(buf[4..8].try_into().unwrap());
             let mut offset = 8;
             let mut num_rays_per_bounce = vec![0u32; bounces];
-            for i in 0..bounces {
-                num_rays_per_bounce[i] =
-                    u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+            for bounces in num_rays_per_bounce.iter_mut() {
+                *bounces = u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
                 offset += 4;
             }
             let mut energy_per_bounce = vec![0f32; bounces];
-            for i in 0..bounces {
-                energy_per_bounce[i] =
-                    f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+            for energy in energy_per_bounce.iter_mut() {
+                *energy = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
                 offset += 4;
             }
             debug_assert_eq!(offset, size, "Buffer size mismatch");
@@ -1499,7 +1509,12 @@ pub mod vgmo {
                 data.push(PerWavelength(per_wavelength));
             }
 
-            Self { stats, data }
+            Self {
+                stats,
+                data,
+                #[cfg(debug_assertions)]
+                trajectories: vec![],
+            }
         }
 
         /// Writes a single data point to a buffer.

@@ -12,6 +12,7 @@ use crate::{
         collector::{BounceAndEnergy, CollectorPatches, PerPatchData},
         emitter::EmitterSamples,
         measurement::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
+        rtc::RayTrajectory,
         RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
@@ -232,6 +233,9 @@ where
     /// region at different places in the scene. You need to check the collector
     /// to know which one is the case and how to interpret the data.
     pub data: Vec<PerWavelength<PatchData>>,
+    /// Extra ray trajectory data for debugging purposes.
+    #[cfg(debug_assertions)]
+    pub trajectories: Vec<RayTrajectory>,
 }
 
 impl<PatchData: Debug + PerPatchData> Debug for BsdfMeasurementDataPoint<PatchData> {
@@ -319,7 +323,7 @@ fn measure_bsdf_embree_rt(
             Some(MeasurementData {
                 name: surface.file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
-                measured: MeasuredData::Bsdf(embr::measure_bsdf(
+                measured: MeasuredData::Bsdf(embr::measure_full_bsdf(
                     &params, mesh, &samples, &patches, cache,
                 )),
             })

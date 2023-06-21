@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     measure,
     measure::{rtc::Ray, RtcMethod},
-    Handedness,
+    Handedness, SphericalCoord,
 };
 use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
@@ -48,11 +48,12 @@ use crate::{
         },
     },
     measure::{
+        collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
-        CollectorScheme,
+        CollectorScheme, Patch,
     },
-    msurf::MicroSurface,
+    msurf::{MicroSurface, MicroSurfaceMesh},
     units::{Degrees, Radians},
 };
 use winit::{
@@ -154,12 +155,20 @@ pub enum DebuggingEvent {
     ToggleCollectorDrawing {
         status: bool,
         scheme: CollectorScheme,
+        patches: CollectorPatches,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     },
     ToggleEmitterPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
     ToggleEmitterSamplesDrawing(bool),
+    MeasureOnePoint {
+        method: RtcMethod,
+        params: BsdfMeasurementParams,
+        surface: Handle<MicroSurface>,
+        mesh: Handle<MicroSurfaceMesh>,
+        position: SphericalCoord,
+    },
     /// Enable/disable the rendering of the sampling debugger.
     SetSamplingRendering(bool),
     UpdateDepthMap,
@@ -683,8 +692,12 @@ impl VgonioGuiApp {
             cursor_pos: [0.0, 0.0],
         };
 
-        let dbg_drawing_state =
-            DebugDrawingState::new(&gpu_ctx, canvas.format(), event_loop.create_proxy());
+        let dbg_drawing_state = DebugDrawingState::new(
+            &gpu_ctx,
+            canvas.format(),
+            event_loop.create_proxy(),
+            cache.clone(),
+        );
         let msurf_rdr_state = MicroSurfaceRenderingState::new(&gpu_ctx, canvas.format());
 
         let toasts = Toasts::new()
@@ -1000,20 +1013,13 @@ impl VgonioGuiApp {
                     ui_render_output
                         .user_cmds
                         .into_iter()
-                        .chain([main_encoder.finish(), ui_render_output.ui_cmd])
-                        .into_iter(),
+                        .chain([main_encoder.finish(), ui_render_output.ui_cmd]),
                 ),
-                Some(dbg_encoder) => Box::new(
-                    ui_render_output
-                        .user_cmds
-                        .into_iter()
-                        .chain([
-                            main_encoder.finish(),
-                            dbg_encoder.finish(),
-                            ui_render_output.ui_cmd,
-                        ])
-                        .into_iter(),
-                ),
+                Some(dbg_encoder) => Box::new(ui_render_output.user_cmds.into_iter().chain([
+                    main_encoder.finish(),
+                    dbg_encoder.finish(),
+                    ui_render_output.ui_cmd,
+                ])),
             };
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
@@ -1113,12 +1119,14 @@ impl VgonioGuiApp {
                     DebuggingEvent::ToggleCollectorDrawing {
                         status,
                         scheme,
+                        patches,
                         orbit_radius,
                         shape_radius,
                     } => self.dbg_drawing_state.update_collector_drawing(
                         &self.ctx.gpu,
                         status,
                         Some(scheme),
+                        patches,
                         orbit_radius,
                         shape_radius,
                     ),
@@ -1140,6 +1148,20 @@ impl VgonioGuiApp {
                     DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
                         self.dbg_drawing_state.emitter_samples_drawing = status;
                     }
+                    DebuggingEvent::MeasureOnePoint {
+                        method,
+                        params,
+                        surface,
+                        mesh,
+                        position,
+                    } => self.dbg_drawing_state.update_ray_trajectories(
+                        &self.ctx.gpu,
+                        method,
+                        params,
+                        surface,
+                        mesh,
+                        position,
+                    ),
                 }
             }
             VgonioEvent::BsdfViewer(event) => match event {

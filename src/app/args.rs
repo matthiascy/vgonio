@@ -1,10 +1,6 @@
-use crate::{
-    error::Error,
-    io::{CompressionScheme, FileEncoding},
-};
-use glam::DVec2;
+use crate::io::{CompressionScheme, FileEncoding};
 use serde::{Deserialize, Serialize};
-use std::{num::ParseIntError, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]
@@ -100,7 +96,7 @@ impl FromStr for NewSize {
                 "No input provided for new width",
             ))?
             .parse()
-            .map_err(|err| {
+            .map_err(|_| {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to parse new width")
             })?;
         let height: u32 = parts
@@ -110,7 +106,7 @@ impl FromStr for NewSize {
                 "No input provided for new height",
             ))?
             .parse()
-            .map_err(|err| {
+            .map_err(|_| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "Failed to parse new height",

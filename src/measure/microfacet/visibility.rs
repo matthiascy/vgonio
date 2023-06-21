@@ -801,7 +801,7 @@ impl LayeredTexture {
                 array_layer_count: Some(1),
             }));
         }
-        let layer_size_in_bytes = (width * height * format.block_size(None).unwrap() as u32) as u64;
+        let layer_size_in_bytes = (width * height * format.block_size(None).unwrap()) as u64;
         Self {
             format,
             texture,

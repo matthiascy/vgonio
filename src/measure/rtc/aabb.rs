@@ -322,11 +322,11 @@ impl Aabb {
                 }
                 let min = Vec3::new(min[0], min[1], min[2]);
                 let max = Vec3::new(max[0], max[1], max[2]);
-                (min.x <= max.x && min.y <= max.y && min.z <= max.z).then(|| Aabb { min, max })
+                (min.x <= max.x && min.y <= max.y && min.z <= max.z).then_some(Aabb { min, max })
             } else {
                 let min = self.min.max(other.min);
                 let max = self.max.min(other.max);
-                (min.x <= max.x && min.y <= max.y && min.z <= max.z).then(|| Aabb { min, max })
+                (min.x <= max.x && min.y <= max.y && min.z <= max.z).then_some(Aabb { min, max })
             }
         }
     }
@@ -482,7 +482,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
         }
     }
 
-    (t_far >= 0.0).then(|| {
+    (t_far >= 0.0).then_some({
         if t_near >= 0.0 {
             RayAabbIsect::Outside(t_near)
         } else {

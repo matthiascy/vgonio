@@ -193,7 +193,7 @@ impl<C: PlottingControls> PlottingInspector<C> {
                 initial.to_degrees(),
                 range.index_of(initial),
                 opposite.to_degrees(),
-                range.index_of(opposite.into()),
+                range.index_of(opposite),
             );
         }
     }
@@ -748,7 +748,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 CoordinatesFormatter::new(move |p, _| format!("λ = {:.0}nm", p.x * 100.0,)),
             )
             .label_formatter(move |name, value| {
-                if name.starts_with("E") {
+                if name.starts_with('E') {
                     format!(
                         "{}: λ = {:.0}, e = {:.2}%)",
                         name,
@@ -778,7 +778,6 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             .x_grid_spacer(move |input| {
                 let (min, max) = input.bounds;
                 (min as u32..=max as u32)
-                    .into_iter()
                     .map(move |i| GridMark {
                         value: i as f64,
                         step_size: 1.0,

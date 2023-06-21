@@ -34,7 +34,7 @@ impl Simulations {
         Simulations {
             bsdf_sim: BsdfSimulation::new(event_loop.clone()),
             madf_sim: MadfSimulation::new(event_loop.clone()),
-            mmsf_sim: MmsfSimulation::new(event_loop.clone()),
+            mmsf_sim: MmsfSimulation::new(event_loop),
             states: [false; 3],
             tab: SimulationTab::Madf,
         }
