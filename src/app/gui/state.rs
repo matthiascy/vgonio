@@ -847,6 +847,7 @@ impl DebugDrawingState {
         shape_radius: Option<f32>,
     ) {
         log::trace!("[DebugDrawingState] Updating collector drawing");
+        self.collector_scheme = scheme;
         self.collector_dome_drawing = status;
         self.collector_orbit_radius = orbit_radius;
         self.collector_shape_radius = shape_radius.unwrap_or(1.0);
@@ -858,7 +859,6 @@ impl DebugDrawingState {
             "[DebugDrawingState] Collector shape radius: {}",
             self.collector_shape_radius
         );
-        self.collector_scheme = scheme;
         if let Some(scheme) = scheme {
             // Update the buffer accordingly
             match scheme {
@@ -953,7 +953,7 @@ impl DebugDrawingState {
                         todo!("Implement spherical rect drawing")
                     }
                     RegionShape::Disk { .. } => {
-                        log::trace!("[DebuggingState] Generating disk shape");
+                        log::trace!("[DebugDrawingState] Generating disk shape");
                         let mut vertices = vec![Vec3::ZERO; 19];
                         let mut indices = vec![UVec3::ZERO; 18];
                         for i in 0..18 {

@@ -8,7 +8,10 @@ use crate::{
         },
     },
     math,
-    measure::{emitter::RegionShape, measurement::BsdfMeasurementParams, rtc::Ray, RtcMethod},
+    measure::{
+        emitter::RegionShape, measurement::BsdfMeasurementParams, rtc::Ray, CollectorScheme,
+        RtcMethod,
+    },
     msurf::MicroSurface,
     Handedness,
 };
@@ -78,7 +81,10 @@ impl BrdfMeasurementDebugging {
         self.selector.single_selected()
     }
 
-    fn estimate_radii(&self, record: Option<&MicroSurfaceRecord>) -> Option<(f32, Option<f32>)> {
+    fn estimate_emitter_radii(
+        &self,
+        record: Option<&MicroSurfaceRecord>,
+    ) -> Option<(f32, Option<f32>)> {
         match record {
             None => {
                 self.event_loop
@@ -120,8 +126,51 @@ impl BrdfMeasurementDebugging {
         }
     }
 
+    fn estimate_collector_radii(
+        &self,
+        record: Option<&MicroSurfaceRecord>,
+    ) -> Option<(f32, Option<f32>)> {
+        match record {
+            None => {
+                self.event_loop
+                    .send_event(VgonioEvent::Notify {
+                        kind: ToastKind::Warning,
+                        text: "No surface selected to evaluate the radius".to_string(),
+                        time: 1.0,
+                    })
+                    .unwrap();
+                None
+            }
+            Some(record) => {
+                let cache = self.cache.read().unwrap();
+                let mesh = cache
+                    .get_micro_surface_mesh_by_surface_id(record.surf)
+                    .unwrap();
+                let orbit_radius = self.params.collector.radius.estimate(mesh);
+
+                let (radius, disk_radius) = match self.params.collector.scheme {
+                    CollectorScheme::Partitioned { .. } => (orbit_radius, None),
+                    CollectorScheme::SingleRegion { shape, .. } => match shape {
+                        RegionShape::SphericalCap { .. } | RegionShape::SphericalRect { .. } => {
+                            (orbit_radius, None)
+                        }
+                        RegionShape::Disk { radius } => {
+                            (orbit_radius, Some(radius.estimate_disk_radius(mesh)))
+                        }
+                    },
+                };
+                log::trace!(
+                    "[BsdfMeasurementDebugging] evaluated radius: {}, {:?}",
+                    radius,
+                    disk_radius
+                );
+                Some((radius, disk_radius))
+            }
+        }
+    }
+
     fn update_emitter_position_index(&mut self, delta: i32, record: Option<&MicroSurfaceRecord>) {
-        if let Some((orbit_radius, shape_radius)) = self.estimate_radii(record) {
+        if let Some((orbit_radius, shape_radius)) = self.estimate_emitter_radii(record) {
             self.orbit_radius = orbit_radius;
             let zenith_step_count = self.params.emitter.zenith.step_count_wrapped();
             let azimuth_step_count = self.params.emitter.azimuth.step_count_wrapped();
@@ -256,7 +305,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Generate").clicked() {
                                 if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_radii(record.as_ref())
+                                    self.estimate_emitter_radii(record.as_ref())
                                 {
                                     self.orbit_radius = orbit_radius;
                                     self.event_loop
@@ -301,7 +350,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                 .changed()
                             {
                                 if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_radii(record.as_ref())
+                                    self.estimate_emitter_radii(record.as_ref())
                                 {
                                     self.orbit_radius = orbit_radius;
 
@@ -337,7 +386,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                 .changed()
                             {
                                 if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_radii(record.as_ref())
+                                    self.estimate_emitter_radii(record.as_ref())
                                 {
                                     self.event_loop
                                         .send_event(VgonioEvent::Debugging(
@@ -382,7 +431,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                     })
                                     .collect();
                                 if let Some((orbit_radius, _)) =
-                                    self.estimate_radii(record.as_ref())
+                                    self.estimate_emitter_radii(record.as_ref())
                                 {
                                     self.orbit_radius = orbit_radius;
                                     self.event_loop
@@ -410,7 +459,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
 
                     if toggle_res.changed() || button_res.clicked() {
                         if let Some((orbit_radius, shape_radius)) =
-                            self.estimate_radii(record.as_ref())
+                            self.estimate_collector_radii(record.as_ref())
                         {
                             self.event_loop
                                 .send_event(VgonioEvent::Debugging(
