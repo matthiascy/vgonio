@@ -36,7 +36,8 @@ pub(crate) struct BrdfMeasurementDebugging {
     emitter_points_drawing: bool,
     emitter_rays_drawing: bool,
     emitter_samples_drawing: bool,
-    ray_trajectories_drawing: bool,
+    ray_trajectories_drawing_reflected: bool,
+    ray_trajectories_drawing_missed: bool,
     params: BsdfMeasurementParams,
     selector: SurfaceSelector,
     ray_params_t: f32,
@@ -73,7 +74,8 @@ impl BrdfMeasurementDebugging {
             emitter_points_drawing: false,
             emitter_rays_drawing: false,
             emitter_samples_drawing: false,
-            ray_trajectories_drawing: false,
+            ray_trajectories_drawing_reflected: false,
+            ray_trajectories_drawing_missed: false,
             params: BsdfMeasurementParams::default(),
             event_loop,
             orbit_radius: 1.0,
@@ -536,13 +538,25 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
 
         ui.horizontal_wrapped(|ui| {
             ui.label("Ray trajectories: ");
-            if ui
-                .add(ToggleSwitch::new(&mut self.ray_trajectories_drawing))
-                .changed()
-            {
+            ui.label("reflected");
+            let changed0 = ui
+                .add(ToggleSwitch::new(
+                    &mut self.ray_trajectories_drawing_reflected,
+                ))
+                .changed();
+
+            ui.label("missed");
+            let changed1 = ui
+                .add(ToggleSwitch::new(&mut self.ray_trajectories_drawing_missed))
+                .changed();
+
+            if changed0 || changed1 {
                 self.event_loop
                     .send_event(VgonioEvent::Debugging(
-                        DebuggingEvent::ToggleRayTrajectoriesDrawing(self.ray_trajectories_drawing),
+                        DebuggingEvent::ToggleRayTrajectoriesDrawing {
+                            reflected: self.ray_trajectories_drawing_reflected,
+                            missed: self.ray_trajectories_drawing_missed,
+                        },
                     ))
                     .unwrap();
             }

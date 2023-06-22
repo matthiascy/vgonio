@@ -162,7 +162,10 @@ pub enum DebuggingEvent {
     ToggleEmitterPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
     ToggleEmitterSamplesDrawing(bool),
-    ToggleRayTrajectoriesDrawing(bool),
+    ToggleRayTrajectoriesDrawing {
+        missed: bool,
+        reflected: bool,
+    },
     MeasureOnePoint {
         method: RtcMethod,
         params: BsdfMeasurementParams,
@@ -1154,8 +1157,9 @@ impl VgonioGuiApp {
                         params,
                         mesh,
                     ),
-                    DebuggingEvent::ToggleRayTrajectoriesDrawing(status) => {
-                        self.dbg_drawing_state.ray_trajectories_drawing = status;
+                    DebuggingEvent::ToggleRayTrajectoriesDrawing { missed, reflected } => {
+                        self.dbg_drawing_state.ray_trajectories_drawing_reflected = reflected;
+                        self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
                     }
                 }
             }

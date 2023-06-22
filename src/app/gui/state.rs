@@ -342,7 +342,9 @@ pub struct DebugDrawingState {
     /// Ray trajectories hitting the surface.
     pub ray_trajectories_reflected_buffer: Option<wgpu::Buffer>,
     /// Whether to show traced ray trajectories.
-    pub ray_trajectories_drawing: bool,
+    pub ray_trajectories_drawing_reflected: bool,
+    /// Whether to show missed ray trajectories.
+    pub ray_trajectories_drawing_missed: bool,
 
     event_loop: VgonioEventLoop,
     cache: Arc<RwLock<Cache>>,
@@ -652,8 +654,9 @@ impl DebugDrawingState {
             collector_patches: None,
             ray_trajectories_missed_buffer: None,
             cache,
-            ray_trajectories_drawing: false,
+            ray_trajectories_drawing_reflected: false,
             ray_trajectories_reflected_buffer: None,
+            ray_trajectories_drawing_missed: false,
         }
     }
 
@@ -1189,12 +1192,13 @@ impl DebugDrawingState {
                 render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
             }
 
-            if self.ray_trajectories_drawing {
+            if self.ray_trajectories_drawing_reflected || self.ray_trajectories_drawing_missed {
                 render_pass.set_pipeline(&self.lines_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
                 constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
 
-                if let Some(missed_buffer) = &self.ray_trajectories_missed_buffer {
+                if self.ray_trajectories_drawing_missed {
+                    let missed_buffer = self.ray_trajectories_missed_buffer.as_ref().unwrap();
                     constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_MISSED_COLOR);
                     render_pass.set_vertex_buffer(0, missed_buffer.slice(..));
                     render_pass.set_push_constants(
@@ -1205,7 +1209,8 @@ impl DebugDrawingState {
                     render_pass.draw(0..missed_buffer.size() as u32 / 12, 0..1);
                 }
 
-                if let Some(reflected_buffer) = &self.ray_trajectories_reflected_buffer {
+                if self.ray_trajectories_drawing_reflected {
+                    let reflected_buffer = self.ray_trajectories_reflected_buffer.as_ref().unwrap();
                     constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_REFLECTED_COLOR);
                     render_pass.set_vertex_buffer(0, reflected_buffer.slice(..));
                     render_pass.set_push_constants(
