@@ -12,7 +12,7 @@ type: !bsdf
     azimuth: 0deg .. =360deg / 30deg
     shape: !disk
       #zenith: 10deg
-    spectrum: 380 nm .. =780 nm / 10 nm
+    spectrum: 380 nm .. =780 nm / 300 nm
   collector:
     radius: auto
     scheme: !partitioned

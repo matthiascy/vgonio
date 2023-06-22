@@ -1042,59 +1042,66 @@ impl DebugDrawingState {
         match method {
             #[cfg(feature = "embree")]
             RtcMethod::Embree => {
-                let cache = self.cache.read().unwrap();
-                let mesh = cache.get_micro_surface_mesh(mesh).unwrap();
-                let measured = embr::measure_bsdf_at_point(
-                    &params,
-                    mesh,
-                    self.emitter_samples.as_ref().unwrap(),
-                    self.collector_patches.as_ref().unwrap(),
-                    &cache,
-                    SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
-                );
+                #[cfg(debug_assertions)]
+                {
+                    let cache = self.cache.read().unwrap();
+                    let mesh = cache.get_micro_surface_mesh(mesh).unwrap();
+                    let measured = embr::measure_bsdf_at_point(
+                        &params,
+                        mesh,
+                        self.emitter_samples.as_ref().unwrap(),
+                        self.collector_patches.as_ref().unwrap(),
+                        &cache,
+                        SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
+                    );
 
-                let mut reflected = vec![];
-                let mut missed = vec![];
-                for trajectory in measured.trajectories.iter() {
-                    let mut iter = trajectory.0.iter().peekable();
-                    let mut i = 0;
-                    while let Some(node) = iter.next() {
-                        let org: Vec3 = node.org.into();
-                        let dir: Vec3 = node.dir.into();
-                        match iter.peek() {
-                            None => {
-                                // Last node
-                                if i == 0 {
-                                    missed.push(org);
-                                    missed.push(org + dir * self.collector_orbit_radius * 1.2);
-                                } else {
-                                    reflected.push(org);
-                                    reflected.push(org + dir * self.collector_orbit_radius * 1.2);
+                    let mut reflected = vec![];
+                    let mut missed = vec![];
+
+                    for trajectory in measured.trajectories.iter() {
+                        let mut iter = trajectory.0.iter().peekable();
+                        let mut i = 0;
+                        while let Some(node) = iter.next() {
+                            let org: Vec3 = node.org.into();
+                            let dir: Vec3 = node.dir.into();
+                            match iter.peek() {
+                                None => {
+                                    // Last node
+                                    if i == 0 {
+                                        missed.push(org);
+                                        missed.push(org + dir * self.collector_orbit_radius * 1.2);
+                                    } else {
+                                        reflected.push(org);
+                                        reflected
+                                            .push(org + dir * self.collector_orbit_radius * 1.2);
+                                    }
+                                    i += 1;
                                 }
-                                i += 1;
-                            }
-                            Some(next) => {
-                                reflected.push(org);
-                                reflected.push(next.org.into());
-                                i += 1;
+                                Some(next) => {
+                                    reflected.push(org);
+                                    reflected.push(next.org.into());
+                                    i += 1;
+                                }
                             }
                         }
                     }
+                    self.ray_trajectories_missed_buffer = Some(ctx.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("debug-collector-ray-trajectories-missed"),
+                            contents: bytemuck::cast_slice(&missed),
+                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        },
+                    ));
+                    self.ray_trajectories_reflected_buffer = Some(ctx.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("debug-collector-ray-trajectories-reflected"),
+                            contents: bytemuck::cast_slice(&reflected),
+                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        },
+                    ));
                 }
-                self.ray_trajectories_missed_buffer = Some(ctx.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("debug-collector-ray-trajectories-missed"),
-                        contents: bytemuck::cast_slice(&missed),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    },
-                ));
-                self.ray_trajectories_reflected_buffer = Some(ctx.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("debug-collector-ray-trajectories-reflected"),
-                        contents: bytemuck::cast_slice(&reflected),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    },
-                ));
+                #[cfg(not(debug_assertions))]
+                log::error!("Ray trajectories can only be drawn in debug mode");
             }
             #[cfg(feature = "optix")]
             RtcMethod::Optix => {
