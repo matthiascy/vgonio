@@ -102,13 +102,7 @@ pub enum VgonioEvent {
     Quit,
     RequestRedraw,
     OpenFiles(Vec<rfd::FileHandle>),
-    TraceRayDbg {
-        ray: Ray,
-        max_bounces: u32,
-        method: RtcMethod,
-    },
     ToggleSurfaceVisibility,
-    UpdatePrimId(u32),
     UpdateCellPos(IVec2),
     CheckVisibleFacets {
         m_azimuth: Degrees,
@@ -194,6 +188,10 @@ pub enum DebuggingEvent {
         azimuth: Radians,
         orbit_radius: f32,
         shape_radius: Option<f32>,
+    },
+    UpdatePrimitiveId {
+        id: u32,
+        status: bool,
     },
     EmitRays {
         orbit_radius: f32,
@@ -1164,6 +1162,10 @@ impl VgonioGuiApp {
                     }
                     DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
                         self.dbg_drawing_state.collector_ray_hit_points_drawing = status;
+                    }
+                    DebuggingEvent::UpdatePrimitiveId { id, status } => {
+                        self.dbg_drawing_state
+                            .update_surface_primitive_id(id, status);
                     }
                 }
             }

@@ -350,6 +350,10 @@ pub struct DebugDrawingState {
     /// Whether to show missed ray trajectories.
     pub ray_trajectories_drawing_missed: bool,
 
+    /// The surface primitive to draw.
+    surface_primitive_id: u32,
+    surface_primitive_drawing: bool,
+
     event_loop: VgonioEventLoop,
     cache: Arc<RwLock<Cache>>,
 
@@ -664,6 +668,8 @@ impl DebugDrawingState {
             ray_trajectories_drawing_reflected: false,
             ray_trajectories_reflected_buffer: None,
             ray_trajectories_drawing_missed: false,
+            surface_primitive_id: 0,
+            surface_primitive_drawing: false,
         }
     }
 
@@ -1018,6 +1024,8 @@ impl DebugDrawingState {
         }
         self.collector_patches = Some(patches);
     }
+
+    pub fn update_surface_primitive_id(&mut self, id: u32, status: bool) { todo!() }
 
     /// Updates the ray trajectories for the debugging draw calls.
     pub fn update_ray_trajectories(
