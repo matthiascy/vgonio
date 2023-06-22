@@ -23,6 +23,31 @@ fn gen_micro_surface_name() -> String {
     }
 }
 
+/// Offset used when generating [`MicroSurfaceMesh`].
+pub enum HeightOffset {
+    /// Offset the height field by a arbitrary value.
+    Arbitrary(f32),
+    /// Offset the height field so that its minimum height is zero.
+    Grounded,
+    /// Offset the height field so that its median height is zero.
+    Centered,
+    /// Do not offset the height field.
+    None,
+}
+
+impl HeightOffset {
+    /// Evaluates the offset value according to the specified minimum and
+    /// maximum height.
+    pub fn eval(&self, min: f32, max: f32) -> f32 {
+        match self {
+            HeightOffset::Arbitrary(offset) => *offset,
+            HeightOffset::Grounded => -min,
+            HeightOffset::Centered => (min + max) * -0.5,
+            HeightOffset::None => 0.0,
+        }
+    }
+}
+
 /// Alignment used when generating height field.
 #[repr(u32)]
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -466,8 +491,14 @@ impl MicroSurface {
 
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
     /// The triangulation is done in the XZ plane.
-    pub fn as_micro_surface_mesh(&self) -> MicroSurfaceMesh {
-        let (verts, extent) = self.generate_vertices(AxisAlignment::XZ);
+    pub fn as_micro_surface_mesh(&self, offset: HeightOffset) -> MicroSurfaceMesh {
+        let height_offset = match offset {
+            HeightOffset::Arbitrary(val) => val,
+            HeightOffset::Centered => -0.5 * (self.min + self.max),
+            HeightOffset::Grounded => -self.min,
+            HeightOffset::None => 0.0,
+        };
+        let (verts, extent) = self.generate_vertices(AxisAlignment::XZ, height_offset);
         let tri_faces = regular_grid_triangulation(self.rows, self.cols);
         let num_faces = tri_faces.len() / 3;
 
@@ -494,12 +525,17 @@ impl MicroSurface {
             facet_areas: areas,
             msurf: self.uuid,
             unit: self.unit,
+            height_offset,
         }
     }
 
     /// Triangulate the heightfield then convert it into a [`RenderableMesh`].
-    pub fn as_renderable_mesh(&self, device: &wgpu::Device) -> RenderableMesh {
-        RenderableMesh::from_micro_surface(device, self)
+    pub fn as_renderable_mesh(
+        &self,
+        device: &wgpu::Device,
+        offset: HeightOffset,
+    ) -> RenderableMesh {
+        RenderableMesh::from_micro_surface(device, self, offset)
     }
 
     /// Generate vertices from the height values.
@@ -507,7 +543,11 @@ impl MicroSurface {
     /// The vertices are generated following the order from left to right, top
     /// to bottom. The vertices are also aligned to the given axis. The center
     /// of the heightfield is at the origin.
-    pub(crate) fn generate_vertices(&self, alignment: AxisAlignment) -> (Vec<Vec3>, Aabb) {
+    pub(crate) fn generate_vertices(
+        &self,
+        alignment: AxisAlignment,
+        height_offset: f32,
+    ) -> (Vec<Vec3>, Aabb) {
         log::info!(
             "Generating height field vertices with {:?} alignment",
             alignment
@@ -526,7 +566,7 @@ impl MicroSurface {
             for c in 0..cols {
                 let u = (c as f32 - half_cols as f32) * du;
                 let v = (r as f32 - half_rows as f32) * dv;
-                let h = self.samples[r * cols + c];
+                let h = self.samples[r * cols + c] + height_offset;
                 let p = match alignment {
                     AxisAlignment::XY => Vec3::new(u, v, h),
                     AxisAlignment::XZ => Vec3::new(u, h, v),
@@ -648,6 +688,9 @@ pub struct MicroSurfaceMesh {
     /// Axis-aligned bounding box of the mesh.
     pub bounds: Aabb,
 
+    /// Height offset applied to original heightfield.
+    pub height_offset: f32,
+
     /// Number of triangles in the mesh.
     pub num_facets: usize,
 
@@ -708,8 +751,8 @@ impl MicroSurface {
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
     ///
-    /// 1. Ascii Matrix file (plain text) coming from
-    ///    Predicting Appearance from Measured Microgeometry of Metal Surfaces.
+    /// 1. Ascii Matrix file (plain text) coming from Predicting Appearance from
+    ///    Measured Microgeometry of Metal Surfaces.
     ///
     /// 2. Plain text data coming from µsurf confocal microscope system.
     ///

@@ -36,10 +36,10 @@ pub struct PerMicroSurfaceState {
     pub min: f32,
     /// The highest value of the micro surface.
     pub max: f32,
+    /// The offset along the y-axis.
+    pub height_offset: f32,
     /// Size of the micro-surface.
     pub size: (u32, u32),
-    /// Offset along the Y axis without scaling.
-    pub y_offset: f32,
 }
 
 /// Outliner is a widget that displays the scene graph of the current scene.
@@ -99,6 +99,7 @@ impl Outliner {
             if let std::collections::hash_map::Entry::Vacant(e) = self.surfaces.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
                 let surf = cache.get_micro_surface(*e.key()).unwrap();
+                let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
                 e.insert((
                     SurfaceCollapsableHeader { selected: false },
                     PerMicroSurfaceState {
@@ -108,8 +109,8 @@ impl Outliner {
                         unit: surf.unit,
                         min: surf.min,
                         max: surf.max,
+                        height_offset: mesh.height_offset,
                         size: (surf.rows as u32, surf.cols as u32),
-                        y_offset: 0.0,
                     },
                 ));
             }
@@ -174,51 +175,22 @@ impl SurfaceCollapsableHeader {
                             state.size.0, state.size.1
                         )));
                         ui.end_row();
+
                         ui.add(egui::Label::new("Min:"));
                         ui.add(egui::Label::new(format!("{:.4} {}", state.min, state.unit)));
                         ui.end_row();
+
                         ui.add(egui::Label::new("Max:"));
                         ui.add(egui::Label::new(format!("{:.4} {}", state.max, state.unit)));
                         ui.end_row();
-                        ui.add(egui::Label::new(format!("Y Offset ({}):", state.unit)))
-                            .on_hover_text(
-                                "Offset along the Y axis without scaling. (Visual only - does not \
-                                 affect the actual surface)",
-                            );
-                        ui.add(
-                            egui::Slider::new(&mut state.y_offset, -100.0..=100.0)
-                                .trailing_fill(true),
-                        );
-                        ui.end_row();
-                        ui.add(egui::Label::new(""));
-                        ui.horizontal_wrapped(|ui| {
-                            if ui
-                                .add(egui::Button::new("Median"))
-                                .on_hover_text(
-                                    "Sets the Y offset to median value of the surface heights",
-                                )
-                                .clicked()
-                            {
-                                state.y_offset = -(state.min + state.max) * 0.5;
-                            }
-                            if ui
-                                .add(egui::Button::new("Ground"))
-                                .on_hover_text(
-                                    "Adjusts its position so that the minimum height value is at \
-                                     the ground level.",
-                                )
-                                .clicked()
-                            {
-                                state.y_offset = -state.min;
-                            }
-                        });
-                        ui.end_row();
+
                         ui.add(egui::Label::new("Scale:")).on_hover_text(
                             "Scales the surface visually. Doest not affect the actual surface.",
                         );
                         ui.add(
                             egui::Slider::new(&mut state.scale, 0.005..=1.5).trailing_fill(true),
                         );
+                        ui.end_row();
                     });
             });
     }

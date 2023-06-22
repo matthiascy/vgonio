@@ -5,7 +5,7 @@ use crate::{
         Config,
     },
     measure::measurement::MeasurementData,
-    msurf::{MicroSurface, MicroSurfaceMesh},
+    msurf::{HeightOffset, MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Error, Medium,
 };
@@ -379,7 +379,7 @@ impl Cache {
                     log::debug!("-- loading: {}", filepath.display());
                     let msurf = MicroSurface::read_from_file(&filepath, None)?;
                     let msurf_hdl = Handle::with_id(msurf.uuid);
-                    let mesh = msurf.as_micro_surface_mesh();
+                    let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded);
                     let mesh_hdl = Handle::new();
                     self.msurfs.insert(msurf_hdl, msurf);
                     self.meshes.insert(mesh_hdl, mesh);
@@ -495,7 +495,7 @@ impl Cache {
                         log::debug!("-- loading: {}", filepath.display());
                         let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
                         let msurf_hdl = Handle::with_id(msurf.uuid);
-                        let mesh = msurf.as_micro_surface_mesh();
+                        let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded);
                         let mesh_hdl = Handle::new();
                         self.msurfs.insert(msurf_hdl, msurf);
                         self.meshes.insert(mesh_hdl, mesh);

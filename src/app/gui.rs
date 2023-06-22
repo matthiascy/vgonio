@@ -844,13 +844,10 @@ impl VgonioGuiApp {
                     .iter()
                     .position(|h| *h == **hdl)
                     .unwrap();
-                buf[0..16].copy_from_slice(
-                    &Mat4::from_translation(Vec3::new(0.0, state.y_offset * state.scale, 0.0))
-                        .to_cols_array(),
-                );
+                buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
                 buf[16..20].copy_from_slice(&[
-                    state.min,
-                    state.max,
+                    state.min + state.height_offset,
+                    state.max + state.height_offset,
                     state.max - state.min,
                     state.scale,
                 ]);

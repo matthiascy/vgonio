@@ -1,7 +1,9 @@
 use crate::{
     app::{cache::Asset, gfx::VertexLayout},
     measure::rtc::Aabb,
-    msurf::{regular_grid_triangulation, AxisAlignment, MicroSurface, MicroSurfaceMesh},
+    msurf::{
+        regular_grid_triangulation, AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh,
+    },
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
@@ -30,11 +32,13 @@ impl RenderableMesh {
         device: &wgpu::Device,
         surf: &MicroSurface,
         id: Uuid,
+        offset: HeightOffset,
     ) -> Self {
         use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
         let (cols, rows) = (surf.cols, surf.rows);
-        let (positions, extent) = surf.generate_vertices(AxisAlignment::XZ);
+        let (positions, extent) =
+            surf.generate_vertices(AxisAlignment::XZ, offset.eval(surf.min, surf.max));
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
         let indices: Vec<u32> = regular_grid_triangulation(rows, cols);
@@ -74,8 +78,13 @@ impl RenderableMesh {
         }
     }
 
-    pub fn from_micro_surface(device: &wgpu::Device, surf: &MicroSurface) -> Self {
-        Self::from_micro_surface_with_id(device, surf, Uuid::new_v4())
+    /// Creates a new [`RenderableMesh`] directly from a [`MicroSurface`].
+    pub fn from_micro_surface(
+        device: &wgpu::Device,
+        surf: &MicroSurface,
+        offset: HeightOffset,
+    ) -> Self {
+        Self::from_micro_surface_with_id(device, surf, Uuid::new_v4(), offset)
     }
 
     pub fn from_micro_surface_mesh_with_id(
