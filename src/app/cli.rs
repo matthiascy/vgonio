@@ -80,7 +80,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
                         desc: MeasurementKindDescription::Bsdf(BsdfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
-                    FastMeasurementKind::MicrofacetNormalDistribution => Measurement {
+                    FastMeasurementKind::MicrofacetAreaDistribution => Measurement {
                         desc: MeasurementKindDescription::Madf(MadfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },

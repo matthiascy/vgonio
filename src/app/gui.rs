@@ -162,12 +162,11 @@ pub enum DebuggingEvent {
     ToggleEmitterPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
     ToggleEmitterSamplesDrawing(bool),
+    ToggleRayTrajectoriesDrawing(bool),
     MeasureOnePoint {
         method: RtcMethod,
         params: BsdfMeasurementParams,
-        surface: Handle<MicroSurface>,
         mesh: Handle<MicroSurfaceMesh>,
-        position: SphericalCoord,
     },
     /// Enable/disable the rendering of the sampling debugger.
     SetSamplingRendering(bool),
@@ -1151,17 +1150,16 @@ impl VgonioGuiApp {
                     DebuggingEvent::MeasureOnePoint {
                         method,
                         params,
-                        surface,
                         mesh,
-                        position,
                     } => self.dbg_drawing_state.update_ray_trajectories(
                         &self.ctx.gpu,
                         method,
                         params,
-                        surface,
                         mesh,
-                        position,
                     ),
+                    DebuggingEvent::ToggleRayTrajectoriesDrawing(status) => {
+                        self.dbg_drawing_state.ray_trajectories_drawing = status;
+                    }
                 }
             }
             VgonioEvent::BsdfViewer(event) => match event {

@@ -1,3 +1,5 @@
+#[cfg(feature = "embree")]
+use crate::measure::rtc::embr;
 use crate::{
     app::{
         cache::{Cache, Handle, MicroSurfaceRecord},
@@ -9,10 +11,8 @@ use crate::{
     },
     math,
     measure::{
-        emitter::RegionShape,
-        measurement::BsdfMeasurementParams,
-        rtc::{embr, Ray},
-        CollectorScheme, RtcMethod,
+        emitter::RegionShape, measurement::BsdfMeasurementParams, rtc::Ray, CollectorScheme,
+        RtcMethod,
     },
     msurf::MicroSurface,
     units::Radians,
@@ -36,6 +36,7 @@ pub(crate) struct BrdfMeasurementDebugging {
     emitter_points_drawing: bool,
     emitter_rays_drawing: bool,
     emitter_samples_drawing: bool,
+    ray_trajectories_drawing: bool,
     params: BsdfMeasurementParams,
     selector: SurfaceSelector,
     ray_params_t: f32,
@@ -61,7 +62,10 @@ impl BrdfMeasurementDebugging {
             ray_origin_spherical: Vec3::new(5.0, 0.0, 0.0),
             ray_target: Default::default(),
             ray_mode: RayMode::Cartesian,
+            #[cfg(feature = "embree")]
             method: RtcMethod::Embree,
+            #[cfg(not(feature = "embree"))]
+            method: RtcMethod::Grid,
             prim_id: 0,
             cell_pos: Default::default(),
             ray_params_t: 1.0,
@@ -69,6 +73,7 @@ impl BrdfMeasurementDebugging {
             emitter_points_drawing: false,
             emitter_rays_drawing: false,
             emitter_samples_drawing: false,
+            ray_trajectories_drawing: false,
             params: BsdfMeasurementParams::default(),
             event_loop,
             orbit_radius: 1.0,
@@ -501,18 +506,11 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
             ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
             if ui.button("Simulate").clicked() {
                 if let Some(record) = record {
-                    let (zenith, azimuth) = self.calc_emitter_position();
                     self.event_loop
                         .send_event(VgonioEvent::Debugging(DebuggingEvent::MeasureOnePoint {
                             method: self.method,
                             params: self.params,
-                            surface: record.surf,
                             mesh: record.mesh,
-                            position: SphericalCoord {
-                                radius: 1.0,
-                                zenith,
-                                azimuth,
-                            },
                         }))
                         .unwrap();
                 }
@@ -535,6 +533,20 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                 }
             });
         }
+
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Ray trajectories: ");
+            if ui
+                .add(ToggleSwitch::new(&mut self.ray_trajectories_drawing))
+                .changed()
+            {
+                self.event_loop
+                    .send_event(VgonioEvent::Debugging(
+                        DebuggingEvent::ToggleRayTrajectoriesDrawing(self.ray_trajectories_drawing),
+                    ))
+                    .unwrap();
+            }
+        });
 
         ui.horizontal_wrapped(|ui| {
             ui.label("prim id");

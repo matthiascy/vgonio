@@ -22,18 +22,22 @@ use crate::{
         gui::VgonioEventLoop,
     },
     math,
-    math::spherical_to_cartesian,
     measure::{
         collector::CollectorPatches,
         emitter::{EmitterSamples, RegionShape},
         measurement::BsdfMeasurementParams,
-        rtc::{embr, Ray, RayTrajectoryNode},
+        rtc::{Ray, RayTrajectoryNode},
         CollectorScheme, Emitter, Patch, RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
     units::{rad, Radians},
     Handedness, SphericalCoord,
 };
+
+#[cfg(feature = "embree")]
+use crate::measure::rtc::embr;
+
+use crate::measure::rtc;
 use egui_toast::ToastKind;
 use glam::{Mat3, Mat4, UVec3, Vec3};
 use std::{
@@ -333,8 +337,12 @@ pub struct DebugDrawingState {
     pub collector_dome_index_buffer: Option<wgpu::Buffer>,
     /// Collector's patches.
     pub collector_patches: Option<CollectorPatches>,
-    /// Ray trajectories buffer.
-    pub collector_ray_trajectories_buffer: Option<wgpu::Buffer>,
+    /// Ray trajectories not hitting the surface.
+    pub ray_trajectories_missed_buffer: Option<wgpu::Buffer>,
+    /// Ray trajectories hitting the surface.
+    pub ray_trajectories_reflected_buffer: Option<wgpu::Buffer>,
+    /// Whether to show traced ray trajectories.
+    pub ray_trajectories_drawing: bool,
 
     event_loop: VgonioEventLoop,
     cache: Arc<RwLock<Cache>>,
@@ -351,7 +359,8 @@ impl DebugDrawingState {
     pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
     pub const COLLECTOR_COLOR: [f32; 4] = [0.2, 0.5, 0.7, 0.5];
-    pub const COLLECTOR_RAY_TRAJECTORIES_COLOR: [f32; 4] = [0.6, 0.3, 0.4, 0.3];
+    pub const RAY_TRAJECTORIES_MISSED_COLOR: [f32; 4] = [0.6, 0.3, 0.4, 0.2];
+    pub const RAY_TRAJECTORIES_REFLECTED_COLOR: [f32; 4] = [0.45, 0.5, 0.4, 0.3];
 
     pub fn new(
         ctx: &GpuContext,
@@ -636,14 +645,15 @@ impl DebugDrawingState {
             drawing_msurf_prims: false,
             collector_orbit_radius: 1.0,
             collector_dome_drawing: false,
-            // collector_patch_center_buffer: (),
             event_loop,
             collector_shape_index_buffer,
             collector_scheme: None,
             collector_shape_radius: 1.0,
-            collector_ray_trajectories_buffer: None,
             collector_patches: None,
+            ray_trajectories_missed_buffer: None,
             cache,
+            ray_trajectories_drawing: false,
+            ray_trajectories_reflected_buffer: None,
         }
     }
 
@@ -886,25 +896,25 @@ impl DebugDrawingState {
                             Patch::Partitioned(p) => {
                                 let (phi_a, phi_b) = p.azimuth;
                                 let (theta_a, theta_b) = p.zenith;
-                                vertices[i * 4] = spherical_to_cartesian(
+                                vertices[i * 4] = math::spherical_to_cartesian(
                                     1.0,
                                     theta_a,
                                     phi_a,
                                     Handedness::RightHandedYUp,
                                 );
-                                vertices[i * 4 + 1] = spherical_to_cartesian(
+                                vertices[i * 4 + 1] = math::spherical_to_cartesian(
                                     1.0,
                                     theta_a,
                                     phi_b,
                                     Handedness::RightHandedYUp,
                                 );
-                                vertices[i * 4 + 2] = spherical_to_cartesian(
+                                vertices[i * 4 + 2] = math::spherical_to_cartesian(
                                     1.0,
                                     theta_b,
                                     phi_b,
                                     Handedness::RightHandedYUp,
                                 );
-                                vertices[i * 4 + 3] = spherical_to_cartesian(
+                                vertices[i * 4 + 3] = math::spherical_to_cartesian(
                                     1.0,
                                     theta_b,
                                     phi_a,
@@ -1005,9 +1015,7 @@ impl DebugDrawingState {
         ctx: &GpuContext,
         method: RtcMethod,
         params: BsdfMeasurementParams,
-        surface: Handle<MicroSurface>,
         mesh: Handle<MicroSurfaceMesh>,
-        position: SphericalCoord,
     ) {
         if self.emitter_samples.is_none() {
             self.event_loop
@@ -1044,34 +1052,46 @@ impl DebugDrawingState {
                     &cache,
                     SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
                 );
-                let vertices = measured
-                    .trajectories
-                    .iter()
-                    .flat_map(|trajectory| {
-                        let mut iter = trajectory.0.iter().peekable();
-                        let mut lines: Vec<Vec3> = vec![];
-                        while let Some(node) = iter.next() {
-                            let org: Vec3 = node.org.into();
-                            let dir: Vec3 = node.dir.into();
-                            match iter.peek() {
-                                None => {
-                                    // Last node
-                                    lines.push(org);
-                                    lines.push(org + dir * self.collector_orbit_radius * 1.2);
+
+                let mut reflected = vec![];
+                let mut missed = vec![];
+                for trajectory in measured.trajectories.iter() {
+                    let mut iter = trajectory.0.iter().peekable();
+                    let mut i = 0;
+                    while let Some(node) = iter.next() {
+                        let org: Vec3 = node.org.into();
+                        let dir: Vec3 = node.dir.into();
+                        match iter.peek() {
+                            None => {
+                                // Last node
+                                if i == 0 {
+                                    missed.push(org);
+                                    missed.push(org + dir * self.collector_orbit_radius * 1.2);
+                                } else {
+                                    reflected.push(org);
+                                    reflected.push(org + dir * self.collector_orbit_radius * 1.2);
                                 }
-                                Some(next) => {
-                                    lines.push(org);
-                                    lines.push(next.org.into());
-                                }
+                                i += 1;
+                            }
+                            Some(next) => {
+                                reflected.push(org);
+                                reflected.push(next.org.into());
+                                i += 1;
                             }
                         }
-                        lines
-                    })
-                    .collect::<Vec<Vec3>>();
-                self.collector_ray_trajectories_buffer = Some(ctx.device.create_buffer_init(
+                    }
+                }
+                self.ray_trajectories_missed_buffer = Some(ctx.device.create_buffer_init(
                     &wgpu::util::BufferInitDescriptor {
-                        label: Some("debug-collector-ray-trajectories"),
-                        contents: bytemuck::cast_slice(&vertices),
+                        label: Some("debug-collector-ray-trajectories-missed"),
+                        contents: bytemuck::cast_slice(&missed),
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    },
+                ));
+                self.ray_trajectories_reflected_buffer = Some(ctx.device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("debug-collector-ray-trajectories-reflected"),
+                        contents: bytemuck::cast_slice(&reflected),
                         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                     },
                 ));
@@ -1162,18 +1182,32 @@ impl DebugDrawingState {
                 render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
             }
 
-            if let Some(buffer) = &self.collector_ray_trajectories_buffer {
+            if self.ray_trajectories_drawing {
                 render_pass.set_pipeline(&self.lines_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, buffer.slice(..));
                 constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-                constants[16..20].copy_from_slice(&Self::COLLECTOR_RAY_TRAJECTORIES_COLOR);
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    0,
-                    bytemuck::cast_slice(&constants),
-                );
-                render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+
+                if let Some(missed_buffer) = &self.ray_trajectories_missed_buffer {
+                    constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_MISSED_COLOR);
+                    render_pass.set_vertex_buffer(0, missed_buffer.slice(..));
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        0,
+                        bytemuck::cast_slice(&constants),
+                    );
+                    render_pass.draw(0..missed_buffer.size() as u32 / 12, 0..1);
+                }
+
+                if let Some(reflected_buffer) = &self.ray_trajectories_reflected_buffer {
+                    constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_REFLECTED_COLOR);
+                    render_pass.set_vertex_buffer(0, reflected_buffer.slice(..));
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        0,
+                        bytemuck::cast_slice(&constants),
+                    );
+                    render_pass.draw(0..reflected_buffer.size() as u32 / 12, 0..1);
+                }
             }
 
             if self.collector_dome_drawing {
