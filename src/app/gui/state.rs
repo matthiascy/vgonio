@@ -1057,7 +1057,7 @@ impl DebugDrawingState {
                                 None => {
                                     // Last node
                                     lines.push(org);
-                                    lines.push(org + dir);
+                                    lines.push(org + dir * self.collector_orbit_radius * 1.2);
                                 }
                                 Some(next) => {
                                     lines.push(org);
