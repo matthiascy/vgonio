@@ -1514,6 +1514,8 @@ pub mod vgmo {
                 data,
                 #[cfg(debug_assertions)]
                 trajectories: vec![],
+                #[cfg(debug_assertions)]
+                hit_points: vec![],
             }
         }
 

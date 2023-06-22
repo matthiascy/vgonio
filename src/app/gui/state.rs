@@ -26,10 +26,10 @@ use crate::{
         collector::CollectorPatches,
         emitter::{EmitterSamples, RegionShape},
         measurement::BsdfMeasurementParams,
-        rtc::{Ray, RayTrajectoryNode},
+        rtc::Ray,
         CollectorScheme, Emitter, Patch, RtcMethod,
     },
-    msurf::{MicroSurface, MicroSurfaceMesh},
+    msurf::MicroSurfaceMesh,
     units::{rad, Radians},
     Handedness, SphericalCoord,
 };
@@ -37,7 +37,6 @@ use crate::{
 #[cfg(feature = "embree")]
 use crate::measure::rtc::embr;
 
-use crate::measure::rtc;
 use egui_toast::ToastKind;
 use glam::{Mat3, Mat4, UVec3, Vec3};
 use std::{
@@ -337,6 +336,11 @@ pub struct DebugDrawingState {
     pub collector_dome_index_buffer: Option<wgpu::Buffer>,
     /// Collector's patches.
     pub collector_patches: Option<CollectorPatches>,
+    /// Points on the collector's surface. (Rays hitting the collector's
+    /// surface)
+    pub collector_ray_hit_points_buffer: Option<wgpu::Buffer>,
+    /// Whether to show ray hit points on the collector's surface.
+    pub collector_ray_hit_points_drawing: bool,
     /// Ray trajectories not hitting the surface.
     pub ray_trajectories_missed_buffer: Option<wgpu::Buffer>,
     /// Ray trajectories hitting the surface.
@@ -361,6 +365,7 @@ impl DebugDrawingState {
     pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];
     pub const COLLECTOR_COLOR: [f32; 4] = [0.2, 0.5, 0.7, 0.5];
+    pub const RAY_HIT_POINTS_COLOR: [f32; 4] = [1.0, 0.1, 0.1, 1.0];
     pub const RAY_TRAJECTORIES_MISSED_COLOR: [f32; 4] = [0.6, 0.3, 0.4, 0.2];
     pub const RAY_TRAJECTORIES_REFLECTED_COLOR: [f32; 4] = [0.45, 0.5, 0.4, 0.3];
 
@@ -652,6 +657,8 @@ impl DebugDrawingState {
             collector_scheme: None,
             collector_shape_radius: 1.0,
             collector_patches: None,
+            collector_ray_hit_points_buffer: None,
+            collector_ray_hit_points_drawing: false,
             ray_trajectories_missed_buffer: None,
             cache,
             ray_trajectories_drawing_reflected: false,
@@ -891,7 +898,7 @@ impl DebugDrawingState {
         if let Some(scheme) = scheme {
             // Update the buffer accordingly
             match scheme {
-                CollectorScheme::Partitioned { partition } => {
+                CollectorScheme::Partitioned { .. } => {
                     let mut vertices = vec![Vec3::ZERO; patches.len() * 4];
                     let mut indices = vec![0u32; patches.len() * 8];
                     for (i, patch) in patches.iter().enumerate() {
@@ -1102,6 +1109,13 @@ impl DebugDrawingState {
                             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                         },
                     ));
+                    self.collector_ray_hit_points_buffer = Some(ctx.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("debug-collector-ray-hit-points"),
+                            contents: bytemuck::cast_slice(&measured.hit_points),
+                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        },
+                    ));
                 }
                 #[cfg(not(debug_assertions))]
                 log::error!("Ray trajectories can only be drawn in debug mode");
@@ -1198,28 +1212,47 @@ impl DebugDrawingState {
                 constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
 
                 if self.ray_trajectories_drawing_missed {
-                    let missed_buffer = self.ray_trajectories_missed_buffer.as_ref().unwrap();
-                    constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_MISSED_COLOR);
-                    render_pass.set_vertex_buffer(0, missed_buffer.slice(..));
-                    render_pass.set_push_constants(
-                        wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&constants),
-                    );
-                    render_pass.draw(0..missed_buffer.size() as u32 / 12, 0..1);
+                    if let Some(missed_buffer) = &self.ray_trajectories_missed_buffer {
+                        constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_MISSED_COLOR);
+                        render_pass.set_vertex_buffer(0, missed_buffer.slice(..));
+                        render_pass.set_push_constants(
+                            wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            0,
+                            bytemuck::cast_slice(&constants),
+                        );
+                        render_pass.draw(0..missed_buffer.size() as u32 / 12, 0..1);
+                    }
                 }
 
                 if self.ray_trajectories_drawing_reflected {
-                    let reflected_buffer = self.ray_trajectories_reflected_buffer.as_ref().unwrap();
-                    constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_REFLECTED_COLOR);
-                    render_pass.set_vertex_buffer(0, reflected_buffer.slice(..));
-                    render_pass.set_push_constants(
-                        wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&constants),
-                    );
-                    render_pass.draw(0..reflected_buffer.size() as u32 / 12, 0..1);
+                    if let Some(reflected_buffer) = &self.ray_trajectories_reflected_buffer {
+                        constants[16..20].copy_from_slice(&Self::RAY_TRAJECTORIES_REFLECTED_COLOR);
+                        render_pass.set_vertex_buffer(0, reflected_buffer.slice(..));
+                        render_pass.set_push_constants(
+                            wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            0,
+                            bytemuck::cast_slice(&constants),
+                        );
+                        render_pass.draw(0..reflected_buffer.size() as u32 / 12, 0..1);
+                    }
                 }
+            }
+
+            if self.collector_ray_hit_points_drawing
+                && self.collector_ray_hit_points_buffer.is_some()
+            {
+                let buffer = self.collector_ray_hit_points_buffer.as_ref().unwrap();
+                render_pass.set_pipeline(&self.points_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, buffer.slice(..));
+                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                constants[16..20].copy_from_slice(&Self::RAY_HIT_POINTS_COLOR);
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    0,
+                    bytemuck::cast_slice(&constants),
+                );
+                render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
             }
 
             if self.collector_dome_drawing {

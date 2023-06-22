@@ -24,7 +24,9 @@ use embree::{
 };
 use glam::Vec3A;
 use rayon::prelude::*;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
+#[cfg(all(debug_assertions, feature = "verbose_debug"))]
+use std::time::Instant;
 
 impl MicroSurfaceMesh {
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
@@ -285,10 +287,11 @@ fn measure_bsdf_at_point_inner(
     cache: &Cache,
 ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
     println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
-
+    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     let t = Instant::now();
     let emitted_rays = Emitter::emit_rays(samples, pos, emitter_orbit_radius, emitter_shape_radius);
     let num_emitted_rays = emitted_rays.len();
+    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     let elapsed = t.elapsed();
     let max_bounces = params.emitter.max_bounces;
 

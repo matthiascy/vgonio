@@ -47,6 +47,7 @@ impl SurfaceSelector {
         }
     }
 
+    #[allow(dead_code)]
     /// Checks if any surface is selected.
     pub fn any_selected(&self) -> bool { !self.selected.is_empty() }
 

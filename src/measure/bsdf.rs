@@ -17,6 +17,7 @@ use crate::{
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
 };
+use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -236,6 +237,9 @@ where
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(debug_assertions)]
     pub trajectories: Vec<RayTrajectory>,
+    /// Hit points on the collector.
+    #[cfg(debug_assertions)]
+    pub hit_points: Vec<Vec3>,
 }
 
 impl<PatchData: Debug + PerPatchData> Debug for BsdfMeasurementDataPoint<PatchData> {
@@ -378,10 +382,9 @@ fn measure_bsdf_optix_rt(
 //     desc: &MeasurementDesc,
 //     ior_db: &RefractiveIndexDatabase,
 //     surfaces: &[Heightfield],
-// ) {
-//     let collector: Collector = desc.collector.into();
-//     let emitter: Emitter = desc.emitter.into();
-//     log::debug!("Emitter generated {} patches.", emitter.patches.len());
+// ) { let collector: Collector = desc.collector.into(); let emitter: Emitter =
+//   desc.emitter.into(); log::debug!("Emitter generated {} patches.",
+//   emitter.patches.len());
 //
 //     let mut embree_rt = EmbreeRayTracing::new(Config::default());
 //
@@ -470,10 +473,9 @@ fn measure_bsdf_optix_rt(
 //     rt_grid: &GridRayTracing,
 //     ior_t: RefractiveIndex,
 //     record: Option<RayTraceRecord>,
-// ) -> Option<RayTraceRecord> {
-//     if let Some(isect) = rt_grid.trace_ray(ray) {
-//         if let Some(Scattering { reflected, .. }) =
-//             scattering_air_conductor(ray, isect.hit_point, isect.normal,
+// ) -> Option<RayTraceRecord> { if let Some(isect) = rt_grid.trace_ray(ray) {
+//   if let Some(Scattering { reflected, .. }) = scattering_air_conductor(ray,
+//   isect.hit_point, isect.normal,
 // ior_t.eta, ior_t.k)         {
 //             if reflected.e >= 0.0 {
 //                 let curr_record = RayTraceRecord {

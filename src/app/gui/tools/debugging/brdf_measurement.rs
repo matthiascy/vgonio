@@ -1,5 +1,3 @@
-#[cfg(feature = "embree")]
-use crate::measure::rtc::embr;
 use crate::{
     app::{
         cache::{Cache, Handle, MicroSurfaceRecord},
@@ -16,7 +14,7 @@ use crate::{
     },
     msurf::MicroSurface,
     units::Radians,
-    Handedness, SphericalCoord,
+    Handedness,
 };
 use egui_toast::ToastKind;
 use glam::{IVec2, Vec3};
@@ -38,6 +36,7 @@ pub(crate) struct BrdfMeasurementDebugging {
     emitter_samples_drawing: bool,
     ray_trajectories_drawing_reflected: bool,
     ray_trajectories_drawing_missed: bool,
+    ray_hit_points_drawing: bool,
     params: BsdfMeasurementParams,
     selector: SurfaceSelector,
     ray_params_t: f32,
@@ -76,6 +75,7 @@ impl BrdfMeasurementDebugging {
             emitter_samples_drawing: false,
             ray_trajectories_drawing_reflected: false,
             ray_trajectories_drawing_missed: false,
+            ray_hit_points_drawing: false,
             params: BsdfMeasurementParams::default(),
             event_loop,
             orbit_radius: 1.0,
@@ -557,6 +557,20 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                             reflected: self.ray_trajectories_drawing_reflected,
                             missed: self.ray_trajectories_drawing_missed,
                         },
+                    ))
+                    .unwrap();
+            }
+        });
+
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Collected rays: ");
+            if ui
+                .add(ToggleSwitch::new(&mut self.ray_hit_points_drawing))
+                .changed()
+            {
+                self.event_loop
+                    .send_event(VgonioEvent::Debugging(
+                        DebuggingEvent::ToggleCollectedRaysDrawing(self.ray_hit_points_drawing),
                     ))
                     .unwrap();
             }

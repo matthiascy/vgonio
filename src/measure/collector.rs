@@ -9,7 +9,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     app::cache::Cache,
-    math::{solve_quadratic, sqr, QuadraticSolution},
+    // math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
         bsdf::{BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
         measurement::BsdfMeasurementParams,
@@ -17,7 +17,8 @@ use crate::{
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
-    Handedness, SphericalCoord,
+    Handedness,
+    SphericalCoord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -327,15 +328,15 @@ impl Collector {
                         // Collect's center is at (0, 0, 0).
                         let a = last.dir.dot(last.dir);
                         let b = 2.0 * last.dir.dot(last.org);
-                        let c = last.org.dot(last.org) - sqr(orbit_radius);
-                        let p = match solve_quadratic(a, b, c) {
-                            QuadraticSolution::None | QuadraticSolution::One(_) => {
+                        let c = last.org.dot(last.org) - math::sqr(orbit_radius);
+                        let p = match math::solve_quadratic(a, b, c) {
+                            math::QuadraticSolution::None | math::QuadraticSolution::One(_) => {
                                 unreachable!(
                                     "Ray starting inside the collector's surface, it should have \
                                      more than one intersection point."
                                 )
                             }
-                            QuadraticSolution::Two(_, t) => last.org + last.dir * t,
+                            math::QuadraticSolution::Two(_, t) => last.org + last.dir * t,
                         };
                         // Returns the index of the ray, the unit vector pointing to the
                         // collector's surface, and the number of
@@ -349,8 +350,6 @@ impl Collector {
                 }
             })
             .collect::<Vec<_>>();
-
-        // log::trace!("outgoing_dirs: {:?}", outgoing_dirs);
 
         // Calculate the energy of the rays (with wavelength) that intersected the
         // collector's surface.
@@ -410,20 +409,6 @@ impl Collector {
                             }
                         }
                         .then_some((outgoing.idx, outgoing.bounce))
-                        // #[cfg(debug_assertions)]
-                        // {
-                        //     log::trace!(
-                        //         "    - outgoing.dir: {:?}, in spherical:
-                        // {:?}",         outgoing.dir,
-                        //         math::cartesian_to_spherical(
-                        //             outgoing.dir.into(),
-                        //             1.0,
-                        //             Handedness::RightHandedYUp
-                        //         )
-                        //     );
-                        //     log::trace!("    - patch: {:?}", patch);
-                        //     log::trace!("    - patch.contains(outgoing.dir):
-                        // {:?}", contains); }
                     })
                     .collect::<Vec<_>>()
             })
@@ -465,11 +450,21 @@ impl Collector {
                 data_per_patch
             })
             .collect::<Vec<_>>();
+
+        // Compute the vertex positions of the outgoing rays.
+        #[cfg(debug_assertions)]
+        let outgoing_vertex_positions: Vec<Vec3> = outgoing_dirs
+            .iter()
+            .map(|outgoing| (outgoing.dir * orbit_radius).into())
+            .collect::<Vec<_>>();
+
         BsdfMeasurementDataPoint {
             data,
             stats,
             #[cfg(debug_assertions)]
             trajectories: trajectories.to_vec(),
+            #[cfg(debug_assertions)]
+            hit_points: outgoing_vertex_positions,
         }
     }
 }

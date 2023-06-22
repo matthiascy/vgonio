@@ -35,6 +35,7 @@ pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> Dr
         .speed(storage_factor as f64)
 }
 
+#[allow(dead_code)]
 fn drag_length<'a, L: LengthMeasurement>(length: &'a mut Length<L>, prefix: &str) -> DragValue<'a> {
     DragValue::new(&mut length.value)
         .prefix(prefix)

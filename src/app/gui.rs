@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     measure,
     measure::{rtc::Ray, RtcMethod},
-    Handedness, SphericalCoord,
+    Handedness,
 };
 use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
@@ -51,7 +51,7 @@ use crate::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
-        CollectorScheme, Patch,
+        CollectorScheme,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
     units::{Degrees, Radians},
@@ -166,6 +166,7 @@ pub enum DebuggingEvent {
         missed: bool,
         reflected: bool,
     },
+    ToggleCollectedRaysDrawing(bool),
     MeasureOnePoint {
         method: RtcMethod,
         params: BsdfMeasurementParams,
@@ -1160,6 +1161,9 @@ impl VgonioGuiApp {
                     DebuggingEvent::ToggleRayTrajectoriesDrawing { missed, reflected } => {
                         self.dbg_drawing_state.ray_trajectories_drawing_reflected = reflected;
                         self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
+                    }
+                    DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
+                        self.dbg_drawing_state.collector_ray_hit_points_drawing = status;
                     }
                 }
             }
