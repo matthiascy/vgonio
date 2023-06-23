@@ -209,6 +209,7 @@ impl BrdfMeasurementDebugging {
 
 impl egui::Widget for &mut BrdfMeasurementDebugging {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let mut record = None;
         egui::CollapsingHeader::new("Specimen")
             .default_open(true)
             .show(ui, |ui| {
@@ -221,49 +222,60 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                     ui.label("Primitive ID: ");
                     ui.add(egui::DragValue::new(&mut self.surface_primitive_id));
 
+                    // Get a copy of the selected surface record to avoid locking the cache for the
+                    // whole function.
+                    record = self.selector.single_selected().and_then(|s| {
+                        self.cache
+                            .read()
+                            .unwrap()
+                            .get_micro_surface_record(s)
+                            .cloned()
+                    });
+
+                    let renderable = record.as_ref().map(|r| r.renderable);
+
                     if ui
                         .add(ToggleSwitch::new(&mut self.surface_primitive_drawing))
                         .changed()
                     {
                         self.event_loop
-                            .send_event(VgonioEvent::Debugging(DebuggingEvent::UpdatePrimitiveId {
-                                id: self.surface_primitive_id,
-                                status: self.surface_primitive_drawing,
-                            }))
+                            .send_event(VgonioEvent::Debugging(
+                                DebuggingEvent::UpdateSurfacePrimitiveId {
+                                    mesh: renderable,
+                                    id: self.surface_primitive_id,
+                                    status: self.surface_primitive_drawing,
+                                },
+                            ))
                             .unwrap()
                     }
 
                     if ui.button("\u{25C0}").clicked() {
                         self.surface_primitive_id = (self.surface_primitive_id - 1).max(0);
                         self.event_loop
-                            .send_event(VgonioEvent::Debugging(DebuggingEvent::UpdatePrimitiveId {
-                                id: self.surface_primitive_id,
-                                status: self.surface_primitive_drawing,
-                            }))
+                            .send_event(VgonioEvent::Debugging(
+                                DebuggingEvent::UpdateSurfacePrimitiveId {
+                                    mesh: renderable,
+                                    id: self.surface_primitive_id,
+                                    status: self.surface_primitive_drawing,
+                                },
+                            ))
                             .unwrap()
                     }
 
                     if ui.button("\u{25B6}").clicked() {
                         self.surface_primitive_id = (self.surface_primitive_id + 1).min(u32::MAX);
                         self.event_loop
-                            .send_event(VgonioEvent::Debugging(DebuggingEvent::UpdatePrimitiveId {
-                                id: self.surface_primitive_id,
-                                status: self.surface_primitive_drawing,
-                            }))
+                            .send_event(VgonioEvent::Debugging(
+                                DebuggingEvent::UpdateSurfacePrimitiveId {
+                                    mesh: renderable,
+                                    id: self.surface_primitive_id,
+                                    status: self.surface_primitive_drawing,
+                                },
+                            ))
                             .unwrap()
                     }
                 });
             });
-
-        // Get a copy of the selected surface record to avoid locking the cache for the
-        // whole function.
-        let record = self.selector.single_selected().and_then(|s| {
-            self.cache
-                .read()
-                .unwrap()
-                .get_micro_surface_record(s)
-                .cloned()
-        });
 
         egui::CollapsingHeader::new("Emitter")
             .default_open(true)

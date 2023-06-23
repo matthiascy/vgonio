@@ -37,6 +37,7 @@ use crate::{
 #[cfg(feature = "embree")]
 use crate::measure::rtc::embr;
 
+use crate::app::gfx::RenderableMesh;
 use egui_toast::ToastKind;
 use glam::{Mat3, Mat4, UVec3, Vec3};
 use std::{
@@ -350,8 +351,11 @@ pub struct DebugDrawingState {
     /// Whether to show missed ray trajectories.
     pub ray_trajectories_drawing_missed: bool,
 
+    /// Surface of interest.
+    surface_of_interest: Option<Handle<RenderableMesh>>,
     /// The surface primitive to draw.
     surface_primitive_id: u32,
+    /// Whether to show surface primitive.
     surface_primitive_drawing: bool,
 
     event_loop: VgonioEventLoop,
@@ -372,6 +376,7 @@ impl DebugDrawingState {
     pub const RAY_HIT_POINTS_COLOR: [f32; 4] = [1.0, 0.1, 0.1, 1.0];
     pub const RAY_TRAJECTORIES_MISSED_COLOR: [f32; 4] = [0.6, 0.3, 0.4, 0.2];
     pub const RAY_TRAJECTORIES_REFLECTED_COLOR: [f32; 4] = [0.45, 0.5, 0.4, 0.3];
+    pub const SURFACE_PRIMITIVE_COLOR: [f32; 4] = [0.12, 0.23, 0.9, 0.8];
 
     pub fn new(
         ctx: &GpuContext,
@@ -668,6 +673,7 @@ impl DebugDrawingState {
             ray_trajectories_drawing_reflected: false,
             ray_trajectories_reflected_buffer: None,
             ray_trajectories_drawing_missed: false,
+            surface_of_interest: None,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
         }
@@ -1025,7 +1031,21 @@ impl DebugDrawingState {
         self.collector_patches = Some(patches);
     }
 
-    pub fn update_surface_primitive_id(&mut self, id: u32, status: bool) { todo!() }
+    pub fn update_surface_primitive_id(
+        &mut self,
+        mesh: Option<Handle<RenderableMesh>>,
+        id: u32,
+        status: bool,
+    ) {
+        log::trace!(
+            "[DebugDrawingState] Updating surface {:?} primitive id to {}",
+            mesh,
+            id
+        );
+        self.surface_of_interest = mesh;
+        self.surface_primitive_id = id;
+        self.surface_primitive_drawing = status;
+    }
 
     /// Updates the ray trajectories for the debugging draw calls.
     pub fn update_ray_trajectories(
@@ -1147,6 +1167,7 @@ impl DebugDrawingState {
         color_output: Option<wgpu::RenderPassColorAttachment>,
         depth_output: Option<wgpu::RenderPassDepthStencilAttachment>,
     ) -> Option<wgpu::CommandEncoder> {
+        let cache = self.cache.read().unwrap();
         if !self.enabled {
             return None;
         }
@@ -1212,6 +1233,28 @@ impl DebugDrawingState {
                     bytemuck::cast_slice(&constants),
                 );
                 render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+            }
+
+            if self.surface_primitive_drawing && self.surface_of_interest.is_some() {
+                let surface = self.surface_of_interest.unwrap();
+                let mesh = cache.get_micro_surface_renderable_mesh(surface).unwrap();
+                render_pass.set_pipeline(&self.triangles_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                constants[16..20].copy_from_slice(&Self::SURFACE_PRIMITIVE_COLOR);
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    0,
+                    bytemuck::cast_slice(&constants),
+                );
+                render_pass
+                    .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(
+                    self.surface_primitive_id * 3..(self.surface_primitive_id + 1) * 3,
+                    0,
+                    0..1,
+                );
             }
 
             if self.ray_trajectories_drawing_reflected || self.ray_trajectories_drawing_missed {

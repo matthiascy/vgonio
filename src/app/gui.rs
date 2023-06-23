@@ -39,7 +39,8 @@ use crate::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, Texture, VisualGridUniforms, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
+            GpuContext, RenderableMesh, Texture, VisualGridUniforms, WgpuConfig,
+            DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
             bsdf_viewer::BsdfViewer,
@@ -189,7 +190,8 @@ pub enum DebuggingEvent {
         orbit_radius: f32,
         shape_radius: Option<f32>,
     },
-    UpdatePrimitiveId {
+    UpdateSurfacePrimitiveId {
+        mesh: Option<Handle<RenderableMesh>>,
         id: u32,
         status: bool,
     },
@@ -1163,9 +1165,9 @@ impl VgonioGuiApp {
                     DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
                         self.dbg_drawing_state.collector_ray_hit_points_drawing = status;
                     }
-                    DebuggingEvent::UpdatePrimitiveId { id, status } => {
+                    DebuggingEvent::UpdateSurfacePrimitiveId { mesh, id, status } => {
                         self.dbg_drawing_state
-                            .update_surface_primitive_id(id, status);
+                            .update_surface_primitive_id(mesh, id, status);
                     }
                 }
             }
