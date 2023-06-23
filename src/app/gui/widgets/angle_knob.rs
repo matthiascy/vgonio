@@ -86,8 +86,6 @@ pub struct AngleKnob<'a> {
 }
 
 impl<'a> AngleKnob<'a> {
-    pub const RESOLUTION: usize = 32;
-
     pub fn new(value: &'a mut Radians) -> Self {
         Self {
             angle: value,
@@ -134,6 +132,7 @@ impl<'a> AngleKnob<'a> {
         self
     }
 
+    #[allow(dead_code)]
     pub fn show_axes(mut self, show_axes: bool) -> Self {
         self.show_axes = show_axes;
         self
@@ -144,11 +143,13 @@ impl<'a> AngleKnob<'a> {
         self
     }
 
+    #[allow(dead_code)]
     pub fn orientation(mut self, orientation: AngleKnobOrientation) -> Self {
         self.orientation = orientation;
         self
     }
 
+    #[allow(dead_code)]
     pub fn shape(mut self, shape: AngleKnobShape) -> Self {
         self.shape = shape;
         self

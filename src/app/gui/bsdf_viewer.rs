@@ -49,6 +49,7 @@ pub struct BsdfViewer {
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
+    #[allow(dead_code)]
     event_loop: VgonioEventLoop,
     proj_view: Mat4,
     aligned_uniform_buffer_size: u32,

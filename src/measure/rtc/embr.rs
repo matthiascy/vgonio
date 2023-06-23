@@ -339,9 +339,9 @@ fn measure_bsdf_at_point_inner(
         .zip(stream_data.par_iter_mut())
         // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
         .enumerate()
-        .for_each(|(i, (rays, data))| {
+        .for_each(|(_i, (rays, data))| {
             #[cfg(all(debug_assertions, feature = "verbose_debug"))]
-            log::trace!("stream {} of {}", i, num_streams);
+            log::trace!("stream {} of {}", _i, num_streams);
             // Populate embree ray stream with generated rays.
             let chunk_size = rays.len();
             let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));
