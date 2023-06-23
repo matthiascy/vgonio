@@ -394,8 +394,11 @@ pub struct MmsfMeasurementParams {
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSizeInclusive<Radians>,
-    /// Discritization resolution during the measurement (area estimation).
+    /// Discretisation resolution during the measurement (area estimation).
     pub resolution: u32,
+    /// Whether to strictly use only the facet normals falling into the sampling
+    /// range.
+    pub strict: bool,
 }
 
 impl Default for MmsfMeasurementParams {
@@ -404,6 +407,7 @@ impl Default for MmsfMeasurementParams {
             azimuth: DEFAULT_AZIMUTH_RANGE,
             zenith: DEFAULT_ZENITH_RANGE,
             resolution: 512,
+            strict: false,
         }
     }
 }
@@ -416,7 +420,7 @@ impl MmsfMeasurementParams {
 
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
-    pub fn measurement_location_count(&self) -> usize {
+    pub fn measurement_points_count(&self) -> usize {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
     }
 

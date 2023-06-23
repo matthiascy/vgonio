@@ -51,7 +51,7 @@ impl Tool for SamplingInspector {
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
         self.event_loop
             .send_event(VgonioEvent::Debugging(
-                DebuggingEvent::SetSamplingRendering(*open),
+                DebuggingEvent::ToggleSamplingRendering(*open),
             ))
             .unwrap();
         egui::Window::new(self.name()).open(open).show(ctx, |ui| {

@@ -2,22 +2,20 @@ use crate::{
     app::{
         cache::{Cache, Handle, MicroSurfaceRecord},
         gui::{
-            misc::{input3_spherical, input3_xyz},
             widgets::{SurfaceSelector, ToggleSwitch},
             DebuggingEvent, VgonioEvent, VgonioEventLoop,
         },
     },
     math,
     measure::{
-        emitter::RegionShape, measurement::BsdfMeasurementParams, rtc::Ray, CollectorScheme,
-        RtcMethod,
+        emitter::RegionShape, measurement::BsdfMeasurementParams, CollectorScheme, RtcMethod,
     },
     msurf::MicroSurface,
     units::Radians,
     Handedness,
 };
 use egui_toast::ToastKind;
-use glam::{IVec2, Vec3};
+use glam::IVec2;
 use std::sync::{Arc, RwLock};
 
 pub(crate) struct BrdfMeasurementDebugging {
@@ -40,8 +38,8 @@ pub(crate) struct BrdfMeasurementDebugging {
     method: RtcMethod,
     surface_primitive_id: u32,
     surface_primitive_drawing: bool,
-
-    cell_pos: IVec2,
+    grid_cell_position: IVec2,
+    grid_cell_drawing: bool,
 }
 
 impl BrdfMeasurementDebugging {
@@ -55,7 +53,7 @@ impl BrdfMeasurementDebugging {
             method: RtcMethod::Grid,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
-            cell_pos: Default::default(),
+            grid_cell_position: Default::default(),
             ray_params_t: 1.0,
             emitter_position_index: 0,
             emitter_points_drawing: false,
@@ -68,6 +66,7 @@ impl BrdfMeasurementDebugging {
             event_loop,
             orbit_radius: 1.0,
             selector: SurfaceSelector::single(),
+            grid_cell_drawing: false,
         }
     }
 
@@ -210,6 +209,37 @@ impl BrdfMeasurementDebugging {
 impl egui::Widget for &mut BrdfMeasurementDebugging {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         let mut record = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Tracing Method: ");
+            #[cfg(feature = "embree")]
+            ui.selectable_value(&mut self.method, RtcMethod::Embree, "Embree");
+            #[cfg(feature = "optix")]
+            ui.selectable_value(&mut self.method, RtcMethod::Optix, "OptiX");
+            ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
+        });
+
+        if self.method == RtcMethod::Grid {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Cell Position: ");
+                ui.add(egui::DragValue::new(&mut self.grid_cell_position.x).prefix("x: "));
+                ui.add(egui::DragValue::new(&mut self.grid_cell_position.y).prefix("y: "));
+
+                if ui
+                    .add(ToggleSwitch::new(&mut self.grid_cell_drawing))
+                    .changed()
+                {
+                    self.event_loop
+                        .send_event(VgonioEvent::Debugging(
+                            DebuggingEvent::UpdateGridCellDrawing {
+                                pos: self.grid_cell_position,
+                                status: self.grid_cell_drawing,
+                            },
+                        ))
+                        .unwrap();
+                }
+            });
+        }
+
         egui::CollapsingHeader::new("Specimen")
             .default_open(true)
             .show(ui, |ui| {
@@ -539,42 +569,18 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
             });
         ui.separator();
 
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Tracing Method: ");
-            #[cfg(feature = "embree")]
-            ui.selectable_value(&mut self.method, RtcMethod::Embree, "Embree");
-            #[cfg(feature = "optix")]
-            ui.selectable_value(&mut self.method, RtcMethod::Optix, "OptiX");
-            ui.selectable_value(&mut self.method, RtcMethod::Grid, "Grid");
-            if ui.button("Simulate").clicked() {
-                if let Some(record) = record {
-                    self.event_loop
-                        .send_event(VgonioEvent::Debugging(DebuggingEvent::MeasureOnePoint {
-                            method: self.method,
-                            params: self.params,
-                            mesh: record.mesh,
-                        }))
-                        .unwrap();
-                }
+        if ui.button("Simulate").clicked() {
+            if let Some(record) = record {
+                self.event_loop
+                    .send_event(VgonioEvent::Debugging(DebuggingEvent::MeasureOnePoint {
+                        method: self.method,
+                        params: self.params,
+                        mesh: record.mesh,
+                    }))
+                    .unwrap();
             }
-        });
-
-        if self.method == RtcMethod::Grid {
-            ui.horizontal_wrapped(|ui| {
-                ui.label("cell");
-                ui.add(egui::DragValue::new(&mut self.cell_pos.x).prefix("x: "));
-                ui.add(egui::DragValue::new(&mut self.cell_pos.y).prefix("y:"));
-
-                if ui.button("show").clicked()
-                    && self
-                        .event_loop
-                        .send_event(VgonioEvent::UpdateCellPos(self.cell_pos))
-                        .is_err()
-                {
-                    log::warn!("Failed to send event VgonioEvent::UpdateCellPos");
-                }
-            });
         }
+        ui.separator();
 
         ui.horizontal_wrapped(|ui| {
             ui.label("Ray trajectories: ");

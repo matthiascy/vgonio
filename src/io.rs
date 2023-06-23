@@ -838,6 +838,7 @@ pub mod vgmo {
                 azimuth,
                 zenith,
                 resolution: 512,
+                strict: true,
             })
         }
 

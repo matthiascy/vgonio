@@ -11,12 +11,7 @@ mod widgets;
 
 // TODO: MSAA
 
-use crate::{
-    error::Error,
-    measure,
-    measure::{rtc::Ray, RtcMethod},
-    Handedness,
-};
+use crate::{error::Error, measure, measure::RtcMethod, Handedness};
 use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use glam::{IVec2, Mat4, Vec3, Vec4};
@@ -26,9 +21,6 @@ use std::{
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
-
-// #[cfg(feature = "embree")]
-// pub(crate) use tools::trace_ray_standard_dbg;
 
 pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioUi;
@@ -104,7 +96,6 @@ pub enum VgonioEvent {
     RequestRedraw,
     OpenFiles(Vec<rfd::FileHandle>),
     ToggleSurfaceVisibility,
-    UpdateCellPos(IVec2),
     CheckVisibleFacets {
         m_azimuth: Degrees,
         m_zenith: Degrees,
@@ -167,8 +158,11 @@ pub enum DebuggingEvent {
         params: BsdfMeasurementParams,
         mesh: Handle<MicroSurfaceMesh>,
     },
-    /// Enable/disable the rendering of the sampling debugger.
-    SetSamplingRendering(bool),
+    UpdateGridCellDrawing {
+        pos: IVec2,
+        status: bool,
+    },
+    ToggleSamplingRendering(bool),
     UpdateDepthMap,
     UpdateRayParams {
         t: f32,
@@ -1045,7 +1039,7 @@ impl VgonioGuiApp {
             VgonioEvent::Debugging(event) => {
                 // TODO: handle events inside the DebuggingState.
                 match event {
-                    DebuggingEvent::SetSamplingRendering(enabled) => {
+                    DebuggingEvent::ToggleSamplingRendering(enabled) => {
                         self.dbg_drawing_state.sampling_debug_enabled = enabled;
                     }
                     DebuggingEvent::UpdateDepthMap => {
@@ -1168,6 +1162,9 @@ impl VgonioGuiApp {
                     DebuggingEvent::UpdateSurfacePrimitiveId { mesh, id, status } => {
                         self.dbg_drawing_state
                             .update_surface_primitive_id(mesh, id, status);
+                    }
+                    DebuggingEvent::UpdateGridCellDrawing { .. } => {
+                        todo!("UpdateGridCellDrawing")
                     }
                 }
             }
