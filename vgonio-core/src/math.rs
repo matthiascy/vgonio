@@ -1,10 +1,30 @@
-use crate::{
-    ulp_eq,
-    units::{radians, Radians},
-    Handedness, SphericalCoord,
-};
+use crate::units::{radians, Radians};
 use cfg_if::cfg_if;
-pub use glam::*;
+use glam::*;
+use serde::{Deserialize, Serialize};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    marker::PhantomData,
+};
+
+/// Coordinate system handedness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Handedness {
+    /// Right-handed, Z-up coordinate system.
+    RightHandedZUp,
+    /// Right-handed, Y-up coordinate system.
+    RightHandedYUp,
+}
+
+impl Handedness {
+    /// Returns the up vector of the reference coordinate system.
+    pub const fn up(self) -> Vec3 {
+        match self {
+            Self::RightHandedZUp => Vec3::Z,
+            Self::RightHandedYUp => Vec3::Y,
+        }
+    }
+}
 
 /// Trait for converting from one primitive numeric type to another.
 #[const_trait]
@@ -13,7 +33,7 @@ pub trait NumericCast<T> {
 }
 
 macro impl_as_primitive($t0:ty as $($t1:ty),*) {
-    $(
+$(
         impl const NumericCast<$t1> for $t0 {
             fn cast(&self) -> $t1 {
                 *self as $t1
@@ -40,6 +60,113 @@ impl_as_primitive!(isize as f32, f64, i32, u32, i64, u64, i128, u128);
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
 ];
+
+/// Equality test of two floating point numbers.
+///
+/// todo: specify the error bound.
+///
+/// # Arguments
+///
+/// * `a`: The first number.
+/// * `b`: The second number.
+///
+/// returns: bool
+pub fn ulp_eq(a: f32, b: f32) -> bool {
+    let diff = (a - b).abs();
+    let a_abs = a.abs();
+    let b_abs = b.abs();
+    if a == b {
+        true
+    } else if a == 0.0 || b == 0.0 || a_abs < f32::MIN_POSITIVE || b_abs < f32::MIN_POSITIVE {
+        diff < (f32::MIN_POSITIVE * f32::EPSILON)
+    } else {
+        (diff / f32::min(a_abs + b_abs, f32::MAX)) < f32::EPSILON
+    }
+}
+
+#[test]
+fn test_ulp_eq() {
+    assert!(ulp_eq(0.0, 0.0));
+    assert!(ulp_eq(1.0, 1.0 + MACHINE_EPSILON_F32));
+    assert!(ulp_eq(1.0, 1.0 + 1e-7 * 0.5));
+    assert!(ulp_eq(1.0, 1.0 - 1e-7 * 0.5));
+    assert!(!ulp_eq(1.0, 1.0 + 1e-6));
+    assert!(!ulp_eq(1.0, 1.0 - 1e-6));
+}
+
+mod private {
+    pub trait CoordSystem {}
+}
+
+pub struct Cartesian;
+pub struct Spherical;
+
+impl private::CoordSystem for Cartesian {}
+impl private::CoordSystem for Spherical {}
+
+pub struct Coord3<C: private::CoordSystem> {
+    pub inner: Vec3,
+    _marker: PhantomData<C>,
+}
+
+/// Spherical coordinate in radians.
+#[derive(Copy, Clone, Serialize, Deserialize)]
+pub struct SphericalCoord {
+    /// Radius of the sphere.
+    pub radius: f32,
+    /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the nadir.
+    /// The zenith angle is the angle between the positive z-axis and the point
+    /// on the sphere. The zenith angle is always between 0 and pi. 0 ~ pi/2 is
+    /// the upper hemisphere, pi/2 ~ pi is the lower hemisphere.
+    pub zenith: Radians,
+    /// Azimuth angle (azimuthal angle) in radians. It is always between 0 and
+    /// 2pi: 0 is the positive x-axis, pi/2 is the positive y-axis, pi is the
+    /// negative x-axis, 3pi/2 is the negative y-axis.
+    pub azimuth: Radians,
+}
+
+impl SphericalCoord {
+    /// Create a new spherical coordinate.
+    pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
+        Self {
+            radius,
+            zenith,
+            azimuth,
+        }
+    }
+
+    /// Convert to a cartesian coordinate.
+    pub fn to_cartesian(&self, handedness: Handedness) -> Vec3 {
+        spherical_to_cartesian(self.radius, self.zenith, self.azimuth, handedness)
+    }
+
+    /// Convert from a cartesian coordinate.
+    pub fn from_cartesian(cartesian: Vec3, radius: f32, handedness: Handedness) -> Self {
+        cartesian_to_spherical(cartesian, radius, handedness)
+    }
+}
+
+impl Debug for SphericalCoord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ ρ: {}, θ: {}, φ: {} }}",
+            self.radius, self.zenith, self.azimuth
+        )
+    }
+}
+
+impl Display for SphericalCoord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ ρ: {}, θ: {}, φ: {} }}",
+            self.radius,
+            self.zenith.in_degrees().prettified(),
+            self.azimuth.in_degrees().prettified()
+        )
+    }
+}
 
 /// Conversion from spherical coordinate system to cartesian coordinate system.
 ///

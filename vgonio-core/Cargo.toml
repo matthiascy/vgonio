@@ -1,0 +1,13 @@
+[package]
+name = "vgonio-core"
+description = "Core types, traits, and functionalities for vgonio"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+cfg-if.workspace = true
+clap.workspace = true
+glam.workspace = true
+paste.workspace = true
+serde.workspace = true

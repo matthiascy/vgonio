@@ -1,9 +1,11 @@
-use crate::{error::Error, math::NumericCast, ulp_eq};
-use core::fmt::Debug;
+use crate::{
+    io::{FileEncoding, ParseError, ParseErrorKind},
+    math::NumericCast,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     str::FromStr,
 };
 
@@ -226,7 +228,7 @@ impl<A: LengthMeasurement> Display for Length<A> {
 
 impl<A: LengthMeasurement, B: LengthMeasurement> PartialEq<Length<B>> for Length<A> {
     fn eq(&self, other: &Length<B>) -> bool {
-        ulp_eq(
+        crate::math::ulp_eq(
             self.value * A::FACTOR_TO_METRE,
             other.value * B::FACTOR_TO_METRE,
         )
@@ -321,19 +323,45 @@ impl<A: LengthMeasurement> From<f32> for Length<A> {
 }
 
 impl<'a, A: LengthMeasurement> TryFrom<&'a str> for Length<A> {
-    type Error = Error;
+    type Error = ParseError;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let bytes = s.trim().as_bytes();
-        let i = super::findr_first_non_ascii_alphabetic(bytes)
-            .ok_or(Error::Any("no unit found in length string".to_string()))?;
+        let i = super::findr_first_non_ascii_alphabetic(bytes).ok_or(ParseError {
+            line: 0,
+            position: 0,
+            kind: ParseErrorKind::InvalidContent,
+            encoding: FileEncoding::Ascii,
+            message: Some(format!("No unit found in length string: \"{}\".", s)),
+        })?;
         let value = std::str::from_utf8(&bytes[..i])
-            .map_err(|_| Error::Any("invalid length string".to_string()))?
+            .map_err(|err| ParseError {
+                line: 0,
+                position: err.valid_up_to() as u32,
+                kind: ParseErrorKind::InvalidUft8,
+                encoding: FileEncoding::Ascii,
+                message: Some(format!("Invalid utf8 in length string: \"{}\".", s)),
+            })?
             .trim()
             .parse::<f32>()
-            .map_err(|_| Error::Any("invalid length value".to_string()))?;
+            .map_err(|err| ParseError {
+                line: 0,
+                position: i as u32,
+                kind: ParseErrorKind::ParseFloat,
+                encoding: FileEncoding::Ascii,
+                message: Some(format!(
+                    "Invalid floating number for length value: \"{}\"",
+                    s
+                )),
+            })?;
         let unit = std::str::from_utf8(&bytes[i..])
-            .map_err(|err| Error::Any(format!("invalid length unit: {err}")))?
+            .map_err(|err| ParseError {
+                line: 0,
+                position: i as u32,
+                kind: ParseErrorKind::InvalidUft8,
+                encoding: FileEncoding::Ascii,
+                message: Some(format!("Invalid utf8 in length string: \"{}\".", s)),
+            })?
             .trim();
         match unit {
             "m" => Ok(Self::new(A::FACTOR_FROM_METRE * value)),
@@ -341,13 +369,19 @@ impl<'a, A: LengthMeasurement> TryFrom<&'a str> for Length<A> {
             "mm" => Ok(Self::new(A::FACTOR_FROM_MILLIMETRE * value)),
             "um" => Ok(Self::new(A::FACTOR_FROM_MICROMETRE * value)),
             "nm" => Ok(Self::new(A::FACTOR_FROM_NANOMETRE * value)),
-            _ => Err(Error::Any("invalid length unit".to_string())),
+            _ => Err(ParseError {
+                line: 0,
+                position: i as u32,
+                kind: ParseErrorKind::InvalidContent,
+                encoding: FileEncoding::Ascii,
+                message: Some(format!("Unsupported unit: \"{}\".", unit)),
+            }),
         }
     }
 }
 
 impl<A: LengthMeasurement> FromStr for Length<A> {
-    type Err = Error;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }

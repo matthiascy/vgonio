@@ -1,4 +1,4 @@
-use crate::{math::NumericCast, ulp_eq};
+use crate::math::NumericCast;
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
 
@@ -81,7 +81,7 @@ impl<A: AngleUnit> Display for Angle<A> {
 
 impl<A: AngleUnit, B: AngleUnit> PartialEq<Angle<B>> for Angle<A> {
     fn eq(&self, other: &Angle<B>) -> bool {
-        ulp_eq(
+        crate::math::ulp_eq(
             self.value * A::FACTOR_TO_RAD,
             other.value * B::FACTOR_TO_RAD,
         )

@@ -8,240 +8,6 @@ use std::{
     path::Path,
 };
 
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct ReadFileError {
-    pub path: Box<Path>,
-    pub kind: ReadFileErrorKind,
-}
-
-impl Display for ReadFileError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error while reading file: {}", self.path.display())
-    }
-}
-
-impl std::error::Error for ReadFileError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.kind {
-            ReadFileErrorKind::Read(err) => Some(err),
-            ReadFileErrorKind::Parse(err) => Some(err),
-        }
-    }
-}
-
-impl ReadFileError {
-    /// Creates a new `ReadFileError` from a `ParseError`.
-    pub fn from_parse_error(path: impl AsRef<Path>, err: ParseError) -> Self {
-        Self {
-            path: path.as_ref().to_path_buf().into_boxed_path(),
-            kind: ReadFileErrorKind::Parse(err),
-        }
-    }
-
-    /// Creates a new `ReadFileError` from a `std::io::Error`.
-    pub fn from_std_io_error(path: impl AsRef<Path>, err: std::io::Error) -> Self {
-        Self {
-            path: path.as_ref().to_path_buf().into_boxed_path(),
-            kind: ReadFileErrorKind::Read(err),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ReadFileErrorKind {
-    Read(std::io::Error),
-    Parse(ParseError),
-}
-
-impl From<std::io::Error> for ReadFileErrorKind {
-    fn from(value: std::io::Error) -> Self { Self::Read(value) }
-}
-
-impl From<ParseError> for ReadFileErrorKind {
-    fn from(value: ParseError) -> Self { Self::Parse(value) }
-}
-
-#[derive(Debug)]
-pub struct ParseError {
-    pub line: u32,
-    pub position: u32,
-    pub kind: ParseErrorKind,
-    pub encoding: FileEncoding,
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.encoding {
-            FileEncoding::Ascii => {
-                write!(
-                    f,
-                    "error while parsing line {} at position {}: ",
-                    self.line, self.position
-                )?;
-            }
-            FileEncoding::Binary => {
-                write!(
-                    f,
-                    "error while parsing byte at position {}: ",
-                    self.position
-                )?;
-            }
-        }
-        match &self.kind {
-            ParseErrorKind::InvalidMagicNumber => write!(f, "invalid magic number"),
-            ParseErrorKind::InvalidEncoding => write!(f, "invalid encoding"),
-            ParseErrorKind::InvalidCompression => write!(f, "invalid compression"),
-            ParseErrorKind::InvalidLine => write!(f, "invalid line"),
-            ParseErrorKind::ParseFloat => write!(f, "invalid float"),
-            ParseErrorKind::NotEnoughData => write!(f, "not enough data"),
-        }
-    }
-}
-
-impl std::error::Error for ParseError {}
-
-#[derive(Debug)]
-pub enum ParseErrorKind {
-    InvalidMagicNumber,
-    InvalidEncoding,
-    InvalidCompression,
-    InvalidLine,
-    ParseFloat,
-    NotEnoughData,
-}
-
-#[derive(Debug)]
-pub struct WriteFileError {
-    pub path: Box<Path>,
-    pub kind: WriteFileErrorKind,
-}
-
-impl Display for WriteFileError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error while writing file: {}", self.path.display())
-    }
-}
-
-impl std::error::Error for WriteFileError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.kind {
-            WriteFileErrorKind::Write(err) => Some(err),
-        }
-    }
-}
-
-impl WriteFileError {
-    /// Creates a new `WriteFileError` from a `std::io::Error`.
-    pub fn from_std_io_error(path: impl AsRef<Path>, err: std::io::Error) -> Self {
-        Self {
-            path: path.as_ref().to_path_buf().into_boxed_path(),
-            kind: WriteFileErrorKind::Write(err),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum WriteFileErrorKind {
-    Write(std::io::Error),
-}
-
-impl From<std::io::Error> for WriteFileErrorKind {
-    fn from(value: std::io::Error) -> Self { Self::Write(value) }
-}
-
-/// Data encoding while storing the data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum FileEncoding {
-    /// The data is encoded as ascii text (plain text).
-    Ascii = 0x23, // '#'
-    /// The data is encoded as binary data.
-    Binary = 0x21, // '!'
-}
-
-impl From<u8> for FileEncoding {
-    fn from(value: u8) -> Self {
-        match value {
-            0x23 => FileEncoding::Ascii,
-            0x21 => FileEncoding::Binary,
-            _ => panic!("Invalid data encoding: {}", value),
-        }
-    }
-}
-
-impl Display for FileEncoding {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FileEncoding::Ascii => write!(f, "ascii"),
-            FileEncoding::Binary => write!(f, "binary"),
-        }
-    }
-}
-
-impl FileEncoding {
-    /// Returns true if the data is encoded as ascii text.
-    pub fn is_ascii(&self) -> bool {
-        match self {
-            FileEncoding::Ascii => true,
-            FileEncoding::Binary => false,
-        }
-    }
-
-    /// Returns true if the data is encoded as binary data.
-    pub fn is_binary(&self) -> bool {
-        match self {
-            FileEncoding::Ascii => false,
-            FileEncoding::Binary => true,
-        }
-    }
-}
-
-/// Data compression scheme while storing the data.
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum, Serialize, Deserialize)]
-pub enum CompressionScheme {
-    /// No compression.
-    None = 0x00,
-    /// Zlib compression.
-    Zlib = 0x01,
-    /// Gzip compression.
-    Gzip = 0x02,
-}
-
-impl From<u8> for CompressionScheme {
-    fn from(value: u8) -> Self {
-        match value {
-            0x00 => CompressionScheme::None,
-            0x01 => CompressionScheme::Zlib,
-            0x02 => CompressionScheme::Gzip,
-            _ => panic!("Invalid data compression: {}", value),
-        }
-    }
-}
-
-impl Display for CompressionScheme {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CompressionScheme::None => write!(f, "none"),
-            CompressionScheme::Zlib => write!(f, "zlib"),
-            CompressionScheme::Gzip => write!(f, "gzip"),
-        }
-    }
-}
-
-impl CompressionScheme {
-    /// Returns true if the data is not compressed.
-    pub fn is_none(&self) -> bool { matches!(self, CompressionScheme::None) }
-
-    /// Returns true if the data is compressed with zlib.
-    pub fn is_zlib(&self) -> bool { matches!(self, CompressionScheme::Zlib) }
-
-    /// Returns true if the data is compressed with gzip.
-    pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
-}
-
 /// Write the data samples to the given writer.
 fn write_f32_data_samples<W: Write>(
     writer: &mut BufWriter<W>,
@@ -534,50 +300,55 @@ pub mod vgmo {
     use super::*;
     use crate::{
         measure::{
-            bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            collector::BounceAndEnergy,
-            emitter::RegionShape,
+            bsdf::{BsdfKind, BsdfMeasurementDataPoint,
+BsdfMeasurementStatsPoint, PerWavelength},
+collector::BounceAndEnergy,             emitter::RegionShape,
             measurement::{
-                BsdfMeasurementParams, MadfMeasurementParams, MeasurementKind,
-                MmsfMeasurementParams, Radius, SimulationKind,
-            },
+                BsdfMeasurementParams, MadfMeasurementParams,
+MeasurementKind,                 MmsfMeasurementParams, Radius,
+SimulationKind,             },
             Collector, CollectorScheme, Emitter,
         },
         ulp_eq,
         units::{
-            mm, rad, solid_angle_of_region, solid_angle_of_spherical_cap, steradians, Nanometres,
-            Radians,
+            mm, rad, solid_angle_of_region, solid_angle_of_spherical_cap,
+steradians, Nanometres,             Radians,
         },
-        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
-    };
+        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive,
+SphericalPartition,     };
     use std::io::BufWriter;
 
     macro_rules! impl_range_by_step_size_inclusive_read_write {
         ($($T:ty, $step_count:ident);*) => {
             $(paste::paste! {
                 impl RangeByStepSizeInclusive<$T> {
-                    #[doc = "Writes the RangeByStepSizeInclusive<`" $T "`> into the given buffer, following the order: start, stop, step_size, step_count."]
-                    pub fn write_to_buf(&self, buf: &mut [u8]) {
-                        debug_assert!(
+                    #[doc = "Writes the RangeByStepSizeInclusive<`" $T "`>
+into the given buffer, following the order: start, stop, step_size,
+step_count."]                     pub fn write_to_buf(&self, buf: &mut [u8])
+{                         debug_assert!(
                             buf.len() >= 16,
-                            "RangeByStepSizeInclusive needs at least 16 bytes of space"
-                        );
-                        buf[0..4].copy_from_slice(&self.start.value.to_le_bytes());
-                        buf[4..8].copy_from_slice(&self.stop.value.to_le_bytes());
-                        buf[8..12].copy_from_slice(&self.step_size.value.to_le_bytes());
-                        buf[12..16].copy_from_slice(&(self.$step_count() as u32).to_le_bytes());
+                            "RangeByStepSizeInclusive needs at least 16 bytes
+of space"                         );
+
+buf[0..4].copy_from_slice(&self.start.value.to_le_bytes());
+buf[4..8].copy_from_slice(&self.stop.value.to_le_bytes());
+buf[8..12].copy_from_slice(&self.step_size.value.to_le_bytes());
+buf[12..16].copy_from_slice(&(self.$step_count() as u32).to_le_bytes());
                     }
 
-                    #[doc = "Reads the RangeByStepSizeInclusive<`" $T "`> from the given buffer, checking that the step count matches the expected value."]
-                    pub fn read_from_buf(buf: &[u8]) -> Self {
+                    #[doc = "Reads the RangeByStepSizeInclusive<`" $T "`>
+from the given buffer, checking that the step count matches the expected
+value."]                     pub fn read_from_buf(buf: &[u8]) -> Self {
                         debug_assert!(
                             buf.len() >= 16,
-                            "RangeByStepSizeInclusive needs at least 16 bytes of space"
-                        );
-                        let start = <$T>::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
-                        let end = <$T>::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
-                        let step_size = <$T>::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
-                        let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+                            "RangeByStepSizeInclusive needs at least 16 bytes
+of space"                         );
+                        let start =
+<$T>::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+let end = <$T>::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+                        let step_size =
+<$T>::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
                         let range = Self::new(start, end, step_size);
                         assert_eq!(
                             step_count,
@@ -597,30 +368,33 @@ pub mod vgmo {
     );
 
     impl RangeByStepCountInclusive<Radians> {
-        /// Writes the RangeByStepCountInclusive<Radians> into the given buffer,
-        /// following the order: start, stop, step_size, step_count.
+        /// Writes the RangeByStepCountInclusive<Radians> into the given
+buffer,         /// following the order: start, stop, step_size, step_count.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= 16,
-                "RangeByStepCountInclusive<Radians> needs at least 16 bytes of space"
-            );
+                "RangeByStepCountInclusive<Radians> needs at least 16 bytes
+of space"             );
             buf[0..4].copy_from_slice(&self.start.value.to_le_bytes());
             buf[4..8].copy_from_slice(&self.stop.value.to_le_bytes());
-            buf[8..12].copy_from_slice(&self.step_size().value.to_le_bytes());
-            buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
-        }
 
-        /// Reads the RangeByStepCountInclusive<Radians> from the given buffer,
-        /// checking that the step size matches the expected value.
+buf[8..12].copy_from_slice(&self.step_size().value.to_le_bytes());
+            buf[12..16].copy_from_slice(&(self.step_count as
+u32).to_le_bytes());         }
+
+        /// Reads the RangeByStepCountInclusive<Radians> from the given
+buffer,         /// checking that the step size matches the expected value.
         pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= 16,
                 "RangeByStepCountInclusive needs at least 16 bytes of space"
             );
-            let start = Radians::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
-            let end = Radians::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
-            let step_size = Radians::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
-            let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+            let start =
+Radians::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+let end = Radians::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+            let step_size =
+Radians::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
             let range = Self::new(start, end, step_count as usize);
             assert!(
                 ulp_eq(range.step_size().value, step_size.value),
@@ -675,8 +449,8 @@ pub mod vgmo {
                         * bsdf.collector.scheme.total_sample_count()
                 }
                 Self::Madf { madf, .. } => {
-                    madf.zenith.step_count_wrapped() * madf.azimuth.step_count_wrapped()
-                }
+                    madf.zenith.step_count_wrapped() *
+madf.azimuth.step_count_wrapped()                 }
                 Self::Mmsf { mmsf, .. } => {
                     mmsf.zenith.step_count_wrapped()
                         * mmsf.azimuth.step_count_wrapped()
@@ -686,35 +460,35 @@ pub mod vgmo {
             }
         }
 
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let meta = HeaderMeta::read(reader)?;
+        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self,
+std::io::Error> {             let meta = HeaderMeta::read(reader)?;
             match meta.kind {
                 MeasurementKind::Bsdf => Ok(Self::Bsdf {
                     meta,
                     bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::MicrofacetAreaDistribution => Ok(Self::Madf {
-                    meta,
+                MeasurementKind::MicrofacetAreaDistribution => Ok(Self::Madf
+{                     meta,
                     madf: MadfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::MicrofacetMaskingShadowing => Ok(Self::Mmsf {
-                    meta,
+                MeasurementKind::MicrofacetMaskingShadowing => Ok(Self::Mmsf
+{                     meta,
                     mmsf: MmsfMeasurementParams::read_from_vgmo(reader)?,
                 }),
             }
         }
 
-        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            match self {
+        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) ->
+Result<(), WriteFileErrorKind> {             match self {
                 Self::Bsdf { meta, bsdf } => {
-                    meta.write(writer).and_then(|_| bsdf.write_to_vgmo(writer))
-                }
+                    meta.write(writer).and_then(|_|
+bsdf.write_to_vgmo(writer))                 }
                 Self::Madf { meta, madf } => {
-                    meta.write(writer).and_then(|_| madf.write_to_vgmo(writer))
-                }
+                    meta.write(writer).and_then(|_|
+madf.write_to_vgmo(writer))                 }
                 Self::Mmsf { meta, mmsf } => {
-                    meta.write(writer).and_then(|_| mmsf.write_to_vgmo(writer))
-                }
+                    meta.write(writer).and_then(|_|
+mmsf.write_to_vgmo(writer))                 }
             }
         }
     }
@@ -722,8 +496,8 @@ pub mod vgmo {
     impl HeaderMeta {
         pub const MAGIC: &'static [u8] = b"VGMO";
 
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; 8];
+        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self,
+std::io::Error> {             let mut buf = [0u8; 8];
             reader.read_exact(&mut buf)?;
 
             if &buf[0..4] != Self::MAGIC {
@@ -743,8 +517,8 @@ pub mod vgmo {
             })
         }
 
-        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            let mut meta = [0x20; 8];
+        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) ->
+Result<(), WriteFileErrorKind> {             let mut meta = [0x20; 8];
             meta[0..4].copy_from_slice(Self::MAGIC);
             meta[4] = self.kind as u8;
             meta[5] = self.encoding as u8;
@@ -757,37 +531,25 @@ pub mod vgmo {
         zenith: &RangeByStepSizeInclusive<Radians>,
         azimuth: &RangeByStepSizeInclusive<Radians>,
         is_madf: bool,
-    ) -> usize {
-        let zenith_step_count = zenith.step_count_wrapped();
-        let azimuth_step_count = azimuth.step_count_wrapped();
-        if is_madf {
-            zenith_step_count * azimuth_step_count
-        } else {
-            zenith_step_count * azimuth_step_count * zenith_step_count * azimuth_step_count
-        }
+    ) -> usize { let zenith_step_count = zenith.step_count_wrapped(); let
+      azimuth_step_count = azimuth.step_count_wrapped(); if is_madf {
+      zenith_step_count * azimuth_step_count } else { zenith_step_count *
+      azimuth_step_count * zenith_step_count * azimuth_step_count }
     }
 
     fn read_madf_mmsf_params_from_vgmo<R: Read>(
         reader: &mut BufReader<R>,
         #[cfg(debug_assertions)] is_madf: bool,
-    ) -> Result<
-        (
-            RangeByStepSizeInclusive<Radians>,
-            RangeByStepSizeInclusive<Radians>,
-        ),
-        std::io::Error,
-    > {
-        let mut buf = [0u8; 40];
-        reader.read_exact(&mut buf)?;
-        let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
-        let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
-        let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
-        #[cfg(debug_assertions)]
-        debug_assert_eq!(
-            sample_count as usize,
-            madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf)
-        );
-        Ok((azimuth, zenith))
+    ) -> Result< ( RangeByStepSizeInclusive<Radians>,
+      RangeByStepSizeInclusive<Radians>, ), std::io::Error,
+    > { let mut buf = [0u8; 40]; reader.read_exact(&mut buf)?; let azimuth =
+    > RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]); let
+    > zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..
+    > 32]); let sample_count =
+    > u32::from_le_bytes(buf[32..36].try_into().unwrap());
+    > #[cfg(debug_assertions)] debug_assert_eq!( sample_count as usize,
+    > madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf) ); Ok((azimuth,
+    > zenith))
     }
 
     pub fn write_madf_mmsf_params_to_vgmo<W: Write>(
@@ -795,22 +557,19 @@ pub mod vgmo {
         zenith: &RangeByStepSizeInclusive<Radians>,
         writer: &mut BufWriter<W>,
         is_madf: bool,
-    ) -> Result<(), WriteFileErrorKind> {
-        let mut header = [0x20; 40];
-        azimuth.write_to_buf(&mut header[0..16]);
-        zenith.write_to_buf(&mut header[16..32]);
-        header[32..36].copy_from_slice(
-            &(madf_or_mmsf_samples_count(zenith, azimuth, is_madf) as u32).to_le_bytes(),
-        );
-        header[39] = 0x0A; // LF
-        writer.write_all(&header).map_err(|err| err.into())
+    ) -> Result<(), WriteFileErrorKind> { let mut header = [0x20; 40];
+      azimuth.write_to_buf(&mut header[0..16]); zenith.write_to_buf(&mut
+      header[16..32]); header[32..36].copy_from_slice(
+      &(madf_or_mmsf_samples_count(zenith, azimuth, is_madf) as
+      u32).to_le_bytes(), ); header[39] = 0x0A; // LF
+      writer.write_all(&header).map_err(|err| err.into())
     }
 
     impl MadfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
-        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
-                reader,
+        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) ->
+Result<Self, std::io::Error> {             let (azimuth, zenith) =
+read_madf_mmsf_params_from_vgmo(                 reader,
                 #[cfg(debug_assertions)]
                 true,
             )?;
@@ -822,15 +581,16 @@ pub mod vgmo {
             &self,
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
-            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, true)
+          write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer,
+          true)
         }
     }
 
     impl MmsfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
-        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
-                reader,
+        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) ->
+Result<Self, std::io::Error> {             let (azimuth, zenith) =
+read_madf_mmsf_params_from_vgmo(                 reader,
                 #[cfg(debug_assertions)]
                 false,
             )?;
@@ -846,9 +606,9 @@ pub mod vgmo {
         pub fn write_to_vgmo<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-        ) -> Result<(), WriteFileErrorKind> {
-            // TODO: write resolution for MMSF
-            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, false)
+        ) -> Result<(), WriteFileErrorKind> { // TODO: write resolution for
+          MMSF write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith,
+          writer, false)
         }
     }
 
@@ -863,15 +623,17 @@ pub mod vgmo {
             match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
                 0x00 => {
                     // Spherical cap
-                    let zenith = rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
-                    RegionShape::SphericalCap { zenith }
-                }
+                    let zenith =
+rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+RegionShape::SphericalCap { zenith }                 }
                 0x01 => {
                     // Spherical rectangle
-                    let zenith_start = rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
-                    let zenith_stop = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
-                    let azimuth_start = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
-                    let azimuth_stop = rad!(f32::from_le_bytes(buf[16..20].try_into().unwrap()));
+                    let zenith_start =
+rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+let zenith_stop = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                    let azimuth_start =
+rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
+let azimuth_stop = rad!(f32::from_le_bytes(buf[16..20].try_into().unwrap()));
                     RegionShape::SphericalRect {
                         zenith: (zenith_start, zenith_stop),
                         azimuth: (azimuth_start, azimuth_stop),
@@ -901,12 +663,12 @@ pub mod vgmo {
                 }
                 RegionShape::SphericalRect { zenith, azimuth } => {
                     buf[0..4].copy_from_slice(&0x01u32.to_le_bytes());
-                    buf[4..8].copy_from_slice(&zenith.0.value().to_le_bytes());
-                    buf[8..12].copy_from_slice(&zenith.1.value().to_le_bytes());
-                    buf[12..16].copy_from_slice(&azimuth.0.value().to_le_bytes());
-                    buf[16..20].copy_from_slice(&azimuth.1.value().to_le_bytes());
-                }
-                RegionShape::Disk { .. } => {
+
+buf[4..8].copy_from_slice(&zenith.0.value().to_le_bytes());
+buf[8..12].copy_from_slice(&zenith.1.value().to_le_bytes());
+buf[12..16].copy_from_slice(&azimuth.0.value().to_le_bytes());
+buf[16..20].copy_from_slice(&azimuth.1.value().to_le_bytes());
+}                 RegionShape::Disk { .. } => {
                     buf[0..4].copy_from_slice(&0x02u32.to_le_bytes());
                 }
             }
@@ -924,20 +686,23 @@ pub mod vgmo {
                 "Emitter needs at least 80 bytes of space"
             );
             let num_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-            let max_bounces = u32::from_le_bytes(buf[4..8].try_into().unwrap());
-            let radius = mm!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
-            let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[12..12 + 16]);
-            let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[28..28 + 16]);
+            let max_bounces =
+u32::from_le_bytes(buf[4..8].try_into().unwrap());             let radius =
+mm!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));             let
+zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[12..12 +
+16]);             let azimuth =
+RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[28..28 + 16]);
             let shape = RegionShape::read_from_buf(&buf[44..44 + 20]);
-            let spectrum = RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[64..64 + 16]);
+            let spectrum =
+RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[64..64 + 16]);
             let solid_angle = match shape {
-                RegionShape::SphericalCap { zenith } => solid_angle_of_spherical_cap(zenith),
-                RegionShape::SphericalRect { zenith, azimuth } => {
-                    solid_angle_of_region(zenith, azimuth)
-                }
+                RegionShape::SphericalCap { zenith } =>
+solid_angle_of_spherical_cap(zenith),
+RegionShape::SphericalRect { zenith, azimuth } => {
+solid_angle_of_region(zenith, azimuth)                 }
                 RegionShape::Disk { .. } => {
-                    log::warn!("[TO BE SUPPRESSED] Solid angle of disk emitter is not implemented");
-                    steradians!(0.0)
+                    log::warn!("[TO BE SUPPRESSED] Solid angle of disk
+emitter is not implemented");                     steradians!(0.0)
                 }
             };
             Self {
@@ -960,7 +725,8 @@ pub mod vgmo {
             );
             buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
             buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
-            buf[8..12].copy_from_slice(&self.radius.value().value.to_le_bytes());
+
+buf[8..12].copy_from_slice(&self.radius.value().value.to_le_bytes());
             self.zenith.write_to_buf(&mut buf[12..12 + 16]);
             self.azimuth.write_to_buf(&mut buf[28..28 + 16]);
             self.shape.write_to_buf(&mut buf[44..44 + 20]);
@@ -978,31 +744,36 @@ pub mod vgmo {
                 buf.len() >= Self::REQUIRED_SIZE,
                 "SphericalPartition needs at least 36 bytes of space"
             );
-            let partition_type = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-            match partition_type {
-                0x00 => {
+            let partition_type =
+u32::from_le_bytes(buf[0..4].try_into().unwrap());             match
+partition_type {                 0x00 => {
                     // EqualAngle
                     let zenith =
-                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[4..4 + 16]);
+
+RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[4..4 + 16]);
                     let azimuth =
-                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
+
+RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
                     SphericalPartition::EqualAngle { zenith, azimuth }
                 }
                 0x01 => {
                     // EqualArea
                     let zenith =
-                        RangeByStepCountInclusive::<Radians>::read_from_buf(&buf[4..4 + 16]);
+
+RangeByStepCountInclusive::<Radians>::read_from_buf(&buf[4..4 + 16]);
                     let azimuth =
-                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
+
+RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
                     SphericalPartition::EqualArea { zenith, azimuth }
                 }
                 0x02 => {
                     // EqualProjectedArea
-                    let zenith = RangeByStepCountInclusive::read_from_buf(&buf[4..4 + 16]);
-                    let azimuth =
-                        RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
-                    SphericalPartition::EqualProjectedArea { zenith, azimuth }
-                }
+                    let zenith =
+RangeByStepCountInclusive::read_from_buf(&buf[4..4 + 16]);
+let azimuth =
+RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[20..20 + 16]);
+                    SphericalPartition::EqualProjectedArea { zenith, azimuth
+}                 }
                 _ => panic!("Invalid partition type: {}", partition_type),
             }
         }
@@ -1024,8 +795,8 @@ pub mod vgmo {
                     zenith.write_to_buf(&mut buf[4..4 + 16]);
                     azimuth.write_to_buf(&mut buf[20..20 + 16]);
                 }
-                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                    buf[0..4].copy_from_slice(&(0x02u32).to_le_bytes());
+                SphericalPartition::EqualProjectedArea { zenith, azimuth } =>
+{                     buf[0..4].copy_from_slice(&(0x02u32).to_le_bytes());
                     zenith.write_to_buf(&mut buf[4..4 + 16]);
                     azimuth.write_to_buf(&mut buf[20..20 + 16]);
                 }
@@ -1059,14 +830,15 @@ pub mod vgmo {
                 }
                 0x01 => {
                     // Single Region
-                    let shape = RegionShape::read_from_buf(&buf[8..8 + RegionShape::REQUIRED_SIZE]);
-                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
-                        &buf[4 + RegionShape::REQUIRED_SIZE..4 + RegionShape::REQUIRED_SIZE + 16],
+                    let shape = RegionShape::read_from_buf(&buf[8..8 +
+RegionShape::REQUIRED_SIZE]);                     let zenith =
+RangeByStepSizeInclusive::<Radians>::read_from_buf(
+&buf[4 + RegionShape::REQUIRED_SIZE..4 + RegionShape::REQUIRED_SIZE + 16],
                     );
-                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
-                        &buf[4 + RegionShape::REQUIRED_SIZE + 16
-                            ..4 + RegionShape::REQUIRED_SIZE + 32],
-                    );
+                    let azimuth =
+RangeByStepSizeInclusive::<Radians>::read_from_buf(
+&buf[4 + RegionShape::REQUIRED_SIZE + 16                             ..4 +
+RegionShape::REQUIRED_SIZE + 32],                     );
                     CollectorScheme::SingleRegion {
                         shape,
                         zenith,
@@ -1086,19 +858,19 @@ pub mod vgmo {
             match self {
                 CollectorScheme::Partitioned { partition } => {
                     buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
-                    partition.write_to_buf(&mut buf[4..4 + SphericalPartition::REQUIRED_SIZE]);
-                }
+                    partition.write_to_buf(&mut buf[4..4 +
+SphericalPartition::REQUIRED_SIZE]);                 }
                 CollectorScheme::SingleRegion {
                     shape,
                     zenith,
                     azimuth,
                 } => {
                     buf[0..4].copy_from_slice(&(0x01u32).to_le_bytes());
-                    // buf[4..8].copy_from_slice(&(*domain as u32).to_le_bytes());
-                    shape.write_to_buf(&mut buf[4..4 + RegionShape::REQUIRED_SIZE]);
-                    zenith.write_to_buf(&mut buf[24..24 + 16]);
-                    azimuth.write_to_buf(&mut buf[40..40 + 16]);
-                }
+                    // buf[4..8].copy_from_slice(&(*domain as
+u32).to_le_bytes());                     shape.write_to_buf(&mut buf[4..4 +
+RegionShape::REQUIRED_SIZE]);                     zenith.write_to_buf(&mut
+buf[24..24 + 16]);                     azimuth.write_to_buf(&mut buf[40..40 +
+16]);                 }
             }
         }
     }
@@ -1122,8 +894,8 @@ pub mod vgmo {
                 }
             };
             let scheme =
-                CollectorScheme::read_from_buf(&buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
-            Self { radius, scheme }
+                CollectorScheme::read_from_buf(&buf[4..4 +
+CollectorScheme::REQUIRED_SIZE]);             Self { radius, scheme }
         }
 
         /// Writes the collector to a buffer.
@@ -1140,34 +912,35 @@ pub mod vgmo {
                     buf[0..4].copy_from_slice(&r.value().to_le_bytes());
                 }
             }
-            buf[0..4].copy_from_slice(&self.radius.value().value.to_le_bytes());
+
+buf[0..4].copy_from_slice(&self.radius.value().value.to_le_bytes());
             self.scheme
-                .write_to_buf(&mut buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
-        }
+                .write_to_buf(&mut buf[4..4 +
+CollectorScheme::REQUIRED_SIZE]);         }
     }
 
     impl BsdfMeasurementParams {
         /// Reads the BSDF measurement parameters from the given reader.
-        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
-            reader.read_exact(&mut buf)?;
-            let kind = BsdfKind::from(buf[0]);
+        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) ->
+Result<Self, std::io::Error> {             let mut buf = [0u8;
+Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
+reader.read_exact(&mut buf)?;             let kind = BsdfKind::from(buf[0]);
             let incident_medium = Medium::from(buf[1]);
             let transmitted_medium = Medium::from(buf[2]);
             let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
-            let emitter = Emitter::read_from_buf(&buf[4..4 + Emitter::REQUIRED_SIZE]);
-            let collector = Collector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
-            let samples_count = u32::from_le_bytes(
-                buf[Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
-                    ..Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
-                    .try_into()
-                    .unwrap(),
+            let emitter = Emitter::read_from_buf(&buf[4..4 +
+Emitter::REQUIRED_SIZE]);             let collector =
+Collector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);             let
+samples_count = u32::from_le_bytes(
+buf[Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
+..Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
+.try_into()                     .unwrap(),
             );
             assert_eq!(
                 samples_count,
                 collector.scheme.total_sample_count() as u32,
-                "The number of samples in the VGMO file does not match the number of samples in \
-                 the collector scheme"
+                "The number of samples in the VGMO file does not match the
+number of samples in \                  the collector scheme"
             );
             Ok(Self {
                 kind,
@@ -1183,26 +956,20 @@ pub mod vgmo {
         pub fn write_to_vgmo<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-        ) -> Result<(), WriteFileErrorKind> {
-            let mut buf = [0x20; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
-            buf[0] = self.kind as u8;
-            buf[1] = self.incident_medium as u8;
-            buf[2] = self.transmitted_medium as u8;
-            buf[3] = match self.sim_kind {
-                SimulationKind::GeomOptics(method) => method as u8,
-                SimulationKind::WaveOptics => 0x03,
-            };
-            self.emitter
-                .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
-            self.collector
-                .write_to_buf(&mut buf[4 + Emitter::REQUIRED_SIZE..]);
-            buf[4 + Emitter::REQUIRED_SIZE + Collector::REQUIRED_SIZE
-                ..4 + Emitter::REQUIRED_SIZE + Collector::REQUIRED_SIZE + 4]
-                .copy_from_slice(
-                    &(self.collector.scheme.total_sample_count() as u32).to_le_bytes(),
-                );
-            buf[155] = 0x0A;
-            writer.write_all(&buf).map_err(|err| err.into())
+        ) -> Result<(), WriteFileErrorKind> { let mut buf = [0x20;
+          Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12]; buf[0]
+          = self.kind as u8; buf[1] = self.incident_medium as u8; buf[2] =
+          self.transmitted_medium as u8; buf[3] = match self.sim_kind {
+          SimulationKind::GeomOptics(method) => method as u8,
+          SimulationKind::WaveOptics => 0x03, }; self.emitter
+          .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
+          self.collector .write_to_buf(&mut buf[4 +
+          Emitter::REQUIRED_SIZE..]); buf[4 + Emitter::REQUIRED_SIZE +
+          Collector::REQUIRED_SIZE ..4 + Emitter::REQUIRED_SIZE +
+          Collector::REQUIRED_SIZE + 4] .copy_from_slice(
+          &(self.collector.scheme.total_sample_count() as u32).to_le_bytes(),
+          ); buf[155] = 0x0A; writer.write_all(&buf).map_err(|err|
+          err.into())
         }
     }
 
@@ -1212,18 +979,11 @@ pub mod vgmo {
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
             params: MadfMeasurementParams,
-        ) -> Result<Self, ReadFileErrorKind> {
-            debug_assert!(
-                meta.kind == MeasurementKind::MicrofacetAreaDistribution,
-                "Measurement kind mismatch"
-            );
-            let samples = read_f32_data_samples(
-                reader,
-                params.samples_count(),
-                meta.encoding,
-                meta.compression,
-            )?;
-            Ok(MeasuredMadfData { params, samples })
+        ) -> Result<Self, ReadFileErrorKind> { debug_assert!( meta.kind ==
+          MeasurementKind::MicrofacetAreaDistribution, "Measurement kind
+          mismatch" ); let samples = read_f32_data_samples( reader,
+          params.samples_count(), meta.encoding, meta.compression, )?;
+          Ok(MeasuredMadfData { params, samples })
         }
 
         /// Writes the measured MADF data to the given writer.
@@ -1232,15 +992,10 @@ pub mod vgmo {
             writer: &mut BufWriter<W>,
             encoding: FileEncoding,
             compression: CompressionScheme,
-        ) -> Result<(), WriteFileErrorKind> {
-            write_f32_data_samples(
-                writer,
-                encoding,
-                compression,
-                &self.samples,
-                self.params.zenith.step_count_wrapped() as u32,
-            )
-            .map_err(|err| err.into())
+        ) -> Result<(), WriteFileErrorKind> { write_f32_data_samples( writer,
+          encoding, compression, &self.samples,
+          self.params.zenith.step_count_wrapped() as u32, ) .map_err(|err|
+          err.into())
         }
     }
 
@@ -1250,18 +1005,11 @@ pub mod vgmo {
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
             params: MmsfMeasurementParams,
-        ) -> Result<Self, ReadFileErrorKind> {
-            debug_assert!(
-                meta.kind == MeasurementKind::MicrofacetMaskingShadowing,
-                "Measurement kind mismatch"
-            );
-            let samples = read_f32_data_samples(
-                reader,
-                params.samples_count(),
-                meta.encoding,
-                meta.compression,
-            )?;
-            Ok(MeasuredMmsfData { params, samples })
+        ) -> Result<Self, ReadFileErrorKind> { debug_assert!( meta.kind ==
+          MeasurementKind::MicrofacetMaskingShadowing, "Measurement kind
+          mismatch" ); let samples = read_f32_data_samples( reader,
+          params.samples_count(), meta.encoding, meta.compression, )?;
+          Ok(MeasuredMmsfData { params, samples })
         }
 
         /// Writes the measured MMSF data to the given writer.
@@ -1270,15 +1018,10 @@ pub mod vgmo {
             writer: &mut BufWriter<W>,
             encoding: FileEncoding,
             compression: CompressionScheme,
-        ) -> Result<(), WriteFileErrorKind> {
-            write_f32_data_samples(
-                writer,
-                encoding,
-                compression,
-                &self.samples,
-                self.params.zenith.step_count_wrapped() as u32,
-            )
-            .map_err(|err| err.into())
+        ) -> Result<(), WriteFileErrorKind> { write_f32_data_samples( writer,
+          encoding, compression, &self.samples,
+          self.params.zenith.step_count_wrapped() as u32, ) .map_err(|err|
+          err.into())
         }
     }
 
@@ -1291,20 +1034,20 @@ pub mod vgmo {
 
                     /// Writes the data to the given buffer.
                     pub fn write_to_buf(&self, buf: &mut [u8]) {
-                        debug_assert!(buf.len() >= self.len() * Self::ELEM_SIZE, "Buffer too small");
-                        for i in 0..self.len() {
-                            buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].copy_from_slice(&self[i].to_le_bytes());
-                        }
-                    }
+                        debug_assert!(buf.len() >= self.len() *
+Self::ELEM_SIZE, "Buffer too small");                         for i in
+0..self.len() {                             buf[i * Self::ELEM_SIZE..(i + 1)
+* Self::ELEM_SIZE].copy_from_slice(&self[i].to_le_bytes());
+}                     }
 
                     /// Reads the data from the given buffer.
                     pub fn read_from_buf(buf: &[u8], len: usize) -> Self {
-                        debug_assert!(buf.len() >= len * Self::ELEM_SIZE, "Buffer too small");
-                        let mut data = vec![0 as $t; len];
-                        for i in 0..len {
-                            data[i] = <$t>::from_le_bytes(buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].try_into().unwrap());
-                        }
-                        Self(data)
+                        debug_assert!(buf.len() >= len * Self::ELEM_SIZE,
+"Buffer too small");                         let mut data = vec![0 as $t;
+len];                         for i in 0..len {
+                            data[i] = <$t>::from_le_bytes(buf[i *
+Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].try_into().unwrap());
+}                         Self(data)
                     }
                 }
             )*
@@ -1316,12 +1059,12 @@ pub mod vgmo {
     impl BsdfMeasurementStatsPoint {
         /// Writes the BSDF measurement statistics at a single point to the
         /// buffer.
-        pub fn write_to_buf(&self, buf: &mut [u8], n_wavelength: usize, bounces: usize) {
-            let size = Self::calc_size_in_bytes(n_wavelength, bounces);
-            debug_assert!(buf.len() >= size, "Buffer too small");
-            let mut offset = 0;
-            buf[offset..offset + 4].copy_from_slice(&self.n_received.to_le_bytes());
-            offset += 4;
+        pub fn write_to_buf(&self, buf: &mut [u8], n_wavelength: usize,
+bounces: usize) {             let size =
+Self::calc_size_in_bytes(n_wavelength, bounces);
+debug_assert!(buf.len() >= size, "Buffer too small");             let mut
+offset = 0;             buf[offset..offset +
+4].copy_from_slice(&self.n_received.to_le_bytes());             offset += 4;
             self.n_absorbed
                 .write_to_buf(&mut buf[offset..offset + n_wavelength * 4]);
             offset += n_wavelength * 4;
@@ -1336,27 +1079,27 @@ pub mod vgmo {
             offset += n_wavelength * 4;
             for i in 0..n_wavelength {
                 for j in 0..bounces {
-                    buf[offset + i * bounces * 4 + j * 4..offset + i * bounces * 4 + (j + 1) * 4]
-                        .copy_from_slice(&self.num_rays_per_bounce[i][j].to_le_bytes());
-                }
-            }
+                    buf[offset + i * bounces * 4 + j * 4..offset + i *
+bounces * 4 + (j + 1) * 4]
+.copy_from_slice(&self.num_rays_per_bounce[i][j].to_le_bytes());
+}             }
             offset += n_wavelength * bounces * 4;
             for i in 0..n_wavelength {
                 for j in 0..bounces {
-                    buf[offset + i * bounces * 4 + j * 4..offset + i * bounces * 4 + (j + 1) * 4]
-                        .copy_from_slice(&self.energy_per_bounce[i][j].to_le_bytes());
-                }
-            }
+                    buf[offset + i * bounces * 4 + j * 4..offset + i *
+bounces * 4 + (j + 1) * 4]
+.copy_from_slice(&self.energy_per_bounce[i][j].to_le_bytes());
+}             }
             offset += n_wavelength * bounces * 4;
             debug_assert_eq!(offset, size, "Buffer size mismatch");
         }
 
         /// Reads the BSDF measurement statistics at a single point from the
         /// buffer.
-        pub fn read_from_buf(buf: &[u8], n_wavelength: usize, max_bounce: usize) -> Option<Self> {
-            let mut offset = 0;
-            let n_received = u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-            offset += 4;
+        pub fn read_from_buf(buf: &[u8], n_wavelength: usize, max_bounce:
+usize) -> Option<Self> {             let mut offset = 0;
+            let n_received = u32::from_le_bytes(buf[offset..offset +
+4].try_into().unwrap());             offset += 4;
             let n_absorbed = PerWavelength::<u32>::read_from_buf(
                 &buf[offset..offset + n_wavelength * 4],
                 n_wavelength,
@@ -1381,8 +1124,8 @@ pub mod vgmo {
             );
             offset += n_wavelength * 4;
 
-            let mut num_rays_per_bounce = vec![vec![0u32; max_bounce]; n_wavelength];
-            for i in 0..n_wavelength {
+            let mut num_rays_per_bounce = vec![vec![0u32; max_bounce];
+n_wavelength];             for i in 0..n_wavelength {
                 for j in 0..max_bounce {
                     num_rays_per_bounce[i][j] = u32::from_le_bytes(
                         buf[offset + i * max_bounce * 4 + j * 4
@@ -1394,8 +1137,8 @@ pub mod vgmo {
             }
             offset += n_wavelength * max_bounce * 4;
 
-            let mut energy_per_bounce = vec![vec![0f32; max_bounce]; n_wavelength];
-            for i in 0..n_wavelength {
+            let mut energy_per_bounce = vec![vec![0f32; max_bounce];
+n_wavelength];             for i in 0..n_wavelength {
                 for j in 0..max_bounce {
                     energy_per_bounce[i][j] = f32::from_le_bytes(
                         buf[offset + i * max_bounce * 4 + j * 4
@@ -1422,18 +1165,18 @@ pub mod vgmo {
         pub fn read_from_buf(buf: &[u8], bounces: usize) -> Option<Self> {
             let size = Self::calc_size_in_bytes(bounces);
             debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
-            let total_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-            let total_energy = f32::from_le_bytes(buf[4..8].try_into().unwrap());
-            let mut offset = 8;
-            let mut num_rays_per_bounce = vec![0u32; bounces];
-            for bounces in num_rays_per_bounce.iter_mut() {
-                *bounces = u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-                offset += 4;
+            let total_rays =
+u32::from_le_bytes(buf[0..4].try_into().unwrap());             let
+total_energy = f32::from_le_bytes(buf[4..8].try_into().unwrap());
+let mut offset = 8;             let mut num_rays_per_bounce = vec![0u32;
+bounces];             for bounces in num_rays_per_bounce.iter_mut() {
+                *bounces = u32::from_le_bytes(buf[offset..offset +
+4].try_into().unwrap());                 offset += 4;
             }
             let mut energy_per_bounce = vec![0f32; bounces];
             for energy in energy_per_bounce.iter_mut() {
-                *energy = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-                offset += 4;
+                *energy = f32::from_le_bytes(buf[offset..offset +
+4].try_into().unwrap());                 offset += 4;
             }
             debug_assert_eq!(offset, size, "Buffer size mismatch");
             Some(Self {
@@ -1453,13 +1196,13 @@ pub mod vgmo {
             buf[4..8].copy_from_slice(&self.total_energy.to_le_bytes());
             let mut offset = 8;
             for i in 0..bounces {
-                buf[offset..offset + 4].copy_from_slice(&self.num_rays_per_bounce[i].to_le_bytes());
-                offset += 4;
-            }
+                buf[offset..offset +
+4].copy_from_slice(&self.num_rays_per_bounce[i].to_le_bytes());
+offset += 4;             }
             for i in 0..bounces {
-                buf[offset..offset + 4].copy_from_slice(&self.energy_per_bounce[i].to_le_bytes());
-                offset += 4;
-            }
+                buf[offset..offset +
+4].copy_from_slice(&self.energy_per_bounce[i].to_le_bytes());
+offset += 4;             }
             debug_assert_eq!(offset, size, "Buffer size mismatch");
         }
     }
@@ -1471,22 +1214,25 @@ pub mod vgmo {
             bounces: usize,
             collector_sample_count: usize,
         ) -> usize {
-            BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces)
+          BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength,
+          bounces)
                 + BounceAndEnergy::calc_size_in_bytes(bounces)
                     * collector_sample_count
                     * n_wavelength
         }
 
         /// Reads a single data point from a buffer.
-        pub fn read_from_buf(buf: &[u8], params: &BsdfMeasurementParams) -> Self {
-            let n_wavelength = params.emitter.spectrum.step_count();
+        pub fn read_from_buf(buf: &[u8], params: &BsdfMeasurementParams) ->
+Self {             let n_wavelength = params.emitter.spectrum.step_count();
             let bounces = params.emitter.max_bounces as usize;
-            let collector_sample_count = params.collector.scheme.total_sample_count();
-            let size = Self::calc_size_in_bytes(n_wavelength, bounces, collector_sample_count);
-            let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
-            debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
-            let stats_size = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
-            let stats = BsdfMeasurementStatsPoint::read_from_buf(
+            let collector_sample_count =
+params.collector.scheme.total_sample_count();             let size =
+Self::calc_size_in_bytes(n_wavelength, bounces, collector_sample_count);
+            let bounce_and_energy_size =
+BounceAndEnergy::calc_size_in_bytes(bounces);
+debug_assert_eq!(buf.len(), size, "Buffer size mismatch");             let
+stats_size = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength,
+bounces);             let stats = BsdfMeasurementStatsPoint::read_from_buf(
                 &buf[0..stats_size],
                 n_wavelength,
                 bounces,
@@ -1495,8 +1241,8 @@ pub mod vgmo {
             let mut data: Vec<PerWavelength<BounceAndEnergy>> =
                 Vec::with_capacity(collector_sample_count);
             for i in 0..collector_sample_count {
-                let mut per_wavelength: Vec<BounceAndEnergy> = Vec::with_capacity(n_wavelength);
-                for j in 0..n_wavelength {
+                let mut per_wavelength: Vec<BounceAndEnergy> =
+Vec::with_capacity(n_wavelength);                 for j in 0..n_wavelength {
                     let offset = stats_size
                         + i * n_wavelength * bounce_and_energy_size
                         + j * bounce_and_energy_size;
@@ -1521,17 +1267,18 @@ pub mod vgmo {
         }
 
         /// Writes a single data point to a buffer.
-        pub fn write_to_buf(&self, buf: &mut [u8], n_wavelength: usize, bounces: usize) {
-            // Write stats.
+        pub fn write_to_buf(&self, buf: &mut [u8], n_wavelength: usize,
+bounces: usize) {             // Write stats.
             self.stats.write_to_buf(buf, n_wavelength, bounces);
-            let mut offset = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
-            let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
-            // Write collector's per wavelength patch data.
-            for per_wavelength_patch_data in &self.data {
-                for bounce_and_energy in per_wavelength_patch_data.iter() {
-                    bounce_and_energy.write_to_buf(&mut buf[offset..], bounces);
-                    offset += bounce_and_energy_size;
-                }
+            let mut offset =
+BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
+            let bounce_and_energy_size =
+BounceAndEnergy::calc_size_in_bytes(bounces);             // Write
+collector's per wavelength patch data.             for
+per_wavelength_patch_data in &self.data {                 for
+bounce_and_energy in per_wavelength_patch_data.iter() {
+bounce_and_energy.write_to_buf(&mut buf[offset..], bounces);
+offset += bounce_and_energy_size;                 }
             }
         }
     }
@@ -1542,11 +1289,8 @@ pub mod vgmo {
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
             params: BsdfMeasurementParams,
-        ) -> Result<Self, ReadFileErrorKind> {
-            debug_assert!(
-                meta.kind == MeasurementKind::Bsdf,
-                "Measurement kind mismatch"
-            );
+        ) -> Result<Self, ReadFileErrorKind> { debug_assert!( meta.kind ==
+          MeasurementKind::Bsdf, "Measurement kind mismatch" );
 
             let mut zlib_decoder;
             let mut gzip_decoder;
@@ -1570,20 +1314,22 @@ pub mod vgmo {
                 FileEncoding::Binary => {
                     let n_wavelength = params.emitter.spectrum.step_count();
                     let bounces = params.emitter.max_bounces as usize;
-                    let collector_sample_count = params.collector.scheme.total_sample_count();
-                    let sample_size =
-                        BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
-                            n_wavelength,
-                            bounces,
+                    let collector_sample_count =
+params.collector.scheme.total_sample_count();                     let
+sample_size =
+BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
+n_wavelength,                             bounces,
                             collector_sample_count,
                         );
-                    let sample_count = params.emitter.azimuth.step_count_wrapped()
+                    let sample_count =
+params.emitter.azimuth.step_count_wrapped()
                         * params.emitter.zenith.step_count_wrapped();
                     let mut buf = vec![0u8; sample_size];
                     let mut samples = Vec::with_capacity(sample_count);
                     (0..sample_count).for_each(|_| {
                         decoder.read_exact(&mut buf).unwrap();
-                        samples.push(BsdfMeasurementDataPoint::read_from_buf(&buf, &params));
+
+samples.push(BsdfMeasurementDataPoint::read_from_buf(&buf, &params));
                     });
 
                     Ok(Self { params, samples })
@@ -1597,19 +1343,17 @@ pub mod vgmo {
             writer: &mut BufWriter<W>,
             encoding: FileEncoding,
             compression: CompressionScheme,
-        ) -> Result<(), WriteFileErrorKind> {
-            let mut zlib;
-            let mut gzip;
+        ) -> Result<(), WriteFileErrorKind> { let mut zlib; let mut gzip;
 
             let mut encoder: Box<&mut dyn Write> = match compression {
                 CompressionScheme::None => Box::new(writer),
                 CompressionScheme::Zlib => {
-                    zlib = flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
-                    Box::new(&mut zlib)
+                    zlib = flate2::write::ZlibEncoder::new(writer,
+flate2::Compression::default());                     Box::new(&mut zlib)
                 }
                 CompressionScheme::Gzip => {
-                    gzip = flate2::write::GzEncoder::new(writer, flate2::Compression::default());
-                    Box::new(&mut gzip)
+                    gzip = flate2::write::GzEncoder::new(writer,
+flate2::Compression::default());                     Box::new(&mut gzip)
                 }
             };
 
@@ -1619,14 +1363,14 @@ pub mod vgmo {
                 }
                 FileEncoding::Binary => {
                     for sample in &self.samples {
-                        let n_wavelength = self.params.emitter.spectrum.step_count();
-                        let bounces = self.params.emitter.max_bounces as usize;
-                        let collector_sample_count =
-                            self.params.collector.scheme.total_sample_count();
-                        let sample_size =
-                            BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
-                                n_wavelength,
-                                bounces,
+                        let n_wavelength =
+self.params.emitter.spectrum.step_count();                         let
+bounces = self.params.emitter.max_bounces as usize;
+let collector_sample_count =
+self.params.collector.scheme.total_sample_count();
+let sample_size =
+BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
+n_wavelength,                                 bounces,
                                 collector_sample_count,
                             );
                         let mut buf = vec![0u8; sample_size];
@@ -1654,11 +1398,11 @@ pub mod vgmo {
             match header {
                 Header::Bsdf { meta, bsdf } => {
                     let measured =
-                        MeasuredBsdfData::read(&mut reader, meta, bsdf).map_err(|err| {
-                            Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            })
+                        MeasuredBsdfData::read(&mut reader, meta,
+bsdf).map_err(|err| {
+Error::ReadFile(ReadFileError {                                 path:
+filepath.to_owned().into_boxed_path(),                                 kind:
+err,                             })
                         })?;
                     Ok(MeasurementData {
                         name,
@@ -1668,11 +1412,11 @@ pub mod vgmo {
                 }
                 Header::Madf { meta, madf } => {
                     let measured =
-                        MeasuredMadfData::read(&mut reader, meta, madf).map_err(|err| {
-                            Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            })
+                        MeasuredMadfData::read(&mut reader, meta,
+madf).map_err(|err| {
+Error::ReadFile(ReadFileError {                                 path:
+filepath.to_owned().into_boxed_path(),                                 kind:
+err,                             })
                         })?;
                     Ok(MeasurementData {
                         name,
@@ -1682,11 +1426,11 @@ pub mod vgmo {
                 }
                 Header::Mmsf { meta, mmsf } => {
                     let measured =
-                        MeasuredMmsfData::read(&mut reader, meta, mmsf).map_err(|err| {
-                            Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            })
+                        MeasuredMmsfData::read(&mut reader, meta,
+mmsf).map_err(|err| {
+Error::ReadFile(ReadFileError {                                 path:
+filepath.to_owned().into_boxed_path(),                                 kind:
+err,                             })
                         })?;
                     Ok(MeasurementData {
                         name,
@@ -1703,94 +1447,54 @@ pub mod vgmo {
             filepath: &Path,
             encoding: FileEncoding,
             compression: CompressionScheme,
-        ) -> Result<(), Error> {
-            let header = match &self.measured {
-                MeasuredData::Madf(adf) => {
-                    assert_eq!(
-                        adf.samples.len(),
-                        adf.params.samples_count(),
-                        "Writing a ADF requires the number of samples to match the number of bins."
-                    );
-                    Header::Madf {
-                        meta: HeaderMeta {
-                            kind: MeasurementKind::MicrofacetAreaDistribution,
-                            encoding,
-                            compression,
-                        },
-                        madf: adf.params,
-                    }
-                }
-                MeasuredData::Mmsf(msf) => {
-                    assert_eq!(
-                        msf.samples.len(),
-                        msf.params.samples_count(),
-                        "Writing a MSF requires the number of samples to match the number of bins."
-                    );
-                    Header::Mmsf {
-                        meta: HeaderMeta {
-                            kind: MeasurementKind::MicrofacetMaskingShadowing,
-                            encoding,
-                            compression,
-                        },
-                        mmsf: msf.params,
-                    }
-                }
-                MeasuredData::Bsdf(bsdf) => {
-                    assert_eq!(
-                        bsdf.samples.len(),
-                        bsdf.params.bsdf_data_samples_count(),
-                        "Writing a BSDF requires the number of samples to match the number of \
-                         bins."
-                    );
-                    Header::Bsdf {
-                        meta: HeaderMeta {
-                            kind: MeasurementKind::Bsdf,
-                            encoding,
-                            compression,
-                        },
-                        bsdf: bsdf.params,
-                    }
-                }
-            };
-            let file = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(filepath)?;
-            let mut writer = BufWriter::new(file);
-            header.write(&mut writer).map_err(|err| {
-                Error::WriteFile(WriteFileError {
-                    path: filepath.to_path_buf().into_boxed_path(),
-                    kind: err,
-                })
-            })?;
+        ) -> Result<(), Error> { let header = match &self.measured {
+          MeasuredData::Madf(adf) => { assert_eq!( adf.samples.len(),
+          adf.params.samples_count(), "Writing a ADF requires the number of
+          samples to match the number of bins." ); Header::Madf { meta:
+          HeaderMeta { kind: MeasurementKind::MicrofacetAreaDistribution,
+          encoding, compression, }, madf: adf.params, } }
+          MeasuredData::Mmsf(msf) => { assert_eq!( msf.samples.len(),
+          msf.params.samples_count(), "Writing a MSF requires the number of
+          samples to match the number of bins." ); Header::Mmsf { meta:
+          HeaderMeta { kind: MeasurementKind::MicrofacetMaskingShadowing,
+          encoding, compression, }, mmsf: msf.params, } }
+          MeasuredData::Bsdf(bsdf) => { assert_eq!( bsdf.samples.len(),
+          bsdf.params.bsdf_data_samples_count(), "Writing a BSDF requires the
+          number of samples to match the number of \ bins." ); Header::Bsdf {
+          meta: HeaderMeta { kind: MeasurementKind::Bsdf, encoding,
+          compression, }, bsdf: bsdf.params, } } }; let file =
+          std::fs::OpenOptions::new() .create(true) .write(true)
+          .truncate(true) .open(filepath)?; let mut writer =
+          BufWriter::new(file); header.write(&mut writer).map_err(|err| {
+          Error::WriteFile(WriteFileError { path:
+          filepath.to_path_buf().into_boxed_path(), kind: err, }) })?;
 
             match &self.measured {
                 MeasuredData::Madf(madf) => {
                     madf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
                             Error::WriteFile(WriteFileError {
-                                path: filepath.to_path_buf().into_boxed_path(),
-                                kind: err,
-                            })
+                                path:
+filepath.to_path_buf().into_boxed_path(),
+kind: err,                             })
                         })
                 }
                 MeasuredData::Mmsf(mmsf) => {
                     mmsf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
                             Error::WriteFile(WriteFileError {
-                                path: filepath.to_path_buf().into_boxed_path(),
-                                kind: err,
-                            })
+                                path:
+filepath.to_path_buf().into_boxed_path(),
+kind: err,                             })
                         })
                 }
                 MeasuredData::Bsdf(bsdf) => {
                     bsdf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
                             Error::WriteFile(WriteFileError {
-                                path: filepath.to_path_buf().into_boxed_path(),
-                                kind: err,
-                            })
+                                path:
+filepath.to_path_buf().into_boxed_path(),
+kind: err,                             })
                         })
                 }
             }
@@ -1820,19 +1524,17 @@ pub mod vgmo {
 pub fn read_ascii_dong2015<R: BufRead>(
     reader: &mut R,
     filepath: &Path,
-) -> Result<MicroSurface, Error> {
-    let mut buf = [0_u8; 4];
-    reader.read_exact(&mut buf)?;
-    if std::str::from_utf8(&buf)? != "Asci" {
-        return Err(Error::UnrecognizedFile);
-    }
+) -> Result<MicroSurface, Error> { let mut buf = [0_u8; 4];
+  reader.read_exact(&mut buf)?; if std::str::from_utf8(&buf)? != "Asci" {
+  return Err(Error::UnrecognizedFile); }
 
     let mut reader = BufReader::new(reader);
 
     let mut line = String::new();
     reader.read_line(&mut line)?;
     let (cols, rows, du, dv) = {
-        let first_line = line.trim().split_ascii_whitespace().collect::<Vec<_>>();
+        let first_line =
+line.trim().split_ascii_whitespace().collect::<Vec<_>>();
 
         let cols = first_line[1].parse::<usize>().unwrap();
         let rows = first_line[2].parse::<usize>().unwrap();
@@ -1875,8 +1577,7 @@ pub fn read_ascii_dong2015<R: BufRead>(
 pub fn read_ascii_usurf<R: BufRead>(
     reader: &mut R,
     filepath: &Path,
-) -> Result<MicroSurface, Error> {
-    let mut line = String::new();
+) -> Result<MicroSurface, Error> { let mut line = String::new();
 
     loop {
         reader.read_line(&mut line)?;
@@ -1912,8 +1613,8 @@ pub fn read_ascii_usurf<R: BufRead>(
         })
         .unzip();
 
-    // Assume that the spacing between two consecutive coordinates is uniform.
-    let du = x_coords[1] - x_coords[0];
+    // Assume that the spacing between two consecutive coordinates is
+uniform.     let du = x_coords[1] - x_coords[0];
     let dv = y_coords[1] - y_coords[0];
     let samples: Vec<f32> = values.into_iter().flatten().collect();
 
@@ -1938,10 +1639,10 @@ fn read_line_ascii_usurf(line: &str) -> Vec<f32> {
     assert!(line.is_ascii());
     line.chars()
         .enumerate()
-        .filter_map(|(index, byte)| if byte == '\t' { Some(index) } else { None }) // find tab positions
-        .scan((0, false), |(last, last_word_is_tab), curr| {
-            // cut string into pieces: floating points string and tab character
-            if *last != curr - 1 {
+        .filter_map(|(index, byte)| if byte == '\t' { Some(index) } else {
+None }) // find tab positions         .scan((0, false), |(last,
+last_word_is_tab), curr| {             // cut string into pieces: floating
+points string and tab character             if *last != curr - 1 {
                 let val_str = if *last == 0 {
                     &line[*last..curr]
                 } else {
@@ -1982,24 +1683,27 @@ mod tests {
     use super::*;
     use crate::{
         measure::{
-            bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            collector::BounceAndEnergy,
-            emitter::RegionShape,
-            measurement::{BsdfMeasurementParams, Radius::Auto, SimulationKind},
-            Collector, CollectorScheme, Emitter, RtcMethod,
+            bsdf::{BsdfKind, BsdfMeasurementDataPoint,
+BsdfMeasurementStatsPoint, PerWavelength},
+collector::BounceAndEnergy,             emitter::RegionShape,
+            measurement::{BsdfMeasurementParams, Radius::Auto,
+SimulationKind},             Collector, CollectorScheme, Emitter, RtcMethod,
         },
         units::{mm, nm, rad, Radians},
-        Medium, RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
-    };
+        Medium, RangeByStepSizeInclusive, SphericalDomain,
+SphericalPartition,     };
 
     #[test]
     #[rustfmt::skip]
     fn test_read_line_ascii_surf0() {
         let lines = [
-            "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
-            "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
-            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
-        ];
+
+"0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
+
+"0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\
+t\n",
+"0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\
+t12.85\t\t\t\t\t\n",         ];
 
         assert_eq!(read_line_ascii_usurf(lines[0]).len(), 16);
         assert_eq!(read_line_ascii_usurf(lines[1]).len(), 23);
@@ -2011,23 +1715,26 @@ mod tests {
     fn test_read_line_ascii_surf1() {
         let lines = [
             "0.00\t12.65\t\t12.63\t12.70\t12.73\t\t12.85\t\n",
-            "0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
-            "0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\n",
-            "0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\t12.85\t\t\t\t\t\n",
-        ];
+
+"0.00\t12.65\t\t12.63\t\t\t\t12.70\t12.73\t\t\t\t\t\t12.85\t\t\t\n",
+
+"0.00\t12.65\t\t\t12.63\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t12.85\t\t\t\
+t\n",
+"0.00\t12.65\t\t\t\t12.63\t\t\t\t\t\t\t\t12.70\t12.73\t\t\t\t\t\t\t\t\t\t\t\
+t12.85\t\t\t\t\t\n",         ];
 
         fn _read_line(line: &str) -> Vec<&str> {
             let tabs = line
                 .chars()
                 .enumerate()
-                .filter_map(|(index, byte)| if byte == '\t' { Some(index) } else { None })
-                .collect::<Vec<usize>>();
+                .filter_map(|(index, byte)| if byte == '\t' { Some(index) }
+else { None })                 .collect::<Vec<usize>>();
 
             let pieces = tabs
                 .iter()
                 .scan((0, false), |(last, last_word_is_tab), curr| {
-                    // cut string into pieces: floating points string and tab character
-                    if *last != curr - 1 {
+                    // cut string into pieces: floating points string and tab
+character                     if *last != curr - 1 {
                         let val_str = if *last == 0 {
                             &line[*last..*curr]
                         } else {
@@ -2093,8 +1800,8 @@ mod tests {
         let size = BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 3);
         let mut buf = vec![0; size];
         data.write_to_buf(&mut buf, 4, 3);
-        let data2 = BsdfMeasurementStatsPoint::read_from_buf(&buf, 4, 3).unwrap();
-        assert_eq!(data, data2);
+        let data2 = BsdfMeasurementStatsPoint::read_from_buf(&buf, 4,
+3).unwrap();         assert_eq!(data, data2);
     }
 
     #[test]
@@ -2102,10 +1809,10 @@ mod tests {
         let data = BounceAndEnergy {
             total_rays: 33468,
             total_energy: 1349534.0,
-            num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0],
-            energy_per_bounce: vec![
-                20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
-            ],
+            num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120,
+130, 0],             energy_per_bounce: vec![
+                20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110.,
+120.,             ],
         };
         let size = BounceAndEnergy::calc_size_in_bytes(11);
         let mut buf = vec![0; size];
@@ -2192,7 +1899,8 @@ mod tests {
             ],
         };
 
-        let size = BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
+        let size =
+BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
         let mut buf = vec![0; size];
         data.write_to_buf(&mut buf, 4, 3);
         let params = BsdfMeasurementParams {
@@ -2207,20 +1915,21 @@ mod tests {
                 zenith: RangeByStepSizeInclusive::zero_to_half_pi(rad!(0.2)),
                 azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
                 shape: RegionShape::SphericalCap { zenith: rad!(0.2) },
-                spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
-                solid_angle: Default::default(),
+                spectrum: RangeByStepSizeInclusive::new(nm!(100.0),
+nm!(400.0), nm!(100.0)),                 solid_angle: Default::default(),
             },
             collector: Collector {
                 radius: Auto(mm!(10.0)),
                 scheme: CollectorScheme::Partitioned {
                     partition: SphericalPartition::EqualAngle {
-                        zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
-                        azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
-                    },
-                },
+                        zenith:
+RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
+azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
+},                 },
             },
         };
-        let data2 = BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);
+        let data2 =
+BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);
         assert_eq!(data, data2);
     }
 }

@@ -6,15 +6,40 @@ edition = "2021"
 build = "build.rs"
 description = "Microscopic level light transport simulation."
 publish = false
+exclude = ["/scripts/*", "/meas/*", "/misc/*"]
+
+[workspace]
+members = [
+    "vgonio-core", "vgonio-msurf"
+]
+
+[workspace.package]
+authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
+edition = "2021"
+version = "0.3.0"
+
+[workspace.dependencies]
+byteorder = "1.4"
+cfg-if = "1.0"
+clap = { version = "4", features = ["derive"] }
+flate2 = "1.0"
+glam = { version = "0.23", features = ["serde", "bytemuck"] }
+log = "0.4"
+paste = "1.0"
+serde = { version = "1", features = ["derive"] }
+uuid = { version = "1.2", features = ["serde", "v4"] }
+
+[features]
+default = []
+embree = ["dep:embree"]
+optix = []
+verbose_debug = []
 
 [dependencies]
 approx = "0.5"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
-byteorder = "1"
-cfg-if = "1"
 chrono = "0.4"
-clap = { version = "4", features = ["derive"] }
 csv = "1"
 dirs = "5.0"
 egui = { version = "0.22", features = ["bytemuck"] }
@@ -24,32 +49,22 @@ egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "o
 egui-toast = "0.8"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true}
 env_logger = "0.10"
-flate2 = "1.0"
 futures-intrusive = "0.5"
-glam = { version = "0.23", features = ["serde", "bytemuck"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
-log = "0.4"
-paste = "1.0"
 pollster = "0.3"
 rfd = { version = "0.11", features = ["file-handle-inner"] }
 rayon = "1.6"
 rand = "0.8"
 rand_distr = "0.4"
 rand_chacha = "0.3"
-serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
 toml = "0.7"
 type-map = "0.5"
-uuid = { version = "1.2", features = ["serde", "v4"] }
 winit = "0.28"
 wgpu = { version = "0.16", features = ["spirv"] }
-
-[features]
-default = []
-embree = ["dep:embree"]
-optix = []
-verbose_debug = []
+vgonio-msurf = { path = "./vgonio-msurf" }
+vgonio-core = { package = "vgonio-core", path = "./vgonio-core" }
 
 [build-dependencies]
 shaderc = "0.8"
@@ -59,13 +74,14 @@ proptest = "1"
 
 [profile.dev]
 split-debuginfo = "unpacked"
+
 [profile.dev.build-override]
 opt-level = 3
 
 [profile.release]
-strip = "debuginfo"  # Remove unnecessary debug info from release builds.
-lto = true  # Enable link-time optimization.
-# debug = 1  # Keep debug info in release builds for profiling.
+strip = "debuginfo"
+lto = true
+# debug = true
 
 # Compile build-dependencies in release mode with
 # the same settings as regular dependencies.

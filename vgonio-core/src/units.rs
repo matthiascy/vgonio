@@ -13,7 +13,7 @@ macro impl_serialization($t:ty where $unit:ident: $unit_trait:ident, #[$doc:meta
 }
 
 macro impl_ops {
-    ($($op:ident),* for $t:ident where $unit_a:ident, $unit_b:ident: $unit_trait:ident) => {
+($($op:ident),* for $t:ident where $unit_a:ident, $unit_b:ident: $unit_trait:ident) => {
         paste::paste! {
             $(
                 impl<$unit_a: $unit_trait, $unit_b: $unit_trait> core::ops::$op<$t<$unit_b>> for $t<$unit_a>
@@ -35,7 +35,7 @@ macro impl_ops {
 }
 
 macro impl_ops_with_f32($($op:ident),* for $t:ident where A: $unit_trait:ident) {
-    paste::paste! {
+paste::paste! {
         $(
             impl<A: $unit_trait> core::ops::$op<f32> for $t<A> {
                 type Output = $t<A>;
@@ -58,7 +58,7 @@ macro impl_ops_with_f32($($op:ident),* for $t:ident where A: $unit_trait:ident) 
 }
 
 macro impl_ops_assign($($op:ident),* for $t:ident where A, B: $unit_trait:ident) {
-    paste::paste! {
+paste::paste! {
         $(
             impl<A: $unit_trait, B: $unit_trait> core::ops::$op<$t<B>> for $t<A>
             where $t<A>: From<$t<B>>
@@ -73,7 +73,7 @@ macro impl_ops_assign($($op:ident),* for $t:ident where A, B: $unit_trait:ident)
 }
 
 macro forward_f32_methods($($name:ident, $doc:expr);+) {
-    $(
+$(
         #[doc = $doc]
         #[inline(always)]
         pub fn $name(self) -> Self {
