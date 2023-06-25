@@ -6,17 +6,18 @@ use crate::{
             DebuggingEvent, VgonioEvent, VgonioEventLoop,
         },
     },
-    math,
     measure::{
         emitter::RegionShape, measurement::BsdfMeasurementParams, CollectorScheme, RtcMethod,
     },
     msurf::MicroSurface,
-    units::Radians,
-    Handedness,
 };
 use egui_toast::ToastKind;
-use glam::IVec2;
 use std::sync::{Arc, RwLock};
+use vgcore::{
+    math,
+    math::{Handedness, IVec2},
+    units::Radians,
+};
 
 pub(crate) struct BrdfMeasurementDebugging {
     cache: Arc<RwLock<Cache>>,

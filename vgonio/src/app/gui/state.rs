@@ -21,7 +21,6 @@ use crate::{
         gfx::remap_depth,
         gui::VgonioEventLoop,
     },
-    math,
     measure::{
         collector::CollectorPatches,
         emitter::{EmitterSamples, RegionShape},
@@ -30,8 +29,6 @@ use crate::{
         CollectorScheme, Emitter, Patch, RtcMethod,
     },
     msurf::MicroSurfaceMesh,
-    units::{rad, Radians},
-    Handedness, SphericalCoord,
 };
 
 #[cfg(feature = "embree")]
@@ -39,11 +36,15 @@ use crate::measure::rtc::embr;
 
 use crate::app::gfx::RenderableMesh;
 use egui_toast::ToastKind;
-use glam::{Mat3, Mat4, UVec3, Vec3};
 use std::{
     default::Default,
     path::Path,
     sync::{Arc, RwLock},
+};
+use vgcore::{
+    math,
+    math::{Handedness, Mat3, Mat4, SphericalCoord, UVec3, Vec3},
+    units::{rad, Radians},
 };
 use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
@@ -814,8 +815,8 @@ impl DebugDrawingState {
 
         if let Some(samples) = &self.emitter_samples {
             let (zenith, azimuth) = self.emitter_position;
-            let mat = Mat3::from_axis_angle(-Vec3::Y, azimuth.value)
-                * Mat3::from_axis_angle(-Vec3::Z, zenith.value);
+            let mat = Mat3::from_axis_angle(-Vec3::Y, azimuth.value())
+                * Mat3::from_axis_angle(-Vec3::Z, zenith.value());
             let vertices = if let Some(shape_radius) = shape_radius {
                 let factor = self.emitter_position.0.cos();
                 samples
@@ -976,7 +977,7 @@ impl DebugDrawingState {
                 }
                 CollectorScheme::SingleRegion { shape, .. } => match shape {
                     RegionShape::SphericalCap { zenith } => {
-                        let steps = (zenith.value / 2.0f32.to_radians()) as u32;
+                        let steps = (zenith.value() / 2.0f32.to_radians()) as u32;
                         let (vertices, indices) =
                             math::generate_triangulated_hemisphere(zenith, steps, 18);
                         self.collector_shape_vertex_buffer =
@@ -1359,8 +1360,8 @@ impl DebugDrawingState {
                                 for theta in zenith.values_wrapped() {
                                     let mat = match shape {
                                         RegionShape::SphericalCap { .. } => {
-                                            Mat4::from_axis_angle(-Vec3::Y, phi.value)
-                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value)
+                                            Mat4::from_axis_angle(-Vec3::Y, phi.value())
+                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value())
                                                 * Mat4::from_scale(Vec3::new(
                                                     self.collector_orbit_radius,
                                                     self.collector_orbit_radius,
@@ -1375,8 +1376,8 @@ impl DebugDrawingState {
                                             Mat4::IDENTITY
                                         }
                                         RegionShape::Disk { .. } => {
-                                            Mat4::from_axis_angle(-Vec3::Y, phi.value)
-                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value)
+                                            Mat4::from_axis_angle(-Vec3::Y, phi.value())
+                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value())
                                                 * Mat4::from_translation(Vec3::new(
                                                     0.0,
                                                     self.collector_orbit_radius,

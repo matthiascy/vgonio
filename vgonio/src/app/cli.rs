@@ -1,4 +1,9 @@
 use std::{fs::OpenOptions, path::PathBuf, time::Instant};
+use vgcore::{
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
+    math::Handedness,
+};
 
 use crate::{
     app::{
@@ -7,7 +12,7 @@ use crate::{
         cli::info::print_info,
         Config,
     },
-    io::{CompressionScheme, FileEncoding},
+    error::RuntimeError,
     measure::{
         self,
         measurement::{
@@ -17,7 +22,7 @@ use crate::{
         CollectorScheme,
     },
     msurf::MicroSurface,
-    Error, Handedness, SphericalPartition,
+    Error, SphericalPartition,
 };
 
 use super::{args::GenerateOptions, cache::Handle};
@@ -30,7 +35,7 @@ pub const RESET: &str = "\u{001b}[0m";
 mod info;
 
 /// Entry point of vgonio CLI.
-pub fn run(cmd: SubCommand, config: Config) -> Result<(), Error> {
+pub fn run(cmd: SubCommand, config: Config) -> Result<(), VgonioError> {
     match cmd {
         SubCommand::Measure(opts) => measure(opts, config),
         SubCommand::PrintInfo(opts) => print_info(opts, config),
@@ -40,7 +45,7 @@ pub fn run(cmd: SubCommand, config: Config) -> Result<(), Error> {
 }
 
 /// Measure different metrics of the micro-surface.
-fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
+fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     log::info!("{:#?}", config);
     // Configure thread pool for parallelism.
     if let Some(nthreads) = opts.nthreads {
@@ -271,7 +276,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), Error> {
 
 // TODO: use vgms file format
 /// Generates a micro-surface using 2D gaussian distribution.
-fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
+fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
     let mut data: Vec<f32> = Vec::with_capacity((opts.res_x * opts.res_y) as usize);
     for i in 0..opts.res_y {
         for j in 0..opts.res_x {
@@ -297,28 +302,33 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), Error> {
         resolve_path(&config.cwd, Some(&p))
     };
 
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
         .open(&path)
         .map_err(|err| {
-            eprintln!("  {BRIGHT_RED}✗{RESET} Failed to open file: {err}");
-            err
+            VgonioError::from_io_error(err, format!("Failed to open file {}", path.display()))
         })?;
 
     use std::io::Write;
 
     writeln!(file, "AsciiMatrix {} {} 0.5 0.5", opts.res_x, opts.res_y).map_err(|err| {
-        eprintln!("  {BRIGHT_RED}✗{RESET} Failed to write to file: {err}");
-        err
+        VgonioError::from_io_error(err, format!("Failed to write to file {}", path.display()))
     })?;
 
     for i in 0..opts.res_y {
         for j in 0..opts.res_x {
-            write!(file, "{} ", data[(i * opts.res_x + j) as usize])?;
+            write!(file, "{} ", data[(i * opts.res_x + j) as usize]).map_err(|err| {
+                VgonioError::from_io_error(
+                    err,
+                    format!("Failed to write to file {}", path.display()),
+                )
+            })?;
         }
-        writeln!(file)?;
+        writeln!(file).map_err(|err| {
+            VgonioError::from_io_error(err, format!("Failed to write to file {}", path.display()))
+        })?;
     }
 
     Ok(())
@@ -333,7 +343,7 @@ fn write_measured_data_to_file(
     encoding: FileEncoding,
     compression: CompressionScheme,
     output: &Option<PathBuf>,
-) -> Result<(), Error> {
+) -> Result<(), VgonioError> {
     let output_dir = resolve_output_dir(config, output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (measurement, surface) in data.iter().zip(surfaces.iter()) {
@@ -400,7 +410,7 @@ fn write_measured_data_to_file(
     Ok(())
 }
 
-fn convert(opts: ConvertOptions, config: Config) -> Result<(), Error> {
+fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
     let output_dir = resolve_output_dir(&config, &opts.output)?;
     for input in opts.inputs {
         let resolved = resolve_path(&config.cwd, Some(&input));
@@ -456,12 +466,18 @@ fn convert(opts: ConvertOptions, config: Config) -> Result<(), Error> {
 ///
 /// * `config` - The configuration of the current Vgonio session.
 /// * `output` - The output directory specified by the user.
-fn resolve_output_dir(config: &Config, output_dir: &Option<PathBuf>) -> Result<PathBuf, Error> {
+fn resolve_output_dir(
+    config: &Config,
+    output_dir: &Option<PathBuf>,
+) -> Result<PathBuf, VgonioError> {
     match output_dir {
         Some(dir) => {
             let path = resolve_path(config.cwd(), Some(dir));
             if !path.is_dir() {
-                return Err(Error::InvalidOutputDir(path));
+                return Err(VgonioError::new(
+                    format!("{} is not a directory", path.display()),
+                    Some(Box::new(RuntimeError::InvalidOutputDir)),
+                ));
             }
             Ok(path)
         }

@@ -1,7 +1,7 @@
 //! Fresnel equations and related functions.
 //!
 //! # Reflection
-#![doc = include_str!("../../misc/imgs/reflect.svg")]
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../misc/imgs/reflect.svg"))]
 //!
 //! See [`reflect`] and [`reflect_cos_abs`] for computing the reflection of a
 //! vector with respect to a surface normal.
@@ -19,7 +19,7 @@
 //! surface at the point of reflection.
 //!
 //! # Refraction
-#![doc = include_str!("../../misc/imgs/refract.svg")]
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../misc/imgs/refract.svg"))]
 //!
 //! See [`refract`] for computing the refraction of a vector with respect to a
 //! surface normal without knowing if the ray is located outside the surface.
@@ -161,8 +161,8 @@
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::{math::rcp, optics::ior::RefractiveIndex};
-use glam::Vec3A;
+use crate::optics::ior::RefractiveIndex;
+use vgcore::{math, math::Vec3A};
 
 /// Reflects a vector `wi` with respect to surface normal `n`.
 ///
@@ -460,8 +460,8 @@ pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
     }
 
     let cos_t = (1.0 - sin_t * sin_t).sqrt();
-    let r_parl = (eta_t * cos_i_abs - eta_i * cos_t) * rcp(eta_t * cos_i_abs + eta_i * cos_t);
-    let r_perp = (eta_i * cos_i_abs - eta_t * cos_t) * rcp(eta_i * cos_i_abs + eta_t * cos_t);
+    let r_parl = (eta_t * cos_i_abs - eta_i * cos_t) * math::rcp(eta_t * cos_i_abs + eta_i * cos_t);
+    let r_perp = (eta_i * cos_i_abs - eta_t * cos_t) * math::rcp(eta_i * cos_i_abs + eta_t * cos_t);
 
     // No polarisation.
     0.5 * (r_parl * r_parl + r_perp * r_perp)

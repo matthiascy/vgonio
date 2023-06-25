@@ -1,21 +1,15 @@
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt,
-    fmt::Display,
     io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
-use vgonio_core::{
+use vgcore::{
     error::VgonioError,
-    io::{
-        CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
-        ReadFileErrorKind,
-    },
+    io::{CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError},
 };
 
 /// Write the data samples to the given writer.
-fn write_f32_data_samples<W: Write>(
+pub fn write_f32_data_samples<W: Write>(
     writer: &mut BufWriter<W>,
     encoding: FileEncoding,
     compression: CompressionScheme,
@@ -60,7 +54,7 @@ fn write_f32_data_samples<W: Write>(
 }
 
 /// Read the data samples from the given reader.
-fn read_f32_data_samples<R: Read>(
+pub fn read_f32_data_samples<R: Read>(
     reader: &mut BufReader<R>,
     count: usize,
     encoding: FileEncoding,
@@ -185,13 +179,13 @@ where
 }
 
 use crate::MicroSurface;
-use vgonio_core::units::LengthUnit;
+use vgcore::units::LengthUnit;
 
 /// Micro-surface file format.
 pub mod vgms {
     use super::*;
     use std::io::{BufWriter, Read, Write};
-    use vgonio_core::{
+    use vgcore::{
         io::{ReadFileErrorKind, WriteFileErrorKind},
         units::LengthUnit,
     };

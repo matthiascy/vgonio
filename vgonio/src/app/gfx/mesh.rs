@@ -1,13 +1,11 @@
 use crate::{
     app::{cache::Asset, gfx::VertexLayout},
-    measure::rtc::Aabb,
-    msurf::{
-        regular_grid_triangulation, AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh,
-    },
+    msurf::{AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh},
 };
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
 use uuid::Uuid;
+use vgcore::math::Aabb;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
@@ -41,7 +39,7 @@ impl RenderableMesh {
             surf.generate_vertices(AxisAlignment::XZ, offset.eval(surf.min, surf.max));
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-        let indices: Vec<u32> = regular_grid_triangulation(rows, cols);
+        let indices: Vec<u32> = vgsurf::regular_grid_triangulation(rows, cols);
         debug_assert_eq!(indices.len(), indices_count);
         log::debug!(
             "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",

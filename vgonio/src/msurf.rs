@@ -1,5 +1,5 @@
 use crate::app::cache::Asset;
-pub use vgonio_msurf::*;
+pub use vgsurf::*;
 
 impl Asset for MicroSurface {}
 impl Asset for MicroSurfaceMesh {}

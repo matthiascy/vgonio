@@ -1,10 +1,8 @@
 use crate::{
     measure::{measurement::Radius, rtc::Ray},
     msurf::MicroSurfaceMesh,
-    units::{radians, steradians, Nanometres, Radians, SolidAngle},
-    Handedness, RangeByStepSizeInclusive, SphericalCoord,
+    RangeByStepSizeInclusive,
 };
-use glam::{Mat3, Vec3};
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
@@ -13,6 +11,10 @@ use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
+use vgcore::{
+    math::{Handedness, Mat3, SphericalCoord, Vec3},
+    units::{radians, steradians, Nanometres, Radians, SolidAngle},
+};
 
 /// Light emitter of the virtual gonio-photometer.
 ///
@@ -267,10 +269,10 @@ impl Emitter {
             log::info!(
                 "  - Generating {} samples in region θ: {}° ~ {}° φ: {}° ~ {}°",
                 num_samples,
-                zenith_start.in_degrees().value,
-                zenith_stop.in_degrees().value,
-                azimuth_start.in_degrees().value,
-                azimuth_stop.in_degrees().value
+                zenith_start.in_degrees().value(),
+                zenith_stop.in_degrees().value(),
+                azimuth_start.in_degrees().value(),
+                azimuth_stop.in_degrees().value()
             );
 
             uniform_sampling_on_unit_sphere(
@@ -321,8 +323,8 @@ impl Emitter {
             orbit_radius,
             shape_radius
         );
-        let mat = Mat3::from_axis_angle(-Vec3::Y, position.azimuth.value)
-            * Mat3::from_axis_angle(-Vec3::Z, position.zenith.value);
+        let mat = Mat3::from_axis_angle(-Vec3::Y, position.azimuth.value())
+            * Mat3::from_axis_angle(-Vec3::Z, position.zenith.value());
         let dir = -position.to_cartesian(Handedness::RightHandedYUp);
         log::trace!("[Emitter] emitting rays with dir = {:?}", dir);
 
@@ -449,7 +451,7 @@ pub fn uniform_sampling_on_unit_disk(num: usize, handedness: Handedness) -> Vec<
 
     let range: Uniform<f32> = Uniform::new(0.0, 1.0);
     let mut samples = Vec::with_capacity(num);
-    samples.resize(num, glam::Vec3::ZERO);
+    samples.resize(num, Vec3::ZERO);
 
     match handedness {
         Handedness::RightHandedZUp => {

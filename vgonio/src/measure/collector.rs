@@ -1,11 +1,9 @@
 use crate::{
-    math,
     measure::{emitter::RegionShape, measurement::Radius},
-    units::{Radians, SolidAngle},
     RangeByStepSizeInclusive, SphericalPartition,
 };
-use glam::{Vec3, Vec3A};
 use std::ops::{Deref, DerefMut};
+use vgcore::math::{Handedness, SphericalCoord, Vec3, Vec3A};
 
 use crate::{
     app::cache::Cache,
@@ -17,10 +15,12 @@ use crate::{
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
-    Handedness,
-    SphericalCoord,
 };
 use serde::{Deserialize, Serialize};
+use vgcore::{
+    math,
+    units::{Radians, SolidAngle},
+};
 
 /// Description of a collector.
 ///

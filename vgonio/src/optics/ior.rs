@@ -1,15 +1,15 @@
 //! Index of refraction.
 
-use crate::{
-    ulp_eq,
-    units::{nanometres, Length, LengthMeasurement, Nanometres},
-    MaterialKind, Medium,
-};
+use crate::{MaterialKind, Medium};
 use std::{
     cmp::Ordering,
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     path::Path,
+};
+use vgcore::{
+    math,
+    units::{nanometres, Length, LengthMeasurement, Nanometres},
 };
 
 /// Material's complex refractive index which varies with wavelength of the
@@ -70,7 +70,7 @@ impl RefractiveIndexDatabase {
             .unwrap();
         let ior_after = refractive_indices[i];
         // If the first wavelength is equal to the given one, return it.
-        if ulp_eq(ior_after.wavelength.value, wavelength.value) {
+        if math::ulp_eq(ior_after.wavelength.value(), wavelength.value()) {
             Some(ior_after)
         } else {
             // Otherwise, interpolate between the two closest refractive indices.

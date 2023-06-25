@@ -18,6 +18,7 @@ use std::{
     str::FromStr,
 };
 use uuid::Uuid;
+use vgcore::error::VgonioError;
 
 pub trait Asset: Send + Sync + 'static {}
 
@@ -362,10 +363,14 @@ impl Cache {
         &mut self,
         config: &Config,
         path: &Path,
-    ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), Error> {
+    ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), VgonioError> {
         match self.resolve_path(path, config) {
-            None => Err(Error::Any(
-                "Failed to load micro surface profile!".to_string(),
+            None => Err(VgonioError::new(
+                format!(
+                    "Failed to resolve micro-surface file path: \"{}\"",
+                    path.display()
+                ),
+                None,
             )),
             Some(filepath) => {
                 if let Some((msurf_id, record)) = self

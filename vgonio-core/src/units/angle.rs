@@ -120,8 +120,17 @@ impl<A: AngleUnit> Angle<A> {
         }
     }
 
-    /// Get the value of the angle.
+    /// Gets the value of the angle.
     pub const fn value(&self) -> f32 { self.value }
+
+    /// Gets the value of the angle as f32.
+    pub const fn as_f32(&self) -> f32 { self.value }
+
+    /// Gets the value of the angle as f64.
+    pub const fn as_f64(&self) -> f64 { self.value as f64 }
+
+    /// Gets a mutable reference to the value of the angle.
+    pub const fn value_mut(&mut self) -> &mut f32 { &mut self.value }
 
     /// Determines whether the angle is greater than zero.
     #[inline(always)]

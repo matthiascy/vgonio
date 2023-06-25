@@ -1,17 +1,17 @@
-use crate::{
-    app::{
-        gfx::{
-            camera::{Camera, Projection},
-            GpuContext, Texture,
-        },
-        gui::{state::GuiRenderer, VgonioEventLoop},
+use crate::app::{
+    gfx::{
+        camera::{Camera, Projection},
+        GpuContext, Texture,
     },
-    math,
+    gui::{state::GuiRenderer, VgonioEventLoop},
 };
-use glam::Mat4;
 use std::{
     borrow::Cow,
     sync::{Arc, RwLock},
+};
+use vgcore::{
+    math,
+    math::{Mat4, Vec3},
 };
 
 pub const SHADER: &str = r#"
@@ -63,11 +63,7 @@ impl BsdfViewer {
         gui: Arc<RwLock<GuiRenderer>>,
         event_loop: VgonioEventLoop,
     ) -> Self {
-        let camera = Camera::new(
-            glam::Vec3::new(2.0, 1.5, 2.0),
-            glam::Vec3::ZERO,
-            glam::Vec3::Y,
-        );
+        let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO, Vec3::Y);
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);
         let proj_view = projection.matrix(crate::app::gfx::camera::ProjectionKind::Perspective)
             * camera.view_matrix();
@@ -87,7 +83,7 @@ impl BsdfViewer {
             Some("sampling-debugger-depth-attachment"),
         );
         let aligned_size = math::calc_aligned_size(
-            std::mem::size_of::<glam::Mat4>() as u32,
+            std::mem::size_of::<Mat4>() as u32,
             gpu.device.limits().min_uniform_buffer_offset_alignment,
         );
         // Pre-allocate the uniform buffer for 8 views.
@@ -151,7 +147,7 @@ impl BsdfViewer {
                     module: &shader,
                     entry_point: "vs_main",
                     buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<glam::Vec3>() as u64,
+                        array_stride: std::mem::size_of::<Vec3>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: &wgpu::vertex_attr_array![0 => Float32x3],
                     }],

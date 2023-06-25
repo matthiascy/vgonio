@@ -7,7 +7,6 @@ use crate::{
         cache::Cache,
         cli::{BRIGHT_YELLOW, RESET},
     },
-    math::{close_enough, rcp},
     measure::{
         bsdf::MeasuredBsdfData,
         collector::CollectorPatches,
@@ -19,12 +18,13 @@ use crate::{
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
     optics::fresnel,
-    ulp_eq,
 };
-use egui::Vec2;
-use glam::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use rayon::prelude::*;
 use std::time::Instant;
+use vgcore::{
+    math,
+    math::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles},
+};
 
 /// Extra data associated with a ray stream.
 ///
@@ -320,7 +320,7 @@ impl Cell for CoarseCell {
 /// The top-left corner is used as the origin of the grid, for the reason that
 /// vertices of the triangle mesh are generated following the order from left
 /// to right, top to bottom.
-#[doc = include_str!("../../../misc/imgs/grid.svg")]
+#[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../misc/imgs/grid.svg"))]
 ///
 /// The blue dots are the micro-surface samples, and the orange dots are the
 /// grid cells.
@@ -455,8 +455,8 @@ impl<C: Cell> Grid<C> {
         let ray_dir = ray.dir.xz();
         log::debug!("Ray direction in the grid space: {:?}", ray_dir);
 
-        let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
-        let is_parallel_to_grid_y = ulp_eq(ray_dir.x, 0.0);
+        let is_parallel_to_grid_x = math::ulp_eq(ray_dir.y, 0.0);
+        let is_parallel_to_grid_y = math::ulp_eq(ray_dir.x, 0.0);
 
         if is_parallel_to_grid_x && is_parallel_to_grid_y {
             // The ray is parallel to both the grid x and y axis; coming from
@@ -490,8 +490,8 @@ impl<C: Cell> Grid<C> {
                 (0.0, 1.0)
             } else {
                 log::debug!("The ray is not parallel to either the grid x or y axis");
-                let m = ray_dir.y * rcp(ray_dir.x);
-                (m, rcp(m))
+                let m = ray_dir.y * math::rcp(ray_dir.x);
+                (m, math::rcp(m))
             }
         };
         log::debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);
@@ -647,12 +647,12 @@ impl Grid<BaseCell> {
             (Some(isect0), Some(isect1)) => {
                 let p0 = isect0.p;
                 let p1 = isect1.p;
-                if close_enough(&p0, &p1) {
+                if math::close_enough(&p0, &p1) {
                     // The ray intersects with two triangles on the shared edge.
                     // u of the first triangle is 0.0, and w of the second triangle
                     // is 0.0.
-                    debug_assert!(ulp_eq(isect0.u, 0.0));
-                    debug_assert!(ulp_eq(1.0 - isect1.u - isect1.v, 0.0));
+                    debug_assert!(math::ulp_eq(isect0.u, 0.0));
+                    debug_assert!(math::ulp_eq(1.0 - isect1.u - isect1.v, 0.0));
                     *hit = Hit {
                         normal: (isect0.n + isect1.n).normalize(),
                         point: p0,
@@ -671,10 +671,10 @@ impl Grid<BaseCell> {
                 // index and its normal.
                 let self_idx = cell.tris[0];
                 let opposite_idx = cell.tris[1];
-                let adjacent = if ulp_eq(isect.u, 0.0) {
+                let adjacent = if math::ulp_eq(isect.u, 0.0) {
                     // u is 0.0, so the ray intersects with the edge p1-p2.
                     Some(opposite_idx)
-                } else if ulp_eq(isect.v, 0.0) {
+                } else if math::ulp_eq(isect.v, 0.0) {
                     // v is 0.0, so the ray intersects with the edge p0-p2.
                     if self_idx < 2 * self.cols {
                         // The cell is on the top row.
@@ -683,7 +683,7 @@ impl Grid<BaseCell> {
                         // Return the triangle index of the cell one row above.
                         Some(self_idx - (self.cols - 1))
                     }
-                } else if ulp_eq(isect.u + isect.v, 1.0) {
+                } else if math::ulp_eq(isect.u + isect.v, 1.0) {
                     // u + v is 1.0, so the ray intersects with the edge p0-p1.
                     if self_idx % 2 * self.cols == 0 {
                         // The cell is on the left column.
@@ -715,7 +715,7 @@ impl Grid<BaseCell> {
                 // index and its normal.
                 let self_idx = cell.tris[1];
                 let opposite_idx = cell.tris[0];
-                let adjacent = if ulp_eq(isect.u, 0.0) {
+                let adjacent = if math::ulp_eq(isect.u, 0.0) {
                     // u is 0.0, so the ray intersects with the edge p1-p2.
                     if self_idx >= (2 * self.cols) * (self.rows - 1) {
                         // The cell is on the bottom row.
@@ -724,7 +724,7 @@ impl Grid<BaseCell> {
                         // Return the triangle index of the cell one row below.
                         Some(self_idx + (self.cols - 1))
                     }
-                } else if ulp_eq(isect.v, 0.0) {
+                } else if math::ulp_eq(isect.v, 0.0) {
                     // v is 0.0, so the ray intersects with the edge p0-p2.
                     if self_idx % (2 * self.cols) == 2 * self.cols - 1 {
                         // The cell is on the right column.
@@ -733,7 +733,7 @@ impl Grid<BaseCell> {
                         // Return the triangle index of the cell one column to the left.
                         Some(self_idx + 1)
                     }
-                } else if ulp_eq(isect.u + isect.v, 1.0) {
+                } else if math::ulp_eq(isect.u + isect.v, 1.0) {
                     // u + v is 1.0, so the ray intersects with the edge p0-p1.
                     Some(opposite_idx)
                 } else {
@@ -834,8 +834,8 @@ impl Grid<BaseCell> {
         use std::println as debug;
 
         let ray_dir = ray.dir.xz();
-        let is_parallel_to_grid_x = ulp_eq(ray_dir.y, 0.0);
-        let is_parallel_to_grid_y = ulp_eq(ray_dir.x, 0.0);
+        let is_parallel_to_grid_x = math::ulp_eq(ray_dir.y, 0.0);
+        let is_parallel_to_grid_y = math::ulp_eq(ray_dir.x, 0.0);
 
         if is_parallel_to_grid_x && is_parallel_to_grid_y {
             // The ray is parallel to both the grid x and y axis; coming from
@@ -868,8 +868,8 @@ impl Grid<BaseCell> {
                 (0.0, 1.0)
             } else {
                 debug!("The ray is not parallel to either the grid x or y axis");
-                let m = ray_dir.y * rcp(ray_dir.x);
-                (m, rcp(m))
+                let m = ray_dir.y * math::rcp(ray_dir.x);
+                (m, math::rcp(m))
             }
         };
         debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);
@@ -1206,7 +1206,7 @@ mod tests {
         ulp_eq,
         units::{um, LengthUnit, UMicrometre},
     };
-    use glam::{IVec2, UVec2, Vec3, Vec3Swizzles};
+    use vgcore::math::{IVec2, UVec2, Vec3, Vec3Swizzles};
 
     #[test]
     fn multilevel_grid_creation() {

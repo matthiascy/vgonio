@@ -1,11 +1,11 @@
 //! Ray tracing measurement module.
 
 use approx::RelativeEq;
-use glam::{Vec3, Vec3A};
 use std::{
     fmt::{Debug, Formatter},
     ops::{Add, Deref, DerefMut, Mul},
 };
+use vgcore::math::{Aabb, Vec3, Vec3A};
 
 #[cfg(feature = "embree")]
 pub mod embr;
@@ -16,10 +16,8 @@ pub mod optix;
 pub mod grid;
 
 mod triangle;
-
-pub use aabb::*;
-pub use axis::Axis;
 pub use triangle::*;
+use vgcore::math;
 
 // TODO: ray packet and associated wavelengths
 
@@ -292,7 +290,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
         }
 
         let (near, mut far) = {
-            let inv_d = rcp(ray.dir[i]);
+            let inv_d = math::rcp(ray.dir[i]);
             let near = (bbox.min[i] - ray.org[i]) * inv_d;
             let far = (bbox.max[i] - ray.org[i]) * inv_d;
             if near > far {
@@ -324,7 +322,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
 #[cfg(test)]
 mod tests {
     use crate::measure::rtc::{ray_aabb_intersection, ray_aabb_intersects, Ray};
-    use vgonio_core::math::Aabb;
+    use vgcore::math::Aabb;
 
     #[test]
     fn aabb_ray_intersection() {

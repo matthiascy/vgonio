@@ -7,15 +7,16 @@ use crate::{
             BsdfViewerEvent, VgonioEvent, VgonioEventLoop,
         },
     },
-    math,
-    math::NumericCast,
     measure::{measurement::MeasurementData, CollectorScheme},
-    units::{rad, Radians},
-    Handedness, RangeByStepSizeInclusive, SphericalPartition,
+    RangeByStepSizeInclusive, SphericalPartition,
 };
 use egui::{plot::*, Align, Context, PointerButton, Response, Ui, Vec2};
-use glam::Vec3;
 use std::{any::Any, ops::RangeInclusive, rc::Rc, sync::Arc};
+use vgcore::{
+    math,
+    math::{Handedness, Vec3},
+    units::{rad, Radians},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PlotType {
@@ -230,7 +231,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
     fn ui(&mut self, ui: &mut Ui) {
         let zenith = self.data.measured.madf_or_mmsf_zenith().unwrap();
         let azimuth = self.data.measured.madf_or_mmsf_azimuth().unwrap();
-        let zenith_bin_width_rad = zenith.step_size.cast();
+        let zenith_bin_width_rad = zenith.step_size.as_f32();
         self.plot_type_ui(ui);
         ui.allocate_ui_with_layout(
             Vec2::new(ui.available_width(), 48.0),
@@ -242,7 +243,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
                     ui,
                     false,
                     &mut opposite,
-                    azimuth.map(|x| x.value).range_bound_inclusive(),
+                    azimuth.map(|x| x.value()).range_bound_inclusive(),
                     azimuth.step_size,
                     48.0,
                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
@@ -251,7 +252,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
                     ui,
                     true,
                     &mut self.controls.azimuth_m,
-                    azimuth.map(|x| x.value).range_bound_inclusive(),
+                    azimuth.map(|x| x.value()).range_bound_inclusive(),
                     azimuth.step_size,
                     48.0,
                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
@@ -273,13 +274,13 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
                 data.iter()
                     .rev()
                     .zip(zenith.values_rev().map(|x| -x))
-                    .map(|(y, x)| [x.value as f64, *y as f64])
+                    .map(|(y, x)| [x.as_f64(), *y as f64])
             });
 
             let data_starting_part = starting
                 .iter()
                 .zip(zenith.values())
-                .map(|(y, x)| [x.value as f64, *y as f64]);
+                .map(|(y, x)| [x.as_f64(), *y as f64]);
 
             match data_opposite_part {
                 None => data_starting_part.collect(),
@@ -373,7 +374,7 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
     fn ui(&mut self, ui: &mut Ui) {
         let zenith = self.data.measured.madf_or_mmsf_zenith().unwrap();
         let azimuth = self.data.measured.madf_or_mmsf_azimuth().unwrap();
-        let zenith_bin_width_rad = zenith.step_size.value;
+        let zenith_bin_width_rad = zenith.step_size.value();
         self.plot_type_ui(ui);
         ui.allocate_ui_with_layout(
             Vec2::new(ui.available_width(), 48.0),
@@ -453,12 +454,12 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
                 data.iter()
                     .rev()
                     .zip(zenith.values_rev().map(|v| -v))
-                    .map(|(y, x)| [x.value as f64, *y as f64])
+                    .map(|(y, x)| [x.as_f64(), *y as f64])
             });
             let data_starting_part = starting
                 .iter()
                 .zip(zenith.values())
-                .map(|(y, x)| [x.value as f64, *y as f64]);
+                .map(|(y, x)| [x.as_f64(), *y as f64]);
 
             match data_opposite_part {
                 None => data_starting_part.collect(),
@@ -648,7 +649,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
         let spectrum = bsdf_data.params.emitter.spectrum;
         let wavelengths = spectrum
             .values()
-            .map(|w| w.value / 100.0)
+            .map(|w| w.value() / 100.0)
             .collect::<Vec<_>>();
         let num_rays = bsdf_data.params.emitter.num_rays;
 
@@ -681,7 +682,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             }
             let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("bsdf_view_buffer_{:?}", self.controls.view_id)),
-                size: std::mem::size_of::<glam::Vec3>() as u64 * count as u64,
+                size: std::mem::size_of::<Vec3>() as u64 * count as u64,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });

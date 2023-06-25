@@ -1,8 +1,3 @@
-use crate::{
-    math::NumericCast,
-    ulp_eq,
-    units::{Angle, AngleUnit, Radians},
-};
 use approx::AbsDiffEq;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -11,9 +6,10 @@ use std::{
     ops::{Add, Div, Mul, RangeInclusive, Sub},
     str::FromStr,
 };
-use vgonio_core::{
+use vgcore::{
+    math,
     math::NumericCast,
-    units::{Angle, Radians},
+    units::{Angle, AngleUnit, Radians},
 };
 
 /// Defines a right inclusive range [a, b] of values with a given step.
@@ -140,7 +136,7 @@ where
         let step_size = self.step_size.cast();
         let start = self.start.cast();
         let stop = self.stop.cast();
-        if ulp_eq(step_size, stop - start) {
+        if math::ulp_eq(step_size, stop - start) {
             2
         } else {
             (((stop - start) / step_size).round() as usize).max(2) + 1
@@ -402,10 +398,10 @@ macro_rules! impl_angle_related_common_methods {
                 pub fn pretty_print(&self) -> String {
                     format!(
                         "{}° .. {}{}° per {}°",
-                        self.start.to_degrees().value,
+                        self.start.to_degrees().value(),
                         $inclusive,
-                        self.stop.to_degrees().value,
-                        self.step_size.to_degrees().value
+                        self.stop.to_degrees().value(),
+                        self.step_size.to_degrees().value()
                     )
                 }
             }
@@ -418,9 +414,9 @@ macro_rules! impl_angle_related_common_methods {
                 pub fn pretty_print(&self) -> String {
                     format!(
                         "{}° ..{}{}° in {} steps",
-                        self.start.to_degrees().value,
+                        self.start.to_degrees().value(),
                         $inclusive,
-                        self.stop.to_degrees().value,
+                        self.stop.to_degrees().value(),
                         self.step_count
                     )
                 }
@@ -437,8 +433,8 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         if self
             .start
             .wrap_to_tau()
-            .value
-            .abs_diff_eq(&self.stop.wrap_to_tau().value, 1e-6)
+            .value()
+            .abs_diff_eq(&self.stop.wrap_to_tau().value(), 1e-6)
         {
             (self.span() / self.step_size).round() as usize
         } else {

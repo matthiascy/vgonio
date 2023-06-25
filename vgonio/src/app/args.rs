@@ -1,6 +1,6 @@
-use crate::io::{CompressionScheme, FileEncoding};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
+use vgcore::io::{CompressionScheme, FileEncoding};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]

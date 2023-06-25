@@ -1,4 +1,4 @@
-use crate::math::{Mat4, Vec3, IDENTITY_MAT4};
+use vgcore::math::{Mat4, Vec3, IDENTITY_MAT4};
 
 pub struct VisualGrid {
     pub transform: Mat4,

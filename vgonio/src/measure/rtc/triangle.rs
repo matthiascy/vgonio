@@ -1,10 +1,9 @@
 use crate::{
     gamma,
-    math::rcp,
     measure::rtc::{Ray, RayTriIsect},
 };
-use glam::Vec3;
 use std::borrow::Cow;
+use vgcore::{math, math::Vec3};
 
 const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
@@ -124,7 +123,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
         return None;
     }
 
-    let inv_det = rcp(det); 
+    let inv_det = math::rcp(det); 
     let tvec = ray_o - p0; // O - A
 
     let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
@@ -279,7 +278,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
     p2t = permute(p2t, kx, ky, kz);
 
     // Perform Shear and scale of vertices.
-    let rcp_dz = rcp(d.z);
+    let rcp_dz = math::rcp(d.z);
     let sx = -d.x * rcp_dz;
     let sy = -d.y * rcp_dz;
     let sz = rcp_dz;
@@ -328,7 +327,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
     }
 
     // Compute barycentric coordinates and t value for triangle intersection.
-    let inv_det = rcp(det);
+    let inv_det = math::rcp(det);
     let b0 = e0 * inv_det;
     let b1 = e1 * inv_det;
     let b2 = e2 * inv_det;
@@ -370,7 +369,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
 mod tests {
     use super::ray_tri_intersect_woop;
     use crate::measure::rtc::{ray_tri_intersect_moller_trumbore, Ray};
-    use glam::Vec3;
+    use vgcore::math::Vec3;
 
     #[test]
     fn test_ray_tri_intersection_woop() {

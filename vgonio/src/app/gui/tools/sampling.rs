@@ -1,7 +1,10 @@
 use egui::PointerButton;
-use glam::Vec3;
 use std::{borrow::Cow, sync::Arc};
 
+use vgcore::{
+    math::{Handedness, Mat4, Vec3},
+    units::deg,
+};
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -13,8 +16,6 @@ use crate::{
         gui::{state::GuiRenderer, DebuggingEvent, VgonioEvent, VgonioEventLoop},
     },
     measure,
-    units::deg,
-    Handedness,
 };
 
 use super::Tool;
@@ -28,7 +29,7 @@ use super::Tool;
 /// image.
 pub struct SamplingInspector {
     gpu: Arc<GpuContext>,
-    proj_view_model: glam::Mat4,
+    proj_view_model: Mat4,
     pub color_attachment_id: egui::TextureId,
     pub color_attachment: Texture,
     pub depth_attachment: Texture,
@@ -116,9 +117,8 @@ impl Tool for SamplingInspector {
         );
         if response.dragged_by(PointerButton::Primary) {
             let delta = response.drag_delta();
-            self.proj_view_model *=
-                glam::Mat4::from_rotation_y(delta.x / 256.0 * std::f32::consts::PI)
-                    * glam::Mat4::from_rotation_x(delta.y / 256.0 * std::f32::consts::PI);
+            self.proj_view_model *= Mat4::from_rotation_y(delta.x / 256.0 * std::f32::consts::PI)
+                * Mat4::from_rotation_x(delta.y / 256.0 * std::f32::consts::PI);
             self.gpu.queue.write_buffer(
                 &self.uniform_buffer,
                 0,

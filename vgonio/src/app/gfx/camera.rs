@@ -1,6 +1,6 @@
 use crate::app::gui::state::InputState;
-use glam::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles};
 use std::cmp::Ordering::Equal;
+use vgcore::math::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles};
 use winit::event::{MouseButton, VirtualKeyCode};
 
 // pub struct OrthonormalBasis {

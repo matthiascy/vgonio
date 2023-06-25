@@ -1,26 +1,23 @@
 use egui::{emath::Numeric, DragValue};
 
-use crate::{
-    units::{Angle, AngleUnit, Length, LengthMeasurement},
-    RangeByStepCountInclusive, RangeByStepSizeInclusive,
-};
+use crate::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
 
-impl<T: Copy + Numeric> RangeByStepSizeInclusive<T> {
-    /// Creates the UI for the range.
-    pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.add(egui::DragValue::new(&mut self.start).prefix("start: "));
-            ui.add(egui::DragValue::new(&mut self.stop).prefix("stop: "));
-            ui.add(egui::DragValue::new(&mut self.step_size).prefix("step: "));
-        })
-        .response
-    }
-}
+// impl<T: Numeric> RangeByStepSizeInclusive<T> {
+//     /// Creates the UI for the range.
+//     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
+//         ui.horizontal(|ui| {
+//             ui.add(egui::DragValue::new(&mut self.start).prefix("start: "));
+//             ui.add(egui::DragValue::new(&mut self.stop).prefix("stop: "));
+//             ui.add(egui::DragValue::new(&mut self.step_size).prefix("step:
+// "));         })
+//         .response
+//     }
+// }
 
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
     let display_factor = A::FACTOR_TO_DEG;
     let storage_factor = A::FACTOR_FROM_DEG;
-    DragValue::new(&mut angle.value)
+    DragValue::new(angle.value_mut())
         .prefix(prefix)
         .custom_formatter(move |val, _| format!("{:.2}°", val as f32 * display_factor))
         .custom_parser(move |val_str| {
@@ -32,7 +29,7 @@ pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> Dr
 
 #[allow(dead_code)]
 fn drag_length<'a, L: LengthMeasurement>(length: &'a mut Length<L>, prefix: &str) -> DragValue<'a> {
-    DragValue::new(&mut length.value)
+    DragValue::new(length.value_mut())
         .prefix(prefix)
         .custom_formatter(move |val, _| format!("{:.2}m", val))
         .custom_parser(move |val_str| {
@@ -71,17 +68,17 @@ impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
             ui.add(
-                egui::DragValue::new(&mut self.start.value)
+                egui::DragValue::new(self.start.value_mut())
                     .prefix("start: ")
                     .suffix(L::SYMBOL),
             );
             ui.add(
-                egui::DragValue::new(&mut self.stop.value)
+                egui::DragValue::new(self.stop.value_mut())
                     .prefix("stop: ")
                     .suffix(L::SYMBOL),
             );
             ui.add(
-                egui::DragValue::new(&mut self.step_size.value)
+                egui::DragValue::new(self.step_size.value_mut())
                     .prefix("step: ")
                     .suffix(L::SYMBOL),
             );
@@ -91,6 +88,10 @@ impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
 }
 
 use std::ops::RangeInclusive;
+use vgcore::{
+    math::Vec3,
+    units::{Angle, AngleUnit, Length, LengthMeasurement},
+};
 
 #[allow(dead_code)]
 pub fn input_ui<T: egui::emath::Numeric>(
@@ -121,8 +122,6 @@ pub fn input<'a, T: egui::emath::Numeric>(
 ) -> impl egui::Widget + 'a {
     move |ui: &mut egui::Ui| input_ui(ui, value, prefix, range)
 }
-
-use glam::Vec3;
 
 #[allow(dead_code)]
 pub fn input3_ui(ui: &mut egui::Ui, value: &mut Vec3, prefixes: &[&str; 3]) -> egui::Response {

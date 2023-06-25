@@ -1,9 +1,13 @@
 [package]
-name = "vgonio-msurf"
+name = "vgonio-surf"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "Library for manipulating, reading and writing micro-surfaces."
+
+[features]
+default = []
+embree = ["dep:embree"]
 
 [dependencies]
 byteorder.workspace = true
@@ -13,4 +17,5 @@ glam.workspace = true
 log.workspace = true
 serde.workspace = true
 uuid.workspace = true
-vgonio-core = { path = "../vgonio-core" }
+embree = { workspace = true, optional = true }
+vgcore = { package = "vgonio-core", path = "../vgonio-core" }

@@ -6,11 +6,11 @@ use crate::{
         measurement::{BsdfMeasurementParams, Radius},
         Collector, CollectorScheme, Emitter,
     },
-    units::{mm, Radians},
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
 };
 use std::hash::Hash;
+use vgcore::units::{mm, Radians};
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
@@ -60,7 +60,7 @@ impl Radius {
 
             if !is_auto {
                 ui.add(
-                    egui::DragValue::new(&mut self.value_mut().value)
+                    egui::DragValue::new(&mut self.value_mut().value())
                         .speed(1.0)
                         .suffix("mm")
                         .clamp_range(0.0..=f32::INFINITY),
@@ -68,7 +68,7 @@ impl Radius {
             }
 
             if fixed_response.clicked() {
-                *self = Radius::Fixed(mm!(self.value().value));
+                *self = Radius::Fixed(mm!(self.value().value()));
             }
         });
     }

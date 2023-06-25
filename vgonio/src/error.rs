@@ -1,9 +1,9 @@
-use crate::io::{ReadFileError, WriteFileError};
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     path::PathBuf,
     str,
 };
+use vgcore::io::{ReadFileError, WriteFileError};
 
 #[derive(Debug)]
 pub enum Error {
@@ -26,10 +26,21 @@ pub enum Error {
     InvalidOutputDir(PathBuf),
     InvalidParameter(&'static str),
     DirectoryOrFileNotFound(PathBuf),
-
-    ReadFile(ReadFileError),
-    WriteFile(WriteFileError),
 }
+
+pub enum RuntimeError {
+    InvalidOutputDir,
+}
+
+impl Debug for RuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { todo!() }
+}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { todo!() }
+}
+
+impl std::error::Error for RuntimeError {}
 
 #[derive(Debug)]
 pub struct WgpuError {
@@ -139,12 +150,6 @@ impl Display for Error {
             Error::DirectoryOrFileNotFound(path) => {
                 write!(f, "Directory or file not found: {}", path.display())
             }
-            Error::ReadFile(err) => {
-                write!(f, "Read file error: {}", err)
-            }
-            Error::WriteFile(err) => {
-                write!(f, "Write file error: {}", err)
-            }
         }
     }
 }
@@ -189,14 +194,6 @@ impl From<toml::de::Error> for Error {
     fn from(err: toml::de::Error) -> Self {
         Error::SerialisationError(SerialisationError::TomlDe(err))
     }
-}
-
-impl From<WriteFileError> for Error {
-    fn from(value: WriteFileError) -> Self { Self::WriteFile(value) }
-}
-
-impl From<ReadFileError> for Error {
-    fn from(value: ReadFileError) -> Self { Self::ReadFile(value) }
 }
 
 macro impl_from_wgpu_errors($($err:ty),*) {

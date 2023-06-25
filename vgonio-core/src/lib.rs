@@ -6,6 +6,9 @@
 #![feature(const_trait_impl)]
 // Enable const fn floating point arithmetic
 #![feature(const_fn_floating_point_arithmetic)]
+// Enable const mut references
+#![feature(const_mut_refs)]
+#![warn(missing_docs)]
 
 pub mod error;
 pub mod io;

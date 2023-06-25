@@ -13,13 +13,13 @@ use crate::{
     },
     measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
     msurf::MicroSurface,
-    units::LengthUnit,
 };
 use std::{
     collections::HashMap,
     rc::Weak,
     sync::{Arc, RwLock},
 };
+use vgcore::units::LengthUnit;
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]

@@ -7,17 +7,19 @@ use crate::{
             GpuContext, RenderPass, Texture, WgpuConfig,
         },
     },
-    math,
     measure::measurement::{
         MeasuredData, MeasurementData, MeasurementDataSource, MmsfMeasurementParams,
     },
     msurf::MicroSurface,
-    units::Radians,
-    Error, Handedness,
+    Error,
 };
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec3};
 use std::path::Path;
+use vgcore::{
+    math,
+    math::{Handedness, Mat4, Vec3},
+    units::Radians,
+};
 use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of

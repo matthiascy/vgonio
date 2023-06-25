@@ -1,6 +1,6 @@
-use crate::units::{rad, Radians};
 use egui::{emath::Rot2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
 use std::f32::consts::TAU;
+use vgcore::units::{rad, Radians};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AngleKnobWinding {
@@ -222,7 +222,7 @@ impl<'a> Widget for AngleKnob<'a> {
                 let paint_stop = |stop_position: f32| {
                     let stop_stroke = {
                         let stop_alpha = 1.0
-                            - ((stop_position - self.angle.value).abs() / (TAU * 0.75))
+                            - ((stop_position - self.angle.value()).abs() / (TAU * 0.75))
                                 .clamp(0.0, 1.0)
                                 .powf(5.0);
                         // TODO: Semantically correct color
@@ -242,11 +242,11 @@ impl<'a> Widget for AngleKnob<'a> {
                 };
 
                 if let Some(min) = self.min {
-                    paint_stop(min.value);
+                    paint_stop(min.value());
                 }
 
                 if let Some(max) = self.max {
-                    paint_stop(max.value);
+                    paint_stop(max.value());
                 }
             }
 
@@ -254,7 +254,7 @@ impl<'a> Widget for AngleKnob<'a> {
                 ui.painter().line_segment(
                     [
                         rect.center(),
-                        rect.center() + angle_to_shape_outline(self.angle.value),
+                        rect.center() + angle_to_shape_outline(self.angle.value()),
                     ],
                     Stroke::new(2.0, Color32::LIGHT_GREEN),
                 );
@@ -267,7 +267,7 @@ impl<'a> Widget for AngleKnob<'a> {
                 );
 
                 ui.painter().circle(
-                    rect.center() + angle_to_shape_outline(self.angle.value),
+                    rect.center() + angle_to_shape_outline(self.angle.value()),
                     self.diameter / 24.0,
                     Color32::LIGHT_GREEN,
                     Stroke::new(2.0, Color32::LIGHT_GREEN),

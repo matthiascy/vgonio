@@ -20,17 +20,15 @@ mod range;
 
 pub use range::*;
 
-use crate::{
-    error::Error,
-    math::{cartesian_to_spherical, spherical_to_cartesian},
-    measure::Patch,
-    units::{rad, Radians},
-};
-use glam::Vec3;
+use crate::{error::Error, measure::Patch};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     str::FromStr,
+};
+use vgcore::{
+    math::Handedness,
+    units::{rad, Radians},
 };
 
 /// Main entry point for the application.

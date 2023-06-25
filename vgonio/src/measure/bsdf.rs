@@ -17,12 +17,12 @@ use crate::{
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
 };
-use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
 };
+use vgcore::math::Vec3;
 
 use super::measurement::BsdfMeasurementParams;
 

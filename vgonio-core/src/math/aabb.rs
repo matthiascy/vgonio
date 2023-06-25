@@ -10,7 +10,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::math::{rcp, ulp_eq, Axis};
+use crate::math::{ulp_eq, Axis};
 use serde::{Deserialize, Serialize};
 
 /// Axis-aligned bounding box.

@@ -22,13 +22,13 @@ use egui::NumExt;
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
-use glam::Mat4;
 use std::{
     collections::HashMap,
     fmt::Write,
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
 };
+use vgcore::math::Mat4;
 
 /// Implementation of the drag and drop functionality.
 pub struct FileDragDrop {

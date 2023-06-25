@@ -13,6 +13,7 @@ use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
 };
+use vgcore::error::VgonioError;
 
 impl Display for MadfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -54,7 +55,7 @@ impl Display for MmsfMeasurementParams {
 
 /// Prints Vgonio's current configurations.
 /// TODO: print default parameters for each measurement
-pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), Error> {
+pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioError> {
     let mut prints = [false, false, false];
     match opts.kind {
         Some(kind) => match kind {

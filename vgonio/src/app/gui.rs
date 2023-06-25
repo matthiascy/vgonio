@@ -11,16 +11,16 @@ mod widgets;
 
 // TODO: MSAA
 
-use crate::{error::Error, measure, measure::RtcMethod, Handedness};
+use crate::{error::Error, measure, measure::RtcMethod};
 use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
-use glam::{IVec2, Mat4, Vec3, Vec4};
 use std::{
     default::Default,
     path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
+use vgcore::math::{Handedness, IVec2, Mat4, Vec3, Vec4};
 
 pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioUi;
@@ -47,8 +47,8 @@ use crate::{
         CollectorScheme,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
-    units::{Degrees, Radians},
 };
+use vgcore::units::{Degrees, Radians};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},

@@ -3,8 +3,8 @@ use crate::{
     Error,
 };
 use bytemuck::{Pod, Zeroable};
-use glam::Mat4;
 use std::sync::Arc;
+use vgcore::math::Mat4;
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.

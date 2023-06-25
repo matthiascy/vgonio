@@ -6,11 +6,9 @@ use crate::{
         collector::CollectorScheme,
         emitter::RegionShape,
         microfacet::{MeasuredMadfData, MeasuredMmsfData},
-        rtc::Aabb,
         Collector, Emitter, RtcMethod,
     },
     msurf::{MicroSurface, MicroSurfaceMesh},
-    units::{deg, mm, nanometres, rad, LengthUnit, Millimetres, Radians, SolidAngle, UMillimetre},
     Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
@@ -20,6 +18,10 @@ use std::{
     hash::Hash,
     io::BufReader,
     path::{Path, PathBuf},
+};
+use vgcore::{
+    math::Aabb,
+    units::{deg, mm, nanometres, rad, LengthUnit, Millimetres, Radians, SolidAngle, UMillimetre},
 };
 
 /// Describes the radius of measurement.
@@ -89,7 +91,7 @@ impl Radius {
     pub fn estimate(&self, mesh: &MicroSurfaceMesh) -> f32 {
         match self {
             Radius::Auto(_) => mesh.bounds.max_extent() * std::f32::consts::SQRT_2,
-            Radius::Fixed(r) => mesh.unit.factor_convert_from::<UMillimetre>() * r.value,
+            Radius::Fixed(r) => mesh.unit.factor_convert_from::<UMillimetre>() * r.value(),
         }
     }
 
@@ -98,7 +100,7 @@ impl Radius {
     pub fn estimate_with_bounds(&self, bounds: Aabb, unit: LengthUnit) -> f32 {
         match self {
             Radius::Auto(_) => bounds.max_extent() * std::f32::consts::SQRT_2,
-            Radius::Fixed(r) => unit.factor_convert_from::<UMillimetre>() * r.value,
+            Radius::Fixed(r) => unit.factor_convert_from::<UMillimetre>() * r.value(),
         }
     }
 

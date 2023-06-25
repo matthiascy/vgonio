@@ -1,23 +1,17 @@
-use clap::ValueEnum;
-use serde::{Deserialize, Serialize};
 use std::{
-    fmt,
-    fmt::Display,
     fs::File,
-    io::{BufRead, BufReader, BufWriter, Read, Write},
+    io::{BufReader, Read, Write},
     path::Path,
 };
-use vgonio_core::math;
+use vgcore::math;
 
 use crate::{
     error::Error,
     measure::{
-        bsdf::MeasuredBsdfData,
+        bsdf::{BsdfMeasurementStatsPoint, MeasuredBsdfData},
         measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
         microfacet::{MeasuredMadfData, MeasuredMmsfData},
     },
-    msurf::MicroSurface,
-    units::LengthUnit,
 };
 
 pub mod vgmo {
@@ -33,19 +27,15 @@ pub mod vgmo {
             },
             Collector, CollectorScheme, Emitter,
         },
-        ulp_eq,
-        units::{
-            mm, rad, solid_angle_of_region, solid_angle_of_spherical_cap, steradians, Nanometres,
-            Radians,
-        },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
     };
     use std::io::BufWriter;
-    use vgonio_core::{
+    use vgcore::{
         io::{
             CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError,
             WriteFileErrorKind,
         },
+        units,
         units::{mm, rad, steradians, Nanometres, Radians},
     };
 
@@ -56,9 +46,9 @@ pub mod vgmo {
                     #[doc = "Writes the RangeByStepSizeInclusive<`" $T "`> into the given buffer, following the order: start, stop, step_size, step_count."]
                     pub fn write_to_buf(&self, buf: &mut [u8]) {
                         debug_assert!(buf.len() >= 16, "RangeByStepSizeInclusive needs at least 16 bytes of space");
-                        buf[0..4].copy_from_slice(&self.start.value.to_le_bytes());
-                        buf[4..8].copy_from_slice(&self.stop.value.to_le_bytes());
-                        buf[8..12].copy_from_slice(&self.step_size.value.to_le_bytes());
+                        buf[0..4].copy_from_slice(&self.start.value().to_le_bytes());
+                        buf[4..8].copy_from_slice(&self.stop.value().to_le_bytes());
+                        buf[8..12].copy_from_slice(&self.step_size.value().to_le_bytes());
                         buf[12..16].copy_from_slice(&(self.$step_count() as u32).to_le_bytes());
                     }
 
@@ -392,7 +382,7 @@ pub mod vgmo {
             match self {
                 RegionShape::SphericalCap { zenith } => {
                     buf[0..4].fill(0x00);
-                    buf[4..8].copy_from_slice(&zenith.value.to_le_bytes());
+                    buf[4..8].copy_from_slice(&zenith.value().to_le_bytes());
                 }
                 RegionShape::SphericalRect { zenith, azimuth } => {
                     buf[0..4].copy_from_slice(&0x01u32.to_le_bytes());
@@ -427,9 +417,9 @@ pub mod vgmo {
             let shape = RegionShape::read_from_buf(&buf[44..44 + 20]);
             let spectrum = RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[64..64 + 16]);
             let solid_angle = match shape {
-                RegionShape::SphericalCap { zenith } => math::solid_angle_of_spherical_cap(zenith),
+                RegionShape::SphericalCap { zenith } => units::solid_angle_of_spherical_cap(zenith),
                 RegionShape::SphericalRect { zenith, azimuth } => {
-                    math::solid_angle_of_region(zenith, azimuth)
+                    units::solid_angle_of_region(zenith, azimuth)
                 }
                 RegionShape::Disk { .. } => {
                     log::warn!(
@@ -460,7 +450,7 @@ emitter is not implemented"
             buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
             buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
 
-            buf[8..12].copy_from_slice(&self.radius.value().value.to_le_bytes());
+            buf[8..12].copy_from_slice(&self.radius.value().as_f32().to_le_bytes());
             self.zenith.write_to_buf(&mut buf[12..12 + 16]);
             self.azimuth.write_to_buf(&mut buf[28..28 + 16]);
             self.shape.write_to_buf(&mut buf[44..44 + 20]);
@@ -640,7 +630,7 @@ emitter is not implemented"
                 }
             }
 
-            buf[0..4].copy_from_slice(&self.radius.value().value.to_le_bytes());
+            buf[0..4].copy_from_slice(&self.radius.value().value().to_le_bytes());
             self.scheme
                 .write_to_buf(&mut buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
         }
@@ -718,7 +708,7 @@ emitter is not implemented"
                 "Measurement kind
           mismatch"
             );
-            let samples = read_f32_data_samples(
+            let samples = vgsurf::io::read_f32_data_samples(
                 reader,
                 params.samples_count(),
                 meta.encoding,
@@ -734,7 +724,7 @@ emitter is not implemented"
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<(), WriteFileErrorKind> {
-            write_f32_data_samples(
+            vgsurf::io::write_f32_data_samples(
                 writer,
                 encoding,
                 compression,
@@ -757,7 +747,7 @@ emitter is not implemented"
                 "Measurement kind
           mismatch"
             );
-            let samples = read_f32_data_samples(
+            let samples = vgsurf::io::read_f32_data_samples(
                 reader,
                 params.samples_count(),
                 meta.encoding,
@@ -773,7 +763,7 @@ emitter is not implemented"
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<(), WriteFileErrorKind> {
-            write_f32_data_samples(
+            vgsurf::io::write_f32_data_samples(
                 writer,
                 encoding,
                 compression,
@@ -1063,7 +1053,7 @@ emitter is not implemented"
                     gzip_decoder = flate2::bufread::GzDecoder::new(reader);
                     Box::new(&mut gzip_decoder)
                 }
-                _ => {}
+                _ => Box::new(reader),
             };
 
             match meta.encoding {
@@ -1115,7 +1105,7 @@ emitter is not implemented"
                     gzip = flate2::write::GzEncoder::new(writer, flate2::Compression::default());
                     Box::new(&mut gzip)
                 }
-                _ => {}
+                _ => Box::new(writer),
             };
 
             match encoding {

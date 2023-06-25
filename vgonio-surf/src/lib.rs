@@ -1,18 +1,21 @@
 //! Heightfield
+#![warn(missing_docs)]
 
 pub mod io;
 
-use glam::Vec3;
+#[cfg(feature = "embree")]
+use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
+
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Seek},
     path::{Path, PathBuf},
 };
-use vgonio_core::{
+use vgcore::{
     error::VgonioError,
-    io::{CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError},
-    math::Aabb,
+    io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
+    math::{Aabb, Vec3},
     units::LengthUnit,
 };
 
@@ -135,8 +138,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_msurf::{AxisAlignment, MicroSurface};
-    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, LengthUnit::UM);
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
@@ -176,8 +179,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let msurf = MicroSurface::new_by(4, 4, 0.1, 0.1, LengthUnit::UM, |row, col| {
     ///     (row + col) as f32
     /// });
@@ -247,8 +250,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let height_field =
     ///     MicroSurface::from_samples(3, 3, 0.5, 0.5, LengthUnit::UM, &samples, None, None);
@@ -314,8 +317,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let msurf = MicroSurface::new(100, 100, 0.1, 0.1, 0.1, LengthUnit::UM);
     /// assert_eq!(msurf.dimension(), (10.0, 10.0));
     /// ```
@@ -328,8 +331,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.samples_count(), 9);
@@ -341,8 +344,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.cells_count(), 4);
@@ -365,16 +368,16 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, None, None);
     /// assert_eq!(msurf.sample_at(2, 2), 0.1);
     /// ```
     ///
     /// ```should_panic
-    /// # use vgonio_core::units::LengthUnit;
-    /// # use vgonio_msurf::MicroSurface;
+    /// # use vgcore::units::LengthUnit;
+    /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, None, None);
     /// let h = msurf.sample_at(4, 4);
@@ -537,7 +540,7 @@ impl MicroSurface {
     /// The vertices are generated following the order from left to right, top
     /// to bottom. The vertices are also aligned to the given axis. The center
     /// of the heightfield is at the origin.
-    pub(crate) fn generate_vertices(
+    pub fn generate_vertices(
         &self,
         alignment: AxisAlignment,
         height_offset: f32,
@@ -618,7 +621,7 @@ impl MicroSurface {
 /// # Returns
 ///
 /// Vec<u32>: An array of vertex indices forming triangles.
-pub(crate) fn regular_grid_triangulation(rows: usize, cols: usize) -> Vec<u32> {
+pub fn regular_grid_triangulation(rows: usize, cols: usize) -> Vec<u32> {
     let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
     let mut tri = 0;
     for i in 0..cols * rows {
@@ -725,6 +728,31 @@ impl MicroSurfaceMesh {
     /// TODO(yang): unit of surface area
     pub fn macro_surface_area(&self) -> f32 {
         (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.z - self.bounds.min.z)
+    }
+
+    /// Constructs an embree geometry from the `MicroSurfaceMesh`.
+    #[cfg(feature = "embree")]
+    pub fn as_embree_geometry<'g>(&self, device: &Device) -> Geometry<'g> {
+        let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
+        geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
+            .unwrap()
+            .view_mut::<[f32; 4]>()
+            .unwrap()
+            .iter_mut()
+            .zip(self.verts.iter())
+            .for_each(|(vert, pos)| {
+                vert[0] = pos.x;
+                vert[1] = pos.y;
+                vert[2] = pos.z;
+                vert[3] = 1.0;
+            });
+        geom.set_new_buffer(BufferUsage::INDEX, 0, Format::UINT3, 12, self.num_facets)
+            .unwrap()
+            .view_mut::<u32>()
+            .unwrap()
+            .copy_from_slice(&self.facets);
+        geom.commit();
+        geom
     }
 }
 

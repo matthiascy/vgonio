@@ -1,8 +1,6 @@
-use crate::{
-    app::gui::{VgonioEvent, VgonioEventLoop},
-    units::{degrees, Degrees},
-};
+use crate::app::gui::{VgonioEvent, VgonioEventLoop};
 use egui::{Response, Ui};
+use vgcore::units::{degrees, Degrees};
 
 pub struct MicrofacetDebugging {
     event_loop: VgonioEventLoop,
@@ -27,13 +25,13 @@ impl egui::Widget for &mut MicrofacetDebugging {
         ui.horizontal_wrapped(|ui| {
             ui.label("view direction");
             ui.add(
-                egui::DragValue::new(&mut self.m_azimuth.value)
+                egui::DragValue::new(&mut self.m_azimuth.value())
                     .speed(0.1)
                     .prefix("φ: ")
                     .suffix("°"),
             );
             ui.add(
-                egui::DragValue::new(&mut self.m_zenith.value)
+                egui::DragValue::new(&mut self.m_zenith.value())
                     .speed(0.1)
                     .prefix("θ: ")
                     .suffix("°"),
@@ -43,7 +41,7 @@ impl egui::Widget for &mut MicrofacetDebugging {
         ui.horizontal_wrapped(|ui| {
             ui.label("opening angle");
             ui.add(
-                egui::DragValue::new(&mut self.opening_angle.value)
+                egui::DragValue::new(&mut self.opening_angle.value())
                     .speed(0.1)
                     .suffix("°"),
             );

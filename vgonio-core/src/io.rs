@@ -110,9 +110,12 @@ pub enum ParseErrorKind {
     NotEnoughData,
 }
 
+/// Possible errors while writing a file.
 #[derive(Debug)]
 pub struct WriteFileError {
+    /// The path of the file.
     pub path: Box<Path>,
+    /// The kind of the error.
     pub kind: WriteFileErrorKind,
 }
 
@@ -140,6 +143,7 @@ impl WriteFileError {
     }
 }
 
+/// The kind of the error while writing a file.
 #[derive(Debug)]
 pub enum WriteFileErrorKind {
     Write(std::io::Error),

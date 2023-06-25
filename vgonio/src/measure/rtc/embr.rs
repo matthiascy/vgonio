@@ -15,44 +15,17 @@ use crate::{
     },
     msurf::MicroSurfaceMesh,
     optics::fresnel,
-    SphericalCoord,
 };
 use embree::{
-    BufferUsage, Config, Device, Format, Geometry, GeometryKind, HitN, IntersectContext,
-    IntersectContextExt, IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit,
-    SoARay, ValidMask, ValidityN, INVALID_ID,
+    BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
+    IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
+    ValidityN, INVALID_ID,
 };
-use glam::Vec3A;
 use rayon::prelude::*;
 use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose_debug"))]
 use std::time::Instant;
-
-impl MicroSurfaceMesh {
-    /// Constructs an embree geometry from the `MicroSurfaceMesh`.
-    pub fn as_embree_geometry<'g>(&self, device: &Device) -> Geometry<'g> {
-        let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
-        geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
-            .unwrap()
-            .view_mut::<[f32; 4]>()
-            .unwrap()
-            .iter_mut()
-            .zip(self.verts.iter())
-            .for_each(|(vert, pos)| {
-                vert[0] = pos.x;
-                vert[1] = pos.y;
-                vert[2] = pos.z;
-                vert[3] = 1.0;
-            });
-        geom.set_new_buffer(BufferUsage::INDEX, 0, Format::UINT3, 12, self.num_facets)
-            .unwrap()
-            .view_mut::<u32>()
-            .unwrap()
-            .copy_from_slice(&self.facets);
-        geom.commit();
-        geom
-    }
-}
+use vgcore::math::{SphericalCoord, Vec3A};
 
 /// Extra data associated with a ray stream.
 ///

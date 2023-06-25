@@ -256,6 +256,9 @@ impl<A: LengthMeasurement> Length<A> {
     /// Returns the value of the length.
     pub const fn value(&self) -> f32 { self.value }
 
+    /// Returns a mutable reference to the value of the length.
+    pub const fn value_mut(&mut self) -> &mut f32 { &mut self.value }
+
     /// Returns the value of the length without the unit.
     pub const fn as_f32(&self) -> f32 { self.value }
 

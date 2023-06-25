@@ -2518,6 +2518,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "chrono",
+ "clap",
  "csv",
  "dirs",
  "egui",
@@ -2527,8 +2528,11 @@ dependencies = [
  "egui_extras",
  "embree",
  "env_logger",
+ "flate2",
  "futures-intrusive",
  "image",
+ "log",
+ "paste",
  "pollster",
  "proptest",
  "rand",
@@ -2536,13 +2540,15 @@ dependencies = [
  "rand_distr",
  "rayon",
  "rfd",
+ "serde",
  "serde_json",
  "serde_yaml",
  "shaderc",
  "toml",
  "type-map",
+ "uuid",
  "vgonio-core",
- "vgonio-msurf",
+ "vgonio-surf",
  "wgpu",
  "winit",
 ]
@@ -2559,11 +2565,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "vgonio-msurf"
+name = "vgonio-surf"
 version = "0.3.0"
 dependencies = [
  "byteorder",
  "clap",
+ "embree",
  "flate2",
  "glam",
  "log",
