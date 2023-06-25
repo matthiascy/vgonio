@@ -11,6 +11,10 @@ use std::{
     ops::{Add, Div, Mul, RangeInclusive, Sub},
     str::FromStr,
 };
+use vgonio_core::{
+    math::NumericCast,
+    units::{Angle, Radians},
+};
 
 /// Defines a right inclusive range [a, b] of values with a given step.
 ///
@@ -460,7 +464,7 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         let angle = angle.to_degrees();
         let start = self.start.to_degrees();
         let step_size = self.step_size.to_degrees();
-        ((angle - start).value / step_size.value).round() as usize % self.step_count_wrapped()
+        ((angle - start).value() / step_size.value()).round() as usize % self.step_count_wrapped()
     }
 
     /// Returns the angle at the given index.
@@ -470,7 +474,7 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
 
     /// Returns the range of angles as a range of floating point values.
     pub fn range_bound_inclusive_f32(&self) -> RangeInclusive<f32> {
-        self.start.value..=self.stop.value
+        self.start.value()..=self.stop.value()
     }
 
     /// Constructs a new range of angles from 0 to 2π with the given step size.

@@ -1,17 +1,6 @@
-[package]
-name = "vgonio"
-version = "0.3.0"
-authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
-edition = "2021"
-build = "build.rs"
-description = "Microscopic level light transport simulation."
-publish = false
-exclude = ["/scripts/*", "/meas/*", "/misc/*"]
-
 [workspace]
-members = [
-    "vgonio-core", "vgonio-msurf"
-]
+members = ["vgonio", "vgonio-core", "vgonio-msurf"]
+resolver = "2"
 
 [workspace.package]
 authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
@@ -29,49 +18,6 @@ paste = "1.0"
 serde = { version = "1", features = ["derive"] }
 uuid = { version = "1.2", features = ["serde", "v4"] }
 
-[features]
-default = []
-embree = ["dep:embree"]
-optix = []
-verbose_debug = []
-
-[dependencies]
-approx = "0.5"
-bincode = "1"
-bytemuck = { version = "1.12", features = ["derive"] }
-chrono = "0.4"
-csv = "1"
-dirs = "5.0"
-egui = { version = "0.22", features = ["bytemuck"] }
-egui_extras = "0.22"
-egui-winit = { version = "0.22", default-features = false }
-egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
-egui-toast = "0.8"
-embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own", optional = true}
-env_logger = "0.10"
-futures-intrusive = "0.5"
-image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
-pollster = "0.3"
-rfd = { version = "0.11", features = ["file-handle-inner"] }
-rayon = "1.6"
-rand = "0.8"
-rand_distr = "0.4"
-rand_chacha = "0.3"
-serde_yaml = "0.9"
-serde_json = "1.0"
-toml = "0.7"
-type-map = "0.5"
-winit = "0.28"
-wgpu = { version = "0.16", features = ["spirv"] }
-vgonio-msurf = { path = "./vgonio-msurf" }
-vgonio-core = { package = "vgonio-core", path = "./vgonio-core" }
-
-[build-dependencies]
-shaderc = "0.8"
-
-[dev-dependencies]
-proptest = "1"
-
 [profile.dev]
 split-debuginfo = "unpacked"
 
@@ -81,10 +27,7 @@ opt-level = 3
 [profile.release]
 strip = "debuginfo"
 lto = true
-# debug = true
 
-# Compile build-dependencies in release mode with
-# the same settings as regular dependencies.
 [profile.release.build-override]
 opt-level = 3
 codegen-units = 16

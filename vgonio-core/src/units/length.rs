@@ -1,4 +1,5 @@
 use crate::{
+    error::VgonioError,
     io::{FileEncoding, ParseError, ParseErrorKind},
     math::NumericCast,
 };
@@ -323,44 +324,34 @@ impl<A: LengthMeasurement> From<f32> for Length<A> {
 }
 
 impl<'a, A: LengthMeasurement> TryFrom<&'a str> for Length<A> {
-    type Error = ParseError;
+    type Error = VgonioError;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let bytes = s.trim().as_bytes();
-        let i = super::findr_first_non_ascii_alphabetic(bytes).ok_or(ParseError {
-            line: 0,
-            position: 0,
-            kind: ParseErrorKind::InvalidContent,
-            encoding: FileEncoding::Ascii,
-            message: Some(format!("No unit found in length string: \"{}\".", s)),
-        })?;
-        let value = std::str::from_utf8(&bytes[..i])
-            .map_err(|err| ParseError {
+        let i = super::findr_first_non_ascii_alphabetic(bytes).ok_or(VgonioError::new(
+            "Invalid length string.",
+            Some(Box::new(ParseError {
                 line: 0,
-                position: err.valid_up_to() as u32,
-                kind: ParseErrorKind::InvalidUft8,
+                position: 0,
+                kind: ParseErrorKind::InvalidContent,
                 encoding: FileEncoding::Ascii,
-                message: Some(format!("Invalid utf8 in length string: \"{}\".", s)),
+            })),
+        ))?;
+        let value = std::str::from_utf8(&bytes[..i])
+            .map_err(|err| {
+                VgonioError::new("Length string contains invalid UTF-8.", Some(Box::new(err)))
             })?
             .trim()
             .parse::<f32>()
-            .map_err(|err| ParseError {
-                line: 0,
-                position: i as u32,
-                kind: ParseErrorKind::ParseFloat,
-                encoding: FileEncoding::Ascii,
-                message: Some(format!(
-                    "Invalid floating number for length value: \"{}\"",
-                    s
-                )),
+            .map_err(|err| {
+                VgonioError::new(
+                    "Length string contains invalid number.",
+                    Some(Box::new(err)),
+                )
             })?;
         let unit = std::str::from_utf8(&bytes[i..])
-            .map_err(|err| ParseError {
-                line: 0,
-                position: i as u32,
-                kind: ParseErrorKind::InvalidUft8,
-                encoding: FileEncoding::Ascii,
-                message: Some(format!("Invalid utf8 in length string: \"{}\".", s)),
+            .map_err(|err| {
+                VgonioError::new("Length string contains invalid UTF-8.", Some(Box::new(err)))
             })?
             .trim();
         match unit {
@@ -369,19 +360,21 @@ impl<'a, A: LengthMeasurement> TryFrom<&'a str> for Length<A> {
             "mm" => Ok(Self::new(A::FACTOR_FROM_MILLIMETRE * value)),
             "um" => Ok(Self::new(A::FACTOR_FROM_MICROMETRE * value)),
             "nm" => Ok(Self::new(A::FACTOR_FROM_NANOMETRE * value)),
-            _ => Err(ParseError {
-                line: 0,
-                position: i as u32,
-                kind: ParseErrorKind::InvalidContent,
-                encoding: FileEncoding::Ascii,
-                message: Some(format!("Unsupported unit: \"{}\".", unit)),
-            }),
+            _ => Err(VgonioError::new(
+                format!("Unknown length unit: {}.", unit),
+                Some(Box::new(ParseError {
+                    line: 0,
+                    position: 0,
+                    kind: ParseErrorKind::InvalidContent,
+                    encoding: FileEncoding::Ascii,
+                })),
+            ))?,
         }
     }
 }
 
 impl<A: LengthMeasurement> FromStr for Length<A> {
-    type Err = ParseError;
+    type Err = VgonioError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }

@@ -6,51 +6,13 @@ use std::{
     io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
-
-/// Data compression scheme while storing the data.
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum, Serialize, Deserialize)]
-pub enum CompressionScheme {
-    /// No compression.
-    None = 0x00,
-    /// Zlib compression.
-    Zlib = 0x01,
-    /// Gzip compression.
-    Gzip = 0x02,
-}
-
-impl From<u8> for CompressionScheme {
-    fn from(value: u8) -> Self {
-        match value {
-            0x00 => CompressionScheme::None,
-            0x01 => CompressionScheme::Zlib,
-            0x02 => CompressionScheme::Gzip,
-            _ => panic!("Invalid data compression: {}", value),
-        }
-    }
-}
-
-impl Display for CompressionScheme {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CompressionScheme::None => write!(f, "none"),
-            CompressionScheme::Zlib => write!(f, "zlib"),
-            CompressionScheme::Gzip => write!(f, "gzip"),
-        }
-    }
-}
-
-impl CompressionScheme {
-    /// Returns true if the data is not compressed.
-    pub fn is_none(&self) -> bool { matches!(self, CompressionScheme::None) }
-
-    /// Returns true if the data is compressed with zlib.
-    pub fn is_zlib(&self) -> bool { matches!(self, CompressionScheme::Zlib) }
-
-    /// Returns true if the data is compressed with gzip.
-    pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
-}
+use vgonio_core::{
+    error::VgonioError,
+    io::{
+        CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
+        ReadFileErrorKind,
+    },
+};
 
 /// Write the data samples to the given writer.
 fn write_f32_data_samples<W: Write>(
@@ -73,6 +35,7 @@ fn write_f32_data_samples<W: Write>(
             gzip_encoder = flate2::write::GzEncoder::new(writer, flate2::Compression::default());
             Box::new(&mut gzip_encoder)
         }
+        _ => Box::new(writer),
     };
 
     match encoding {
@@ -116,6 +79,7 @@ fn read_f32_data_samples<R: Read>(
             gzip_decoder = flate2::bufread::GzDecoder::new(reader);
             Box::new(&mut gzip_decoder)
         }
+        _ => Box::new(reader),
     };
 
     let mut samples = vec![0.0; count];
@@ -220,13 +184,17 @@ where
     Ok(())
 }
 
-use core::units::LengthUnit;
+use crate::MicroSurface;
+use vgonio_core::units::LengthUnit;
 
 /// Micro-surface file format.
 pub mod vgms {
     use super::*;
-    use core::units::LengthUnit;
     use std::io::{BufWriter, Read, Write};
+    use vgonio_core::{
+        io::{ReadFileErrorKind, WriteFileErrorKind},
+        units::LengthUnit,
+    };
 
     /// Header of the VGMS file.
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -353,17 +321,33 @@ pub mod vgms {
 pub fn read_ascii_dong2015<R: BufRead>(
     reader: &mut R,
     filepath: &Path,
-) -> Result<MicroSurface, Error> {
+) -> Result<MicroSurface, VgonioError> {
     let mut buf = [0_u8; 4];
-    reader.read_exact(&mut buf)?;
-    if std::str::from_utf8(&buf)? != "Asci" {
-        return Err(Error::UnrecognizedFile);
+    reader.read_exact(&mut buf).map_err(|err| {
+        VgonioError::new("Failed to read magic number from file", Some(Box::new(err)))
+    })?;
+    let magic_number = std::str::from_utf8(&buf)
+        .map_err(|err| VgonioError::from_utf8_error(err, "Invalid magic number in file"))?;
+    if magic_number != "Asci" {
+        return Err(VgonioError::new(
+            format!(
+                "Invalid magic number \"{}\" for file: {}",
+                magic_number,
+                filepath.display()
+            ),
+            None,
+        ));
     }
 
     let mut reader = BufReader::new(reader);
 
     let mut line = String::new();
-    reader.read_line(&mut line)?;
+    reader.read_line(&mut line).map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!("Failed to read lines from file {}", filepath.display()),
+        )
+    })?;
     let (cols, rows, du, dv) = {
         let first_line = line.trim().split_ascii_whitespace().collect::<Vec<_>>();
 
@@ -384,10 +368,13 @@ pub fn read_ascii_dong2015<R: BufRead>(
     let mut samples = vec![0.0; rows * cols];
 
     read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
-        Error::ReadFile(ReadFileError {
-            path: filepath.to_owned().into_boxed_path(),
-            kind: ReadFileErrorKind::Parse(err),
-        })
+        VgonioError::new(
+            format!("Failed to read samples from file {}", filepath.display()),
+            Some(Box::new(ReadFileError::from_parse_error(
+                filepath.clone(),
+                err,
+            ))),
+        )
     })?;
 
     Ok(MicroSurface::from_samples(
@@ -408,24 +395,43 @@ pub fn read_ascii_dong2015<R: BufRead>(
 pub fn read_ascii_usurf<R: BufRead>(
     reader: &mut R,
     filepath: &Path,
-) -> Result<MicroSurface, Error> {
+) -> Result<MicroSurface, VgonioError> {
     let mut line = String::new();
 
     loop {
-        reader.read_line(&mut line)?;
+        reader.read_line(&mut line).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!("Failed to read lines from file {}", filepath.display()),
+            )
+        })?;
         if !line.is_empty() {
             break;
         }
     }
 
+    let magic_number = line.trim();
+
     if line.trim() != "DATA" {
-        return Err(Error::UnrecognizedFile);
+        return Err(VgonioError::new(
+            format!(
+                "Invalid magic number \"{}\" for file: {}",
+                magic_number,
+                filepath.display()
+            ),
+            None,
+        ));
     }
 
     line.clear();
 
     // Read horizontal coordinates
-    reader.read_line(&mut line)?;
+    reader.read_line(&mut line).map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!("Failed to read lines from file {}", filepath.display()),
+        )
+    })?;
     let x_coords: Vec<f32> = line
         .trim()
         .split_ascii_whitespace()
@@ -524,6 +530,7 @@ mod tests {
         units::{mm, nm, rad, Radians},
         Medium, RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
     };
+    use vgonio_core::units::{mm, nm, rad, Radians};
 
     #[test]
     #[rustfmt::skip]
@@ -600,160 +607,5 @@ mod tests {
         assert_eq!(results[1], 16);
         assert_eq!(results[2], 23);
         assert_eq!(results[3], 30);
-    }
-
-    #[test]
-    fn test_bsdf_measurement_stats_point_read_write() {
-        let data = BsdfMeasurementStatsPoint {
-            n_received: 1234567,
-            n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
-            n_reflected: PerWavelength(vec![5, 6, 7, 8]),
-            n_captured: PerWavelength(vec![9, 10, 11, 12]),
-            e_captured: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
-            num_rays_per_bounce: PerWavelength(vec![
-                vec![17, 18, 19],
-                vec![22, 23, 24],
-                vec![26, 27, 28],
-                vec![30, 31, 32],
-            ]),
-            energy_per_bounce: PerWavelength(vec![
-                vec![1.0, 2.0, 4.0],
-                vec![5.0, 6.0, 7.0],
-                vec![8.0, 9.0, 10.0],
-                vec![11.0, 12.0, 13.0],
-            ]),
-        };
-        let size = BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 3);
-        let mut buf = vec![0; size];
-        data.write_to_buf(&mut buf, 4, 3);
-        let data2 = BsdfMeasurementStatsPoint::read_from_buf(&buf, 4, 3).unwrap();
-        assert_eq!(data, data2);
-    }
-
-    #[test]
-    fn test_bounce_and_energy_read_write() {
-        let data = BounceAndEnergy {
-            total_rays: 33468,
-            total_energy: 1349534.0,
-            num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0],
-            energy_per_bounce: vec![
-                20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
-            ],
-        };
-        let size = BounceAndEnergy::calc_size_in_bytes(11);
-        let mut buf = vec![0; size];
-        data.write_to_buf(&mut buf, 11);
-        let data2 = BounceAndEnergy::read_from_buf(&buf, 11).unwrap();
-        assert_eq!(data, data2);
-    }
-
-    #[test]
-    fn test_bsdf_measurement_data_point() {
-        let data = BsdfMeasurementDataPoint::<BounceAndEnergy> {
-            stats: BsdfMeasurementStatsPoint {
-                n_received: 0,
-                n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
-                n_reflected: PerWavelength(vec![5, 6, 7, 8]),
-                n_captured: PerWavelength(vec![9, 10, 11, 12]),
-                e_captured: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
-                num_rays_per_bounce: PerWavelength(vec![
-                    vec![17, 18, 19],
-                    vec![22, 23, 24],
-                    vec![26, 27, 28],
-                    vec![30, 31, 32],
-                ]),
-                energy_per_bounce: PerWavelength(vec![
-                    vec![1.0, 2.0, 4.0],
-                    vec![5.0, 6.0, 7.0],
-                    vec![8.0, 9.0, 10.0],
-                    vec![11.0, 12.0, 13.0],
-                ]),
-            },
-            data: vec![
-                PerWavelength(vec![
-                    BounceAndEnergy {
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
-                    },
-                    BounceAndEnergy {
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
-                    },
-                ]),
-                PerWavelength(vec![
-                    BounceAndEnergy {
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
-                    },
-                    BounceAndEnergy {
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
-                    },
-                ]),
-            ],
-        };
-
-        let size = BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
-        let mut buf = vec![0; size];
-        data.write_to_buf(&mut buf, 4, 3);
-        let params = BsdfMeasurementParams {
-            kind: BsdfKind::Brdf,
-            sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
-            incident_medium: Medium::Air,
-            transmitted_medium: Medium::Aluminium,
-            emitter: Emitter {
-                num_rays: 0,
-                max_bounces: 3,
-                radius: Auto(mm!(0.0)),
-                zenith: RangeByStepSizeInclusive::zero_to_half_pi(rad!(0.2)),
-                azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
-                shape: RegionShape::SphericalCap { zenith: rad!(0.2) },
-                spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
-                solid_angle: Default::default(),
-            },
-            collector: Collector {
-                radius: Auto(mm!(10.0)),
-                scheme: CollectorScheme::Partitioned {
-                    partition: SphericalPartition::EqualAngle {
-                        zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
-                        azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
-                    },
-                },
-            },
-        };
-        let data2 = BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);
-        assert_eq!(data, data2);
     }
 }

@@ -9,6 +9,12 @@ use std::{
     io::{BufReader, BufWriter, Read, Seek},
     path::{Path, PathBuf},
 };
+use vgonio_core::{
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError},
+    math::Aabb,
+    units::LengthUnit,
+};
 
 /// Static variable used to generate height field name.
 static mut MICRO_SURFACE_COUNTER: u32 = 0;
@@ -130,7 +136,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgonio_msurf::{AxisAlignment, MicroSurface};
-    /// # use vgonio::units::LengthUnit;
+    /// # use vgonio_core::units::LengthUnit;
     /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, LengthUnit::UM);
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
@@ -170,8 +176,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::msurf::{AxisAlignment, MicroSurface};
-    /// # use vgonio::units::LengthUnit;
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let msurf = MicroSurface::new_by(4, 4, 0.1, 0.1, LengthUnit::UM, |row, col| {
     ///     (row + col) as f32
     /// });
@@ -241,8 +247,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{LengthUnit};
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let height_field =
     ///     MicroSurface::from_samples(3, 3, 0.5, 0.5, LengthUnit::UM, &samples, None, None);
@@ -308,8 +314,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::msurf::MicroSurface;
-    /// use vgonio::units::LengthUnit;
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let msurf = MicroSurface::new(100, 100, 0.1, 0.1, 0.1, LengthUnit::UM);
     /// assert_eq!(msurf.dimension(), (10.0, 10.0));
     /// ```
@@ -322,8 +328,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::msurf::MicroSurface;
-    /// use vgonio::units::LengthUnit;
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.samples_count(), 9);
@@ -335,8 +341,8 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::msurf::MicroSurface;
-    /// use vgonio::units::LengthUnit;
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.cells_count(), 4);
@@ -359,16 +365,16 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{LengthUnit};
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, None, None);
     /// assert_eq!(msurf.sample_at(2, 2), 0.1);
     /// ```
     ///
     /// ```should_panic
-    /// # use vgonio::msurf::MicroSurface;
-    /// # use vgonio::units::{LengthUnit};
+    /// # use vgonio_core::units::LengthUnit;
+    /// # use vgonio_msurf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, None, None);
     /// let h = msurf.sample_at(4, 4);
@@ -702,8 +708,6 @@ pub struct MicroSurfaceMesh {
     pub unit: LengthUnit,
 }
 
-impl Asset for MicroSurfaceMesh {}
-
 impl MicroSurfaceMesh {
     /// Returns the surface area of a facet.
     ///
@@ -750,9 +754,13 @@ impl MicroSurface {
     pub fn read_from_file(
         filepath: &Path,
         origin: Option<MicroSurfaceOrigin>,
-    ) -> Result<MicroSurface, Error> {
+    ) -> Result<MicroSurface, VgonioError> {
         use crate::io;
-        let file = File::open(filepath)?;
+        let file = File::open(filepath).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                &format!("Failed to open micro-surface file: {}", filepath.display()))
+        })?;
         let mut reader = BufReader::new(file);
 
         if let Some(origin) = origin {
@@ -764,17 +772,21 @@ impl MicroSurface {
         } else {
             // Otherwise, try to figure out the file format by reading first several bytes.
             let mut buf = [0_u8; 4];
-            reader.read_exact(&mut buf)?;
-            reader.seek(std::io::SeekFrom::Start(0))?; // Reset the cursor to the beginning of the file.
-            match std::str::from_utf8(&buf)? {
+            reader.read_exact(&mut buf).map_err(|err| {
+                VgonioError::from_io_error(
+                    err,
+                    &format!("Failed to read first 4 bytes of file: {}", filepath.display()))
+            })?;
+            reader.seek(std::io::SeekFrom::Start(0)).unwrap(); // Reset the cursor to the beginning of the file.
+            match std::str::from_utf8(&buf).unwrap() {
                 "Asci" => io::read_ascii_dong2015(&mut reader, filepath),
                 "DATA" => io::read_ascii_usurf(&mut reader, filepath),
                 "VGMS" => {
                     let (header, samples) = io::vgms::read(&mut reader)
-                        .map_err(|err| Error::ReadFile(io::ReadFileError {
+                        .map_err(|err| VgonioError::from_read_file_error(ReadFileError {
                             path: filepath.to_owned().into_boxed_path(),
                             kind: err,
-                        }))?;
+                        }, "Failed to read VGMS file."))?;
                     Ok(MicroSurface::from_samples(
                         header.rows as usize,
                         header.cols as usize,
@@ -788,7 +800,7 @@ impl MicroSurface {
                         Some(filepath.to_owned()),
                     ))
                 }
-                _ => Err(Error::UnrecognizedFile),
+                _ => Err(VgonioError::new("Unknown file format.", None))
             }
         }
             .map(|mut ms| {
@@ -801,10 +813,18 @@ impl MicroSurface {
     pub fn write_to_file(
         &self,
         filepath: &Path,
-        encoding: io::FileEncoding,
-        compression: io::CompressionScheme,
-    ) -> Result<(), Error> {
-        let mut file = File::create(filepath)?;
+        encoding: FileEncoding,
+        compression: CompressionScheme,
+    ) -> Result<(), VgonioError> {
+        let mut file = File::create(filepath).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                &format!(
+                    "Failed to create micro-surface file: {}",
+                    filepath.display()
+                ),
+            )
+        })?;
         let header = io::vgms::Header {
             rows: self.rows as u32,
             cols: self.cols as u32,
@@ -817,10 +837,13 @@ impl MicroSurface {
         };
         let mut writer = BufWriter::new(&mut file);
         io::vgms::write(&mut writer, header, &self.samples).map_err(|err| {
-            Error::WriteFile(io::WriteFileError {
-                path: filepath.to_owned().into_boxed_path(),
-                kind: err,
-            })
+            VgonioError::from_write_file_error(
+                WriteFileError {
+                    path: filepath.to_owned().into_boxed_path(),
+                    kind: err,
+                },
+                "Failed to write VGMS file.",
+            )
         })
     }
 }

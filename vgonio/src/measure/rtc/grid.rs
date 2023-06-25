@@ -21,6 +21,7 @@ use crate::{
     optics::fresnel,
     ulp_eq,
 };
+use egui::Vec2;
 use glam::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use rayon::prelude::*;
 use std::time::Instant;

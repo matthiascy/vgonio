@@ -7,6 +7,7 @@
 // Enable const fn floating point arithmetic
 #![feature(const_fn_floating_point_arithmetic)]
 
+pub mod error;
 pub mod io;
 pub mod math;
 pub mod units;

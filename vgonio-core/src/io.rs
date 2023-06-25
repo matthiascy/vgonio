@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, fmt::Display, path::Path};
 
 #[derive(Debug)]
-#[non_exhaustive]
 pub struct ReadFileError {
     pub path: Box<Path>,
     pub kind: ReadFileErrorKind,
@@ -20,6 +19,7 @@ impl std::error::Error for ReadFileError {
         match &self.kind {
             ReadFileErrorKind::Read(err) => Some(err),
             ReadFileErrorKind::Parse(err) => Some(err),
+            ReadFileErrorKind::InvalidFileFormat => None,
         }
     }
 }
@@ -46,6 +46,7 @@ impl ReadFileError {
 pub enum ReadFileErrorKind {
     Read(std::io::Error),
     Parse(ParseError),
+    InvalidFileFormat,
 }
 
 impl From<std::io::Error> for ReadFileErrorKind {
@@ -62,7 +63,6 @@ pub struct ParseError {
     pub position: u32,
     pub kind: ParseErrorKind,
     pub encoding: FileEncoding,
-    pub message: Option<String>,
 }
 
 impl Display for ParseError {

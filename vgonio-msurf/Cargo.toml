@@ -13,4 +13,4 @@ glam.workspace = true
 log.workspace = true
 serde.workspace = true
 uuid.workspace = true
-core = { package = "vgonio-core", path = "../vgonio-core" }
+vgonio-core = { path = "../vgonio-core" }

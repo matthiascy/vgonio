@@ -13,12 +13,10 @@ extern crate core;
 mod app;
 mod error;
 mod io;
-mod math;
 pub mod measure;
 pub mod msurf;
 pub mod optics;
 mod range;
-pub mod units;
 
 pub use range::*;
 
