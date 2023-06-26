@@ -1,6 +1,7 @@
 //! Measurement parameters.
 use crate::{
     app::cache::{Asset, Handle},
+    error::RuntimeError,
     measure::{
         bsdf::{BsdfKind, MeasuredBsdfData},
         collector::CollectorScheme,
@@ -8,8 +9,7 @@ use crate::{
         microfacet::{MeasuredMadfData, MeasuredMmsfData},
         Collector, Emitter, RtcMethod,
     },
-    msurf::{MicroSurface, MicroSurfaceMesh},
-    Error, Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
+    Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -20,9 +20,11 @@ use std::{
     path::{Path, PathBuf},
 };
 use vgcore::{
+    error::VgonioError,
     math::Aabb,
     units::{deg, mm, nanometres, rad, LengthUnit, Millimetres, Radians, SolidAngle, UMillimetre},
 };
+use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 /// Describes the radius of measurement.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -231,16 +233,20 @@ impl BsdfMeasurementParams {
     pub fn bsdf_data_samples_count(&self) -> usize { self.emitter.samples_count() }
 
     /// Whether the measurement parameters are valid.
-    pub fn validate(self) -> Result<Self, Error> {
+    pub fn validate(self) -> Result<Self, VgonioError> {
         log::info!("Validating measurement description...");
         let emitter = &self.emitter;
         if emitter.num_rays < 1 {
-            return Err(Error::InvalidEmitter("number of rays must be at least 1"));
+            return Err(VgonioError::new(
+                "Number of rays must be at least 1",
+                Some(Box::new(RuntimeError::InvalidEmitter)),
+            ));
         }
 
         if emitter.max_bounces < 1 {
-            return Err(Error::InvalidEmitter(
-                "maximum number of bounces must be at least 1",
+            return Err(VgonioError::new(
+                "Number of bounces must be at least 1",
+                Some(Box::new(RuntimeError::InvalidEmitter)),
             ));
         }
 
@@ -248,29 +254,33 @@ impl BsdfMeasurementParams {
             && emitter.zenith.step_size > rad!(0.0)
             && emitter.azimuth.step_size > rad!(0.0))
         {
-            return Err(Error::InvalidEmitter(
-                "emitter's radius, zenith step size and azimuth step size must be positive",
+            return Err(VgonioError::new(
+                "Emitter's orbit radius, zenith and azimuth must be positive",
+                Some(Box::new(RuntimeError::InvalidEmitter)),
             ));
         }
 
         match emitter.shape {
             RegionShape::SphericalCap { zenith } => {
                 if zenith <= rad!(0.0) || zenith > deg!(360.0) {
-                    return Err(Error::InvalidEmitter(
-                        "emitter's zenith angle must be in the range [0°, 360°]",
+                    return Err(VgonioError::new(
+                        "Emitter's zenith angle must be in the range [0°, 90°]",
+                        Some(Box::new(RuntimeError::InvalidEmitter)),
                     ));
                 }
             }
             RegionShape::SphericalRect { zenith, azimuth } => {
                 if zenith.0 <= rad!(0.0) || zenith.1 > deg!(360.0) {
-                    return Err(Error::InvalidEmitter(
-                        "emitter's zenith angle must be in the range [0°, 360°]",
+                    return Err(VgonioError::new(
+                        "Emitter's zenith angle must be in the range [0°, 90°]",
+                        Some(Box::new(RuntimeError::InvalidEmitter)),
                     ));
                 }
 
                 if azimuth.0 <= rad!(0.0) || azimuth.1 > deg!(360.0) {
-                    return Err(Error::InvalidEmitter(
-                        "emitter's azimuth angle must be in the range [0°, 360°]",
+                    return Err(VgonioError::new(
+                        "Emitter's azimuth angle must be in the range [0°, 360°]",
+                        Some(Box::new(RuntimeError::InvalidEmitter)),
                     ));
                 }
             }
@@ -278,21 +288,24 @@ impl BsdfMeasurementParams {
         }
 
         if emitter.spectrum.start < nanometres!(0.0) || emitter.spectrum.stop < nanometres!(0.0) {
-            return Err(Error::InvalidEmitter(
-                "emitter's spectrum must be in the range [0nm, ∞)",
+            return Err(VgonioError::new(
+                "Emitter's spectrum must be positive",
+                Some(Box::new(RuntimeError::InvalidEmitter)),
             ));
         }
 
         if emitter.spectrum.start > emitter.spectrum.stop {
-            return Err(Error::InvalidEmitter(
-                "emitter's spectrum start must be less than or equal to its end",
+            return Err(VgonioError::new(
+                "Emitter's spectrum start must be less than its stop",
+                Some(Box::new(RuntimeError::InvalidEmitter)),
             ));
         }
 
         let collector = &self.collector;
         if !collector.radius.is_valid() {
-            return Err(Error::InvalidCollector(
-                "collector's radius must be positive",
+            return Err(VgonioError::new(
+                "Collector's radius must be positive",
+                Some(Box::new(RuntimeError::InvalidCollector)),
             ));
         }
 
@@ -325,7 +338,10 @@ impl BsdfMeasurementParams {
         };
 
         if !is_valid_scheme.0 {
-            return Err(Error::InvalidCollector(is_valid_scheme.1));
+            return Err(VgonioError::new(
+                is_valid_scheme.1,
+                Some(Box::new(RuntimeError::InvalidCollector)),
+            ));
         }
 
         Ok(self)
@@ -363,25 +379,28 @@ impl MadfMeasurementParams {
     }
 
     /// Validate the parameters.
-    pub fn validate(self) -> Result<Self, Error> {
+    pub fn validate(self) -> Result<Self, VgonioError> {
         if !(self.azimuth.start >= Radians::ZERO
             && self.azimuth.stop
                 <= (Radians::TWO_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
         {
-            return Err(Error::InvalidParameter(
+            return Err(VgonioError::new(
                 "Microfacet distribution measurement: azimuth angle must be in the range [0°, \
                  360°]",
+                Some(Box::new(RuntimeError::InvalidParameters)),
             ));
         }
         if !(self.zenith.start >= Radians::ZERO && self.zenith.start <= Radians::HALF_PI) {
-            return Err(Error::InvalidParameter(
+            return Err(VgonioError::new(
                 "Microfacet distribution measurement: zenith angle must be in the range [0°, 90°]",
+                Some(Box::new(RuntimeError::InvalidParameters)),
             ));
         }
         if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
-            return Err(Error::InvalidParameter(
+            return Err(VgonioError::new(
                 "Microfacet distribution measurement: azimuth and zenith step sizes must be \
                  positive!",
+                Some(Box::new(RuntimeError::InvalidParameters)),
             ));
         }
 
@@ -427,29 +446,32 @@ impl MmsfMeasurementParams {
     }
 
     /// Validate the parameters when reading from a file.
-    pub fn validate(self) -> Result<Self, Error> {
+    pub fn validate(self) -> Result<Self, VgonioError> {
         if !(self.azimuth.start >= Radians::ZERO
             && self.azimuth.stop
                 <= (Radians::TWO_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
         {
-            return Err(Error::InvalidParameter(
+            return Err(VgonioError::new(
                 "Microfacet shadowing-masking measurement: azimuth angle must be in the range \
                  [0°, 360°]",
+                Some(Box::new(RuntimeError::InvalidParameters)),
             ));
         }
         if !(self.zenith.start >= Radians::ZERO
             && self.zenith.start
                 <= (Radians::HALF_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
         {
-            return Err(Error::InvalidParameter(
+            return Err(VgonioError::new(
                 "Microfacet shadowing-masking measurement: zenith angle must be in the range [0°, \
                  90°]",
+                Some(Box::new(RuntimeError::InvalidParameters)),
             ));
         }
         if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
-            return Err(Error::InvalidParameter(
+            return Err(VgonioError::new(
                 "Microfacet shadowing-masking measurement: azimuth and zenith step sizes must be \
                  positive!",
+                Some(Box::new(RuntimeError::InvalidParameters)),
             ));
         }
 
@@ -473,7 +495,7 @@ pub enum MeasurementKindDescription {
 
 impl MeasurementKindDescription {
     /// Whether the measurement parameters are valid.
-    pub fn validate(self) -> Result<Self, Error> {
+    pub fn validate(self) -> Result<Self, VgonioError> {
         match self {
             Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
             Self::Madf(mfd) => Ok(Self::Madf(mfd.validate()?)),
@@ -581,7 +603,7 @@ impl Measurement {
     /// # Arguments
     /// * `path` - Path to the measurement file or directory, must be in
     ///   canonical form.
-    pub fn load(path: &Path) -> Result<Vec<Measurement>, Error> {
+    pub fn load(path: &Path) -> Result<Vec<Measurement>, VgonioError> {
         if path.exists() {
             if path.is_dir() {
                 Self::load_from_dir(path)
@@ -589,7 +611,10 @@ impl Measurement {
                 Self::load_from_file(path)
             }
         } else {
-            Err(Error::DirectoryOrFileNotFound(path.to_path_buf()))
+            Err(VgonioError::from_io_error(
+                std::io::ErrorKind::NotFound.into(),
+                format!("Path does not exist: {}", path.display()),
+            ))
         }
     }
 
@@ -597,10 +622,17 @@ impl Measurement {
     /// # Arguments
     /// * `path` - Path to the measurement directory, must be in canonical form
     ///   and must exist.
-    fn load_from_dir(dir: &Path) -> Result<Vec<Measurement>, Error> {
+    fn load_from_dir(dir: &Path) -> Result<Vec<Measurement>, VgonioError> {
         let mut measurements = Vec::new();
-        for entry in std::fs::read_dir(dir)? {
-            let entry = entry?;
+        for entry in std::fs::read_dir(dir).map_err(|err| {
+            VgonioError::from_io_error(err, format!("Failed to read directory: {}", dir.display()))
+        })? {
+            let entry = entry.map_err(|err| {
+                VgonioError::from_io_error(
+                    err,
+                    format!("Failed to read directory: {}", dir.display()),
+                )
+            })?;
             let path = entry.path();
             if path.is_file() {
                 if let Some(ext) = path.extension() {
@@ -620,23 +652,36 @@ impl Measurement {
     ///
     /// * `filepath` - Path to the file containing the measurement descriptions,
     ///   must be in canonical form and must exist.
-    fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, Error> {
-        let mut file = File::open(filepath)?;
+    fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, VgonioError> {
+        let mut file = File::open(filepath).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!(
+                    "Failed to open measurement description file: {}",
+                    filepath.display()
+                ),
+            )
+        })?;
         let reader = BufReader::new(&mut file);
         // TODO: invoke generation of patches and samples
         let measurements = serde_yaml::Deserializer::from_reader(reader)
             .map(|doc| {
                 Measurement::deserialize(doc)
-                    .map_err(Error::from)
+                    .map_err(|err| {
+                        VgonioError::new(
+                            "Failed to deserialize measurement description",
+                            Some(Box::new(RuntimeError::from(err))),
+                        )
+                    })
                     .and_then(|measurement| measurement.validate())
             })
-            .collect::<Result<Vec<_>, Error>>()?;
+            .collect::<Result<Vec<_>, VgonioError>>()?;
 
         Ok(measurements)
     }
 
     /// Validate the measurement description.
-    pub fn validate(self) -> Result<Self, Error> {
+    pub fn validate(self) -> Result<Self, VgonioError> {
         log::info!("Validating measurement description...");
         let details = self.desc.validate()?;
         Ok(Self {

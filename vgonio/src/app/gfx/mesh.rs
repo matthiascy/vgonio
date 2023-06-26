@@ -1,11 +1,9 @@
-use crate::{
-    app::{cache::Asset, gfx::VertexLayout},
-    msurf::{AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh},
-};
+use crate::app::{cache::Asset, gfx::VertexLayout};
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
 use uuid::Uuid;
 use vgcore::math::Aabb;
+use vgsurf::{AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh};
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]

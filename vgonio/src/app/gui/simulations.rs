@@ -2,16 +2,14 @@ mod bsdf;
 mod madf;
 mod mmsf;
 
-use crate::{
-    app::{
-        cache::{Cache, Handle},
-        gui::{
-            simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
-            VgonioEventLoop,
-        },
+use crate::app::{
+    cache::{Cache, Handle},
+    gui::{
+        simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
+        VgonioEventLoop,
     },
-    msurf::MicroSurface,
 };
+use vgsurf::MicroSurface;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SimulationTab {

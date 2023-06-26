@@ -1,10 +1,15 @@
+//! IO related types and functions.
+
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{fmt, fmt::Display, path::Path};
 
+/// Error type when reading a file.
 #[derive(Debug)]
 pub struct ReadFileError {
+    /// Path to the file that caused the error.
     pub path: Box<Path>,
+    /// Kind of error that occurred.
     pub kind: ReadFileErrorKind,
 }
 
@@ -42,10 +47,14 @@ impl ReadFileError {
     }
 }
 
+/// Kind of error that occurred while reading a file.
 #[derive(Debug)]
 pub enum ReadFileErrorKind {
+    /// Error caused by a `std::io::Error`.
     Read(std::io::Error),
+    /// Error caused by a `ParseError`.
     Parse(ParseError),
+    /// Error caused by an invalid file format.
     InvalidFileFormat,
 }
 
@@ -57,11 +66,16 @@ impl From<ParseError> for ReadFileErrorKind {
     fn from(value: ParseError) -> Self { Self::Parse(value) }
 }
 
+/// Error type when parsing a file.
 #[derive(Debug)]
 pub struct ParseError {
+    /// Line number where the error occurred.
     pub line: u32,
+    /// Position in the line where the error occurred.
     pub position: u32,
+    /// Kind of error that occurred.
     pub kind: ParseErrorKind,
+    /// Encoding of the file.
     pub encoding: FileEncoding,
 }
 
@@ -98,15 +112,24 @@ impl Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// All possible errors while parsing a file.
 #[derive(Debug)]
 pub enum ParseErrorKind {
+    /// The parsed content is not expected.
     InvalidContent,
+    /// The parsed content is not valid UTF-8.
     InvalidUft8,
+    /// The magic number is not valid.
     InvalidMagicNumber,
+    /// The encoding is not valid.
     InvalidEncoding,
+    /// The compression is not valid.
     InvalidCompression,
+    /// The line is not valid.
     InvalidLine,
+    /// The float is not valid.
     ParseFloat,
+    /// There is not enough data to parse.
     NotEnoughData,
 }
 
@@ -146,6 +169,7 @@ impl WriteFileError {
 /// The kind of the error while writing a file.
 #[derive(Debug)]
 pub enum WriteFileErrorKind {
+    /// The error is a `std::io::Error`.
     Write(std::io::Error),
 }
 

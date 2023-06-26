@@ -13,7 +13,6 @@ use crate::{
         measurement::BsdfMeasurementParams,
         rtc::RayTrajectory,
     },
-    msurf::MicroSurfaceMesh,
     optics::fresnel,
 };
 use serde::{Deserialize, Serialize};
@@ -21,6 +20,7 @@ use vgcore::{
     math,
     units::{Radians, SolidAngle},
 };
+use vgsurf::MicroSurfaceMesh;
 
 /// Description of a collector.
 ///

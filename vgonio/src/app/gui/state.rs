@@ -28,7 +28,6 @@ use crate::{
         rtc::Ray,
         CollectorScheme, Emitter, Patch, RtcMethod,
     },
-    msurf::MicroSurfaceMesh,
 };
 
 #[cfg(feature = "embree")]
@@ -46,6 +45,7 @@ use vgcore::{
     math::{Handedness, Mat3, Mat4, SphericalCoord, UVec3, Vec3},
     units::{rad, Radians},
 };
+use vgsurf::MicroSurfaceMesh;
 use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
@@ -866,7 +866,7 @@ impl DebugDrawingState {
         );
         self.emitter_rays = Some(Emitter::emit_rays(
             self.emitter_samples.as_ref().unwrap(),
-            SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
+            SphericalCoord::unit(self.emitter_position.0, self.emitter_position.1),
             orbit_radius,
             shape_radius,
         ));

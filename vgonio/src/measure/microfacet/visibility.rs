@@ -10,16 +10,16 @@ use crate::{
     measure::measurement::{
         MeasuredData, MeasurementData, MeasurementDataSource, MmsfMeasurementParams,
     },
-    msurf::MicroSurface,
-    Error,
 };
 use bytemuck::{Pod, Zeroable};
 use std::path::Path;
 use vgcore::{
+    error::VgonioError,
     math,
     math::{Handedness, Mat4, Vec3},
     units::Radians,
 };
+use vgsurf::MicroSurface;
 use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of
@@ -629,7 +629,7 @@ impl VisibilityEstimator {
         device: &wgpu::Device,
         dir: &Path,
         as_image: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), VgonioError> {
         log::info!("Saving color attachment to {:?}", dir);
         self.color_attachments[0].save(device, &dir.join("visible_projected_area"), as_image)?;
         self.color_attachments[1].save(device, &dir.join("total_projected_area"), as_image)
@@ -641,7 +641,7 @@ impl VisibilityEstimator {
         device: &wgpu::Device,
         dir: &Path,
         as_image: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), VgonioError> {
         log::info!("Saving depth attachment to {:?}", dir);
         self.depth_attachment.save(device, dir, as_image)
     }
@@ -977,7 +977,12 @@ impl DepthAttachment {
     }
 
     /// Save the attachment data to files.
-    pub fn save(&self, device: &wgpu::Device, dir: &Path, as_image: bool) -> Result<(), Error> {
+    pub fn save(
+        &self,
+        device: &wgpu::Device,
+        dir: &Path,
+        as_image: bool,
+    ) -> Result<(), VgonioError> {
         self.textures
             .iter()
             .zip(self.storage_buffers.iter())
@@ -1173,7 +1178,12 @@ impl ColorAttachment {
     }
 
     /// Save the color attachment data to files.
-    pub fn save(&self, device: &wgpu::Device, dir: &Path, as_image: bool) -> Result<(), Error> {
+    pub fn save(
+        &self,
+        device: &wgpu::Device,
+        dir: &Path,
+        as_image: bool,
+    ) -> Result<(), VgonioError> {
         self.textures
             .iter()
             .zip(self.storage_buffers.iter())
@@ -1211,8 +1221,9 @@ impl ColorAttachment {
                             } else {
                                 let img =
                                     ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, layer)
-                                        .ok_or(Error::Any(
-                                            "Failed to create image buffer".to_string(),
+                                        .ok_or(VgonioError::new(
+                                            "Failed to create image buffer",
+                                            None,
                                         ))
                                         .unwrap();
                                 img.save(dir.join(format!(

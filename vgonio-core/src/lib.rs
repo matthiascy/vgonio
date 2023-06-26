@@ -1,3 +1,7 @@
+//! # vgonio-core
+//! Core library for vgonio.
+//! Contains all the basic types and functions for the vgonio project.
+
 // Enable _mm_rcp14_ss
 #![feature(stdsimd)]
 // Enable macro 2.0

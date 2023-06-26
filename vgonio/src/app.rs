@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::RuntimeError;
 use serde::{Deserialize, Serialize};
 use std::{fmt, io::Write, path::Path};
 
@@ -11,6 +11,7 @@ pub(crate) mod gui;
 
 use crate::app::cache::resolve_path;
 use args::CliArgs;
+use vgcore::error::VgonioError;
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -49,10 +50,23 @@ pub struct UserConfig {
 
 impl UserConfig {
     /// Load [`UserConfig`] from a .toml file.
-    pub fn load(path: &Path) -> Result<Self, Error> {
+    pub fn load(path: &Path) -> Result<Self, VgonioError> {
         let base = path.parent().unwrap_or_else(|| Path::new("."));
-        let string = std::fs::read_to_string(path)?;
-        let mut config: UserConfig = toml::from_str(&string)?;
+        let string = std::fs::read_to_string(path).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!("Failed to read user configuration file: {}", path.display()),
+            )
+        })?;
+        let mut config: UserConfig = toml::from_str(&string).map_err(|err| {
+            VgonioError::new(
+                format!(
+                    "Failed to parse user configuration file: {}",
+                    path.display()
+                ),
+                Some(Box::new(RuntimeError::from(err))),
+            )
+        })?;
         if let Some(cache_dir) = config.cache_dir {
             config.cache_dir = Some(resolve_path(base, Some(&cache_dir)));
         }
@@ -109,20 +123,29 @@ impl Config {
     ///
     /// + On macos system: "$HOME/Library/Application Support"
     /// (same as configuration directory)
-    pub fn load_config(filepath: Option<&Path>) -> Result<Self, Error> {
+    pub fn load_config(filepath: Option<&Path>) -> Result<Self, VgonioError> {
         log::info!("Loading configurations...");
         let sys_config_dir = {
-            let mut config_dir = dirs::config_dir().ok_or(Error::SysConfigDirNotFound)?;
+            let mut config_dir = dirs::config_dir().ok_or(VgonioError::new(
+                format!("System configuration directory not found."),
+                Some(Box::new(RuntimeError::SysConfigDirNotFound)),
+            ))?;
             config_dir.push("vgonio");
             config_dir
         };
         let sys_cache_dir = {
-            let mut cache_dir = dirs::cache_dir().ok_or(Error::SysCacheDirNotFound)?;
+            let mut cache_dir = dirs::cache_dir().ok_or(VgonioError::new(
+                format!("System cache directory not found."),
+                Some(Box::new(RuntimeError::SysCacheDirNotFound)),
+            ))?;
             cache_dir.push("vgonio");
             cache_dir
         };
         let sys_data_dir = {
-            let mut data_dir = dirs::data_dir().ok_or(Error::SysDataDirNotFound)?;
+            let mut data_dir = dirs::data_dir().ok_or(VgonioError::new(
+                format!("System data files directory not found."),
+                Some(Box::new(RuntimeError::SysDataDirNotFound)),
+            ))?;
             data_dir.push("vgonio");
             data_dir
         };
@@ -136,18 +159,44 @@ impl Config {
 
         // Create the default directories if they don't exist.
         if !sys_config_dir.exists() {
-            std::fs::create_dir_all(&sys_config_dir)?;
+            std::fs::create_dir_all(&sys_config_dir).map_err(|err| {
+                VgonioError::from_io_error(
+                    err,
+                    format!(
+                        "Failed to create system configuration directory {}",
+                        sys_config_dir.display()
+                    ),
+                )
+            })?;
         }
 
         if !sys_cache_dir.exists() {
-            std::fs::create_dir_all(&sys_cache_dir)?;
+            std::fs::create_dir_all(&sys_cache_dir).map_err(|err| {
+                VgonioError::from_io_error(
+                    err,
+                    format!(
+                        "Failed to create system cache directory {}",
+                        sys_cache_dir.display()
+                    ),
+                )
+            })?;
         }
 
         if !sys_data_dir.exists() {
-            std::fs::create_dir_all(&sys_data_dir)?;
+            std::fs::create_dir_all(&sys_data_dir).map_err(|err| {
+                VgonioError::from_io_error(
+                    err,
+                    format!(
+                        "Failed to create system data files directory {}",
+                        sys_data_dir.display()
+                    ),
+                )
+            })?;
         }
 
-        let cwd = std::env::current_dir()?;
+        let cwd = std::env::current_dir().map_err(|err| {
+            VgonioError::from_io_error(err, format!("Failed to get current working directory."))
+        })?;
 
         let user_config = if filepath.is_some_and(|p| p.exists()) {
             let user_config_path = filepath.unwrap().canonicalize().unwrap();
@@ -177,11 +226,25 @@ impl Config {
                         output_dir: None,
                         data_dir: Some(sys_data_dir.clone()),
                     };
-                    let serialized = toml::to_string(&user_config).unwrap();
+                    let serialized = toml::to_string(&user_config).map_err(|err| {
+                        VgonioError::new(
+                            format!("Failed to serialize default configuration."),
+                            Some(Box::new(RuntimeError::from(err))),
+                        )
+                    })?;
                     let mut config_file = std::fs::OpenOptions::new()
                         .write(true)
                         .create(true)
-                        .open(&config_in_sys)?;
+                        .open(&config_in_sys)
+                        .map_err(|err| {
+                            VgonioError::from_io_error(
+                                err,
+                                format!(
+                                    "Failed to create configuration file {}",
+                                    config_in_sys.display()
+                                ),
+                            )
+                        })?;
                     config_file.write_all(serialized.as_bytes()).unwrap();
                     user_config
                 }
@@ -278,7 +341,7 @@ pub fn log_filter_from_level(level: u8) -> log::LevelFilter {
 ///
 /// * `args` - The CLI arguments passed to the program.
 /// * `launch_time` - The time when the program is launched.
-pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<Config, Error> {
+pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<Config, VgonioError> {
     let log_level = if args.verbose { 4 } else { args.log_level };
     let log_level_wgpu = if args.debug_wgpu { 3 } else { 0 };
     let log_level_winit = if args.debug_winit { 3 } else { 0 };

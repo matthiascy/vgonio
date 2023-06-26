@@ -1,22 +1,18 @@
 use super::{state::GuiRenderer, VgonioEvent};
-use crate::{
-    app::{
-        cache::{Cache, Handle},
-        gfx::GpuContext,
-        gui::{
-            bsdf_viewer::BsdfViewer,
-            gizmo::NavigationGizmo,
-            icons::Icon,
-            outliner::Outliner,
-            simulations::Simulations,
-            tools::{SamplingInspector, Scratch, Tools},
-            widgets::ToggleSwitch,
-            DebuggingInspector, VgonioEventLoop,
-        },
-        Config,
+use crate::app::{
+    cache::{Cache, Handle},
+    gfx::GpuContext,
+    gui::{
+        bsdf_viewer::BsdfViewer,
+        gizmo::NavigationGizmo,
+        icons::Icon,
+        outliner::Outliner,
+        simulations::Simulations,
+        tools::{SamplingInspector, Scratch, Tools},
+        widgets::ToggleSwitch,
+        DebuggingInspector, VgonioEventLoop,
     },
-    error::Error,
-    msurf::MicroSurface,
+    Config,
 };
 use egui::NumExt;
 use egui_extras::RetainedImage;
@@ -28,7 +24,8 @@ use std::{
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
 };
-use vgcore::math::Mat4;
+use vgcore::{error::VgonioError, math::Mat4};
+use vgsurf::MicroSurface;
 
 /// Implementation of the drag and drop functionality.
 pub struct FileDragDrop {
@@ -208,9 +205,11 @@ impl ImageCache {
     }
 }
 
-fn load_image_from_bytes(bytes: &[u8]) -> Result<egui::ColorImage, Error> {
+fn load_image_from_bytes(bytes: &[u8]) -> Result<egui::ColorImage, VgonioError> {
     let image = image::load_from_memory(bytes)
-        .map_err(|e| Error::Any(e.to_string()))?
+        .map_err(|err| {
+            VgonioError::new(format!("Failed to load image \"{}\"from bytes", err), None)
+        })?
         .into_rgba8();
     let size = [image.width() as _, image.height() as _];
     let pixels = image.as_flat_samples();

@@ -1,4 +1,6 @@
-use crate::units::{radians, Radians};
+//! Math utilities.
+
+use crate::units::{rad, radians, Radians};
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -36,6 +38,7 @@ impl Handedness {
 /// Trait for converting from one primitive numeric type to another.
 #[const_trait]
 pub trait NumericCast<T> {
+    /// Casts `self` to `T`.
     fn cast(&self) -> T;
 }
 
@@ -64,6 +67,7 @@ impl_as_primitive!(i16 as f32, f64, i32, u32, i64, u64, i128, u128);
 impl_as_primitive!(usize as f32, f64, i32, u32, i64, u64, i128, u128);
 impl_as_primitive!(isize as f32, f64, i32, u32, i64, u64, i128, u128);
 
+/// Identity matrix.
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
 ];
@@ -101,19 +105,115 @@ fn test_ulp_eq() {
     assert!(!ulp_eq(1.0, 1.0 - 1e-6));
 }
 
-mod private {
-    pub trait CoordSystem {}
-}
+/// Coordinate system.
+pub trait CoordSystem {}
 
+/// Cartesian coordinate system.
 pub struct Cartesian;
+
+/// Spherical coordinate system.
 pub struct Spherical;
 
-impl private::CoordSystem for Cartesian {}
-impl private::CoordSystem for Spherical {}
+impl CoordSystem for Cartesian {}
+impl CoordSystem for Spherical {}
 
-pub struct Coord3<C: private::CoordSystem> {
-    pub inner: Vec3,
+/// 3D coordinate can be in Cartesian or Spherical coordinate system.
+pub struct Coord3<C: CoordSystem> {
+    inner: Vec3,
     _marker: PhantomData<C>,
+}
+
+/// 3D coordinate in Cartesian coordinate system.
+pub type Coord3C = Coord3<Cartesian>;
+
+impl Coord3C {
+    /// Converts the coordinate to Spherical coordinate system.
+    pub fn to_spherical(self, radius: f32, handed: Handedness) -> Coord3S {
+        let (r, t, p) = cartesian_to_spherical(self.inner, radius, handed);
+        Coord3S::new(r, t, p)
+    }
+
+    /// Returns the x coordinate.
+    pub fn x(&self) -> f32 { self.inner.x }
+
+    /// Returns the y coordinate.
+    pub fn y(&self) -> f32 { self.inner.y }
+
+    /// Returns the z coordinate.
+    pub fn z(&self) -> f32 { self.inner.z }
+}
+
+/// 3D coordinate in Spherical coordinate system.
+pub type Coord3S = Coord3<Spherical>;
+
+impl Coord3S {
+    /// Creates a new spherical coordinate.
+    pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
+        Coord3S {
+            inner: Vec3::new(radius, zenith.value, azimuth.value),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Creates a new spherical coordinate with radius 1.
+    pub fn unit(zenith: Radians, azimuth: Radians) -> Self {
+        Coord3S {
+            inner: Vec3::new(1.0, zenith.value, azimuth.value),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Converts from spherical to cartesian coordinate system.
+    pub fn to_cartesian(self, handed: Handedness) -> Coord3C {
+        let vec = spherical_to_cartesian(
+            self.inner.x,
+            self.inner.y.into(),
+            self.inner.z.into(),
+            handed,
+        );
+        Coord3C {
+            inner: vec,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the radius.
+    pub fn radius(&self) -> Radians { rad!(self.inner.x) }
+
+    /// Returns the zenith angle (polar angle) in radians. 0 is the zenith, pi
+    /// is the nadir. The zenith angle is the inclination angle between the
+    /// positive up-axis and the point on the sphere. The zenith angle is
+    /// always between 0 and pi. 0 ~ pi/2 is the upper hemisphere, pi/2 ~ pi
+    /// is the lower hemisphere.
+    pub fn zenith(&self) -> Radians { rad!(self.inner.y) }
+
+    /// Returns the azimuth angle (azimuthal angle) in radians. It is always
+    /// between 0 and 2pi.
+    pub fn azimuth(&self) -> Radians { rad!(self.inner.z) }
+}
+
+impl Debug for Coord3S {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ ρ: {}, θ: {}, φ: {} }}",
+            self.radius(),
+            self.zenith(),
+            self.azimuth()
+        )
+    }
+}
+
+impl Display for Coord3S {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ ρ: {}, θ: {}, φ: {} }}",
+            self.radius(),
+            self.zenith().to_degrees().prettified(),
+            self.azimuth().to_degrees().prettified()
+        )
+    }
 }
 
 /// Spherical coordinate in radians.
@@ -121,22 +221,31 @@ pub struct Coord3<C: private::CoordSystem> {
 pub struct SphericalCoord {
     /// Radius of the sphere.
     pub radius: f32,
-    /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the nadir.
-    /// The zenith angle is the angle between the positive z-axis and the point
-    /// on the sphere. The zenith angle is always between 0 and pi. 0 ~ pi/2 is
-    /// the upper hemisphere, pi/2 ~ pi is the lower hemisphere.
+    /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the
+    /// nadir. The zenith angle is the angle between the positive z-axis and
+    /// the point on the sphere. The zenith angle is always between 0 and pi.
+    /// 0 ~ pi/2 is the upper hemisphere, pi/2 ~ pi is the lower hemisphere.
     pub zenith: Radians,
-    /// Azimuth angle (azimuthal angle) in radians. It is always between 0 and
-    /// 2pi: 0 is the positive x-axis, pi/2 is the positive y-axis, pi is the
-    /// negative x-axis, 3pi/2 is the negative y-axis.
+    /// Azimuth angle (azimuthal angle) in radians. It is always between 0
+    /// and 2pi: 0 is the positive x-axis, pi/2 is the positive y-axis, pi is
+    /// the negative x-axis, 3pi/2 is the negative y-axis.
     pub azimuth: Radians,
 }
 
 impl SphericalCoord {
-    /// Create a new spherical coordinate.
+    /// Creates a new spherical coordinate.
     pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
         Self {
             radius,
+            zenith,
+            azimuth,
+        }
+    }
+
+    /// Creates a new spherical coordinate with radius 1.
+    pub fn unit(zenith: Radians, azimuth: Radians) -> Self {
+        Self {
+            radius: 1.0,
             zenith,
             azimuth,
         }
@@ -149,7 +258,12 @@ impl SphericalCoord {
 
     /// Convert from a cartesian coordinate.
     pub fn from_cartesian(cartesian: Vec3, radius: f32, handedness: Handedness) -> Self {
-        cartesian_to_spherical(cartesian, radius, handedness)
+        let (radius, zenith, azimuth) = cartesian_to_spherical(cartesian, radius, handedness);
+        Self {
+            radius,
+            zenith,
+            azimuth,
+        }
     }
 }
 
@@ -211,31 +325,29 @@ pub fn spherical_to_cartesian(
 /// * `r` - radius
 /// * `zenith` - polar angle
 /// * `azimuth` - azimuthal angle
-pub fn cartesian_to_spherical(v: Vec3, radius: f32, handedness: Handedness) -> SphericalCoord {
+pub fn cartesian_to_spherical(
+    v: Vec3,
+    radius: f32,
+    handedness: Handedness,
+) -> (f32, Radians, Radians) {
     let (zenith, azimuth) = match handedness {
-        Handedness::RightHandedZUp => (
-            radians!((v.z * rcp(radius)).acos()),
-            radians!(v.y.atan2(v.x)),
-        ),
-        Handedness::RightHandedYUp => (
-            radians!((v.y * rcp(radius)).acos()),
-            radians!(v.z.atan2(v.x)),
-        ),
+        Handedness::RightHandedZUp => (rad!((v.z * rcp(radius)).acos()), rad!(v.y.atan2(v.x))),
+        Handedness::RightHandedYUp => (rad!((v.y * rcp(radius)).acos()), rad!(v.z.atan2(v.x))),
     };
 
-    SphericalCoord {
+    (
         radius,
-        zenith: if zenith < radians!(0.0) {
+        if zenith < radians!(0.0) {
             zenith + Radians::PI
         } else {
             zenith
         },
-        azimuth: if azimuth < radians!(0.0) {
+        if azimuth < radians!(0.0) {
             azimuth + Radians::TAU
         } else {
             azimuth
         },
-    }
+    )
 }
 
 // TODO: improve accuracy
@@ -498,8 +610,11 @@ fn test_nmadd() {
 /// Quadratic equation can have 0, 1 or 2 real solutions.
 #[derive(Debug, Copy, Clone)]
 pub enum QuadraticSolution {
+    /// No real solutions.
     None,
+    /// One real solution.
     One(f32),
+    /// Two real solutions.
     Two(f32, f32),
 }
 

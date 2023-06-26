@@ -1,12 +1,10 @@
-use crate::{
-    app::cache::{Cache, Handle},
-    msurf::MicroSurface,
-};
+use crate::app::cache::{Cache, Handle};
 use egui::Color32;
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
+use vgsurf::MicroSurface;
 
 /// The selection mode for surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

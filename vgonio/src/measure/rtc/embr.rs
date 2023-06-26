@@ -13,7 +13,6 @@ use crate::{
         rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
         Emitter,
     },
-    msurf::MicroSurfaceMesh,
     optics::fresnel,
 };
 use embree::{
@@ -26,6 +25,7 @@ use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose_debug"))]
 use std::time::Instant;
 use vgcore::math::{SphericalCoord, Vec3A};
+use vgsurf::MicroSurfaceMesh;
 
 /// Extra data associated with a ray stream.
 ///

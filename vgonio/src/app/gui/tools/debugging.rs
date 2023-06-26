@@ -9,16 +9,14 @@ mod brdf_measurement;
 mod microfacet;
 mod shadow_map;
 
-use crate::{
-    app::{
-        cache::{Cache, Handle},
-        gui::{tools::Tool, widgets::ToggleSwitch},
-    },
-    msurf::MicroSurface,
+use crate::app::{
+    cache::{Cache, Handle},
+    gui::{tools::Tool, widgets::ToggleSwitch},
 };
 use brdf_measurement::BrdfMeasurementDebugging;
 use microfacet::MicrofacetDebugging;
 use shadow_map::DepthMapPane;
+use vgsurf::MicroSurface;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]

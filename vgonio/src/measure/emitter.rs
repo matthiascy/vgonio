@@ -1,6 +1,5 @@
 use crate::{
     measure::{measurement::Radius, rtc::Ray},
-    msurf::MicroSurfaceMesh,
     RangeByStepSizeInclusive,
 };
 use rand::{
@@ -15,6 +14,7 @@ use vgcore::{
     math::{Handedness, Mat3, SphericalCoord, Vec3},
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
 };
+use vgsurf::MicroSurfaceMesh;
 
 /// Light emitter of the virtual gonio-photometer.
 ///

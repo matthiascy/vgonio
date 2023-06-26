@@ -6,12 +6,15 @@ use std::{
 use vgcore::math;
 
 use crate::{
-    error::Error,
     measure::{
-        bsdf::{BsdfMeasurementStatsPoint, MeasuredBsdfData},
+        bsdf::{
+            BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, MeasuredBsdfData, PerWavelength,
+        },
+        collector::BounceAndEnergy,
         measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
         microfacet::{MeasuredMadfData, MeasuredMmsfData},
     },
+    RangeByStepSizeInclusive,
 };
 
 pub mod vgmo {
@@ -31,6 +34,7 @@ pub mod vgmo {
     };
     use std::io::BufWriter;
     use vgcore::{
+        error::VgonioError,
         io::{
             CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError,
             WriteFileErrorKind,
@@ -1136,10 +1140,14 @@ emitter is not implemented"
 
     impl MeasurementData {
         /// Loads the measurement data from a file.
-        pub fn read_from_file(filepath: &Path) -> Result<Self, Error> {
-            let file = File::open(filepath)?;
+        pub fn read_from_file(filepath: &Path) -> Result<Self, VgonioError> {
+            let file = File::open(filepath).map_err(|err| {
+                VgonioError::from_io_error(err, "Failed to open measurement file.")
+            })?;
             let mut reader = BufReader::new(file);
-            let header = Header::read(&mut reader)?;
+            let header = Header::read(&mut reader).map_err(|err| {
+                VgonioError::from_io_error(err, "Failed to read header from file.")
+            })?;
             let path = filepath.to_path_buf();
             let name = path
                 .file_stem()
@@ -1150,10 +1158,13 @@ emitter is not implemented"
                 Header::Bsdf { meta, bsdf } => {
                     let measured =
                         MeasuredBsdfData::read(&mut reader, meta, bsdf).map_err(|err| {
-                            Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            })
+                            VgonioError::from_read_file_error(
+                                ReadFileError {
+                                    path: filepath.to_owned().into_boxed_path(),
+                                    kind: err,
+                                },
+                                "Failed to read measured data from file.",
+                            )
                         })?;
                     Ok(MeasurementData {
                         name,
@@ -1164,10 +1175,13 @@ emitter is not implemented"
                 Header::Madf { meta, madf } => {
                     let measured =
                         MeasuredMadfData::read(&mut reader, meta, madf).map_err(|err| {
-                            Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            })
+                            VgonioError::from_read_file_error(
+                                ReadFileError {
+                                    path: filepath.to_owned().into_boxed_path(),
+                                    kind: err,
+                                },
+                                "Failed to read measured area distribution data from file.",
+                            )
                         })?;
                     Ok(MeasurementData {
                         name,
@@ -1178,10 +1192,13 @@ emitter is not implemented"
                 Header::Mmsf { meta, mmsf } => {
                     let measured =
                         MeasuredMmsfData::read(&mut reader, meta, mmsf).map_err(|err| {
-                            Error::ReadFile(ReadFileError {
-                                path: filepath.to_owned().into_boxed_path(),
-                                kind: err,
-                            })
+                            VgonioError::from_read_file_error(
+                                ReadFileError {
+                                    path: filepath.to_owned().into_boxed_path(),
+                                    kind: err,
+                                },
+                                "Failed to read measured masking/shadowing data from file.",
+                            )
                         })?;
                     Ok(MeasurementData {
                         name,
@@ -1198,7 +1215,7 @@ emitter is not implemented"
             filepath: &Path,
             encoding: FileEncoding,
             compression: CompressionScheme,
-        ) -> Result<(), Error> {
+        ) -> Result<(), VgonioError> {
             let header = match &self.measured {
                 MeasuredData::Madf(adf) => {
                     assert_eq!(
@@ -1253,41 +1270,56 @@ emitter is not implemented"
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(filepath)?;
+                .open(filepath)
+                .map_err(|err| {
+                    VgonioError::from_io_error(err, "Failed to open measurement file.")
+                })?;
             let mut writer = BufWriter::new(file);
             header.write(&mut writer).map_err(|err| {
-                Error::WriteFile(WriteFileError {
-                    path: filepath.to_path_buf().into_boxed_path(),
-                    kind: err,
-                })
+                VgonioError::from_write_file_error(
+                    WriteFileError {
+                        path: filepath.to_owned().into_boxed_path(),
+                        kind: err,
+                    },
+                    "Failed to write measurement data header to file.",
+                )
             })?;
 
             match &self.measured {
                 MeasuredData::Madf(madf) => {
                     madf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
-                            Error::WriteFile(WriteFileError {
-                                path: filepath.to_path_buf().into_boxed_path(),
-                                kind: err,
-                            })
+                            VgonioError::from_write_file_error(
+                                WriteFileError {
+                                    path: filepath.to_owned().into_boxed_path(),
+                                    kind: err,
+                                },
+                                "Failed to write measured area distribution data to file.",
+                            )
                         })
                 }
                 MeasuredData::Mmsf(mmsf) => {
                     mmsf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
-                            Error::WriteFile(WriteFileError {
-                                path: filepath.to_path_buf().into_boxed_path(),
-                                kind: err,
-                            })
+                            VgonioError::from_write_file_error(
+                                WriteFileError {
+                                    path: filepath.to_owned().into_boxed_path(),
+                                    kind: err,
+                                },
+                                "Failed to write measured masking/shadowing data to file.",
+                            )
                         })
                 }
                 MeasuredData::Bsdf(bsdf) => {
                     bsdf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
-                            Error::WriteFile(WriteFileError {
-                                path: filepath.to_path_buf().into_boxed_path(),
-                                kind: err,
-                            })
+                            VgonioError::from_write_file_error(
+                                WriteFileError {
+                                    path: filepath.to_owned().into_boxed_path(),
+                                    kind: err,
+                                },
+                                "Failed to write measured BSDF data to file.",
+                            )
                         })
                 }
             }

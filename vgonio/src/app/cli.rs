@@ -4,6 +4,7 @@ use vgcore::{
     io::{CompressionScheme, FileEncoding},
     math::Handedness,
 };
+use vgsurf::MicroSurface;
 
 use crate::{
     app::{
@@ -21,8 +22,7 @@ use crate::{
         },
         CollectorScheme,
     },
-    msurf::MicroSurface,
-    Error, SphericalPartition,
+    SphericalPartition,
 };
 
 use super::{args::GenerateOptions, cache::Handle};
@@ -302,7 +302,7 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
         resolve_path(&config.cwd, Some(&p))
     };
 
-    let file = OpenOptions::new()
+    let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)

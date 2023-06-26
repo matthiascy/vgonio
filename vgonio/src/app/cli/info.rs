@@ -3,7 +3,6 @@ use crate::{
         args::{PrintInfoKind, PrintInfoOptions},
         Config,
     },
-    error::Error,
     measure::measurement::{
         BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementKindDescription,
         MmsfMeasurementParams,

@@ -11,7 +11,7 @@ mod widgets;
 
 // TODO: MSAA
 
-use crate::{error::Error, measure, measure::RtcMethod};
+use crate::{measure, measure::RtcMethod};
 use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use std::{
@@ -40,15 +40,19 @@ use crate::{
             ui::Theme,
         },
     },
+    error::RuntimeError,
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
         CollectorScheme,
     },
-    msurf::{MicroSurface, MicroSurfaceMesh},
 };
-use vgcore::units::{Degrees, Radians};
+use vgcore::{
+    error::VgonioError,
+    units::{Degrees, Radians},
+};
+use vgsurf::{MicroSurface, MicroSurfaceMesh};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
@@ -219,7 +223,7 @@ use self::tools::SamplingInspector;
 use super::{gfx::WindowSurface, Config};
 
 /// Launches Vgonio GUI application.
-pub fn run(config: Config) -> Result<(), Error> {
+pub fn run(config: Config) -> Result<(), VgonioError> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_decorations(true)
@@ -617,7 +621,7 @@ impl VgonioGuiApp {
         config: Config,
         window: &Window,
         event_loop: &EventLoop<VgonioEvent>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, VgonioError> {
         let wgpu_config = WgpuConfig {
             device_descriptor: wgpu::DeviceDescriptor {
                 label: Some("vgonio-wgpu-device"),
@@ -789,7 +793,7 @@ impl VgonioGuiApp {
         }
     }
 
-    pub fn update(&mut self, window: &Window, dt: Duration) -> Result<(), Error> {
+    pub fn update(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
         // Update camera uniform.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
@@ -1327,7 +1331,7 @@ impl VgonioGuiApp {
     ) {
         match self.update(window, dt) {
             Ok(_) => {}
-            Err(Error::Rhi(error)) => {
+            Err(RuntimeError::Rhi(error)) => {
                 if error.is_surface_error() {
                     if let Some(surface_error) = error.get::<wgpu::SurfaceError>() {
                         match surface_error {

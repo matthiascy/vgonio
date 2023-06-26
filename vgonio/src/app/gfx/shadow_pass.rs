@@ -1,10 +1,10 @@
 use crate::{
     app::gfx::{remap_depth, GpuContext, RenderPass, Texture},
-    Error,
+    error::RuntimeError,
 };
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
-use vgcore::math::Mat4;
+use vgcore::{error::VgonioError, math::Mat4};
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.
@@ -298,7 +298,7 @@ impl ShadowPass {
         near: f32,
         far: f32,
         path: &std::path::Path,
-    ) -> Result<(), Error> {
+    ) -> Result<(), VgonioError> {
         if let Some(buffer) = &self.depth_attachment_storage {
             {
                 let slice = buffer.slice(..);
@@ -323,19 +323,26 @@ impl ShadowPass {
                 use image::{ImageBuffer, Luma};
                 ImageBuffer::<Luma<u8>, _>::from_raw(self.width, self.height, data)
                     .ok_or_else(|| {
-                        Error::Any(
+                        VgonioError::new(
                             "Failed to create image from depth map buffer, please check if the \
-                             data have been transferred to the buffer!"
-                                .into(),
+                             data have been transferred to the buffer!",
+                            None,
                         )
                     })
-                    .and_then(|img| img.save(path).map_err(Error::from))?;
+                    .and_then(|img| {
+                        img.save(path).map_err(|err| {
+                            VgonioError::new(
+                                format!("Failed to save the image to {}", path.display()),
+                                Some(Box::new(RuntimeError::from(err))),
+                            )
+                        })
+                    })?;
             }
             buffer.unmap();
 
             Ok(())
         } else {
-            Err(Error::Any("Depth map buffer is not created!".into()))
+            Err(VgonioError::new("Depth map buffer is not created!", None))
         }
     }
 

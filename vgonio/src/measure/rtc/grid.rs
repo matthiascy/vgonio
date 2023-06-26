@@ -16,7 +16,6 @@ use crate::{
         rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
         Emitter,
     },
-    msurf::{MicroSurface, MicroSurfaceMesh},
     optics::fresnel,
 };
 use rayon::prelude::*;
@@ -25,6 +24,7 @@ use vgcore::{
     math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles},
 };
+use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 /// Extra data associated with a ray stream.
 ///

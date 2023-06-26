@@ -5,9 +5,8 @@ use crate::{
         Config,
     },
     measure::measurement::MeasurementData,
-    msurf::{HeightOffset, MicroSurface, MicroSurfaceMesh},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
-    Error, Medium,
+    Medium,
 };
 use std::{
     collections::HashMap,
@@ -19,6 +18,7 @@ use std::{
 };
 use uuid::Uuid;
 use vgcore::error::VgonioError;
+use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh};
 
 pub trait Asset: Send + Sync + 'static {}
 
@@ -107,6 +107,10 @@ impl<T: Asset> Default for Handle<T> {
 impl From<Uuid> for Handle<MicroSurface> {
     fn from(id: Uuid) -> Self { Self::with_id(id) }
 }
+
+impl Asset for MicroSurface {}
+
+impl Asset for MicroSurfaceMesh {}
 
 /// A record inside the cache for a micro-surface.
 #[derive(Debug, Clone)]
@@ -223,12 +227,14 @@ impl Cache {
         &mut self,
         device: &wgpu::Device,
         msurf: Handle<MicroSurface>,
-    ) -> Result<Handle<RenderableMesh>, Error> {
+    ) -> Result<Handle<RenderableMesh>, VgonioError> {
         log::debug!("Creating renderable mesh for micro-surface: {}", msurf);
-        let record = self
-            .records
-            .get_mut(&msurf)
-            .ok_or_else(|| Error::Any(format!("{BRIGHT_RED}Surface record not exist!{RESET}")))?;
+        let record = self.records.get_mut(&msurf).ok_or_else(|| {
+            VgonioError::new(
+                format!("[Cache] Record for surface {} doesn't exist.", msurf),
+                None,
+            )
+        })?;
         if record.renderable.is_valid() {
             log::debug!(
                 "Renderable mesh {} already exists for micro-surface: {}",
@@ -237,10 +243,12 @@ impl Cache {
             );
             return Ok(record.renderable);
         }
-        let mesh = self
-            .meshes
-            .get(&record.mesh)
-            .ok_or_else(|| Error::Any(format!("{BRIGHT_RED}Surface mesh not exist!{RESET}")))?;
+        let mesh = self.meshes.get(&record.mesh).ok_or_else(|| {
+            VgonioError::new(
+                format!("[Cache] Mesh for surface {} doesn't exist.", msurf),
+                None,
+            )
+        })?;
         log::trace!("MicroSurfaceMesh of surface {}: {}", msurf, mesh.uuid);
         let handle = Handle::new();
         let renderable = RenderableMesh::from_micro_surface_mesh_with_id(device, mesh, handle.id);
@@ -409,9 +417,12 @@ impl Cache {
         &mut self,
         config: &Config,
         path: &Path,
-    ) -> Result<Handle<MeasurementData>, Error> {
+    ) -> Result<Handle<MeasurementData>, VgonioError> {
         match self.resolve_path(path, config) {
-            None => Err(Error::Any("Failed to load measurement data!".to_string())),
+            None => Err(VgonioError::new(
+                "Failed to resolve measurement file.",
+                None,
+            )),
             Some(filepath) => {
                 if let Some((hdl, _)) = self
                     .measurements_data
@@ -468,7 +479,7 @@ impl Cache {
         &mut self,
         config: &Config,
         paths: &[PathBuf],
-    ) -> Result<Vec<Handle<MicroSurface>>, Error> {
+    ) -> Result<Vec<Handle<MicroSurface>>, VgonioError> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
             .iter()

@@ -1,3 +1,5 @@
+//! Error type for vgonio.
+
 use crate::io::{ReadFileError, WriteFileError};
 use std::{
     error::Error,

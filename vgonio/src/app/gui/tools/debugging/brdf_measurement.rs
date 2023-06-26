@@ -9,7 +9,6 @@ use crate::{
     measure::{
         emitter::RegionShape, measurement::BsdfMeasurementParams, CollectorScheme, RtcMethod,
     },
-    msurf::MicroSurface,
 };
 use egui_toast::ToastKind;
 use std::sync::{Arc, RwLock};
@@ -18,6 +17,7 @@ use vgcore::{
     math::{Handedness, IVec2},
     units::Radians,
 };
+use vgsurf::MicroSurface;
 
 pub(crate) struct BrdfMeasurementDebugging {
     cache: Arc<RwLock<Cache>>,

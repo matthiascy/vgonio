@@ -1,3 +1,5 @@
+//! Reading and writing of surface files.
+
 use serde::{Deserialize, Serialize};
 use std::{
     io::{BufRead, BufReader, BufWriter, Read, Write},
@@ -193,13 +195,21 @@ pub mod vgms {
     /// Header of the VGMS file.
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub struct Header {
+        /// Number of rows of the micro-surface.
         pub rows: u32,
+        /// Number of columns of the micro-surface.
         pub cols: u32,
+        /// The horizontal spacing between samples.
         pub du: f32,
+        /// The vertical spacing between samples.
         pub dv: f32,
+        /// The unit used for the micro-surface.
         pub unit: LengthUnit,
+        /// Size of one sample in bytes.
         pub sample_data_size: u8,
+        /// The encoding of the file.
         pub encoding: FileEncoding,
+        /// The compression scheme used for the file.
         pub compression: CompressionScheme,
     }
 

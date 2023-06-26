@@ -12,7 +12,6 @@ use crate::{
         },
     },
     measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
-    msurf::MicroSurface,
 };
 use std::{
     collections::HashMap,
@@ -20,6 +19,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use vgcore::units::LengthUnit;
+use vgsurf::MicroSurface;
 
 /// States of one item in the outliner.
 #[derive(Clone, Debug)]

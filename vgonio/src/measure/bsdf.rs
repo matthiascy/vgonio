@@ -15,7 +15,6 @@ use crate::{
         rtc::RayTrajectory,
         RtcMethod,
     },
-    msurf::{MicroSurface, MicroSurfaceMesh},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -23,6 +22,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 use vgcore::math::Vec3;
+use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 use super::measurement::BsdfMeasurementParams;
 

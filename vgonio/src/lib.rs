@@ -14,25 +14,25 @@ mod app;
 mod error;
 mod io;
 pub mod measure;
-pub mod msurf;
 pub mod optics;
 mod range;
 
 pub use range::*;
 
-use crate::{error::Error, measure::Patch};
+use crate::measure::Patch;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     str::FromStr,
 };
 use vgcore::{
+    error::VgonioError,
     math::Handedness,
     units::{rad, Radians},
 };
 
 /// Main entry point for the application.
-pub fn run() -> Result<(), Error> {
+pub fn run() -> Result<(), VgonioError> {
     use app::args::CliArgs;
     use clap::Parser;
 
@@ -91,7 +91,7 @@ impl Medium {
 }
 
 impl FromStr for Medium {
-    type Err = Error;
+    type Err = VgonioError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim() {
@@ -99,7 +99,7 @@ impl FromStr for Medium {
             "vacuum" => Ok(Self::Vacuum),
             "al" => Ok(Self::Aluminium),
             "cu" => Ok(Self::Copper),
-            &_ => Err(Error::Any("unknown medium".to_string())),
+            &_ => Err(VgonioError::new("Unknown medium", None)),
         }
     }
 }
