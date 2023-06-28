@@ -523,18 +523,6 @@ fn read_line_ascii_usurf(line: &str) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        measure::{
-            bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            collector::BounceAndEnergy,
-            emitter::RegionShape,
-            measurement::{BsdfMeasurementParams, Radius::Auto, SimulationKind},
-            Collector, CollectorScheme, Emitter, RtcMethod,
-        },
-        units::{mm, nm, rad, Radians},
-        Medium, RangeByStepSizeInclusive, SphericalDomain, SphericalPartition,
-    };
-    use vgonio_core::units::{mm, nm, rad, Radians};
 
     #[test]
     #[rustfmt::skip]

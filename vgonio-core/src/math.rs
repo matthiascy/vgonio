@@ -67,6 +67,18 @@ impl_as_primitive!(i16 as f32, f64, i32, u32, i64, u64, i128, u128);
 impl_as_primitive!(usize as f32, f64, i32, u32, i64, u64, i128, u128);
 impl_as_primitive!(isize as f32, f64, i32, u32, i64, u64, i128, u128);
 
+/// Machine epsilon for double precision floating point numbers.
+pub const MACHINE_EPSILON_F64: f64 = f64::EPSILON * 0.5;
+
+/// Machine epsilon for single precision floating point numbers.
+pub const MACHINE_EPSILON_F32: f32 = f32::EPSILON * 0.5;
+
+/// Compute the conservative bounding of $(1 \pm \epsilon_{m})^n$ for a given
+/// $n$.
+pub const fn gamma(n: u32) -> f32 {
+    (n as f32 * MACHINE_EPSILON_F32) / (1.0 - n as f32 * MACHINE_EPSILON_F32)
+}
+
 /// Identity matrix.
 pub const IDENTITY_MAT4: [f32; 16] = [
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -93,16 +105,6 @@ pub fn ulp_eq(a: f32, b: f32) -> bool {
     } else {
         (diff / f32::min(a_abs + b_abs, f32::MAX)) < f32::EPSILON
     }
-}
-
-#[test]
-fn test_ulp_eq() {
-    assert!(ulp_eq(0.0, 0.0));
-    assert!(ulp_eq(1.0, 1.0 + MACHINE_EPSILON_F32));
-    assert!(ulp_eq(1.0, 1.0 + 1e-7 * 0.5));
-    assert!(ulp_eq(1.0, 1.0 - 1e-7 * 0.5));
-    assert!(!ulp_eq(1.0, 1.0 + 1e-6));
-    assert!(!ulp_eq(1.0, 1.0 - 1e-6));
 }
 
 /// Coordinate system.
@@ -350,54 +352,6 @@ pub fn cartesian_to_spherical(
     )
 }
 
-// TODO: improve accuracy
-#[test]
-fn spherical_cartesian_conversion() {
-    use crate::{ulp_eq, units::degrees};
-
-    println!(
-        "{:?}",
-        spherical_to_cartesian(
-            1.0,
-            radians!(0.0),
-            radians!(0.0),
-            Handedness::RightHandedYUp
-        )
-    );
-    println!(
-        "{:?}",
-        cartesian_to_spherical(Vec3::new(0.0, 1.0, 0.0), 1.0, Handedness::RightHandedYUp)
-    );
-
-    let r = 1.0;
-    let zenith = radians!(0.0);
-    let azimuth = radians!(0.0);
-    let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
-    let sph = cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
-    assert!(ulp_eq(r, sph.radius));
-    println!("{:.20} {:.20}", zenith.value, sph.zenith.value);
-    assert!(ulp_eq(zenith.value, sph.zenith.value));
-    assert!(ulp_eq(azimuth.value, sph.azimuth.value));
-
-    let r = 2.0;
-    let zenith = degrees!(45.0).into();
-    let azimuth = degrees!(120.0).into();
-    let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
-    let sph = cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
-    assert!(ulp_eq(r, sph.radius));
-    assert!(ulp_eq(zenith.value, sph.zenith.value));
-    assert!(ulp_eq(azimuth.value, sph.azimuth.value));
-
-    let r = 1.5;
-    let zenith = degrees!(60.0).in_radians();
-    let azimuth = degrees!(90.0).in_radians();
-    let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedYUp);
-    let sph = cartesian_to_spherical(v, 1.5, Handedness::RightHandedYUp);
-    assert!(ulp_eq(r, sph.radius));
-    assert!(ulp_eq(zenith.value, sph.zenith.value));
-    assert!(ulp_eq(azimuth.value, sph.azimuth.value));
-}
-
 /// Returns the accurate reciprocal of the given value.
 ///
 /// Newton-Raphson iteration is used to compute the reciprocal.
@@ -431,39 +385,6 @@ pub fn rcp(x: f32) -> f32 {
             1.0 / x
         }
     }
-}
-
-#[test]
-fn test_rcp() {
-    use crate::ulp_eq;
-    assert!(ulp_eq(rcp(1.0), 1.0));
-    assert!(ulp_eq(rcp(2.0), 0.5));
-    assert!(ulp_eq(rcp(4.0), 0.25));
-    assert!(ulp_eq(rcp(8.0), 0.125));
-    assert!(ulp_eq(rcp(16.0), 0.0625));
-    assert!(ulp_eq(rcp(32.0), 0.03125));
-    assert!(ulp_eq(rcp(64.0), 0.015625));
-    assert!(ulp_eq(rcp(128.0), 0.0078125));
-    assert!(ulp_eq(rcp(256.0), 0.00390625));
-    assert!(ulp_eq(rcp(512.0), 0.001953125));
-    assert!(ulp_eq(rcp(1024.0), 0.0009765625));
-    assert!(ulp_eq(rcp(2048.0), 0.00048828125));
-    assert!(ulp_eq(rcp(4096.0), 0.000244140625));
-    assert!(ulp_eq(rcp(8192.0), 0.0001220703125));
-    assert!(ulp_eq(rcp(16384.0), 6.103515625e-05));
-    assert!(ulp_eq(rcp(32768.0), 3.0517578125e-05));
-    assert!(ulp_eq(rcp(65536.0), 1.52587890625e-05));
-    assert!(ulp_eq(rcp(131072.0), 7.62939453125e-06));
-    assert!(ulp_eq(rcp(262144.0), 3.814697265625e-06));
-    assert!(ulp_eq(rcp(524288.0), 1.9073486328125e-06));
-    assert!(ulp_eq(rcp(1048576.0), 9.5367431640625e-07));
-    assert!(ulp_eq(rcp(2097152.0), 4.76837158203125e-07));
-    assert!(ulp_eq(rcp(4194304.0), 2.384185791015625e-07));
-    assert!(ulp_eq(rcp(8388608.0), 1.1920928955078125e-07));
-    assert!(ulp_eq(rcp(3.0), 1.0 / 3.0));
-    assert_eq!(1.0 / -0.0, rcp(-0.0));
-    assert_eq!(1.0 / 0.0, rcp(0.0));
-    assert_eq!(rcp(0.0), f32::INFINITY);
 }
 
 /// Returns the square of the given value.
@@ -500,23 +421,6 @@ pub fn rsqrt(x: f32) -> f32 {
     }
 }
 
-#[test]
-fn test_rsqrt() {
-    assert!(ulp_eq(rsqrt(1.0), 1.0));
-    assert!(ulp_eq(rsqrt(4.0), 0.5));
-    assert!(ulp_eq(rsqrt(8.0), 0.35355338));
-    assert!(ulp_eq(rsqrt(9.0), 0.33333334));
-    assert!(ulp_eq(rsqrt(16.0), 0.25));
-    assert!(ulp_eq(rsqrt(64.0), 0.125));
-    assert!(ulp_eq(rsqrt(256.0), 0.0625));
-    assert!(ulp_eq(rsqrt(1024.0), 0.03125));
-    assert!(ulp_eq(rsqrt(4096.0), 0.015625));
-    assert!(ulp_eq(rsqrt(16384.0), 0.0078125));
-    assert!(ulp_eq(rsqrt(65536.0), 0.00390625));
-    assert!(ulp_eq(rsqrt(262144.0), 0.001953125));
-    println!("{:.20} - {:.20}", rsqrt(3.0), rcp(3.0f32.sqrt()));
-}
-
 /// Returns the fused multiply-subtract of the given values.
 ///
 /// This is equivalent to `a * b - c`. However, this function may fall back to
@@ -529,14 +433,6 @@ pub fn msub(a: f32, b: f32, c: f32) -> f32 {
     } else {
         a * b - c
     }
-}
-
-#[test]
-fn test_msub() {
-    assert_eq!(msub(1.0, 2.0, 3.0), -1.0);
-    assert_eq!(msub(2.0, 3.0, 4.0), 2.0);
-    assert_eq!(msub(3.0, 4.0, 5.0), 7.0);
-    assert_eq!(msub(4.0, 5.0, 6.0), 14.0);
 }
 
 /// Returns the fused multiply-add of the given values.
@@ -555,14 +451,6 @@ pub fn madd(a: f32, b: f32, c: f32) -> f32 {
     }
 }
 
-#[test]
-fn test_madd() {
-    assert_eq!(madd(1.0, 2.0, 3.0), 5.0);
-    assert_eq!(madd(2.0, 4.0, 6.0), 14.0);
-    assert_eq!(madd(3.0, 6.0, 9.0), 27.0);
-    assert_eq!(madd(4.0, 8.0, 12.0), 44.0);
-}
-
 /// Returns the fused negated multiply-subtract of the given values.
 ///
 /// This is equivalent to `-a * b - c`. However, this function may fall back to
@@ -577,14 +465,6 @@ pub fn nmsub(a: f32, b: f32, c: f32) -> f32 {
     }
 }
 
-#[test]
-fn test_nmsub() {
-    assert_eq!(nmsub(1.0, 2.0, 3.0), -5.0);
-    assert_eq!(nmsub(2.0, 4.0, 6.0), -14.0);
-    assert_eq!(nmsub(3.0, 6.0, 9.0), -27.0);
-    assert_eq!(nmsub(4.0, 8.0, 12.0), -44.0);
-}
-
 /// Returns the fused negated multiply-add of the given values.
 ///
 /// This is equivalent to `-a * b + c`. However, this function may fall back to
@@ -597,14 +477,6 @@ pub fn nmadd(a: f32, b: f32, c: f32) -> f32 {
     } else {
         -a * b + c
     }
-}
-
-#[test]
-fn test_nmadd() {
-    assert_eq!(nmadd(1.0, 2.0, 3.0), 1.0);
-    assert_eq!(nmadd(2.0, 4.0, 6.0), -2.0);
-    assert_eq!(nmadd(3.0, 6.0, 9.0), -9.0);
-    assert_eq!(nmadd(4.0, 8.0, 12.0), -20.0);
 }
 
 /// Quadratic equation can have 0, 1 or 2 real solutions.
@@ -649,24 +521,6 @@ pub fn solve_quadratic(a: f32, b: f32, c: f32) -> QuadraticSolution {
         let q = (-b - discriminant) * rcp_2a;
         QuadraticSolution::Two(p.min(q), p.max(q))
     }
-}
-
-#[test]
-fn test_quadratic() {
-    assert_eq!(solve_quadratic(1.0, 0.0, 0.0), QuadraticSolution::One(0.0));
-    assert_eq!(solve_quadratic(1.0, 0.0, 1.0), QuadraticSolution::None);
-    assert_eq!(
-        solve_quadratic(2.0, 5.0, 3.0),
-        QuadraticSolution::Two(-1.5, -1.0)
-    );
-    assert_eq!(
-        solve_quadratic(5.0, 6.0, 1.0),
-        QuadraticSolution::Two(-1.0, -0.2)
-    );
-    assert_eq!(
-        solve_quadratic(-2.0, 2.0, 1.0),
-        QuadraticSolution::Two(-0.3660254, 1.3660254)
-    );
 }
 
 /// Checks if the given values are close enough to each other.
@@ -808,4 +662,174 @@ pub fn generate_parametric_hemisphere_cells(
 pub fn calc_aligned_size(size: u32, alignment: u32) -> u32 {
     let mask = alignment - 1;
     (size + mask) & !mask
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        math::{
+            cartesian_to_spherical, madd, msub, nmadd, nmsub, rcp, rsqrt, solve_quadratic,
+            spherical_to_cartesian, ulp_eq, Handedness, QuadraticSolution, MACHINE_EPSILON_F32,
+        },
+        units::{degrees, radians},
+    };
+    use glam::Vec3;
+
+    #[test]
+    fn test_ulp_eq() {
+        assert!(ulp_eq(0.0, 0.0));
+        assert!(ulp_eq(1.0, 1.0 + MACHINE_EPSILON_F32));
+        assert!(ulp_eq(1.0, 1.0 + 1e-7 * 0.5));
+        assert!(ulp_eq(1.0, 1.0 - 1e-7 * 0.5));
+        assert!(!ulp_eq(1.0, 1.0 + 1e-6));
+        assert!(!ulp_eq(1.0, 1.0 - 1e-6));
+    }
+
+    // TODO: improve accuracy
+    #[test]
+    fn spherical_cartesian_conversion() {
+        println!(
+            "{:?}",
+            spherical_to_cartesian(
+                1.0,
+                radians!(0.0),
+                radians!(0.0),
+                Handedness::RightHandedYUp
+            )
+        );
+        println!(
+            "{:?}",
+            cartesian_to_spherical(Vec3::new(0.0, 1.0, 0.0), 1.0, Handedness::RightHandedYUp)
+        );
+
+        let r = 1.0;
+        let zenith = radians!(0.0);
+        let azimuth = radians!(0.0);
+        let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
+        let (radius, sph_zenith, sph_azimuth) =
+            cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
+        assert!(ulp_eq(r, radius));
+        println!("{:.20} {:.20}", zenith.value, sph_zenith.value);
+        assert!(ulp_eq(zenith.value, sph_zenith.value));
+        assert!(ulp_eq(azimuth.value, sph_azimuth.value));
+
+        let r = 2.0;
+        let zenith = degrees!(45.0).into();
+        let azimuth = degrees!(120.0).into();
+        let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
+        let (radius, sph_zenith, sph_azimuth) =
+            cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
+        assert!(ulp_eq(r, radius));
+        assert!(ulp_eq(zenith.value, sph_zenith.value));
+        assert!(ulp_eq(azimuth.value, sph_azimuth.value));
+
+        let r = 1.5;
+        let zenith = degrees!(60.0).in_radians();
+        let azimuth = degrees!(90.0).in_radians();
+        let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedYUp);
+        let (radius, sph_zenith, sph_azimuth) =
+            cartesian_to_spherical(v, 1.5, Handedness::RightHandedYUp);
+        assert!(ulp_eq(r, radius));
+        assert!(ulp_eq(zenith.value, sph_zenith.value));
+        assert!(ulp_eq(azimuth.value, sph_azimuth.value));
+    }
+
+    #[test]
+    fn test_rcp() {
+        assert!(ulp_eq(rcp(1.0), 1.0));
+        assert!(ulp_eq(rcp(2.0), 0.5));
+        assert!(ulp_eq(rcp(4.0), 0.25));
+        assert!(ulp_eq(rcp(8.0), 0.125));
+        assert!(ulp_eq(rcp(16.0), 0.0625));
+        assert!(ulp_eq(rcp(32.0), 0.03125));
+        assert!(ulp_eq(rcp(64.0), 0.015625));
+        assert!(ulp_eq(rcp(128.0), 0.0078125));
+        assert!(ulp_eq(rcp(256.0), 0.00390625));
+        assert!(ulp_eq(rcp(512.0), 0.001953125));
+        assert!(ulp_eq(rcp(1024.0), 0.0009765625));
+        assert!(ulp_eq(rcp(2048.0), 0.00048828125));
+        assert!(ulp_eq(rcp(4096.0), 0.000244140625));
+        assert!(ulp_eq(rcp(8192.0), 0.0001220703125));
+        assert!(ulp_eq(rcp(16384.0), 6.103515625e-05));
+        assert!(ulp_eq(rcp(32768.0), 3.0517578125e-05));
+        assert!(ulp_eq(rcp(65536.0), 1.52587890625e-05));
+        assert!(ulp_eq(rcp(131072.0), 7.62939453125e-06));
+        assert!(ulp_eq(rcp(262144.0), 3.814697265625e-06));
+        assert!(ulp_eq(rcp(524288.0), 1.9073486328125e-06));
+        assert!(ulp_eq(rcp(1048576.0), 9.5367431640625e-07));
+        assert!(ulp_eq(rcp(2097152.0), 4.76837158203125e-07));
+        assert!(ulp_eq(rcp(4194304.0), 2.384185791015625e-07));
+        assert!(ulp_eq(rcp(8388608.0), 1.1920928955078125e-07));
+        assert!(ulp_eq(rcp(3.0), 1.0 / 3.0));
+        assert_eq!(1.0 / -0.0, rcp(-0.0));
+        assert_eq!(1.0 / 0.0, rcp(0.0));
+        assert_eq!(rcp(0.0), f32::INFINITY);
+    }
+
+    #[test]
+    fn test_quadratic() {
+        assert_eq!(solve_quadratic(1.0, 0.0, 0.0), QuadraticSolution::One(0.0));
+        assert_eq!(solve_quadratic(1.0, 0.0, 1.0), QuadraticSolution::None);
+        assert_eq!(
+            solve_quadratic(2.0, 5.0, 3.0),
+            QuadraticSolution::Two(-1.5, -1.0)
+        );
+        assert_eq!(
+            solve_quadratic(5.0, 6.0, 1.0),
+            QuadraticSolution::Two(-1.0, -0.2)
+        );
+        assert_eq!(
+            solve_quadratic(-2.0, 2.0, 1.0),
+            QuadraticSolution::Two(-0.3660254, 1.3660254)
+        );
+    }
+
+    #[test]
+    fn test_rsqrt() {
+        assert!(ulp_eq(rsqrt(1.0), 1.0));
+        assert!(ulp_eq(rsqrt(4.0), 0.5));
+        assert!(ulp_eq(rsqrt(8.0), 0.35355338));
+        assert!(ulp_eq(rsqrt(9.0), 0.33333334));
+        assert!(ulp_eq(rsqrt(16.0), 0.25));
+        assert!(ulp_eq(rsqrt(64.0), 0.125));
+        assert!(ulp_eq(rsqrt(256.0), 0.0625));
+        assert!(ulp_eq(rsqrt(1024.0), 0.03125));
+        assert!(ulp_eq(rsqrt(4096.0), 0.015625));
+        assert!(ulp_eq(rsqrt(16384.0), 0.0078125));
+        assert!(ulp_eq(rsqrt(65536.0), 0.00390625));
+        assert!(ulp_eq(rsqrt(262144.0), 0.001953125));
+        println!("{:.20} - {:.20}", rsqrt(3.0), rcp(3.0f32.sqrt()));
+    }
+
+    #[test]
+    fn test_msub() {
+        assert_eq!(msub(1.0, 2.0, 3.0), -1.0);
+        assert_eq!(msub(2.0, 3.0, 4.0), 2.0);
+        assert_eq!(msub(3.0, 4.0, 5.0), 7.0);
+        assert_eq!(msub(4.0, 5.0, 6.0), 14.0);
+    }
+
+    #[test]
+    fn test_madd() {
+        assert_eq!(madd(1.0, 2.0, 3.0), 5.0);
+        assert_eq!(madd(2.0, 4.0, 6.0), 14.0);
+        assert_eq!(madd(3.0, 6.0, 9.0), 27.0);
+        assert_eq!(madd(4.0, 8.0, 12.0), 44.0);
+    }
+
+    #[test]
+    fn test_nmsub() {
+        assert_eq!(nmsub(1.0, 2.0, 3.0), -5.0);
+        assert_eq!(nmsub(2.0, 4.0, 6.0), -14.0);
+        assert_eq!(nmsub(3.0, 6.0, 9.0), -27.0);
+        assert_eq!(nmsub(4.0, 8.0, 12.0), -44.0);
+    }
+
+    #[test]
+    fn test_nmadd() {
+        assert_eq!(nmadd(1.0, 2.0, 3.0), 1.0);
+        assert_eq!(nmadd(2.0, 4.0, 6.0), -2.0);
+        assert_eq!(nmadd(3.0, 6.0, 9.0), -9.0);
+        assert_eq!(nmadd(4.0, 8.0, 12.0), -20.0);
+    }
 }

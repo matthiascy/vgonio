@@ -1200,19 +1200,18 @@ impl<'ms> MultilevelGrid<'ms> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        measure::rtc::{grid::MultilevelGrid, Hit, Ray},
-        msurf::{AxisAlignment, MicroSurface},
-        ulp_eq,
-        units::{um, LengthUnit, UMicrometre},
+    use crate::measure::rtc::{grid::MultilevelGrid, Hit, Ray};
+    use vgcore::{
+        math::{ulp_eq, IVec2, UVec2, Vec3, Vec3Swizzles},
+        units::LengthUnit,
     };
-    use vgcore::math::{IVec2, UVec2, Vec3, Vec3Swizzles};
+    use vgsurf::{HeightOffset, MicroSurface};
 
     #[test]
     fn multilevel_grid_creation() {
         let surf =
             MicroSurface::from_samples(9, 9, 0.5, 0.5, LengthUnit::UM, &vec![0.0; 81], None, None);
-        let mesh = surf.as_micro_surface_mesh();
+        let mesh = surf.as_micro_surface_mesh(HeightOffset::None);
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         assert_eq!(grid.level(), 2);
         assert_eq!(grid.coarse.len(), 2);
@@ -1268,7 +1267,7 @@ mod tests {
             None,
             None
         );
-        let mesh = surf.as_micro_surface_mesh();
+        let mesh = surf.as_micro_surface_mesh(HeightOffset::None);
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
         assert_eq!(grid.level(), 2);
@@ -1358,7 +1357,7 @@ mod tests {
     #[test]
     fn grid_traverse() {
         let surf = MicroSurface::new(10, 10, 1.0, 1.0, 0.0, LengthUnit::UM);
-        let mesh = surf.as_micro_surface_mesh();
+        let mesh = surf.as_micro_surface_mesh(HeightOffset::None);
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
         println!("level: {}", grid.level());
@@ -1521,7 +1520,7 @@ mod tests {
             None,
             None,
         );
-        let mesh = surf.as_micro_surface_mesh();
+        let mesh = surf.as_micro_surface_mesh(HeightOffset::None);
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
 

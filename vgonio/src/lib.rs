@@ -104,18 +104,6 @@ impl FromStr for Medium {
     }
 }
 
-/// Machine epsilon for double precision floating point numbers.
-pub const MACHINE_EPSILON_F64: f64 = f64::EPSILON * 0.5;
-
-/// Machine epsilon for single precision floating point numbers.
-pub const MACHINE_EPSILON_F32: f32 = f32::EPSILON * 0.5;
-
-/// Compute the conservative bounding of $(1 \pm \epsilon_{m})^n$ for a given
-/// $n$.
-pub const fn gamma(n: u32) -> f32 {
-    (n as f32 * MACHINE_EPSILON_F32) / (1.0 - n as f32 * MACHINE_EPSILON_F32)
-}
-
 /// The domain of the spherical coordinate.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -433,51 +421,55 @@ pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
 /// Returns the gamma factor for a floating point number.
 pub const fn gamma_f32(n: f32) -> f32 { (n * MACHINE_EPSILON) / (1.0 - n * MACHINE_EPSILON) }
 
-#[test]
-fn spherical_domain_clamp() {
-    use crate::units::degrees;
+#[cfg(test)]
+mod tests {
+    use crate::SphericalDomain;
+    use vgcore::units::deg;
 
-    let domain = SphericalDomain::Upper;
-    let angle = degrees!(91.0);
-    let clamped = domain.clamp_zenith(angle.into());
-    assert_eq!(clamped, degrees!(90.0));
+    #[test]
+    fn spherical_domain_clamp() {
+        let domain = SphericalDomain::Upper;
+        let angle = deg!(91.0);
+        let clamped = domain.clamp_zenith(angle.into());
+        assert_eq!(clamped, deg!(90.0));
 
-    let domain = SphericalDomain::Lower;
-    let angle = degrees!(191.0);
-    let clamped = domain.clamp_zenith(angle.into());
-    assert_eq!(clamped, degrees!(180.0));
-}
+        let domain = SphericalDomain::Lower;
+        let angle = deg!(191.0);
+        let clamped = domain.clamp_zenith(angle.into());
+        assert_eq!(clamped, deg!(180.0));
+    }
 
-/// Bumps a floating-point value up to the next representable value.
-#[inline]
-pub fn next_f32_up(f: f32) -> f32 {
-    if f.is_infinite() && f > 0.0 {
-        f
-    } else if f == -0.0 {
-        0.0
-    } else {
-        let bits = f.to_bits();
-        if f >= 0.0 {
-            f32::from_bits(bits + 1)
+    /// Bumps a floating-point value up to the next representable value.
+    #[inline]
+    pub fn next_f32_up(f: f32) -> f32 {
+        if f.is_infinite() && f > 0.0 {
+            f
+        } else if f == -0.0 {
+            0.0
         } else {
-            f32::from_bits(bits - 1)
+            let bits = f.to_bits();
+            if f >= 0.0 {
+                f32::from_bits(bits + 1)
+            } else {
+                f32::from_bits(bits - 1)
+            }
         }
     }
-}
 
-/// Bumps a floating-point value down to the next representable value.
-#[inline]
-pub fn next_f32_down(f: f32) -> f32 {
-    if f.is_infinite() && f < 0.0 {
-        f
-    } else if f == -0.0 {
-        0.0
-    } else {
-        let bits = f.to_bits();
-        if f > 0.0 {
-            f32::from_bits(bits - 1)
+    /// Bumps a floating-point value down to the next representable value.
+    #[inline]
+    pub fn next_f32_down(f: f32) -> f32 {
+        if f.is_infinite() && f < 0.0 {
+            f
+        } else if f == -0.0 {
+            0.0
         } else {
-            f32::from_bits(bits + 1)
+            let bits = f.to_bits();
+            if f > 0.0 {
+                f32::from_bits(bits - 1)
+            } else {
+                f32::from_bits(bits + 1)
+            }
         }
     }
 }

@@ -411,7 +411,8 @@ impl<A: AngleUnit> const NumericCast<Angle<A>> for f32 {
 #[cfg(test)]
 mod angle_unit_tests {
     use super::*;
-    use crate::ulp_eq;
+    use crate::math::ulp_eq;
+    use serde_yaml;
 
     #[test]
     fn conversion() {

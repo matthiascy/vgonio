@@ -1120,7 +1120,7 @@ mod range_by_step_count_tests {
 #[cfg(test)]
 mod range_by_step_size_tests {
     use super::*;
-    use crate::units::{deg, degrees, rad, radians, Degrees, Rads};
+    use vgcore::units::{deg, rad, Degrees, Rads};
 
     #[test]
     fn try_from_str_inclusive() {
@@ -1153,18 +1153,18 @@ mod range_by_step_size_tests {
     #[test]
     fn try_from_str_inclusive_angle() {
         let range = RangeByStepSize::<Radians>::try_from("0.0 rad .. =10.0rad / 0.1deg").unwrap();
-        assert_eq!(range.start(), radians!(0.0));
-        assert_eq!(range.stop(), radians!(10.0));
-        assert_eq!(range.step_size(), degrees!(0.1).to_radians());
+        assert_eq!(range.start(), rad!(0.0));
+        assert_eq!(range.stop(), rad!(10.0));
+        assert_eq!(range.step_size(), deg!(0.1).to_radians());
         assert!(!range.is_exclusive());
     }
 
     #[test]
     fn try_from_str_exclusive_angle() {
         let range = RangeByStepSize::<Degrees>::try_from("0.0rad .. 360 deg / 10.0deg").unwrap();
-        assert_eq!(range.start(), degrees!(0.0));
-        assert_eq!(range.stop(), degrees!(360.0));
-        assert_eq!(range.step_size(), degrees!(10.0));
+        assert_eq!(range.start(), deg!(0.0));
+        assert_eq!(range.stop(), deg!(360.0));
+        assert_eq!(range.step_size(), deg!(10.0));
         assert!(range.is_exclusive());
     }
 

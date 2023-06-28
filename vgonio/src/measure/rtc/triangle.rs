@@ -1,9 +1,9 @@
-use crate::{
-    gamma,
-    measure::rtc::{Ray, RayTriIsect},
-};
+use crate::measure::rtc::{Ray, RayTriIsect};
 use std::borrow::Cow;
-use vgcore::{math, math::Vec3};
+use vgcore::{
+    math,
+    math::{gamma, Vec3},
+};
 
 const TOLERANCE: f32 = f32::EPSILON * 2.0;
 

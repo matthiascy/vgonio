@@ -384,8 +384,7 @@ impl_aabb_indexing!(usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
-    use std::io::empty;
+    use proptest::{prop_assert, prop_assert_eq, proptest};
 
     #[test]
     fn aabb_creation() {

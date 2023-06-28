@@ -322,7 +322,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
 #[cfg(test)]
 mod tests {
     use crate::measure::rtc::{ray_aabb_intersection, ray_aabb_intersects, Ray};
-    use vgcore::math::Aabb;
+    use vgcore::math::{Aabb, Vec3};
 
     #[test]
     fn aabb_ray_intersection() {

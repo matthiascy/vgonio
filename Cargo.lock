@@ -2534,7 +2534,6 @@ dependencies = [
  "log",
  "paste",
  "pollster",
- "proptest",
  "rand",
  "rand_chacha",
  "rand_distr",
@@ -2561,7 +2560,9 @@ dependencies = [
  "clap",
  "glam",
  "paste",
+ "proptest",
  "serde",
+ "serde_yaml",
 ]
 
 [[package]]

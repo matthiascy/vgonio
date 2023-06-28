@@ -586,8 +586,9 @@ pub fn reflectance_insulator_conductor_spectrum(
 
 #[cfg(test)]
 mod tests {
-    use crate::{optics::ior::RefractiveIndex, units::nm};
+    use crate::optics::ior::RefractiveIndex;
     use std::{fs::OpenOptions, io::Write};
+    use vgcore::units::nm;
 
     #[test]
     fn reflectance_insulator_test() {

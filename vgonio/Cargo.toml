@@ -41,8 +41,8 @@ rayon = "1.6"
 rand = "0.8"
 rand_distr = "0.4"
 rand_chacha = "0.3"
-serde_yaml = "0.9"
 serde_json = "1.0"
+serde_yaml = { workspace = true }
 toml = "0.7"
 type-map = "0.5"
 winit = "0.28"
@@ -52,23 +52,3 @@ vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 
 [build-dependencies]
 shaderc = "0.8"
-
-[dev-dependencies]
-proptest = "1"
-
-#[profile.dev]
-#split-debuginfo = "unpacked"
-
-#[profile.dev.build-override]
-#opt-level = 3
-
-#[profile.release]
-#strip = "debuginfo"
-#lto = true
-# debug = true
-
-# Compile build-dependencies in release mode with
-# the same settings as regular dependencies.
-#[profile.release.build-override]
-#opt-level = 3
-#codegen-units = 16

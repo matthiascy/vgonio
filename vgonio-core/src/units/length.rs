@@ -541,7 +541,7 @@ impl<U: LengthMeasurement> NumericCast<f32> for Length<U> {
 #[cfg(test)]
 mod length_unit_tests {
     use super::*;
-    use crate::ulp_eq;
+    use crate::math::ulp_eq;
     use paste::paste;
 
     macro_rules! test_conversion {

@@ -663,7 +663,6 @@ impl Measurement {
             )
         })?;
         let reader = BufReader::new(&mut file);
-        // TODO: invoke generation of patches and samples
         let measurements = serde_yaml::Deserializer::from_reader(reader)
             .map(|doc| {
                 Measurement::deserialize(doc)

@@ -1327,56 +1327,24 @@ emitter is not implemented"
     }
 }
 
-#[test]
-fn test_bsdf_measurement_stats_point_read_write() {
-    let data = BsdfMeasurementStatsPoint {
-        n_received: 1234567,
-        n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
-        n_reflected: PerWavelength(vec![5, 6, 7, 8]),
-        n_captured: PerWavelength(vec![9, 10, 11, 12]),
-        e_captured: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
-        num_rays_per_bounce: PerWavelength(vec![
-            vec![17, 18, 19],
-            vec![22, 23, 24],
-            vec![26, 27, 28],
-            vec![30, 31, 32],
-        ]),
-        energy_per_bounce: PerWavelength(vec![
-            vec![1.0, 2.0, 4.0],
-            vec![5.0, 6.0, 7.0],
-            vec![8.0, 9.0, 10.0],
-            vec![11.0, 12.0, 13.0],
-        ]),
+#[cfg(test)]
+mod tests {
+    use crate::{
+        measure::{
+            bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
+            collector::BounceAndEnergy,
+            emitter::RegionShape,
+            measurement::{BsdfMeasurementParams, Radius, SimulationKind},
+            Collector, CollectorScheme, Emitter, RtcMethod,
+        },
+        Medium, RangeByStepSizeInclusive, SphericalPartition,
     };
-    let size = BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 3);
-    let mut buf = vec![0; size];
-    data.write_to_buf(&mut buf, 4, 3);
-    let data2 = BsdfMeasurementStatsPoint::read_from_buf(&buf, 4, 3).unwrap();
-    assert_eq!(data, data2);
-}
+    use vgcore::units::{mm, nm, rad, Radians};
 
-#[test]
-fn test_bounce_and_energy_read_write() {
-    let data = BounceAndEnergy {
-        total_rays: 33468,
-        total_energy: 1349534.0,
-        num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0],
-        energy_per_bounce: vec![
-            20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
-        ],
-    };
-    let size = BounceAndEnergy::calc_size_in_bytes(11);
-    let mut buf = vec![0; size];
-    data.write_to_buf(&mut buf, 11);
-    let data2 = BounceAndEnergy::read_from_buf(&buf, 11).unwrap();
-    assert_eq!(data, data2);
-}
-
-#[test]
-fn test_bsdf_measurement_data_point() {
-    let data = BsdfMeasurementDataPoint::<BounceAndEnergy> {
-        stats: BsdfMeasurementStatsPoint {
-            n_received: 0,
+    #[test]
+    fn test_bsdf_measurement_stats_point_read_write() {
+        let data = BsdfMeasurementStatsPoint {
+            n_received: 1234567,
             n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
             n_reflected: PerWavelength(vec![5, 6, 7, 8]),
             n_captured: PerWavelength(vec![9, 10, 11, 12]),
@@ -1393,91 +1361,142 @@ fn test_bsdf_measurement_data_point() {
                 vec![8.0, 9.0, 10.0],
                 vec![11.0, 12.0, 13.0],
             ]),
-        },
-        data: vec![
-            PerWavelength(vec![
-                BounceAndEnergy {
-                    total_rays: 33468,
-                    total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
-                },
-                BounceAndEnergy {
-                    total_rays: 33,
-                    total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4, 0],
-                    energy_per_bounce: vec![0.0, 3.0, 4.0],
-                },
-                BounceAndEnergy {
-                    total_rays: 33468,
-                    total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
-                },
-                BounceAndEnergy {
-                    total_rays: 33,
-                    total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4, 0],
-                    energy_per_bounce: vec![0.0, 3.0, 4.0],
-                },
-            ]),
-            PerWavelength(vec![
-                BounceAndEnergy {
-                    total_rays: 33468,
-                    total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
-                },
-                BounceAndEnergy {
-                    total_rays: 33,
-                    total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4, 0],
-                    energy_per_bounce: vec![0.0, 3.0, 4.0],
-                },
-                BounceAndEnergy {
-                    total_rays: 33468,
-                    total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
-                },
-                BounceAndEnergy {
-                    total_rays: 33,
-                    total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4, 0],
-                    energy_per_bounce: vec![0.0, 3.0, 4.0],
-                },
-            ]),
-        ],
-    };
+        };
+        let size = BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 3);
+        let mut buf = vec![0; size];
+        data.write_to_buf(&mut buf, 4, 3);
+        let data2 = BsdfMeasurementStatsPoint::read_from_buf(&buf, 4, 3).unwrap();
+        assert_eq!(data, data2);
+    }
 
-    let size = BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
-    let mut buf = vec![0; size];
-    data.write_to_buf(&mut buf, 4, 3);
-    let params = BsdfMeasurementParams {
-        kind: BsdfKind::Brdf,
-        sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
-        incident_medium: Medium::Air,
-        transmitted_medium: Medium::Aluminium,
-        emitter: Emitter {
-            num_rays: 0,
-            max_bounces: 3,
-            radius: Auto(mm!(0.0)),
-            zenith: RangeByStepSizeInclusive::zero_to_half_pi(rad!(0.2)),
-            azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
-            shape: RegionShape::SphericalCap { zenith: rad!(0.2) },
-            spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
-            solid_angle: Default::default(),
-        },
-        collector: Collector {
-            radius: Auto(mm!(10.0)),
-            scheme: CollectorScheme::Partitioned {
-                partition: SphericalPartition::EqualAngle {
-                    zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
-                    azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
+    #[test]
+    fn test_bounce_and_energy_read_write() {
+        let data = BounceAndEnergy {
+            total_rays: 33468,
+            total_energy: 1349534.0,
+            num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0],
+            energy_per_bounce: vec![
+                20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
+            ],
+        };
+        let size = BounceAndEnergy::calc_size_in_bytes(11);
+        let mut buf = vec![0; size];
+        data.write_to_buf(&mut buf, 11);
+        let data2 = BounceAndEnergy::read_from_buf(&buf, 11).unwrap();
+        assert_eq!(data, data2);
+    }
+
+    #[test]
+    fn test_bsdf_measurement_data_point() {
+        let data = BsdfMeasurementDataPoint::<BounceAndEnergy> {
+            stats: BsdfMeasurementStatsPoint {
+                n_received: 0,
+                n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
+                n_reflected: PerWavelength(vec![5, 6, 7, 8]),
+                n_captured: PerWavelength(vec![9, 10, 11, 12]),
+                e_captured: PerWavelength(vec![13.0, 14.0, 15.0, 16.0]),
+                num_rays_per_bounce: PerWavelength(vec![
+                    vec![17, 18, 19],
+                    vec![22, 23, 24],
+                    vec![26, 27, 28],
+                    vec![30, 31, 32],
+                ]),
+                energy_per_bounce: PerWavelength(vec![
+                    vec![1.0, 2.0, 4.0],
+                    vec![5.0, 6.0, 7.0],
+                    vec![8.0, 9.0, 10.0],
+                    vec![11.0, 12.0, 13.0],
+                ]),
+            },
+            data: vec![
+                PerWavelength(vec![
+                    BounceAndEnergy {
+                        total_rays: 33468,
+                        total_energy: 1349534.0,
+                        num_rays_per_bounce: vec![210, 40, 60],
+                        energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    },
+                    BounceAndEnergy {
+                        total_rays: 33,
+                        total_energy: 14.0,
+                        num_rays_per_bounce: vec![10, 4, 0],
+                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                    },
+                    BounceAndEnergy {
+                        total_rays: 33468,
+                        total_energy: 1349534.0,
+                        num_rays_per_bounce: vec![210, 40, 60],
+                        energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    },
+                    BounceAndEnergy {
+                        total_rays: 33,
+                        total_energy: 14.0,
+                        num_rays_per_bounce: vec![10, 4, 0],
+                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                    },
+                ]),
+                PerWavelength(vec![
+                    BounceAndEnergy {
+                        total_rays: 33468,
+                        total_energy: 1349534.0,
+                        num_rays_per_bounce: vec![210, 40, 60],
+                        energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    },
+                    BounceAndEnergy {
+                        total_rays: 33,
+                        total_energy: 14.0,
+                        num_rays_per_bounce: vec![10, 4, 0],
+                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                    },
+                    BounceAndEnergy {
+                        total_rays: 33468,
+                        total_energy: 1349534.0,
+                        num_rays_per_bounce: vec![210, 40, 60],
+                        energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    },
+                    BounceAndEnergy {
+                        total_rays: 33,
+                        total_energy: 14.0,
+                        num_rays_per_bounce: vec![10, 4, 0],
+                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                    },
+                ]),
+            ],
+            #[cfg(debug_assertions)]
+            trajectories: vec![],
+            #[cfg(debug_assertions)]
+            hit_points: vec![],
+        };
+
+        let size = BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
+        let mut buf = vec![0; size];
+        data.write_to_buf(&mut buf, 4, 3);
+        let params = BsdfMeasurementParams {
+            kind: BsdfKind::Brdf,
+            sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
+            incident_medium: Medium::Air,
+            transmitted_medium: Medium::Aluminium,
+            emitter: Emitter {
+                num_rays: 0,
+                max_bounces: 3,
+                radius: Radius::Auto(mm!(0.0)),
+                zenith: RangeByStepSizeInclusive::zero_to_half_pi(rad!(0.2)),
+                azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
+                shape: RegionShape::SphericalCap { zenith: rad!(0.2) },
+                spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
+                solid_angle: Default::default(),
+            },
+            collector: Collector {
+                radius: Radius::Auto(mm!(10.0)),
+                scheme: CollectorScheme::Partitioned {
+                    partition: SphericalPartition::EqualAngle {
+                        zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
+                        azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
+                    },
                 },
             },
-        },
-    };
-    let data2 = BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);
-    assert_eq!(data, data2);
+        };
+        let data2 = BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);
+        assert_eq!(data, data2);
+    }
 }

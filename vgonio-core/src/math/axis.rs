@@ -7,8 +7,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// # Examples
 /// ```
-/// # use vgonio::measure::rtc::Axis;
-///
+/// # use vgonio_core::math::Axis;
 /// let mut pos = [0.1, 0.4, 0.6];
 /// pos[Axis::X] -= 0.1;
 ///
@@ -94,7 +93,7 @@ impl IndexMut<Axis> for Vec3 {
 
 #[cfg(test)]
 mod test {
-    use crate::measure::rtc::Axis;
+    use super::*;
     use proptest::prelude::*;
 
     proptest! {
