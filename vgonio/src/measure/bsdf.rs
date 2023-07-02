@@ -11,7 +11,7 @@ use crate::{
     measure::{
         collector::{BounceAndEnergy, CollectorPatches, PerPatchData},
         emitter::EmitterSamples,
-        measurement::{MeasurementData, SimulationKind},
+        measurement::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
         rtc::RayTrajectory,
         RtcMethod,
     },
