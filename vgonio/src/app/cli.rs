@@ -1,4 +1,4 @@
-use std::{fs::OpenOptions, path::PathBuf, time::Instant};
+use std::{fs::OpenOptions, path::PathBuf, time, time::Instant};
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},

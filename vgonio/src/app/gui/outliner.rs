@@ -8,11 +8,14 @@ use crate::{
                 BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
                 PlottingInspector, PlottingWidget,
             },
+            ui::{TabInfo, TabViewer},
             VgonioEventLoop,
         },
     },
     measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
 };
+use egui::{Ui, WidgetText};
+use egui_dock::NodeIndex;
 use std::{
     collections::HashMap,
     rc::Weak,
@@ -362,4 +365,12 @@ impl Outliner {
             plot.show(ui.ctx(), open);
         }
     }
+}
+
+impl egui_dock::TabViewer for Outliner {
+    type Tab = TabInfo;
+
+    fn ui(&mut self, ui: &mut Ui, _tab: &mut Self::Tab) { self.ui(ui); }
+
+    fn title(&mut self, _tab: &mut Self::Tab) -> WidgetText { WidgetText::from("Outliner") }
 }

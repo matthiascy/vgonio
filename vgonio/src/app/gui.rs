@@ -603,7 +603,7 @@ pub struct VgonioGuiApp {
     msurf_rdr_state: MicroSurfaceRenderingState,
     // /// State of the visual grid rendering, including the pipeline, binding
     // /// groups, and buffers.
-    // visual_grid_state: VisualGridState,
+    visual_grid_state: VisualGridState,
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
@@ -616,6 +616,9 @@ pub struct VgonioGuiApp {
 
     /// Notification manager.
     toasts: Toasts,
+
+    /// Docking tabs.
+    tabs_tree: DockingTabsTree<String>,
 }
 
 impl VgonioGuiApp {
@@ -708,6 +711,11 @@ impl VgonioGuiApp {
             .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
             .direction(egui::Direction::BottomUp);
 
+        let tab1 = "Tab1".to_string();
+        let tab2 = "Tab2".to_string();
+        let mut tabs_tree = DockingTabsTree::new(vec![tab1]);
+        tabs_tree.split_left(egui_dock::NodeIndex::root(), 0.20, vec![tab2]);
+
         Ok(Self {
             start_time: Instant::now(),
             ctx: Context {
@@ -726,6 +734,7 @@ impl VgonioGuiApp {
             visual_grid_state,
             bsdf_viewer,
             toasts,
+            tabs_tree,
         })
     }
 
@@ -1003,7 +1012,7 @@ impl VgonioGuiApp {
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.ui.show(ctx);
+                self.ui.show(ctx, &mut self.tabs_tree);
                 self.toasts.show(ctx);
             },
         );
