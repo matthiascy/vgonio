@@ -10,11 +10,11 @@ use crate::app::{
         simulations::Simulations,
         tools::{SamplingInspector, Scratch, Tools},
         widgets::ToggleSwitch,
-        DebuggingInspector, VgonioEventLoop,
+        DebuggingInspector, DockingTabsTree, VgonioEventLoop,
     },
     Config,
 };
-use egui::NumExt;
+use egui::{NumExt, Ui, WidgetText};
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
@@ -251,6 +251,9 @@ pub struct VgonioUi {
     pub left_panel_expanded: bool,
 
     pub simulations: Simulations,
+
+    /// Docking tabs.
+    tabs_tree: DockingTabsTree<String>,
 }
 
 #[repr(u8)]
@@ -272,6 +275,16 @@ impl Deref for ThemeVisuals {
     fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
+struct TabViewer;
+
+impl egui_dock::TabViewer for TabViewer {
+    type Tab = String;
+
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { ui.label(format!("Content of {tab}")); }
+
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { (&*tab).into() }
+}
+
 impl VgonioUi {
     pub fn new(
         event_loop: VgonioEventLoop,
@@ -282,6 +295,10 @@ impl VgonioUi {
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing UI");
+        let tab1 = "Tab1".to_string();
+        let tab2 = "Tab2".to_string();
+        let mut tabs_tree = DockingTabsTree::new(vec![tab1]);
+        tabs_tree.split_left(egui_dock::NodeIndex::root(), 0.20, vec![tab2]);
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -301,6 +318,7 @@ impl VgonioUi {
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
+            tabs_tree,
         }
     }
 
@@ -310,6 +328,7 @@ impl VgonioUi {
 
     pub fn show(&mut self, ctx: &egui::Context) {
         self.theme.update(ctx);
+
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
@@ -329,6 +348,13 @@ impl VgonioUi {
         }
 
         self.simulations.show_all(ctx);
+
+        egui::Window::new("new_window").show(ctx, |ui| {
+            egui_dock::DockArea::new(&mut self.tabs_tree)
+                .show_add_buttons(true)
+                .show_add_popup(true)
+                .show_inside(ui, &mut TabViewer {});
+        });
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }

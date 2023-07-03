@@ -1,3 +1,4 @@
+mod brdf_viewer;
 mod bsdf_viewer;
 mod gizmo;
 mod icons;
@@ -5,6 +6,7 @@ mod misc;
 pub mod outliner;
 mod simulations;
 pub mod state;
+mod surf_viewer;
 mod tools;
 mod ui;
 mod widgets;
@@ -59,6 +61,8 @@ use winit::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
     window::{Window, WindowBuilder},
 };
+
+type DockingTabsTree<Tab> = egui_dock::Tree<Tab>;
 
 /// Initial window width.
 const WIN_INITIAL_WIDTH: u32 = 1600;
@@ -597,10 +601,9 @@ pub struct VgonioGuiApp {
     /// State of the micro surface rendering, including the pipeline, binding
     /// groups, and buffers.
     msurf_rdr_state: MicroSurfaceRenderingState,
-    /// State of the visual grid rendering, including the pipeline, binding
-    /// groups, and buffers.
-    visual_grid_state: VisualGridState,
-
+    // /// State of the visual grid rendering, including the pipeline, binding
+    // /// groups, and buffers.
+    // visual_grid_state: VisualGridState,
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,

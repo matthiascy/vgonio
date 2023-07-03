@@ -27,6 +27,7 @@ chrono = "0.4"
 csv = "1"
 dirs = "5.0"
 egui = { version = "0.22", features = ["bytemuck"] }
+egui_dock = { version = "0.6" }
 egui_extras = "0.22"
 egui-winit = { version = "0.22", default-features = false }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
