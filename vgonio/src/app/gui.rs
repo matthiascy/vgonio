@@ -1,5 +1,6 @@
 mod brdf_viewer;
 mod bsdf_viewer;
+mod file_drag_drop;
 mod gizmo;
 mod icons;
 mod misc;
