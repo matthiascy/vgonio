@@ -16,9 +16,11 @@ mod widgets;
 
 use crate::{measure, measure::RtcMethod};
 use egui::Align2;
+use egui_dock::NodeIndex;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use std::{
     default::Default,
+    ops::Index,
     path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
@@ -39,8 +41,9 @@ use crate::{
         },
         gui::{
             bsdf_viewer::BsdfViewer,
+            outliner::Outliner,
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
-            ui::Theme,
+            ui::{Dockable, Tab, TabKind, Theme},
         },
     },
     error::RuntimeError,
@@ -619,7 +622,7 @@ pub struct VgonioGuiApp {
     toasts: Toasts,
 
     /// Docking tabs.
-    tabs_tree: DockingTabsTree<String>,
+    tabs_tree: DockingTabsTree<Tab>,
 }
 
 impl VgonioGuiApp {
@@ -712,10 +715,22 @@ impl VgonioGuiApp {
             .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
             .direction(egui::Direction::BottomUp);
 
-        let tab1 = "Tab1".to_string();
-        let tab2 = "Tab2".to_string();
-        let mut tabs_tree = DockingTabsTree::new(vec![tab1]);
-        tabs_tree.split_left(egui_dock::NodeIndex::root(), 0.20, vec![tab2]);
+        let mut tabs_tree = DockingTabsTree::new(vec![
+            Tab {
+                kind: TabKind::Regular,
+                index: NodeIndex(0),
+                dockable: Arc::new(RwLock::new(String::from("Scene"))),
+            },
+            Tab {
+                kind: TabKind::Outliner,
+                index: NodeIndex(1),
+                dockable: Arc::new(RwLock::new(Outliner::new(
+                    gpu_ctx.clone(),
+                    bsdf_viewer.clone(),
+                    event_loop.create_proxy(),
+                ))),
+            },
+        ]);
 
         Ok(Self {
             start_time: Instant::now(),

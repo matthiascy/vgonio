@@ -8,7 +8,7 @@ use crate::{
                 BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
                 PlottingInspector, PlottingWidget,
             },
-            ui::{TabInfo, TabViewer},
+            ui::Dockable,
             VgonioEventLoop,
         },
     },
@@ -367,10 +367,8 @@ impl Outliner {
     }
 }
 
-impl egui_dock::TabViewer for Outliner {
-    type Tab = TabInfo;
+impl Dockable for Outliner {
+    fn title(&self) -> WidgetText { "Outliner".into() }
 
-    fn ui(&mut self, ui: &mut Ui, _tab: &mut Self::Tab) { self.ui(ui); }
-
-    fn title(&mut self, _tab: &mut Self::Tab) -> WidgetText { WidgetText::from("Outliner") }
+    fn ui(&mut self, ui: &mut Ui) { self.ui(ui); }
 }

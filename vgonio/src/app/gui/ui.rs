@@ -15,14 +15,14 @@ use crate::app::{
     },
     Config,
 };
-use egui::{NumExt, Ui, WidgetText};
-use egui_dock::NodeIndex;
+use egui::{Id, NumExt, Ui, Widget, WidgetText};
+use egui_dock::{Node, NodeIndex};
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
 use std::{
     collections::HashMap,
-    fmt::{Debug, Write},
+    fmt::{Debug, Formatter, Write},
     marker::PhantomData,
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
@@ -180,6 +180,8 @@ pub struct VgonioUi {
     pub left_panel_expanded: bool,
 
     pub simulations: Simulations,
+
+    pub id_counter: u32,
 }
 
 #[repr(u8)]
@@ -201,7 +203,9 @@ impl Deref for ThemeVisuals {
     fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
+#[derive(Debug)]
 pub enum TabKind {
+    Workspace,
     Outliner,
     Fancy,
     Regular,
@@ -212,30 +216,82 @@ pub struct TabInfo {
     node: NodeIndex,
 }
 
-pub struct TabViewer<T> {
-    _marker: PhantomData<T>,
+/// A trait for types that can be docked.
+pub trait Dockable {
+    /// The title of the dockable.
+    fn title(&self) -> WidgetText;
+
+    /// The content of the dockable.
+    fn ui(&mut self, ui: &mut Ui);
 }
 
-impl egui_dock::TabViewer for TabViewer<String> {
-    type Tab = String;
+impl Dockable for String {
+    fn title(&self) -> WidgetText { self.clone().into() }
 
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { ui.label(format!("Content of {tab}")); }
-
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { (&*tab).into() }
+    fn ui(&mut self, ui: &mut Ui) { ui.label(&*self); }
 }
 
-impl egui_dock::TabViewer for VgonioUi {
-    type Tab = String;
+/// A tab in the dock tree.
+pub struct Tab {
+    /// The kind of the tab.
+    pub kind: TabKind,
+    /// The node index of the tab in the dock tree.
+    pub index: NodeIndex,
+    /// The dockable content of the tab.
+    pub dockable: Arc<RwLock<dyn Dockable>>,
+}
 
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
-        let ctx = ui.ctx();
-        self.tools.show(ctx);
-        self.drag_drop.show(ctx);
-        self.navigator.show(ctx);
-        self.simulations.show_all(ctx);
+impl Debug for Tab {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tab")
+            .field("kind", &self.kind)
+            .field("index", &self.index)
+            .finish()
+    }
+}
+
+/// Viewer for the tabs in the dock tree.
+pub struct TabViewer<'a> {
+    to_be_added: &'a mut Vec<ToBeAdded>,
+    id_counter: &'a mut u32,
+}
+
+pub struct ToBeAdded {
+    pub kind: TabKind,
+    pub parent: NodeIndex,
+}
+
+impl<'a> egui_dock::TabViewer for TabViewer<'a> {
+    type Tab = Tab;
+
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { tab.dockable.write().unwrap().ui(ui); }
+
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { tab.dockable.read().unwrap().title() }
+
+    fn id(&mut self, tab: &mut Self::Tab) -> Id {
+        *self.id_counter += 1;
+        Id::new(format!(
+            "dock_tab_{}_{}",
+            tab.dockable.read().unwrap().title().text(),
+            self.id_counter
+        ))
     }
 
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { (&*tab).into() }
+    fn add_popup(&mut self, ui: &mut Ui, node: NodeIndex) {
+        if ui.button("Regular").clicked() {
+            self.to_be_added.push(ToBeAdded {
+                kind: TabKind::Regular,
+                parent: node,
+            });
+        }
+
+        if ui.button("Fancy").clicked() {
+            self.to_be_added.push(ToBeAdded {
+                kind: TabKind::Fancy,
+                parent: node,
+            });
+        }
+    }
 }
 
 impl VgonioUi {
@@ -267,6 +323,7 @@ impl VgonioUi {
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
+            id_counter: 0,
         }
     }
 
@@ -274,8 +331,10 @@ impl VgonioUi {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, tabs: &mut DockingTabsTree<String>) {
+    pub fn show(&mut self, ctx: &egui::Context, tabs: &mut DockingTabsTree<Tab>) {
         self.theme.update(ctx);
+
+        let mut added_nodes = Vec::new();
 
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
@@ -289,7 +348,13 @@ impl VgonioUi {
         egui_dock::DockArea::new(tabs)
             .show_add_buttons(true)
             .show_add_popup(true)
-            .show(ctx, self);
+            .show(
+                ctx,
+                &mut TabViewer {
+                    to_be_added: &mut added_nodes,
+                    id_counter: &mut self.id_counter,
+                },
+            );
 
         // TODO: Old functional code, to be removed
         // self.tools.show(ctx);
@@ -304,6 +369,19 @@ impl VgonioUi {
                 .resizable(true)
                 .show(ctx, |ui| self.outliner.ui(ui));
         }
+
+        added_nodes.drain(..).for_each(|to_be_added| {
+            // Focus the node that we want to add the tab to
+            tabs.set_focused_node(to_be_added.parent);
+            // Allocate a new index for the tab
+            let index = NodeIndex(tabs.num_tabs());
+            // Add the tab
+            tabs.push_to_focused_leaf(Tab {
+                kind: to_be_added.kind,
+                index,
+                dockable: Arc::new(RwLock::new(String::from("Hello world"))),
+            });
+        });
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
