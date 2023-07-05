@@ -22,8 +22,7 @@ use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
 use std::{
     collections::HashMap,
-    fmt::{Debug, Formatter, Write},
-    marker::PhantomData,
+    fmt::{Debug, Formatter},
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
 };
@@ -333,9 +332,6 @@ impl VgonioUi {
 
     pub fn show(&mut self, ctx: &egui::Context, tabs: &mut DockingTabsTree<Tab>) {
         self.theme.update(ctx);
-
-        let mut added_nodes = Vec::new();
-
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
@@ -345,6 +341,7 @@ impl VgonioUi {
             });
 
         // New docking system
+        let mut added_nodes = Vec::new();
         egui_dock::DockArea::new(tabs)
             .show_add_buttons(true)
             .show_add_popup(true)
@@ -355,6 +352,19 @@ impl VgonioUi {
                     id_counter: &mut self.id_counter,
                 },
             );
+
+        added_nodes.drain(..).for_each(|to_be_added| {
+            // Focus the node that we want to add the tab to
+            tabs.set_focused_node(to_be_added.parent);
+            // Allocate a new index for the tab
+            let index = NodeIndex(tabs.num_tabs());
+            // Add the tab
+            tabs.push_to_focused_leaf(Tab {
+                kind: to_be_added.kind,
+                index,
+                dockable: Arc::new(RwLock::new(String::from("Hello world"))),
+            });
+        });
 
         // TODO: Old functional code, to be removed
         // self.tools.show(ctx);
@@ -369,19 +379,6 @@ impl VgonioUi {
                 .resizable(true)
                 .show(ctx, |ui| self.outliner.ui(ui));
         }
-
-        added_nodes.drain(..).for_each(|to_be_added| {
-            // Focus the node that we want to add the tab to
-            tabs.set_focused_node(to_be_added.parent);
-            // Allocate a new index for the tab
-            let index = NodeIndex(tabs.num_tabs());
-            // Add the tab
-            tabs.push_to_focused_leaf(Tab {
-                kind: to_be_added.kind,
-                index,
-                dockable: Arc::new(RwLock::new(String::from("Hello world"))),
-            });
-        });
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
