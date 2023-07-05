@@ -1,13 +1,20 @@
-use crate::app::{
-    cache::{Cache, Handle},
-    gfx::{camera::ViewProjUniform, GpuContext, Texture},
-    gui::{
-        state::{camera::CameraState, DepthMap},
-        MicroSurfaceUniforms, VisualGridState,
+use crate::{
+    app::{
+        cache::{Cache, Handle},
+        gfx::{
+            camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
+            GpuContext, Texture,
+        },
+        gui::{
+            state::{camera::CameraState, DebugDrawState, DepthMap},
+            MicroSurfaceUniforms, VgonioEventLoop, VisualGridState,
+        },
     },
+    error::RuntimeError,
 };
 use egui::mutex::RwLock;
 use std::sync::Arc;
+use vgcore::math::Vec3;
 use vgsurf::MicroSurface;
 
 // TODO: remove crate public visibility
@@ -202,4 +209,34 @@ pub struct SurfViewer {
     surf_state: MicroSurfaceState,
     /// Depth texture.
     depth_map: DepthMap,
+    /// Debug drawing state.
+    debug_draw_state: DebugDrawState,
+}
+
+impl SurfViewer {
+    pub fn new(
+        gpu: &GpuContext,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+        cache: Arc<RwLock<Cache>>,
+        event_loop: VgonioEventLoop,
+    ) -> Self {
+        let surf_state = MicroSurfaceState::new(gpu, format);
+        let depth_map = DepthMap::new(gpu, width, height);
+        let debug_draw_state = DebugDrawState::new(gpu, format, event_loop, cache.clone());
+        let camera = {
+            let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
+            let projection = Projection::new(0.1, 100.0, 75.0f32.to_radians(), width, height);
+            CameraState::new(camera, projection, ProjectionKind::Perspective)
+        };
+        Self {
+            camera,
+            visual_grid_state: VisualGridState::new(gpu, format),
+            cache,
+            surf_state,
+            depth_map,
+            debug_draw_state,
+        }
+    }
 }

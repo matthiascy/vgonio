@@ -278,7 +278,7 @@ impl DepthMap {
     }
 }
 
-pub struct DebugDrawingState {
+pub struct DebugDrawState {
     /// If true, the debug drawing is enabled.
     pub(crate) enabled: bool,
     pub(crate) collector_dome_drawing: bool,
@@ -369,7 +369,7 @@ pub struct DebugDrawingState {
     pub drawing_msurf_prims: bool,
 }
 
-impl DebugDrawingState {
+impl DebugDrawState {
     pub const EMITTER_SAMPLES_COLOR: [f32; 4] = [0.27, 1.0, 0.27, 1.0];
     pub const EMITTER_POINTS_COLOR: [f32; 4] = [1.0, 0.27, 0.27, 1.0];
     pub const EMITTER_RAYS_COLOR: [f32; 4] = [0.27, 0.4, 0.8, 0.6];

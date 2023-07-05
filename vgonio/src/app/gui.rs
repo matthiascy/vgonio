@@ -42,7 +42,7 @@ use crate::{
         gui::{
             bsdf_viewer::BsdfViewer,
             outliner::Outliner,
-            state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
+            state::{camera::CameraState, DebugDrawState, DepthMap, GuiContext, InputState},
             surf_viewer::MicroSurfaceState,
             ui::{Dockable, Tab, TabKind, Theme},
         },
@@ -438,7 +438,7 @@ pub struct VgonioGuiApp {
     depth_map: DepthMap,
     // TODO: add MSAA
     /// Debug drawing state.
-    dbg_drawing_state: DebugDrawingState,
+    dbg_drawing_state: DebugDrawState,
 
     /// Notification manager.
     toasts: Toasts,
@@ -525,7 +525,7 @@ impl VgonioGuiApp {
             cursor_pos: [0.0, 0.0],
         };
 
-        let dbg_drawing_state = DebugDrawingState::new(
+        let dbg_drawing_state = DebugDrawState::new(
             &gpu_ctx,
             canvas.format(),
             event_loop.create_proxy(),
