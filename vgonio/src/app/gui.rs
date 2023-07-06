@@ -17,11 +17,12 @@ mod widgets;
 
 use crate::{measure, measure::RtcMethod};
 use egui::Align2;
-use egui_dock::NodeIndex;
+use egui_dock::{Node, NodeIndex};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use std::{
+    any::{type_name, type_name_of_val, Any, TypeId},
     default::Default,
-    ops::Index,
+    ops::{Index, IndexMut},
     path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
@@ -37,15 +38,15 @@ use crate::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, RenderableMesh, Texture, VisualGridUniforms, WgpuConfig,
-            DEFAULT_BIND_GROUP_LAYOUT_DESC,
+            GpuContext, RenderableMesh, Texture, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
             bsdf_viewer::BsdfViewer,
             outliner::Outliner,
             state::{camera::CameraState, DebugDrawState, DepthMap, GuiContext, InputState},
-            surf_viewer::MicroSurfaceState,
+            surf_viewer::{MicroSurfaceState, SurfViewer},
             ui::{Dockable, Tab, TabKind, Theme},
+            visual_grid::VisualGridState,
         },
     },
     error::RuntimeError,
@@ -314,6 +315,8 @@ pub struct VgonioGuiApp {
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
 
+    outliner: Arc<RwLock<Outliner>>,
+
     /// Depth map of the scene. TODO: refactor
     depth_map: DepthMap,
     // TODO: add MSAA
@@ -325,6 +328,7 @@ pub struct VgonioGuiApp {
 
     /// Docking tabs.
     tabs_tree: DockingTabsTree<Tab>,
+    dockables: Vec<Arc<RwLock<dyn Dockable>>>,
 }
 
 impl VgonioGuiApp {
@@ -386,12 +390,18 @@ impl VgonioGuiApp {
             event_loop.create_proxy(),
         )));
 
+        let outliner = Arc::new(RwLock::new(Outliner::new(
+            gpu_ctx.clone(),
+            bsdf_viewer.clone(),
+            event_loop.create_proxy(),
+        )));
+
         let mut ui = VgonioUi::new(
             event_loop.create_proxy(),
             config.clone(),
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
-            bsdf_viewer.clone(),
+            outliner.clone(),
             cache.clone(),
         );
 
@@ -417,22 +427,11 @@ impl VgonioGuiApp {
             .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
             .direction(egui::Direction::BottomUp);
 
-        let mut tabs_tree = DockingTabsTree::new(vec![
-            Tab {
-                kind: TabKind::Regular,
-                index: NodeIndex(0),
-                dockable: Arc::new(RwLock::new(String::from("Scene"))),
-            },
-            Tab {
-                kind: TabKind::Outliner,
-                index: NodeIndex(1),
-                dockable: Arc::new(RwLock::new(Outliner::new(
-                    gpu_ctx.clone(),
-                    bsdf_viewer.clone(),
-                    event_loop.create_proxy(),
-                ))),
-            },
-        ]);
+        let mut tabs_tree = DockingTabsTree::new(vec![Tab {
+            kind: TabKind::Regular,
+            index: NodeIndex(0),
+            dockable: Arc::new(RwLock::new(String::from("Scene"))),
+        }]);
 
         Ok(Self {
             start_time: Instant::now(),
@@ -453,6 +452,8 @@ impl VgonioGuiApp {
             bsdf_viewer,
             toasts,
             tabs_tree,
+            outliner,
+            dockables: vec![],
         })
     }
 
@@ -526,7 +527,8 @@ impl VgonioGuiApp {
     pub fn update(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
         // Update camera uniform.
         self.camera
-            .update(&self.input, dt, ProjectionKind::Perspective);
+            .update_with_input_state(&self.input, dt, ProjectionKind::Perspective);
+
         self.ui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
@@ -545,7 +547,8 @@ impl VgonioGuiApp {
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
             Some(surface) => {
-                let state = self.ui.outliner().surfaces().get(&surface).unwrap();
+                let outliner = self.outliner.read().unwrap();
+                let state = outliner.surfaces().get(&surface).unwrap();
                 (state.1.min, state.1.max, state.1.scale)
             }
             None => (0.0, 1.0, 1.0),
@@ -559,40 +562,52 @@ impl VgonioGuiApp {
         );
 
         // Update uniform buffer for all visible surfaces.
-        let visible_surfaces = self.ui.outliner().visible_surfaces();
-        if !visible_surfaces.is_empty() {
-            self.ctx.gpu.queue.write_buffer(
-                &self.msurf_rdr_state.global_uniform_buffer,
-                0,
-                bytemuck::bytes_of(&view_proj),
-            );
-            // Update per-surface uniform buffer.
-            let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
-            for (hdl, state) in visible_surfaces.iter() {
-                let mut buf = [0.0; 20];
-                let local_uniform_buf_index = self
-                    .msurf_rdr_state
-                    .locals_lookup
-                    .iter()
-                    .position(|h| *h == **hdl)
-                    .unwrap();
-                buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-                buf[16..20].copy_from_slice(&[
-                    state.min + state.height_offset,
-                    state.max + state.height_offset,
-                    state.max - state.min,
-                    state.scale,
-                ]);
+        {
+            let visible_surfaces = {
+                let outliner = self.outliner.read().unwrap();
+                outliner.visible_surfaces()
+            };
+            if !visible_surfaces.is_empty() {
                 self.ctx.gpu.queue.write_buffer(
-                    &self.msurf_rdr_state.local_uniform_buffer,
-                    local_uniform_buf_index as u64 * aligned_size as u64,
-                    bytemuck::cast_slice(&buf),
+                    &self.msurf_rdr_state.global_uniform_buffer,
+                    0,
+                    bytemuck::bytes_of(&view_proj),
                 );
+                // Update per-surface uniform buffer.
+                let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+                for (hdl, state) in visible_surfaces.iter() {
+                    let mut buf = [0.0; 20];
+                    let local_uniform_buf_index = self
+                        .msurf_rdr_state
+                        .locals_lookup
+                        .iter()
+                        .position(|h| *h == *hdl)
+                        .unwrap();
+                    buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                    buf[16..20].copy_from_slice(&[
+                        state.min + state.height_offset,
+                        state.max + state.height_offset,
+                        state.max - state.min,
+                        state.scale,
+                    ]);
+                    self.ctx.gpu.queue.write_buffer(
+                        &self.msurf_rdr_state.local_uniform_buffer,
+                        local_uniform_buf_index as u64 * aligned_size as u64,
+                        bytemuck::cast_slice(&buf),
+                    );
+                }
             }
         }
 
         // Update GUI context.
         self.ctx.gui.update(window);
+
+        if let Some((_, tab)) = self.tabs_tree.find_active_focused() {
+            tab.dockable
+                .write()
+                .unwrap()
+                .update_with_input_state(&self.input, dt);
+        }
 
         // Reset mouse movement
         self.input.scroll_delta = 0.0;
@@ -633,7 +648,10 @@ impl VgonioGuiApp {
                 });
 
         let cache = self.cache.read().unwrap();
-        let visible_surfaces = self.ui.outliner().visible_surfaces();
+        let visible_surfaces = {
+            let outliner = self.outliner.read().unwrap();
+            outliner.visible_surfaces()
+        };
         {
             let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
@@ -668,7 +686,7 @@ impl VgonioGuiApp {
                 render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
 
                 for (hdl, _) in visible_surfaces.iter() {
-                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
+                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(*hdl);
                     if renderable.is_none() {
                         log::debug!(
                             "Failed to get renderable mesh for surface {:?}, skipping.",
@@ -680,7 +698,7 @@ impl VgonioGuiApp {
                         .msurf_rdr_state
                         .locals_lookup
                         .iter()
-                        .position(|x| x == *hdl)
+                        .position(|x| x == hdl)
                         .unwrap();
                     let renderable = renderable.unwrap();
                     render_pass.set_bind_group(
@@ -724,13 +742,17 @@ impl VgonioGuiApp {
             }),
         );
 
+        // for tab in self.tabs_tree.tabs() {
+        //     tab.dockable.write().unwrap().update();
+        // }
+
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
             window,
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.ui.show(ctx, &mut self.tabs_tree);
+                self.ui.show(ctx, &mut self.tabs_tree, &mut self.dockables);
                 self.toasts.show(ctx);
             },
         );
@@ -1145,11 +1167,14 @@ impl VgonioGuiApp {
             }
         }
         let cache = self.cache.read().unwrap();
+        // TODO: probably using event
         self.msurf_rdr_state.update_locals_lookup(&surfaces);
         self.ui.update_loaded_surfaces(&surfaces, &cache);
-        self.ui
-            .outliner_mut()
-            .update_measurement_data(&measurements, &cache);
+        {
+            let mut outliner = self.outliner.write().unwrap();
+            outliner.update_surfaces(&surfaces, &cache);
+            outliner.update_measurement_data(&measurements, &cache);
+        }
     }
 }
 

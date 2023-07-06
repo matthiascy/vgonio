@@ -7,18 +7,24 @@ use crate::{
         },
         gui::{
             gizmo::NavigationGizmo,
+            outliner::Outliner,
             state::{camera::CameraState, DebugDrawState, DepthMap, GuiRenderer, InputState},
             ui::Dockable,
-            MicroSurfaceUniforms, VgonioEventLoop, VisualGridState,
+            visual_grid::VisualGridState,
+            MicroSurfaceUniforms, VgonioEventLoop,
         },
     },
     error::RuntimeError,
 };
-use chrono::Duration;
 use egui::{PointerButton, Ui, WidgetText, WidgetType::Label};
 use egui_gizmo::GizmoOrientation;
-use std::sync::{Arc, RwLock};
-use vgcore::math::Vec3;
+use std::{
+    any::Any,
+    borrow::Cow,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
+use vgcore::math::{Mat4, Vec3};
 use vgsurf::MicroSurface;
 use winit::dpi::PhysicalSize;
 
@@ -213,8 +219,8 @@ pub struct SurfViewer {
     visual_grid_state: VisualGridState,
     /// Cache for all kinds of resources.
     cache: Arc<RwLock<Cache>>,
-    /// Micro-surface rendering state.
-    surf_state: MicroSurfaceState,
+    /// Micro-surface rendering state. TODO: remove crate visibility.
+    pub(crate) surf_state: MicroSurfaceState,
     /// Depth texture.
     depth_map: DepthMap,
     /// Debug drawing state.
@@ -227,9 +233,11 @@ pub struct SurfViewer {
     /// Color attachment.
     color_attachment: Texture,
     color_attachment_id: egui::TextureId,
+    outliner: Arc<RwLock<Outliner>>,
     // depth_attachment: Texture,
     // depth_attachment_id: egui::TextureId,
     id_counter: u32,
+    proj_view_model: Mat4,
 }
 
 impl SurfViewer {
@@ -240,6 +248,7 @@ impl SurfViewer {
         height: u32,
         format: wgpu::TextureFormat,
         cache: Arc<RwLock<Cache>>,
+        outliner: Arc<RwLock<Outliner>>,
         event_loop: VgonioEventLoop,
         id_counter: u32,
     ) -> Self {
@@ -251,7 +260,19 @@ impl SurfViewer {
             let projection = Projection::new(0.1, 100.0, 75.0f32.to_radians(), width, height);
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
-        let visual_grid_state = VisualGridState::new(&gpu, format);
+        let mut visual_grid_state = VisualGridState::new(&gpu, format);
+        visual_grid_state.update_uniforms(
+            &gpu,
+            &camera.uniform.view_proj,
+            &camera.uniform.view_proj_inv,
+            wgpu::Color {
+                r: 0.4,
+                g: 0.4,
+                b: 0.4,
+                a: 1.0,
+            },
+            false,
+        );
         // TODO: improve
         let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sampling-debugger-sampler"),
@@ -297,16 +318,18 @@ impl SurfViewer {
             output_format: format,
             color_attachment,
             color_attachment_id,
+            outliner,
             id_counter,
+            proj_view_model: Mat4::IDENTITY,
         }
     }
 
-    pub fn resize(&mut self, new_size: egui::Vec2, scale_factor: Option<f32>) {
+    pub fn resize_viewport(&mut self, new_size: egui::Vec2, scale_factor: Option<f32>) {
         let scale_factor = scale_factor.unwrap_or(1.0);
         if new_size == self.viewport_size || (new_size.x == 0.0 && new_size.y == 0.0) {
             return;
         }
-        println!("resize: {:?}", new_size);
+        println!("resize to: {:?}", new_size);
         let width = (new_size.x * scale_factor) as u32;
         let height = (new_size.y * scale_factor) as u32;
         let sampler = Arc::new(self.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
@@ -348,27 +371,183 @@ impl SurfViewer {
         self.viewport_size = new_size;
     }
 
-    // pub fn update(&mut self, input: &InputState, dt: Duration) -> Result<(),
-    // RuntimeError> {     self.camera.update(input, dt,
-    // ProjectionKind::Perspective); }
+    fn update(&mut self, size: egui::Vec2, scale_factor: Option<f32>) {
+        // Resize if needed
+        self.resize_viewport(size, scale_factor);
+        // TODO: update camera
+        self.visual_grid_state.update_uniforms(
+            &self.gpu,
+            &self.camera.uniform.view_proj,
+            &self.camera.uniform.view_proj_inv,
+            wgpu::Color {
+                r: 0.4,
+                g: 0.4,
+                b: 0.4,
+                a: 1.0,
+            },
+            false,
+        );
+
+        // Update uniform buffer for all visible surfaces.
+        let visible_surfaces = {
+            let outliner = self.outliner.read().unwrap();
+            outliner.visible_surfaces()
+        };
+
+        let view_proj = self.camera.uniform.view_proj;
+
+        if !visible_surfaces.is_empty() {
+            self.gpu.queue.write_buffer(
+                &self.surf_state.global_uniform_buffer,
+                0,
+                bytemuck::bytes_of(&view_proj),
+            );
+            // Update per-surface uniform buffer.
+            let aligned_size = MicroSurfaceUniforms::aligned_size(&self.gpu.device);
+            for (hdl, state) in visible_surfaces.iter() {
+                let local_uniform_buf_index = if !self.surf_state.locals_lookup.contains(hdl) {
+                    self.surf_state.locals_lookup.push(*hdl);
+                    self.surf_state.locals_lookup.len() - 1
+                } else {
+                    self.surf_state
+                        .locals_lookup
+                        .iter()
+                        .position(|h| *h == *hdl)
+                        .unwrap()
+                };
+
+                let mut buf = [0.0; 20];
+                buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                buf[16..20].copy_from_slice(&[
+                    state.min + state.height_offset,
+                    state.max + state.height_offset,
+                    state.max - state.min,
+                    state.scale,
+                ]);
+                self.gpu.queue.write_buffer(
+                    &self.surf_state.local_uniform_buffer,
+                    local_uniform_buf_index as u64 * aligned_size as u64,
+                    bytemuck::cast_slice(&buf),
+                );
+            }
+        }
+
+        let cache = self.cache.read().unwrap();
+        // Update rendered texture.
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("surf_viewer_update"),
+            });
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("surf_viewer_update"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.color_attachment.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_map.depth_attachment.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
+            });
+
+            let aligned_micro_surface_uniform_size =
+                MicroSurfaceUniforms::aligned_size(&self.gpu.device);
+
+            if !visible_surfaces.is_empty() {
+                render_pass.set_pipeline(&self.surf_state.pipeline);
+                render_pass.set_bind_group(0, &self.surf_state.globals_bind_group, &[]);
+
+                for (hdl, _) in visible_surfaces.iter() {
+                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(*hdl);
+                    if renderable.is_none() {
+                        log::debug!(
+                            "Failed to get renderable mesh for surface {:?}, skipping.",
+                            hdl
+                        );
+                        continue;
+                    }
+                    let buf_index = self
+                        .surf_state
+                        .locals_lookup
+                        .iter()
+                        .position(|x| x == hdl)
+                        .unwrap();
+                    let renderable = renderable.unwrap();
+                    render_pass.set_bind_group(
+                        1,
+                        &self.surf_state.locals_bind_group,
+                        &[buf_index as u32 * aligned_micro_surface_uniform_size],
+                    );
+                    render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        renderable.index_buffer.slice(..),
+                        renderable.index_format,
+                    );
+                    render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
+                }
+            }
+
+            // Draw visual grid.
+            render_pass.set_pipeline(&self.visual_grid_state.pipeline);
+            render_pass.set_bind_group(0, &self.visual_grid_state.bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+        self.gpu.queue.submit(Some(encoder.finish()));
+    }
 }
 
 impl Dockable for SurfViewer {
     fn title(&self) -> WidgetText { WidgetText::from("Surface View") }
 
-    fn ui(&mut self, ui: &mut Ui) {
-        let rect = ui.available_rect_before_wrap();
-        self.resize(rect.size(), None);
-        let response = egui::Area::new("surf_viewer")
-            .show(ui.ctx(), |ui| {
-                ui.push_id(format!("surf_viewer_{}", self.id_counter), |ui| {
-                    ui.image(self.color_attachment_id, rect.size());
-                });
-            })
-            .response;
+    fn update_with_input_state(&mut self, input: &InputState, dt: Duration) {
+        self.camera
+            .update_with_input_state(input, dt, ProjectionKind::Perspective);
+    }
 
-        if response.dragged_by(PointerButton::Primary) {
-            println!("dragged");
-        }
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+
+    fn ui(&mut self, ui: &mut Ui) {
+        self.update(ui.available_size(), None);
+        let response = ui
+            .push_id(format!("surf_viewer_{}", self.id_counter), |ui| {
+                ui.add(
+                    egui::Image::new(self.color_attachment_id, self.viewport_size)
+                        .sense(egui::Sense::click_and_drag()),
+                )
+            })
+            .inner;
+
+        // if response.dragged_by(PointerButton::Primary) {
+        //     let delta = response.drag_delta();
+        //     println!("delta: {:?}", delta);
+        //     self.camera
+        //         .controller
+        //         .rotate(delta.x, delta.y, &mut self.camera.camera);
+        //     self.visual_grid_state.update_uniforms(
+        //         &self.gpu,
+        //         &self.camera.uniform.view_proj,
+        //         &self.camera.uniform.view_proj_inv,
+        //         wgpu::Color {
+        //             r: 0.4,
+        //             g: 0.4,
+        //             b: 0.4,
+        //             a: 1.0,
+        //         },
+        //         false,
+        //     );
+        // }
     }
 }

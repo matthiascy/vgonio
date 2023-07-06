@@ -17,6 +17,7 @@ use crate::{
 use egui::{Ui, WidgetText};
 use egui_dock::NodeIndex;
 use std::{
+    any::Any,
     collections::HashMap,
     rc::Weak,
     sync::{Arc, RwLock},
@@ -86,11 +87,11 @@ impl Outliner {
     }
 
     /// Returns an iterator over all the visible micro surfaces.
-    pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &PerMicroSurfaceState)> {
+    pub fn visible_surfaces(&self) -> Vec<(Handle<MicroSurface>, PerMicroSurfaceState)> {
         self.surfaces
             .iter()
             .filter(|(_, (_, s))| s.visible)
-            .map(|(id, (_, s))| (id, s))
+            .map(|(id, (_, s))| (*id, s.clone()))
             .collect()
     }
 
@@ -371,4 +372,8 @@ impl Dockable for Outliner {
     fn title(&self) -> WidgetText { "Outliner".into() }
 
     fn ui(&mut self, ui: &mut Ui) { self.ui(ui); }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }

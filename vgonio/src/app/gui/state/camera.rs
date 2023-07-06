@@ -22,7 +22,12 @@ impl CameraState {
         }
     }
 
-    pub fn update(&mut self, input: &InputState, dt: std::time::Duration, kind: ProjectionKind) {
+    pub fn update_with_input_state(
+        &mut self,
+        input: &InputState,
+        dt: std::time::Duration,
+        kind: ProjectionKind,
+    ) {
         self.controller.update(input, &mut self.camera, dt);
         self.uniform.update(&self.camera, &self.projection, kind);
     }

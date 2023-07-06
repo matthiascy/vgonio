@@ -6,6 +6,7 @@
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
 #![feature(vec_push_within_capacity)]
+#![feature(type_name_of_val)]
 #![warn(missing_docs)]
 
 extern crate core;

@@ -9,6 +9,7 @@ use crate::app::{
         icons::Icon,
         outliner::Outliner,
         simulations::Simulations,
+        state::InputState,
         surf_viewer::SurfViewer,
         tools::{SamplingInspector, Scratch, Tools},
         widgets::ToggleSwitch,
@@ -22,10 +23,12 @@ use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
 use std::{
+    any::{Any, TypeId},
     collections::HashMap,
     fmt::{Debug, Formatter},
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
+    time::Duration,
 };
 use vgcore::{error::VgonioError, math::Mat4};
 use vgsurf::MicroSurface;
@@ -174,7 +177,7 @@ pub struct VgonioUi {
     navigator: NavigationGizmo,
 
     /// Outliner of the scene.
-    outliner: Outliner,
+    outliner: Arc<RwLock<Outliner>>,
 
     image_cache: Arc<Mutex<ImageCache>>,
 
@@ -227,14 +230,26 @@ pub trait Dockable {
     /// The title of the dockable.
     fn title(&self) -> WidgetText;
 
+    /// Updates the dockable with the given input state. TODO: undecided if this
+    /// is needed.
+    fn update_with_input_state(&mut self, _input: &InputState, _dt: Duration) {}
+
     /// The content of the dockable.
     fn ui(&mut self, ui: &mut Ui);
+
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl Dockable for String {
     fn title(&self) -> WidgetText { self.clone().into() }
 
     fn ui(&mut self, ui: &mut Ui) { ui.label(&*self); }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }
 
 /// A tab in the dock tree.
@@ -314,7 +329,7 @@ impl VgonioUi {
         config: Arc<Config>,
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
-        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        outliner: Arc<RwLock<Outliner>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing UI");
@@ -334,7 +349,7 @@ impl VgonioUi {
             drag_drop: FileDragDrop::new(event_loop.clone()),
             theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            outliner: Outliner::new(gpu, bsdf_viewer, event_loop.clone()),
+            outliner,
             image_cache: Arc::new(Mutex::new(Default::default())),
             visual_grid_enabled: true,
             right_panel_expanded: true,
@@ -348,7 +363,12 @@ impl VgonioUi {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, tabs: &mut DockingTabsTree<Tab>) {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        tabs: &mut DockingTabsTree<Tab>,
+        dockables: &mut Vec<Arc<RwLock<dyn Dockable>>>,
+    ) {
         self.theme.update(ctx);
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
@@ -364,7 +384,7 @@ impl VgonioUi {
                 .min_width(300.0)
                 .default_width(460.0)
                 .width_range(200.0..=500.0)
-                .show(ctx, |ui| self.outliner.ui(ui));
+                .show(ctx, |ui| self.outliner.write().unwrap().ui(ui));
         }
 
         // New docking system
@@ -394,11 +414,13 @@ impl VgonioUi {
                     512,
                     wgpu::TextureFormat::Bgra8UnormSrgb,
                     self.cache.clone(),
+                    self.outliner.clone(),
                     self.event_loop.clone(),
                     self.id_counter,
                 ))),
                 _ => Arc::new(RwLock::new(String::from("Hello world"))),
             };
+            dockables.push(dockable.clone());
             tabs.push_to_focused_leaf(Tab {
                 kind: to_be_added.kind,
                 index,
@@ -406,23 +428,17 @@ impl VgonioUi {
             });
         });
 
-        // TODO: Old functional code, to be removed
-        // self.tools.show(ctx);
-        // self.drag_drop.show(ctx);
-        // self.navigator.show(ctx);
-        // self.simulations.show_all(ctx);
+        self.tools.show(ctx);
+        self.drag_drop.show(ctx);
+        self.navigator.show(ctx);
+        self.simulations.show_all(ctx);
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
 
     pub fn current_theme_visuals(&self) -> &ThemeVisuals { self.theme.current_theme_visuals() }
 
-    pub fn outliner(&self) -> &Outliner { &self.outliner }
-
-    pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
-
     pub fn update_loaded_surfaces(&mut self, surfaces: &[Handle<MicroSurface>], cache: &Cache) {
-        self.outliner_mut().update_surfaces(surfaces, cache);
         self.tools
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()

@@ -286,13 +286,13 @@ impl OrbitControls {
 
     pub fn toggle_zooming(&mut self) { self.is_zooming_enabled = !self.is_zooming_enabled; }
 
-    fn pan(&self, dx: f32, dy: f32, camera: &mut Camera) {
+    pub fn pan(&self, dx: f32, dy: f32, camera: &mut Camera) {
         let delta = camera.right() * dx * self.pan_speed + camera.up() * dy * self.pan_speed;
         camera.eye += delta;
         camera.target += delta;
     }
 
-    fn rotate(&self, dx: f32, dy: f32, camera: &mut Camera) {
+    pub fn rotate(&self, dx: f32, dy: f32, camera: &mut Camera) {
         let mut position = Vec4::from((camera.eye, 1.0));
         let pivot = Vec4::from((camera.target, 1.0));
         let forward = camera.forward();
@@ -317,7 +317,7 @@ impl OrbitControls {
         camera.eye = position.xyz();
     }
 
-    fn zoom(&self, delta: f32, camera: &mut Camera) {
+    pub fn zoom(&self, delta: f32, camera: &mut Camera) {
         let eye = camera.eye + camera.forward() * delta * self.zoom_speed;
         let distance = (camera.target - eye).length();
         if distance > self.min_zoom_dist && distance < self.max_zoom_dist {
