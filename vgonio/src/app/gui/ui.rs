@@ -9,6 +9,7 @@ use crate::app::{
         icons::Icon,
         outliner::Outliner,
         simulations::Simulations,
+        surf_viewer::SurfViewer,
         tools::{SamplingInspector, Scratch, Tools},
         widgets::ToggleSwitch,
         DebuggingInspector, DockingTabsTree, VgonioEventLoop,
@@ -149,6 +150,11 @@ fn load_image_from_bytes(bytes: &[u8]) -> Result<egui::ColorImage, VgonioError> 
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioUi {
+    gpu: Arc<GpuContext>,
+    gui: Arc<RwLock<GuiRenderer>>,
+
+    cache: Arc<RwLock<Cache>>,
+
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
 
@@ -208,6 +214,7 @@ pub enum TabKind {
     Outliner,
     Fancy,
     Regular,
+    SurfViewer,
 }
 
 pub struct TabInfo {
@@ -277,6 +284,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     }
 
     fn add_popup(&mut self, ui: &mut Ui, node: NodeIndex) {
+        ui.set_min_width(120.0);
         if ui.button("Regular").clicked() {
             self.to_be_added.push(ToBeAdded {
                 kind: TabKind::Regular,
@@ -287,6 +295,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
         if ui.button("Fancy").clicked() {
             self.to_be_added.push(ToBeAdded {
                 kind: TabKind::Fancy,
+                parent: node,
+            });
+        }
+
+        if ui.button("SurfViewer").clicked() {
+            self.to_be_added.push(ToBeAdded {
+                kind: TabKind::SurfViewer,
                 parent: node,
             });
         }
@@ -304,6 +319,9 @@ impl VgonioUi {
     ) -> Self {
         log::info!("Initializing UI");
         Self {
+            gpu: gpu.clone(),
+            gui: gui.clone(),
+            cache: cache.clone(),
             config,
             event_loop: event_loop.clone(),
             tools: Tools::new(
@@ -340,6 +358,15 @@ impl VgonioUi {
                 });
             });
 
+        if self.right_panel_expanded {
+            egui::SidePanel::right("vgonio_right_panel")
+                .resizable(true)
+                .min_width(300.0)
+                .default_width(460.0)
+                .width_range(200.0..=500.0)
+                .show(ctx, |ui| self.outliner.ui(ui));
+        }
+
         // New docking system
         let mut added_nodes = Vec::new();
         egui_dock::DockArea::new(tabs)
@@ -359,10 +386,23 @@ impl VgonioUi {
             // Allocate a new index for the tab
             let index = NodeIndex(tabs.num_tabs());
             // Add the tab
+            let dockable: Arc<RwLock<dyn Dockable>> = match to_be_added.kind {
+                TabKind::SurfViewer => Arc::new(RwLock::new(SurfViewer::new(
+                    self.gpu.clone(),
+                    self.gui.clone(),
+                    512,
+                    512,
+                    wgpu::TextureFormat::Bgra8UnormSrgb,
+                    self.cache.clone(),
+                    self.event_loop.clone(),
+                    self.id_counter,
+                ))),
+                _ => Arc::new(RwLock::new(String::from("Hello world"))),
+            };
             tabs.push_to_focused_leaf(Tab {
                 kind: to_be_added.kind,
                 index,
-                dockable: Arc::new(RwLock::new(String::from("Hello world"))),
+                dockable,
             });
         });
 
@@ -371,14 +411,6 @@ impl VgonioUi {
         // self.drag_drop.show(ctx);
         // self.navigator.show(ctx);
         // self.simulations.show_all(ctx);
-
-        if self.right_panel_expanded {
-            egui::SidePanel::right("vgonio_right_panel")
-                .min_width(300.0)
-                .default_width(460.0)
-                .resizable(true)
-                .show(ctx, |ui| self.outliner.ui(ui));
-        }
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }

@@ -6,16 +6,21 @@ use crate::{
             GpuContext, Texture,
         },
         gui::{
-            state::{camera::CameraState, DebugDrawState, DepthMap},
+            gizmo::NavigationGizmo,
+            state::{camera::CameraState, DebugDrawState, DepthMap, GuiRenderer, InputState},
+            ui::Dockable,
             MicroSurfaceUniforms, VgonioEventLoop, VisualGridState,
         },
     },
     error::RuntimeError,
 };
-use egui::mutex::RwLock;
-use std::sync::Arc;
+use chrono::Duration;
+use egui::{PointerButton, Ui, WidgetText, WidgetType::Label};
+use egui_gizmo::GizmoOrientation;
+use std::sync::{Arc, RwLock};
 use vgcore::math::Vec3;
 use vgsurf::MicroSurface;
+use winit::dpi::PhysicalSize;
 
 // TODO: remove crate public visibility
 /// Rendering resources for loaded [`MicroSurface`].
@@ -199,6 +204,9 @@ impl MicroSurfaceState {
 
 /// Surface viewer.
 pub struct SurfViewer {
+    /// GPU context.
+    gpu: Arc<GpuContext>,
+    gui: Arc<RwLock<GuiRenderer>>,
     /// State of the camera.
     camera: CameraState,
     /// State of the visual grid rendering.
@@ -211,32 +219,156 @@ pub struct SurfViewer {
     depth_map: DepthMap,
     /// Debug drawing state.
     debug_draw_state: DebugDrawState,
+    /// Size of the viewport.
+    viewport_size: egui::Vec2,
+    /// Gizmo for navigating the scene.
+    navigator: NavigationGizmo,
+    output_format: wgpu::TextureFormat,
+    /// Color attachment.
+    color_attachment: Texture,
+    color_attachment_id: egui::TextureId,
+    // depth_attachment: Texture,
+    // depth_attachment_id: egui::TextureId,
+    id_counter: u32,
 }
 
 impl SurfViewer {
     pub fn new(
-        gpu: &GpuContext,
+        gpu: Arc<GpuContext>,
+        gui: Arc<RwLock<GuiRenderer>>,
         width: u32,
         height: u32,
         format: wgpu::TextureFormat,
         cache: Arc<RwLock<Cache>>,
         event_loop: VgonioEventLoop,
+        id_counter: u32,
     ) -> Self {
-        let surf_state = MicroSurfaceState::new(gpu, format);
-        let depth_map = DepthMap::new(gpu, width, height);
-        let debug_draw_state = DebugDrawState::new(gpu, format, event_loop, cache.clone());
+        let surf_state = MicroSurfaceState::new(&gpu, format);
+        let depth_map = DepthMap::new(&gpu, width, height);
+        let debug_draw_state = DebugDrawState::new(&gpu, format, event_loop, cache.clone());
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(0.1, 100.0, 75.0f32.to_radians(), width, height);
             CameraState::new(camera, projection, ProjectionKind::Perspective)
         };
+        let visual_grid_state = VisualGridState::new(&gpu, format);
+        // TODO: improve
+        let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sampling-debugger-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        }));
+        let color_attachment = Texture::new(
+            &gpu.device,
+            &wgpu::TextureDescriptor {
+                label: Some("surf_viewer_color_attachment"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+            Some(sampler),
+        );
+        let color_attachment_id = gui.write().unwrap().register_native_texture(
+            &gpu.device,
+            &color_attachment.view,
+            wgpu::FilterMode::Linear,
+        );
         Self {
+            gpu,
+            gui,
             camera,
-            visual_grid_state: VisualGridState::new(gpu, format),
+            visual_grid_state,
             cache,
             surf_state,
             depth_map,
             debug_draw_state,
+            viewport_size: egui::Vec2::new(width as f32, height as f32),
+            navigator: NavigationGizmo::new(GizmoOrientation::Global),
+            output_format: format,
+            color_attachment,
+            color_attachment_id,
+            id_counter,
+        }
+    }
+
+    pub fn resize(&mut self, new_size: egui::Vec2, scale_factor: Option<f32>) {
+        let scale_factor = scale_factor.unwrap_or(1.0);
+        if new_size == self.viewport_size || (new_size.x == 0.0 && new_size.y == 0.0) {
+            return;
+        }
+        println!("resize: {:?}", new_size);
+        let width = (new_size.x * scale_factor) as u32;
+        let height = (new_size.y * scale_factor) as u32;
+        let sampler = Arc::new(self.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sampling-debugger-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        }));
+        self.color_attachment = Texture::new(
+            &self.gpu.device,
+            &wgpu::TextureDescriptor {
+                label: Some("surf_viewer_color_attachment"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.output_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+            Some(sampler),
+        );
+        self.gui
+            .write()
+            .unwrap()
+            .update_egui_texture_from_wgpu_texture(
+                &self.gpu.device,
+                &self.color_attachment.view,
+                wgpu::FilterMode::Linear,
+                self.color_attachment_id,
+            );
+        self.depth_map.resize(&self.gpu, width, height);
+        self.camera.projection.resize(width, height);
+        self.viewport_size = new_size;
+    }
+
+    // pub fn update(&mut self, input: &InputState, dt: Duration) -> Result<(),
+    // RuntimeError> {     self.camera.update(input, dt,
+    // ProjectionKind::Perspective); }
+}
+
+impl Dockable for SurfViewer {
+    fn title(&self) -> WidgetText { WidgetText::from("Surface View") }
+
+    fn ui(&mut self, ui: &mut Ui) {
+        let rect = ui.available_rect_before_wrap();
+        self.resize(rect.size(), None);
+        let response = egui::Area::new("surf_viewer")
+            .show(ui.ctx(), |ui| {
+                ui.push_id(format!("surf_viewer_{}", self.id_counter), |ui| {
+                    ui.image(self.color_attachment_id, rect.size());
+                });
+            })
+            .response;
+
+        if response.dragged_by(PointerButton::Primary) {
+            println!("dragged");
         }
     }
 }

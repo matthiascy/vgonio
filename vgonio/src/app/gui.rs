@@ -10,6 +10,7 @@ pub mod state;
 mod surf_viewer;
 mod tools;
 mod ui;
+mod visual_grid;
 mod widgets;
 
 // TODO: MSAA
@@ -282,127 +283,6 @@ pub struct Context {
     gpu: Arc<GpuContext>,
     /// GUI context for rendering.
     gui: GuiContext,
-}
-
-struct VisualGridState {
-    pipeline: wgpu::RenderPipeline,
-    bind_group: wgpu::BindGroup,
-    uniform_buffer: wgpu::Buffer,
-}
-
-impl VisualGridState {
-    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
-        let vert_shader = ctx
-            .device
-            .create_shader_module(wgpu::include_spirv!(concat!(
-                env!("OUT_DIR"),
-                "/visual_grid.vert.spv"
-            )));
-        let frag_shader = ctx
-            .device
-            .create_shader_module(wgpu::include_spirv!(concat!(
-                env!("OUT_DIR"),
-                "/visual_grid.frag.spv"
-            )));
-        let bind_group_layout = ctx
-            .device
-            .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
-        let pipeline_layout = ctx
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("visual_grid_render_pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("visual_grid_uniform_buffer"),
-                contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("visual_grid_bind_group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
-        let pipeline = ctx
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("visual_grid_render_pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &vert_shader,
-                    entry_point: "main",
-                    buffers: &[],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &frag_shader,
-                    entry_point: "main",
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: target_format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                multiview: None,
-            });
-        Self {
-            pipeline,
-            bind_group,
-            uniform_buffer,
-        }
-    }
-
-    pub fn update_uniforms(
-        &self,
-        ctx: &GpuContext,
-        view_proj: &ViewProjUniform,
-        view_proj_inv: &ViewProjUniform,
-        color: wgpu::Color,
-        is_dark_mode: bool,
-    ) {
-        ctx.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::bytes_of(&VisualGridUniforms {
-                view: view_proj.view.to_cols_array(),
-                proj: view_proj.proj.to_cols_array(),
-                view_inv: view_proj_inv.view.to_cols_array(),
-                proj_inv: view_proj_inv.proj.to_cols_array(),
-                grid_line_color: [
-                    color.r as f32,
-                    color.g as f32,
-                    color.b as f32,
-                    if is_dark_mode { 1.0 } else { 0.0 },
-                ],
-            }),
-        );
-    }
 }
 
 /// Vgonio client application with GUI.
