@@ -236,20 +236,12 @@ pub trait Dockable {
 
     /// The content of the dockable.
     fn ui(&mut self, ui: &mut Ui);
-
-    fn as_any(&self) -> &dyn Any;
-
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl Dockable for String {
     fn title(&self) -> WidgetText { self.clone().into() }
 
     fn ui(&mut self, ui: &mut Ui) { ui.label(&*self); }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }
 
 /// A tab in the dock tree.
@@ -430,8 +422,8 @@ impl VgonioUi {
 
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
-        self.navigator.show(ctx);
-        self.simulations.show_all(ctx);
+        // self.navigator.show(ctx);
+        // self.simulations.show_all(ctx);
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }

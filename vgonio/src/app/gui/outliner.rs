@@ -372,8 +372,4 @@ impl Dockable for Outliner {
     fn title(&self) -> WidgetText { "Outliner".into() }
 
     fn ui(&mut self, ui: &mut Ui) { self.ui(ui); }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }

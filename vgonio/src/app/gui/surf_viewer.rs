@@ -387,6 +387,11 @@ impl SurfViewer {
             },
             false,
         );
+        self.navigator.update_matrices(
+            Mat4::IDENTITY,
+            Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
+            Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
+        );
 
         // Update uniform buffer for all visible surfaces.
         let visible_surfaces = {
@@ -515,10 +520,6 @@ impl Dockable for SurfViewer {
             .update_with_input_state(input, dt, ProjectionKind::Perspective);
     }
 
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-
     fn ui(&mut self, ui: &mut Ui) {
         self.update(ui.available_size(), None);
         let response = ui
@@ -529,6 +530,7 @@ impl Dockable for SurfViewer {
                 )
             })
             .inner;
+        self.navigator.show(ui.ctx());
 
         // if response.dragged_by(PointerButton::Primary) {
         //     let delta = response.drag_delta();

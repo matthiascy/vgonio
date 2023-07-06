@@ -50,8 +50,10 @@ impl NavigationGizmo {
 
     pub fn show(&mut self, ctx: &egui::Context) {
         egui::Area::new(self.name())
-            .anchor(Align2::RIGHT_BOTTOM, (-150.0, -150.0))
-            .interactable(false)
+            .fixed_pos((0.0, 0.0))
+            //.anchor(Align2::RIGHT_BOTTOM, (-150.0, -150.0))
+            .interactable(true)
+            .movable(true)
             .show(ctx, |ui| {
                 let visuals = GizmoVisuals {
                     stroke_width: 6.0,
