@@ -230,8 +230,7 @@ pub trait Dockable {
     /// The title of the dockable.
     fn title(&self) -> WidgetText;
 
-    /// Updates the dockable with the given input state. TODO: undecided if this
-    /// is needed.
+    /// Updates the dockable with the given input state.
     fn update_with_input_state(&mut self, _input: &InputState, _dt: Duration) {}
 
     /// The content of the dockable.
@@ -251,7 +250,7 @@ pub struct Tab {
     /// The node index of the tab in the dock tree.
     pub index: NodeIndex,
     /// The dockable content of the tab.
-    pub dockable: Arc<RwLock<dyn Dockable>>,
+    pub dockable: Box<dyn Dockable>,
 }
 
 impl Debug for Tab {
@@ -277,15 +276,15 @@ pub struct ToBeAdded {
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     type Tab = Tab;
 
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { tab.dockable.write().unwrap().ui(ui); }
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { tab.dockable.ui(ui); }
 
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { tab.dockable.read().unwrap().title() }
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { tab.dockable.title() }
 
     fn id(&mut self, tab: &mut Self::Tab) -> Id {
         *self.id_counter += 1;
         Id::new(format!(
             "dock_tab_{}_{}",
-            tab.dockable.read().unwrap().title().text(),
+            tab.dockable.title().text(),
             self.id_counter
         ))
     }
@@ -355,12 +354,7 @@ impl VgonioUi {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(
-        &mut self,
-        ctx: &egui::Context,
-        tabs: &mut DockingTabsTree<Tab>,
-        dockables: &mut Vec<Arc<RwLock<dyn Dockable>>>,
-    ) {
+    pub fn show(&mut self, ctx: &egui::Context, tabs: &mut DockingTabsTree<Tab>) {
         self.theme.update(ctx);
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
@@ -398,8 +392,8 @@ impl VgonioUi {
             // Allocate a new index for the tab
             let index = NodeIndex(tabs.num_tabs());
             // Add the tab
-            let dockable: Arc<RwLock<dyn Dockable>> = match to_be_added.kind {
-                TabKind::SurfViewer => Arc::new(RwLock::new(SurfViewer::new(
+            let dockable: Box<dyn Dockable> = match to_be_added.kind {
+                TabKind::SurfViewer => Box::new(SurfViewer::new(
                     self.gpu.clone(),
                     self.gui.clone(),
                     512,
@@ -409,10 +403,9 @@ impl VgonioUi {
                     self.outliner.clone(),
                     self.event_loop.clone(),
                     self.id_counter,
-                ))),
-                _ => Arc::new(RwLock::new(String::from("Hello world"))),
+                )),
+                _ => Box::new(String::from("Hello world")),
             };
-            dockables.push(dockable.clone());
             tabs.push_to_focused_leaf(Tab {
                 kind: to_be_added.kind,
                 index,

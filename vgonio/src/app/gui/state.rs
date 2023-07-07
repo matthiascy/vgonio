@@ -49,7 +49,7 @@ use vgsurf::MicroSurfaceMesh;
 use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
 
-use super::EventResponse;
+//use super::EventResponse;
 
 pub const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 pub const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -1479,9 +1479,7 @@ impl GuiContext {
         let output = self.context.run(ui);
         self.context
             .handle_platform_output(window, output.platform_output);
-
         let primitives = self.context.inner.tessellate(output.shapes);
-
         {
             let mut renderer = self.renderer.write().unwrap();
             let user_cmds = {
@@ -1528,7 +1526,5 @@ impl GuiContext {
     }
 
     /// Update the context whenever there is a window event.
-    pub fn on_window_event(&mut self, event: &WindowEvent) -> EventResponse {
-        self.context.on_window_event(event).into()
-    }
+    pub fn on_window_event(&mut self, event: &WindowEvent) { self.context.on_window_event(event) }
 }

@@ -329,6 +329,8 @@ impl MeasuredDataCollapsableHeader {
 impl Outliner {
     /// Creates the ui for the outliner.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Outliner");
+        ui.separator();
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
@@ -366,10 +368,4 @@ impl Outliner {
             plot.show(ui.ctx(), open);
         }
     }
-}
-
-impl Dockable for Outliner {
-    fn title(&self) -> WidgetText { "Outliner".into() }
-
-    fn ui(&mut self, ui: &mut Ui) { self.ui(ui); }
 }

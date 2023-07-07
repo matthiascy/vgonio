@@ -4,6 +4,7 @@ use winit::{
     event::{ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode},
 };
 
+#[derive(Debug)]
 pub struct InputState {
     pub(crate) key_map: HashMap<VirtualKeyCode, bool>,
     pub(crate) mouse_map: HashMap<MouseButton, bool>,

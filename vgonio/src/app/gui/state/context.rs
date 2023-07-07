@@ -31,8 +31,8 @@ impl RawGuiContext {
     /// Updates the GUI context when a window event is received.
     ///
     /// This function should always be called before rendering the GUI.
-    pub fn on_window_event(&mut self, event: &WindowEvent) -> EventResponse {
-        self.state.on_event(&self.inner, event)
+    pub fn on_window_event(&mut self, event: &WindowEvent) {
+        let _ = self.state.on_event(&self.inner, event);
     }
 
     /// Processes the non-rendering outputs of each frame.

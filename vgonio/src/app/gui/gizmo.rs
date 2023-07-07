@@ -1,4 +1,4 @@
-use egui::{Align2, Color32};
+use egui::{Align2, Color32, LayerId};
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 use vgcore::math::Mat4;
 
@@ -48,41 +48,42 @@ impl NavigationGizmo {
 
     pub fn name(&self) -> &'static str { "Gizmo" }
 
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        let visuals = GizmoVisuals {
+            stroke_width: 6.0,
+            x_color: Color32::from_rgb(255, 0, 148),
+            y_color: Color32::from_rgb(148, 255, 0),
+            z_color: Color32::from_rgb(0, 148, 255),
+            s_color: Color32::WHITE,
+            inactive_alpha: 0.5,
+            highlight_alpha: 1.0,
+            highlight_color: None,
+            gizmo_size: 75.0,
+        };
+
+        let gizmo = Gizmo::new("My gizmo")
+            .view_matrix(self.view_matrix.to_cols_array_2d())
+            .projection_matrix(self.proj_matrix.to_cols_array_2d())
+            .model_matrix(self.model_matrix.to_cols_array_2d())
+            .mode(self.mode)
+            .orientation(self.orientation)
+            .snapping(true)
+            // .snap_angle(snap_angle)
+            // .snap_distance(snap_distance)
+            .visuals(visuals);
+
+        self.last_gizmo_response = gizmo.interact(ui);
+
+        if let Some(gizmo_response) = self.last_gizmo_response {
+            self.model_matrix = gizmo_response.transform();
+        }
+    }
+
     pub fn show(&mut self, ctx: &egui::Context) {
         egui::Area::new(self.name())
-            .fixed_pos((0.0, 0.0))
-            //.anchor(Align2::RIGHT_BOTTOM, (-150.0, -150.0))
-            .interactable(true)
+            //.fixed_pos((0.0, 0.0))+
+            .anchor(Align2::LEFT_TOP, (0.0, 0.0))
             .movable(true)
-            .show(ctx, |ui| {
-                let visuals = GizmoVisuals {
-                    stroke_width: 6.0,
-                    x_color: Color32::from_rgb(255, 0, 148),
-                    y_color: Color32::from_rgb(148, 255, 0),
-                    z_color: Color32::from_rgb(0, 148, 255),
-                    s_color: Color32::WHITE,
-                    inactive_alpha: 0.5,
-                    highlight_alpha: 1.0,
-                    highlight_color: None,
-                    gizmo_size: 75.0,
-                };
-
-                let gizmo = Gizmo::new("My gizmo")
-                    .view_matrix(self.view_matrix.to_cols_array_2d())
-                    .projection_matrix(self.proj_matrix.to_cols_array_2d())
-                    .model_matrix(self.model_matrix.to_cols_array_2d())
-                    .mode(self.mode)
-                    .orientation(self.orientation)
-                    .snapping(true)
-                    // .snap_angle(snap_angle)
-                    // .snap_distance(snap_distance)
-                    .visuals(visuals);
-
-                self.last_gizmo_response = gizmo.interact(ui);
-
-                if let Some(gizmo_response) = self.last_gizmo_response {
-                    self.model_matrix = gizmo_response.transform();
-                }
-            });
+            .show(ctx, |ui| self.ui(ui));
     }
 }

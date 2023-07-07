@@ -76,32 +76,32 @@ const WIN_INITIAL_WIDTH: u32 = 1600;
 /// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
 
-/// Event processing state.
-pub enum EventResponse {
-    /// Event wasn't handled, continue processing.
-    Ignored,
-    /// Event was handled, stop processing events.
-    Consumed,
-}
-
-impl EventResponse {
-    /// Returns true if the event was consumed.
-    pub fn is_consumed(&self) -> bool {
-        match self {
-            EventResponse::Ignored => false,
-            EventResponse::Consumed => true,
-        }
-    }
-}
-
-impl From<egui_winit::EventResponse> for EventResponse {
-    fn from(resp: egui_winit::EventResponse) -> Self {
-        match resp.consumed {
-            true => EventResponse::Consumed,
-            false => EventResponse::Ignored,
-        }
-    }
-}
+// /// Event processing state.
+// pub enum EventResponse {
+//     /// Event wasn't handled, continue processing.
+//     Ignored,
+//     /// Event was handled, stop processing events.
+//     Consumed,
+// }
+//
+// impl EventResponse {
+//     /// Returns true if the event was consumed.
+//     pub fn is_consumed(&self) -> bool {
+//         match self {
+//             EventResponse::Ignored => false,
+//             EventResponse::Consumed => true,
+//         }
+//     }
+// }
+//
+// impl From<egui_winit::EventResponse> for EventResponse {
+//     fn from(resp: egui_winit::EventResponse) -> Self {
+//         match resp.consumed {
+//             true => EventResponse::Consumed,
+//             false => EventResponse::Ignored,
+//         }
+//     }
+// }
 
 /// Events used by Vgonio application.
 #[derive(Debug)]
@@ -328,7 +328,6 @@ pub struct VgonioGuiApp {
 
     /// Docking tabs.
     tabs_tree: DockingTabsTree<Tab>,
-    dockables: Vec<Arc<RwLock<dyn Dockable>>>,
 }
 
 impl VgonioGuiApp {
@@ -430,7 +429,17 @@ impl VgonioGuiApp {
         let mut tabs_tree = DockingTabsTree::new(vec![Tab {
             kind: TabKind::Regular,
             index: NodeIndex(0),
-            dockable: Arc::new(RwLock::new(String::from("Scene"))),
+            dockable: Box::new(SurfViewer::new(
+                gpu_ctx.clone(),
+                gui_ctx.renderer.clone(),
+                512,
+                512,
+                wgpu::TextureFormat::Bgra8UnormSrgb,
+                cache.clone(),
+                outliner.clone(),
+                event_loop.create_proxy(),
+                0,
+            )),
         }]);
 
         Ok(Self {
@@ -453,7 +462,6 @@ impl VgonioGuiApp {
             toasts,
             tabs_tree,
             outliner,
-            dockables: vec![],
         })
     }
 
@@ -486,8 +494,13 @@ impl VgonioGuiApp {
         event: &WindowEvent,
         control: &mut ControlFlow,
     ) {
+        // Here we feed the event to the egui context, then
+        // we store the event in the input state.
+        // TODO: This is not ideal, we should probably have a
+        //       single input state that is shared between the
+        //       egui context and the application.
         match self.ctx.gui.on_window_event(event) {
-            EventResponse::Ignored => match event {
+            _ => match event {
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -520,7 +533,6 @@ impl VgonioGuiApp {
                 WindowEvent::CloseRequested => *control = ControlFlow::Exit,
                 _ => {}
             },
-            EventResponse::Consumed => {}
         }
     }
 
@@ -528,6 +540,11 @@ impl VgonioGuiApp {
         // Update camera uniform.
         self.camera
             .update_with_input_state(&self.input, dt, ProjectionKind::Perspective);
+
+        // Get input state directly from the window.
+        if let Some((_, tab)) = self.tabs_tree.find_active_focused() {
+            tab.dockable.update_with_input_state(&self.input, dt);
+        }
 
         self.ui.update_gizmo_matrices(
             Mat4::IDENTITY,
@@ -602,19 +619,12 @@ impl VgonioGuiApp {
         // Update GUI context.
         self.ctx.gui.update(window);
 
-        if let Some((_, tab)) = self.tabs_tree.find_active_focused() {
-            tab.dockable
-                .write()
-                .unwrap()
-                .update_with_input_state(&self.input, dt);
-        }
-
         // Reset mouse movement
         self.input.scroll_delta = 0.0;
         self.input.cursor_delta = [0.0, 0.0];
 
         // Update the renderings.
-        self.render(window)?;
+        self.render(window, dt)?;
 
         // Rendering the SamplingInspector is done after the main render pass.
         if self.dbg_drawing_state.sampling_debug_enabled {
@@ -631,7 +641,7 @@ impl VgonioGuiApp {
     }
 
     /// Render the frame to the surface.
-    pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, window: &Window, dt: Duration) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.canvas.get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
@@ -742,17 +752,13 @@ impl VgonioGuiApp {
             }),
         );
 
-        // for tab in self.tabs_tree.tabs() {
-        //     tab.dockable.write().unwrap().update();
-        // }
-
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
             window,
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.ui.show(ctx, &mut self.tabs_tree, &mut self.dockables);
+                self.ui.show(ctx, &mut self.tabs_tree);
                 self.toasts.show(ctx);
             },
         );

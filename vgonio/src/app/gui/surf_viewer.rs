@@ -16,7 +16,7 @@ use crate::{
     },
     error::RuntimeError,
 };
-use egui::{PointerButton, Ui, WidgetText, WidgetType::Label};
+use egui::{LayerId, PointerButton, Ui, WidgetText, WidgetType::Label};
 use egui_gizmo::GizmoOrientation;
 use std::{
     any::Any,
@@ -238,7 +238,11 @@ pub struct SurfViewer {
     // depth_attachment_id: egui::TextureId,
     id_counter: u32,
     proj_view_model: Mat4,
+
+    name: String,
 }
+
+// TODO: make id counter sequential
 
 impl SurfViewer {
     pub fn new(
@@ -321,6 +325,7 @@ impl SurfViewer {
             outliner,
             id_counter,
             proj_view_model: Mat4::IDENTITY,
+            name: format!("Surface Viewer #{}", id_counter),
         }
     }
 
@@ -371,10 +376,15 @@ impl SurfViewer {
         self.viewport_size = new_size;
     }
 
-    fn update(&mut self, size: egui::Vec2, scale_factor: Option<f32>) {
+    fn render(&mut self, size: egui::Vec2, scale_factor: Option<f32>) {
         // Resize if needed
         self.resize_viewport(size, scale_factor);
         // TODO: update camera
+        self.camera.uniform.update(
+            &self.camera.camera,
+            &self.camera.projection,
+            ProjectionKind::Perspective,
+        );
         self.visual_grid_state.update_uniforms(
             &self.gpu,
             &self.camera.uniform.view_proj,
@@ -410,15 +420,16 @@ impl SurfViewer {
             // Update per-surface uniform buffer.
             let aligned_size = MicroSurfaceUniforms::aligned_size(&self.gpu.device);
             for (hdl, state) in visible_surfaces.iter() {
-                let local_uniform_buf_index = if !self.surf_state.locals_lookup.contains(hdl) {
+                let local_uniform_buf_index = if let Some(idx) = self
+                    .surf_state
+                    .locals_lookup
+                    .iter()
+                    .position(|h| *h == *hdl)
+                {
+                    idx
+                } else {
                     self.surf_state.locals_lookup.push(*hdl);
                     self.surf_state.locals_lookup.len() - 1
-                } else {
-                    self.surf_state
-                        .locals_lookup
-                        .iter()
-                        .position(|h| *h == *hdl)
-                        .unwrap()
                 };
 
                 let mut buf = [0.0; 20];
@@ -513,43 +524,28 @@ impl SurfViewer {
 }
 
 impl Dockable for SurfViewer {
-    fn title(&self) -> WidgetText { WidgetText::from("Surface View") }
+    fn title(&self) -> WidgetText { WidgetText::from(&self.name) }
 
-    fn update_with_input_state(&mut self, input: &InputState, dt: Duration) {
+    fn update_with_input_state(&mut self, _input: &InputState, _dt: Duration) {
         self.camera
-            .update_with_input_state(input, dt, ProjectionKind::Perspective);
+            .update_with_input_state(_input, _dt, ProjectionKind::Perspective);
     }
 
     fn ui(&mut self, ui: &mut Ui) {
-        self.update(ui.available_size(), None);
-        let response = ui
-            .push_id(format!("surf_viewer_{}", self.id_counter), |ui| {
-                ui.add(
-                    egui::Image::new(self.color_attachment_id, self.viewport_size)
-                        .sense(egui::Sense::click_and_drag()),
-                )
-            })
-            .inner;
-        self.navigator.show(ui.ctx());
+        let rect = ui.available_rect_before_wrap();
+        let size = egui::Vec2::new(rect.width(), rect.height());
 
-        // if response.dragged_by(PointerButton::Primary) {
-        //     let delta = response.drag_delta();
-        //     println!("delta: {:?}", delta);
-        //     self.camera
-        //         .controller
-        //         .rotate(delta.x, delta.y, &mut self.camera.camera);
-        //     self.visual_grid_state.update_uniforms(
-        //         &self.gpu,
-        //         &self.camera.uniform.view_proj,
-        //         &self.camera.uniform.view_proj_inv,
-        //         wgpu::Color {
-        //             r: 0.4,
-        //             g: 0.4,
-        //             b: 0.4,
-        //             a: 1.0,
-        //         },
-        //         false,
-        //     );
-        // }
+        self.render(size, None);
+
+        egui::Area::new(self.name.clone())
+            .fixed_pos(rect.min)
+            .show(ui.ctx(), |ui| {
+                ui.set_clip_rect(rect);
+                ui.add(egui::Image::new(
+                    self.color_attachment_id,
+                    self.viewport_size,
+                ));
+                self.navigator.ui(ui);
+            });
     }
 }
