@@ -4,11 +4,11 @@ use crate::{
         gfx::GpuContext,
         gui::{
             bsdf_viewer::BsdfViewer,
+            docking::Dockable,
             tools::{
                 BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
                 PlottingInspector, PlottingWidget,
             },
-            ui::Dockable,
             VgonioEventLoop,
         },
     },
@@ -51,6 +51,8 @@ pub struct PerMicroSurfaceState {
 /// It will reads the micro-surfaces from the cache and display them in a tree
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
+    /// The unique id of the outliner.
+    uuid: uuid::Uuid,
     gpu_ctx: Arc<GpuContext>,
     event_loop: VgonioEventLoop,
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
@@ -77,6 +79,7 @@ impl Outliner {
             surfaces: HashMap::new(),
             measurements: Default::default(),
             plotting_inspectors: vec![],
+            uuid: uuid::Uuid::new_v4(),
         }
     }
 
@@ -368,4 +371,12 @@ impl Outliner {
             plot.show(ui.ctx(), open);
         }
     }
+}
+
+impl Dockable for Outliner {
+    fn title(&self) -> WidgetText { WidgetText::from("Outliner") }
+
+    fn ui(&mut self, ui: &mut Ui) { self.ui(ui); }
+
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
 }

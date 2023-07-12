@@ -1,5 +1,6 @@
 mod brdf_viewer;
 mod bsdf_viewer;
+mod docking;
 mod file_drag_drop;
 mod gizmo;
 mod icons;
@@ -43,11 +44,11 @@ use crate::{
         },
         gui::{
             bsdf_viewer::BsdfViewer,
+            docking::{Dockable, Tab, TabKind},
             outliner::Outliner,
             state::{camera::CameraState, DebugDrawState, DepthMap, GuiContext, InputState},
             surf_viewer::{MicroSurfaceState, SurfViewer},
             theme::{Theme, ThemeState},
-            ui::{Dockable, Tab, TabKind},
             visual_grid::VisualGridState,
         },
     },
@@ -414,7 +415,6 @@ impl VgonioGuiApp {
                 cache.clone(),
                 outliner.clone(),
                 event_loop.create_proxy(),
-                0,
             )),
         }]);
 

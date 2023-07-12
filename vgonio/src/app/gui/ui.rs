@@ -1,4 +1,8 @@
-use super::{state::GuiRenderer, VgonioEvent};
+use super::{
+    docking::{Dockable, DockableString, Tab, TabKind, TabViewer},
+    state::GuiRenderer,
+    VgonioEvent,
+};
 use crate::app::{
     cache::{Cache, Handle},
     gfx::GpuContext,
@@ -117,109 +121,6 @@ pub struct VgonioUi {
     pub id_counter: u32,
 }
 
-#[derive(Debug)]
-pub enum TabKind {
-    Workspace,
-    Outliner,
-    Fancy,
-    Regular,
-    SurfViewer,
-}
-
-pub struct TabInfo {
-    kind: TabKind,
-    node: NodeIndex,
-}
-
-/// A trait for types that can be docked.
-pub trait Dockable {
-    /// The title of the dockable.
-    fn title(&self) -> WidgetText;
-
-    /// Updates the dockable with the given input state.
-    fn update_with_input_state(&mut self, _input: &InputState, _dt: Duration) {}
-
-    /// The content of the dockable.
-    fn ui(&mut self, ui: &mut Ui);
-}
-
-impl Dockable for String {
-    fn title(&self) -> WidgetText { self.clone().into() }
-
-    fn ui(&mut self, ui: &mut Ui) { ui.label(&*self); }
-}
-
-/// A tab in the dock tree.
-pub struct Tab {
-    /// The kind of the tab.
-    pub kind: TabKind,
-    /// The node index of the tab in the dock tree.
-    pub index: NodeIndex,
-    /// The dockable content of the tab.
-    pub dockable: Box<dyn Dockable>,
-}
-
-impl Debug for Tab {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Tab")
-            .field("kind", &self.kind)
-            .field("index", &self.index)
-            .finish()
-    }
-}
-
-/// Viewer for the tabs in the dock tree.
-pub struct TabViewer<'a> {
-    to_be_added: &'a mut Vec<ToBeAdded>,
-    id_counter: &'a mut u32,
-}
-
-pub struct ToBeAdded {
-    pub kind: TabKind,
-    pub parent: NodeIndex,
-}
-
-impl<'a> egui_dock::TabViewer for TabViewer<'a> {
-    type Tab = Tab;
-
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { tab.dockable.ui(ui); }
-
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { tab.dockable.title() }
-
-    fn id(&mut self, tab: &mut Self::Tab) -> Id {
-        *self.id_counter += 1;
-        Id::new(format!(
-            "dock_tab_{}_{}",
-            tab.dockable.title().text(),
-            self.id_counter
-        ))
-    }
-
-    fn add_popup(&mut self, ui: &mut Ui, node: NodeIndex) {
-        ui.set_min_width(120.0);
-        if ui.button("Regular").clicked() {
-            self.to_be_added.push(ToBeAdded {
-                kind: TabKind::Regular,
-                parent: node,
-            });
-        }
-
-        if ui.button("Fancy").clicked() {
-            self.to_be_added.push(ToBeAdded {
-                kind: TabKind::Fancy,
-                parent: node,
-            });
-        }
-
-        if ui.button("SurfViewer").clicked() {
-            self.to_be_added.push(ToBeAdded {
-                kind: TabKind::SurfViewer,
-                parent: node,
-            });
-        }
-    }
-}
-
 impl VgonioUi {
     pub fn new(
         event_loop: VgonioEventLoop,
@@ -279,45 +180,48 @@ impl VgonioUi {
                 .show(ctx, |ui| self.outliner.write().unwrap().ui(ui));
         }
 
-        // // New docking system
-        // let mut added_nodes = Vec::new();
-        // egui_dock::DockArea::new(tabs)
-        //     .show_add_buttons(true)
-        //     .show_add_popup(true)
-        //     .show(
-        //         ctx,
-        //         &mut TabViewer {
-        //             to_be_added: &mut added_nodes,
-        //             id_counter: &mut self.id_counter,
-        //         },
-        //     );
+        // New docking system
+        let mut added_nodes = Vec::new();
+        egui_dock::DockArea::new(tabs)
+            .show_add_buttons(true)
+            .show_add_popup(true)
+            .show(
+                ctx,
+                &mut TabViewer {
+                    to_be_added: &mut added_nodes,
+                },
+            );
 
-        // added_nodes.drain(..).for_each(|to_be_added| {
-        //     // Focus the node that we want to add the tab to
-        //     tabs.set_focused_node(to_be_added.parent);
-        //     // Allocate a new index for the tab
-        //     let index = NodeIndex(tabs.num_tabs());
-        //     // Add the tab
-        //     let dockable: Box<dyn Dockable> = match to_be_added.kind {
-        //         TabKind::SurfViewer => Box::new(SurfViewer::new(
-        //             self.gpu.clone(),
-        //             self.gui.clone(),
-        //             512,
-        //             512,
-        //             wgpu::TextureFormat::Bgra8UnormSrgb,
-        //             self.cache.clone(),
-        //             self.outliner.clone(),
-        //             self.event_loop.clone(),
-        //             self.id_counter,
-        //         )),
-        //         _ => Box::new(String::from("Hello world")),
-        //     };
-        //     tabs.push_to_focused_leaf(Tab {
-        //         kind: to_be_added.kind,
-        //         index,
-        //         dockable,
-        //     });
-        // });
+        added_nodes.drain(..).for_each(|to_be_added| {
+            // Focus the node that we want to add the tab to
+            tabs.set_focused_node(to_be_added.parent);
+            // Allocate a new index for the tab
+            let index = NodeIndex(tabs.num_tabs());
+            // Add the tab
+            let dockable: Box<dyn Dockable> = match to_be_added.kind {
+                TabKind::SurfViewer => Box::new(SurfViewer::new(
+                    self.gpu.clone(),
+                    self.gui.clone(),
+                    512,
+                    512,
+                    wgpu::TextureFormat::Bgra8UnormSrgb,
+                    self.cache.clone(),
+                    self.outliner.clone(),
+                    self.event_loop.clone(),
+                )),
+                // TabKind::Outliner => Box::new(Outliner::new(
+                //     self.outliner.clone(),
+                //     self.event_loop.clone(),
+                //     self.cache.clone(),
+                // )),
+                _ => Box::new(DockableString::new(String::from("Hello world"))),
+            };
+            tabs.push_to_focused_leaf(Tab {
+                kind: to_be_added.kind,
+                index,
+                dockable,
+            });
+        });
 
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
@@ -376,7 +280,7 @@ impl VgonioUi {
         } else {
             self.icon_image(&Icon::VGONIO_MENU_LIGHT)
         };
-        let desired_icon_height = (ui.max_rect().height() - 4.0).at_most(28.0);
+        let desired_icon_height = (ui.max_rect().height() - 4.0).at_most(24.0);
         let image_size = icon_image.size_vec2() * (desired_icon_height / icon_image.size_vec2().y);
         let texture_id = icon_image.texture_id(ui.ctx());
 

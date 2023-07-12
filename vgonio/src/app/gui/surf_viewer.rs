@@ -6,10 +6,10 @@ use crate::{
             GpuContext, Texture,
         },
         gui::{
+            docking::Dockable,
             gizmo::NavigationGizmo,
             outliner::Outliner,
             state::{camera::CameraState, DebugDrawState, DepthMap, GuiRenderer, InputState},
-            ui::Dockable,
             visual_grid::VisualGridState,
             MicroSurfaceUniforms, VgonioEventLoop,
         },
@@ -24,6 +24,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use uuid::Uuid;
 use vgcore::math::{Mat4, Vec3};
 use vgsurf::MicroSurface;
 use winit::dpi::PhysicalSize;
@@ -210,8 +211,11 @@ impl MicroSurfaceState {
 
 /// Surface viewer.
 pub struct SurfViewer {
+    /// UUID of the surface viewer.
+    uuid: Uuid,
     /// GPU context.
     gpu: Arc<GpuContext>,
+    /// GUI renderer.
     gui: Arc<RwLock<GuiRenderer>>,
     /// State of the camera.
     camera: CameraState,
@@ -236,9 +240,7 @@ pub struct SurfViewer {
     outliner: Arc<RwLock<Outliner>>,
     // depth_attachment: Texture,
     // depth_attachment_id: egui::TextureId,
-    id_counter: u32,
     proj_view_model: Mat4,
-    name: String,
     focused: bool,
 }
 
@@ -254,7 +256,6 @@ impl SurfViewer {
         cache: Arc<RwLock<Cache>>,
         outliner: Arc<RwLock<Outliner>>,
         event_loop: VgonioEventLoop,
-        id_counter: u32,
     ) -> Self {
         let surf_state = MicroSurfaceState::new(&gpu, format);
         let depth_map = DepthMap::new(&gpu, width, height);
@@ -323,10 +324,9 @@ impl SurfViewer {
             color_attachment,
             color_attachment_id,
             outliner,
-            id_counter,
             proj_view_model: Mat4::IDENTITY,
-            name: format!("Surface Viewer #{}", id_counter),
             focused: false,
+            uuid: Uuid::new_v4(),
         }
     }
 
@@ -525,12 +525,14 @@ impl SurfViewer {
 }
 
 impl Dockable for SurfViewer {
-    fn title(&self) -> WidgetText { WidgetText::from(&self.name) }
+    fn title(&self) -> WidgetText { WidgetText::from("Surface Viewer") }
 
     fn update_with_input_state(&mut self, _input: &InputState, _dt: Duration) {
         self.camera
             .update_with_input_state(_input, _dt, ProjectionKind::Perspective);
     }
+
+    fn uuid(&self) -> Uuid { self.uuid }
 
     fn ui(&mut self, ui: &mut Ui) {
         let rect = ui.available_rect_before_wrap();
@@ -538,7 +540,7 @@ impl Dockable for SurfViewer {
 
         self.render(size, None);
 
-        egui::Area::new(self.name.clone())
+        egui::Area::new(self.uuid.to_string())
             .fixed_pos(rect.min)
             .show(ui.ctx(), |ui| {
                 ui.set_clip_rect(rect);
