@@ -238,8 +238,8 @@ pub struct SurfViewer {
     // depth_attachment_id: egui::TextureId,
     id_counter: u32,
     proj_view_model: Mat4,
-
     name: String,
+    focused: bool,
 }
 
 // TODO: make id counter sequential
@@ -326,6 +326,7 @@ impl SurfViewer {
             id_counter,
             proj_view_model: Mat4::IDENTITY,
             name: format!("Surface Viewer #{}", id_counter),
+            focused: false,
         }
     }
 
@@ -541,7 +542,7 @@ impl Dockable for SurfViewer {
             .fixed_pos(rect.min)
             .show(ui.ctx(), |ui| {
                 ui.set_clip_rect(rect);
-                ui.add(egui::Image::new(
+                let res = ui.add(egui::Image::new(
                     self.color_attachment_id,
                     self.viewport_size,
                 ));

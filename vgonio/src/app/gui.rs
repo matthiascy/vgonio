@@ -8,6 +8,7 @@ pub mod outliner;
 mod simulations;
 pub mod state;
 mod surf_viewer;
+mod theme;
 mod tools;
 mod ui;
 mod visual_grid;
@@ -45,7 +46,8 @@ use crate::{
             outliner::Outliner,
             state::{camera::CameraState, DebugDrawState, DepthMap, GuiContext, InputState},
             surf_viewer::{MicroSurfaceState, SurfViewer},
-            ui::{Dockable, Tab, TabKind, Theme},
+            theme::{Theme, ThemeState},
+            ui::{Dockable, Tab, TabKind},
             visual_grid::VisualGridState,
         },
     },
@@ -76,33 +78,6 @@ const WIN_INITIAL_WIDTH: u32 = 1600;
 /// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
 
-// /// Event processing state.
-// pub enum EventResponse {
-//     /// Event wasn't handled, continue processing.
-//     Ignored,
-//     /// Event was handled, stop processing events.
-//     Consumed,
-// }
-//
-// impl EventResponse {
-//     /// Returns true if the event was consumed.
-//     pub fn is_consumed(&self) -> bool {
-//         match self {
-//             EventResponse::Ignored => false,
-//             EventResponse::Consumed => true,
-//         }
-//     }
-// }
-//
-// impl From<egui_winit::EventResponse> for EventResponse {
-//     fn from(resp: egui_winit::EventResponse) -> Self {
-//         match resp.consumed {
-//             true => EventResponse::Consumed,
-//             false => EventResponse::Ignored,
-//         }
-//     }
-// }
-
 /// Events used by Vgonio application.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -127,7 +102,7 @@ pub enum VgonioEvent {
     },
 }
 
-/// Events used by BSDF viewer.`
+/// Events used by BSDF viewer.
 #[derive(Debug)]
 pub enum BsdfViewerEvent {
     /// Enable/disable the rendering of a texture.
@@ -303,6 +278,7 @@ pub struct VgonioGuiApp {
     cache: Arc<RwLock<Cache>>,
     /// Input states collected from the window.
     input: InputState,
+
     /// Camera state including the view and projection matrices.
     camera: CameraState,
     /// State of the micro surface rendering, including the pipeline, binding

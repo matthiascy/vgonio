@@ -1,10 +1,11 @@
-use egui::{Align2, Color32, LayerId};
+use egui::{Align2, Color32};
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 use vgcore::math::Mat4;
 
 // TODO: customise gizmo visuals: implement Viewport (Navigation) Gizmo and
 //       Object(Transform) Gizmo
 
+#[derive(Debug)]
 pub struct NavigationGizmo {
     model_matrix: Mat4,
     view_matrix: Mat4,

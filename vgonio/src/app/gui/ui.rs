@@ -11,6 +11,7 @@ use crate::app::{
         simulations::Simulations,
         state::InputState,
         surf_viewer::SurfViewer,
+        theme::{Theme, ThemeState, ThemeVisuals},
         tools::{SamplingInspector, Scratch, Tools},
         widgets::ToggleSwitch,
         DebuggingInspector, DockingTabsTree, VgonioEventLoop,
@@ -18,7 +19,7 @@ use crate::app::{
     Config,
 };
 use egui::{Id, NumExt, Ui, Widget, WidgetText};
-use egui_dock::{Node, NodeIndex};
+use egui_dock::{Node, NodeIndex, TabIndex};
 use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
@@ -26,88 +27,12 @@ use std::{
     any::{Any, TypeId},
     collections::HashMap,
     fmt::{Debug, Formatter},
-    ops::Deref,
+    ops::{Deref, Index},
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 use vgcore::{error::VgonioError, math::Mat4};
 use vgsurf::MicroSurface;
-
-pub struct ThemeState {
-    pub theme: Theme,
-    pub theme_visuals: [ThemeVisuals; 2],
-    pub need_update: bool,
-}
-
-impl Default for ThemeState {
-    fn default() -> Self {
-        Self {
-            theme_visuals: [
-                ThemeVisuals {
-                    egui_visuals: egui::Visuals {
-                        dark_mode: true,
-                        ..egui::Visuals::dark()
-                    },
-                    clear_color: wgpu::Color {
-                        r: 0.046, // no gamma correction
-                        g: 0.046,
-                        b: 0.046,
-                        a: 1.0,
-                    },
-                    grid_line_color: wgpu::Color {
-                        r: 0.4,
-                        g: 0.4,
-                        b: 0.4,
-                        a: 1.0,
-                    },
-                },
-                ThemeVisuals {
-                    egui_visuals: egui::Visuals {
-                        dark_mode: false,
-                        panel_fill: egui::Color32::from_gray(190),
-                        ..egui::Visuals::light()
-                    },
-                    clear_color: wgpu::Color {
-                        r: 0.208, // no gamma correction
-                        g: 0.208,
-                        b: 0.208,
-                        a: 1.0,
-                    },
-                    grid_line_color: wgpu::Color {
-                        r: 0.68,
-                        g: 0.68,
-                        b: 0.68,
-                        a: 1.0,
-                    },
-                },
-            ],
-            theme: Theme::Light,
-            need_update: true,
-        }
-    }
-}
-
-impl ThemeState {
-    pub fn update(&mut self, ctx: &egui::Context) {
-        if self.need_update {
-            self.need_update = false;
-            ctx.set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
-        }
-    }
-
-    pub fn set(&mut self, theme: Theme) {
-        if self.theme != theme {
-            self.theme = theme;
-            self.need_update = true;
-        }
-    }
-
-    pub fn current_theme(&self) -> Theme { self.theme }
-
-    pub fn current_theme_visuals(&self) -> &ThemeVisuals {
-        &self.theme_visuals[self.theme as usize]
-    }
-}
 
 #[derive(Default)]
 pub struct ImageCache {
@@ -190,25 +115,6 @@ pub struct VgonioUi {
     pub simulations: Simulations,
 
     pub id_counter: u32,
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Theme {
-    Dark = 0,
-    Light = 1,
-}
-
-pub struct ThemeVisuals {
-    pub egui_visuals: egui::Visuals,
-    pub clear_color: wgpu::Color,
-    pub grid_line_color: wgpu::Color,
-}
-
-impl Deref for ThemeVisuals {
-    type Target = egui::Visuals;
-
-    fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
 #[derive(Debug)]
@@ -373,45 +279,45 @@ impl VgonioUi {
                 .show(ctx, |ui| self.outliner.write().unwrap().ui(ui));
         }
 
-        // New docking system
-        let mut added_nodes = Vec::new();
-        egui_dock::DockArea::new(tabs)
-            .show_add_buttons(true)
-            .show_add_popup(true)
-            .show(
-                ctx,
-                &mut TabViewer {
-                    to_be_added: &mut added_nodes,
-                    id_counter: &mut self.id_counter,
-                },
-            );
+        // // New docking system
+        // let mut added_nodes = Vec::new();
+        // egui_dock::DockArea::new(tabs)
+        //     .show_add_buttons(true)
+        //     .show_add_popup(true)
+        //     .show(
+        //         ctx,
+        //         &mut TabViewer {
+        //             to_be_added: &mut added_nodes,
+        //             id_counter: &mut self.id_counter,
+        //         },
+        //     );
 
-        added_nodes.drain(..).for_each(|to_be_added| {
-            // Focus the node that we want to add the tab to
-            tabs.set_focused_node(to_be_added.parent);
-            // Allocate a new index for the tab
-            let index = NodeIndex(tabs.num_tabs());
-            // Add the tab
-            let dockable: Box<dyn Dockable> = match to_be_added.kind {
-                TabKind::SurfViewer => Box::new(SurfViewer::new(
-                    self.gpu.clone(),
-                    self.gui.clone(),
-                    512,
-                    512,
-                    wgpu::TextureFormat::Bgra8UnormSrgb,
-                    self.cache.clone(),
-                    self.outliner.clone(),
-                    self.event_loop.clone(),
-                    self.id_counter,
-                )),
-                _ => Box::new(String::from("Hello world")),
-            };
-            tabs.push_to_focused_leaf(Tab {
-                kind: to_be_added.kind,
-                index,
-                dockable,
-            });
-        });
+        // added_nodes.drain(..).for_each(|to_be_added| {
+        //     // Focus the node that we want to add the tab to
+        //     tabs.set_focused_node(to_be_added.parent);
+        //     // Allocate a new index for the tab
+        //     let index = NodeIndex(tabs.num_tabs());
+        //     // Add the tab
+        //     let dockable: Box<dyn Dockable> = match to_be_added.kind {
+        //         TabKind::SurfViewer => Box::new(SurfViewer::new(
+        //             self.gpu.clone(),
+        //             self.gui.clone(),
+        //             512,
+        //             512,
+        //             wgpu::TextureFormat::Bgra8UnormSrgb,
+        //             self.cache.clone(),
+        //             self.outliner.clone(),
+        //             self.event_loop.clone(),
+        //             self.id_counter,
+        //         )),
+        //         _ => Box::new(String::from("Hello world")),
+        //     };
+        //     tabs.push_to_focused_leaf(Tab {
+        //         kind: to_be_added.kind,
+        //         index,
+        //         dockable,
+        //     });
+        // });
 
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
