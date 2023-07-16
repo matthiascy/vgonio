@@ -18,7 +18,7 @@ use std::{
 };
 use uuid::Uuid;
 use vgcore::error::VgonioError;
-use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh};
+use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 
 pub trait Asset: Send + Sync + 'static {}
 
@@ -392,7 +392,8 @@ impl Cache {
                     log::debug!("-- loading: {}", filepath.display());
                     let msurf = MicroSurface::read_from_file(&filepath, None)?;
                     let msurf_hdl = Handle::with_id(msurf.uuid);
-                    let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded);
+                    let mesh =
+                        msurf.as_micro_surface_mesh(HeightOffset::Grounded, config.tri_pattern);
                     let mesh_hdl = Handle::new();
                     self.msurfs.insert(msurf_hdl, msurf);
                     self.meshes.insert(mesh_hdl, mesh);
@@ -479,6 +480,7 @@ impl Cache {
         &mut self,
         config: &Config,
         paths: &[PathBuf],
+        pattern: TriangulationPattern,
     ) -> Result<Vec<Handle<MicroSurface>>, VgonioError> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
@@ -511,7 +513,7 @@ impl Cache {
                         log::debug!("-- loading: {}", filepath.display());
                         let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
                         let msurf_hdl = Handle::with_id(msurf.uuid);
-                        let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded);
+                        let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded, pattern);
                         let mesh_hdl = Handle::new();
                         self.msurfs.insert(msurf_hdl, msurf);
                         self.meshes.insert(mesh_hdl, mesh);

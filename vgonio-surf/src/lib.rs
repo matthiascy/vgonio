@@ -497,7 +497,11 @@ impl MicroSurface {
 
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
     /// The triangulation is done in the XZ plane.
-    pub fn as_micro_surface_mesh(&self, offset: HeightOffset) -> MicroSurfaceMesh {
+    pub fn as_micro_surface_mesh(
+        &self,
+        offset: HeightOffset,
+        pattern: TriangulationPattern,
+    ) -> MicroSurfaceMesh {
         let height_offset = match offset {
             HeightOffset::Arbitrary(val) => val,
             HeightOffset::Centered => -0.5 * (self.min + self.max),
@@ -505,7 +509,7 @@ impl MicroSurface {
             HeightOffset::None => 0.0,
         };
         let (verts, extent) = self.generate_vertices(AxisAlignment::XZ, height_offset);
-        let tri_faces = regular_grid_triangulation(self.rows, self.cols);
+        let tri_faces = regular_grid_triangulation(self.rows, self.cols, pattern);
         let num_faces = tri_faces.len() / 3;
 
         let mut normals = vec![Vec3::ZERO; num_faces];
@@ -604,24 +608,94 @@ impl MicroSurface {
     }
 }
 
+/// Triangulation pattern for grid triangulation.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TriangulationPattern {
+    /// Triangulate from top to bottom, left to right.
+    /// 0  <--  1
+    /// | A  /  |
+    /// |  /  B |
+    /// 2  -->  3
+    BottomLeftToTopRight,
+    /// Triangulate from top to bottom, right to left.
+    /// 0  <--  1
+    /// |  \  B |
+    /// | A  \  |
+    /// 2  -->  3
+    TopLeftToBottomRight,
+}
+
 /// Generate triangle indices for grid triangulation.
 ///
 /// The grid is assumed to be a regular grid with `cols` columns and `rows`
 /// rows. The triangles are generated in counter-clockwise order. The
-/// triangulation starts from the first row, from left to right. Thus, the
+/// triangulation starts from the first row, from left to right. Thus,
 /// when using the indices, you need to provide the vertices in the same
 /// order.
 ///
 /// Triangle winding is counter-clockwise.
-/// 0  <-- 1
-/// |   /  |
-/// |  /   |
-/// 2  --> 3
+///
+/// Pattern is specified by `TriangulationPattern`.
 ///
 /// # Returns
 ///
 /// Vec<u32>: An array of vertex indices forming triangles.
-pub fn regular_grid_triangulation(rows: usize, cols: usize) -> Vec<u32> {
+pub fn regular_grid_triangulation(
+    rows: usize,
+    cols: usize,
+    pattern: TriangulationPattern,
+) -> Vec<u32> {
+    let mut triangulate: Box<dyn FnMut(usize, usize, usize, &mut usize, &mut [u32])> = match pattern
+    {
+        TriangulationPattern::BottomLeftToTopRight => Box::new(
+            |i: usize, row: usize, col: usize, mut tri: &mut usize, indices: &mut [u32]| {
+                if col == 0 {
+                    indices[*tri] = i as u32;
+                    indices[*tri + 1] = (i + cols) as u32;
+                    indices[*tri + 2] = (i + 1) as u32;
+                    *tri += 3;
+                } else if col == cols - 1 {
+                    indices[*tri] = i as u32;
+                    indices[*tri + 1] = (i + cols - 1) as u32;
+                    indices[*tri + 2] = (i + cols) as u32;
+                    *tri += 3;
+                } else {
+                    indices[*tri] = i as u32;
+                    indices[*tri + 1] = (i + cols - 1) as u32;
+                    indices[*tri + 2] = (i + cols) as u32;
+                    indices[*tri + 3] = i as u32;
+                    indices[*tri + 4] = (i + cols) as u32;
+                    indices[*tri + 5] = (i + 1) as u32;
+                    *tri += 6;
+                }
+            },
+        ),
+        TriangulationPattern::TopLeftToBottomRight => Box::new(
+            |i: usize, row: usize, col: usize, mut tri: &mut usize, indices: &mut [u32]| {
+                if col == 0 {
+                    //
+                    indices[*tri] = i as u32;
+                    indices[*tri + 1] = (i + cols) as u32;
+                    indices[*tri + 2] = (i + cols + 1) as u32;
+                    *tri += 3;
+                } else if col == cols - 1 {
+                    indices[*tri] = i as u32;
+                    indices[*tri + 1] = (i - 1) as u32;
+                    indices[*tri + 2] = (i + cols - 1) as u32;
+                    *tri += 3;
+                } else {
+                    indices[*tri] = i as u32;
+                    indices[*tri + 1] = (i - 1) as u32;
+                    indices[*tri + 2] = (i + cols) as u32;
+                    indices[*tri + 3] = i as u32;
+                    indices[*tri + 4] = (i + cols) as u32;
+                    indices[*tri + 5] = (i + cols + 1) as u32;
+                    *tri += 6;
+                }
+            },
+        ),
+    };
+
     let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
     let mut tri = 0;
     for i in 0..cols * rows {
@@ -633,25 +707,7 @@ pub fn regular_grid_triangulation(rows: usize, cols: usize) -> Vec<u32> {
             continue;
         }
 
-        if col == 0 {
-            indices[tri] = i as u32;
-            indices[tri + 1] = (i + cols) as u32;
-            indices[tri + 2] = (i + 1) as u32;
-            tri += 3;
-        } else if col == cols - 1 {
-            indices[tri] = i as u32;
-            indices[tri + 1] = (i + cols - 1) as u32;
-            indices[tri + 2] = (i + cols) as u32;
-            tri += 3;
-        } else {
-            indices[tri] = i as u32;
-            indices[tri + 1] = (i + cols - 1) as u32;
-            indices[tri + 2] = (i + cols) as u32;
-            indices[tri + 3] = i as u32;
-            indices[tri + 4] = (i + cols) as u32;
-            indices[tri + 5] = (i + 1) as u32;
-            tri += 6;
-        }
+        triangulate(i, row, col, &mut tri, &mut indices);
     }
 
     indices

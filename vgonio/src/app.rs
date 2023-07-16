@@ -12,6 +12,7 @@ pub(crate) mod gui;
 use crate::app::cache::resolve_path;
 use args::CliArgs;
 use vgcore::error::VgonioError;
+use vgsurf::TriangulationPattern;
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -31,6 +32,9 @@ pub struct Config {
 
     /// User-defined configuration.
     user: UserConfig,
+
+    /// Triangulation configuration.
+    tri_pattern: TriangulationPattern,
 }
 
 /// Options can be configured by user.
@@ -250,12 +254,33 @@ impl Config {
                 }
             }
         };
+        let tri_pattern = match std::env::var("TRI_PATTERN") {
+            Ok(val) => match val.as_str() {
+                "BL2TR" => {
+                    log::info!("Triangulation pattern: BottomLeftToTopRight");
+                    TriangulationPattern::BottomLeftToTopRight
+                }
+                "TL2BR" => {
+                    log::info!("Triangulation pattern: TopLeftToBottomRight");
+                    TriangulationPattern::TopLeftToBottomRight
+                }
+                _ => {
+                    log::info!("Unknown triangulation pattern, use default BL2TR.");
+                    TriangulationPattern::BottomLeftToTopRight
+                }
+            },
+            Err(_) => {
+                log::info!("No triangulation pattern specified, use default BL2TR.");
+                TriangulationPattern::BottomLeftToTopRight
+            }
+        };
         Ok(Self {
             sys_config_dir,
             sys_cache_dir,
             sys_data_dir,
             cwd,
             user: user_config,
+            tri_pattern,
         })
     }
 

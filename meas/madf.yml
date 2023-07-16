@@ -5,5 +5,5 @@ type: !microfacet-area-distribution-function # !madf
 surfaces:
   - usr://surfaces/aluminium65bar100.vgms
   # - usr://surfaces/al8x8.vgms
-#  - usr://surfaces/AluminiumMirror.txt
-#  - usr://surfaces/varying_density_05_res_1000.txt
+  #  - usr://surfaces/AluminiumMirror.txt
+  #  - usr://surfaces/varying_density_05_res_1000.txt

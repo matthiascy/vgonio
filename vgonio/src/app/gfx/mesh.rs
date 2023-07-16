@@ -3,7 +3,7 @@ use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
 use uuid::Uuid;
 use vgcore::math::Aabb;
-use vgsurf::{AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh};
+use vgsurf::{AxisAlignment, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
@@ -29,6 +29,7 @@ impl RenderableMesh {
         surf: &MicroSurface,
         id: Uuid,
         offset: HeightOffset,
+        pattern: TriangulationPattern,
     ) -> Self {
         use wgpu::util::DeviceExt;
         // Number of triangles = 2 * rows * cols
@@ -37,7 +38,7 @@ impl RenderableMesh {
             surf.generate_vertices(AxisAlignment::XZ, offset.eval(surf.min, surf.max));
         let vertices_count = positions.len();
         let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-        let indices: Vec<u32> = vgsurf::regular_grid_triangulation(rows, cols);
+        let indices: Vec<u32> = vgsurf::regular_grid_triangulation(rows, cols, pattern);
         debug_assert_eq!(indices.len(), indices_count);
         log::debug!(
             "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",
@@ -79,8 +80,9 @@ impl RenderableMesh {
         device: &wgpu::Device,
         surf: &MicroSurface,
         offset: HeightOffset,
+        pattern: TriangulationPattern,
     ) -> Self {
-        Self::from_micro_surface_with_id(device, surf, Uuid::new_v4(), offset)
+        Self::from_micro_surface_with_id(device, surf, Uuid::new_v4(), offset, pattern)
     }
 
     pub fn from_micro_surface_mesh_with_id(
