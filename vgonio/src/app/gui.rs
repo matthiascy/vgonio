@@ -601,9 +601,9 @@ pub struct VgonioGuiApp {
     /// State of the micro surface rendering, including the pipeline, binding
     /// groups, and buffers.
     msurf_rdr_state: MicroSurfaceRenderingState,
-    // /// State of the visual grid rendering, including the pipeline, binding
-    // /// groups, and buffers.
-    // visual_grid_state: VisualGridState,
+    /// State of the visual grid rendering, including the pipeline, binding
+    /// groups, and buffers.
+    visual_grid_state: VisualGridState,
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,

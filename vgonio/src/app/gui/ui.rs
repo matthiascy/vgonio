@@ -251,9 +251,8 @@ pub struct VgonioUi {
     pub left_panel_expanded: bool,
 
     pub simulations: Simulations,
-
-    /// Docking tabs.
-    tabs_tree: DockingTabsTree<String>,
+    // /// Docking tabs.
+    // tabs_tree: DockingTabsTree<String>,
 }
 
 #[repr(u8)]
@@ -297,8 +296,8 @@ impl VgonioUi {
         log::info!("Initializing UI");
         let tab1 = "Tab1".to_string();
         let tab2 = "Tab2".to_string();
-        let mut tabs_tree = DockingTabsTree::new(vec![tab1]);
-        tabs_tree.split_left(egui_dock::NodeIndex::root(), 0.20, vec![tab2]);
+        // let mut tabs_tree = DockingTabsTree::new(vec![tab1]);
+        // tabs_tree.split_left(egui_dock::NodeIndex::root(), 0.20, vec![tab2]);
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -318,7 +317,7 @@ impl VgonioUi {
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
-            tabs_tree,
+            // tabs_tree,
         }
     }
 
@@ -349,12 +348,12 @@ impl VgonioUi {
 
         self.simulations.show_all(ctx);
 
-        egui::Window::new("new_window").show(ctx, |ui| {
-            egui_dock::DockArea::new(&mut self.tabs_tree)
-                .show_add_buttons(true)
-                .show_add_popup(true)
-                .show_inside(ui, &mut TabViewer {});
-        });
+        // egui::Window::new("new_window").show(ctx, |ui| {
+        //     egui_dock::DockArea::new(&mut self.tabs_tree)
+        //         .show_add_buttons(true)
+        //         .show_add_popup(true)
+        //         .show_inside(ui, &mut TabViewer {});
+        // });
     }
 
     pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
