@@ -273,6 +273,7 @@ impl MeasuredDataCollapsableHeader {
                     });
                 ui.add_space(5.0);
                 if ui.button("Plot").clicked() {
+                    // TODO: Send message to bsdf viewer to plot this data.
                     self.show_plot = true;
                     if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
                         match &measured.measured {

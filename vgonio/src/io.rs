@@ -5,16 +5,10 @@ use std::{
 };
 use vgcore::math;
 
-use crate::{
-    measure::{
-        bsdf::{
-            BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, MeasuredBsdfData, PerWavelength,
-        },
-        collector::BounceAndEnergy,
-        measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
-        microfacet::{MeasuredMadfData, MeasuredMmsfData},
-    },
-    RangeByStepSizeInclusive,
+use crate::measure::{
+    bsdf::MeasuredBsdfData,
+    measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
+    microfacet::{MeasuredMadfData, MeasuredMmsfData},
 };
 
 pub mod vgmo {
@@ -113,7 +107,9 @@ pub mod vgmo {
             let range = Self::new(start, end, step_count as usize);
             assert!(
                 math::ulp_eq(range.step_size().value(), step_size.value()),
-                "RangeByStepCountInclusive<Radians>: step size mismatch"
+                "RangeByStepCountInclusive<Radians> step size mismatch: expected {}, got {}",
+                range.step_size().value(),
+                step_size.value()
             );
             range
         }
