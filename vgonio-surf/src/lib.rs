@@ -609,13 +609,15 @@ impl MicroSurface {
 }
 
 /// Triangulation pattern for grid triangulation.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum TriangulationPattern {
     /// Triangulate from top to bottom, left to right.
     /// 0  <--  1
     /// | A  /  |
     /// |  /  B |
     /// 2  -->  3
+    #[default]
     BottomLeftToTopRight,
     /// Triangulate from top to bottom, right to left.
     /// 0  <--  1
@@ -673,7 +675,6 @@ pub fn regular_grid_triangulation(
         TriangulationPattern::TopLeftToBottomRight => Box::new(
             |i: usize, row: usize, col: usize, mut tri: &mut usize, indices: &mut [u32]| {
                 if col == 0 {
-                    //
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
                     indices[*tri + 2] = (i + cols + 1) as u32;
@@ -681,7 +682,7 @@ pub fn regular_grid_triangulation(
                 } else if col == cols - 1 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i - 1) as u32;
-                    indices[*tri + 2] = (i + cols - 1) as u32;
+                    indices[*tri + 2] = (i + cols) as u32;
                     *tri += 3;
                 } else {
                     indices[*tri] = i as u32;
@@ -715,7 +716,7 @@ pub fn regular_grid_triangulation(
 
 #[test]
 fn regular_grid_triangulation_test() {
-    let indices = regular_grid_triangulation(4, 3);
+    let indices = regular_grid_triangulation(4, 3, TriangulationPattern::BottomLeftToTopRight);
     assert_eq!(indices.len(), 36);
     println!("{:?}", indices);
 }

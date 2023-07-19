@@ -114,7 +114,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
         .into_iter()
         .filter_map(|meas| {
             cache
-                .load_micro_surfaces(&config, &meas.surfaces, config.tri_pattern)
+                .load_micro_surfaces(&config, &meas.surfaces, config.user.triangulation)
                 .ok()
                 .map(|surfaces| (meas, surfaces))
         })
