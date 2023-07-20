@@ -1,4 +1,4 @@
-use crate::app::gui::{state::camera::CameraState, VisualGridState};
+use crate::app::gui::{state::camera::CameraState, visual_grid::VisualGridState};
 
 /// Surface viewer.
 pub struct SurfViewer {

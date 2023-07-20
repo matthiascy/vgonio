@@ -1,7 +1,6 @@
 mod buffers;
 pub mod camera;
 mod context;
-mod grid;
 mod mesh;
 mod shadow_pass;
 mod texture;
@@ -11,7 +10,6 @@ pub use buffers::*;
 use wgpu::TextureFormat;
 
 pub use context::{GpuContext, WgpuConfig, WindowSurface};
-pub use grid::*;
 pub use mesh::*;
 pub use shadow_pass::ShadowPass;
 pub use texture::Texture;

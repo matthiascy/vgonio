@@ -810,6 +810,10 @@ pub struct MeasurementData {
 
 impl Asset for MeasurementData {}
 
+impl PartialEq for MeasurementData {
+    fn eq(&self, other: &Self) -> bool { self.source == other.source }
+}
+
 impl MeasurementData {
     /// Returns the kind of the measurement data.
     pub fn kind(&self) -> MeasurementKind { self.measured.kind() }

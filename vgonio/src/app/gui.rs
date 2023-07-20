@@ -12,11 +12,11 @@ mod surf_viewer;
 mod theme;
 mod tools;
 mod ui;
+mod visual_grid;
 mod widgets;
 
 // TODO: MSAA
 
-use crate::{measure, measure::RtcMethod};
 use egui::Align2;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use std::{
@@ -25,7 +25,6 @@ use std::{
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
-use vgcore::math::{Handedness, IVec2, Mat4, Vec3, Vec4};
 
 pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioUi;
@@ -36,8 +35,7 @@ use crate::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, RenderableMesh, Texture, VisualGridUniforms, WgpuConfig,
-            DEFAULT_BIND_GROUP_LAYOUT_DESC,
+            GpuContext, RenderableMesh, Texture, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
         },
         gui::{
             bsdf_viewer::BsdfViewer,
@@ -47,14 +45,18 @@ use crate::{
     },
     error::RuntimeError,
     measure::{
+        self,
         collector::CollectorPatches,
         emitter::EmitterSamples,
-        measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
-        CollectorScheme,
+        measurement::{
+            BsdfMeasurementParams, MadfMeasurementParams, MeasurementData, MmsfMeasurementParams,
+        },
+        CollectorScheme, RtcMethod,
     },
 };
 use vgcore::{
     error::VgonioError,
+    math::{Handedness, IVec2, Mat4, Vec3, Vec4},
     units::{Degrees, Radians},
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
@@ -225,9 +227,9 @@ pub enum MeasureEvent {
 /// Event loop proxy with Vgonio events.
 pub type VgonioEventLoop = EventLoopProxy<VgonioEvent>;
 
-use self::tools::SamplingInspector;
+use self::{tools::SamplingInspector, visual_grid::VisualGridState};
 
-use super::{gfx::WindowSurface, Config};
+use crate::app::{gfx::WindowSurface, Config};
 
 /// Launches Vgonio GUI application.
 pub fn run(config: Config) -> Result<(), VgonioError> {
@@ -458,126 +460,6 @@ impl MicroSurfaceRenderingState {
             }
             self.locals_lookup.push(*hdl);
         }
-    }
-}
-
-struct VisualGridState {
-    pipeline: wgpu::RenderPipeline,
-    bind_group: wgpu::BindGroup,
-    uniform_buffer: wgpu::Buffer,
-}
-
-impl VisualGridState {
-    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
-        let vert_shader = ctx
-            .device
-            .create_shader_module(wgpu::include_spirv!(concat!(
-                env!("OUT_DIR"),
-                "/visual_grid.vert.spv"
-            )));
-        let frag_shader = ctx
-            .device
-            .create_shader_module(wgpu::include_spirv!(concat!(
-                env!("OUT_DIR"),
-                "/visual_grid.frag.spv"
-            )));
-        let bind_group_layout = ctx
-            .device
-            .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
-        let pipeline_layout = ctx
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("visual_grid_render_pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("visual_grid_uniform_buffer"),
-                contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("visual_grid_bind_group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
-        let pipeline = ctx
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("visual_grid_render_pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &vert_shader,
-                    entry_point: "main",
-                    buffers: &[],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &frag_shader,
-                    entry_point: "main",
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: target_format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                multiview: None,
-            });
-        Self {
-            pipeline,
-            bind_group,
-            uniform_buffer,
-        }
-    }
-
-    pub fn update_uniforms(
-        &self,
-        ctx: &GpuContext,
-        view_proj: &ViewProjUniform,
-        view_proj_inv: &ViewProjUniform,
-        color: wgpu::Color,
-        theme_kind: ThemeKind,
-    ) {
-        let alpha = match theme_kind {
-            ThemeKind::Light => 0.0,
-            ThemeKind::Dark => 1.0,
-        };
-        ctx.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::bytes_of(&VisualGridUniforms {
-                view: view_proj.view.to_cols_array(),
-                proj: view_proj.proj.to_cols_array(),
-                view_inv: view_proj_inv.view.to_cols_array(),
-                proj_inv: view_proj_inv.proj.to_cols_array(),
-                grid_line_color: [color.r as f32, color.g as f32, color.b as f32, alpha],
-            }),
-        );
     }
 }
 
@@ -976,9 +858,7 @@ impl VgonioGuiApp {
             }
 
             if self.ui.visual_grid_enabled {
-                render_pass.set_pipeline(&self.visual_grid_state.pipeline);
-                render_pass.set_bind_group(0, &self.visual_grid_state.bind_group, &[]);
-                render_pass.draw(0..6, 0..1);
+                self.visual_grid_state.render(&mut render_pass);
             }
         }
 
@@ -1240,95 +1120,6 @@ impl VgonioGuiApp {
                 });
             }
             UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
-            // VgonioEvent::CheckVisibleFacets {
-            //     m_azimuth,
-            //     m_zenith,
-            //     opening_angle,
-            // } => match &self.msurf {
-            //     None => {}
-            //     Some(msurf) => {
-            //         let cache = self.cache.deref().borrow();
-            //         let msurf_mesh = cache.micro_surface_mesh(msurf.mesh).unwrap();
-            //         let half_opening_angle_cos = (opening_angle / 2.0).cos();
-            //         log::debug!(
-            //             "zenith: {}, azimuth: {}, opening angle: {}, half opening angle cos: {}",
-            //             m_zenith,
-            //             m_azimuth,
-            //             opening_angle,
-            //             half_opening_angle_cos
-            //         );
-            //         // Right-handed Y-up
-            //         let view_dir = Vec3::new(
-            //             m_zenith.sin() * m_azimuth.cos(),
-            //             m_zenith.cos(),
-            //             m_zenith.sin() * m_azimuth.sin(),
-            //         )
-            //         .normalize();
-            //         log::debug!("View direction: {:?}", view_dir);
-            //         log::debug!("normals: {:?}", msurf_mesh.facet_normals);
-            //         let visible_facets_indices = msurf_mesh
-            //             .facet_normals
-            //             .iter()
-            //             .enumerate()
-            //             .inspect(|(idx, normal)| {
-            //                 log::debug!(
-            //                     "facet {}: {:?}, dot {}",
-            //                     idx,
-            //                     normal,
-            //                     normal.dot(view_dir)
-            //                 );
-            //             })
-            //             .filter_map(|(idx, normal)| {
-            //                 if normal.dot(view_dir) >= half_opening_angle_cos {
-            //                     Some(idx)
-            //                 } else {
-            //                     None
-            //                 }
-            //             })
-            //             .flat_map(|idx| {
-            //                 [
-            //                     msurf_mesh.facets[idx * 3],
-            //                     msurf_mesh.facets[idx * 3 + 1],
-            //                     msurf_mesh.facets[idx * 3 + 2],
-            //                 ]
-            //             })
-            //             .collect::<Vec<_>>();
-            //         log::debug!("Visible facets count: {}", visible_facets_indices.len() / 3);
-            //
-            //         if visible_facets_indices.len() >= 3 {
-            //             // reallocate buffer if needed
-            //             if visible_facets_indices.len() * std::mem::size_of::<u32>()
-            //                 > self.debug_drawing.msurf_prim_index_buf.size() as usize - 3
-            //             {
-            //                 log::debug!(
-            //                     "Reallocating visible facets index buffer to {} bytes",
-            //                     visible_facets_indices.len() * std::mem::size_of::<u32>() + 3
-            //                 );
-            //                 self.debug_drawing.msurf_prim_index_buf =
-            //                     self.ctx.gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            //                         label: Some("Visible Facets Index Buffer"),
-            //                         size: (visible_facets_indices.len()
-            //                             * std::mem::size_of::<u32>()
-            //                             + 3) as u64,
-            //                         usage: wgpu::BufferUsages::COPY_DST
-            //                             | wgpu::BufferUsages::INDEX
-            //                             | wgpu::BufferUsages::COPY_SRC,
-            //                         mapped_at_creation: false,
-            //                     });
-            //             }
-            //             self.debug_drawing.msurf_prim_index_count =
-            //                 visible_facets_indices.len() as u32;
-            //             log::debug!("Updating visible facets index buffer");
-            //             self.ctx.gpu.queue.write_buffer(
-            //                 &self.debug_drawing.msurf_prim_index_buf,
-            //                 3 * std::mem::size_of::<u32>() as u64,
-            //                 bytemuck::cast_slice(&visible_facets_indices),
-            //             );
-            //             self.debug_drawing.drawing_msurf_prims = true;
-            //             self.debug_drawing.multiple_prims = true;
-            //         }
-            //     }
-            // },
             _ => {}
         }
     }
