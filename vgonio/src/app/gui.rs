@@ -7,6 +7,7 @@ pub mod outliner;
 mod simulations;
 pub mod state;
 mod surf_viewer;
+mod theme;
 mod tools;
 mod ui;
 mod widgets;
@@ -39,7 +40,7 @@ use crate::{
         gui::{
             bsdf_viewer::BsdfViewer,
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
-            ui::Theme,
+            theme::{ThemeKind, ThemeState, ThemeVisuals},
         },
     },
     error::RuntimeError,
@@ -118,6 +119,8 @@ pub enum VgonioEvent {
         text: String,
         time: f32,
     },
+    /// Update the theme.
+    UpdateThemeKind(ThemeKind),
 }
 
 /// Events used by BSDF viewer.`
@@ -558,8 +561,12 @@ impl VisualGridState {
         view_proj: &ViewProjUniform,
         view_proj_inv: &ViewProjUniform,
         color: wgpu::Color,
-        is_dark_mode: bool,
+        theme_kind: ThemeKind,
     ) {
+        let alpha = match theme_kind {
+            ThemeKind::Light => 0.0,
+            ThemeKind::Dark => 1.0,
+        };
         ctx.queue.write_buffer(
             &self.uniform_buffer,
             0,
@@ -568,12 +575,7 @@ impl VisualGridState {
                 proj: view_proj.proj.to_cols_array(),
                 view_inv: view_proj_inv.view.to_cols_array(),
                 proj_inv: view_proj_inv.proj.to_cols_array(),
-                grid_line_color: [
-                    color.r as f32,
-                    color.g as f32,
-                    color.b as f32,
-                    if is_dark_mode { 1.0 } else { 0.0 },
-                ],
+                grid_line_color: [color.r as f32, color.g as f32, color.b as f32, alpha],
             }),
         );
     }
@@ -607,6 +609,8 @@ pub struct VgonioGuiApp {
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+
+    theme: ThemeState,
 
     /// Depth map of the scene. TODO: refactor
     depth_map: DepthMap,
@@ -686,7 +690,7 @@ impl VgonioGuiApp {
             cache.clone(),
         );
 
-        ui.set_theme(Theme::Light);
+        let theme = ThemeState::default();
 
         let input = InputState {
             key_map: Default::default(),
@@ -726,6 +730,7 @@ impl VgonioGuiApp {
             visual_grid_state,
             bsdf_viewer,
             toasts,
+            theme,
         })
     }
 
@@ -805,15 +810,15 @@ impl VgonioGuiApp {
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
             Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
         );
-        let current_theme_visuals = self.ui.current_theme_visuals();
+
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
         self.visual_grid_state.update_uniforms(
             &self.ctx.gpu,
             &view_proj,
             &view_proj_inv,
-            current_theme_visuals.grid_line_color,
-            current_theme_visuals.egui_visuals.dark_mode,
+            self.theme.visuals().grid_line_color,
+            self.theme.kind(),
         );
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
@@ -918,7 +923,7 @@ impl VgonioGuiApp {
                         // same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(self.ui.current_theme_visuals().clear_color),
+                            load: wgpu::LoadOp::Clear(self.theme.visuals().clear_color),
                             store: true,
                         },
                     },
@@ -1003,7 +1008,8 @@ impl VgonioGuiApp {
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.ui.show(ctx);
+                self.theme.update(ctx);
+                self.ui.show(ctx, self.theme.kind());
                 self.toasts.show(ctx);
             },
         );
@@ -1037,13 +1043,14 @@ impl VgonioGuiApp {
     }
 
     pub fn on_user_event(&mut self, event: VgonioEvent, control_flow: &mut ControlFlow) {
+        use VgonioEvent::*;
         match event {
-            VgonioEvent::Quit => {
+            Quit => {
                 *control_flow = ControlFlow::Exit;
             }
-            VgonioEvent::RequestRedraw => {}
-            VgonioEvent::OpenFiles(files) => self.open_files(files),
-            VgonioEvent::Debugging(event) => {
+            RequestRedraw => {}
+            OpenFiles(files) => self.open_files(files),
+            Debugging(event) => {
                 // TODO: handle events inside the DebuggingState.
                 match event {
                     DebuggingEvent::ToggleSamplingRendering(enabled) => {
@@ -1175,7 +1182,7 @@ impl VgonioGuiApp {
                     }
                 }
             }
-            VgonioEvent::BsdfViewer(event) => match event {
+            BsdfViewer(event) => match event {
                 BsdfViewerEvent::ToggleView(id) => {
                     self.bsdf_viewer.write().unwrap().toggle_view(id);
                 }
@@ -1191,7 +1198,7 @@ impl VgonioGuiApp {
                     self.bsdf_viewer.write().unwrap().rotate(id, angle);
                 }
             },
-            VgonioEvent::Measure(event) => match event {
+            Measure(event) => match event {
                 MeasureEvent::Madf { params, surfaces } => {
                     println!("Measuring area distribution");
                     measure::microfacet::measure_area_distribution(
@@ -1222,7 +1229,7 @@ impl VgonioGuiApp {
                     todo!("Save area distribution to file or display it in a window");
                 }
             },
-            VgonioEvent::Notify { kind, text, time } => {
+            Notify { kind, text, time } => {
                 self.toasts.add(Toast {
                     kind,
                     text: text.into(),
@@ -1232,6 +1239,7 @@ impl VgonioGuiApp {
                         .show_icon(true),
                 });
             }
+            UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
             // VgonioEvent::CheckVisibleFacets {
             //     m_azimuth,
             //     m_zenith,

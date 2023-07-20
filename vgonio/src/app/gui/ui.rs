@@ -1,4 +1,8 @@
-use super::{state::GuiRenderer, VgonioEvent};
+use super::{
+    state::GuiRenderer,
+    theme::{ThemeKind, ThemeState},
+    VgonioEvent,
+};
 use crate::app::{
     cache::{Cache, Handle},
     gfx::GpuContext,
@@ -101,82 +105,6 @@ impl FileDragDrop {
     }
 }
 
-pub struct ThemeState {
-    pub theme: Theme,
-    pub theme_visuals: [ThemeVisuals; 2],
-    pub need_update: bool,
-}
-
-impl Default for ThemeState {
-    fn default() -> Self {
-        Self {
-            theme_visuals: [
-                ThemeVisuals {
-                    egui_visuals: egui::Visuals {
-                        dark_mode: true,
-                        ..egui::Visuals::dark()
-                    },
-                    clear_color: wgpu::Color {
-                        r: 0.046, // no gamma correction
-                        g: 0.046,
-                        b: 0.046,
-                        a: 1.0,
-                    },
-                    grid_line_color: wgpu::Color {
-                        r: 0.4,
-                        g: 0.4,
-                        b: 0.4,
-                        a: 1.0,
-                    },
-                },
-                ThemeVisuals {
-                    egui_visuals: egui::Visuals {
-                        dark_mode: false,
-                        panel_fill: egui::Color32::from_gray(190),
-                        ..egui::Visuals::light()
-                    },
-                    clear_color: wgpu::Color {
-                        r: 0.208, // no gamma correction
-                        g: 0.208,
-                        b: 0.208,
-                        a: 1.0,
-                    },
-                    grid_line_color: wgpu::Color {
-                        r: 0.68,
-                        g: 0.68,
-                        b: 0.68,
-                        a: 1.0,
-                    },
-                },
-            ],
-            theme: Theme::Light,
-            need_update: true,
-        }
-    }
-}
-
-impl ThemeState {
-    pub fn update(&mut self, ctx: &egui::Context) {
-        if self.need_update {
-            self.need_update = false;
-            ctx.set_visuals(self.theme_visuals[self.theme as usize].egui_visuals.clone());
-        }
-    }
-
-    pub fn set(&mut self, theme: Theme) {
-        if self.theme != theme {
-            self.theme = theme;
-            self.need_update = true;
-        }
-    }
-
-    pub fn current_theme(&self) -> Theme { self.theme }
-
-    pub fn current_theme_visuals(&self) -> &ThemeVisuals {
-        &self.theme_visuals[self.theme as usize]
-    }
-}
-
 #[derive(Default)]
 pub struct ImageCache {
     images: HashMap<&'static str, Arc<RetainedImage>>,
@@ -227,8 +155,6 @@ pub struct VgonioUi {
     /// Event loop proxy for sending user defined events.
     event_loop: VgonioEventLoop,
 
-    theme: ThemeState,
-
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
 
@@ -253,25 +179,6 @@ pub struct VgonioUi {
     pub simulations: Simulations,
     // /// Docking tabs.
     // tabs_tree: DockingTabsTree<String>,
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Theme {
-    Dark = 0,
-    Light = 1,
-}
-
-pub struct ThemeVisuals {
-    pub egui_visuals: egui::Visuals,
-    pub clear_color: wgpu::Color,
-    pub grid_line_color: wgpu::Color,
-}
-
-impl Deref for ThemeVisuals {
-    type Target = egui::Visuals;
-
-    fn deref(&self) -> &Self::Target { &self.egui_visuals }
 }
 
 struct TabViewer;
@@ -309,7 +216,6 @@ impl VgonioUi {
             ),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
             drag_drop: FileDragDrop::new(event_loop.clone()),
-            theme: ThemeState::default(),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             outliner: Outliner::new(gpu, bsdf_viewer, event_loop.clone()),
             image_cache: Arc::new(Mutex::new(Default::default())),
@@ -325,14 +231,12 @@ impl VgonioUi {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
-        self.theme.update(ctx);
-
+    pub fn show(&mut self, ctx: &egui::Context, kind: ThemeKind) {
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.vgonio_menu(ui);
+                    self.vgonio_menu(ui, kind);
                 });
             });
         self.tools.show(ctx);
@@ -355,10 +259,6 @@ impl VgonioUi {
         //         .show_inside(ui, &mut TabViewer {});
         // });
     }
-
-    pub fn set_theme(&mut self, theme: Theme) { self.theme.set(theme); }
-
-    pub fn current_theme_visuals(&self) -> &ThemeVisuals { self.theme.current_theme_visuals() }
 
     pub fn outliner(&self) -> &Outliner { &self.outliner }
 
@@ -405,12 +305,11 @@ impl VgonioUi {
         response
     }
 
-    fn vgonio_menu(&mut self, ui: &mut egui::Ui) {
+    fn vgonio_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind) {
         ui.set_height(28.0);
-        let icon_image = if self.theme.current_theme() == Theme::Dark {
-            self.icon_image(&Icon::VGONIO_MENU_DARK)
-        } else {
-            self.icon_image(&Icon::VGONIO_MENU_LIGHT)
+        let icon_image = match kind {
+            ThemeKind::Dark => self.icon_image(&Icon::VGONIO_MENU_DARK),
+            ThemeKind::Light => self.icon_image(&Icon::VGONIO_MENU_LIGHT),
         };
         let desired_icon_height = (ui.max_rect().height() - 4.0).at_most(28.0);
         let image_size = icon_image.size_vec2() * (desired_icon_height / icon_image.size_vec2().y);
@@ -564,10 +463,14 @@ impl VgonioUi {
             });
             ui.menu_button("Theme", |ui| {
                 if ui.button("☀ Light").clicked() {
-                    self.theme.set(Theme::Light);
+                    self.event_loop
+                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Light))
+                        .unwrap();
                 }
                 if ui.button("🌙 Dark").clicked() {
-                    self.theme.set(Theme::Dark);
+                    self.event_loop
+                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Dark))
+                        .unwrap();
                 }
             });
 

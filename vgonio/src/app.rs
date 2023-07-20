@@ -49,6 +49,7 @@ pub struct UserConfig {
     pub data_dir: Option<std::path::PathBuf>,
 
     /// Triangulation pattern for heightfield.
+    #[serde(default = "TriangulationPattern::default")]
     pub triangulation: TriangulationPattern,
 }
 
