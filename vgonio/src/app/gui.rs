@@ -1,5 +1,7 @@
 mod brdf_viewer;
 mod bsdf_viewer;
+mod docking;
+mod file_drop;
 mod gizmo;
 mod icons;
 mod misc;
@@ -62,8 +64,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
     window::{Window, WindowBuilder},
 };
-
-type DockingTabsTree<Tab> = egui_dock::Tree<Tab>;
 
 /// Initial window width.
 const WIN_INITIAL_WIDTH: u32 = 1600;
