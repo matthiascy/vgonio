@@ -1,26 +1,33 @@
-use crate::app::{
-    cache::{Cache, Handle},
-    gfx::GpuContext,
-    gui::{
-        bsdf_viewer::BsdfViewer,
-        event::{EventLoopProxy, VgonioEvent},
-        file_drop::FileDragDrop,
-        gizmo::NavigationGizmo,
-        icons,
-        outliner::Outliner,
-        simulations::Simulations,
-        state::GuiRenderer,
-        theme::ThemeKind,
-        tools::{SamplingInspector, Scratch, Tools},
-        widgets::ToggleSwitch,
-        DebuggingInspector,
+use crate::{
+    app::{
+        cache::{Cache, Handle},
+        gfx::GpuContext,
+        gui::{
+            bsdf_viewer::BsdfViewer,
+            data::PropertyData,
+            event::{EventLoopProxy, VgonioEvent},
+            file_drop::FileDragDrop,
+            gizmo::NavigationGizmo,
+            icons,
+            outliner::Outliner,
+            simulations::Simulations,
+            state::GuiRenderer,
+            theme::ThemeKind,
+            tools::{SamplingInspector, Scratch, Tools},
+            widgets::ToggleSwitch,
+            DebuggingInspector,
+        },
+        Config,
     },
-    Config,
+    measure::measurement::MeasurementData,
 };
 use egui::{NumExt, Ui, WidgetText};
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
-use std::sync::{Arc, RwLock};
+use std::{
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
 use vgcore::math::Mat4;
 use vgsurf::MicroSurface;
 
@@ -36,6 +43,8 @@ pub struct VgonioGui {
 
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
+
+    gpu_ctx: Arc<GpuContext>,
 
     cache: Arc<RwLock<Cache>>,
 
@@ -55,18 +64,10 @@ pub struct VgonioGui {
     pub left_panel_expanded: bool,
     pub simulations: Simulations,
 
+    pub properties: Arc<RwLock<PropertyData>>,
+
     /// Docking system for the UI.
     dockspace: DockSpace,
-}
-
-struct TabViewer;
-
-impl egui_dock::TabViewer for TabViewer {
-    type Tab = String;
-
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) { ui.label(format!("Content of {tab}")); }
-
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { (&*tab).into() }
 }
 
 impl VgonioGui {
@@ -79,6 +80,8 @@ impl VgonioGui {
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing UI");
+        let properties = Arc::new(RwLock::new(PropertyData::new()));
+
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -92,12 +95,14 @@ impl VgonioGui {
             cache,
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            outliner: Outliner::new(gpu, bsdf_viewer, event_loop.clone()),
+            outliner: Outliner::new(gpu.clone(), properties.clone(), event_loop.clone()),
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
             plotting_inspectors: vec![],
             dockspace: DockSpace::default(),
+            properties,
+            gpu_ctx: gpu,
         }
     }
 
@@ -106,7 +111,12 @@ impl VgonioGui {
     /// Returns [`EventResponse::Ignored`] if the event was not handled,
     /// otherwise returns [`EventResponse::Handled`].
     pub fn on_user_event(&mut self, event: VgonioEvent) -> EventResponse {
-        match event {
+        match &event {
+            VgonioEvent::OpenFiles(paths) => {
+                self.on_open_files(paths);
+                // TODO: return handled
+                EventResponse::Ignored(event)
+            }
             _ => EventResponse::Ignored(event),
         }
     }
@@ -143,13 +153,18 @@ impl VgonioGui {
 
     pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
 
-    pub fn update_loaded_surfaces(&mut self, surfaces: &[Handle<MicroSurface>], cache: &Cache) {
-        self.outliner_mut().update_surfaces(surfaces, cache);
+    pub fn on_open_files(&mut self, files: &[rfd::FileHandle]) {
+        let (surfaces, measurements) = self.open_files(files);
+        let cache = self.cache.read().unwrap();
+        self.properties
+            .write()
+            .unwrap()
+            .update_surfaces(&surfaces, &cache);
         self.tools
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()
-            .update_surfaces(surfaces);
-        self.simulations.update_loaded_surfaces(surfaces, cache);
+            .update_surfaces(&surfaces);
+        self.simulations.update_loaded_surfaces(&surfaces, &cache);
     }
 
     fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind, visual_grid_visible: &mut bool) {
@@ -345,6 +360,79 @@ impl VgonioGui {
         if icon_toggle_button(ui, "right_panel_toggle", &mut right_panel_expanded).clicked() {
             self.right_panel_expanded = right_panel_expanded;
         }
+    }
+
+    fn open_files(
+        &mut self,
+        files: &[rfd::FileHandle],
+    ) -> (Vec<Handle<MicroSurface>>, Vec<Handle<MeasurementData>>) {
+        let mut surfaces = vec![];
+        let mut measurements = vec![];
+        // TODO: handle other file types
+        for file in files {
+            let path: PathBuf = file.into();
+            let ext = match path.extension() {
+                None => None,
+                Some(s) => s.to_str().map(|s| s.to_lowercase()),
+            };
+
+            if let Some(ext) = ext {
+                match ext.as_str() {
+                    "vgmo" => {
+                        // Micro-surface measurement data
+                        log::debug!("Opening micro-surface measurement output: {:?}", path);
+                        match self
+                            .cache
+                            .write()
+                            .unwrap()
+                            .load_micro_surface_measurement(&self.config, &path)
+                        {
+                            Ok(hdl) => {
+                                measurements.push(hdl);
+                            }
+                            Err(e) => {
+                                log::error!("Failed to load micro surface measurement: {:?}", e);
+                            }
+                        }
+                    }
+                    "vgms" | "txt" => {
+                        // Micro-surface profile
+                        log::debug!("Opening micro-surface profile: {:?}", path);
+                        let mut locked_cache = self.cache.write().unwrap();
+                        match locked_cache.load_micro_surface(&self.config, &path) {
+                            Ok((surf, _)) => {
+                                let _ = locked_cache
+                                    .create_micro_surface_renderable_mesh(
+                                        &self.gpu_ctx.device,
+                                        surf,
+                                    )
+                                    .unwrap();
+                                surfaces.push(surf)
+                            }
+                            Err(e) => {
+                                log::error!("Failed to load micro surface: {:?}", e);
+                            }
+                        }
+                    }
+                    "spd" => {
+                        todo!()
+                    }
+                    "csv" => {
+                        todo!()
+                    }
+                    _ => {}
+                }
+            } else {
+                log::warn!("File {:?} has no extension, ignoring", path);
+            }
+        }
+        (surfaces, measurements)
+        // let cache = self.cache.read().unwrap();
+        // self.msurf_rdr_state.update_locals_lookup(&surfaces);
+        // self.ui.on_open_files(&surfaces, &cache);
+        // self.ui
+        //     .outliner_mut()
+        //     .update_measurement_data(&measurements, &cache);
     }
 }
 

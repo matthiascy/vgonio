@@ -21,26 +21,9 @@ use std::{
 use vgcore::units::LengthUnit;
 use vgsurf::MicroSurface;
 
-/// States of one item in the outliner.
-#[derive(Clone, Debug)]
-pub struct PerMicroSurfaceState {
-    /// The name of the micro surface.
-    pub name: String,
-    /// Whether the micro surface is visible.
-    pub visible: bool,
-    /// The scale factor of the micro surface.
-    pub scale: f32,
-    /// The length unit of the micro surface.
-    pub unit: LengthUnit,
-    /// The lowest value of the micro surface.
-    pub min: f32,
-    /// The highest value of the micro surface.
-    pub max: f32,
-    /// The offset along the y-axis.
-    pub height_offset: f32,
-    /// Size of the micro-surface.
-    pub size: (u32, u32),
-}
+use crate::app::gui::data::{MicroSurfaceProp, PropertyData};
+
+use super::data::MeasurementDataProp;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
@@ -49,103 +32,101 @@ pub struct PerMicroSurfaceState {
 pub struct Outliner {
     gpu_ctx: Arc<GpuContext>,
     event_loop: EventLoopProxy,
-    bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+    // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// States of the micro surfaces, indexed by their ids.
-    surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
+    // surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, MicroSurfaceProp)>,
+    surface_headers: Vec<CollapsableHeader<Handle<MicroSurface>>>,
     // /// States of the measured data.
     //measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
-    measurements: Vec<(Handle<MeasurementData>, MeasuredDataCollapsableHeader)>,
+    measured_headers: Vec<CollapsableHeader<Handle<MeasurementData>>>,
     // /// Plotting inspectors, linked to the measurement data they are inspecting.
     // plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
+    data: Arc<RwLock<PropertyData>>,
 }
 
 impl Outliner {
     /// Creates a new outliner.
     pub fn new(
         gpu_ctx: Arc<GpuContext>,
-        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         log::info!("Creating outliner");
         Self {
             gpu_ctx,
             event_loop,
-            bsdf_viewer,
-            surfaces: HashMap::new(),
-            measurements: Default::default(),
+            // bsdf_viewer,
+            // surfaces: HashMap::new(),
+            // measurements: Default::default(),
             // plotting_inspectors: vec![],
+            surface_headers: vec![],
+            measured_headers: vec![],
+            data,
         }
     }
 
-    pub fn surfaces(
-        &self,
-    ) -> &HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)> {
-        &self.surfaces
-    }
+    // pub fn surfaces(
+    //     &self,
+    // ) -> &HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader,
+    //   MicroSurfaceProp)> { &self.surfaces
+    // }
 
-    /// Returns an iterator over all the visible micro surfaces.
-    pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &PerMicroSurfaceState)> {
-        self.surfaces
-            .iter()
-            .filter(|(_, (_, s))| s.visible)
-            .map(|(id, (_, s))| (id, s))
-            .collect()
-    }
+    // /// Returns an iterator over all the visible micro surfaces.
+    // pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>,
+    // &MicroSurfaceProp)> {     self.surfaces
+    //         .iter()
+    //         .filter(|(_, (_, s))| s.visible)
+    //         .map(|(id, (_, s))| (id, s))
+    //         .collect()
+    // }
 
-    pub fn any_visible_surfaces(&self) -> bool { self.surfaces.iter().any(|(_, (_, s))| s.visible) }
+    // pub fn any_visible_surfaces(&self) -> bool { self.surfaces.iter().any(|(_,
+    // (_, s))| s.visible) }
 
-    /// Updates the list of micro surfaces.
-    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &Cache) {
-        for hdl in surfs {
-            if let std::collections::hash_map::Entry::Vacant(e) = self.surfaces.entry(*hdl) {
-                let record = cache.get_micro_surface_record(*hdl).unwrap();
-                let surf = cache.get_micro_surface(*e.key()).unwrap();
-                let mesh = cache.get_micro_surface_mesh(record.mesh).unwrap();
-                e.insert((
-                    SurfaceCollapsableHeader { selected: false },
-                    PerMicroSurfaceState {
-                        name: record.name().to_string(),
-                        visible: false,
-                        scale: 1.0,
-                        unit: surf.unit,
-                        min: surf.min,
-                        max: surf.max,
-                        height_offset: mesh.height_offset,
-                        size: (surf.rows as u32, surf.cols as u32),
-                    },
-                ));
-            }
-        }
-    }
+    // /// Updates the list of micro surfaces.
+    // pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache:
+    // &Cache) {     for hdl in surfs {
+    //         if let std::collections::hash_map::Entry::Vacant(e) =
+    // self.surfaces.entry(*hdl) {             let record =
+    // cache.get_micro_surface_record(*hdl).unwrap();             let surf =
+    // cache.get_micro_surface(*e.key()).unwrap();             let mesh =
+    // cache.get_micro_surface_mesh(record.mesh).unwrap();
+    // e.insert((                 SurfaceCollapsableHeader { selected: false },
+    //                 MicroSurfaceProp {
+    //                     name: record.name().to_string(),
+    //                     visible: false,
+    //                     scale: 1.0,
+    //                     unit: surf.unit,
+    //                     min: surf.min,
+    //                     max: surf.max,
+    //                     height_offset: mesh.height_offset,
+    //                     size: (surf.rows as u32, surf.cols as u32),
+    //                 },
+    //             ));
+    //         }
+    //     }
+    // }
 
-    /// Updates the list of measurement data.
-    pub fn update_measurement_data(
-        &mut self,
-        measurements: &[Handle<MeasurementData>],
-        cache: &Cache,
-    ) {
-        for meas in measurements {
-            // let data = cache.get_measurement_data(*meas).unwrap();
-            // if !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) {
-            //     self.measurements.push((
-            //         data,
-            //         MeasuredDataCollapsableHeader {
-            //             selected: false,
-            //             show_plot: false,
-            //         },
-            //     ));
-            // }
-            if !self.measurements.iter().any(|(d, _)| d == meas) {
-                self.measurements.push((
-                    *meas,
-                    MeasuredDataCollapsableHeader {
-                        selected: false,
-                        show_plot: false,
-                    },
-                ));
-            }
-        }
-    }
+    // /// Updates the list of measurement data.
+    // pub fn update_measurement_data(
+    //     &mut self,
+    //     measurements: &[Handle<MeasurementData>],
+    //     cache: &Cache,
+    // ) { for meas in measurements { // let data =
+    //   cache.get_measurement_data(*meas).unwrap(); // if
+    //   !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) { //
+    //   self.measurements.push(( //         data, // MeasuredDataCollapsableHeader
+    //   { //             selected: false, // show_plot: false, //         }, // ));
+    //   // } if !self.measurements.iter().any(|(d, _)| d == meas) {
+    //   self.measurements.push(( *meas, MeasuredDataCollapsableHeader { selected:
+    //   false, show_plot: false, }, )); } }
+    // }
+}
+
+pub struct CollapsableHeader<T> {
+    selected: bool,
+    item: T,
 }
 
 fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool) {
@@ -158,12 +139,13 @@ fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool) {
     });
 }
 
-pub struct SurfaceCollapsableHeader {
-    selected: bool,
-}
+// pub struct SurfaceCollapsableHeader {
+//     surface: Handle<MicroSurface>,
+//     selected: bool,
+// }
 
-impl SurfaceCollapsableHeader {
-    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut PerMicroSurfaceState) {
+impl CollapsableHeader<Handle<MicroSurface>> {
+    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut MicroSurfaceProp) {
         let id = ui.make_persistent_id(&state.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
@@ -206,84 +188,90 @@ impl SurfaceCollapsableHeader {
     }
 }
 
-struct MeasuredDataCollapsableHeader {
-    selected: bool,
-    show_plot: bool,
-}
+// struct MeasuredDataCollapsableHeader {
+//     measurement: Handle<MeasurementData>,
+//     selected: bool,
+//     show_plot: bool,
+// }
 
-#[rustfmt::skip]
-impl MeasuredDataCollapsableHeader {
+impl CollapsableHeader<Handle<MeasurementData>> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
         // data: Weak<MeasurementData>,
-        data: Handle<MeasurementData>,
-        cache: Arc<RwLock<Cache>>,
+        prop: &MeasurementDataProp,
+        // cache: Arc<RwLock<Cache>>,
         // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         gpu: Arc<GpuContext>,
         event_loop: EventLoopProxy,
     ) {
-        let cache = cache.read().unwrap();
-        let measured = cache.get_measurement_data(data).unwrap();
-        let id = ui.make_persistent_id(&measured.name);
+        // let cache = cache.read().unwrap();
+        // let measured = cache.get_measurement_data(prop).unwrap();
+        let id = ui.make_persistent_id(&prop.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                header_content(ui, &measured.name, &mut self.selected);
+                header_content(ui, &prop.name, &mut self.selected);
             })
             .body(|ui| {
-                let measurement_kind = measured.kind();
+                let measurement_kind = prop.kind;
                 egui::Grid::new("measurement_data_body")
                     .num_columns(2)
                     .show(ui, |ui| {
                         ui.label("Type:");
                         ui.label(format!("{}", measurement_kind));
                         ui.end_row();
-                        ui.label("Source:");
-                        match measured.source {
-                            MeasurementDataSource::Loaded(_) => {
-                                ui.label("loaded");
-                            }
-                            MeasurementDataSource::Measured(_) => {
-                                ui.label("measured");
-                            }
-                        }
-                        ui.end_row();
+                        // ui.label("Source:");
+                        // match prop.source {
+                        //     MeasurementDataSource::Loaded(_) => {
+                        //         ui.label("loaded");
+                        //     }
+                        //     MeasurementDataSource::Measured(_) => {
+                        //         ui.label("measured");
+                        //     }
+                        // }
+                        // ui.end_row();
 
-                        if measurement_kind == MeasurementKind::MicrofacetAreaDistribution
-                            || measurement_kind == MeasurementKind::MicrofacetMaskingShadowing
-                        {
-                            let zenith = measured.measured.madf_or_mmsf_zenith().unwrap();
-                            let azimuth = measured.measured.madf_or_mmsf_azimuth().unwrap();
-                            ui.label("θ:");
-                            ui.label(format!(
-                                "{:.2}° ~ {:.2}°, every {:.2}°",
-                                zenith.start.to_degrees(),
-                                zenith.stop.to_degrees(),
-                                zenith.step_size.to_degrees(),
-                            ));
-                            ui.end_row();
-                            #[cfg(debug_assertions)]
-                            {
-                                ui.label("θ bins:");
-                                ui.label(format!("{}", zenith.step_count_wrapped()));
-                                ui.end_row()
-                            }
-                            ui.label("φ:");
-                            ui.label(format!(
-                                "{:.2}° ~ {:.2}°, every {:.2}°",
-                                azimuth.start.to_degrees(),
-                                azimuth.stop.to_degrees(),
-                                azimuth.step_size.to_degrees(),
-                            ));
-                            ui.end_row();
-                            #[cfg(debug_assertions)]
-                            {
-                                ui.label("φ bins:");
-                                ui.label(format!("{}", azimuth.step_count_wrapped()));
-                                ui.end_row()
-                            }
-                        }
+                        // if measurement_kind ==
+                        // MeasurementKind::MicrofacetAreaDistribution     ||
+                        // measurement_kind ==
+                        // MeasurementKind::MicrofacetMaskingShadowing
+                        // {
+                        //     let zenith =
+                        // .measured.madf_or_mmsf_zenith().unwrap();
+                        //     let azimuth =
+                        // measured.measured.madf_or_mmsf_azimuth().unwrap();
+                        //     ui.label("θ:");
+                        //     ui.label(format!(
+                        //         "{:.2}° ~ {:.2}°, every {:.2}°",
+                        //         zenith.start.to_degrees(),
+                        //         zenith.stop.to_degrees(),
+                        //         zenith.step_size.to_degrees(),
+                        //     ));
+                        //     ui.end_row();
+                        //     #[cfg(debug_assertions)]
+                        //     {
+                        //         ui.label("θ bins:");
+                        //         ui.label(format!("{}",
+                        // zenith.step_count_wrapped()));
+                        //         ui.end_row()
+                        //     }
+                        //     ui.label("φ:");
+                        //     ui.label(format!(
+                        //         "{:.2}° ~ {:.2}°, every {:.2}°",
+                        //         azimuth.start.to_degrees(),
+                        //         azimuth.stop.to_degrees(),
+                        //         azimuth.step_size.to_degrees(),
+                        //     ));
+                        //     ui.end_row();
+                        //     #[cfg(debug_assertions)]
+                        //     {
+                        //         ui.label("φ bins:");
+                        //         ui.label(format!("{}",
+                        // azimuth.step_count_wrapped()));
+                        //         ui.end_row()
+                        //     }
+                        // }
                     });
                 ui.add_space(5.0);
                 if ui.button("Plot").clicked() {
@@ -322,7 +310,8 @@ impl MeasuredDataCollapsableHeader {
                     //                     measured.name.clone(),
                     //                     measured.clone(),
                     //                     BsdfPlottingControls::new(
-                    //                         bsdf_viewer.write().unwrap().create_new_view(),
+                    //
+                    // bsdf_viewer.write().unwrap().create_new_view(),
                     //                     ),
                     //                     gpu,
                     //                     event_loop,
@@ -340,12 +329,13 @@ impl MeasuredDataCollapsableHeader {
 impl Outliner {
     /// Creates the ui for the outliner.
     pub fn ui(&mut self, ui: &mut egui::Ui, cache: Arc<RwLock<Cache>>) {
+        let mut state = self.data.write().unwrap();
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    for (_, (hdr, state)) in self.surfaces.iter_mut() {
-                        hdr.ui(ui, state);
+                    for hdr in self.surface_headers.iter_mut() {
+                        hdr.ui(ui, &mut state.surfaces.get_mut(&hdr.item).unwrap());
                     }
                 });
             });
@@ -353,17 +343,25 @@ impl Outliner {
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    for (data, hdr) in self.measurements.iter_mut() {
+                    for hdr in self.measured_headers.iter_mut() {
                         hdr.ui(
                             ui,
-                            data.clone(),
-                            // &mut self.plotting_inspectors,
-                            // self.bsdf_viewer.clone(),
-                            cache.clone(),
+                            &state.measured.get(&hdr.item).unwrap(),
                             self.gpu_ctx.clone(),
                             self.event_loop.clone(),
                         );
                     }
+                    // for (data, hdr) in self.measured_headers.iter_mut() {
+                    //     hdr.ui(
+                    //         ui,
+                    //         data.clone(),
+                    //         // &mut self.plotting_inspectors,
+                    //         // self.bsdf_viewer.clone(),
+                    //         cache.clone(),
+                    //         self.gpu_ctx.clone(),
+                    //         self.event_loop.clone(),
+                    //     );
+                    // }
                 })
             });
 

@@ -1,26 +1,44 @@
 use std::fmt::{self, Debug};
 
+use super::prop_insp::PropertyInspector;
+
 /// Docking space for widgets.
 pub struct DockSpace {
     /// Inner tree of the dock space.
-    inner: egui_dock::Tree<DockingTab>,
-    /// Tabs to be added to the dock space.
-    added: Vec<NewTab>,
+    inner: egui_dock::Tree<DockingWidget>,
+    /// New widgets to be added to the dock space.
+    added: Vec<NewWidget>,
 }
 
 impl Default for DockSpace {
+    /// Create a new dock space with a default layout.
+    ///
+    /// |   | 1 |
+    /// | 0 | - |
+    /// |   | 2 |
     fn default() -> Self {
+        let mut inner = egui_dock::Tree::new(vec![DockingWidget {
+            index: 0,
+            dockable: Box::new(DockableString::new("Hello, world!".to_owned())),
+        }]);
+        let [_, r] = inner.split_right(
+            egui_dock::NodeIndex::root(),
+            0.8,
+            vec![DockingWidget {
+                index: 1,
+                dockable: Box::new(DockableString::new("Hello, world!".to_owned())),
+            }],
+        );
+        inner.split_below(
+            r,
+            0.5,
+            vec![DockingWidget {
+                index: 2,
+                dockable: Box::new(PropertyInspector::new()),
+            }],
+        );
         Self {
-            inner: egui_dock::Tree::new(vec![
-                DockingTab {
-                    index: 0,
-                    widget: Box::new(DockableString::new("Hello, world!".to_owned())),
-                },
-                DockingTab {
-                    index: 0,
-                    widget: Box::new(DockableString::new("Hello, world!".to_owned())),
-                },
-            ]),
+            inner,
             added: Vec::new(),
         }
     }
@@ -49,8 +67,10 @@ impl DockSpace {
             let widget: Box<dyn Dockable> = match new_tab.kind {
                 _ => Box::new(DockableString::new(String::from("Hello world"))),
             };
-            self.inner
-                .push_to_focused_leaf(DockingTab { index, widget });
+            self.inner.push_to_focused_leaf(DockingWidget {
+                index,
+                dockable: widget,
+            });
         });
     }
 }
@@ -63,11 +83,11 @@ pub trait Dockable {
     /// Title of the widget.
     fn title(&self) -> egui::WidgetText;
 
-    /// Actual content of the widget.
-    fn ui(&mut self, ui: &mut egui::Ui);
-
     /// Kind of the widget.
     fn kind(&self) -> WidgetKind;
+
+    /// Actual content of the widget.
+    fn ui(&mut self, ui: &mut egui::Ui);
 }
 
 /// Kind of a possible widget.
@@ -78,29 +98,30 @@ pub enum WidgetKind {
     Outliner,
     SurfViewer,
     BsdfViewer,
+    Properties,
 }
 
 /// A tab that can be stored in the dock space.
-pub struct DockingTab {
+pub struct DockingWidget {
     /// Index of the tab in the dock space inner tree.
     pub index: usize,
     /// Widget to be displayed in the tab.
-    pub widget: Box<dyn Dockable>,
+    pub dockable: Box<dyn Dockable>,
 }
 
-impl Debug for DockingTab {
+impl Debug for DockingWidget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DockingTab")
             .field("index", &self.index)
-            .field("kind", &self.widget.kind())
-            .field("widget", &self.widget.uuid())
+            .field("kind", &self.dockable.kind())
+            .field("widget", &self.dockable.uuid())
             .finish()
     }
 }
 
 /// New tab to be added to the dock space.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct NewTab {
+pub struct NewWidget {
     /// Widget to be created.
     pub kind: WidgetKind,
     /// Index of the parent tab in the dock space inner tree.
@@ -109,37 +130,37 @@ pub struct NewTab {
 
 /// Utility structure to render the tabs in the dock space.
 pub struct DockingDisplay<'a> {
-    pub added: &'a mut Vec<NewTab>,
+    pub added: &'a mut Vec<NewWidget>,
 }
 
 impl<'a> egui_dock::TabViewer for DockingDisplay<'a> {
-    type Tab = DockingTab;
+    type Tab = DockingWidget;
 
-    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id { egui::Id::new(tab.widget.uuid()) }
+    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id { egui::Id::new(tab.dockable.uuid()) }
 
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) { tab.widget.ui(ui) }
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) { tab.dockable.ui(ui) }
 
-    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText { tab.widget.title() }
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText { tab.dockable.title() }
 
     fn add_popup(&mut self, ui: &mut egui::Ui, parent: egui_dock::NodeIndex) {
         ui.set_min_width(120.0);
 
         if ui.button("SurfViewer").clicked() {
-            self.added.push(NewTab {
+            self.added.push(NewWidget {
                 kind: WidgetKind::SurfViewer,
                 parent: parent.0,
             });
         }
 
         if ui.button("BsdfViewer").clicked() {
-            self.added.push(NewTab {
+            self.added.push(NewWidget {
                 kind: WidgetKind::BsdfViewer,
                 parent: parent.0,
             });
         }
 
         if ui.button("Outliner").clicked() {
-            self.added.push(NewTab {
+            self.added.push(NewWidget {
                 kind: WidgetKind::Outliner,
                 parent: parent.0,
             });
@@ -147,7 +168,7 @@ impl<'a> egui_dock::TabViewer for DockingDisplay<'a> {
 
         #[cfg(debug_assertions)]
         if ui.button("String").clicked() {
-            self.added.push(NewTab {
+            self.added.push(NewWidget {
                 kind: WidgetKind::String,
                 parent: parent.0,
             });

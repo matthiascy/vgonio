@@ -1,5 +1,6 @@
 mod brdf_viewer;
 mod bsdf_viewer;
+mod data;
 mod docking;
 mod event;
 mod file_drop;
@@ -7,6 +8,7 @@ mod gizmo;
 mod icons;
 mod misc;
 pub mod outliner;
+mod prop_insp;
 mod simulations;
 pub mod state;
 mod surf_viewer;
@@ -375,8 +377,9 @@ impl VgonioGuiApp {
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
             Some(surface) => {
-                let state = self.ui.outliner().surfaces().get(&surface).unwrap();
-                (state.1.min, state.1.max, state.1.scale)
+                let properties = self.ui.properties.read().unwrap();
+                let prop = properties.surfaces.get(&surface).unwrap();
+                (prop.min, prop.max, prop.scale)
             }
             None => (0.0, 1.0, 1.0),
         };
@@ -389,7 +392,8 @@ impl VgonioGuiApp {
         );
 
         // Update uniform buffer for all visible surfaces.
-        let visible_surfaces = self.ui.outliner().visible_surfaces();
+        let properties = self.ui.properties.read().unwrap();
+        let visible_surfaces = properties.visible_surfaces();
         if !visible_surfaces.is_empty() {
             self.ctx.gpu.queue.write_buffer(
                 &self.msurf_rdr_state.global_uniform_buffer,
@@ -464,7 +468,7 @@ impl VgonioGuiApp {
 
         {
             let cache = self.cache.read().unwrap();
-            let visible_surfaces = self.ui.outliner().visible_surfaces();
+            let visible_surfaces = self.ui.properties.read().unwrap().visible_surfaces();
             {
                 let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Main Render Pass"),
@@ -898,11 +902,11 @@ impl VgonioGuiApp {
                 log::warn!("File {:?} has no extension, ignoring", path);
             }
         }
-        let cache = self.cache.read().unwrap();
+        // let cache = self.cache.read().unwrap();
         self.msurf_rdr_state.update_locals_lookup(&surfaces);
-        self.ui.update_loaded_surfaces(&surfaces, &cache);
-        self.ui
-            .outliner_mut()
-            .update_measurement_data(&measurements, &cache);
+        // self.ui.on_open_files(&surfaces, &cache);
+        // self.ui
+        //     .outliner_mut()
+        //     .update_measurement_data(&measurements, &cache);
     }
 }
