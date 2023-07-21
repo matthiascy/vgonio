@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
     rc::{Rc, Weak},
     str::FromStr,
+    sync::Arc,
 };
 use uuid::Uuid;
 use vgcore::error::VgonioError;
@@ -170,7 +171,7 @@ pub struct Cache {
     renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
 
     /// Cache for measured data.
-    measurements_data: HashMap<Handle<MeasurementData>, Rc<MeasurementData>>,
+    measurements_data: HashMap<Handle<MeasurementData>, MeasurementData>,
 
     // TODO: recently files
     /// Cache for recently opened files.
@@ -362,8 +363,8 @@ impl Cache {
     pub fn get_measurement_data(
         &self,
         handle: Handle<MeasurementData>,
-    ) -> Option<Weak<MeasurementData>> {
-        self.measurements_data.get(&handle).map(Rc::downgrade)
+    ) -> Option<&MeasurementData> {
+        self.measurements_data.get(&handle)
     }
 
     /// Loads a surface from its relevant place and returns its cache handle.
@@ -434,7 +435,7 @@ impl Cache {
                     Ok(*hdl)
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
-                    let data = Rc::new(MeasurementData::read_from_file(&filepath)?);
+                    let data = MeasurementData::read_from_file(&filepath)?;
                     let handle = Handle::new();
                     self.measurements_data.insert(handle, data);
                     Ok(handle)

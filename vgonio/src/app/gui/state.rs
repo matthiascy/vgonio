@@ -7,6 +7,7 @@ mod renderer;
 // and cli)
 
 pub use context::RawGuiContext;
+use egui_winit::EventResponse;
 pub use input::InputState;
 pub use renderer::GuiRenderer;
 
@@ -48,8 +49,6 @@ use vgcore::{
 use vgsurf::MicroSurfaceMesh;
 use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
-
-use super::EventResponse;
 
 pub const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 pub const ZENITH_BIN_SIZE_DEG: usize = 2;
@@ -1529,6 +1528,6 @@ impl GuiContext {
 
     /// Update the context whenever there is a window event.
     pub fn on_window_event(&mut self, event: &WindowEvent) -> EventResponse {
-        self.context.on_window_event(event).into()
+        self.context.on_window_event(event)
     }
 }

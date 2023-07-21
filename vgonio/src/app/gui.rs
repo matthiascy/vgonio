@@ -27,20 +27,19 @@ use std::{
 };
 
 pub(crate) use tools::DebuggingInspector;
-pub use ui::VgonioUi;
-use wgpu::util::DeviceExt;
+pub use ui::VgonioGui;
 
 use crate::{
     app::{
         cache::{Cache, Handle},
         gfx::{
             camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
-            GpuContext, RenderableMesh, Texture, WgpuConfig, DEFAULT_BIND_GROUP_LAYOUT_DESC,
+            GpuContext, RenderableMesh, Texture, WgpuConfig,
         },
         gui::{
             bsdf_viewer::BsdfViewer,
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
-            theme::{ThemeKind, ThemeState, ThemeVisuals},
+            theme::{ThemeKind, ThemeState},
         },
     },
     error::RuntimeError,
@@ -48,9 +47,7 @@ use crate::{
         self,
         collector::CollectorPatches,
         emitter::EmitterSamples,
-        measurement::{
-            BsdfMeasurementParams, MadfMeasurementParams, MeasurementData, MmsfMeasurementParams,
-        },
+        measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
         CollectorScheme, RtcMethod,
     },
 };
@@ -71,33 +68,6 @@ use winit::{
 const WIN_INITIAL_WIDTH: u32 = 1600;
 /// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
-
-/// Event processing state.
-pub enum EventResponse {
-    /// Event wasn't handled, continue processing.
-    Ignored,
-    /// Event was handled, stop processing events.
-    Consumed,
-}
-
-impl EventResponse {
-    /// Returns true if the event was consumed.
-    pub fn is_consumed(&self) -> bool {
-        match self {
-            EventResponse::Ignored => false,
-            EventResponse::Consumed => true,
-        }
-    }
-}
-
-impl From<egui_winit::EventResponse> for EventResponse {
-    fn from(resp: egui_winit::EventResponse) -> Self {
-        match resp.consumed {
-            true => EventResponse::Consumed,
-            false => EventResponse::Ignored,
-        }
-    }
-}
 
 /// Events used by Vgonio application.
 #[derive(Debug)]
@@ -227,7 +197,11 @@ pub enum MeasureEvent {
 /// Event loop proxy with Vgonio events.
 pub type VgonioEventLoop = EventLoopProxy<VgonioEvent>;
 
-use self::{tools::SamplingInspector, visual_grid::VisualGridState};
+use self::{
+    surf_viewer::MicroSurfaceUniforms,
+    tools::{PlottingWidget, SamplingInspector},
+    visual_grid::VisualGridState,
+};
 
 use crate::app::{gfx::WindowSurface, Config};
 
@@ -472,7 +446,7 @@ pub struct VgonioGuiApp {
     /// Surface for presenting rendered frames.
     canvas: WindowSurface,
     /// The GUI application state.
-    ui: VgonioUi,
+    ui: VgonioGui,
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
     /// The cache of the application including preloaded datafiles. See
@@ -563,7 +537,7 @@ impl VgonioGuiApp {
             event_loop.create_proxy(),
         )));
 
-        let mut ui = VgonioUi::new(
+        let ui = VgonioGui::new(
             event_loop.create_proxy(),
             config.clone(),
             gpu_ctx.clone(),
@@ -645,8 +619,10 @@ impl VgonioGuiApp {
         event: &WindowEvent,
         control: &mut ControlFlow,
     ) {
-        match self.ctx.gui.on_window_event(event) {
-            EventResponse::Ignored => match event {
+        let response = self.ctx.gui.on_window_event(event);
+        // Note: `consumed` is `true` if the event was handled by egui.
+        if !response.consumed {
+            match event {
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -678,8 +654,7 @@ impl VgonioGuiApp {
                 }
                 WindowEvent::CloseRequested => *control = ControlFlow::Exit,
                 _ => {}
-            },
-            EventResponse::Consumed => {}
+            }
         }
     }
 
@@ -792,72 +767,73 @@ impl VgonioGuiApp {
                     label: Some("vgonio_render_encoder"),
                 });
 
-        let cache = self.cache.read().unwrap();
-        let visible_surfaces = self.ui.outliner().visible_surfaces();
         {
-            let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Main Render Pass"),
-                color_attachments: &[Some(
-                    // This is what [[location(0)]] in the fragment shader targets
-                    wgpu::RenderPassColorAttachment {
-                        view: &output_view,
-                        // This is the texture that will receive the resolved output; will be the
-                        // same as `view` unless multisampling.
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(self.theme.visuals().clear_color),
-                            store: true,
+            let cache = self.cache.read().unwrap();
+            let visible_surfaces = self.ui.outliner().visible_surfaces();
+            {
+                let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Main Render Pass"),
+                    color_attachments: &[Some(
+                        // This is what [[location(0)]] in the fragment shader targets
+                        wgpu::RenderPassColorAttachment {
+                            view: &output_view,
+                            // This is the texture that will receive the resolved output; will be
+                            // the same as `view` unless multisampling.
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(self.theme.visuals().clear_color),
+                                store: true,
+                            },
                         },
-                    },
-                )],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_map.depth_attachment.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+                    )],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth_map.depth_attachment.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-            });
+                });
 
-            let aligned_micro_surface_uniform_size =
-                MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+                let aligned_micro_surface_uniform_size =
+                    MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
 
-            if !visible_surfaces.is_empty() {
-                render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
-                render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
+                if !visible_surfaces.is_empty() {
+                    render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
+                    render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
 
-                for (hdl, _) in visible_surfaces.iter() {
-                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
-                    if renderable.is_none() {
-                        log::debug!(
-                            "Failed to get renderable mesh for surface {:?}, skipping.",
-                            hdl
+                    for (hdl, _) in visible_surfaces.iter() {
+                        let renderable =
+                            cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
+                        if renderable.is_none() {
+                            log::debug!(
+                                "Failed to get renderable mesh for surface {:?}, skipping.",
+                                hdl
+                            );
+                            continue;
+                        }
+                        let buf_index = self
+                            .msurf_rdr_state
+                            .locals_lookup
+                            .iter()
+                            .position(|x| x == *hdl)
+                            .unwrap();
+                        let renderable = renderable.unwrap();
+                        render_pass.set_bind_group(
+                            1,
+                            &self.msurf_rdr_state.locals_bind_group,
+                            &[buf_index as u32 * aligned_micro_surface_uniform_size],
                         );
-                        continue;
+                        render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
+                        render_pass.set_index_buffer(
+                            renderable.index_buffer.slice(..),
+                            renderable.index_format,
+                        );
+                        render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
                     }
-                    let buf_index = self
-                        .msurf_rdr_state
-                        .locals_lookup
-                        .iter()
-                        .position(|x| x == *hdl)
-                        .unwrap();
-                    let renderable = renderable.unwrap();
-                    render_pass.set_bind_group(
-                        1,
-                        &self.msurf_rdr_state.locals_bind_group,
-                        &[buf_index as u32 * aligned_micro_surface_uniform_size],
-                    );
-                    render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        renderable.index_buffer.slice(..),
-                        renderable.index_format,
-                    );
-                    render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
                 }
-            }
 
-            if self.ui.visual_grid_enabled {
                 self.visual_grid_state.render(&mut render_pass);
             }
         }
@@ -889,7 +865,8 @@ impl VgonioGuiApp {
             &output_view,
             |ctx| {
                 self.theme.update(ctx);
-                self.ui.show(ctx, self.theme.kind());
+                self.ui
+                    .show(ctx, self.theme.kind(), &mut self.visual_grid_state.visible);
                 self.toasts.show(ctx);
             },
         );
@@ -1222,27 +1199,5 @@ impl VgonioGuiApp {
         self.ui
             .outliner_mut()
             .update_measurement_data(&measurements, &cache);
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct MicroSurfaceUniforms {
-    model: Mat4,
-    info: Vec4,
-}
-
-impl MicroSurfaceUniforms {
-    /// Returns the size of the uniforms in bytes, aligned to the device's
-    /// `min_uniform_buffer_offset_alignment`.
-    fn aligned_size(device: &wgpu::Device) -> u32 {
-        let alignment = device.limits().min_uniform_buffer_offset_alignment;
-        let size = std::mem::size_of::<MicroSurfaceUniforms>() as u32;
-        let remainder = size % alignment;
-        if remainder == 0 {
-            size
-        } else {
-            size + alignment - remainder
-        }
     }
 }

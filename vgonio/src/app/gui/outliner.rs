@@ -52,10 +52,11 @@ pub struct Outliner {
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// States of the micro surfaces, indexed by their ids.
     surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
-    /// States of the measured data.
-    measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
-    /// Plotting inspectors, linked to the measurement data they are inspecting.
-    plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
+    // /// States of the measured data.
+    //measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
+    measurements: Vec<(Handle<MeasurementData>, MeasuredDataCollapsableHeader)>,
+    // /// Plotting inspectors, linked to the measurement data they are inspecting.
+    // plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
 }
 
 impl Outliner {
@@ -72,7 +73,7 @@ impl Outliner {
             bsdf_viewer,
             surfaces: HashMap::new(),
             measurements: Default::default(),
-            plotting_inspectors: vec![],
+            // plotting_inspectors: vec![],
         }
     }
 
@@ -124,10 +125,19 @@ impl Outliner {
         cache: &Cache,
     ) {
         for meas in measurements {
-            let data = cache.get_measurement_data(*meas).unwrap();
-            if !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) {
+            // let data = cache.get_measurement_data(*meas).unwrap();
+            // if !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) {
+            //     self.measurements.push((
+            //         data,
+            //         MeasuredDataCollapsableHeader {
+            //             selected: false,
+            //             show_plot: false,
+            //         },
+            //     ));
+            // }
+            if !self.measurements.iter().any(|(d, _)| d == meas) {
                 self.measurements.push((
-                    data,
+                    *meas,
                     MeasuredDataCollapsableHeader {
                         selected: false,
                         show_plot: false,
@@ -201,17 +211,21 @@ struct MeasuredDataCollapsableHeader {
     show_plot: bool,
 }
 
+#[rustfmt::skip]
 impl MeasuredDataCollapsableHeader {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        data: Weak<MeasurementData>,
-        plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
-        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        // data: Weak<MeasurementData>,
+        data: Handle<MeasurementData>,
+        cache: Arc<RwLock<Cache>>,
+        // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
+        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         gpu: Arc<GpuContext>,
         event_loop: VgonioEventLoop,
     ) {
-        let measured = data.upgrade().unwrap();
+        let cache = cache.read().unwrap();
+        let measured = cache.get_measurement_data(data).unwrap();
         let id = ui.make_persistent_id(&measured.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
@@ -274,49 +288,49 @@ impl MeasuredDataCollapsableHeader {
                 ui.add_space(5.0);
                 if ui.button("Plot").clicked() {
                     // TODO: Send message to bsdf viewer to plot this data.
-                    self.show_plot = true;
-                    if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
-                        match &measured.measured {
-                            MeasuredData::Madf(_) => {
-                                plots.push((
-                                    data.clone(),
-                                    Box::new(PlottingInspector::new(
-                                        measured.name.clone(),
-                                        measured.clone(),
-                                        MadfPlottingControls::default(),
-                                        gpu,
-                                        event_loop,
-                                    )),
-                                ));
-                            }
-                            MeasuredData::Mmsf(_) => {
-                                plots.push((
-                                    data.clone(),
-                                    Box::new(PlottingInspector::new(
-                                        measured.name.clone(),
-                                        measured.clone(),
-                                        MmsfPlottingControls::default(),
-                                        gpu,
-                                        event_loop,
-                                    )),
-                                ));
-                            }
-                            MeasuredData::Bsdf(_) => {
-                                plots.push((
-                                    data.clone(),
-                                    Box::new(PlottingInspector::new(
-                                        measured.name.clone(),
-                                        measured.clone(),
-                                        BsdfPlottingControls::new(
-                                            bsdf_viewer.write().unwrap().create_new_view(),
-                                        ),
-                                        gpu,
-                                        event_loop,
-                                    )),
-                                ));
-                            }
-                        }
-                    }
+                    // self.show_plot = true;
+                    // if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
+                    //     match &measured.measured {
+                    //         MeasuredData::Madf(_) => {
+                    //             plots.push((
+                    //                 data.clone(),
+                    //                 Box::new(PlottingInspector::new(
+                    //                     measured.name.clone(),
+                    //                     measured.clone(),
+                    //                     MadfPlottingControls::default(),
+                    //                     gpu,
+                    //                     event_loop,
+                    //                 )),
+                    //             ));
+                    //         }
+                    //         MeasuredData::Mmsf(_) => {
+                    //             plots.push((
+                    //                 data.clone(),
+                    //                 Box::new(PlottingInspector::new(
+                    //                     measured.name.clone(),
+                    //                     measured.clone(),
+                    //                     MmsfPlottingControls::default(),
+                    //                     gpu,
+                    //                     event_loop,
+                    //                 )),
+                    //             ));
+                    //         }
+                    //         MeasuredData::Bsdf(_) => {
+                    //             plots.push((
+                    //                 data.clone(),
+                    //                 Box::new(PlottingInspector::new(
+                    //                     measured.name.clone(),
+                    //                     measured.clone(),
+                    //                     BsdfPlottingControls::new(
+                    //                         bsdf_viewer.write().unwrap().create_new_view(),
+                    //                     ),
+                    //                     gpu,
+                    //                     event_loop,
+                    //                 )),
+                    //             ));
+                    //         }
+                    //     }
+                    // }
                 }
             });
     }
@@ -325,7 +339,7 @@ impl MeasuredDataCollapsableHeader {
 // GUI related functions
 impl Outliner {
     /// Creates the ui for the outliner.
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, cache: Arc<RwLock<Cache>>) {
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
@@ -343,8 +357,9 @@ impl Outliner {
                         hdr.ui(
                             ui,
                             data.clone(),
-                            &mut self.plotting_inspectors,
-                            self.bsdf_viewer.clone(),
+                            // &mut self.plotting_inspectors,
+                            // self.bsdf_viewer.clone(),
+                            cache.clone(),
                             self.gpu_ctx.clone(),
                             self.event_loop.clone(),
                         );
@@ -352,15 +367,16 @@ impl Outliner {
                 })
             });
 
-        for (data, plot) in self.plotting_inspectors.iter_mut() {
-            let open = &mut self
-                .measurements
-                .iter_mut()
-                .find(|(d, _)| d.ptr_eq(data))
-                .unwrap()
-                .1
-                .show_plot;
-            plot.show(ui.ctx(), open);
-        }
+        // TODO: draw plots in main loop.
+        // for (data, plot) in self.plotting_inspectors.iter_mut() {
+        //     let open = &mut self
+        //         .measurements
+        //         .iter_mut()
+        //         .find(|(d, _)| d.ptr_eq(data))
+        //         .unwrap()
+        //         .1
+        //         .show_plot;
+        //     plot.show(ui.ctx(), open);
+        // }
     }
 }

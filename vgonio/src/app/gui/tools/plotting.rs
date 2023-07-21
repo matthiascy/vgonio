@@ -25,6 +25,7 @@ enum PlotType {
 }
 
 pub trait PlottingWidget {
+    fn uuid(&self) -> uuid::Uuid;
     fn name(&self) -> &str;
     fn ui(&mut self, ui: &mut Ui);
     fn show(&mut self, ctx: &Context, open: &mut bool) {
@@ -44,6 +45,8 @@ pub trait PlottingWidget {
 pub trait PlottingControls: 'static {}
 
 pub struct PlottingInspector<C: PlottingControls> {
+    /// Unique ID for the plot widget.
+    uuid: uuid::Uuid,
     /// Unique name for the plot.
     name: String,
     /// The data to be plotted
@@ -154,6 +157,7 @@ impl<C: PlottingControls> PlottingInspector<C> {
             event_loop,
             gpu,
             controls,
+            uuid: uuid::Uuid::new_v4(),
         }
     }
 
@@ -226,6 +230,8 @@ impl<C: PlottingControls> PlottingInspector<C> {
 }
 
 impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
+
     fn name(&self) -> &str { self.name.as_str() }
 
     fn ui(&mut self, ui: &mut Ui) {
@@ -369,6 +375,8 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
 }
 
 impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
+
     fn name(&self) -> &str { self.name.as_str() }
 
     fn ui(&mut self, ui: &mut Ui) {
@@ -547,6 +555,8 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
 }
 
 impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
+
     fn name(&self) -> &str { self.name.as_str() }
 
     fn ui(&mut self, ui: &mut Ui) {

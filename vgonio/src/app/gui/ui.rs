@@ -5,11 +5,11 @@ use crate::app::{
         bsdf_viewer::BsdfViewer,
         file_drop::FileDragDrop,
         gizmo::NavigationGizmo,
-        icons::Icon,
+        icons,
         outliner::Outliner,
         simulations::Simulations,
         state::GuiRenderer,
-        theme::{ThemeKind, ThemeState},
+        theme::ThemeKind,
         tools::{SamplingInspector, Scratch, Tools},
         widgets::ToggleSwitch,
         DebuggingInspector, VgonioEvent, VgonioEventLoop,
@@ -17,62 +17,14 @@ use crate::app::{
     Config,
 };
 use egui::{NumExt, Ui, WidgetText};
-use egui_extras::RetainedImage;
 use egui_gizmo::GizmoOrientation;
 use egui_toast::ToastKind;
-use std::{
-    collections::HashMap,
-    fmt::Write,
-    ops::Deref,
-    sync::{Arc, Mutex, RwLock},
-};
-use vgcore::{error::VgonioError, math::Mat4};
+use std::sync::{Arc, RwLock};
+use vgcore::math::Mat4;
 use vgsurf::MicroSurface;
 
-#[derive(Default)]
-pub struct ImageCache {
-    images: HashMap<&'static str, Arc<RetainedImage>>,
-}
-
-impl ImageCache {
-    pub fn get_or_insert(
-        &mut self,
-        id: &'static str,
-        bytes: Option<&'static [u8]>,
-    ) -> Option<Arc<RetainedImage>> {
-        match bytes {
-            None => self.images.get(id).cloned(),
-            Some(b) => Some(
-                self.images
-                    .entry(id)
-                    .or_insert_with(|| {
-                        let image = load_image_from_bytes(b)
-                            .unwrap_or_else(|err| panic!("Failed to load image {id:?}: {}", err));
-                        let retained = RetainedImage::from_color_image(id, image);
-                        Arc::new(retained)
-                    })
-                    .clone(),
-            ),
-        }
-    }
-}
-
-fn load_image_from_bytes(bytes: &[u8]) -> Result<egui::ColorImage, VgonioError> {
-    let image = image::load_from_memory(bytes)
-        .map_err(|err| {
-            VgonioError::new(format!("Failed to load image \"{}\"from bytes", err), None)
-        })?
-        .into_rgba8();
-    let size = [image.width() as _, image.height() as _];
-    let pixels = image.as_flat_samples();
-    Ok(egui::ColorImage::from_rgba_unmultiplied(
-        size,
-        pixels.as_slice(),
-    ))
-}
-
 /// Implementation of the GUI for vgonio application.
-pub struct VgonioUi {
+pub struct VgonioGui {
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
 
@@ -81,6 +33,8 @@ pub struct VgonioUi {
 
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
+
+    cache: Arc<RwLock<Cache>>,
 
     // pub simulation_workspace: SimulationWorkspace, // TODO: make private, simplify access
     /// The drag and drop state.
@@ -92,14 +46,8 @@ pub struct VgonioUi {
     /// Outliner of the scene.
     outliner: Outliner,
 
-    image_cache: Arc<Mutex<ImageCache>>,
-
-    /// Visibility of the visual grid.
-    pub visual_grid_enabled: bool,
-
     pub right_panel_expanded: bool,
     pub left_panel_expanded: bool,
-
     pub simulations: Simulations,
     // /// Docking tabs.
     // tabs_tree: DockingTabsTree<String>,
@@ -115,7 +63,7 @@ impl egui_dock::TabViewer for TabViewer {
     fn title(&mut self, tab: &mut Self::Tab) -> WidgetText { (&*tab).into() }
 }
 
-impl VgonioUi {
+impl VgonioGui {
     pub fn new(
         event_loop: VgonioEventLoop,
         config: Arc<Config>,
@@ -136,14 +84,13 @@ impl VgonioUi {
                 event_loop.clone(),
                 gpu.clone(),
                 &mut gui.write().unwrap(),
-                cache,
+                cache.clone(),
             ),
             // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
+            cache,
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             outliner: Outliner::new(gpu, bsdf_viewer, event_loop.clone()),
-            image_cache: Arc::new(Mutex::new(Default::default())),
-            visual_grid_enabled: true,
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
@@ -155,12 +102,12 @@ impl VgonioUi {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, kind: ThemeKind) {
+    pub fn show(&mut self, ctx: &egui::Context, kind: ThemeKind, visual_grid_visble: &mut bool) {
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.vgonio_menu(ui, kind);
+                    self.main_menu(ui, kind, visual_grid_visble);
                 });
             });
         self.tools.show(ctx);
@@ -171,7 +118,7 @@ impl VgonioUi {
                 .min_width(300.0)
                 .default_width(460.0)
                 .resizable(true)
-                .show(ctx, |ui| self.outliner.ui(ui));
+                .show(ctx, |ui| self.outliner.ui(ui, self.cache.clone()));
         }
 
         self.simulations.show_all(ctx);
@@ -196,44 +143,12 @@ impl VgonioUi {
             .update_surfaces(surfaces);
         self.simulations.update_loaded_surfaces(surfaces, cache);
     }
-}
 
-impl VgonioUi {
-    fn icon_image(&self, icon: &Icon) -> Arc<RetainedImage> {
-        self.image_cache
-            .lock()
-            .unwrap()
-            .get_or_insert(icon.id, Some(icon.bytes))
-            .unwrap()
-    }
-
-    fn icon_toggle_button(
-        &self,
-        ui: &mut egui::Ui,
-        icon: &Icon,
-        selected: &mut bool,
-    ) -> egui::Response {
-        let size_points = egui::Vec2::splat(16.0);
-        let image = self.icon_image(icon);
-        let tex_id = image.texture_id(ui.ctx());
-        let tint = if *selected {
-            ui.visuals().widgets.inactive.fg_stroke.color
-        } else {
-            egui::Color32::from_gray(100)
-        };
-        let mut response = ui.add(egui::ImageButton::new(tex_id, size_points).tint(tint));
-        if response.clicked() {
-            *selected = !*selected;
-            response.mark_changed()
-        }
-        response
-    }
-
-    fn vgonio_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind) {
+    fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind, visual_grid_visible: &mut bool) {
         ui.set_height(28.0);
         let icon_image = match kind {
-            ThemeKind::Dark => self.icon_image(&Icon::VGONIO_MENU_DARK),
-            ThemeKind::Light => self.icon_image(&Icon::VGONIO_MENU_LIGHT),
+            ThemeKind::Dark => icons::get_icon_image("vgonio_menu_dark").unwrap(),
+            ThemeKind::Light => icons::get_icon_image("vgonio_menu_light").unwrap(),
         };
         let desired_icon_height = (ui.max_rect().height() - 4.0).at_most(28.0);
         let image_size = icon_image.size_vec2() * (desired_icon_height / icon_image.size_vec2().y);
@@ -355,7 +270,7 @@ impl VgonioUi {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("     Visual grid");
                         ui.add_space(5.0);
-                        ui.add(ToggleSwitch::new(&mut self.visual_grid_enabled));
+                        ui.add(ToggleSwitch::new(visual_grid_visible));
                     });
                 }
 
@@ -414,19 +329,35 @@ impl VgonioUi {
         ui.add_space(ui.available_width() - 48.0);
 
         let mut left_panel_expanded = self.left_panel_expanded;
-        if self
-            .icon_toggle_button(ui, &Icon::LEFT_PANEL_TOGGLE, &mut left_panel_expanded)
-            .clicked()
-        {
+        if icon_toggle_button(ui, "left_panel_toggle", &mut left_panel_expanded).clicked() {
             self.left_panel_expanded = left_panel_expanded;
         }
 
         let mut right_panel_expanded = self.right_panel_expanded;
-        if self
-            .icon_toggle_button(ui, &Icon::RIGHT_PANEL_TOGGLE, &mut right_panel_expanded)
-            .clicked()
-        {
+        if icon_toggle_button(ui, "right_panel_toggle", &mut right_panel_expanded).clicked() {
             self.right_panel_expanded = right_panel_expanded;
         }
     }
+}
+
+fn icon_toggle_button(
+    ui: &mut egui::Ui,
+    icon_name: &'static str,
+    selected: &mut bool,
+) -> egui::Response {
+    let size_points = egui::Vec2::splat(16.0);
+    let image = icons::get_icon_image(icon_name).unwrap();
+    // let image = self.icon_image(icon);
+    let tex_id = image.texture_id(ui.ctx());
+    let tint = if *selected {
+        ui.visuals().widgets.inactive.fg_stroke.color
+    } else {
+        egui::Color32::from_gray(100)
+    };
+    let mut response = ui.add(egui::ImageButton::new(tex_id, size_points).tint(tint));
+    if response.clicked() {
+        *selected = !*selected;
+        response.mark_changed()
+    }
+    response
 }

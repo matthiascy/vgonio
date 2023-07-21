@@ -1,4 +1,3 @@
-const SPIRV_DST_PATH: &str = "src/app/gui/assets/shaders/spirv";
 const GLSL_SRC_PATH: &str = "src/app/gui/assets/shaders/glsl";
 const GLSL_SRC_FILES: [&str; 2] = [
     "src/app/gui/assets/shaders/glsl/visual_grid.vert",
@@ -10,9 +9,6 @@ fn main() {
     for entry in GLSL_SRC_FILES {
         println!("cargo:rerun-if-changed={entry}");
     }
-
-    // Create destination directory if it doesn't exist.
-    std::fs::create_dir_all(SPIRV_DST_PATH).expect("Couldn't create destination directory.");
 
     // Compile GLSL shaders to SPIRV.
     let compiler = shaderc::Compiler::new().unwrap();

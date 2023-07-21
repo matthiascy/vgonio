@@ -47,8 +47,7 @@ pub struct VisualGridState {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
-    // TODO: remove ui.visual_grid_enabled
-    // is_enabled: bool,
+    pub(crate) visible: bool,
 }
 
 impl VisualGridState {
@@ -138,6 +137,7 @@ impl VisualGridState {
             pipeline,
             bind_group,
             uniform_buffer,
+            visible: true,
         }
     }
 
@@ -168,8 +168,13 @@ impl VisualGridState {
 
     /// Render the visual grid.
     pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        if !self.visible {
+            return;
+        }
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..6, 0..1);
     }
+
+    pub fn visible(&self) -> bool { self.visible }
 }
