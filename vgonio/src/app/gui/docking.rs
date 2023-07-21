@@ -2,7 +2,57 @@ use std::fmt::{self, Debug};
 
 /// Docking space for widgets.
 pub struct DockSpace {
+    /// Inner tree of the dock space.
     inner: egui_dock::Tree<DockingTab>,
+    /// Tabs to be added to the dock space.
+    added: Vec<NewTab>,
+}
+
+impl Default for DockSpace {
+    fn default() -> Self {
+        Self {
+            inner: egui_dock::Tree::new(vec![
+                DockingTab {
+                    index: 0,
+                    widget: Box::new(DockableString::new("Hello, world!".to_owned())),
+                },
+                DockingTab {
+                    index: 0,
+                    widget: Box::new(DockableString::new("Hello, world!".to_owned())),
+                },
+            ]),
+            added: Vec::new(),
+        }
+    }
+}
+
+impl DockSpace {
+    pub fn show(&mut self, ctx: &egui::Context) {
+        use egui_dock::NodeIndex;
+
+        egui_dock::DockArea::new(&mut self.inner)
+            .show_add_buttons(true)
+            .show_add_popup(true)
+            .show(
+                ctx,
+                &mut DockingDisplay {
+                    added: &mut self.added,
+                },
+            );
+
+        self.added.drain(..).for_each(|new_tab| {
+            // Focus the node that we want to add a tab to.
+            self.inner.set_focused_node(NodeIndex(new_tab.parent));
+            // Allocate a new index for the tab.
+            let index = self.inner.num_tabs();
+            // Add the tab.
+            let widget: Box<dyn Dockable> = match new_tab.kind {
+                _ => Box::new(DockableString::new(String::from("Hello world"))),
+            };
+            self.inner
+                .push_to_focused_leaf(DockingTab { index, widget });
+        });
+    }
 }
 
 /// Common docking functionality for all dockable widgets
@@ -109,6 +159,19 @@ impl<'a> egui_dock::TabViewer for DockingDisplay<'a> {
 pub struct DockableString {
     pub uuid: uuid::Uuid,
     pub content: String,
+}
+
+impl DockableString {
+    pub fn new(content: String) -> Self { Self::from(content) }
+}
+
+impl From<String> for DockableString {
+    fn from(content: String) -> Self {
+        Self {
+            uuid: uuid::Uuid::new_v4(),
+            content,
+        }
+    }
 }
 
 #[cfg(debug_assertions)]

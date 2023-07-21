@@ -24,7 +24,7 @@ use std::sync::{Arc, RwLock};
 use vgcore::math::Mat4;
 use vgsurf::MicroSurface;
 
-use super::tools::PlottingWidget;
+use super::{docking::DockSpace, event::EventResponse, tools::PlottingWidget};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -54,8 +54,9 @@ pub struct VgonioGui {
     pub right_panel_expanded: bool,
     pub left_panel_expanded: bool,
     pub simulations: Simulations,
-    // /// Docking tabs.
-    // tabs_tree: DockingTabsTree<String>,
+
+    /// Docking system for the UI.
+    dockspace: DockSpace,
 }
 
 struct TabViewer;
@@ -78,10 +79,6 @@ impl VgonioGui {
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing UI");
-        let tab1 = "Tab1".to_string();
-        let tab2 = "Tab2".to_string();
-        // let mut tabs_tree = DockingTabsTree::new(vec![tab1]);
-        // tabs_tree.split_left(egui_dock::NodeIndex::root(), 0.20, vec![tab2]);
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -100,11 +97,19 @@ impl VgonioGui {
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
             plotting_inspectors: vec![],
-            // tabs_tree,
+            dockspace: DockSpace::default(),
         }
     }
 
-    pub fn on_user_event(&mut self, event: &VgonioEvent) {}
+    /// Handles a user event.
+    ///
+    /// Returns [`EventResponse::Ignored`] if the event was not handled,
+    /// otherwise returns [`EventResponse::Handled`].
+    pub fn on_user_event(&mut self, event: VgonioEvent) -> EventResponse {
+        match event {
+            _ => EventResponse::Ignored(event),
+        }
+    }
 
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
         self.navigator.update_matrices(model, view, proj);
@@ -118,9 +123,6 @@ impl VgonioGui {
                     self.main_menu(ui, kind, visual_grid_visble);
                 });
             });
-        self.tools.show(ctx);
-        self.drag_drop.show(ctx);
-        self.navigator.show(ctx);
         if self.right_panel_expanded {
             egui::SidePanel::right("vgonio_right_panel")
                 .min_width(300.0)
@@ -128,14 +130,13 @@ impl VgonioGui {
                 .resizable(true)
                 .show(ctx, |ui| self.outliner.ui(ui, self.cache.clone()));
         }
-        self.simulations.show_all(ctx);
 
-        // egui::Window::new("new_window").show(ctx, |ui| {
-        //     egui_dock::DockArea::new(&mut self.tabs_tree)
-        //         .show_add_buttons(true)
-        //         .show_add_popup(true)
-        //         .show_inside(ui, &mut TabViewer {});
-        // });
+        self.dockspace.show(ctx);
+
+        self.tools.show(ctx);
+        self.drag_drop.show(ctx);
+        self.navigator.show(ctx);
+        self.simulations.show_all(ctx);
     }
 
     pub fn outliner(&self) -> &Outliner { &self.outliner }

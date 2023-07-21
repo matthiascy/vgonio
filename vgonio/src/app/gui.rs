@@ -39,7 +39,7 @@ use crate::{
         },
         gui::{
             bsdf_viewer::BsdfViewer,
-            event::{BsdfViewerEvent, DebuggingEvent, MeasureEvent, VgonioEvent},
+            event::{BsdfViewerEvent, DebuggingEvent, EventResponse, MeasureEvent, VgonioEvent},
             state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
             theme::ThemeState,
         },
@@ -353,7 +353,7 @@ impl VgonioGuiApp {
         }
     }
 
-    pub fn update(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
+    pub fn update_frame(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
         // Update camera uniform.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
@@ -596,203 +596,213 @@ impl VgonioGuiApp {
 
     pub fn on_user_event(&mut self, event: VgonioEvent, control_flow: &mut ControlFlow) {
         use VgonioEvent::*;
-        match event {
-            Quit => {
-                *control_flow = ControlFlow::Exit;
-            }
-            RequestRedraw => {}
-            OpenFiles(files) => self.open_files(files),
-            Debugging(event) => {
-                // TODO: handle events inside the DebuggingState.
+
+        match self.ui.on_user_event(event) {
+            EventResponse::Handled => return,
+            EventResponse::Ignored(event) => {
                 match event {
-                    DebuggingEvent::ToggleSamplingRendering(enabled) => {
-                        self.dbg_drawing_state.sampling_debug_enabled = enabled;
+                    Quit => {
+                        *control_flow = ControlFlow::Exit;
                     }
-                    DebuggingEvent::UpdateDepthMap => {
-                        self.depth_map.copy_to_buffer(
-                            &self.ctx.gpu,
-                            self.canvas.width(),
-                            self.canvas.height(),
-                        );
-                        self.ui
-                            .tools
-                            .get_tool_mut::<DebuggingInspector>()
-                            .unwrap()
-                            .depth_map_pane
-                            .update_depth_map(
+                    RequestRedraw => {}
+                    OpenFiles(files) => self.open_files(files),
+                    Debugging(event) => {
+                        // TODO: handle events inside the DebuggingState.
+                        match event {
+                            DebuggingEvent::ToggleSamplingRendering(enabled) => {
+                                self.dbg_drawing_state.sampling_debug_enabled = enabled;
+                            }
+                            DebuggingEvent::UpdateDepthMap => {
+                                self.depth_map.copy_to_buffer(
+                                    &self.ctx.gpu,
+                                    self.canvas.width(),
+                                    self.canvas.height(),
+                                );
+                                self.ui
+                                    .tools
+                                    .get_tool_mut::<DebuggingInspector>()
+                                    .unwrap()
+                                    .depth_map_pane
+                                    .update_depth_map(
+                                        &self.ctx.gpu,
+                                        &self.ctx.gui,
+                                        &self.depth_map.depth_attachment_storage,
+                                        self.depth_map.width,
+                                        self.canvas.height(),
+                                    );
+                            }
+                            DebuggingEvent::UpdateEmitterSamples {
+                                samples,
+                                orbit_radius,
+                                shape_radius,
+                            } => {
+                                self.dbg_drawing_state.update_emitter_samples(
+                                    &self.ctx.gpu,
+                                    samples,
+                                    orbit_radius,
+                                    shape_radius,
+                                );
+                            }
+                            DebuggingEvent::UpdateEmitterPoints {
+                                points,
+                                orbit_radius,
+                            } => {
+                                self.dbg_drawing_state.update_emitter_points(
+                                    &self.ctx.gpu,
+                                    points,
+                                    orbit_radius,
+                                );
+                            }
+                            DebuggingEvent::ToggleEmitterPointsDrawing(status) => {
+                                self.dbg_drawing_state.emitter_points_drawing = status;
+                            }
+                            DebuggingEvent::UpdateEmitterPosition {
+                                zenith,
+                                azimuth,
+                                orbit_radius,
+                                shape_radius,
+                            } => {
+                                self.dbg_drawing_state.update_emitter_position(
+                                    &self.ctx.gpu,
+                                    zenith,
+                                    azimuth,
+                                    orbit_radius,
+                                    shape_radius,
+                                );
+                            }
+                            DebuggingEvent::EmitRays {
+                                orbit_radius,
+                                shape_radius,
+                            } => {
+                                self.dbg_drawing_state.emit_rays(
+                                    &self.ctx.gpu,
+                                    orbit_radius,
+                                    shape_radius,
+                                );
+                            }
+                            DebuggingEvent::ToggleDebugDrawing(status) => {
+                                self.dbg_drawing_state.enabled = status;
+                            }
+                            DebuggingEvent::ToggleCollectorDrawing {
+                                status,
+                                scheme,
+                                patches,
+                                orbit_radius,
+                                shape_radius,
+                            } => self.dbg_drawing_state.update_collector_drawing(
                                 &self.ctx.gpu,
-                                &self.ctx.gui,
-                                &self.depth_map.depth_attachment_storage,
-                                self.depth_map.width,
-                                self.canvas.height(),
+                                status,
+                                Some(scheme),
+                                patches,
+                                orbit_radius,
+                                shape_radius,
+                            ),
+                            DebuggingEvent::UpdateRayParams {
+                                t,
+                                orbit_radius,
+                                shape_radius,
+                            } => {
+                                self.dbg_drawing_state.update_ray_params(
+                                    &self.ctx.gpu,
+                                    t,
+                                    orbit_radius,
+                                    shape_radius,
+                                );
+                            }
+                            DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
+                                self.dbg_drawing_state.emitter_rays_drawing = status;
+                            }
+                            DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
+                                self.dbg_drawing_state.emitter_samples_drawing = status;
+                            }
+                            DebuggingEvent::MeasureOnePoint {
+                                method,
+                                params,
+                                mesh,
+                            } => self.dbg_drawing_state.update_ray_trajectories(
+                                &self.ctx.gpu,
+                                method,
+                                params,
+                                mesh,
+                            ),
+                            DebuggingEvent::ToggleRayTrajectoriesDrawing { missed, reflected } => {
+                                self.dbg_drawing_state.ray_trajectories_drawing_reflected =
+                                    reflected;
+                                self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
+                            }
+                            DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
+                                self.dbg_drawing_state.collector_ray_hit_points_drawing = status;
+                            }
+                            DebuggingEvent::UpdateSurfacePrimitiveId { mesh, id, status } => {
+                                self.dbg_drawing_state
+                                    .update_surface_primitive_id(mesh, id, status);
+                            }
+                            DebuggingEvent::UpdateGridCellDrawing { .. } => {
+                                todo!("UpdateGridCellDrawing")
+                            }
+                        }
+                    }
+                    BsdfViewer(event) => match event {
+                        BsdfViewerEvent::ToggleView(id) => {
+                            self.bsdf_viewer.write().unwrap().toggle_view(id);
+                        }
+                        BsdfViewerEvent::UpdateBuffer { id, buffer, count } => {
+                            log::debug!("Updating buffer for id: {:?}", id);
+                            self.bsdf_viewer
+                                .write()
+                                .unwrap()
+                                .update_bsdf_data_buffer(id, buffer, count);
+                        }
+                        BsdfViewerEvent::Rotate { id, angle } => {
+                            log::debug!("Rotating bsdf viewer id: {:?}", id);
+                            self.bsdf_viewer.write().unwrap().rotate(id, angle);
+                        }
+                    },
+                    Measure(event) => match event {
+                        MeasureEvent::Madf { params, surfaces } => {
+                            println!("Measuring area distribution");
+                            measure::microfacet::measure_area_distribution(
+                                params,
+                                &surfaces,
+                                &self.cache.read().unwrap(),
                             );
+                            todo!("Save area distribution to file or display it in a window");
+                        }
+                        MeasureEvent::Mmsf { params, surfaces } => {
+                            println!("Measuring masking/shadowing");
+                            measure::microfacet::measure_masking_shadowing(
+                                params,
+                                &surfaces,
+                                &self.cache.read().unwrap(),
+                                Handedness::RightHandedYUp,
+                            );
+                            todo!("Save area distribution to file or display it in a window");
+                        }
+                        MeasureEvent::Bsdf { params, surfaces } => {
+                            println!("Measuring BSDF");
+                            measure::bsdf::measure_bsdf_rt(
+                                params,
+                                &surfaces,
+                                params.sim_kind,
+                                &self.cache.read().unwrap(),
+                            );
+                            todo!("Save area distribution to file or display it in a window");
+                        }
+                    },
+                    Notify { kind, text, time } => {
+                        self.toasts.add(Toast {
+                            kind,
+                            text: text.into(),
+                            options: ToastOptions::default()
+                                .duration_in_seconds(time as f64)
+                                .show_progress(true)
+                                .show_icon(true),
+                        });
                     }
-                    DebuggingEvent::UpdateEmitterSamples {
-                        samples,
-                        orbit_radius,
-                        shape_radius,
-                    } => {
-                        self.dbg_drawing_state.update_emitter_samples(
-                            &self.ctx.gpu,
-                            samples,
-                            orbit_radius,
-                            shape_radius,
-                        );
-                    }
-                    DebuggingEvent::UpdateEmitterPoints {
-                        points,
-                        orbit_radius,
-                    } => {
-                        self.dbg_drawing_state.update_emitter_points(
-                            &self.ctx.gpu,
-                            points,
-                            orbit_radius,
-                        );
-                    }
-                    DebuggingEvent::ToggleEmitterPointsDrawing(status) => {
-                        self.dbg_drawing_state.emitter_points_drawing = status;
-                    }
-                    DebuggingEvent::UpdateEmitterPosition {
-                        zenith,
-                        azimuth,
-                        orbit_radius,
-                        shape_radius,
-                    } => {
-                        self.dbg_drawing_state.update_emitter_position(
-                            &self.ctx.gpu,
-                            zenith,
-                            azimuth,
-                            orbit_radius,
-                            shape_radius,
-                        );
-                    }
-                    DebuggingEvent::EmitRays {
-                        orbit_radius,
-                        shape_radius,
-                    } => {
-                        self.dbg_drawing_state
-                            .emit_rays(&self.ctx.gpu, orbit_radius, shape_radius);
-                    }
-                    DebuggingEvent::ToggleDebugDrawing(status) => {
-                        self.dbg_drawing_state.enabled = status;
-                    }
-                    DebuggingEvent::ToggleCollectorDrawing {
-                        status,
-                        scheme,
-                        patches,
-                        orbit_radius,
-                        shape_radius,
-                    } => self.dbg_drawing_state.update_collector_drawing(
-                        &self.ctx.gpu,
-                        status,
-                        Some(scheme),
-                        patches,
-                        orbit_radius,
-                        shape_radius,
-                    ),
-                    DebuggingEvent::UpdateRayParams {
-                        t,
-                        orbit_radius,
-                        shape_radius,
-                    } => {
-                        self.dbg_drawing_state.update_ray_params(
-                            &self.ctx.gpu,
-                            t,
-                            orbit_radius,
-                            shape_radius,
-                        );
-                    }
-                    DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
-                        self.dbg_drawing_state.emitter_rays_drawing = status;
-                    }
-                    DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
-                        self.dbg_drawing_state.emitter_samples_drawing = status;
-                    }
-                    DebuggingEvent::MeasureOnePoint {
-                        method,
-                        params,
-                        mesh,
-                    } => self.dbg_drawing_state.update_ray_trajectories(
-                        &self.ctx.gpu,
-                        method,
-                        params,
-                        mesh,
-                    ),
-                    DebuggingEvent::ToggleRayTrajectoriesDrawing { missed, reflected } => {
-                        self.dbg_drawing_state.ray_trajectories_drawing_reflected = reflected;
-                        self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
-                    }
-                    DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
-                        self.dbg_drawing_state.collector_ray_hit_points_drawing = status;
-                    }
-                    DebuggingEvent::UpdateSurfacePrimitiveId { mesh, id, status } => {
-                        self.dbg_drawing_state
-                            .update_surface_primitive_id(mesh, id, status);
-                    }
-                    DebuggingEvent::UpdateGridCellDrawing { .. } => {
-                        todo!("UpdateGridCellDrawing")
-                    }
+                    UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
+                    _ => {}
                 }
             }
-            BsdfViewer(event) => match event {
-                BsdfViewerEvent::ToggleView(id) => {
-                    self.bsdf_viewer.write().unwrap().toggle_view(id);
-                }
-                BsdfViewerEvent::UpdateBuffer { id, buffer, count } => {
-                    log::debug!("Updating buffer for id: {:?}", id);
-                    self.bsdf_viewer
-                        .write()
-                        .unwrap()
-                        .update_bsdf_data_buffer(id, buffer, count);
-                }
-                BsdfViewerEvent::Rotate { id, angle } => {
-                    log::debug!("Rotating bsdf viewer id: {:?}", id);
-                    self.bsdf_viewer.write().unwrap().rotate(id, angle);
-                }
-            },
-            Measure(event) => match event {
-                MeasureEvent::Madf { params, surfaces } => {
-                    println!("Measuring area distribution");
-                    measure::microfacet::measure_area_distribution(
-                        params,
-                        &surfaces,
-                        &self.cache.read().unwrap(),
-                    );
-                    todo!("Save area distribution to file or display it in a window");
-                }
-                MeasureEvent::Mmsf { params, surfaces } => {
-                    println!("Measuring masking/shadowing");
-                    measure::microfacet::measure_masking_shadowing(
-                        params,
-                        &surfaces,
-                        &self.cache.read().unwrap(),
-                        Handedness::RightHandedYUp,
-                    );
-                    todo!("Save area distribution to file or display it in a window");
-                }
-                MeasureEvent::Bsdf { params, surfaces } => {
-                    println!("Measuring BSDF");
-                    measure::bsdf::measure_bsdf_rt(
-                        params,
-                        &surfaces,
-                        params.sim_kind,
-                        &self.cache.read().unwrap(),
-                    );
-                    todo!("Save area distribution to file or display it in a window");
-                }
-            },
-            Notify { kind, text, time } => {
-                self.toasts.add(Toast {
-                    kind,
-                    text: text.into(),
-                    options: ToastOptions::default()
-                        .duration_in_seconds(time as f64)
-                        .show_progress(true)
-                        .show_icon(true),
-                });
-            }
-            UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
-            _ => {}
         }
     }
 
@@ -803,7 +813,7 @@ impl VgonioGuiApp {
         dt: Duration,
         control: &mut ControlFlow,
     ) {
-        match self.update(window, dt) {
+        match self.update_frame(window, dt) {
             Ok(_) => {}
             Err(RuntimeError::Rhi(error)) => {
                 if error.is_surface_error() {

@@ -141,3 +141,12 @@ pub enum MeasureEvent {
         surfaces: Vec<Handle<MicroSurface>>,
     },
 }
+
+/// Response to an event.
+#[derive(Debug)]
+pub enum EventResponse {
+    /// The event was consumed and should not be propagated.
+    Handled,
+    /// The event was ignored and should be propagated.
+    Ignored(VgonioEvent),
+}
