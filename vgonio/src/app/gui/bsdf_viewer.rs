@@ -3,7 +3,7 @@ use crate::app::{
         camera::{Camera, Projection},
         GpuContext, Texture,
     },
-    gui::{state::GuiRenderer, VgonioEventLoop},
+    gui::state::GuiRenderer,
 };
 use std::{
     borrow::Cow,
@@ -13,6 +13,8 @@ use vgcore::{
     math,
     math::{Mat4, Vec3},
 };
+
+use crate::app::gui::event::EventLoopProxy;
 
 pub const SHADER: &str = r#"
 @group(0) @binding(0)
@@ -50,7 +52,7 @@ pub struct BsdfViewer {
     uniform_bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
     #[allow(dead_code)]
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     proj_view: Mat4,
     aligned_uniform_buffer_size: u32,
 }
@@ -61,7 +63,7 @@ impl BsdfViewer {
     pub fn new(
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
-        event_loop: VgonioEventLoop,
+        event_loop: EventLoopProxy,
     ) -> Self {
         let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO, Vec3::Y);
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);

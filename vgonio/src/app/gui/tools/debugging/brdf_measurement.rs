@@ -2,8 +2,8 @@ use crate::{
     app::{
         cache::{Cache, Handle, MicroSurfaceRecord},
         gui::{
+            event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             widgets::{SurfaceSelector, ToggleSwitch},
-            DebuggingEvent, VgonioEvent, VgonioEventLoop,
         },
     },
     measure::{
@@ -35,7 +35,7 @@ pub(crate) struct BrdfMeasurementDebugging {
     ray_params_t: f32,
     orbit_radius: f32,
     collector_dome_drawing: bool,
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     method: RtcMethod,
     surface_primitive_id: u32,
     surface_primitive_drawing: bool,
@@ -44,7 +44,7 @@ pub(crate) struct BrdfMeasurementDebugging {
 }
 
 impl BrdfMeasurementDebugging {
-    pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
             collector_dome_drawing: false,
             cache,

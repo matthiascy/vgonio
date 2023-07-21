@@ -1,13 +1,13 @@
-use crate::app::gui::{VgonioEvent, VgonioEventLoop};
+use crate::app::gui::event::{EventLoopProxy, VgonioEvent};
 
 /// Implementation of the drag and drop functionality.
 pub struct FileDragDrop {
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     files: Vec<egui::DroppedFile>,
 }
 
 impl FileDragDrop {
-    pub fn new(event_loop: VgonioEventLoop) -> Self {
+    pub fn new(event_loop: EventLoopProxy) -> Self {
         log::info!("Initialized file drag and drop");
         Self {
             event_loop,

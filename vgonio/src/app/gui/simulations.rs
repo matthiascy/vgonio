@@ -5,8 +5,8 @@ mod mmsf;
 use crate::app::{
     cache::{Cache, Handle},
     gui::{
+        event::EventLoopProxy,
         simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
-        VgonioEventLoop,
     },
 };
 use vgsurf::MicroSurface;
@@ -27,7 +27,7 @@ pub struct Simulations {
 }
 
 impl Simulations {
-    pub fn new(event_loop: VgonioEventLoop) -> Self {
+    pub fn new(event_loop: EventLoopProxy) -> Self {
         log::info!("Initializing simulations");
         Simulations {
             bsdf_sim: BsdfSimulation::new(event_loop.clone()),

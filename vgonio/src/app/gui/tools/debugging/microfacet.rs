@@ -1,16 +1,16 @@
-use crate::app::gui::{VgonioEvent, VgonioEventLoop};
+use crate::app::gui::event::{EventLoopProxy, VgonioEvent};
 use egui::{Response, Ui};
 use vgcore::units::{degrees, Degrees};
 
 pub struct MicrofacetDebugging {
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     m_azimuth: Degrees,
     m_zenith: Degrees,
     opening_angle: Degrees,
 }
 
 impl MicrofacetDebugging {
-    pub fn new(event_loop: VgonioEventLoop) -> Self {
+    pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             event_loop,
             m_azimuth: degrees!(0.0),

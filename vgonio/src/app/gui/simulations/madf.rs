@@ -1,5 +1,8 @@
 use crate::{
-    app::gui::{widgets::SurfaceSelector, MeasureEvent, VgonioEvent, VgonioEventLoop},
+    app::gui::{
+        event::{EventLoopProxy, MeasureEvent, VgonioEvent},
+        widgets::SurfaceSelector,
+    },
     measure::measurement::MadfMeasurementParams,
 };
 
@@ -7,11 +10,11 @@ use crate::{
 pub struct MadfSimulation {
     pub params: MadfMeasurementParams,
     pub(crate) selector: SurfaceSelector,
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
 }
 
 impl MadfSimulation {
-    pub fn new(event_loop: VgonioEventLoop) -> Self {
+    pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             params: MadfMeasurementParams::default(),
             event_loop,

@@ -1,6 +1,9 @@
 use crate::app::{
     gfx::{remap_depth, GpuContext},
-    gui::{state::GuiContext, DebuggingEvent, VgonioEvent, VgonioEventLoop},
+    gui::{
+        event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
+        state::GuiContext,
+    },
 };
 use egui::{Sense, TextureFilter};
 
@@ -9,13 +12,13 @@ const IMG_HEIGHT: usize = 270;
 
 pub(crate) struct DepthMapPane {
     /// The event loop proxy used to send events to the main event loop.
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     depth_map_image: image::RgbaImage,
     depth_map_handle: Option<egui::TextureHandle>,
 }
 
 impl DepthMapPane {
-    pub fn new(event_loop: VgonioEventLoop) -> Self {
+    pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             event_loop,
             depth_map_handle: None,

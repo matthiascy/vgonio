@@ -1,4 +1,4 @@
-use crate::app::gui::{DebuggingEvent, VgonioEvent, VgonioEventLoop};
+use crate::app::gui::event::{DebuggingEvent, EventLoopProxy, VgonioEvent};
 use std::{
     any::Any,
     default::Default,
@@ -34,7 +34,7 @@ impl Default for PaneKind {
 pub(crate) struct DebuggingInspector {
     opened_pane: PaneKind,
     pub debug_drawing_enabled: bool,
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     pub(crate) depth_map_pane: DepthMapPane,
     pub(crate) brdf_debugging: BrdfMeasurementDebugging,
     pub(crate) microfacet_debugging: MicrofacetDebugging,
@@ -93,7 +93,7 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(event_loop: VgonioEventLoop, cache: Arc<RwLock<Cache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy, cache: Arc<RwLock<Cache>>) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: false,

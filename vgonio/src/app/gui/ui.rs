@@ -3,6 +3,7 @@ use crate::app::{
     gfx::GpuContext,
     gui::{
         bsdf_viewer::BsdfViewer,
+        event::{EventLoopProxy, VgonioEvent},
         file_drop::FileDragDrop,
         gizmo::NavigationGizmo,
         icons,
@@ -12,7 +13,7 @@ use crate::app::{
         theme::ThemeKind,
         tools::{SamplingInspector, Scratch, Tools},
         widgets::ToggleSwitch,
-        DebuggingInspector, VgonioEvent, VgonioEventLoop,
+        DebuggingInspector,
     },
     Config,
 };
@@ -23,13 +24,15 @@ use std::sync::{Arc, RwLock};
 use vgcore::math::Mat4;
 use vgsurf::MicroSurface;
 
+use super::tools::PlottingWidget;
+
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
 
     /// Event loop proxy for sending user defined events.
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
 
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
@@ -45,6 +48,8 @@ pub struct VgonioGui {
 
     /// Outliner of the scene.
     outliner: Outliner,
+
+    plotting_inspectors: Vec<Box<dyn PlottingWidget>>,
 
     pub right_panel_expanded: bool,
     pub left_panel_expanded: bool,
@@ -65,7 +70,7 @@ impl egui_dock::TabViewer for TabViewer {
 
 impl VgonioGui {
     pub fn new(
-        event_loop: VgonioEventLoop,
+        event_loop: EventLoopProxy,
         config: Arc<Config>,
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
@@ -94,9 +99,12 @@ impl VgonioGui {
             right_panel_expanded: true,
             left_panel_expanded: false,
             simulations: Simulations::new(event_loop),
+            plotting_inspectors: vec![],
             // tabs_tree,
         }
     }
+
+    pub fn on_user_event(&mut self, event: &VgonioEvent) {}
 
     pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
         self.navigator.update_matrices(model, view, proj);
@@ -120,7 +128,6 @@ impl VgonioGui {
                 .resizable(true)
                 .show(ctx, |ui| self.outliner.ui(ui, self.cache.clone()));
         }
-
         self.simulations.show_all(ctx);
 
         // egui::Window::new("new_window").show(ctx, |ui| {

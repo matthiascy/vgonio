@@ -4,11 +4,11 @@ use crate::{
         gfx::GpuContext,
         gui::{
             bsdf_viewer::BsdfViewer,
+            event::EventLoopProxy,
             tools::{
                 BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
                 PlottingInspector, PlottingWidget,
             },
-            VgonioEventLoop,
         },
     },
     measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
@@ -48,7 +48,7 @@ pub struct PerMicroSurfaceState {
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
     gpu_ctx: Arc<GpuContext>,
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// States of the micro surfaces, indexed by their ids.
     surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, PerMicroSurfaceState)>,
@@ -64,7 +64,7 @@ impl Outliner {
     pub fn new(
         gpu_ctx: Arc<GpuContext>,
         bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-        event_loop: VgonioEventLoop,
+        event_loop: EventLoopProxy,
     ) -> Self {
         log::info!("Creating outliner");
         Self {
@@ -222,7 +222,7 @@ impl MeasuredDataCollapsableHeader {
         // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         gpu: Arc<GpuContext>,
-        event_loop: VgonioEventLoop,
+        event_loop: EventLoopProxy,
     ) {
         let cache = cache.read().unwrap();
         let measured = cache.get_measurement_data(data).unwrap();

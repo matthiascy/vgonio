@@ -11,16 +11,11 @@ use egui_winit::EventResponse;
 pub use input::InputState;
 pub use renderer::GuiRenderer;
 
-use crate::app::{
-    gfx::{GpuContext, RenderPass, Texture, VertexLayout, WindowSurface},
-    gui::VgonioEvent,
-};
-
 use crate::{
     app::{
         cache::{Cache, Handle},
-        gfx::remap_depth,
-        gui::VgonioEventLoop,
+        gfx::{remap_depth, GpuContext, RenderPass, Texture, VertexLayout, WindowSurface},
+        gui::event::{EventLoopProxy, VgonioEvent},
     },
     measure::{
         collector::CollectorPatches,
@@ -358,7 +353,7 @@ pub struct DebugDrawingState {
     /// Whether to show surface primitive.
     surface_primitive_drawing: bool,
 
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     cache: Arc<RwLock<Cache>>,
 
     pub msurf_prim_rp: RenderPass,
@@ -381,7 +376,7 @@ impl DebugDrawingState {
     pub fn new(
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
-        event_loop: VgonioEventLoop,
+        event_loop: EventLoopProxy,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);

@@ -2,9 +2,9 @@ use crate::{
     app::{
         gfx::GpuContext,
         gui::{
+            event::{BsdfViewerEvent, EventLoopProxy, VgonioEvent},
             tools::Tool,
             widgets::{AngleKnob, AngleKnobWinding},
-            BsdfViewerEvent, VgonioEvent, VgonioEventLoop,
         },
     },
     measure::{measurement::MeasurementData, CollectorScheme},
@@ -56,7 +56,7 @@ pub struct PlottingInspector<C: PlottingControls> {
     /// The type of plot to be displayed
     plot_type: PlotType,
     /// The event loop.
-    event_loop: VgonioEventLoop,
+    event_loop: EventLoopProxy,
     /// GPU context.
     gpu: Arc<GpuContext>,
     /// Controlling parameters for the plot.
@@ -144,7 +144,7 @@ impl<C: PlottingControls> PlottingInspector<C> {
         data: Rc<MeasurementData>,
         controls: C,
         gpu: Arc<GpuContext>,
-        event_loop: VgonioEventLoop,
+        event_loop: EventLoopProxy,
     ) -> Self {
         Self {
             name,
