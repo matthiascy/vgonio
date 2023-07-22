@@ -13,6 +13,7 @@ use crate::{
     },
     measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
 };
+use egui::WidgetText;
 use std::{
     collections::HashMap,
     rc::Weak,
@@ -21,7 +22,10 @@ use std::{
 use vgcore::units::LengthUnit;
 use vgsurf::MicroSurface;
 
-use crate::app::gui::data::{MicroSurfaceProp, PropertyData};
+use crate::app::gui::{
+    data::{MicroSurfaceProp, PropertyData},
+    docking::{Dockable, WidgetKind},
+};
 
 use super::data::MeasurementDataProp;
 
@@ -30,7 +34,9 @@ use super::data::MeasurementDataProp;
 /// It will reads the micro-surfaces from the cache and display them in a tree
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
-    gpu_ctx: Arc<GpuContext>,
+    /// The unique id of the outliner.
+    uuid: uuid::Uuid,
+    // gpu_ctx: Arc<GpuContext>,
     event_loop: EventLoopProxy,
     // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// States of the micro surfaces, indexed by their ids.
@@ -47,14 +53,15 @@ pub struct Outliner {
 impl Outliner {
     /// Creates a new outliner.
     pub fn new(
-        gpu_ctx: Arc<GpuContext>,
+        // gpu_ctx: Arc<GpuContext>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         log::info!("Creating outliner");
         Self {
-            gpu_ctx,
+            uuid: uuid::Uuid::new_v4(),
+            // gpu_ctx,
             event_loop,
             // bsdf_viewer,
             // surfaces: HashMap::new(),
@@ -203,7 +210,7 @@ impl CollapsableHeader<Handle<MeasurementData>> {
         // cache: Arc<RwLock<Cache>>,
         // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-        gpu: Arc<GpuContext>,
+        // gpu: Arc<GpuContext>,
         event_loop: EventLoopProxy,
     ) {
         // let cache = cache.read().unwrap();
@@ -328,7 +335,29 @@ impl CollapsableHeader<Handle<MeasurementData>> {
 // GUI related functions
 impl Outliner {
     /// Creates the ui for the outliner.
-    pub fn ui(&mut self, ui: &mut egui::Ui, cache: Arc<RwLock<Cache>>) {
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        // Update the list of surfaces and measurements.
+        {
+            let data = self.data.read().unwrap();
+            for (hdl, _) in &data.surfaces {
+                if !self.surface_headers.iter().any(|h| h.item == *hdl) {
+                    self.surface_headers.push(CollapsableHeader {
+                        selected: false,
+                        item: hdl.clone(),
+                    });
+                }
+            }
+
+            for (hdl, _) in &data.measured {
+                if !self.measured_headers.iter().any(|h| h.item == *hdl) {
+                    self.measured_headers.push(CollapsableHeader {
+                        selected: false,
+                        item: hdl.clone(),
+                    });
+                }
+            }
+        }
+
         let mut state = self.data.write().unwrap();
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
@@ -347,7 +376,7 @@ impl Outliner {
                         hdr.ui(
                             ui,
                             &state.measured.get(&hdr.item).unwrap(),
-                            self.gpu_ctx.clone(),
+                            // self.gpu_ctx.clone(),
                             self.event_loop.clone(),
                         );
                     }
@@ -377,4 +406,15 @@ impl Outliner {
         //     plot.show(ui.ctx(), open);
         // }
     }
+}
+
+impl Dockable for Outliner {
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
+
+    fn title(&self) -> WidgetText { "Outliner".into() }
+
+    fn kind(&self) -> WidgetKind { WidgetKind::Outliner }
+
+    /// Actual content of the widget.
+    fn ui(&mut self, ui: &mut egui::Ui) { self.ui(ui) }
 }

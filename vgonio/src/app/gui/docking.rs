@@ -1,22 +1,31 @@
-use std::fmt::{self, Debug};
+use crate::app::{
+    gfx::GpuContext,
+    gui::{data::PropertyData, event::EventLoopProxy},
+};
+use std::{
+    fmt::{self, Debug},
+    sync::{Arc, RwLock},
+};
 
-use super::prop_insp::PropertyInspector;
+use crate::app::gui::{outliner::Outliner, prop_insp::PropertyInspector};
 
 /// Docking space for widgets.
 pub struct DockSpace {
+    /// Event loop proxy.
+    event_loop: EventLoopProxy,
     /// Inner tree of the dock space.
     inner: egui_dock::Tree<DockingWidget>,
     /// New widgets to be added to the dock space.
     added: Vec<NewWidget>,
 }
 
-impl Default for DockSpace {
+impl DockSpace {
     /// Create a new dock space with a default layout.
     ///
     /// |   | 1 |
     /// | 0 | - |
     /// |   | 2 |
-    fn default() -> Self {
+    pub fn default_layout(data: Arc<RwLock<PropertyData>>, event_loop: EventLoopProxy) -> Self {
         let mut inner = egui_dock::Tree::new(vec![DockingWidget {
             index: 0,
             dockable: Box::new(DockableString::new("Hello, world!".to_owned())),
@@ -26,7 +35,7 @@ impl Default for DockSpace {
             0.8,
             vec![DockingWidget {
                 index: 1,
-                dockable: Box::new(DockableString::new("Hello, world!".to_owned())),
+                dockable: Box::new(Outliner::new(data, event_loop.clone())),
             }],
         );
         inner.split_below(
@@ -38,14 +47,13 @@ impl Default for DockSpace {
             }],
         );
         Self {
+            event_loop,
             inner,
             added: Vec::new(),
         }
     }
-}
 
-impl DockSpace {
-    pub fn show(&mut self, ctx: &egui::Context) {
+    pub fn show(&mut self, ctx: &egui::Context, data: Arc<RwLock<PropertyData>>) {
         use egui_dock::NodeIndex;
 
         egui_dock::DockArea::new(&mut self.inner)
@@ -63,8 +71,11 @@ impl DockSpace {
             self.inner.set_focused_node(NodeIndex(new_tab.parent));
             // Allocate a new index for the tab.
             let index = self.inner.num_tabs();
-            // Add the tab.
+            // Add the widget to the dock space.
             let widget: Box<dyn Dockable> = match new_tab.kind {
+                WidgetKind::Outliner => {
+                    Box::new(Outliner::new(data.clone(), self.event_loop.clone()))
+                }
                 _ => Box::new(DockableString::new(String::from("Hello world"))),
             };
             self.inner.push_to_focused_leaf(DockingWidget {

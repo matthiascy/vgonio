@@ -392,36 +392,38 @@ impl VgonioGuiApp {
         );
 
         // Update uniform buffer for all visible surfaces.
-        let properties = self.ui.properties.read().unwrap();
-        let visible_surfaces = properties.visible_surfaces();
-        if !visible_surfaces.is_empty() {
-            self.ctx.gpu.queue.write_buffer(
-                &self.msurf_rdr_state.global_uniform_buffer,
-                0,
-                bytemuck::bytes_of(&view_proj),
-            );
-            // Update per-surface uniform buffer.
-            let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
-            for (hdl, state) in visible_surfaces.iter() {
-                let mut buf = [0.0; 20];
-                let local_uniform_buf_index = self
-                    .msurf_rdr_state
-                    .locals_lookup
-                    .iter()
-                    .position(|h| *h == **hdl)
-                    .unwrap();
-                buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-                buf[16..20].copy_from_slice(&[
-                    state.min + state.height_offset,
-                    state.max + state.height_offset,
-                    state.max - state.min,
-                    state.scale,
-                ]);
+        {
+            let properties = self.ui.properties.read().unwrap();
+            let visible_surfaces = properties.visible_surfaces();
+            if !visible_surfaces.is_empty() {
                 self.ctx.gpu.queue.write_buffer(
-                    &self.msurf_rdr_state.local_uniform_buffer,
-                    local_uniform_buf_index as u64 * aligned_size as u64,
-                    bytemuck::cast_slice(&buf),
+                    &self.msurf_rdr_state.global_uniform_buffer,
+                    0,
+                    bytemuck::bytes_of(&view_proj),
                 );
+                // Update per-surface uniform buffer.
+                let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+                for (hdl, state) in visible_surfaces.iter() {
+                    let mut buf = [0.0; 20];
+                    let local_uniform_buf_index = self
+                        .msurf_rdr_state
+                        .locals_lookup
+                        .iter()
+                        .position(|h| *h == **hdl)
+                        .unwrap();
+                    buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                    buf[16..20].copy_from_slice(&[
+                        state.min + state.height_offset,
+                        state.max + state.height_offset,
+                        state.max - state.min,
+                        state.scale,
+                    ]);
+                    self.ctx.gpu.queue.write_buffer(
+                        &self.msurf_rdr_state.local_uniform_buffer,
+                        local_uniform_buf_index as u64 * aligned_size as u64,
+                        bytemuck::cast_slice(&buf),
+                    );
+                }
             }
         }
 
@@ -468,7 +470,8 @@ impl VgonioGuiApp {
 
         {
             let cache = self.cache.read().unwrap();
-            let visible_surfaces = self.ui.properties.read().unwrap().visible_surfaces();
+            let properties = self.ui.properties.read().unwrap();
+            let visible_surfaces = properties.visible_surfaces();
             {
                 let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Main Render Pass"),
@@ -601,6 +604,7 @@ impl VgonioGuiApp {
     pub fn on_user_event(&mut self, event: VgonioEvent, control_flow: &mut ControlFlow) {
         use VgonioEvent::*;
 
+        // Handle events from the UI.
         match self.ui.on_user_event(event) {
             EventResponse::Handled => return,
             EventResponse::Ignored(event) => {
@@ -609,7 +613,7 @@ impl VgonioGuiApp {
                         *control_flow = ControlFlow::Exit;
                     }
                     RequestRedraw => {}
-                    OpenFiles(files) => self.open_files(files),
+                    // OpenFiles(files) => self.open_files(files),
                     Debugging(event) => {
                         // TODO: handle events inside the DebuggingState.
                         match event {

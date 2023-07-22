@@ -44,6 +44,7 @@ pub struct MeasurementDataProp {
 ///
 /// This is the data that is shared between different instances of the property
 /// inspector and the outliner.
+#[derive(Debug)]
 pub struct PropertyData {
     /// Micro surface properties.
     pub surfaces: HashMap<Handle<MicroSurface>, MicroSurfaceProp>,

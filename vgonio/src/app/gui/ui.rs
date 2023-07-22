@@ -55,19 +55,13 @@ pub struct VgonioGui {
     /// Gizmo inside the viewport for navigating the scene.
     navigator: NavigationGizmo,
 
-    /// Outliner of the scene.
-    outliner: Outliner,
-
     plotting_inspectors: Vec<Box<dyn PlottingWidget>>,
 
-    pub right_panel_expanded: bool,
-    pub left_panel_expanded: bool,
     pub simulations: Simulations,
-
     pub properties: Arc<RwLock<PropertyData>>,
 
     /// Docking system for the UI.
-    dockspace: DockSpace,
+    dock_space: DockSpace,
 }
 
 impl VgonioGui {
@@ -91,16 +85,12 @@ impl VgonioGui {
                 &mut gui.write().unwrap(),
                 cache.clone(),
             ),
-            // simulation_workspace: SimulationWorkspace::new(event_loop.clone(), cache.clone()),
             cache,
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            outliner: Outliner::new(gpu.clone(), properties.clone(), event_loop.clone()),
-            right_panel_expanded: true,
-            left_panel_expanded: false,
-            simulations: Simulations::new(event_loop),
+            simulations: Simulations::new(event_loop.clone()),
             plotting_inspectors: vec![],
-            dockspace: DockSpace::default(),
+            dock_space: DockSpace::default_layout(properties.clone(), event_loop),
             properties,
             gpu_ctx: gpu,
         }
@@ -114,8 +104,7 @@ impl VgonioGui {
         match &event {
             VgonioEvent::OpenFiles(paths) => {
                 self.on_open_files(paths);
-                // TODO: return handled
-                EventResponse::Ignored(event)
+                EventResponse::Handled
             }
             _ => EventResponse::Ignored(event),
         }
@@ -133,33 +122,23 @@ impl VgonioGui {
                     self.main_menu(ui, kind, visual_grid_visble);
                 });
             });
-        if self.right_panel_expanded {
-            egui::SidePanel::right("vgonio_right_panel")
-                .min_width(300.0)
-                .default_width(460.0)
-                .resizable(true)
-                .show(ctx, |ui| self.outliner.ui(ui, self.cache.clone()));
-        }
 
-        self.dockspace.show(ctx);
-
+        self.dock_space.show(ctx, self.properties.clone());
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
         self.navigator.show(ctx);
         self.simulations.show_all(ctx);
     }
 
-    pub fn outliner(&self) -> &Outliner { &self.outliner }
-
-    pub fn outliner_mut(&mut self) -> &mut Outliner { &mut self.outliner }
-
     pub fn on_open_files(&mut self, files: &[rfd::FileHandle]) {
+        log::info!("Process UI opening files: {:?}", files);
         let (surfaces, measurements) = self.open_files(files);
         let cache = self.cache.read().unwrap();
         self.properties
             .write()
             .unwrap()
             .update_surfaces(&surfaces, &cache);
+        println!("properties: {:?}", self.properties);
         self.tools
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()
@@ -348,18 +327,6 @@ impl VgonioGui {
                 }
             }
         });
-
-        ui.add_space(ui.available_width() - 48.0);
-
-        let mut left_panel_expanded = self.left_panel_expanded;
-        if icon_toggle_button(ui, "left_panel_toggle", &mut left_panel_expanded).clicked() {
-            self.left_panel_expanded = left_panel_expanded;
-        }
-
-        let mut right_panel_expanded = self.right_panel_expanded;
-        if icon_toggle_button(ui, "right_panel_toggle", &mut right_panel_expanded).clicked() {
-            self.right_panel_expanded = right_panel_expanded;
-        }
     }
 
     fn open_files(
