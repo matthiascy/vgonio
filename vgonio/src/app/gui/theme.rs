@@ -72,7 +72,7 @@ impl Default for ThemeState {
 
 impl ThemeState {
     /// Updates the egui context with the current theme visuals.
-    pub fn update(&mut self, ctx: &egui::Context) {
+    pub fn update_context(&mut self, ctx: &egui::Context) {
         if self.is_dirty {
             self.is_dirty = false;
             ctx.set_visuals(self.visuals[self.kind as usize].egui_visuals.clone());

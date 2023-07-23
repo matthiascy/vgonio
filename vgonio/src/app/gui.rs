@@ -79,7 +79,7 @@ use self::{
     visual_grid::VisualGridState,
 };
 
-use crate::app::{gfx::WindowSurface, Config};
+use crate::app::{gfx::WindowSurface, gui::theme::ThemeKind, Config};
 
 /// Launches Vgonio GUI application.
 pub fn run(config: Config) -> Result<(), VgonioError> {
@@ -163,8 +163,7 @@ pub struct VgonioGuiApp {
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
 
-    theme: ThemeState,
-
+    // theme: ThemeState,
     /// Depth map of the scene. TODO: refactor
     depth_map: DepthMap,
     // TODO: add MSAA
@@ -243,7 +242,7 @@ impl VgonioGuiApp {
             cache.clone(),
         );
 
-        let theme = ThemeState::default();
+        // let theme = ThemeState::default();
 
         let input = InputState {
             key_map: Default::default(),
@@ -283,7 +282,7 @@ impl VgonioGuiApp {
             visual_grid_state,
             bsdf_viewer,
             toasts,
-            theme,
+            // theme,
         })
     }
 
@@ -367,12 +366,14 @@ impl VgonioGuiApp {
 
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
+        // TODO: to be removed
         self.visual_grid_state.update_uniforms(
             &self.ctx.gpu,
             &view_proj,
             &view_proj_inv,
-            self.theme.visuals().grid_line_color,
-            self.theme.kind(),
+            // self.theme.visuals().grid_line_color,
+            wgpu::Color::BLACK,
+            ThemeKind::Dark,
         );
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
@@ -483,7 +484,10 @@ impl VgonioGuiApp {
                             // the same as `view` unless multisampling.
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(self.theme.visuals().clear_color),
+                                load: wgpu::LoadOp::Clear(
+                                    // self.theme.visuals().clear_color
+                                    wgpu::Color::BLACK,
+                                ),
                                 store: true,
                             },
                         },
@@ -566,7 +570,7 @@ impl VgonioGuiApp {
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.theme.update(ctx);
+                // self.theme.update(ctx);
                 self.ui
                     .show(ctx, self.theme.kind(), &mut self.visual_grid_state.visible);
                 self.toasts.show(ctx);
@@ -807,7 +811,7 @@ impl VgonioGuiApp {
                                 .show_icon(true),
                         });
                     }
-                    UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
+                    // UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
                     _ => {}
                 }
             }

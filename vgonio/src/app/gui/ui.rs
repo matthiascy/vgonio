@@ -12,7 +12,7 @@ use crate::{
             outliner::Outliner,
             simulations::Simulations,
             state::GuiRenderer,
-            theme::ThemeKind,
+            theme::{ThemeKind, ThemeState},
             tools::{SamplingInspector, Scratch, Tools},
             widgets::ToggleSwitch,
             DebuggingInspector,
@@ -55,6 +55,8 @@ pub struct VgonioGui {
     /// Gizmo inside the viewport for navigating the scene.
     navigator: NavigationGizmo,
 
+    theme: ThemeState,
+
     plotting_inspectors: Vec<Box<dyn PlottingWidget>>,
 
     pub simulations: Simulations,
@@ -93,6 +95,7 @@ impl VgonioGui {
             dock_space: DockSpace::default_layout(properties.clone(), event_loop),
             properties,
             gpu_ctx: gpu,
+            theme: ThemeState::default(),
         }
     }
 
@@ -106,6 +109,10 @@ impl VgonioGui {
                 self.on_open_files(paths);
                 EventResponse::Handled
             }
+            VgonioEvent::UpdateThemeKind(kind) => {
+                self.theme.set_kind(*kind);
+                EventResponse::Handled
+            }
             _ => EventResponse::Ignored(event),
         }
     }
@@ -114,12 +121,13 @@ impl VgonioGui {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, kind: ThemeKind, visual_grid_visble: &mut bool) {
+    pub fn show(&mut self, ctx: &egui::Context, kind: ThemeKind, visual_grid_visible: &mut bool) {
+        self.theme.update_context(ctx);
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.main_menu(ui, kind, visual_grid_visble);
+                    self.main_menu(ui, kind, visual_grid_visible);
                 });
             });
 
