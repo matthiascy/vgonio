@@ -17,7 +17,7 @@ use crate::app::{
     gui::{
         data::{MicroSurfaceProp, PropertyData},
         docking::{Dockable, WidgetKind},
-        event::EventLoopProxy,
+        event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
         state::camera::CameraState,
         theme::{ThemeKind, ThemeState},
         visual_grid::VisualGridState,
@@ -45,7 +45,8 @@ pub struct MicroSurfaceState {
     /// Lookup table linking [`MicroSurface`] to its offset in the local uniform
     /// buffer.
     pub(crate) locals_lookup: Vec<Handle<MicroSurface>>,
-    // views: HashMap<Uuid, (egui::TextureId, wgpu::Texture)>,
+    format: wgpu::TextureFormat,
+    views: HashMap<Uuid, (egui::TextureId, Texture)>,
 }
 
 impl MicroSurfaceState {
@@ -195,6 +196,8 @@ impl MicroSurfaceState {
             global_uniform_buffer,
             local_uniform_buffer,
             locals_lookup: Default::default(),
+            format: target_format,
+            views: Default::default(),
         }
     }
 
@@ -206,6 +209,83 @@ impl MicroSurfaceState {
                 continue;
             }
             self.locals_lookup.push(*hdl);
+        }
+    }
+
+    /// Creates a new view for the given SurfaceViewer.
+    pub fn create_view(&mut self, viewer: Uuid, tex_id: egui::TextureId, gpu: &GpuContext) {
+        assert!(
+            self.views.get(&viewer).is_none(),
+            "Surface viewer with the same UUID already exists"
+        );
+        let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sampling-debugger-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        }));
+        let attachment = Texture::new(
+            &gpu.device,
+            &wgpu::TextureDescriptor {
+                label: Some(format!("surf_viewer_{}_color_attachment", viewer).as_str()),
+                size: wgpu::Extent3d {
+                    width: 256,
+                    height: 256,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+            Some(sampler),
+        );
+        self.views.insert(viewer, (tex_id, attachment));
+    }
+
+    pub fn resize_view(
+        &mut self,
+        viewer: Uuid,
+        width: u32,
+        height: u32,
+        gpu: &GpuContext,
+        gui: Arc<RwLock<GuiRenderer>>,
+    ) {
+        if let Some((attachment_id, attachment)) = self.views.get_mut(&viewer) {
+            let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("sampling-debugger-sampler"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            }));
+            *attachment = Texture::new(
+                &gpu.device,
+                &wgpu::TextureDescriptor {
+                    label: Some(format!("surf_viewer_{}_color_attachment", viewer).as_str()),
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                },
+                Some(sampler),
+            );
+            gui.write().unwrap().update_egui_texture_from_wgpu_texture(
+                &gpu.device,
+                &attachment.view,
+                wgpu::FilterMode::Linear,
+                *attachment_id,
+            );
         }
     }
 }
@@ -259,11 +339,13 @@ pub struct SurfaceViewer {
     // /// Gizmo for navigating the scene.
     // navigator: NavigationGizmo,
     output_format: wgpu::TextureFormat,
-    color_attachment: Texture,
+    // color_attachment: Texture,
     proj_view_model: Mat4,
     focused: bool,
 
     color_attachment_id: egui::TextureId,
+
+    event_loop: EventLoopProxy,
 
     prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
 }
@@ -300,37 +382,37 @@ impl SurfaceViewer {
             },
             theme_kind,
         );
-        // TODO: improve
-        let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("sampling-debugger-sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        }));
-        let color_attachment = Texture::new(
-            &gpu.device,
-            &wgpu::TextureDescriptor {
-                label: Some("surf_viewer_color_attachment"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            },
-            Some(sampler),
-        );
-        let color_attachment_id = gui.write().unwrap().register_native_texture(
-            &gpu.device,
-            &color_attachment.view,
-            wgpu::FilterMode::Linear,
-        );
+        // // TODO: improve
+        // let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        //     label: Some("sampling-debugger-sampler"),
+        //     mag_filter: wgpu::FilterMode::Linear,
+        //     min_filter: wgpu::FilterMode::Linear,
+        //     ..Default::default()
+        // }));
+        // let color_attachment = Texture::new(
+        //     &gpu.device,
+        //     &wgpu::TextureDescriptor {
+        //         label: Some("surf_viewer_color_attachment"),
+        //         size: wgpu::Extent3d {
+        //             width,
+        //             height,
+        //             depth_or_array_layers: 1,
+        //         },
+        //         mip_level_count: 1,
+        //         sample_count: 1,
+        //         dimension: wgpu::TextureDimension::D2,
+        //         format,
+        //         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+        //             | wgpu::TextureUsages::TEXTURE_BINDING,
+        //         view_formats: &[],
+        //     },
+        //     Some(sampler),
+        // );
+        // let color_attachment_id = gui.write().unwrap().register_native_texture(
+        //     &gpu.device,
+        //     &color_attachment.view,
+        //     wgpu::FilterMode::Linear,
+        // );
         let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
             gpu,
@@ -344,13 +426,14 @@ impl SurfaceViewer {
             viewport_size: egui::Vec2::new(width as f32, height as f32),
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             output_format: format,
-            color_attachment,
+            // color_attachment,
             color_attachment_id,
             // outliner,
             proj_view_model: Mat4::IDENTITY,
             focused: false,
             uuid: Uuid::new_v4(),
             prop_data,
+            event_loop,
         }
     }
 
@@ -364,40 +447,49 @@ impl SurfaceViewer {
         println!("resize to: {:?}", new_size);
         let width = (new_size.x * scale_factor) as u32;
         let height = (new_size.y * scale_factor) as u32;
-        let sampler = Arc::new(self.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("sampling-debugger-sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        }));
-        self.color_attachment = Texture::new(
-            &self.gpu.device,
-            &wgpu::TextureDescriptor {
-                label: Some("surf_viewer_color_attachment"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.output_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            },
-            Some(sampler),
-        );
-        self.gui
-            .write()
-            .unwrap()
-            .update_egui_texture_from_wgpu_texture(
-                &self.gpu.device,
-                &self.color_attachment.view,
-                wgpu::FilterMode::Linear,
-                self.color_attachment_id,
-            );
+
+        self.event_loop
+            .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Resize {
+                uuid: self.uuid,
+                size: (width, height),
+            }))
+            .unwrap();
+
+        // let sampler =
+        // Arc::new(self.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        //     label: Some("sampling-debugger-sampler"),
+        //     mag_filter: wgpu::FilterMode::Linear,
+        //     min_filter: wgpu::FilterMode::Linear,
+        //     ..Default::default()
+        // }));
+        // self.color_attachment = Texture::new(
+        //     &self.gpu.device,
+        //     &wgpu::TextureDescriptor {
+        //         label: Some("surf_viewer_color_attachment"),
+        //         size: wgpu::Extent3d {
+        //             width,
+        //             height,
+        //             depth_or_array_layers: 1,
+        //         },
+        //         mip_level_count: 1,
+        //         sample_count: 1,
+        //         dimension: wgpu::TextureDimension::D2,
+        //         format: self.output_format,
+        //         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+        //             | wgpu::TextureUsages::TEXTURE_BINDING,
+        //         view_formats: &[],
+        //     },
+        //     Some(sampler),
+        // );
+        // self.gui
+        //     .write()
+        //     .unwrap()
+        //     .update_egui_texture_from_wgpu_texture(
+        //         &self.gpu.device,
+        //         &self.color_attachment.view,
+        //         wgpu::FilterMode::Linear,
+        //         self.color_attachment_id,
+        //     );
         self.depth_map.resize(&self.gpu, width, height);
         self.camera.projection.resize(width, height);
         self.viewport_size = new_size;

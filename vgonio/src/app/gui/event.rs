@@ -46,11 +46,30 @@ pub enum VgonioEvent {
     },
     /// Update the theme.
     UpdateThemeKind(ThemeKind),
-    SurfaceViewerCreated {
+    SurfaceViewer(SurfaceViewerEvent),
+}
+
+/// Events used by [`SurfaceViewer`].
+#[derive(Debug)]
+pub enum SurfaceViewerEvent {
+    /// Notify the GUI backend that a surface viewer has been created.
+    Create {
         /// ID of the surface viewer.
         uuid: Uuid,
         /// Texture ID of the surface viewer output.
-        texture_id: egui::TextureId,
+        tex_id: egui::TextureId,
+    },
+    /// Notify the GUI backend that a surface viewer has been resized.
+    Resize {
+        /// ID of the surface viewer.
+        uuid: Uuid,
+        /// New size of the surface viewer.
+        size: (u32, u32),
+    },
+    /// Notify the GUI backend that a surface viewer has been closed.
+    Close {
+        /// ID of the surface viewer.
+        uuid: Uuid,
     },
 }
 

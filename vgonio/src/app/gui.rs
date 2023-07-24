@@ -82,7 +82,7 @@ use self::{
 
 use crate::app::{
     gfx::WindowSurface,
-    gui::{surf_viewer::SurfaceViewer, theme::ThemeKind},
+    gui::{event::SurfaceViewerEvent, surf_viewer::SurfaceViewer, theme::ThemeKind},
     Config,
 };
 
@@ -356,39 +356,41 @@ impl VgonioGuiApp {
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
 
-        self.ui.update_gizmo_matrices(
-            Mat4::IDENTITY,
-            Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
-            Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
-        );
 
-        let view_proj = self.camera.uniform.view_proj;
-        let view_proj_inv = self.camera.uniform.view_proj_inv;
-        // TODO: to be removed
-        self.visual_grid_state.update_uniforms(
-            &self.ctx.gpu,
-            &view_proj,
-            &view_proj_inv,
-            // self.theme.visuals().grid_line_color,
-            wgpu::Color::BLACK,
-            ThemeKind::Dark,
-        );
-        let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
-        let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
-            Some(surface) => {
-                let properties = self.ui.properties.read().unwrap();
-                let prop = properties.surfaces.get(&surface).unwrap();
-                (prop.min, prop.max, prop.scale)
-            }
-            None => (0.0, 1.0, 1.0),
-        };
-        self.dbg_drawing_state.update_uniform_buffer(
-            &self.ctx.gpu,
-            &(view_proj.proj * view_proj.view),
-            lowest,
-            highest,
-            scale,
-        );
+
+        // self.ui.update_gizmo_matrices(
+        //     Mat4::IDENTITY,
+        //     Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
+        //     Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
+        // );
+        // 
+        // let view_proj = self.camera.uniform.view_proj;
+        // let view_proj_inv = self.camera.uniform.view_proj_inv;
+        // // TODO: to be removed
+        // self.visual_grid_state.update_uniforms(
+        //     &self.ctx.gpu,
+        //     &view_proj,
+        //     &view_proj_inv,
+        //     // self.theme.visuals().grid_line_color,
+        //     wgpu::Color::BLACK,
+        //     ThemeKind::Dark,
+        // );
+        // let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
+        // let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
+        //     Some(surface) => {
+        //         let properties = self.ui.properties.read().unwrap();
+        //         let prop = properties.surfaces.get(&surface).unwrap();
+        //         (prop.min, prop.max, prop.scale)
+        //     }
+        //     None => (0.0, 1.0, 1.0),
+        // };
+        // self.dbg_drawing_state.update_uniform_buffer(
+        //     &self.ctx.gpu,
+        //     &(view_proj.proj * view_proj.view),
+        //     lowest,
+        //     highest,
+        //     scale,
+        // );
 
         // // Update uniform buffer for all visible surfaces.
         // {
@@ -788,9 +790,16 @@ impl VgonioGuiApp {
                     },
 
                     // UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
-                    SurfaceViewerCreated { uuid, texture_id } => {
-                        todo!()
-                    }
+                    SurfaceViewer(event) => match event {
+                        SurfaceViewerEvent::Create {
+                            uuid,
+                            tex_id: texture_id,
+                        } => {
+                            self.surf_state.create_view(uuid, texture_id, &self.ctx.gpu);
+                        }
+                        SurfaceViewerEvent::Resize { .. } => {}
+                        SurfaceViewerEvent::Close { .. } => {}
+                    },
                     _ => {}
                 }
             }

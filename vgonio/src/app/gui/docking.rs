@@ -10,8 +10,12 @@ use std::{
 };
 
 use crate::app::gui::{
-    event::VgonioEvent, outliner::Outliner, prop_insp::PropertyInspector, state::GuiRenderer,
-    surf_viewer::SurfaceViewer, theme::ThemeKind,
+    event::{SurfaceViewerEvent, VgonioEvent},
+    outliner::Outliner,
+    prop_insp::PropertyInspector,
+    state::GuiRenderer,
+    surf_viewer::SurfaceViewer,
+    theme::ThemeKind,
 };
 
 /// Docking space for widgets.
@@ -123,12 +127,12 @@ impl DockSpace {
                         self.event_loop.clone(),
                         self.data.clone(),
                     ));
-                    // self.event_loop
-                    //     .send_event(VgonioEvent::SurfaceViewerCreated {
-                    //         uuid: widget.uuid(),
-                    //         texture_id: widget.color_attachment_id(),
-                    //     })
-                    //     .unwrap();
+                    self.event_loop
+                        .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {
+                            uuid: widget.uuid(),
+                            tex_id: widget.color_attachment_id(),
+                        }))
+                        .unwrap();
                     widget
                 }
                 _ => Box::new(DockableString::new(String::from("Hello world"))),
