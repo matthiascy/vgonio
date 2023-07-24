@@ -7,6 +7,7 @@ mod file_drop;
 mod gizmo;
 mod icons;
 mod misc;
+mod notify;
 pub mod outliner;
 mod prop_insp;
 mod simulations;
@@ -79,7 +80,11 @@ use self::{
     visual_grid::VisualGridState,
 };
 
-use crate::app::{gfx::WindowSurface, gui::theme::ThemeKind, Config};
+use crate::app::{
+    gfx::WindowSurface,
+    gui::{surf_viewer::SurfaceViewer, theme::ThemeKind},
+    Config,
+};
 
 /// Launches Vgonio GUI application.
 pub fn run(config: Config) -> Result<(), VgonioError> {
@@ -156,22 +161,19 @@ pub struct VgonioGuiApp {
     /// State of the micro surface rendering, including the pipeline, binding
     /// groups, and buffers.
     surf_state: MicroSurfaceState,
-    /// State of the visual grid rendering, including the pipeline, binding
-    /// groups, and buffers.
+    // /// State of the visual grid rendering, including the pipeline, binding
+    // /// groups, and buffers.
     visual_grid_state: VisualGridState,
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
 
-    // theme: ThemeState,
     /// Depth map of the scene. TODO: refactor
-    depth_map: DepthMap,
+    // depth_map: DepthMap,
     // TODO: add MSAA
+
     /// Debug drawing state.
     dbg_drawing_state: DebugDrawingState,
-
-    /// Notification manager.
-    toasts: Toasts,
 }
 
 impl VgonioGuiApp {
@@ -197,7 +199,7 @@ impl VgonioGuiApp {
         let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
         let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
-        let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
+        // let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
         let camera = {
             let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
             let projection = Projection::new(
@@ -260,10 +262,6 @@ impl VgonioGuiApp {
         );
         let msurf_rdr_state = MicroSurfaceState::new(&gpu_ctx, canvas.format());
 
-        let toasts = Toasts::new()
-            .anchor(Align2::LEFT_BOTTOM, (10.0, -10.0))
-            .direction(egui::Direction::BottomUp);
-
         Ok(Self {
             start_time: Instant::now(),
             ctx: Context {
@@ -274,15 +272,13 @@ impl VgonioGuiApp {
             ui,
             cache,
             input,
-            depth_map,
+            // depth_map,
             dbg_drawing_state,
             camera,
             canvas,
             surf_state: msurf_rdr_state,
             visual_grid_state,
             bsdf_viewer,
-            toasts,
-            // theme,
         })
     }
 
@@ -301,8 +297,8 @@ impl VgonioGuiApp {
             new_size.height,
             scale_factor,
         ) {
-            self.depth_map
-                .resize(&self.ctx.gpu, new_size.width, new_size.height);
+            // self.depth_map
+            //     .resize(&self.ctx.gpu, new_size.width, new_size.height);
             self.camera
                 .projection
                 .resize(new_size.width, new_size.height);
@@ -463,109 +459,111 @@ impl VgonioGuiApp {
         let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        // Command encoders for the current frame.
-        let mut main_encoder =
-            self.ctx
-                .gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vgonio_render_encoder"),
-                });
+        // // Command encoders for the current frame.
+        // let mut encoder =
+        //     self.ctx
+        //         .gpu
+        //         .device
+        //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        //             label: Some("vgonio_render_encoder"),
+        //         });
+        // 
+        // {
+        //     let cache = self.cache.read().unwrap();
+        //     let properties = self.ui.properties.read().unwrap();
+        //     let visible_surfaces = properties.visible_surfaces();
+        //     {
+        //         let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        //             label: Some("Main Render Pass"),
+        //             color_attachments: &[Some(
+        //                 // This is what [[location(0)]] in the fragment shader targets
+        //                 wgpu::RenderPassColorAttachment {
+        //                     view: &output_view,
+        //                     // This is the texture that will receive the resolved output; will be
+        //                     // the same as `view` unless multisampling.
+        //                     resolve_target: None,
+        //                     ops: wgpu::Operations {
+        //                         load: wgpu::LoadOp::Clear(
+        //                             // self.theme.visuals().clear_color
+        //                             wgpu::Color::BLACK,
+        //                         ),
+        //                         store: true,
+        //                     },
+        //                 },
+        //             )],
+        //             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+        //                 view: &self.depth_map.depth_attachment.view,
+        //                 depth_ops: Some(wgpu::Operations {
+        //                     load: wgpu::LoadOp::Clear(1.0),
+        //                     store: true,
+        //                 }),
+        //                 stencil_ops: None,
+        //             }),
+        //         });
+        // 
+        //         let aligned_micro_surface_uniform_size =
+        //             MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+        // 
+        //         // if !visible_surfaces.is_empty() {
+        //         //     render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
+        //         //     render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
+        //         //
+        //         //     for (hdl, _) in visible_surfaces.iter() {
+        //         //         let renderable =
+        //         //             cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
+        //         //         if renderable.is_none() {
+        //         //             log::debug!(
+        //         //                 "Failed to get renderable mesh for surface {:?}, skipping.",
+        //         //                 hdl
+        //         //             );
+        //         //             continue;
+        //         //         }
+        //         //         let buf_index = self
+        //         //             .msurf_rdr_state
+        //         //             .locals_lookup
+        //         //             .iter()
+        //         //             .position(|x| x == *hdl)
+        //         //             .unwrap();
+        //         //         let renderable = renderable.unwrap();
+        //         //         render_pass.set_bind_group(
+        //         //             1,
+        //         //             &self.msurf_rdr_state.locals_bind_group,
+        //         //             &[buf_index as u32 * aligned_micro_surface_uniform_size],
+        //         //         );
+        //         //         render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
+        //         //         render_pass.set_index_buffer(
+        //         //             renderable.index_buffer.slice(..),
+        //         //             renderable.index_format,
+        //         //         );
+        //         //         render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
+        //         //     }
+        //         // }
+        // 
+        //         // self.visual_grid_state.render(&mut render_pass);
+        //     }
+        // }
 
-        {
-            let cache = self.cache.read().unwrap();
-            let properties = self.ui.properties.read().unwrap();
-            let visible_surfaces = properties.visible_surfaces();
-            {
-                let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Main Render Pass"),
-                    color_attachments: &[Some(
-                        // This is what [[location(0)]] in the fragment shader targets
-                        wgpu::RenderPassColorAttachment {
-                            view: &output_view,
-                            // This is the texture that will receive the resolved output; will be
-                            // the same as `view` unless multisampling.
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(
-                                    // self.theme.visuals().clear_color
-                                    wgpu::Color::BLACK,
-                                ),
-                                store: true,
-                            },
-                        },
-                    )],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self.depth_map.depth_attachment.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
-                        }),
-                        stencil_ops: None,
-                    }),
-                });
+        // let dbg_drawing_encoder = self.dbg_drawing_state.record_render_pass(
+        //     &self.ctx.gpu,
+        //     Some(wgpu::RenderPassColorAttachment {
+        //         view: &output_view,
+        //         resolve_target: None,
+        //         ops: wgpu::Operations {
+        //             load: wgpu::LoadOp::Load,
+        //             store: true,
+        //         },
+        //     }),
+        //     Some(wgpu::RenderPassDepthStencilAttachment {
+        //         view: &self.depth_map.depth_attachment.view,
+        //         depth_ops: Some(wgpu::Operations {
+        //             load: wgpu::LoadOp::Clear(1.0),
+        //             store: true,
+        //         }),
+        //         stencil_ops: None,
+        //     }),
+        // );
 
-                let aligned_micro_surface_uniform_size =
-                    MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
-
-                // if !visible_surfaces.is_empty() {
-                //     render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
-                //     render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
-                //
-                //     for (hdl, _) in visible_surfaces.iter() {
-                //         let renderable =
-                //             cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
-                //         if renderable.is_none() {
-                //             log::debug!(
-                //                 "Failed to get renderable mesh for surface {:?}, skipping.",
-                //                 hdl
-                //             );
-                //             continue;
-                //         }
-                //         let buf_index = self
-                //             .msurf_rdr_state
-                //             .locals_lookup
-                //             .iter()
-                //             .position(|x| x == *hdl)
-                //             .unwrap();
-                //         let renderable = renderable.unwrap();
-                //         render_pass.set_bind_group(
-                //             1,
-                //             &self.msurf_rdr_state.locals_bind_group,
-                //             &[buf_index as u32 * aligned_micro_surface_uniform_size],
-                //         );
-                //         render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
-                //         render_pass.set_index_buffer(
-                //             renderable.index_buffer.slice(..),
-                //             renderable.index_format,
-                //         );
-                //         render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
-                //     }
-                // }
-
-                self.visual_grid_state.render(&mut render_pass);
-            }
-        }
-
-        let dbg_drawing_encoder = self.dbg_drawing_state.record_render_pass(
-            &self.ctx.gpu,
-            Some(wgpu::RenderPassColorAttachment {
-                view: &output_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                },
-            }),
-            Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.depth_map.depth_attachment.view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
-                }),
-                stencil_ops: None,
-            }),
-        );
+        // TODO: render UI needed images first
 
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
@@ -573,33 +571,18 @@ impl VgonioGuiApp {
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                // self.theme.update(ctx);
-                self.ui.show(ctx, &mut self.visual_grid_state.visible);
-                self.toasts.show(ctx);
+                self.ui.show(ctx);
             },
         );
 
-        let command_buffers: Box<dyn Iterator<Item = wgpu::CommandBuffer>> =
-            match dbg_drawing_encoder {
-                None => Box::new(
-                    ui_render_output
-                        .user_cmds
-                        .into_iter()
-                        .chain([main_encoder.finish(), ui_render_output.ui_cmd]),
-                ),
-                Some(dbg_encoder) => Box::new(ui_render_output.user_cmds.into_iter().chain([
-                    main_encoder.finish(),
-                    dbg_encoder.finish(),
-                    ui_render_output.ui_cmd,
-                ])),
-            };
+        let cmds = ui_render_output.user_cmds.into_iter().chain([ui_render_output.ui_cmd]);
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
-        self.ctx.gpu.queue.submit(command_buffers);
+        self.ctx.gpu.queue.submit(cmds);
 
-        self.depth_map
-            .copy_to_buffer(&self.ctx.gpu, self.canvas.width(), self.canvas.height());
+        // self.depth_map
+        //     .copy_to_buffer(&self.ctx.gpu, self.canvas.width(), self.canvas.height());
 
         // Present the frame to the screen.
         output_frame.present();
@@ -619,7 +602,6 @@ impl VgonioGuiApp {
                         *control_flow = ControlFlow::Exit;
                     }
                     RequestRedraw => {}
-                    // OpenFiles(files) => self.open_files(files),
                     Debugging(event) => {
                         // TODO: handle events inside the DebuggingState.
                         match event {
@@ -627,23 +609,24 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state.sampling_debug_enabled = enabled;
                             }
                             DebuggingEvent::UpdateDepthMap => {
-                                self.depth_map.copy_to_buffer(
-                                    &self.ctx.gpu,
-                                    self.canvas.width(),
-                                    self.canvas.height(),
-                                );
-                                self.ui
-                                    .tools
-                                    .get_tool_mut::<DebuggingInspector>()
-                                    .unwrap()
-                                    .depth_map_pane
-                                    .update_depth_map(
-                                        &self.ctx.gpu,
-                                        &self.ctx.gui,
-                                        &self.depth_map.depth_attachment_storage,
-                                        self.depth_map.width,
-                                        self.canvas.height(),
-                                    );
+                                // self.depth_map.copy_to_buffer(
+                                //     &self.ctx.gpu,
+                                //     self.canvas.width(),
+                                //     self.canvas.height(),
+                                // );
+                                // self.ui
+                                //     .tools
+                                //     .get_tool_mut::<DebuggingInspector>()
+                                //     .unwrap()
+                                //     .depth_map_pane
+                                //     .update_depth_map(
+                                //         &self.ctx.gpu,
+                                //         &self.ctx.gui,
+                                //         &self.depth_map.
+                                // depth_attachment_storage,
+                                //         self.depth_map.width,
+                                //         self.canvas.height(),
+                                //     );
                             }
                             DebuggingEvent::UpdateEmitterSamples {
                                 samples,
@@ -803,17 +786,11 @@ impl VgonioGuiApp {
                             todo!("Save area distribution to file or display it in a window");
                         }
                     },
-                    Notify { kind, text, time } => {
-                        self.toasts.add(Toast {
-                            kind,
-                            text: text.into(),
-                            options: ToastOptions::default()
-                                .duration_in_seconds(time as f64)
-                                .show_progress(true)
-                                .show_icon(true),
-                        });
-                    }
+
                     // UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
+                    SurfaceViewerCreated { uuid, texture_id } => {
+                        todo!()
+                    }
                     _ => {}
                 }
             }
@@ -846,77 +823,5 @@ impl VgonioGuiApp {
             }
             _ => {}
         }
-    }
-}
-
-// VgonioEvent handling
-impl VgonioGuiApp {
-    fn open_files(&mut self, files: Vec<rfd::FileHandle>) {
-        let mut surfaces = vec![];
-        let mut measurements = vec![];
-        // TODO: handle other file types
-        for file in files {
-            let path: PathBuf = file.into();
-            let ext = match path.extension() {
-                None => None,
-                Some(s) => s.to_str().map(|s| s.to_lowercase()),
-            };
-
-            if let Some(ext) = ext {
-                match ext.as_str() {
-                    "vgmo" => {
-                        // Micro-surface measurement data
-                        log::debug!("Opening micro-surface measurement output: {:?}", path);
-                        match self
-                            .cache
-                            .write()
-                            .unwrap()
-                            .load_micro_surface_measurement(&self.config, &path)
-                        {
-                            Ok(hdl) => {
-                                measurements.push(hdl);
-                            }
-                            Err(e) => {
-                                log::error!("Failed to load micro surface measurement: {:?}", e);
-                            }
-                        }
-                    }
-                    "vgms" | "txt" => {
-                        // Micro-surface profile
-                        log::debug!("Opening micro-surface profile: {:?}", path);
-                        let mut locked_cache = self.cache.write().unwrap();
-                        match locked_cache.load_micro_surface(&self.config, &path) {
-                            Ok((surf, _)) => {
-                                let _ = locked_cache
-                                    .create_micro_surface_renderable_mesh(
-                                        &self.ctx.gpu.device,
-                                        surf,
-                                    )
-                                    .unwrap();
-                                surfaces.push(surf)
-                            }
-                            Err(e) => {
-                                log::error!("Failed to load micro surface: {:?}", e);
-                            }
-                        }
-                    }
-                    "spd" => {
-                        todo!()
-                    }
-                    "csv" => {
-                        todo!()
-                    }
-                    _ => {}
-                }
-            } else {
-                log::warn!("File {:?} has no extension, ignoring", path);
-            }
-        }
-        // let cache = self.cache.read().unwrap();
-        self.surf_state.update_locals_lookup(&surfaces);
-        // self.ui.on_open_files(&surfaces, &cache);
-        // self.ui
-        //     .outliner_mut()
-        //     .update_measurement_data(&measurements, &cache);
     }
 }

@@ -10,17 +10,17 @@ use std::{
 };
 
 use crate::app::gui::{
-    outliner::Outliner, prop_insp::PropertyInspector, state::GuiRenderer,
+    event::VgonioEvent, outliner::Outliner, prop_insp::PropertyInspector, state::GuiRenderer,
     surf_viewer::SurfaceViewer, theme::ThemeKind,
 };
 
 /// Docking space for widgets.
 pub struct DockSpace {
-    gpu: Arc<GpuContext>,                 // TODO: remove
-    gui: Arc<RwLock<GuiRenderer>>,        // TODO: remove
-    cache: Arc<RwLock<Cache>>,            // TODO: remove
-    prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
-
+    gui: Arc<RwLock<GuiRenderer>>,   // TODO: remove
+    cache: Arc<RwLock<Cache>>,       // TODO: remove
+    data: Arc<RwLock<PropertyData>>, // TODO: remove
+    /// GPU context.
+    gpu: Arc<GpuContext>,
     /// Event loop proxy.
     event_loop: EventLoopProxy,
     /// Inner tree of the dock space.
@@ -54,7 +54,7 @@ impl DockSpace {
     ) -> Self {
         let mut inner = egui_dock::Tree::new(vec![DockingWidget {
             index: 0,
-            dockable: Box::new(DockableString::new("Hello, world!".to_owned())),
+            dockable: Box::new(DockableString::new(String::from("Hello world"))),
         }]);
         let [_, r] = inner.split_right(
             egui_dock::NodeIndex::root(),
@@ -73,10 +73,10 @@ impl DockSpace {
             }],
         );
         Self {
-            gpu,
             gui,
             cache,
-            prop_data: data,
+            data,
+            gpu,
             event_loop,
             inner,
             added: Vec::new(),
@@ -111,17 +111,26 @@ impl DockSpace {
                 WidgetKind::Outliner => {
                     Box::new(Outliner::new(data.clone(), self.event_loop.clone()))
                 }
-                WidgetKind::SurfViewer => Box::new(SurfaceViewer::new(
-                    self.gpu.clone(),
-                    self.gui.clone(),
-                    256,
-                    256,
-                    wgpu::TextureFormat::Bgra8UnormSrgb,
-                    self.cache.clone(),
-                    theme_kind,
-                    self.event_loop.clone(),
-                    self.prop_data.clone(),
-                )),
+                WidgetKind::SurfViewer => {
+                    let widget = Box::new(SurfaceViewer::new(
+                        self.gpu.clone(),
+                        self.gui.clone(),
+                        256,
+                        256,
+                        wgpu::TextureFormat::Bgra8UnormSrgb,
+                        self.cache.clone(),
+                        theme_kind,
+                        self.event_loop.clone(),
+                        self.data.clone(),
+                    ));
+                    // self.event_loop
+                    //     .send_event(VgonioEvent::SurfaceViewerCreated {
+                    //         uuid: widget.uuid(),
+                    //         texture_id: widget.color_attachment_id(),
+                    //     })
+                    //     .unwrap();
+                    widget
+                }
                 _ => Box::new(DockableString::new(String::from("Hello world"))),
             };
             self.inner.push_to_focused_leaf(DockingWidget {

@@ -1,5 +1,8 @@
 use egui::{Ui, WidgetText};
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 use uuid::Uuid;
 
 use vgcore::math::{Mat4, Vec3, Vec4};
@@ -42,6 +45,7 @@ pub struct MicroSurfaceState {
     /// Lookup table linking [`MicroSurface`] to its offset in the local uniform
     /// buffer.
     pub(crate) locals_lookup: Vec<Handle<MicroSurface>>,
+    // views: HashMap<Uuid, (egui::TextureId, wgpu::Texture)>,
 }
 
 impl MicroSurfaceState {
@@ -256,9 +260,10 @@ pub struct SurfaceViewer {
     // navigator: NavigationGizmo,
     output_format: wgpu::TextureFormat,
     color_attachment: Texture,
-    color_attachment_id: egui::TextureId,
     proj_view_model: Mat4,
     focused: bool,
+
+    color_attachment_id: egui::TextureId,
 
     prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
 }
@@ -326,6 +331,7 @@ impl SurfaceViewer {
             &color_attachment.view,
             wgpu::FilterMode::Linear,
         );
+        let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
             gpu,
             gui,
@@ -347,6 +353,8 @@ impl SurfaceViewer {
             prop_data,
         }
     }
+
+    pub fn color_attachment_id(&self) -> egui::TextureId { self.color_attachment_id }
 
     pub fn resize_viewport(&mut self, new_size: egui::Vec2, scale_factor: Option<f32>) {
         let scale_factor = scale_factor.unwrap_or(1.0);

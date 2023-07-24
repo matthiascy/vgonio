@@ -29,7 +29,7 @@ use crate::{
 #[cfg(feature = "embree")]
 use crate::measure::rtc::embr;
 
-use crate::app::gfx::RenderableMesh;
+use crate::app::{gfx::RenderableMesh, gui::notify::NotifyKind};
 use egui_toast::ToastKind;
 use std::{
     default::Default,
@@ -846,7 +846,7 @@ impl DebugDrawingState {
             log::trace!("No emitter samples to emit rays from");
             self.event_loop
                 .send_event(VgonioEvent::Notify {
-                    kind: ToastKind::Warning,
+                    kind: NotifyKind::Warning,
                     text: "Generate samples before generate rays".to_string(),
                     time: 4.0,
                 })
@@ -1053,7 +1053,7 @@ impl DebugDrawingState {
         if self.emitter_samples.is_none() {
             self.event_loop
                 .send_event(VgonioEvent::Notify {
-                    kind: ToastKind::Warning,
+                    kind: NotifyKind::Warning,
                     text: "Please generate samples before tracing".to_string(),
                     time: 4.0,
                 })
@@ -1064,7 +1064,7 @@ impl DebugDrawingState {
         if self.collector_patches.is_none() {
             self.event_loop
                 .send_event(VgonioEvent::Notify {
-                    kind: ToastKind::Warning,
+                    kind: NotifyKind::Warning,
                     text: "Please generate patches before tracing".to_string(),
                     time: 4.0,
                 })

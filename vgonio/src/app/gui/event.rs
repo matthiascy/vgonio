@@ -1,5 +1,9 @@
 use crate::{
-    app::{cache::Handle, gfx::RenderableMesh, gui::theme::ThemeKind},
+    app::{
+        cache::Handle,
+        gfx::RenderableMesh,
+        gui::{docking::NewWidget, notify::NotifyKind, theme::ThemeKind},
+    },
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
@@ -8,6 +12,7 @@ use crate::{
     },
 };
 use egui_toast::ToastKind;
+use uuid::Uuid;
 use vgcore::{
     math::{IVec2, Vec3},
     units::{Degrees, Radians},
@@ -35,12 +40,18 @@ pub enum VgonioEvent {
     Debugging(DebuggingEvent),
     Measure(MeasureEvent),
     Notify {
-        kind: ToastKind,
+        kind: NotifyKind,
         text: String,
         time: f32,
     },
     /// Update the theme.
     UpdateThemeKind(ThemeKind),
+    SurfaceViewerCreated {
+        /// ID of the surface viewer.
+        uuid: Uuid,
+        /// Texture ID of the surface viewer output.
+        texture_id: egui::TextureId,
+    },
 }
 
 /// Events used by BSDF viewer.`

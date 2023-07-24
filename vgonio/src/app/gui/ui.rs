@@ -9,6 +9,7 @@ use crate::{
             file_drop::FileDragDrop,
             gizmo::NavigationGizmo,
             icons,
+            notify::{NotifyKind, NotifySystem},
             outliner::Outliner,
             simulations::Simulations,
             state::GuiRenderer,
@@ -23,7 +24,6 @@ use crate::{
 };
 use egui::{NumExt, Ui, WidgetText};
 use egui_gizmo::GizmoOrientation;
-use egui_toast::ToastKind;
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -56,6 +56,9 @@ pub struct VgonioGui {
     navigator: NavigationGizmo,
 
     theme: ThemeState,
+
+    /// Notification system.
+    notif: NotifySystem,
 
     plotting_inspectors: Vec<Box<dyn PlottingWidget>>,
 
@@ -102,6 +105,7 @@ impl VgonioGui {
             properties,
             gpu_ctx: gpu,
             theme: ThemeState::default(),
+            notif: NotifySystem::new(),
         }
     }
 
@@ -119,6 +123,10 @@ impl VgonioGui {
                 self.theme.set_theme_kind(*kind);
                 EventResponse::Handled
             }
+            VgonioEvent::Notify { kind, text, time } => {
+                self.notif.notify(*kind, text.clone(), *time as f64);
+                EventResponse::Handled
+            }
             _ => EventResponse::Ignored(event),
         }
     }
@@ -127,13 +135,13 @@ impl VgonioGui {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, visual_grid_visible: &mut bool) {
+    pub fn show(&mut self, ctx: &egui::Context) {
         self.theme.update_context(ctx);
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.main_menu(ui, self.theme.kind(), visual_grid_visible);
+                    self.main_menu(ui, self.theme.kind());
                 });
             });
 
@@ -143,6 +151,7 @@ impl VgonioGui {
         self.drag_drop.show(ctx);
         self.navigator.show(ctx);
         self.simulations.show_all(ctx);
+        self.notif.show(ctx);
     }
 
     pub fn on_open_files(&mut self, files: &[rfd::FileHandle]) {
@@ -161,7 +170,7 @@ impl VgonioGui {
         self.simulations.update_loaded_surfaces(&surfaces, &cache);
     }
 
-    fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind, visual_grid_visible: &mut bool) {
+    fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind) {
         ui.set_height(28.0);
         let icon_image = match kind {
             ThemeKind::Dark => icons::get_icon_image("vgonio_menu_dark").unwrap(),
@@ -175,7 +184,7 @@ impl VgonioGui {
             if ui.button("About").clicked() {
                 self.event_loop
                     .send_event(VgonioEvent::Notify {
-                        kind: ToastKind::Info,
+                        kind: NotifyKind::Info,
                         text: "TODO: about".to_string(),
                         time: 0.0,
                     })
@@ -197,7 +206,7 @@ impl VgonioGui {
                 if ui.button("Micro-surface").clicked() {
                     self.event_loop
                         .send_event(VgonioEvent::Notify {
-                            kind: ToastKind::Info,
+                            kind: NotifyKind::Info,
                             text: "TODO: new height field".to_string(),
                             time: 3.0,
                         })
@@ -231,7 +240,7 @@ impl VgonioGui {
                     if ui.button(format!("item {i}")).clicked() {
                         self.event_loop
                             .send_event(VgonioEvent::Notify {
-                                kind: ToastKind::Info,
+                                kind: NotifyKind::Info,
                                 text: format!("TODO: open recent item {i}"),
                                 time: 3.0,
                             })
@@ -246,7 +255,7 @@ impl VgonioGui {
                 if ui.button("Save...").clicked() {
                     self.event_loop
                         .send_event(VgonioEvent::Notify {
-                            kind: ToastKind::Info,
+                            kind: NotifyKind::Info,
                             text: "TODO: save".into(),
                             time: 3.0,
                         })
@@ -259,7 +268,7 @@ impl VgonioGui {
                     if ui.button("     Undo").clicked() {
                         self.event_loop
                             .send_event(VgonioEvent::Notify {
-                                kind: ToastKind::Info,
+                                kind: NotifyKind::Info,
                                 text: "TODO: undo".into(),
                                 time: 3.0,
                             })
@@ -268,7 +277,7 @@ impl VgonioGui {
                     if ui.button("     Redo").clicked() {
                         self.event_loop
                             .send_event(VgonioEvent::Notify {
-                                kind: ToastKind::Info,
+                                kind: NotifyKind::Info,
                                 text: "TODO: redo".into(),
                                 time: 3.0,
                             })
@@ -283,20 +292,21 @@ impl VgonioGui {
                     ui.close_menu();
                 }
 
-                {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("     Visual grid");
-                        ui.add_space(5.0);
-                        ui.add(ToggleSwitch::new(visual_grid_visible));
-                    });
-                }
+                // TODO: per surface viewer instance
+                // {
+                //     ui.horizontal_wrapped(|ui| {
+                //         ui.label("     Visual grid");
+                //         ui.add_space(5.0);
+                //         ui.add(ToggleSwitch::new(visual_grid_visible));
+                //     });
+                // }
 
                 ui.separator();
 
                 if ui.button("\u{2699} Preferences").clicked() {
                     self.event_loop
                         .send_event(VgonioEvent::Notify {
-                            kind: ToastKind::Info,
+                            kind: NotifyKind::Info,
                             text: "TODO: open preferences window".into(),
                             time: 3.0,
                         })

@@ -118,15 +118,15 @@ pub struct GuiRenderer {
     texture_bind_group_layout: wgpu::BindGroupLayout,
     // Map of egui texture IDs to textures and their associated bind groups (texture + sampler)
     // The texture may be None if the TextureId is just a handle to a user-provided
-    // sampler.
-    textures: HashMap<epaint::TextureId, (Option<wgpu::Texture>, wgpu::BindGroup)>,
+    // sampler. The bind group may be None if user only pre-allocated a texture ID
+    // for later use.
+    textures: HashMap<epaint::TextureId, (Option<wgpu::Texture>, Option<wgpu::BindGroup>)>,
 
     /// Samplers classified by texture filters.
     samplers: HashMap<epaint::textures::TextureOptions, wgpu::Sampler>,
 
-    /// Next available texture ID for user-provided textures.
-    next_user_texture_id: u64,
-
+    // /// Next available texture ID for user-provided textures.
+    // next_user_texture_id: u64,
     /// Callbacks for custom rendering.
     paint_callback_resources: TypeMap,
 }
@@ -137,6 +137,14 @@ impl GuiRenderer {
 
     const INDEX_BUFFER_INIT_CAPACITY: wgpu::BufferAddress =
         3 * 1024 * std::mem::size_of::<u32>() as wgpu::BufferAddress;
+
+    /// Returns a new texture ID that can be used to refer to a user-provided
+    /// texture.
+    pub fn new_user_texture_id() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_USER_TEXTURE_ID: AtomicU64 = AtomicU64::new(0);
+        NEXT_USER_TEXTURE_ID.fetch_add(1, Ordering::Relaxed)
+    }
 
     pub fn new(
         device: &wgpu::Device,
@@ -296,7 +304,7 @@ impl GuiRenderer {
             texture_bind_group_layout,
             textures: HashMap::new(),
             samplers: HashMap::new(),
-            next_user_texture_id: 0,
+            // next_user_texture_id: 0,
             paint_callback_resources: TypeMap::new(),
             output_format: output_color_format,
         }
@@ -356,7 +364,8 @@ impl GuiRenderer {
                     let index_buffer_subslice = index_buffer_subslices.next().unwrap();
                     let vertex_buffer_subslice = vertex_buffer_subslices.next().unwrap();
 
-                    if let Some((_texture, bind_group)) = self.textures.get(&mesh.texture_id) {
+                    if let Some((_texture, Some(bind_group))) = self.textures.get(&mesh.texture_id)
+                    {
                         render_pass.set_bind_group(1, bind_group, &[]);
                         render_pass.set_vertex_buffer(
                             0,
@@ -523,7 +532,7 @@ impl GuiRenderer {
             });
             let origin = wgpu::Origin3d::ZERO;
             queue_write_data_to_texture(&texture, origin);
-            self.textures.insert(id, (Some(texture), bind_group));
+            self.textures.insert(id, (Some(texture), Some(bind_group)));
         }
     }
 
@@ -538,7 +547,7 @@ impl GuiRenderer {
     pub fn texture(
         &self,
         id: epaint::TextureId,
-    ) -> Option<&(Option<wgpu::Texture>, wgpu::BindGroup)> {
+    ) -> Option<&(Option<wgpu::Texture>, Option<wgpu::BindGroup>)> {
         self.textures.get(&id)
     }
 
@@ -559,7 +568,7 @@ impl GuiRenderer {
             device,
             texture,
             wgpu::SamplerDescriptor {
-                label: Some(format!("egui_tex_user_id_{}", self.next_user_texture_id).as_str()),
+                label: None,
                 mag_filter: texture_filter,
                 min_filter: texture_filter,
                 ..Default::default()
@@ -583,12 +592,13 @@ impl GuiRenderer {
         texture: &wgpu::TextureView,
         sampler: wgpu::SamplerDescriptor<'_>,
     ) -> epaint::TextureId {
+        let id = epaint::TextureId::User(Self::new_user_texture_id());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             compare: None,
             ..sampler
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(format!("egui_tex_user_id_{}", self.next_user_texture_id).as_str()),
+            label: Some(format!("egui_tex_user_id_{:?}", id).as_str()),
             layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -601,9 +611,15 @@ impl GuiRenderer {
                 },
             ],
         });
-        let id = epaint::TextureId::User(self.next_user_texture_id);
-        self.textures.insert(id, (None, bind_group));
-        self.next_user_texture_id += 1;
+        self.textures.insert(id, (None, Some(bind_group)));
+        id
+    }
+
+    /// Pre-allocates a `epaint::TextureId` that can be used to refer to a
+    /// user-provided texture.
+    pub fn pre_register_texture_id(&mut self) -> epaint::TextureId {
+        let id = epaint::TextureId::User(Self::new_user_texture_id());
+        self.textures.insert(id, (None, None));
         id
     }
 
@@ -622,7 +638,7 @@ impl GuiRenderer {
             device,
             texture,
             wgpu::SamplerDescriptor {
-                label: Some(format!("egui_tex_user_id_{}", self.next_user_texture_id).as_str()),
+                label: None,
                 mag_filter: texture_filter,
                 min_filter: texture_filter,
                 ..Default::default()
@@ -653,7 +669,7 @@ impl GuiRenderer {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(format!("egui_tex_user_id_{}", self.next_user_texture_id).as_str()),
+            label: Some(format!("egui_tex_user_id_{:?}", id).as_str()),
             layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -666,7 +682,7 @@ impl GuiRenderer {
                 },
             ],
         });
-        *user_texture_bind_group = bind_group;
+        *user_texture_bind_group = Some(bind_group);
     }
 
     /// Uploads the uniforms, vertex and index data used by the renderer.

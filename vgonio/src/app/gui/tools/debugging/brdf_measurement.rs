@@ -3,6 +3,7 @@ use crate::{
         cache::{Cache, Handle, MicroSurfaceRecord},
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
+            notify::NotifyKind,
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
@@ -10,7 +11,6 @@ use crate::{
         emitter::RegionShape, measurement::BsdfMeasurementParams, CollectorScheme, RtcMethod,
     },
 };
-use egui_toast::ToastKind;
 use std::sync::{Arc, RwLock};
 use vgcore::{
     math,
@@ -87,7 +87,7 @@ impl BrdfMeasurementDebugging {
             None => {
                 self.event_loop
                     .send_event(VgonioEvent::Notify {
-                        kind: ToastKind::Warning,
+                        kind: NotifyKind::Warning,
                         text: "No surface selected to evaluate the radius".to_string(),
                         time: 1.0,
                     })
@@ -132,7 +132,7 @@ impl BrdfMeasurementDebugging {
             None => {
                 self.event_loop
                     .send_event(VgonioEvent::Notify {
-                        kind: ToastKind::Warning,
+                        kind: NotifyKind::Warning,
                         text: "No surface selected to evaluate the radius".to_string(),
                         time: 1.0,
                     })
@@ -340,7 +340,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                     None => {
                                         self.event_loop
                                             .send_event(VgonioEvent::Notify {
-                                                kind: ToastKind::Warning,
+                                                kind: NotifyKind::Warning,
                                                 text: "No surface selected to evaluate the dome \
                                                        radius"
                                                     .to_string(),
@@ -358,7 +358,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                         );
                                         self.event_loop
                                             .send_event(VgonioEvent::Notify {
-                                                kind: ToastKind::Warning,
+                                                kind: NotifyKind::Warning,
                                                 text: format!(
                                                     "Evaluated emitter radius = {radius}"
                                                 ),
