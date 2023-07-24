@@ -1,4 +1,6 @@
+use egui::{Ui, WidgetText};
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 use vgcore::math::{Mat4, Vec3, Vec4};
 use vgsurf::MicroSurface;
@@ -10,7 +12,11 @@ use crate::app::{
         GpuContext, Texture,
     },
     gui::{
-        event::EventLoopProxy, state::camera::CameraState, theme::ThemeKind,
+        data::{MicroSurfaceProp, PropertyData},
+        docking::{Dockable, WidgetKind},
+        event::EventLoopProxy,
+        state::camera::CameraState,
+        theme::{ThemeKind, ThemeState},
         visual_grid::VisualGridState,
     },
 };
@@ -225,9 +231,9 @@ impl MicroSurfaceUniforms {
 }
 
 /// Surface viewer.
-pub struct SurfViewer {
+pub struct SurfaceViewer {
     /// Unique identifier across all widgets.
-    uuid: uuid::Uuid,
+    uuid: Uuid,
     /// GPU context.
     gpu: Arc<GpuContext>,
     /// GUI renderer.
@@ -253,9 +259,11 @@ pub struct SurfViewer {
     color_attachment_id: egui::TextureId,
     proj_view_model: Mat4,
     focused: bool,
+
+    prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
 }
 
-impl SurfViewer {
+impl SurfaceViewer {
     pub fn new(
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
@@ -263,9 +271,9 @@ impl SurfViewer {
         height: u32,
         format: wgpu::TextureFormat,
         cache: Arc<RwLock<Cache>>,
-        // outliner: Arc<RwLock<Outliner>>,
         theme_kind: ThemeKind,
         event_loop: EventLoopProxy,
+        prop_data: Arc<RwLock<PropertyData>>,
     ) -> Self {
         let surf_state = MicroSurfaceState::new(&gpu, format);
         let depth_map = DepthMap::new(&gpu, width, height);
@@ -336,6 +344,7 @@ impl SurfViewer {
             proj_view_model: Mat4::IDENTITY,
             focused: false,
             uuid: Uuid::new_v4(),
+            prop_data,
         }
     }
 
@@ -405,7 +414,7 @@ impl SurfViewer {
                 b: 0.4,
                 a: 1.0,
             },
-            false,
+            ThemeKind::Dark,
         );
         // self.navigator.update_matrices(
         //     Mat4::IDENTITY,
@@ -413,14 +422,10 @@ impl SurfViewer {
         // self.camera.camera.up),     Mat4::orthographic_rh(-1.0, 1.0, -1.0,
         // 1.0, 0.1, 100.0), );
 
-        // Update uniform buffer for all visible surfaces.
-        let visible_surfaces = {
-            let outliner = self.outliner.read().unwrap();
-            outliner.visible_surfaces()
-        };
-
         let view_proj = self.camera.uniform.view_proj;
 
+        let prop_data = self.prop_data.read().unwrap();
+        let visible_surfaces = prop_data.visible_surfaces();
         if !visible_surfaces.is_empty() {
             self.gpu.queue.write_buffer(
                 &self.surf_state.global_uniform_buffer,
@@ -429,26 +434,23 @@ impl SurfViewer {
             );
             // Update per-surface uniform buffer.
             let aligned_size = MicroSurfaceUniforms::aligned_size(&self.gpu.device);
-            for (hdl, state) in visible_surfaces.iter() {
-                let local_uniform_buf_index = if let Some(idx) = self
-                    .surf_state
-                    .locals_lookup
-                    .iter()
-                    .position(|h| *h == *hdl)
+            for (hdl, prop) in visible_surfaces.iter() {
+                let local_uniform_buf_index = if let Some(idx) =
+                    self.surf_state.locals_lookup.iter().position(|h| h == *hdl)
                 {
                     idx
                 } else {
-                    self.surf_state.locals_lookup.push(*hdl);
+                    self.surf_state.locals_lookup.push(**hdl);
                     self.surf_state.locals_lookup.len() - 1
                 };
 
                 let mut buf = [0.0; 20];
                 buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
                 buf[16..20].copy_from_slice(&[
-                    state.min + state.height_offset,
-                    state.max + state.height_offset,
-                    state.max - state.min,
-                    state.scale,
+                    prop.min + prop.height_offset,
+                    prop.max + prop.height_offset,
+                    prop.max - prop.min,
+                    prop.scale,
                 ]);
                 self.gpu.queue.write_buffer(
                     &self.surf_state.local_uniform_buffer,
@@ -495,7 +497,7 @@ impl SurfViewer {
                 render_pass.set_bind_group(0, &self.surf_state.globals_bind_group, &[]);
 
                 for (hdl, _) in visible_surfaces.iter() {
-                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(*hdl);
+                    let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
                     if renderable.is_none() {
                         log::debug!(
                             "Failed to get renderable mesh for surface {:?},
@@ -508,7 +510,7 @@ impl SurfViewer {
                         .surf_state
                         .locals_lookup
                         .iter()
-                        .position(|x| x == hdl)
+                        .position(|x| &x == hdl)
                         .unwrap();
                     let renderable = renderable.unwrap();
                     render_pass.set_bind_group(
@@ -525,11 +527,39 @@ impl SurfViewer {
                 }
             }
 
-            // Draw visual grid.
-            render_pass.set_pipeline(&self.visual_grid_state.pipeline);
-            render_pass.set_bind_group(0, &self.visual_grid_state.bind_group, &[]);
-            render_pass.draw(0..6, 0..1);
+            self.visual_grid_state.render(&mut render_pass);
+
+            // // Draw visual grid.
+            // render_pass.set_pipeline(&self.visual_grid_state.pipeline);
+            // render_pass.set_bind_group(0, &self.visual_grid_state.bind_group,
+            // &[]); render_pass.draw(0..6, 0..1);
         }
         self.gpu.queue.submit(Some(encoder.finish()));
+    }
+}
+
+impl Dockable for SurfaceViewer {
+    fn kind(&self) -> WidgetKind { WidgetKind::SurfViewer }
+
+    fn title(&self) -> WidgetText { "Surface Viewer".into() }
+
+    fn uuid(&self) -> Uuid { self.uuid }
+
+    fn ui(&mut self, ui: &mut Ui) {
+        let rect = ui.available_rect_before_wrap();
+        let size = egui::Vec2::new(rect.width(), rect.height());
+
+        self.render(size, None);
+
+        egui::Area::new(self.uuid.to_string())
+            .fixed_pos(rect.min)
+            .show(ui.ctx(), |ui| {
+                ui.set_clip_rect(rect);
+                let res = ui.add(egui::Image::new(
+                    self.color_attachment_id,
+                    self.viewport_size,
+                ));
+                //self.navigator.ui(ui);
+            });
     }
 }

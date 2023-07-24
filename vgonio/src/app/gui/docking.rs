@@ -1,16 +1,26 @@
 use crate::app::{
+    cache::Cache,
     gfx::GpuContext,
     gui::{data::PropertyData, event::EventLoopProxy},
 };
 use std::{
     fmt::{self, Debug},
+    ops::{Deref, DerefMut},
     sync::{Arc, RwLock},
 };
 
-use crate::app::gui::{outliner::Outliner, prop_insp::PropertyInspector};
+use crate::app::gui::{
+    outliner::Outliner, prop_insp::PropertyInspector, state::GuiRenderer,
+    surf_viewer::SurfaceViewer, theme::ThemeKind,
+};
 
 /// Docking space for widgets.
 pub struct DockSpace {
+    gpu: Arc<GpuContext>,                 // TODO: remove
+    gui: Arc<RwLock<GuiRenderer>>,        // TODO: remove
+    cache: Arc<RwLock<Cache>>,            // TODO: remove
+    prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
+
     /// Event loop proxy.
     event_loop: EventLoopProxy,
     /// Inner tree of the dock space.
@@ -19,13 +29,29 @@ pub struct DockSpace {
     added: Vec<NewWidget>,
 }
 
+impl Deref for DockSpace {
+    type Target = egui_dock::Tree<DockingWidget>;
+
+    fn deref(&self) -> &Self::Target { &self.inner }
+}
+
+impl DerefMut for DockSpace {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
+}
+
 impl DockSpace {
     /// Create a new dock space with a default layout.
     ///
     /// |   | 1 |
     /// | 0 | - |
     /// |   | 2 |
-    pub fn default_layout(data: Arc<RwLock<PropertyData>>, event_loop: EventLoopProxy) -> Self {
+    pub fn default_layout(
+        gpu: Arc<GpuContext>,
+        gui: Arc<RwLock<GuiRenderer>>,
+        cache: Arc<RwLock<Cache>>,
+        data: Arc<RwLock<PropertyData>>,
+        event_loop: EventLoopProxy,
+    ) -> Self {
         let mut inner = egui_dock::Tree::new(vec![DockingWidget {
             index: 0,
             dockable: Box::new(DockableString::new("Hello, world!".to_owned())),
@@ -35,7 +61,7 @@ impl DockSpace {
             0.8,
             vec![DockingWidget {
                 index: 1,
-                dockable: Box::new(Outliner::new(data, event_loop.clone())),
+                dockable: Box::new(Outliner::new(data.clone(), event_loop.clone())),
             }],
         );
         inner.split_below(
@@ -47,13 +73,22 @@ impl DockSpace {
             }],
         );
         Self {
+            gpu,
+            gui,
+            cache,
+            prop_data: data,
             event_loop,
             inner,
             added: Vec::new(),
         }
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, data: Arc<RwLock<PropertyData>>) {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        data: Arc<RwLock<PropertyData>>,
+        theme_kind: ThemeKind,
+    ) {
         use egui_dock::NodeIndex;
 
         egui_dock::DockArea::new(&mut self.inner)
@@ -61,7 +96,7 @@ impl DockSpace {
             .show_add_popup(true)
             .show(
                 ctx,
-                &mut DockingDisplay {
+                &mut DockSpaceView {
                     added: &mut self.added,
                 },
             );
@@ -76,6 +111,17 @@ impl DockSpace {
                 WidgetKind::Outliner => {
                     Box::new(Outliner::new(data.clone(), self.event_loop.clone()))
                 }
+                WidgetKind::SurfViewer => Box::new(SurfaceViewer::new(
+                    self.gpu.clone(),
+                    self.gui.clone(),
+                    256,
+                    256,
+                    wgpu::TextureFormat::Bgra8UnormSrgb,
+                    self.cache.clone(),
+                    theme_kind,
+                    self.event_loop.clone(),
+                    self.prop_data.clone(),
+                )),
                 _ => Box::new(DockableString::new(String::from("Hello world"))),
             };
             self.inner.push_to_focused_leaf(DockingWidget {
@@ -88,14 +134,14 @@ impl DockSpace {
 
 /// Common docking functionality for all dockable widgets
 pub trait Dockable {
-    /// Unique identifier of the widget.
-    fn uuid(&self) -> uuid::Uuid;
+    /// Kind of the widget.
+    fn kind(&self) -> WidgetKind;
 
     /// Title of the widget.
     fn title(&self) -> egui::WidgetText;
 
-    /// Kind of the widget.
-    fn kind(&self) -> WidgetKind;
+    /// Unique identifier of the widget.
+    fn uuid(&self) -> uuid::Uuid;
 
     /// Actual content of the widget.
     fn ui(&mut self, ui: &mut egui::Ui);
@@ -140,18 +186,18 @@ pub struct NewWidget {
 }
 
 /// Utility structure to render the tabs in the dock space.
-pub struct DockingDisplay<'a> {
+pub struct DockSpaceView<'a> {
     pub added: &'a mut Vec<NewWidget>,
 }
 
-impl<'a> egui_dock::TabViewer for DockingDisplay<'a> {
+impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
     type Tab = DockingWidget;
-
-    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id { egui::Id::new(tab.dockable.uuid()) }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) { tab.dockable.ui(ui) }
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText { tab.dockable.title() }
+
+    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id { egui::Id::new(tab.dockable.uuid()) }
 
     fn add_popup(&mut self, ui: &mut egui::Ui, parent: egui_dock::NodeIndex) {
         ui.set_min_width(120.0);
@@ -187,6 +233,7 @@ impl<'a> egui_dock::TabViewer for DockingDisplay<'a> {
     }
 }
 
+/// Test utility structure to render a string tab in the dock space.
 #[cfg(debug_assertions)]
 pub struct DockableString {
     pub uuid: uuid::Uuid,
@@ -208,14 +255,14 @@ impl From<String> for DockableString {
 
 #[cfg(debug_assertions)]
 impl Dockable for DockableString {
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+    fn kind(&self) -> WidgetKind { WidgetKind::String }
 
     fn title(&self) -> egui::WidgetText { "Dockable String".into() }
+
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.label(&self.content);
         ui.label(&format!("uuid: {}, content: {}", self.uuid, self.content));
     }
-
-    fn kind(&self) -> WidgetKind { WidgetKind::String }
 }

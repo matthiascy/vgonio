@@ -63,7 +63,7 @@ pub struct VgonioGui {
     pub properties: Arc<RwLock<PropertyData>>,
 
     /// Docking system for the UI.
-    dock_space: DockSpace,
+    pub(crate) dock_space: DockSpace,
 }
 
 impl VgonioGui {
@@ -87,12 +87,18 @@ impl VgonioGui {
                 &mut gui.write().unwrap(),
                 cache.clone(),
             ),
-            cache,
+            cache: cache.clone(),
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             simulations: Simulations::new(event_loop.clone()),
             plotting_inspectors: vec![],
-            dock_space: DockSpace::default_layout(properties.clone(), event_loop),
+            dock_space: DockSpace::default_layout(
+                gpu.clone(),
+                gui.clone(),
+                cache,
+                properties.clone(),
+                event_loop,
+            ),
             properties,
             gpu_ctx: gpu,
             theme: ThemeState::default(),
@@ -110,7 +116,7 @@ impl VgonioGui {
                 EventResponse::Handled
             }
             VgonioEvent::UpdateThemeKind(kind) => {
-                self.theme.set_kind(*kind);
+                self.theme.set_theme_kind(*kind);
                 EventResponse::Handled
             }
             _ => EventResponse::Ignored(event),
@@ -121,17 +127,18 @@ impl VgonioGui {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, kind: ThemeKind, visual_grid_visible: &mut bool) {
+    pub fn show(&mut self, ctx: &egui::Context, visual_grid_visible: &mut bool) {
         self.theme.update_context(ctx);
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.main_menu(ui, kind, visual_grid_visible);
+                    self.main_menu(ui, self.theme.kind(), visual_grid_visible);
                 });
             });
 
-        self.dock_space.show(ctx, self.properties.clone());
+        self.dock_space
+            .show(ctx, self.properties.clone(), self.theme.kind());
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
         self.navigator.show(ctx);

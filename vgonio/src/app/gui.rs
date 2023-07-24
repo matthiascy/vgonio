@@ -155,7 +155,7 @@ pub struct VgonioGuiApp {
     camera: CameraState,
     /// State of the micro surface rendering, including the pipeline, binding
     /// groups, and buffers.
-    msurf_rdr_state: MicroSurfaceState,
+    surf_state: MicroSurfaceState,
     /// State of the visual grid rendering, including the pipeline, binding
     /// groups, and buffers.
     visual_grid_state: VisualGridState,
@@ -278,7 +278,7 @@ impl VgonioGuiApp {
             dbg_drawing_state,
             camera,
             canvas,
-            msurf_rdr_state,
+            surf_state: msurf_rdr_state,
             visual_grid_state,
             bsdf_viewer,
             toasts,
@@ -354,10 +354,12 @@ impl VgonioGuiApp {
         }
     }
 
-    pub fn update_frame(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
-        // Update camera uniform.
+    #[rustfmt::skip]
+    pub fn render_frame(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
+        // Update camera uniform depending on which surface viewer is active.
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
+
         self.ui.update_gizmo_matrices(
             Mat4::IDENTITY,
             Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
@@ -392,41 +394,41 @@ impl VgonioGuiApp {
             scale,
         );
 
-        // Update uniform buffer for all visible surfaces.
-        {
-            let properties = self.ui.properties.read().unwrap();
-            let visible_surfaces = properties.visible_surfaces();
-            if !visible_surfaces.is_empty() {
-                self.ctx.gpu.queue.write_buffer(
-                    &self.msurf_rdr_state.global_uniform_buffer,
-                    0,
-                    bytemuck::bytes_of(&view_proj),
-                );
-                // Update per-surface uniform buffer.
-                let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
-                for (hdl, state) in visible_surfaces.iter() {
-                    let mut buf = [0.0; 20];
-                    let local_uniform_buf_index = self
-                        .msurf_rdr_state
-                        .locals_lookup
-                        .iter()
-                        .position(|h| *h == **hdl)
-                        .unwrap();
-                    buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-                    buf[16..20].copy_from_slice(&[
-                        state.min + state.height_offset,
-                        state.max + state.height_offset,
-                        state.max - state.min,
-                        state.scale,
-                    ]);
-                    self.ctx.gpu.queue.write_buffer(
-                        &self.msurf_rdr_state.local_uniform_buffer,
-                        local_uniform_buf_index as u64 * aligned_size as u64,
-                        bytemuck::cast_slice(&buf),
-                    );
-                }
-            }
-        }
+        // // Update uniform buffer for all visible surfaces.
+        // {
+        //     let properties = self.ui.properties.read().unwrap();
+        //     let visible_surfaces = properties.visible_surfaces();
+        //     if !visible_surfaces.is_empty() {
+        //         self.ctx.gpu.queue.write_buffer(
+        //             &self.msurf_rdr_state.global_uniform_buffer,
+        //             0,
+        //             bytemuck::bytes_of(&view_proj),
+        //         );
+        //         // Update per-surface uniform buffer.
+        //         let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
+        //         for (hdl, state) in visible_surfaces.iter() {
+        //             let mut buf = [0.0; 20];
+        //             let local_uniform_buf_index = self
+        //                 .msurf_rdr_state
+        //                 .locals_lookup
+        //                 .iter()
+        //                 .position(|h| *h == **hdl)
+        //                 .unwrap();
+        //             buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+        //             buf[16..20].copy_from_slice(&[
+        //                 state.min + state.height_offset,
+        //                 state.max + state.height_offset,
+        //                 state.max - state.min,
+        //                 state.scale,
+        //             ]);
+        //             self.ctx.gpu.queue.write_buffer(
+        //                 &self.msurf_rdr_state.local_uniform_buffer,
+        //                 local_uniform_buf_index as u64 * aligned_size as u64,
+        //                 bytemuck::cast_slice(&buf),
+        //             );
+        //         }
+        //     }
+        // }
 
         // Update GUI context.
         self.ctx.gui.update(window);
@@ -453,6 +455,7 @@ impl VgonioGuiApp {
     }
 
     /// Render the frame to the surface.
+    #[rustfmt::skip]
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.canvas.get_current_texture()?;
@@ -505,40 +508,40 @@ impl VgonioGuiApp {
                 let aligned_micro_surface_uniform_size =
                     MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
 
-                if !visible_surfaces.is_empty() {
-                    render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
-                    render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
-
-                    for (hdl, _) in visible_surfaces.iter() {
-                        let renderable =
-                            cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
-                        if renderable.is_none() {
-                            log::debug!(
-                                "Failed to get renderable mesh for surface {:?}, skipping.",
-                                hdl
-                            );
-                            continue;
-                        }
-                        let buf_index = self
-                            .msurf_rdr_state
-                            .locals_lookup
-                            .iter()
-                            .position(|x| x == *hdl)
-                            .unwrap();
-                        let renderable = renderable.unwrap();
-                        render_pass.set_bind_group(
-                            1,
-                            &self.msurf_rdr_state.locals_bind_group,
-                            &[buf_index as u32 * aligned_micro_surface_uniform_size],
-                        );
-                        render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            renderable.index_buffer.slice(..),
-                            renderable.index_format,
-                        );
-                        render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
-                    }
-                }
+                // if !visible_surfaces.is_empty() {
+                //     render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
+                //     render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
+                //
+                //     for (hdl, _) in visible_surfaces.iter() {
+                //         let renderable =
+                //             cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
+                //         if renderable.is_none() {
+                //             log::debug!(
+                //                 "Failed to get renderable mesh for surface {:?}, skipping.",
+                //                 hdl
+                //             );
+                //             continue;
+                //         }
+                //         let buf_index = self
+                //             .msurf_rdr_state
+                //             .locals_lookup
+                //             .iter()
+                //             .position(|x| x == *hdl)
+                //             .unwrap();
+                //         let renderable = renderable.unwrap();
+                //         render_pass.set_bind_group(
+                //             1,
+                //             &self.msurf_rdr_state.locals_bind_group,
+                //             &[buf_index as u32 * aligned_micro_surface_uniform_size],
+                //         );
+                //         render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
+                //         render_pass.set_index_buffer(
+                //             renderable.index_buffer.slice(..),
+                //             renderable.index_format,
+                //         );
+                //         render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
+                //     }
+                // }
 
                 self.visual_grid_state.render(&mut render_pass);
             }
@@ -571,8 +574,7 @@ impl VgonioGuiApp {
             &output_view,
             |ctx| {
                 // self.theme.update(ctx);
-                self.ui
-                    .show(ctx, self.theme.kind(), &mut self.visual_grid_state.visible);
+                self.ui.show(ctx, &mut self.visual_grid_state.visible);
                 self.toasts.show(ctx);
             },
         );
@@ -825,7 +827,7 @@ impl VgonioGuiApp {
         dt: Duration,
         control: &mut ControlFlow,
     ) {
-        match self.update_frame(window, dt) {
+        match self.render_frame(window, dt) {
             Ok(_) => {}
             Err(RuntimeError::Rhi(error)) => {
                 if error.is_surface_error() {
@@ -911,7 +913,7 @@ impl VgonioGuiApp {
             }
         }
         // let cache = self.cache.read().unwrap();
-        self.msurf_rdr_state.update_locals_lookup(&surfaces);
+        self.surf_state.update_locals_lookup(&surfaces);
         // self.ui.on_open_files(&surfaces, &cache);
         // self.ui
         //     .outliner_mut()
