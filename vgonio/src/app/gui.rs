@@ -71,19 +71,11 @@ const WIN_INITIAL_WIDTH: u32 = 1600;
 /// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
 
-use self::{
-    surf_viewer::{MicroSurfaceState, MicroSurfaceUniforms},
-    tools::{PlottingWidget, SamplingInspector},
-    visual_grid::VisualGridState,
-};
+use self::tools::{PlottingWidget, SamplingInspector};
 
 use crate::app::{
     gfx::WindowSurface,
-    gui::{
-        event::SurfaceViewerEvent,
-        surf_viewer::{SurfaceViewer, SurfaceViewerStates},
-        theme::ThemeKind,
-    },
+    gui::{event::SurfaceViewerEvent, surf_viewer::SurfaceViewerStates, theme::ThemeKind},
     Config,
 };
 
@@ -140,6 +132,8 @@ pub struct Context {
     gui: GuiContext,
 }
 
+// TODO: add MSAA
+
 /// Vgonio client application with GUI.
 pub struct VgonioGuiApp {
     /// The time when the application started.
@@ -150,6 +144,7 @@ pub struct VgonioGuiApp {
     canvas: WindowSurface,
     /// The GUI application state.
     ui: VgonioGui,
+    theme: ThemeState,
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
     /// The cache of the application including preloaded datafiles. See
@@ -157,24 +152,11 @@ pub struct VgonioGuiApp {
     cache: Arc<RwLock<Cache>>,
     /// Input states collected from the window.
     input: InputState,
-    /// Camera state including the view and projection matrices.
-    camera: CameraState,
-    // /// State of the micro surface rendering, including the pipeline, binding
-    // /// groups, and buffers.
-    // surf_state: MicroSurfaceState,
+    /// State of the micro surface rendering.
     surface_viewer_states: SurfaceViewerStates,
-
-    // // /// State of the visual grid rendering, including the pipeline, binding
-    // // /// groups, and buffers.
-    // visual_grid_state: VisualGridState,
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-
-    /// Depth map of the scene. TODO: refactor
-    // depth_map: DepthMap,
-    // TODO: add MSAA
-
     /// Debug drawing state.
     dbg_drawing_state: DebugDrawingState,
 }
@@ -202,11 +184,6 @@ impl VgonioGuiApp {
         let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
         let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
-        // let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
-        let camera = CameraState::default_with_size(canvas.width(), canvas.height());
-
-        // let visual_grid_state = VisualGridState::new(&gpu_ctx, canvas.format());
-
         let gui_ctx = GuiContext::new(
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
@@ -253,7 +230,6 @@ impl VgonioGuiApp {
             event_loop.create_proxy(),
             cache.clone(),
         );
-        // let msurf_rdr_state = MicroSurfaceState::new(&gpu_ctx, canvas.format());
 
         let surface_viewer_states = SurfaceViewerStates::new(&gpu_ctx, canvas.format());
 
@@ -267,14 +243,11 @@ impl VgonioGuiApp {
             ui,
             cache,
             input,
-            // depth_map,
             dbg_drawing_state,
-            camera,
             canvas,
-            // surf_state: msurf_rdr_state,
-            // visual_grid_state,
             bsdf_viewer,
             surface_viewer_states,
+            theme: Default::default(),
         })
     }
 
@@ -287,18 +260,12 @@ impl VgonioGuiApp {
     pub fn reconfigure_surface(&mut self) { self.canvas.reconfigure(&self.ctx.gpu.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
-        if self.canvas.resize(
+        self.canvas.resize(
             &self.ctx.gpu.device,
             new_size.width,
             new_size.height,
             scale_factor,
-        ) {
-            // self.depth_map
-            //     .resize(&self.ctx.gpu, new_size.width, new_size.height);
-            self.camera
-                .projection
-                .resize(new_size.width, new_size.height);
-        }
+        );
     }
 
     pub fn on_window_event(
@@ -348,9 +315,9 @@ impl VgonioGuiApp {
 
     #[rustfmt::skip]
     pub fn render_frame(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
-        // Update camera uniform depending on which surface viewer is active.
-        self.camera
-            .update(&self.input, dt, ProjectionKind::Perspective);
+        // // Update camera uniform depending on which surface viewer is active.
+        // self.camera
+        //     .update(&self.input, dt, ProjectionKind::Perspective);
 
         // self.ui.update_gizmo_matrices(
         //     Mat4::IDENTITY,
@@ -563,7 +530,7 @@ impl VgonioGuiApp {
             let cache = self.cache.read().unwrap();
             let properties = self.ui.properties.read().unwrap();
             let surfaces = properties.visible_surfaces_with_props();
-            self.surface_viewer_states.render(&self.ctx.gpu, &self.input, dt, &cache, &mut encoder, &surfaces);
+            self.surface_viewer_states.render(&self.ctx.gpu, &self.input, dt, &self.theme, &cache, &mut encoder, &surfaces);
         }
 
         // UI render pass recoding.
@@ -572,7 +539,8 @@ impl VgonioGuiApp {
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.ui.show(ctx);
+                self.theme.update_context(ctx);
+                self.ui.show(ctx, self.theme.kind());
             },
         );
 
@@ -582,9 +550,6 @@ impl VgonioGuiApp {
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
         self.ctx.gpu.queue.submit(cmds);
-
-        // self.depth_map
-        //     .copy_to_buffer(&self.ctx.gpu, self.canvas.width(), self.canvas.height());
 
         // Present the frame to the screen.
         output_frame.present();
@@ -816,6 +781,9 @@ impl VgonioGuiApp {
                             self.surface_viewer_states.update_surfaces_list(&surfaces)
                         }
                     },
+                    UpdateThemeKind(kind) => {
+                        self.theme.set_theme_kind(kind);
+                    }
                     _ => {}
                 }
             }

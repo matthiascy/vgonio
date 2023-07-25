@@ -19,7 +19,7 @@ use crate::app::{
         docking::{Dockable, WidgetKind},
         event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
         state::{camera::CameraState, InputState},
-        theme::{ThemeKind, ThemeState},
+        theme::{ThemeKind, ThemeState, ThemeVisuals},
         visual_grid::VisualGridState,
     },
 };
@@ -154,6 +154,7 @@ impl SurfaceViewerState {
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
         input: &InputState,
         dt: std::time::Duration,
+        theme: &ThemeState,
         gpu: &GpuContext,
     ) {
         self.camera.update(&input, dt, ProjectionKind::Perspective);
@@ -164,8 +165,8 @@ impl SurfaceViewerState {
             gpu,
             &view_proj,
             &view_proj_inv,
-            wgpu::Color::WHITE, // TODO: theme color
-            ThemeKind::Dark,
+            theme.visuals().grid_line_color,
+            theme.kind(),
         )
     }
 }
@@ -257,12 +258,13 @@ impl SurfaceViewerStates {
         gpu: &GpuContext,
         input: &InputState,
         dt: std::time::Duration,
+        theme: &ThemeState,
         cache: &Cache,
         encoder: &mut wgpu::CommandEncoder,
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
     ) {
         for (_, state) in &mut self.states {
-            state.update(surfaces, input, dt, gpu);
+            state.update(surfaces, input, dt, theme, gpu);
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(
                     format!("surface_viewer_render_pass_{:?}", state.c_attachment_id).as_str(),
@@ -275,10 +277,7 @@ impl SurfaceViewerStates {
                         // the same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(
-                                // self.theme.visuals().clear_color
-                                wgpu::Color::BLACK,
-                            ),
+                            load: wgpu::LoadOp::Clear(theme.visuals().clear_color),
                             store: true,
                         },
                     },
@@ -594,8 +593,6 @@ impl MicroSurfaceUniforms {
 pub struct SurfaceViewer {
     /// Unique identifier across all widgets.
     uuid: Uuid,
-    // /// State of the visual grid rendering.
-    //visual_grid_state: VisualGridState,
     /// Cache for all kinds of resources.
     cache: Arc<RwLock<Cache>>,
     // /// Debug drawing state.
@@ -605,7 +602,6 @@ pub struct SurfaceViewer {
     // /// Gizmo for navigating the scene.
     // navigator: NavigationGizmo,
     output_format: wgpu::TextureFormat,
-    // color_attachment: Texture,
     proj_view_model: Mat4,
     focused: bool,
     color_attachment_id: egui::TextureId,
@@ -620,33 +616,19 @@ impl SurfaceViewer {
 
     pub fn new(
         gui: Arc<RwLock<GuiRenderer>>,
-        width: u32,
-        height: u32,
         format: wgpu::TextureFormat,
         cache: Arc<RwLock<Cache>>,
-        theme_kind: ThemeKind,
         event_loop: EventLoopProxy,
         prop_data: Arc<RwLock<PropertyData>>,
     ) -> Self {
-        // let mut visual_grid_state = VisualGridState::new(&gpu, format);
-        // visual_grid_state.update_uniforms(
-        //     &gpu,
-        //     &camera.uniform.view_proj,
-        //     &camera.uniform.view_proj_inv,
-        //     wgpu::Color {
-        //         r: 0.4,
-        //         g: 0.4,
-        //         b: 0.4,
-        //         a: 1.0,
-        //     },
-        //     theme_kind,
-        // );
         let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
-            // visual_grid_state,
             cache,
             // debug_draw_state,
-            viewport_size: egui::Vec2::new(width as f32, height as f32),
+            viewport_size: egui::Vec2::new(
+                SurfaceViewer::DEFAULT_WIDTH as f32,
+                SurfaceViewer::DEFAULT_HEIGHT as f32,
+            ),
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             output_format: format,
             color_attachment_id,
@@ -836,9 +818,6 @@ impl Dockable for SurfaceViewer {
         let size = egui::Vec2::new(rect.width(), rect.height());
         // Resize if needed.
         self.resize_viewport(size, None);
-
-        // self.render(size, None);
-
         egui::Area::new(self.uuid.to_string())
             .fixed_pos(rect.min)
             .show(ui.ctx(), |ui| {

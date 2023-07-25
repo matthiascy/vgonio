@@ -55,8 +55,6 @@ pub struct VgonioGui {
     /// Gizmo inside the viewport for navigating the scene.
     navigator: NavigationGizmo,
 
-    theme: ThemeState,
-
     /// Notification system.
     notif: NotifySystem,
 
@@ -96,7 +94,6 @@ impl VgonioGui {
             simulations: Simulations::new(event_loop.clone()),
             plotting_inspectors: vec![],
             dock_space: DockSpace::default_layout(
-                gpu.clone(),
                 gui.clone(),
                 cache,
                 properties.clone(),
@@ -104,7 +101,6 @@ impl VgonioGui {
             ),
             properties,
             gpu_ctx: gpu,
-            theme: ThemeState::default(),
             notif: NotifySystem::new(),
         }
     }
@@ -119,10 +115,6 @@ impl VgonioGui {
                 self.on_open_files(paths);
                 EventResponse::Handled
             }
-            VgonioEvent::UpdateThemeKind(kind) => {
-                self.theme.set_theme_kind(*kind);
-                EventResponse::Handled
-            }
             VgonioEvent::Notify { kind, text, time } => {
                 self.notif.notify(*kind, text.clone(), *time as f64);
                 EventResponse::Handled
@@ -135,18 +127,16 @@ impl VgonioGui {
         self.navigator.update_matrices(model, view, proj);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
-        self.theme.update_context(ctx);
+    pub fn show(&mut self, ctx: &egui::Context, theme_kind: ThemeKind) {
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    self.main_menu(ui, self.theme.kind());
+                    self.main_menu(ui, theme_kind);
                 });
             });
 
-        self.dock_space
-            .show(ctx, self.properties.clone(), self.theme.kind());
+        self.dock_space.show(ctx, self.properties.clone());
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
         self.navigator.show(ctx);

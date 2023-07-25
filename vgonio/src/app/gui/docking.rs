@@ -15,16 +15,14 @@ use crate::app::gui::{
     prop_insp::PropertyInspector,
     state::GuiRenderer,
     surf_viewer::SurfaceViewer,
-    theme::ThemeKind,
+    theme::{ThemeKind, ThemeVisuals},
 };
 
 /// Docking space for widgets.
 pub struct DockSpace {
-    gui: Arc<RwLock<GuiRenderer>>,   // TODO: remove
-    cache: Arc<RwLock<Cache>>,       // TODO: remove
-    data: Arc<RwLock<PropertyData>>, // TODO: remove
-    /// GPU context.
-    gpu: Arc<GpuContext>,
+    gui: Arc<RwLock<GuiRenderer>>,
+    cache: Arc<RwLock<Cache>>,
+    data: Arc<RwLock<PropertyData>>,
     /// Event loop proxy.
     event_loop: EventLoopProxy,
     /// Inner tree of the dock space.
@@ -50,7 +48,6 @@ impl DockSpace {
     /// | 0 | - |
     /// |   | 2 |
     pub fn default_layout(
-        gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
         cache: Arc<RwLock<Cache>>,
         data: Arc<RwLock<PropertyData>>,
@@ -80,19 +77,13 @@ impl DockSpace {
             gui,
             cache,
             data,
-            gpu,
             event_loop,
             inner,
             added: Vec::new(),
         }
     }
 
-    pub fn show(
-        &mut self,
-        ctx: &egui::Context,
-        data: Arc<RwLock<PropertyData>>,
-        theme_kind: ThemeKind,
-    ) {
+    pub fn show(&mut self, ctx: &egui::Context, data: Arc<RwLock<PropertyData>>) {
         use egui_dock::NodeIndex;
 
         egui_dock::DockArea::new(&mut self.inner)
@@ -118,11 +109,8 @@ impl DockSpace {
                 WidgetKind::SurfViewer => {
                     let widget = Box::new(SurfaceViewer::new(
                         self.gui.clone(),
-                        256,
-                        256,
                         wgpu::TextureFormat::Bgra8UnormSrgb,
                         self.cache.clone(),
-                        theme_kind,
                         self.event_loop.clone(),
                         self.data.clone(),
                     ));

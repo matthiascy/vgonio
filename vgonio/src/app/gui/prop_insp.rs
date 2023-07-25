@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::app::gui::docking::{Dockable, WidgetKind};
 
-use crate::app::gui::data::PropertyData;
+use crate::app::gui::{data::PropertyData, theme::ThemeVisuals};
 
 /// The property inspector.
 ///
@@ -25,11 +25,11 @@ impl PropertyInspector {
 }
 
 impl Dockable for PropertyInspector {
+    fn kind(&self) -> WidgetKind { WidgetKind::Properties }
+
     fn title(&self) -> egui::WidgetText { "Properties".into() }
 
     fn uuid(&self) -> uuid::Uuid { self.uuid }
-
-    fn kind(&self) -> WidgetKind { WidgetKind::Properties }
 
     fn ui(&mut self, ui: &mut egui::Ui) { ui.label("Properties"); }
 }

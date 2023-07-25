@@ -25,6 +25,7 @@ use vgsurf::MicroSurface;
 use crate::app::gui::{
     data::{MicroSurfaceProp, PropertyData},
     docking::{Dockable, WidgetKind},
+    theme::ThemeVisuals,
 };
 
 use super::data::MeasurementDataProp;
@@ -409,12 +410,11 @@ impl Outliner {
 }
 
 impl Dockable for Outliner {
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+    fn kind(&self) -> WidgetKind { WidgetKind::Outliner }
 
     fn title(&self) -> WidgetText { "Outliner".into() }
 
-    fn kind(&self) -> WidgetKind { WidgetKind::Outliner }
+    fn uuid(&self) -> uuid::Uuid { self.uuid }
 
-    /// Actual content of the widget.
     fn ui(&mut self, ui: &mut egui::Ui) { self.ui(ui) }
 }
