@@ -73,8 +73,9 @@ impl VgonioGui {
         config: Arc<Config>,
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
-        bsdf_viewer: Arc<RwLock<BsdfViewer>>,
+        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         cache: Arc<RwLock<Cache>>,
+        format: wgpu::TextureFormat,
     ) -> Self {
         log::info!("Initializing UI");
         let properties = Arc::new(RwLock::new(PropertyData::new()));
@@ -82,12 +83,7 @@ impl VgonioGui {
         Self {
             config,
             event_loop: event_loop.clone(),
-            tools: Tools::new(
-                event_loop.clone(),
-                gpu.clone(),
-                &mut gui.write().unwrap(),
-                cache.clone(),
-            ),
+            tools: Tools::new(event_loop.clone(), gpu.clone(), gui.clone(), cache.clone()),
             cache: cache.clone(),
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
@@ -98,6 +94,7 @@ impl VgonioGui {
                 cache,
                 properties.clone(),
                 event_loop,
+                format,
             ),
             properties,
             gpu_ctx: gpu,

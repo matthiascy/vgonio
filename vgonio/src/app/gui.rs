@@ -210,8 +210,9 @@ impl VgonioGuiApp {
             config.clone(),
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
-            bsdf_viewer.clone(),
+            // bsdf_viewer.clone(),
             cache.clone(),
+            canvas.format(),
         );
 
         // let theme = ThemeState::default();

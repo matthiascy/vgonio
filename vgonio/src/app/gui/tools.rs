@@ -33,7 +33,7 @@ impl Tools {
     pub fn new(
         event_loop: EventLoopProxy,
         gpu: Arc<GpuContext>,
-        gui: &mut GuiRenderer,
+        gui: Arc<RwLock<GuiRenderer>>,
         cache: Arc<RwLock<Cache>>,
     ) -> Self {
         log::info!("Initializing tools...");

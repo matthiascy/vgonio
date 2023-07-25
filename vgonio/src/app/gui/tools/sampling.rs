@@ -1,5 +1,8 @@
 use egui::PointerButton;
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::{Arc, RwLock},
+};
 
 use vgcore::{
     math::{Handedness, Mat4, Vec3},
@@ -140,7 +143,7 @@ struct Vertex([f32; 3]);
 impl SamplingInspector {
     pub fn new(
         gpu: Arc<GpuContext>,
-        gui: &mut GuiRenderer,
+        gui: Arc<RwLock<GuiRenderer>>,
         output_format: wgpu::TextureFormat,
         event_loop: EventLoopProxy,
     ) -> SamplingInspector {
@@ -174,7 +177,7 @@ impl SamplingInspector {
             },
             Some(sampler.clone()),
         );
-        let color_attachment_id = gui.register_native_texture(
+        let color_attachment_id = gui.write().unwrap().register_native_texture(
             &gpu.device,
             &color_attachment.view,
             wgpu::FilterMode::Linear,

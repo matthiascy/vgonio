@@ -52,10 +52,26 @@ impl DockSpace {
         cache: Arc<RwLock<Cache>>,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
+        format: wgpu::TextureFormat,
     ) -> Self {
+        log::info!("Creating default dock space layout");
+        let surf_viewer = Box::new(SurfaceViewer::new(
+            gui.clone(),
+            format,
+            cache.clone(),
+            event_loop.clone(),
+            data.clone(),
+        ));
+        log::info!("Created surface viewer");
+        event_loop
+            .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {
+                uuid: surf_viewer.uuid(),
+                tex_id: surf_viewer.color_attachment_id(),
+            }))
+            .unwrap();
         let mut inner = egui_dock::Tree::new(vec![DockingWidget {
             index: 0,
-            dockable: Box::new(DockableString::new(String::from("Hello world"))),
+            dockable: surf_viewer,
         }]);
         let [_, r] = inner.split_right(
             egui_dock::NodeIndex::root(),

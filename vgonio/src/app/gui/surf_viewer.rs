@@ -1,4 +1,5 @@
 use egui::{Ui, WidgetText};
+use log::log;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -818,15 +819,6 @@ impl Dockable for SurfaceViewer {
         let size = egui::Vec2::new(rect.width(), rect.height());
         // Resize if needed.
         self.resize_viewport(size, None);
-        egui::Area::new(self.uuid.to_string())
-            .fixed_pos(rect.min)
-            .show(ui.ctx(), |ui| {
-                ui.set_clip_rect(rect);
-                let res = ui.add(egui::Image::new(
-                    self.color_attachment_id,
-                    self.viewport_size,
-                ));
-                //self.navigator.ui(ui);
-            });
+        ui.image(self.color_attachment_id, self.viewport_size);
     }
 }
