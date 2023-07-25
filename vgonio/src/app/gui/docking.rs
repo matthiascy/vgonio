@@ -117,7 +117,6 @@ impl DockSpace {
                 }
                 WidgetKind::SurfViewer => {
                     let widget = Box::new(SurfaceViewer::new(
-                        self.gpu.clone(),
                         self.gui.clone(),
                         256,
                         256,

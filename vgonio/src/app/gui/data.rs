@@ -89,11 +89,19 @@ impl PropertyData {
     pub fn any_visible_surfaces(&self) -> bool { self.surfaces.iter().any(|(_, s)| s.visible) }
 
     /// Returns a list of visible micro surfaces.
-    pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>, &MicroSurfaceProp)> {
+    pub fn visible_surfaces_with_props(&self) -> Vec<(&Handle<MicroSurface>, &MicroSurfaceProp)> {
         self.surfaces
             .iter()
             .filter(|(_, s)| s.visible)
             .map(|(id, s)| (id, s))
+            .collect()
+    }
+
+    pub fn visible_surfaces(&self) -> Vec<Handle<MicroSurface>> {
+        self.surfaces
+            .iter()
+            .filter(|(_, s)| s.visible)
+            .map(|(id, _)| *id)
             .collect()
     }
 

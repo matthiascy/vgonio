@@ -33,6 +33,7 @@ use crate::app::{gfx::RenderableMesh, gui::notify::NotifyKind};
 use egui_toast::ToastKind;
 use std::{
     default::Default,
+    ops::Deref,
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -160,6 +161,12 @@ pub struct DepthMap {
     /// Manually padded width to make sure the bytes per row is a multiple of
     /// 256.
     pub(crate) width: u32,
+}
+
+impl Deref for DepthMap {
+    type Target = Texture;
+
+    fn deref(&self) -> &Self::Target { &self.depth_attachment }
 }
 
 impl DepthMap {

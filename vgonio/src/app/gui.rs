@@ -21,11 +21,8 @@ mod widgets;
 
 // TODO: MSAA
 
-use egui::Align2;
-use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use std::{
     default::Default,
-    path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
@@ -200,17 +197,7 @@ impl VgonioGuiApp {
         let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
         // let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
-        let camera = {
-            let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
-            let projection = Projection::new(
-                0.1,
-                100.0,
-                75.0f32.to_radians(),
-                canvas.width(),
-                canvas.height(),
-            );
-            CameraState::new(camera, projection, ProjectionKind::Perspective)
-        };
+        let camera = CameraState::default_with_size(canvas.width(), canvas.height());
 
         let visual_grid_state = VisualGridState::new(&gpu_ctx, canvas.format());
 
@@ -356,8 +343,6 @@ impl VgonioGuiApp {
         self.camera
             .update(&self.input, dt, ProjectionKind::Perspective);
 
-
-
         // self.ui.update_gizmo_matrices(
         //     Mat4::IDENTITY,
         //     Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
@@ -436,7 +421,7 @@ impl VgonioGuiApp {
         self.input.cursor_delta = [0.0, 0.0];
 
         // Update the renderings.
-        self.render(window)?;
+        self.render(window, dt)?;
 
         // Rendering the SamplingInspector is done after the main render pass.
         if self.dbg_drawing_state.sampling_debug_enabled {
@@ -454,22 +439,21 @@ impl VgonioGuiApp {
 
     /// Render the frame to the surface.
     #[rustfmt::skip]
-    pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, window: &Window, dt: Duration) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.canvas.get_current_texture()?;
         // Get a `TextureView` to the output frame's color attachment.
         let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        // // Command encoders for the current frame.
-        // let mut encoder =
-        //     self.ctx
-        //         .gpu
-        //         .device
-        //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        //             label: Some("vgonio_render_encoder"),
-        //         });
-        // 
+        // Command encoders for rendering the frame.
+        let mut encoder =
+            self.ctx
+                .gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vgonio_render_encoder"),
+                });
         // {
         //     let cache = self.cache.read().unwrap();
         //     let properties = self.ui.properties.read().unwrap();
@@ -566,6 +550,12 @@ impl VgonioGuiApp {
         // );
 
         // TODO: render UI needed images first
+        {
+            let cache = self.cache.read().unwrap();
+            let properties = self.ui.properties.read().unwrap();
+            let surfaces = properties.visible_surfaces_with_props();
+            self.surf_state.render_views(&self.ctx.gpu, &self.input, dt, &cache, &mut encoder, &surfaces);
+        }
 
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
@@ -577,7 +567,8 @@ impl VgonioGuiApp {
             },
         );
 
-        let cmds = ui_render_output.user_cmds.into_iter().chain([ui_render_output.ui_cmd]);
+        let cmds = std::iter::once(encoder.finish())
+            .chain(ui_render_output.user_cmds).chain([ui_render_output.ui_cmd]);
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
@@ -795,10 +786,26 @@ impl VgonioGuiApp {
                             uuid,
                             tex_id: texture_id,
                         } => {
-                            self.surf_state.create_view(uuid, texture_id, &self.ctx.gpu);
+                            self.surf_state.create_view(
+                                uuid,
+                                texture_id,
+                                &self.ctx.gpu,
+                                &self.ctx.gui.renderer,
+                            );
                         }
-                        SurfaceViewerEvent::Resize { .. } => {}
+                        SurfaceViewerEvent::Resize { uuid, size } => {
+                            self.surf_state.resize_view(
+                                uuid,
+                                size.0,
+                                size.1,
+                                &self.ctx.gpu,
+                                self.ctx.gui.renderer.clone(),
+                            );
+                        }
                         SurfaceViewerEvent::Close { .. } => {}
+                        SurfaceViewerEvent::UpdateSurfaceList { surfaces } => {
+                            self.surf_state.update_surfaces_list(&surfaces)
+                        }
                     },
                     _ => {}
                 }

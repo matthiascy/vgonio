@@ -5,7 +5,7 @@ use crate::{
         gui::{
             bsdf_viewer::BsdfViewer,
             data::PropertyData,
-            event::{EventLoopProxy, VgonioEvent},
+            event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
             file_drop::FileDragDrop,
             gizmo::NavigationGizmo,
             icons,
@@ -168,6 +168,11 @@ impl VgonioGui {
             .unwrap()
             .update_surfaces(&surfaces);
         self.simulations.update_loaded_surfaces(&surfaces, &cache);
+        self.event_loop
+            .send_event(VgonioEvent::SurfaceViewer(
+                SurfaceViewerEvent::UpdateSurfaceList { surfaces },
+            ))
+            .unwrap();
     }
 
     fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind) {

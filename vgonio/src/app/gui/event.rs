@@ -71,6 +71,10 @@ pub enum SurfaceViewerEvent {
         /// ID of the surface viewer.
         uuid: Uuid,
     },
+    UpdateSurfaceList {
+        /// List of surfaces to display.
+        surfaces: Vec<Handle<MicroSurface>>,
+    },
 }
 
 /// Events used by BSDF viewer.`
