@@ -8,6 +8,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{Arc, RwLock},
 };
+use uuid::Uuid;
 
 use crate::app::gui::{
     event::{SurfaceViewerEvent, VgonioEvent},
@@ -97,6 +98,14 @@ impl DockSpace {
             inner,
             added: Vec::new(),
         }
+    }
+
+    pub fn surface_viewers(&self) -> Vec<Uuid> {
+        self.inner
+            .tabs()
+            .filter(|t| t.dockable.kind() == WidgetKind::SurfViewer)
+            .map(|t| t.dockable.uuid())
+            .collect()
     }
 
     pub fn show(&mut self, ctx: &egui::Context, data: Arc<RwLock<PropertyData>>) {

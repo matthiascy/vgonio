@@ -157,8 +157,11 @@ impl SurfaceViewerState {
         dt: std::time::Duration,
         theme: &ThemeState,
         gpu: &GpuContext,
+        update_camera: bool,
     ) {
-        self.camera.update(&input, dt, ProjectionKind::Perspective);
+        if update_camera {
+            self.camera.update(&input, dt, ProjectionKind::Perspective);
+        }
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
         self.surface.update(gpu, &view_proj, surfaces);
@@ -257,6 +260,7 @@ impl SurfaceViewerStates {
     pub fn render(
         &mut self,
         gpu: &GpuContext,
+        active_viewer: Option<Uuid>,
         input: &InputState,
         dt: std::time::Duration,
         theme: &ThemeState,
@@ -264,8 +268,14 @@ impl SurfaceViewerStates {
         encoder: &mut wgpu::CommandEncoder,
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
     ) {
-        for (_, state) in &mut self.states {
-            state.update(surfaces, input, dt, theme, gpu);
+        for (viewer, state) in &mut self.states {
+            if let Some(active) = active_viewer {
+                if active == *viewer {
+                    state.update(surfaces, input, dt, theme, gpu, true);
+                }
+            } else {
+                state.update(surfaces, input, dt, theme, gpu, false);
+            }
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(
                     format!("surface_viewer_render_pass_{:?}", state.c_attachment_id).as_str(),

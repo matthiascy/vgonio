@@ -33,14 +33,11 @@ pub use ui::VgonioGui;
 use crate::{
     app::{
         cache::Cache,
-        gfx::{
-            camera::{Camera, Projection, ProjectionKind},
-            GpuContext, WgpuConfig,
-        },
+        gfx::{GpuContext, WgpuConfig},
         gui::{
             bsdf_viewer::BsdfViewer,
             event::{BsdfViewerEvent, DebuggingEvent, EventResponse, MeasureEvent, VgonioEvent},
-            state::{camera::CameraState, DebugDrawingState, DepthMap, GuiContext, InputState},
+            state::{DebugDrawingState, GuiContext, InputState},
             theme::ThemeState,
         },
     },
@@ -58,11 +55,10 @@ use vgcore::{
     math::{Handedness, IVec2, Mat4, Vec3},
     units::{Degrees, Radians},
 };
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Window, WindowBuilder},
 };
 
@@ -75,7 +71,12 @@ use self::tools::{PlottingWidget, SamplingInspector};
 
 use crate::app::{
     gfx::WindowSurface,
-    gui::{event::SurfaceViewerEvent, surf_viewer::SurfaceViewerStates, theme::ThemeKind},
+    gui::{
+        docking::{DockingWidget, WidgetKind},
+        event::SurfaceViewerEvent,
+        surf_viewer::SurfaceViewerStates,
+        theme::ThemeKind,
+    },
     Config,
 };
 
@@ -215,8 +216,6 @@ impl VgonioGuiApp {
             canvas.format(),
         );
 
-        // let theme = ThemeState::default();
-
         let input = InputState {
             key_map: Default::default(),
             mouse_map: Default::default(),
@@ -276,41 +275,40 @@ impl VgonioGuiApp {
         control: &mut ControlFlow,
     ) {
         let response = self.ctx.gui.on_window_event(event);
-        // Note: `consumed` is `true` if the event was handled by egui.
-        if !response.consumed {
-            match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            state,
-                            virtual_keycode: Some(keycode),
-                            ..
-                        },
-                    ..
-                } => {
-                    self.input.update_key_map(*keycode, *state);
-                }
-                WindowEvent::MouseWheel { delta, .. } => {
-                    self.input.update_scroll_delta(*delta);
-                }
-                WindowEvent::MouseInput { state, button, .. } => {
-                    self.input.update_mouse_map(*button, *state);
-                }
-                WindowEvent::CursorMoved { position, .. } => {
-                    self.input.update_cursor_delta((*position).cast::<f32>());
-                }
-                WindowEvent::Resized(new_size) => {
-                    self.resize(*new_size, Some(window.scale_factor() as f32));
-                }
-                WindowEvent::ScaleFactorChanged {
-                    new_inner_size,
-                    scale_factor,
-                } => {
-                    self.resize(**new_inner_size, Some(*scale_factor as f32));
-                }
-                WindowEvent::CloseRequested => *control = ControlFlow::Exit,
-                _ => {}
+        // Even if the event was consumed by the UI, we still need to update the
+        // input state.
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(keycode),
+                        ..
+                    },
+                ..
+            } => {
+                self.input.update_key_map(*keycode, *state);
             }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.input.update_scroll_delta(*delta);
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.input.update_mouse_map(*button, *state);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.input.update_cursor_delta((*position).cast::<f32>());
+            }
+            WindowEvent::Resized(new_size) => {
+                self.resize(*new_size, Some(window.scale_factor() as f32));
+            }
+            WindowEvent::ScaleFactorChanged {
+                new_inner_size,
+                scale_factor,
+            } => {
+                self.resize(**new_inner_size, Some(*scale_factor as f32));
+            }
+            WindowEvent::CloseRequested => *control = ControlFlow::Exit,
+            _ => {}
         }
     }
 
@@ -393,10 +391,6 @@ impl VgonioGuiApp {
         // Update GUI context.
         self.ctx.gui.update(window);
 
-        // Reset mouse movement
-        self.input.scroll_delta = 0.0;
-        self.input.cursor_delta = [0.0, 0.0];
-
         // Update the renderings.
         self.render(window, dt)?;
 
@@ -410,6 +404,10 @@ impl VgonioGuiApp {
         }
 
         self.bsdf_viewer.write().unwrap().render();
+
+        // Reset mouse movement
+        self.input.scroll_delta = 0.0;
+        self.input.cursor_delta = [0.0, 0.0];
 
         Ok(())
     }
@@ -531,7 +529,19 @@ impl VgonioGuiApp {
             let cache = self.cache.read().unwrap();
             let properties = self.ui.properties.read().unwrap();
             let surfaces = properties.visible_surfaces_with_props();
-            self.surface_viewer_states.render(&self.ctx.gpu, &self.input, dt, &self.theme, &cache, &mut encoder, &surfaces);
+            let viewer = {
+                let viewers = self.ui.dock_space.surface_viewers();
+                if viewers.len() == 1 {
+                    Some(viewers[0])
+                } else {
+                    self.ui.dock_space.find_active_focused()
+                        .and_then(|widget| match widget.1.dockable.kind() {
+                            WidgetKind::SurfViewer => Some(widget.1.dockable.uuid()),
+                            _ => None,
+                        })
+                }
+            };
+            self.surface_viewer_states.render(&self.ctx.gpu, viewer, &self.input, dt, &self.theme, &cache, &mut encoder, &surfaces);
         }
 
         // UI render pass recoding.
