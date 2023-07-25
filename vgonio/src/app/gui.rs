@@ -79,7 +79,11 @@ use self::{
 
 use crate::app::{
     gfx::WindowSurface,
-    gui::{event::SurfaceViewerEvent, surf_viewer::SurfaceViewer, theme::ThemeKind},
+    gui::{
+        event::SurfaceViewerEvent,
+        surf_viewer::{SurfaceViewer, SurfaceViewerStates},
+        theme::ThemeKind,
+    },
     Config,
 };
 
@@ -155,12 +159,14 @@ pub struct VgonioGuiApp {
     input: InputState,
     /// Camera state including the view and projection matrices.
     camera: CameraState,
-    /// State of the micro surface rendering, including the pipeline, binding
-    /// groups, and buffers.
-    surf_state: MicroSurfaceState,
-    // /// State of the visual grid rendering, including the pipeline, binding
+    // /// State of the micro surface rendering, including the pipeline, binding
     // /// groups, and buffers.
-    visual_grid_state: VisualGridState,
+    // surf_state: MicroSurfaceState,
+    surface_viewer_states: SurfaceViewerStates,
+
+    // // /// State of the visual grid rendering, including the pipeline, binding
+    // // /// groups, and buffers.
+    // visual_grid_state: VisualGridState,
     /// State of the BSDF viewer, including the pipeline, binding groups, and
     /// buffers.
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
@@ -199,7 +205,7 @@ impl VgonioGuiApp {
         // let depth_map = DepthMap::new(&gpu_ctx, canvas.width(), canvas.height());
         let camera = CameraState::default_with_size(canvas.width(), canvas.height());
 
-        let visual_grid_state = VisualGridState::new(&gpu_ctx, canvas.format());
+        // let visual_grid_state = VisualGridState::new(&gpu_ctx, canvas.format());
 
         let gui_ctx = GuiContext::new(
             gpu_ctx.device.clone(),
@@ -247,7 +253,9 @@ impl VgonioGuiApp {
             event_loop.create_proxy(),
             cache.clone(),
         );
-        let msurf_rdr_state = MicroSurfaceState::new(&gpu_ctx, canvas.format());
+        // let msurf_rdr_state = MicroSurfaceState::new(&gpu_ctx, canvas.format());
+
+        let surface_viewer_states = SurfaceViewerStates::new(&gpu_ctx, canvas.format());
 
         Ok(Self {
             start_time: Instant::now(),
@@ -263,9 +271,10 @@ impl VgonioGuiApp {
             dbg_drawing_state,
             camera,
             canvas,
-            surf_state: msurf_rdr_state,
-            visual_grid_state,
+            // surf_state: msurf_rdr_state,
+            // visual_grid_state,
             bsdf_viewer,
+            surface_viewer_states,
         })
     }
 
@@ -554,7 +563,7 @@ impl VgonioGuiApp {
             let cache = self.cache.read().unwrap();
             let properties = self.ui.properties.read().unwrap();
             let surfaces = properties.visible_surfaces_with_props();
-            self.surf_state.render_views(&self.ctx.gpu, &self.input, dt, &cache, &mut encoder, &surfaces);
+            self.surface_viewer_states.render(&self.ctx.gpu, &self.input, dt, &cache, &mut encoder, &surfaces);
         }
 
         // UI render pass recoding.
@@ -786,7 +795,7 @@ impl VgonioGuiApp {
                             uuid,
                             tex_id: texture_id,
                         } => {
-                            self.surf_state.create_view(
+                            self.surface_viewer_states.allocate_viewer_resources(
                                 uuid,
                                 texture_id,
                                 &self.ctx.gpu,
@@ -794,17 +803,17 @@ impl VgonioGuiApp {
                             );
                         }
                         SurfaceViewerEvent::Resize { uuid, size } => {
-                            self.surf_state.resize_view(
+                            self.surface_viewer_states.resize_viewport(
                                 uuid,
                                 size.0,
                                 size.1,
                                 &self.ctx.gpu,
-                                self.ctx.gui.renderer.clone(),
+                                &self.ctx.gui.renderer,
                             );
                         }
                         SurfaceViewerEvent::Close { .. } => {}
                         SurfaceViewerEvent::UpdateSurfaceList { surfaces } => {
-                            self.surf_state.update_surfaces_list(&surfaces)
+                            self.surface_viewer_states.update_surfaces_list(&surfaces)
                         }
                     },
                     _ => {}

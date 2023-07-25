@@ -44,16 +44,16 @@ impl Default for VisualGridUniforms {
 
 /// Visual grid rendering.
 pub struct VisualGridState {
-    pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
     pub(crate) visible: bool,
 }
 
 impl VisualGridState {
-    pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
-        use wgpu::util::DeviceExt;
-
+    pub fn create_pipeline(
+        ctx: &GpuContext,
+        target_format: wgpu::TextureFormat,
+    ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
         let vert_shader = ctx
             .device
             .create_shader_module(wgpu::include_spirv!(concat!(
@@ -76,21 +76,6 @@ impl VisualGridState {
                 bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
-        let uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("visual_grid_uniform_buffer"),
-                contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("visual_grid_bind_group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
         let pipeline = ctx
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -133,15 +118,36 @@ impl VisualGridState {
                 }),
                 multiview: None,
             });
+        (pipeline, bind_group_layout)
+    }
+}
+
+impl VisualGridState {
+    pub fn new(ctx: &GpuContext, bind_group_layout: &wgpu::BindGroupLayout) -> Self {
+        use wgpu::util::DeviceExt;
+        let uniform_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("visual_grid_uniform_buffer"),
+                contents: bytemuck::bytes_of(&VisualGridUniforms::default()),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("visual_grid_bind_group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
         Self {
-            pipeline,
             bind_group,
             uniform_buffer,
             visible: true,
         }
     }
 
-    pub fn update_uniforms(
+    pub fn update(
         &self,
         ctx: &GpuContext,
         view_proj: &ViewProjUniform,
@@ -167,13 +173,17 @@ impl VisualGridState {
     }
 
     /// Render the visual grid.
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+    pub fn render<'a>(
+        &'a self,
+        pipeline: &'a wgpu::RenderPipeline,
+        pass: &mut wgpu::RenderPass<'a>,
+    ) {
         if !self.visible {
             return;
         }
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(0..6, 0..1);
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.draw(0..6, 0..1);
     }
 
     pub fn visible(&self) -> bool { self.visible }
