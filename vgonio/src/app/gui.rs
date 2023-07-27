@@ -42,19 +42,9 @@ use crate::{
         },
     },
     error::RuntimeError,
-    measure::{
-        self,
-        collector::CollectorPatches,
-        emitter::EmitterSamples,
-        measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
-        CollectorScheme, RtcMethod,
-    },
+    measure,
 };
-use vgcore::{
-    error::VgonioError,
-    math::{Handedness, IVec2, Mat4, Vec3},
-    units::{Degrees, Radians},
-};
+use vgcore::{error::VgonioError, math::Handedness};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
@@ -67,16 +57,11 @@ const WIN_INITIAL_WIDTH: u32 = 1600;
 /// Initial window height.
 const WIN_INITIAL_HEIGHT: u32 = 900;
 
-use self::tools::{PlottingWidget, SamplingInspector};
+use self::tools::SamplingInspector;
 
 use crate::app::{
     gfx::WindowSurface,
-    gui::{
-        docking::{DockingWidget, WidgetKind},
-        event::SurfaceViewerEvent,
-        surf_viewer::SurfaceViewerStates,
-        theme::ThemeKind,
-    },
+    gui::{docking::WidgetKind, event::SurfaceViewerEvent, surf_viewer::SurfaceViewerStates},
     Config,
 };
 
@@ -213,7 +198,6 @@ impl VgonioGuiApp {
             gui_ctx.renderer.clone(),
             // bsdf_viewer.clone(),
             cache.clone(),
-            canvas.format(),
         );
 
         let input = InputState {
@@ -251,12 +235,6 @@ impl VgonioGuiApp {
         })
     }
 
-    #[inline]
-    pub fn surface_width(&self) -> u32 { self.canvas.width() }
-
-    #[inline]
-    pub fn surface_height(&self) -> u32 { self.canvas.height() }
-
     pub fn reconfigure_surface(&mut self) { self.canvas.reconfigure(&self.ctx.gpu.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
@@ -274,7 +252,7 @@ impl VgonioGuiApp {
         event: &WindowEvent,
         control: &mut ControlFlow,
     ) {
-        let response = self.ctx.gui.on_window_event(event);
+        let _ = self.ctx.gui.on_window_event(event);
         // Even if the event was consumed by the UI, we still need to update the
         // input state.
         match event {
@@ -314,28 +292,8 @@ impl VgonioGuiApp {
 
     #[rustfmt::skip]
     pub fn render_frame(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
-        // // Update camera uniform depending on which surface viewer is active.
-        // self.camera
-        //     .update(&self.input, dt, ProjectionKind::Perspective);
-
-        // self.ui.update_gizmo_matrices(
-        //     Mat4::IDENTITY,
-        //     Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO, self.camera.camera.up),
-        //     Mat4::orthographic_rh(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0),
-        // );
-        // 
-        // let view_proj = self.camera.uniform.view_proj;
-        // let view_proj_inv = self.camera.uniform.view_proj_inv;
-        // // TODO: to be removed
-        // self.visual_grid_state.update_uniforms(
-        //     &self.ctx.gpu,
-        //     &view_proj,
-        //     &view_proj_inv,
-        //     // self.theme.visuals().grid_line_color,
-        //     wgpu::Color::BLACK,
-        //     ThemeKind::Dark,
-        // );
-
+        // Update the uniform buffers for the debug drawing state depending on the selected
+        // viewer.
         let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
         let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
             Some(surface) => {
@@ -358,43 +316,6 @@ impl VgonioGuiApp {
             }
             None => {}
         }
-
-
-        // // Update uniform buffer for all visible surfaces.
-        // {
-        //     let properties = self.ui.properties.read().unwrap();
-        //     let visible_surfaces = properties.visible_surfaces();
-        //     if !visible_surfaces.is_empty() {
-        //         self.ctx.gpu.queue.write_buffer(
-        //             &self.msurf_rdr_state.global_uniform_buffer,
-        //             0,
-        //             bytemuck::bytes_of(&view_proj),
-        //         );
-        //         // Update per-surface uniform buffer.
-        //         let aligned_size = MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
-        //         for (hdl, state) in visible_surfaces.iter() {
-        //             let mut buf = [0.0; 20];
-        //             let local_uniform_buf_index = self
-        //                 .msurf_rdr_state
-        //                 .locals_lookup
-        //                 .iter()
-        //                 .position(|h| *h == **hdl)
-        //                 .unwrap();
-        //             buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-        //             buf[16..20].copy_from_slice(&[
-        //                 state.min + state.height_offset,
-        //                 state.max + state.height_offset,
-        //                 state.max - state.min,
-        //                 state.scale,
-        //             ]);
-        //             self.ctx.gpu.queue.write_buffer(
-        //                 &self.msurf_rdr_state.local_uniform_buffer,
-        //                 local_uniform_buf_index as u64 * aligned_size as u64,
-        //                 bytemuck::cast_slice(&buf),
-        //             );
-        //         }
-        //     }
-        // }
 
         // Update GUI context.
         self.ctx.gui.update(window);

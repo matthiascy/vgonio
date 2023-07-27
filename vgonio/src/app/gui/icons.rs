@@ -49,7 +49,7 @@ fn get_icons_cache() -> &'static mut Icons {
     static ICONS: AtomicPtr<Icons> = AtomicPtr::new(std::ptr::null_mut());
     let mut ptr = ICONS.load(Ordering::Acquire);
     if ptr.is_null() {
-        let mut icons = Box::new(Icons(Arc::new(Mutex::new(HashMap::default()))));
+        let icons = Box::new(Icons(Arc::new(Mutex::new(HashMap::default()))));
         ptr = Box::into_raw(icons);
         if ICONS
             .compare_exchange(

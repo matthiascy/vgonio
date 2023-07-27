@@ -1,4 +1,4 @@
-use egui::{emath::Numeric, DragValue};
+use egui::DragValue;
 
 use crate::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
 

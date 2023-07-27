@@ -8,6 +8,8 @@ use crate::{
     measure::measurement::{MeasurementData, MeasurementDataSource, MeasurementKind},
 };
 
+use super::outliner::OutlinerItem;
+
 /// Micor surface properties.
 #[derive(Clone, Debug)]
 pub struct MicroSurfaceProp {
@@ -50,6 +52,7 @@ pub struct PropertyData {
     pub surfaces: HashMap<Handle<MicroSurface>, MicroSurfaceProp>,
     /// Measured data properties.
     pub measured: HashMap<Handle<MeasurementData>, MeasurementDataProp>,
+    pub selected: Option<OutlinerItem>,
 }
 
 impl PropertyData {
@@ -58,6 +61,7 @@ impl PropertyData {
         Self {
             surfaces: HashMap::default(),
             measured: HashMap::default(),
+            selected: None,
         }
     }
 
@@ -122,4 +126,6 @@ impl PropertyData {
             }
         }
     }
+
+    pub fn on_item_selected(&mut self, item: OutlinerItem) { self.selected = Some(item); }
 }

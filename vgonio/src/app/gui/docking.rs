@@ -1,6 +1,5 @@
 use crate::app::{
     cache::Cache,
-    gfx::GpuContext,
     gui::{data::PropertyData, event::EventLoopProxy},
 };
 use std::{
@@ -52,13 +51,10 @@ impl DockSpace {
         cache: Arc<RwLock<Cache>>,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
-        format: wgpu::TextureFormat,
     ) -> Self {
         log::info!("Creating default dock space layout");
         let surf_viewer = Box::new(SurfaceViewer::new(
             gui.clone(),
-            format,
-            cache.clone(),
             event_loop.clone(),
             data.clone(),
         ));
@@ -86,7 +82,7 @@ impl DockSpace {
             0.5,
             vec![DockingWidget {
                 index: 2,
-                dockable: Box::new(PropertyInspector::new()),
+                dockable: Box::new(PropertyInspector::new(data.clone())),
             }],
         );
         Self {
@@ -133,8 +129,6 @@ impl DockSpace {
                 WidgetKind::SurfViewer => {
                     let widget = Box::new(SurfaceViewer::new(
                         self.gui.clone(),
-                        wgpu::TextureFormat::Bgra8UnormSrgb,
-                        self.cache.clone(),
                         self.event_loop.clone(),
                         self.data.clone(),
                     ));

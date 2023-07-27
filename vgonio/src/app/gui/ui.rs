@@ -4,7 +4,7 @@ use crate::{
         gfx::GpuContext,
         gui::{
             data::PropertyData,
-            event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
+            event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
             file_drop::FileDragDrop,
             gizmo::NavigationGizmo,
             icons,
@@ -19,7 +19,7 @@ use crate::{
     },
     measure::measurement::MeasurementData,
 };
-use egui::{NumExt, Ui, WidgetText};
+use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
 use std::{
     path::PathBuf,
@@ -72,7 +72,6 @@ impl VgonioGui {
         gui: Arc<RwLock<GuiRenderer>>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         cache: Arc<RwLock<Cache>>,
-        format: wgpu::TextureFormat,
     ) -> Self {
         log::info!("Initializing UI ...");
         let properties = Arc::new(RwLock::new(PropertyData::new()));
@@ -91,7 +90,6 @@ impl VgonioGui {
                 cache,
                 properties.clone(),
                 event_loop,
-                format,
             ),
             properties,
             gpu_ctx: gpu,
@@ -120,6 +118,14 @@ impl VgonioGui {
                     .update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)
             }
+            VgonioEvent::Outliner(outliner_event) => match outliner_event {
+                OutlinerEvent::SelectItem(item) => {
+                    let mut properties = self.properties.write().unwrap();
+                    properties.on_item_selected(*item);
+                    EventResponse::Handled
+                }
+                _ => EventResponse::Ignored(event),
+            },
             _ => EventResponse::Ignored(event),
         }
     }

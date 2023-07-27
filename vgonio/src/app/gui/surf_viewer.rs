@@ -1,19 +1,17 @@
 use egui::{Ui, WidgetText};
-use log::log;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use wgpu::Surface;
 
-use vgcore::math::{Mat4, Vec3, Vec4};
+use vgcore::math::{Mat4, Vec4};
 use vgsurf::MicroSurface;
 
 use crate::app::{
     cache::{Cache, Handle},
     gfx::{
-        camera::{Camera, Projection, ProjectionKind, ViewProjUniform},
+        camera::{ProjectionKind, ViewProjUniform},
         GpuContext, Texture,
     },
     gui::{
@@ -21,15 +19,12 @@ use crate::app::{
         docking::{Dockable, WidgetKind},
         event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
         state::{camera::CameraState, InputState},
-        theme::{ThemeKind, ThemeState, ThemeVisuals},
+        theme::ThemeState,
         visual_grid::VisualGridState,
     },
 };
 
-use super::{
-    gizmo::NavigationGizmo,
-    state::{DepthMap, GuiRenderer},
-};
+use super::state::{DepthMap, GuiRenderer};
 
 /// State of a single surface viewer.
 pub struct SurfaceViewerState {
@@ -627,49 +622,49 @@ impl MicroSurfaceUniforms {
 pub struct SurfaceViewer {
     /// Unique identifier across all widgets.
     uuid: Uuid,
-    /// Cache for all kinds of resources.
-    cache: Arc<RwLock<Cache>>,
     /// Size of the viewport.
     viewport_size: egui::Vec2,
     // /// Gizmo for navigating the scene.
     // navigator: NavigationGizmo,
-    output_format: wgpu::TextureFormat,
-    focused: bool,
     color_attachment_id: egui::TextureId,
     event_loop: EventLoopProxy,
     prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
 }
 
 impl SurfaceViewer {
+    /// Initial width of the viewer.
     const DEFAULT_WIDTH: u32 = 256;
+    /// Initial height of the viewer.
     const DEFAULT_HEIGHT: u32 = 256;
 
+    /// Creates a new [`SurfaceViewer`].
+    ///
+    /// The viewer's output is rendered to a texture, which can be accessed
+    /// by egui through [`color_attachment_id`]. Resources needed for rendering
+    /// are allocated by [`SurfaceViewerState`].
     pub fn new(
         gui: Arc<RwLock<GuiRenderer>>,
-        format: wgpu::TextureFormat,
-        cache: Arc<RwLock<Cache>>,
         event_loop: EventLoopProxy,
         prop_data: Arc<RwLock<PropertyData>>,
     ) -> Self {
         let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
-            cache,
             viewport_size: egui::Vec2::new(
                 SurfaceViewer::DEFAULT_WIDTH as f32,
                 SurfaceViewer::DEFAULT_HEIGHT as f32,
             ),
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            output_format: format,
             color_attachment_id,
-            focused: false,
             uuid: Uuid::new_v4(),
             prop_data,
             event_loop,
         }
     }
 
+    /// Returns the texture ID of the viewer's output.
     pub fn color_attachment_id(&self) -> egui::TextureId { self.color_attachment_id }
 
+    /// Resizes the viewport.
     pub fn resize_viewport(&mut self, new_size: egui::Vec2, scale_factor: Option<f32>) {
         let scale_factor = scale_factor.unwrap_or(1.0);
         if new_size == self.viewport_size || (new_size.x == 0.0 && new_size.y == 0.0) {
@@ -699,7 +694,6 @@ impl Dockable for SurfaceViewer {
     fn ui(&mut self, ui: &mut Ui) {
         let rect = ui.available_rect_before_wrap();
         let size = egui::Vec2::new(rect.width(), rect.height());
-        // Resize if needed.
         self.resize_viewport(size, None);
         ui.image(self.color_attachment_id, self.viewport_size);
     }

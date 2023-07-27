@@ -1,34 +1,21 @@
 use crate::{
     app::{
-        cache::{Cache, Handle},
-        gfx::GpuContext,
+        cache::Handle,
         gui::{
-            bsdf_viewer::BsdfViewer,
-            event::EventLoopProxy,
-            tools::{
-                BsdfPlottingControls, MadfPlottingControls, MmsfPlottingControls,
-                PlottingInspector, PlottingWidget,
-            },
+            data::MeasurementDataProp,
+            event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
         },
     },
-    measure::measurement::{MeasuredData, MeasurementData, MeasurementDataSource, MeasurementKind},
+    measure::measurement::MeasurementData,
 };
 use egui::WidgetText;
-use std::{
-    collections::HashMap,
-    rc::Weak,
-    sync::{Arc, RwLock},
-};
-use vgcore::units::LengthUnit;
+use std::sync::{Arc, RwLock};
 use vgsurf::MicroSurface;
 
 use crate::app::gui::{
     data::{MicroSurfaceProp, PropertyData},
     docking::{Dockable, WidgetKind},
-    theme::ThemeVisuals,
 };
-
-use super::data::MeasurementDataProp;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
@@ -71,30 +58,6 @@ impl Outliner {
         }
     }
 
-    // /// Updates the list of micro surfaces.
-    // pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache:
-    // &Cache) {     for hdl in surfs {
-    //         if let std::collections::hash_map::Entry::Vacant(e) =
-    // self.surfaces.entry(*hdl) {             let record =
-    // cache.get_micro_surface_record(*hdl).unwrap();             let surf =
-    // cache.get_micro_surface(*e.key()).unwrap();             let mesh =
-    // cache.get_micro_surface_mesh(record.mesh).unwrap();
-    // e.insert((                 SurfaceCollapsableHeader { selected: false },
-    //                 MicroSurfaceProp {
-    //                     name: record.name().to_string(),
-    //                     visible: false,
-    //                     scale: 1.0,
-    //                     unit: surf.unit,
-    //                     min: surf.min,
-    //                     max: surf.max,
-    //                     height_offset: mesh.height_offset,
-    //                     size: (surf.rows as u32, surf.cols as u32),
-    //                 },
-    //             ));
-    //         }
-    //     }
-    // }
-
     // /// Updates the list of measurement data.
     // pub fn update_measurement_data(
     //     &mut self,
@@ -111,27 +74,47 @@ impl Outliner {
     // }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum OutlinerItem {
+    MicroSurface(Handle<MicroSurface>),
+    MeasurementData(Handle<MeasurementData>),
+}
+
 pub struct CollapsableHeader<T> {
     selected: bool,
     item: T,
 }
 
-fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool) {
+fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool, hook: impl FnOnce()) {
     ui.vertical_centered_justified(|ui| {
         ui.horizontal(|ui| {
             if ui.selectable_label(*selected, name).clicked() {
                 *selected = !*selected;
+                if *selected {
+                    hook();
+                }
             }
         })
     });
 }
 
 impl CollapsableHeader<Handle<MicroSurface>> {
-    pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut MicroSurfaceProp) {
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        state: &mut MicroSurfaceProp,
+        event_loop: &EventLoopProxy,
+    ) {
         let id = ui.make_persistent_id(&state.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                header_content(ui, &state.name, &mut self.selected);
+                header_content(ui, &state.name, &mut self.selected, || {
+                    event_loop
+                        .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                            OutlinerItem::MicroSurface(self.item),
+                        )))
+                        .unwrap();
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.checkbox(&mut state.visible, "");
                 })
@@ -170,12 +153,6 @@ impl CollapsableHeader<Handle<MicroSurface>> {
     }
 }
 
-// struct MeasuredDataCollapsableHeader {
-//     measurement: Handle<MeasurementData>,
-//     selected: bool,
-//     show_plot: bool,
-// }
-
 impl CollapsableHeader<Handle<MeasurementData>> {
     pub fn ui(
         &mut self,
@@ -186,14 +163,21 @@ impl CollapsableHeader<Handle<MeasurementData>> {
         // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         // gpu: Arc<GpuContext>,
-        event_loop: EventLoopProxy,
+        event_loop: &EventLoopProxy,
     ) {
         // let cache = cache.read().unwrap();
         // let measured = cache.get_measurement_data(prop).unwrap();
         let id = ui.make_persistent_id(&prop.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                header_content(ui, &prop.name, &mut self.selected);
+                header_content(ui, &prop.name, &mut self.selected, || {
+                    println!("Selecting measured data");
+                    event_loop
+                        .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                            OutlinerItem::MeasurementData(self.item),
+                        )))
+                        .unwrap();
+                });
             })
             .body(|ui| {
                 let measurement_kind = prop.kind;
@@ -339,7 +323,11 @@ impl Outliner {
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     for hdr in self.surface_headers.iter_mut() {
-                        hdr.ui(ui, &mut prop_data.surfaces.get_mut(&hdr.item).unwrap());
+                        hdr.ui(
+                            ui,
+                            &mut prop_data.surfaces.get_mut(&hdr.item).unwrap(),
+                            &self.event_loop,
+                        );
                     }
                 });
             });
@@ -351,7 +339,7 @@ impl Outliner {
                         hdr.ui(
                             ui,
                             &mut prop_data.measured.get_mut(&hdr.item).unwrap(),
-                            self.event_loop.clone(),
+                            &self.event_loop,
                         );
                     }
                 })

@@ -13,9 +13,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     hash::Hash,
     path::{Path, PathBuf},
-    rc::{Rc, Weak},
     str::FromStr,
-    sync::Arc,
 };
 use uuid::Uuid;
 use vgcore::error::VgonioError;

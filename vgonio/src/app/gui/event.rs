@@ -2,7 +2,7 @@ use crate::{
     app::{
         cache::Handle,
         gfx::RenderableMesh,
-        gui::{docking::NewWidget, notify::NotifyKind, theme::ThemeKind},
+        gui::{notify::NotifyKind, theme::ThemeKind},
     },
     measure::{
         collector::CollectorPatches,
@@ -11,13 +11,14 @@ use crate::{
         CollectorScheme, RtcMethod,
     },
 };
-use egui_toast::ToastKind;
 use uuid::Uuid;
 use vgcore::{
     math::{IVec2, Vec3},
     units::{Degrees, Radians},
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
+
+use super::outliner::OutlinerItem;
 
 /// Event loop proxy with Vgonio events.
 pub type EventLoopProxy = winit::event_loop::EventLoopProxy<VgonioEvent>;
@@ -47,6 +48,7 @@ pub enum VgonioEvent {
     /// Update the theme.
     UpdateThemeKind(ThemeKind),
     SurfaceViewer(SurfaceViewerEvent),
+    Outliner(OutlinerEvent),
 }
 
 /// Events used by [`SurfaceViewer`].
@@ -158,6 +160,11 @@ pub enum DebuggingEvent {
         orbit_radius: f32,
         shape_radius: Option<f32>,
     },
+}
+
+#[derive(Debug)]
+pub enum OutlinerEvent {
+    SelectItem(OutlinerItem),
 }
 
 #[derive(Debug)]

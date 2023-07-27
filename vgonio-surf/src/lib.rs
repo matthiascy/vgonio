@@ -647,10 +647,9 @@ pub fn regular_grid_triangulation(
     cols: usize,
     pattern: TriangulationPattern,
 ) -> Vec<u32> {
-    let mut triangulate: Box<dyn FnMut(usize, usize, usize, &mut usize, &mut [u32])> = match pattern
-    {
+    let mut triangulate: Box<dyn FnMut(usize, usize, &mut usize, &mut [u32])> = match pattern {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
-            |i: usize, row: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
+            |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
                 if col == 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
@@ -673,7 +672,7 @@ pub fn regular_grid_triangulation(
             },
         ),
         TriangulationPattern::TopLeftToBottomRight => Box::new(
-            |i: usize, row: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
+            |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
                 if col == 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
@@ -708,7 +707,7 @@ pub fn regular_grid_triangulation(
             continue;
         }
 
-        triangulate(i, row, col, &mut tri, &mut indices);
+        triangulate(i, col, &mut tri, &mut indices);
     }
 
     indices

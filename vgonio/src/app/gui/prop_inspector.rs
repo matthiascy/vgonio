@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::app::gui::docking::{Dockable, WidgetKind};
 
-use crate::app::gui::{data::PropertyData, theme::ThemeVisuals};
+use crate::app::gui::data::PropertyData;
 
 /// The property inspector.
 ///
@@ -16,14 +16,61 @@ pub struct PropertyInspector {
 }
 
 impl PropertyInspector {
-    pub fn new() -> Self {
+    pub fn new(data: Arc<RwLock<PropertyData>>) -> Self {
         Self {
             uuid: uuid::Uuid::new_v4(),
-            data: Arc::new(RwLock::new(PropertyData::new())),
+            data,
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) { ui.label("Properties"); }
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        let data = self.data.read().unwrap();
+        match data.selected {
+            Some(item) => match item {
+                super::outliner::OutlinerItem::MicroSurface(surf) => {
+                    let state = data.surfaces.get(&surf).unwrap();
+                    egui::Grid::new("surface_collapsable_header_grid")
+                        .num_columns(3)
+                        .spacing([40.0, 4.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("Micro Surface");
+                            ui.end_row();
+
+                            ui.add(egui::Label::new("Size:"));
+                            ui.add(egui::Label::new(format!(
+                                "{} x {}",
+                                state.size.0, state.size.1
+                            )));
+                            ui.end_row();
+
+                            ui.add(egui::Label::new("Min:"));
+                            ui.add(egui::Label::new(format!("{:.4} {}", state.min, state.unit)));
+                            ui.end_row();
+
+                            ui.add(egui::Label::new("Max:"));
+                            ui.add(egui::Label::new(format!("{:.4} {}", state.max, state.unit)));
+                            ui.end_row();
+
+                            // ui.add(egui::Label::new("Scale:")).on_hover_text(
+                            //     "Scales the surface visually. Doest not
+                            // affect the actual surface.",
+                            // );
+                            // ui.add(
+                            //     egui::Slider::new(&mut state.scale,
+                            // 0.005..=1.5)
+                            //         .trailing_fill(true),
+                            // );
+                            // ui.end_row();
+                        });
+                }
+                super::outliner::OutlinerItem::MeasurementData(meas) => {}
+            },
+            None => {
+                ui.label("Nothing selected");
+            }
+        }
+    }
 }
 
 impl Dockable for PropertyInspector {
