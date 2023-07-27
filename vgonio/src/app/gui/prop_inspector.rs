@@ -22,6 +22,8 @@ impl PropertyInspector {
             data: Arc::new(RwLock::new(PropertyData::new())),
         }
     }
+
+    pub fn ui(&mut self, ui: &mut egui::Ui) { ui.label("Properties"); }
 }
 
 impl Dockable for PropertyInspector {
@@ -31,5 +33,5 @@ impl Dockable for PropertyInspector {
 
     fn uuid(&self) -> uuid::Uuid { self.uuid }
 
-    fn ui(&mut self, ui: &mut egui::Ui) { ui.label("Properties"); }
+    fn ui(&mut self, ui: &mut egui::Ui) { self.ui(ui); }
 }

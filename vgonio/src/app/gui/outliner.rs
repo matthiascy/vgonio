@@ -39,12 +39,11 @@ pub struct Outliner {
     uuid: uuid::Uuid,
     // gpu_ctx: Arc<GpuContext>,
     event_loop: EventLoopProxy,
-    // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-    /// States of the micro surfaces, indexed by their ids.
-    // surfaces: HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader, MicroSurfaceProp)>,
+    /// Collapsable headers for the micro surfaces.
     surface_headers: Vec<CollapsableHeader<Handle<MicroSurface>>>,
     // /// States of the measured data.
     //measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
+    /// Collapsable headers for the measured data.
     measured_headers: Vec<CollapsableHeader<Handle<MeasurementData>>>,
     // /// Plotting inspectors, linked to the measurement data they are inspecting.
     // plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
@@ -54,7 +53,6 @@ pub struct Outliner {
 impl Outliner {
     /// Creates a new outliner.
     pub fn new(
-        // gpu_ctx: Arc<GpuContext>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -62,7 +60,6 @@ impl Outliner {
         log::info!("Creating outliner");
         Self {
             uuid: uuid::Uuid::new_v4(),
-            // gpu_ctx,
             event_loop,
             // bsdf_viewer,
             // surfaces: HashMap::new(),
@@ -73,24 +70,6 @@ impl Outliner {
             data,
         }
     }
-
-    // pub fn surfaces(
-    //     &self,
-    // ) -> &HashMap<Handle<MicroSurface>, (SurfaceCollapsableHeader,
-    //   MicroSurfaceProp)> { &self.surfaces
-    // }
-
-    // /// Returns an iterator over all the visible micro surfaces.
-    // pub fn visible_surfaces(&self) -> Vec<(&Handle<MicroSurface>,
-    // &MicroSurfaceProp)> {     self.surfaces
-    //         .iter()
-    //         .filter(|(_, (_, s))| s.visible)
-    //         .map(|(id, (_, s))| (id, s))
-    //         .collect()
-    // }
-
-    // pub fn any_visible_surfaces(&self) -> bool { self.surfaces.iter().any(|(_,
-    // (_, s))| s.visible) }
 
     // /// Updates the list of micro surfaces.
     // pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache:
@@ -147,11 +126,6 @@ fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool) {
     });
 }
 
-// pub struct SurfaceCollapsableHeader {
-//     surface: Handle<MicroSurface>,
-//     selected: bool,
-// }
-
 impl CollapsableHeader<Handle<MicroSurface>> {
     pub fn ui(&mut self, ui: &mut egui::Ui, state: &mut MicroSurfaceProp) {
         let id = ui.make_persistent_id(&state.name);
@@ -207,7 +181,7 @@ impl CollapsableHeader<Handle<MeasurementData>> {
         &mut self,
         ui: &mut egui::Ui,
         // data: Weak<MeasurementData>,
-        prop: &MeasurementDataProp,
+        prop: &mut MeasurementDataProp,
         // cache: Arc<RwLock<Cache>>,
         // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
@@ -359,13 +333,13 @@ impl Outliner {
             }
         }
 
-        let mut state = self.data.write().unwrap();
+        let mut prop_data = self.data.write().unwrap();
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     for hdr in self.surface_headers.iter_mut() {
-                        hdr.ui(ui, &mut state.surfaces.get_mut(&hdr.item).unwrap());
+                        hdr.ui(ui, &mut prop_data.surfaces.get_mut(&hdr.item).unwrap());
                     }
                 });
             });
@@ -376,22 +350,10 @@ impl Outliner {
                     for hdr in self.measured_headers.iter_mut() {
                         hdr.ui(
                             ui,
-                            &state.measured.get(&hdr.item).unwrap(),
-                            // self.gpu_ctx.clone(),
+                            &mut prop_data.measured.get_mut(&hdr.item).unwrap(),
                             self.event_loop.clone(),
                         );
                     }
-                    // for (data, hdr) in self.measured_headers.iter_mut() {
-                    //     hdr.ui(
-                    //         ui,
-                    //         data.clone(),
-                    //         // &mut self.plotting_inspectors,
-                    //         // self.bsdf_viewer.clone(),
-                    //         cache.clone(),
-                    //         self.gpu_ctx.clone(),
-                    //         self.event_loop.clone(),
-                    //     );
-                    // }
                 })
             });
 

@@ -1,10 +1,11 @@
 use egui::{Ui, WidgetText};
 use log::log;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
+use wgpu::Surface;
 
 use vgcore::math::{Mat4, Vec3, Vec4};
 use vgsurf::MicroSurface;
@@ -105,6 +106,12 @@ impl SurfaceViewerState {
         }
     }
 
+    pub fn camera_view_proj(&self) -> ViewProjUniform { self.camera.uniform.view_proj }
+
+    pub fn depth_attachment(&self) -> &Texture { &self.d_attachment.depth_attachment }
+
+    pub fn colour_attachment(&self) -> &Texture { &self.c_attachment }
+
     pub fn resize(
         &mut self,
         width: u32,
@@ -191,6 +198,8 @@ pub struct SurfaceViewerStates {
     grid_bind_group_layout: wgpu::BindGroupLayout,
     /// States of the micro surface rendering for each surface viewer.
     states: HashMap<Uuid, SurfaceViewerState>,
+    /// List of surfaces ready to be rendered.
+    surfaces: HashSet<Handle<MicroSurface>>,
 }
 
 impl SurfaceViewerStates {
@@ -207,12 +216,20 @@ impl SurfaceViewerStates {
             grid_pipeline,
             grid_bind_group_layout,
             states: Default::default(),
+            surfaces: Default::default(),
         }
     }
 
+    pub fn viewer_state(&self, viewer: Uuid) -> Option<&SurfaceViewerState> {
+        self.states.get(&viewer)
+    }
+
     pub fn update_surfaces_list(&mut self, surfaces: &[Handle<MicroSurface>]) {
+        for surface in surfaces {
+            self.surfaces.insert(*surface);
+        }
         for (_, state) in self.states.iter_mut() {
-            state.surface.update_surfaces_list(surfaces);
+            state.surface.update_surfaces_list(surfaces.iter());
         }
     }
 
@@ -228,18 +245,17 @@ impl SurfaceViewerStates {
             self.states.get(&viewer).is_none(),
             "Surface viewer with the same UUID already exists"
         );
-        self.states.insert(
-            viewer,
-            SurfaceViewerState::new(
-                gpu,
-                gui,
-                self.format,
-                tex_id,
-                &self.surf_globals_layout,
-                &self.surf_locals_layout,
-                &self.grid_bind_group_layout,
-            ),
+        let mut state = SurfaceViewerState::new(
+            gpu,
+            gui,
+            self.format,
+            tex_id,
+            &self.surf_globals_layout,
+            &self.surf_locals_layout,
+            &self.grid_bind_group_layout,
         );
+        state.surface.update_surfaces_list(self.surfaces.iter());
+        self.states.insert(viewer, state);
     }
 
     /// Resize the viewport of a surface viewer.
@@ -256,8 +272,7 @@ impl SurfaceViewerStates {
         }
     }
 
-    // TODO: only update focused viewer's camera
-    pub fn render(
+    pub fn record_render_pass(
         &mut self,
         gpu: &GpuContext,
         active_viewer: Option<Uuid>,
@@ -265,9 +280,13 @@ impl SurfaceViewerStates {
         dt: std::time::Duration,
         theme: &ThemeState,
         cache: &Cache,
-        encoder: &mut wgpu::CommandEncoder,
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
-    ) {
+    ) -> wgpu::CommandEncoder {
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vgonio_render_encoder"),
+            });
         for (viewer, state) in &mut self.states {
             if let Some(active) = active_viewer {
                 if active == *viewer {
@@ -342,9 +361,10 @@ impl SurfaceViewerStates {
             {
                 state
                     .visual_grid
-                    .render(&self.grid_pipeline, &mut render_pass);
+                    .record_render_pass(&self.grid_pipeline, &mut render_pass);
             }
         }
+        encoder
     }
 }
 
@@ -533,7 +553,10 @@ impl MicroSurfaceState {
     /// Update the list of surfaces.
     ///
     /// Updates the lookup table.
-    pub fn update_surfaces_list(&mut self, surfs: &[Handle<MicroSurface>]) {
+    pub fn update_surfaces_list<'a, S: Iterator<Item = &'a Handle<MicroSurface>>>(
+        &mut self,
+        surfs: S,
+    ) {
         for hdl in surfs {
             if self.locals_lookup.contains(hdl) {
                 continue;
@@ -606,18 +629,14 @@ pub struct SurfaceViewer {
     uuid: Uuid,
     /// Cache for all kinds of resources.
     cache: Arc<RwLock<Cache>>,
-    // /// Debug drawing state.
-    // debug_draw_state: DebugDrawState,
     /// Size of the viewport.
     viewport_size: egui::Vec2,
     // /// Gizmo for navigating the scene.
     // navigator: NavigationGizmo,
     output_format: wgpu::TextureFormat,
-    proj_view_model: Mat4,
     focused: bool,
     color_attachment_id: egui::TextureId,
     event_loop: EventLoopProxy,
-
     prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
 }
 
@@ -635,7 +654,6 @@ impl SurfaceViewer {
         let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
             cache,
-            // debug_draw_state,
             viewport_size: egui::Vec2::new(
                 SurfaceViewer::DEFAULT_WIDTH as f32,
                 SurfaceViewer::DEFAULT_HEIGHT as f32,
@@ -643,7 +661,6 @@ impl SurfaceViewer {
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             output_format: format,
             color_attachment_id,
-            proj_view_model: Mat4::IDENTITY,
             focused: false,
             uuid: Uuid::new_v4(),
             prop_data,
@@ -668,159 +685,14 @@ impl SurfaceViewer {
             .unwrap();
         self.viewport_size = new_size;
     }
-
-    #[deprecated]
-    fn render(&mut self, size: egui::Vec2, scale_factor: Option<f32>) {
-        // Resize if needed
-        self.resize_viewport(size, scale_factor);
-        // TODO: update camera
-        // self.camera.uniform.update(
-        //     &self.camera.camera,
-        //     &self.camera.projection,
-        //     ProjectionKind::Perspective,
-        // );
-        // self.visual_grid_state.update_uniforms(
-        //     &self.gpu,
-        //     &self.camera.uniform.view_proj,
-        //     &self.camera.uniform.view_proj_inv,
-        //     wgpu::Color {
-        //         r: 0.4,
-        //         g: 0.4,
-        //         b: 0.4,
-        //         a: 1.0,
-        //     },
-        //     ThemeKind::Dark,
-        // );
-        // self.navigator.update_matrices(
-        //     Mat4::IDENTITY,
-        //     Mat4::look_at_rh(self.camera.camera.eye, Vec3::ZERO,
-        // self.camera.camera.up),     Mat4::orthographic_rh(-1.0, 1.0, -1.0,
-        // 1.0, 0.1, 100.0), );
-        // let view_proj = self.camera.uniform.view_proj;
-        // let prop_data = self.prop_data.read().unwrap();
-        //     let visible_surfaces = prop_data.visible_surfaces();
-        //     if !visible_surfaces.is_empty() {
-        //         self.gpu.queue.write_buffer(
-        //             &self.surf_state.global_uniform_buffer,
-        //             0,
-        //             bytemuck::bytes_of(&view_proj),
-        //         );
-        //         // Update per-surface uniform buffer.
-        //         let aligned_size =
-        // MicroSurfaceUniforms::aligned_size(&self.gpu.device);
-        //         for (hdl, prop) in visible_surfaces.iter() {
-        //             let local_uniform_buf_index = if let Some(idx) =
-        //                 self.surf_state.locals_lookup.iter().position(|h| h
-        // == *hdl)             {
-        //                 idx
-        //             } else {
-        //                 self.surf_state.locals_lookup.push(**hdl);
-        //                 self.surf_state.locals_lookup.len() - 1
-        //             };
-
-        //             let mut buf = [0.0; 20];
-        //
-        // buf[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-        //             buf[16..20].copy_from_slice(&[
-        //                 prop.min + prop.height_offset,
-        //                 prop.max + prop.height_offset,
-        //                 prop.max - prop.min,
-        //                 prop.scale,
-        //             ]);
-        //             self.gpu.queue.write_buffer(
-        //                 &self.surf_state.local_uniform_buffer,
-        //                 local_uniform_buf_index as u64 * aligned_size as u64,
-        //                 bytemuck::cast_slice(&buf),
-        //             );
-        //         }
-        //     }
-
-        //     let cache = self.cache.read().unwrap();
-        //     // Update rendered texture.
-        //     let mut encoder = self
-        //         .gpu
-        //         .device
-        //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        //             label: Some("surf_viewer_update"),
-        //         });
-        //     {
-        //         let mut render_pass =
-        // encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        //             label: Some("surf_viewer_update"),
-        //             color_attachments: &[Some(wgpu::RenderPassColorAttachment
-        // {                 view: &self.color_attachment.view,
-        //                 resolve_target: None,
-        //                 ops: wgpu::Operations {
-        //                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-        //                     store: true,
-        //                 },
-        //             })],
-        //             depth_stencil_attachment:
-        // Some(wgpu::RenderPassDepthStencilAttachment {
-        // view: &self.depth_map.depth_attachment.view,
-        // depth_ops: Some(wgpu::Operations {                     load:
-        // wgpu::LoadOp::Clear(1.0),                     store: true,
-        //                 }),
-        //                 stencil_ops: None,
-        //             }),
-        //         });
-
-        //         let aligned_micro_surface_uniform_size =
-        //             MicroSurfaceUniforms::aligned_size(&self.gpu.device);
-
-        //         if !visible_surfaces.is_empty() {
-        //             render_pass.set_pipeline(&self.surf_state.pipeline);
-        //             render_pass.set_bind_group(0,
-        // &self.surf_state.globals_bind_group, &[]);
-
-        //             for (hdl, _) in visible_surfaces.iter() {
-        //                 let renderable =
-        // cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
-        //                 if renderable.is_none() {
-        //                     log::debug!(
-        //                         "Failed to get renderable mesh for surface
-        // {:?}, skipping.",
-        //                         hdl
-        //                     );
-        //                     continue;
-        //                 }
-        //                 let buf_index = self
-        //                     .surf_state
-        //                     .locals_lookup
-        //                     .iter()
-        //                     .position(|x| &x == hdl)
-        //                     .unwrap();
-        //                 let renderable = renderable.unwrap();
-        //                 render_pass.set_bind_group(
-        //                     1,
-        //                     &self.surf_state.locals_bind_group,
-        //                     &[buf_index as u32 *
-        // aligned_micro_surface_uniform_size],                 );
-        //                 render_pass.set_vertex_buffer(0,
-        // renderable.vertex_buffer.slice(..));
-        // render_pass.set_index_buffer(
-        // renderable.index_buffer.slice(..),
-        // renderable.index_format,                 );
-        //                 render_pass.draw_indexed(0..renderable.indices_count,
-        // 0, 0..1);             }
-        //         }
-
-        //         self.visual_grid_state.render(&mut render_pass);
-
-        //         // // Draw visual grid.
-        //         //
-        // render_pass.set_pipeline(&self.visual_grid_state.pipeline);
-        //         // render_pass.set_bind_group(0,
-        // &self.visual_grid_state.bind_group,         // &[]);
-        // render_pass.draw(0..6, 0..1);     }
-        //     self.gpu.queue.submit(Some(encoder.finish()));
-    }
 }
 
 impl Dockable for SurfaceViewer {
     fn kind(&self) -> WidgetKind { WidgetKind::SurfViewer }
 
-    fn title(&self) -> WidgetText { "Surface Viewer".into() }
+    fn title(&self) -> WidgetText {
+        format!("Surface Viewer - {}", &self.uuid.to_string().as_str()[..6]).into()
+    }
 
     fn uuid(&self) -> Uuid { self.uuid }
 

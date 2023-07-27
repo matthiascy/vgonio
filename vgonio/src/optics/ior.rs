@@ -5,6 +5,7 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
+    ops::Deref,
     path::Path,
 };
 use vgcore::{
@@ -51,6 +52,12 @@ impl Default for RefractiveIndexDatabase {
     fn default() -> Self { Self::new() }
 }
 
+impl Deref for RefractiveIndexDatabase {
+    type Target = HashMap<Medium, Vec<RefractiveIndex>>;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
 impl RefractiveIndexDatabase {
     /// Create an empty database.
     pub fn new() -> RefractiveIndexDatabase { RefractiveIndexDatabase(HashMap::new()) }
@@ -59,7 +66,6 @@ impl RefractiveIndexDatabase {
     /// (in nanometres).
     pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndex> {
         let refractive_indices = self
-            .0
             .get(&medium)
             .unwrap_or_else(|| panic!("unknown medium {:?}", medium));
         // Search for the position of the first wavelength equal or greater than the

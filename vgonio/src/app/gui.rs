@@ -9,7 +9,7 @@ mod icons;
 mod misc;
 mod notify;
 pub mod outliner;
-mod prop_insp;
+mod prop_inspector;
 mod simulations;
 pub mod state;
 mod surf_viewer;
@@ -335,22 +335,30 @@ impl VgonioGuiApp {
         //     wgpu::Color::BLACK,
         //     ThemeKind::Dark,
         // );
-        // let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
-        // let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
-        //     Some(surface) => {
-        //         let properties = self.ui.properties.read().unwrap();
-        //         let prop = properties.surfaces.get(&surface).unwrap();
-        //         (prop.min, prop.max, prop.scale)
-        //     }
-        //     None => (0.0, 1.0, 1.0),
-        // };
-        // self.dbg_drawing_state.update_uniform_buffer(
-        //     &self.ctx.gpu,
-        //     &(view_proj.proj * view_proj.view),
-        //     lowest,
-        //     highest,
-        //     scale,
-        // );
+
+        let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
+        let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
+            Some(surface) => {
+                let properties = self.ui.properties.read().unwrap();
+                let prop = properties.surfaces.get(&surface).unwrap();
+                (prop.min, prop.max, prop.scale)
+            }
+            None => (0.0, 1.0, 1.0),
+        };
+        match dbg_tool.brdf_debugging.selected_viewer() {
+            Some(viewer) => {
+                let view_proj = self.surface_viewer_states.viewer_state(viewer).unwrap().camera_view_proj();
+                self.dbg_drawing_state.update_uniform_buffer(
+                    &self.ctx.gpu,
+                    &(view_proj.proj * view_proj.view),
+                    lowest,
+                    highest,
+                    scale,
+                );
+            }
+            None => {}
+        }
+
 
         // // Update uniform buffer for all visible surfaces.
         // {
@@ -413,7 +421,6 @@ impl VgonioGuiApp {
     }
 
     /// Render the frame to the surface.
-    #[rustfmt::skip]
     pub fn render(&mut self, window: &Window, dt: Duration) -> Result<(), wgpu::SurfaceError> {
         // Get the next frame (`SurfaceTexture`) to render to.
         let output_frame = self.canvas.get_current_texture()?;
@@ -421,111 +428,8 @@ impl VgonioGuiApp {
         let output_view = output_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        // Command encoders for rendering the frame.
-        let mut encoder =
-            self.ctx
-                .gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vgonio_render_encoder"),
-                });
-        // {
-        //     let cache = self.cache.read().unwrap();
-        //     let properties = self.ui.properties.read().unwrap();
-        //     let visible_surfaces = properties.visible_surfaces();
-        //     {
-        //         let mut render_pass = main_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        //             label: Some("Main Render Pass"),
-        //             color_attachments: &[Some(
-        //                 // This is what [[location(0)]] in the fragment shader targets
-        //                 wgpu::RenderPassColorAttachment {
-        //                     view: &output_view,
-        //                     // This is the texture that will receive the resolved output; will be
-        //                     // the same as `view` unless multisampling.
-        //                     resolve_target: None,
-        //                     ops: wgpu::Operations {
-        //                         load: wgpu::LoadOp::Clear(
-        //                             // self.theme.visuals().clear_color
-        //                             wgpu::Color::BLACK,
-        //                         ),
-        //                         store: true,
-        //                     },
-        //                 },
-        //             )],
-        //             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-        //                 view: &self.depth_map.depth_attachment.view,
-        //                 depth_ops: Some(wgpu::Operations {
-        //                     load: wgpu::LoadOp::Clear(1.0),
-        //                     store: true,
-        //                 }),
-        //                 stencil_ops: None,
-        //             }),
-        //         });
-        // 
-        //         let aligned_micro_surface_uniform_size =
-        //             MicroSurfaceUniforms::aligned_size(&self.ctx.gpu.device);
-        // 
-        //         // if !visible_surfaces.is_empty() {
-        //         //     render_pass.set_pipeline(&self.msurf_rdr_state.pipeline);
-        //         //     render_pass.set_bind_group(0, &self.msurf_rdr_state.globals_bind_group, &[]);
-        //         //
-        //         //     for (hdl, _) in visible_surfaces.iter() {
-        //         //         let renderable =
-        //         //             cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
-        //         //         if renderable.is_none() {
-        //         //             log::debug!(
-        //         //                 "Failed to get renderable mesh for surface {:?}, skipping.",
-        //         //                 hdl
-        //         //             );
-        //         //             continue;
-        //         //         }
-        //         //         let buf_index = self
-        //         //             .msurf_rdr_state
-        //         //             .locals_lookup
-        //         //             .iter()
-        //         //             .position(|x| x == *hdl)
-        //         //             .unwrap();
-        //         //         let renderable = renderable.unwrap();
-        //         //         render_pass.set_bind_group(
-        //         //             1,
-        //         //             &self.msurf_rdr_state.locals_bind_group,
-        //         //             &[buf_index as u32 * aligned_micro_surface_uniform_size],
-        //         //         );
-        //         //         render_pass.set_vertex_buffer(0, renderable.vertex_buffer.slice(..));
-        //         //         render_pass.set_index_buffer(
-        //         //             renderable.index_buffer.slice(..),
-        //         //             renderable.index_format,
-        //         //         );
-        //         //         render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
-        //         //     }
-        //         // }
-        // 
-        //         // self.visual_grid_state.render(&mut render_pass);
-        //     }
-        // }
-
-        // let dbg_drawing_encoder = self.dbg_drawing_state.record_render_pass(
-        //     &self.ctx.gpu,
-        //     Some(wgpu::RenderPassColorAttachment {
-        //         view: &output_view,
-        //         resolve_target: None,
-        //         ops: wgpu::Operations {
-        //             load: wgpu::LoadOp::Load,
-        //             store: true,
-        //         },
-        //     }),
-        //     Some(wgpu::RenderPassDepthStencilAttachment {
-        //         view: &self.depth_map.depth_attachment.view,
-        //         depth_ops: Some(wgpu::Operations {
-        //             load: wgpu::LoadOp::Clear(1.0),
-        //             store: true,
-        //         }),
-        //         stencil_ops: None,
-        //     }),
-        // );
-
-        // TODO: render UI needed images first
-        {
+        let (viewer_encoder, dbg_encoder) = {
+            // Render first viewports for the surface viewers.
             let cache = self.cache.read().unwrap();
             let properties = self.ui.properties.read().unwrap();
             let surfaces = properties.visible_surfaces_with_props();
@@ -534,15 +438,66 @@ impl VgonioGuiApp {
                 if viewers.len() == 1 {
                     Some(viewers[0])
                 } else {
-                    self.ui.dock_space.find_active_focused()
-                        .and_then(|widget| match widget.1.dockable.kind() {
+                    self.ui.dock_space.find_active_focused().and_then(|widget| {
+                        match widget.1.dockable.kind() {
                             WidgetKind::SurfViewer => Some(widget.1.dockable.uuid()),
                             _ => None,
-                        })
+                        }
+                    })
                 }
             };
-            self.surface_viewer_states.render(&self.ctx.gpu, viewer, &self.input, dt, &self.theme, &cache, &mut encoder, &surfaces);
-        }
+
+            let viewer_encoder = self.surface_viewer_states.record_render_pass(
+                &self.ctx.gpu,
+                viewer,
+                &self.input,
+                dt,
+                &self.theme,
+                &cache,
+                &surfaces,
+            );
+
+            let viewer = self
+                .ui
+                .tools
+                .get_tool::<DebuggingInspector>()
+                .unwrap()
+                .brdf_debugging
+                .selected_viewer();
+            let dbg_drawing_encoder = match viewer {
+                Some(viewer) => self.dbg_drawing_state.record_render_pass(
+                    &self.ctx.gpu,
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &self
+                            .surface_viewer_states
+                            .viewer_state(viewer)
+                            .unwrap()
+                            .colour_attachment()
+                            .view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                    Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self
+                            .surface_viewer_states
+                            .viewer_state(viewer)
+                            .unwrap()
+                            .depth_attachment()
+                            .view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),
+                ),
+                None => None,
+            };
+            (viewer_encoder, dbg_drawing_encoder)
+        };
 
         // UI render pass recoding.
         let ui_render_output = self.ctx.gui.render(
@@ -555,8 +510,19 @@ impl VgonioGuiApp {
             },
         );
 
-        let cmds = std::iter::once(encoder.finish())
-            .chain(ui_render_output.user_cmds).chain([ui_render_output.ui_cmd]);
+        let cmds: Box<dyn Iterator<Item = wgpu::CommandBuffer>> = match dbg_encoder {
+            Some(encoder) => Box::new(
+                [viewer_encoder.finish(), encoder.finish()]
+                    .into_iter()
+                    .chain(ui_render_output.user_cmds)
+                    .chain([ui_render_output.ui_cmd]),
+            ),
+            None => Box::new(
+                std::iter::once(viewer_encoder.finish())
+                    .chain(ui_render_output.user_cmds)
+                    .chain([ui_render_output.ui_cmd]),
+            ),
+        };
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
@@ -764,8 +730,6 @@ impl VgonioGuiApp {
                             todo!("Save area distribution to file or display it in a window");
                         }
                     },
-
-                    // UpdateThemeKind(kind) => self.theme.set_theme_kind(kind),
                     SurfaceViewer(event) => match event {
                         SurfaceViewerEvent::Create {
                             uuid,
@@ -787,7 +751,9 @@ impl VgonioGuiApp {
                                 &self.ctx.gui.renderer,
                             );
                         }
-                        SurfaceViewerEvent::Close { .. } => {}
+                        SurfaceViewerEvent::Close { .. } => {
+                            todo!("SurfaceViewerEvent::Close")
+                        }
                         SurfaceViewerEvent::UpdateSurfaceList { surfaces } => {
                             self.surface_viewer_states.update_surfaces_list(&surfaces)
                         }

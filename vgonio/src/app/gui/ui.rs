@@ -3,19 +3,16 @@ use crate::{
         cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
-            bsdf_viewer::BsdfViewer,
             data::PropertyData,
             event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
             file_drop::FileDragDrop,
             gizmo::NavigationGizmo,
             icons,
             notify::{NotifyKind, NotifySystem},
-            outliner::Outliner,
             simulations::Simulations,
             state::GuiRenderer,
-            theme::{ThemeKind, ThemeState},
+            theme::ThemeKind,
             tools::{SamplingInspector, Scratch, Tools},
-            widgets::ToggleSwitch,
             DebuggingInspector,
         },
         Config,
@@ -77,7 +74,7 @@ impl VgonioGui {
         cache: Arc<RwLock<Cache>>,
         format: wgpu::TextureFormat,
     ) -> Self {
-        log::info!("Initializing UI");
+        log::info!("Initializing UI ...");
         let properties = Arc::new(RwLock::new(PropertyData::new()));
 
         Self {
@@ -116,6 +113,13 @@ impl VgonioGui {
                 self.notif.notify(*kind, text.clone(), *time as f64);
                 EventResponse::Handled
             }
+            VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create { uuid, .. }) => {
+                self.tools
+                    .get_tool_mut::<DebuggingInspector>()
+                    .unwrap()
+                    .update_surface_viewers(&[*uuid]);
+                EventResponse::Ignored(event)
+            }
             _ => EventResponse::Ignored(event),
         }
     }
@@ -145,11 +149,9 @@ impl VgonioGui {
         log::info!("Process UI opening files: {:?}", files);
         let (surfaces, measurements) = self.open_files(files);
         let cache = self.cache.read().unwrap();
-        self.properties
-            .write()
-            .unwrap()
-            .update_surfaces(&surfaces, &cache);
-        println!("properties: {:?}", self.properties);
+        let mut properties = self.properties.write().unwrap();
+        properties.update_surfaces(&surfaces, &cache);
+        properties.update_measurement_data(&measurements, &cache);
         self.tools
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()

@@ -542,13 +542,20 @@ impl Cache {
     }
 
     /// Loads the refractive index database from the paths specified in the
-    /// config.
+    /// configuration.
+    ///
+    /// The database is loaded from the following paths:
+    /// - `VgonioConfig::sys_data_dir()`
+    /// - `VgonioConfig::user_data_dir()`
     pub fn load_ior_database(&mut self, config: &Config) {
+        log::debug!("Loading refractive index database ...");
         // let mut database = RefractiveIndexDatabase::new();
         let sys_path: PathBuf = config.sys_data_dir().to_path_buf().join("ior");
         let user_path = config
             .user_data_dir()
             .map(|path| path.to_path_buf().join("ior"));
+        log::debug!("  -- sys_path: {:?}", sys_path);
+        log::debug!("  -- user_path: {:?}", user_path);
         // First load refractive indices from `VgonioConfig::sys_data_dir()`.
         if sys_path.exists() {
             // Load one by one the files in the directory.

@@ -650,7 +650,7 @@ pub fn regular_grid_triangulation(
     let mut triangulate: Box<dyn FnMut(usize, usize, usize, &mut usize, &mut [u32])> = match pattern
     {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
-            |i: usize, row: usize, col: usize, mut tri: &mut usize, indices: &mut [u32]| {
+            |i: usize, row: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
                 if col == 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
@@ -673,7 +673,7 @@ pub fn regular_grid_triangulation(
             },
         ),
         TriangulationPattern::TopLeftToBottomRight => Box::new(
-            |i: usize, row: usize, col: usize, mut tri: &mut usize, indices: &mut [u32]| {
+            |i: usize, row: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
                 if col == 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;

@@ -173,7 +173,7 @@ impl VisualGridState {
     }
 
     /// Render the visual grid.
-    pub fn render<'a>(
+    pub fn record_render_pass<'a>(
         &'a self,
         pipeline: &'a wgpu::RenderPipeline,
         pass: &mut wgpu::RenderPass<'a>,

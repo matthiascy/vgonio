@@ -13,10 +13,9 @@ use uuid::Uuid;
 use crate::app::gui::{
     event::{SurfaceViewerEvent, VgonioEvent},
     outliner::Outliner,
-    prop_insp::PropertyInspector,
+    prop_inspector::PropertyInspector,
     state::GuiRenderer,
     surf_viewer::SurfaceViewer,
-    theme::{ThemeKind, ThemeVisuals},
 };
 
 /// Docking space for widgets.
@@ -166,7 +165,7 @@ pub trait Dockable {
     fn title(&self) -> egui::WidgetText;
 
     /// Unique identifier of the widget.
-    fn uuid(&self) -> uuid::Uuid;
+    fn uuid(&self) -> Uuid;
 
     /// Actual content of the widget.
     fn ui(&mut self, ui: &mut egui::Ui);

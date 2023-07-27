@@ -12,6 +12,7 @@ use crate::{
     },
 };
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 use vgcore::{
     math,
     math::{Handedness, IVec2},
@@ -41,6 +42,8 @@ pub(crate) struct BrdfMeasurementDebugging {
     surface_primitive_drawing: bool,
     grid_cell_position: IVec2,
     grid_cell_drawing: bool,
+    surface_viewers: Vec<Uuid>,
+    focused_viewer: Option<Uuid>,
 }
 
 impl BrdfMeasurementDebugging {
@@ -68,6 +71,8 @@ impl BrdfMeasurementDebugging {
             orbit_radius: 1.0,
             selector: SurfaceSelector::single(),
             grid_cell_drawing: false,
+            surface_viewers: vec![],
+            focused_viewer: None,
         }
     }
 
@@ -75,9 +80,19 @@ impl BrdfMeasurementDebugging {
         self.selector.update(surfaces, &self.cache.read().unwrap());
     }
 
+    pub fn update_surface_viewers(&mut self, viewers: &[Uuid]) {
+        for viewer in viewers {
+            if !self.surface_viewers.contains(viewer) {
+                self.surface_viewers.push(*viewer);
+            }
+        }
+    }
+
     pub fn selected_surface(&self) -> Option<Handle<MicroSurface>> {
         self.selector.single_selected()
     }
+
+    pub fn selected_viewer(&self) -> Option<Uuid> { self.focused_viewer }
 
     fn estimate_emitter_radii(
         &self,
@@ -209,6 +224,20 @@ impl BrdfMeasurementDebugging {
 
 impl egui::Widget for &mut BrdfMeasurementDebugging {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        egui::ComboBox::new("brdf_measurement_debugging_selector", "Surface Viewer")
+            .selected_text(match self.focused_viewer {
+                None => "Select a surface viewer".into(),
+                Some(uuid) => format!("Viewer-{}", &uuid.to_string()[..6].to_ascii_uppercase()),
+            })
+            .show_ui(ui, |ui| {
+                for viewer in &self.surface_viewers {
+                    ui.selectable_value(
+                        &mut self.focused_viewer,
+                        Some(*viewer),
+                        format!("Viewer-{}", &viewer.to_string()[..6].to_ascii_uppercase()),
+                    );
+                }
+            });
         let mut record = None;
         ui.horizontal_wrapped(|ui| {
             ui.label("Tracing Method: ");

@@ -81,6 +81,10 @@ impl UserConfig {
         if let Some(data_dir) = config.data_dir {
             config.data_dir = Some(resolve_path(base, Some(&data_dir)));
         }
+        log::trace!("  - User cache directory: {:?}", config.cache_dir);
+        log::trace!("  - User output directory: {:?}", config.output_dir);
+        log::trace!("  - User data directory: {:?}", config.data_dir);
+        log::trace!("  - Triangulation pattern: {:?}", config.triangulation);
         Ok(config)
     }
 }
