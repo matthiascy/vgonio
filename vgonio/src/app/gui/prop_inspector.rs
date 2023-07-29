@@ -212,7 +212,7 @@ impl Dockable for PropertyInspector {
 
     fn title(&self) -> egui::WidgetText { "Properties".into() }
 
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+    fn uuid(&self) -> Uuid { self.uuid }
 
     fn ui(&mut self, ui: &mut egui::Ui) { self.ui(ui); }
 }

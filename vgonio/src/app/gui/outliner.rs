@@ -30,8 +30,6 @@ pub struct Outliner {
     surface_headers: Vec<CollapsableHeader<Handle<MicroSurface>>>,
     /// Collapsable headers for the measured data.
     measured_headers: Vec<CollapsableHeader<Handle<MeasurementData>>>,
-    /// The currently selected item.
-    selected: Option<OutlinerItem>,
     /// The property data of each item.
     data: Arc<RwLock<PropertyData>>,
 }
@@ -45,7 +43,6 @@ impl Outliner {
             event_loop,
             surface_headers: vec![],
             measured_headers: vec![],
-            selected: None,
             data,
         }
     }
@@ -65,60 +62,66 @@ impl CollapsableHeader<Handle<MicroSurface>> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        state: &mut MicroSurfaceProp,
-        current: &mut Option<OutlinerItem>,
+        prop: &Arc<RwLock<PropertyData>>,
         event_loop: &EventLoopProxy,
     ) {
-        let id = ui.make_persistent_id(&state.name);
-        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
-            .show_header(ui, |ui| {
-                ui.vertical_centered_justified(|ui| {
-                    ui.horizontal(|ui| {
-                        let mut selected = match current {
-                            None => false,
-                            Some(item) => match item {
-                                OutlinerItem::MicroSurface(surf) => {
-                                    if surf == &self.item {
-                                        true
-                                    } else {
-                                        false
-                                    }
+        egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(),
+            ui.make_persistent_id(self.item.id()),
+            false,
+        )
+        .show_header(ui, |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.horizontal(|ui| {
+                    let mut data = prop.write().unwrap();
+                    let mut selected = match &data.selected {
+                        None => false,
+                        Some(item) => match item {
+                            OutlinerItem::MicroSurface(surf) => {
+                                if surf == &self.item {
+                                    true
+                                } else {
+                                    false
                                 }
-                                OutlinerItem::MeasurementData(_) => false,
-                            },
-                        };
-                        if ui.selectable_label(selected, &state.name).clicked() {
-                            if selected == false {
-                                *current = Some(OutlinerItem::MicroSurface(self.item));
-                                event_loop
-                                    .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                        OutlinerItem::MicroSurface(self.item),
-                                    )))
-                                    .unwrap();
                             }
+                            OutlinerItem::MeasurementData(_) => false,
+                        },
+                    };
+                    let state = data.surfaces.get(&self.item).unwrap();
+                    if ui.selectable_label(selected, &state.name).clicked() {
+                        if selected == false {
+                            data.selected = Some(OutlinerItem::MicroSurface(self.item));
+                            event_loop
+                                .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                                    OutlinerItem::MicroSurface(self.item),
+                                )))
+                                .unwrap();
                         }
-                    })
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.checkbox(&mut state.visible, "");
+                    }
                 })
-            })
-            .body(|ui| {
-                // Scale
-                egui::Grid::new("surface_collapsable_header_grid")
-                    .num_columns(3)
-                    .spacing([40.0, 4.0])
-                    .striped(true)
-                    .show(ui, |ui| {
-                        ui.add(egui::Label::new("Scale:")).on_hover_text(
-                            "Scales the surface visually. Doest not affect the actual surface.",
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut state.scale, 0.005..=1.5).trailing_fill(true),
-                        );
-                        ui.end_row();
-                    });
             });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut prop = prop.write().unwrap();
+                let state = prop.surfaces.get_mut(&self.item).unwrap();
+                ui.checkbox(&mut state.visible, "");
+            })
+        })
+        .body(|ui| {
+            let mut prop = prop.write().unwrap();
+            let scale = &mut prop.surfaces.get_mut(&self.item).unwrap().scale;
+            // Scale
+            egui::Grid::new("surface_collapsable_header_grid")
+                .num_columns(3)
+                .spacing([40.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.add(egui::Label::new("Scale:")).on_hover_text(
+                        "Scales the surface visually. Doest not affect the actual surface.",
+                    );
+                    ui.add(egui::Slider::new(scale, 0.005..=1.5).trailing_fill(true));
+                    ui.end_row();
+                });
+        });
     }
 }
 
@@ -126,100 +129,94 @@ impl CollapsableHeader<Handle<MeasurementData>> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        prop: &mut MeasurementDataProp,
-        current: &mut Option<OutlinerItem>,
+        prop: &Arc<RwLock<PropertyData>>,
         event_loop: &EventLoopProxy,
     ) {
-        let id = ui.make_persistent_id(&prop.name);
-        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
-            .show_header(ui, |ui| {
-                ui.vertical_centered_justified(|ui| {
-                    ui.horizontal(|ui| {
-                        let mut selected = match current {
-                            None => false,
-                            Some(item) => match item {
-                                OutlinerItem::MicroSurface(_) => false,
-                                OutlinerItem::MeasurementData(data) => {
-                                    if data == &self.item {
-                                        true
-                                    } else {
-                                        false
-                                    }
+        egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(),
+            ui.make_persistent_id(self.item.id()),
+            false,
+        )
+        .show_header(ui, |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.horizontal(|ui| {
+                    let mut data = prop.write().unwrap();
+                    let mut selected = match &data.selected {
+                        None => false,
+                        Some(item) => match item {
+                            OutlinerItem::MicroSurface(_) => false,
+                            OutlinerItem::MeasurementData(data) => {
+                                if data == &self.item {
+                                    true
+                                } else {
+                                    false
                                 }
-                            },
-                        };
-                        if ui.selectable_label(selected, &prop.name).clicked() {
-                            if selected == false {
-                                *current = Some(OutlinerItem::MeasurementData(self.item));
-                                event_loop
-                                    .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                        OutlinerItem::MeasurementData(self.item),
-                                    )))
-                                    .unwrap();
                             }
+                        },
+                    };
+                    let state = data.measured.get(&self.item).unwrap();
+                    if ui.selectable_label(selected, &state.name).clicked() {
+                        if selected == false {
+                            data.selected = Some(OutlinerItem::MeasurementData(self.item));
+                            event_loop
+                                .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                                    OutlinerItem::MeasurementData(self.item),
+                                )))
+                                .unwrap();
                         }
-                    })
-                });
-            })
-            .body(|ui| {
-                let measurement_kind = prop.kind;
-                egui::Grid::new("measurement_data_body")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Type:");
-                        ui.label(format!("{}", measurement_kind));
-                        ui.end_row();
-                    });
-                ui.add_space(5.0);
-
-                if ui.button("Graph").clicked() {
-                    // TODO: Send message to bsdf viewer to plot this data.
-                    // self.show_plot = true;
-                    // if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
-                    //     match &measured.measured {
-                    //         MeasuredData::Madf(_) => {
-                    //             plots.push((
-                    //                 data.clone(),
-                    //                 Box::new(PlottingInspector::new(
-                    //                     measured.name.clone(),
-                    //                     measured.clone(),
-                    //                     MadfPlottingControls::default(),
-                    //                     gpu,
-                    //                     event_loop,
-                    //                 )),
-                    //             ));
-                    //         }
-                    //         MeasuredData::Mmsf(_) => {
-                    //             plots.push((
-                    //                 data.clone(),
-                    //                 Box::new(PlottingInspector::new(
-                    //                     measured.name.clone(),
-                    //                     measured.clone(),
-                    //                     MmsfPlottingControls::default(),
-                    //                     gpu,
-                    //                     event_loop,
-                    //                 )),
-                    //             ));
-                    //         }
-                    //         MeasuredData::Bsdf(_) => {
-                    //             plots.push((
-                    //                 data.clone(),
-                    //                 Box::new(PlottingInspector::new(
-                    //                     measured.name.clone(),
-                    //                     measured.clone(),
-                    //                     BsdfPlottingControls::new(
-                    //
-                    // bsdf_viewer.write().unwrap().create_new_view(),
-                    //                     ),
-                    //                     gpu,
-                    //                     event_loop,
-                    //                 )),
-                    //             ));
-                    //         }
-                    //     }
-                    // }
-                }
+                    }
+                })
             });
+        })
+        .body(|ui| {
+            if ui.button("Graph").clicked() {
+                // TODO: Send message to bsdf viewer to plot this data.
+                // self.show_plot = true;
+                // if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
+                //     match &measured.measured {
+                //         MeasuredData::Madf(_) => {
+                //             plots.push((
+                //                 data.clone(),
+                //                 Box::new(PlottingInspector::new(
+                //                     measured.name.clone(),
+                //                     measured.clone(),
+                //                     MadfPlottingControls::default(),
+                //                     gpu,
+                //                     event_loop,
+                //                 )),
+                //             ));
+                //         }
+                //         MeasuredData::Mmsf(_) => {
+                //             plots.push((
+                //                 data.clone(),
+                //                 Box::new(PlottingInspector::new(
+                //                     measured.name.clone(),
+                //                     measured.clone(),
+                //                     MmsfPlottingControls::default(),
+                //                     gpu,
+                //                     event_loop,
+                //                 )),
+                //             ));
+                //         }
+                //         MeasuredData::Bsdf(_) => {
+                //             plots.push((
+                //                 data.clone(),
+                //                 Box::new(PlottingInspector::new(
+                //                     measured.name.clone(),
+                //                     measured.clone(),
+                //                     BsdfPlottingControls::new(
+                //
+                // bsdf_viewer.write().unwrap().create_new_view(),
+                //                     ),
+                //                     gpu,
+                //                     event_loop,
+                //                 )),
+                //             ));
+                //         }
+                //     }
+                // }
+            }
+        });
     }
 }
 
@@ -245,32 +242,22 @@ impl Outliner {
             }
         }
 
-        let mut prop_data = self.data.write().unwrap();
         egui::CollapsingHeader::new("MicroSurfaces")
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     for hdr in self.surface_headers.iter_mut() {
-                        hdr.ui(
-                            ui,
-                            &mut prop_data.surfaces.get_mut(&hdr.item).unwrap(),
-                            &mut self.selected,
-                            &self.event_loop,
-                        );
+                        hdr.ui(ui, &self.data, &self.event_loop);
                     }
                 });
             });
+
         egui::CollapsingHeader::new("Measurements")
             .default_open(true)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     for hdr in self.measured_headers.iter_mut() {
-                        hdr.ui(
-                            ui,
-                            &mut prop_data.measured.get_mut(&hdr.item).unwrap(),
-                            &mut self.selected,
-                            &self.event_loop,
-                        );
+                        hdr.ui(ui, &self.data, &self.event_loop);
                     }
                 })
             });
