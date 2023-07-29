@@ -28,50 +28,27 @@ pub struct Outliner {
     event_loop: EventLoopProxy,
     /// Collapsable headers for the micro surfaces.
     surface_headers: Vec<CollapsableHeader<Handle<MicroSurface>>>,
-    // /// States of the measured data.
-    //measurements: Vec<(Weak<MeasurementData>, MeasuredDataCollapsableHeader)>,
     /// Collapsable headers for the measured data.
     measured_headers: Vec<CollapsableHeader<Handle<MeasurementData>>>,
-    // /// Plotting inspectors, linked to the measurement data they are inspecting.
-    // plotting_inspectors: Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
+    /// The currently selected item.
+    selected: Option<OutlinerItem>,
+    /// The property data of each item.
     data: Arc<RwLock<PropertyData>>,
 }
 
 impl Outliner {
     /// Creates a new outliner.
-    pub fn new(
-        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-        data: Arc<RwLock<PropertyData>>,
-        event_loop: EventLoopProxy,
-    ) -> Self {
+    pub fn new(data: Arc<RwLock<PropertyData>>, event_loop: EventLoopProxy) -> Self {
         log::info!("Creating outliner");
         Self {
             uuid: uuid::Uuid::new_v4(),
             event_loop,
-            // bsdf_viewer,
-            // surfaces: HashMap::new(),
-            // measurements: Default::default(),
-            // plotting_inspectors: vec![],
             surface_headers: vec![],
             measured_headers: vec![],
+            selected: None,
             data,
         }
     }
-
-    // /// Updates the list of measurement data.
-    // pub fn update_measurement_data(
-    //     &mut self,
-    //     measurements: &[Handle<MeasurementData>],
-    //     cache: &Cache,
-    // ) { for meas in measurements { // let data =
-    //   cache.get_measurement_data(*meas).unwrap(); // if
-    //   !self.measurements.iter().any(|(d, _)| d.ptr_eq(&data)) { //
-    //   self.measurements.push(( //         data, // MeasuredDataCollapsableHeader
-    //   { //             selected: false, // show_plot: false, //         }, // ));
-    //   // } if !self.measurements.iter().any(|(d, _)| d == meas) {
-    //   self.measurements.push(( *meas, MeasuredDataCollapsableHeader { selected:
-    //   false, show_plot: false, }, )); } }
-    // }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -81,21 +58,7 @@ pub enum OutlinerItem {
 }
 
 pub struct CollapsableHeader<T> {
-    selected: bool,
     item: T,
-}
-
-fn header_content(ui: &mut egui::Ui, name: &str, selected: &mut bool, hook: impl FnOnce()) {
-    ui.vertical_centered_justified(|ui| {
-        ui.horizontal(|ui| {
-            if ui.selectable_label(*selected, name).clicked() {
-                *selected = !*selected;
-                if *selected {
-                    hook();
-                }
-            }
-        })
-    });
 }
 
 impl CollapsableHeader<Handle<MicroSurface>> {
@@ -103,17 +66,38 @@ impl CollapsableHeader<Handle<MicroSurface>> {
         &mut self,
         ui: &mut egui::Ui,
         state: &mut MicroSurfaceProp,
+        current: &mut Option<OutlinerItem>,
         event_loop: &EventLoopProxy,
     ) {
         let id = ui.make_persistent_id(&state.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                header_content(ui, &state.name, &mut self.selected, || {
-                    event_loop
-                        .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                            OutlinerItem::MicroSurface(self.item),
-                        )))
-                        .unwrap();
+                ui.vertical_centered_justified(|ui| {
+                    ui.horizontal(|ui| {
+                        let mut selected = match current {
+                            None => false,
+                            Some(item) => match item {
+                                OutlinerItem::MicroSurface(surf) => {
+                                    if surf == &self.item {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                OutlinerItem::MeasurementData(_) => false,
+                            },
+                        };
+                        if ui.selectable_label(selected, &state.name).clicked() {
+                            if selected == false {
+                                *current = Some(OutlinerItem::MicroSurface(self.item));
+                                event_loop
+                                    .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                                        OutlinerItem::MicroSurface(self.item),
+                                    )))
+                                    .unwrap();
+                            }
+                        }
+                    })
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.checkbox(&mut state.visible, "");
@@ -157,26 +141,39 @@ impl CollapsableHeader<Handle<MeasurementData>> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        // data: Weak<MeasurementData>,
         prop: &mut MeasurementDataProp,
-        // cache: Arc<RwLock<Cache>>,
-        // plots: &mut Vec<(Weak<MeasurementData>, Box<dyn PlottingWidget>)>,
-        // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-        // gpu: Arc<GpuContext>,
+        current: &mut Option<OutlinerItem>,
         event_loop: &EventLoopProxy,
     ) {
-        // let cache = cache.read().unwrap();
-        // let measured = cache.get_measurement_data(prop).unwrap();
         let id = ui.make_persistent_id(&prop.name);
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
             .show_header(ui, |ui| {
-                header_content(ui, &prop.name, &mut self.selected, || {
-                    println!("Selecting measured data");
-                    event_loop
-                        .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                            OutlinerItem::MeasurementData(self.item),
-                        )))
-                        .unwrap();
+                ui.vertical_centered_justified(|ui| {
+                    ui.horizontal(|ui| {
+                        let mut selected = match current {
+                            None => false,
+                            Some(item) => match item {
+                                OutlinerItem::MicroSurface(_) => false,
+                                OutlinerItem::MeasurementData(data) => {
+                                    if data == &self.item {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                            },
+                        };
+                        if ui.selectable_label(selected, &prop.name).clicked() {
+                            if selected == false {
+                                *current = Some(OutlinerItem::MeasurementData(self.item));
+                                event_loop
+                                    .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                                        OutlinerItem::MeasurementData(self.item),
+                                    )))
+                                    .unwrap();
+                            }
+                        }
+                    })
                 });
             })
             .body(|ui| {
@@ -300,19 +297,15 @@ impl Outliner {
             let data = self.data.read().unwrap();
             for (hdl, _) in &data.surfaces {
                 if !self.surface_headers.iter().any(|h| h.item == *hdl) {
-                    self.surface_headers.push(CollapsableHeader {
-                        selected: false,
-                        item: hdl.clone(),
-                    });
+                    self.surface_headers
+                        .push(CollapsableHeader { item: hdl.clone() });
                 }
             }
 
             for (hdl, _) in &data.measured {
                 if !self.measured_headers.iter().any(|h| h.item == *hdl) {
-                    self.measured_headers.push(CollapsableHeader {
-                        selected: false,
-                        item: hdl.clone(),
-                    });
+                    self.measured_headers
+                        .push(CollapsableHeader { item: hdl.clone() });
                 }
             }
         }
@@ -326,6 +319,7 @@ impl Outliner {
                         hdr.ui(
                             ui,
                             &mut prop_data.surfaces.get_mut(&hdr.item).unwrap(),
+                            &mut self.selected,
                             &self.event_loop,
                         );
                     }
@@ -339,6 +333,7 @@ impl Outliner {
                         hdr.ui(
                             ui,
                             &mut prop_data.measured.get_mut(&hdr.item).unwrap(),
+                            &mut self.selected,
                             &self.event_loop,
                         );
                     }

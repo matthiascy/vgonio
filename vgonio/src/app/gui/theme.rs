@@ -29,7 +29,10 @@ impl Default for ThemeState {
                 ThemeVisuals {
                     egui_visuals: egui::Visuals {
                         dark_mode: true,
-                        ..egui::Visuals::dark()
+                        ..egui::Visuals {
+                            faint_bg_color: egui::Color32::from_gray(50),
+                            ..egui::Visuals::dark()
+                        }
                     },
                     clear_color: wgpu::Color {
                         r: 0.046, // no gamma correction
@@ -48,7 +51,10 @@ impl Default for ThemeState {
                     egui_visuals: egui::Visuals {
                         dark_mode: false,
                         panel_fill: egui::Color32::from_gray(190),
-                        ..egui::Visuals::light()
+                        ..egui::Visuals {
+                            faint_bg_color: egui::Color32::from_gray(200),
+                            ..egui::Visuals::light()
+                        }
                     },
                     clear_color: wgpu::Color {
                         r: 0.208, // no gamma correction
