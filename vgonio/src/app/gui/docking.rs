@@ -82,7 +82,7 @@ impl DockSpace {
             0.5,
             vec![DockingWidget {
                 index: 2,
-                dockable: Box::new(PropertyInspector::new(data.clone())),
+                dockable: Box::new(PropertyInspector::new(cache.clone(), data.clone())),
             }],
         );
         Self {

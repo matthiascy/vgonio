@@ -52,6 +52,7 @@ pub struct PropertyData {
     pub surfaces: HashMap<Handle<MicroSurface>, MicroSurfaceProp>,
     /// Measured data properties.
     pub measured: HashMap<Handle<MeasurementData>, MeasurementDataProp>,
+    /// The currently selected item.
     pub selected: Option<OutlinerItem>,
 }
 

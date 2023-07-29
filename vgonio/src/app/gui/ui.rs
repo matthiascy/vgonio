@@ -419,12 +419,6 @@ impl VgonioGui {
             }
         }
         (surfaces, measurements)
-        // let cache = self.cache.read().unwrap();
-        // self.msurf_rdr_state.update_locals_lookup(&surfaces);
-        // self.ui.on_open_files(&surfaces, &cache);
-        // self.ui
-        //     .outliner_mut()
-        //     .update_measurement_data(&measurements, &cache);
     }
 }
 

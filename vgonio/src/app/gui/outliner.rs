@@ -110,21 +110,6 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                     .spacing([40.0, 4.0])
                     .striped(true)
                     .show(ui, |ui| {
-                        ui.add(egui::Label::new("Size:"));
-                        ui.add(egui::Label::new(format!(
-                            "{} x {}",
-                            state.size.0, state.size.1
-                        )));
-                        ui.end_row();
-
-                        ui.add(egui::Label::new("Min:"));
-                        ui.add(egui::Label::new(format!("{:.4} {}", state.min, state.unit)));
-                        ui.end_row();
-
-                        ui.add(egui::Label::new("Max:"));
-                        ui.add(egui::Label::new(format!("{:.4} {}", state.max, state.unit)));
-                        ui.end_row();
-
                         ui.add(egui::Label::new("Scale:")).on_hover_text(
                             "Scales the surface visually. Doest not affect the actual surface.",
                         );
@@ -184,60 +169,10 @@ impl CollapsableHeader<Handle<MeasurementData>> {
                         ui.label("Type:");
                         ui.label(format!("{}", measurement_kind));
                         ui.end_row();
-                        // ui.label("Source:");
-                        // match prop.source {
-                        //     MeasurementDataSource::Loaded(_) => {
-                        //         ui.label("loaded");
-                        //     }
-                        //     MeasurementDataSource::Measured(_) => {
-                        //         ui.label("measured");
-                        //     }
-                        // }
-                        // ui.end_row();
-
-                        // if measurement_kind ==
-                        // MeasurementKind::MicrofacetAreaDistribution     ||
-                        // measurement_kind ==
-                        // MeasurementKind::MicrofacetMaskingShadowing
-                        // {
-                        //     let zenith =
-                        // .measured.madf_or_mmsf_zenith().unwrap();
-                        //     let azimuth =
-                        // measured.measured.madf_or_mmsf_azimuth().unwrap();
-                        //     ui.label("θ:");
-                        //     ui.label(format!(
-                        //         "{:.2}° ~ {:.2}°, every {:.2}°",
-                        //         zenith.start.to_degrees(),
-                        //         zenith.stop.to_degrees(),
-                        //         zenith.step_size.to_degrees(),
-                        //     ));
-                        //     ui.end_row();
-                        //     #[cfg(debug_assertions)]
-                        //     {
-                        //         ui.label("θ bins:");
-                        //         ui.label(format!("{}",
-                        // zenith.step_count_wrapped()));
-                        //         ui.end_row()
-                        //     }
-                        //     ui.label("φ:");
-                        //     ui.label(format!(
-                        //         "{:.2}° ~ {:.2}°, every {:.2}°",
-                        //         azimuth.start.to_degrees(),
-                        //         azimuth.stop.to_degrees(),
-                        //         azimuth.step_size.to_degrees(),
-                        //     ));
-                        //     ui.end_row();
-                        //     #[cfg(debug_assertions)]
-                        //     {
-                        //         ui.label("φ bins:");
-                        //         ui.label(format!("{}",
-                        // azimuth.step_count_wrapped()));
-                        //         ui.end_row()
-                        //     }
-                        // }
                     });
                 ui.add_space(5.0);
-                if ui.button("Plot").clicked() {
+
+                if ui.button("Graph").clicked() {
                     // TODO: Send message to bsdf viewer to plot this data.
                     // self.show_plot = true;
                     // if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {

@@ -1,10 +1,14 @@
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 use crate::app::gui::docking::{Dockable, WidgetKind};
 
 use crate::{
-    app::gui::{data::PropertyData, outliner::OutlinerItem},
-    measure::measurement::MeasurementDataSource,
+    app::{
+        cache::Cache,
+        gui::{data::PropertyData, outliner::OutlinerItem},
+    },
+    measure::measurement::{MeasuredData, MeasurementDataSource},
 };
 
 /// The property inspector.
@@ -13,16 +17,19 @@ use crate::{
 /// selected objects. It is also used to edit the properties of objects.
 pub struct PropertyInspector {
     /// The unique identifier of the property inspector.
-    uuid: uuid::Uuid,
+    uuid: Uuid,
     /// Property inspector data.
     data: Arc<RwLock<PropertyData>>,
+    /// Cache of the application.
+    cache: Arc<RwLock<Cache>>,
 }
 
 impl PropertyInspector {
-    pub fn new(data: Arc<RwLock<PropertyData>>) -> Self {
+    pub fn new(cache: Arc<RwLock<Cache>>, data: Arc<RwLock<PropertyData>>) -> Self {
         Self {
-            uuid: uuid::Uuid::new_v4(),
+            uuid: Uuid::new_v4(),
             data,
+            cache,
         }
     }
 
@@ -103,6 +110,90 @@ impl PropertyInspector {
                                         }
                                     }
                                     ui.end_row();
+
+                                    let cache = self.cache.read().unwrap();
+                                    let data = cache.get_measurement_data(meas).unwrap();
+                                    match &data.measured {
+                                        MeasuredData::Madf(madf) => {
+                                            ui.label("θ:");
+                                            ui.label(format!(
+                                                "{} ~ {}, every {}",
+                                                madf.params.zenith.start.prettified(),
+                                                madf.params.zenith.stop.prettified(),
+                                                madf.params.zenith.step_size.prettified()
+                                            ));
+                                            ui.end_row();
+
+                                            #[cfg(debug_assertions)]
+                                            {
+                                                ui.label("θ bins count:");
+                                                ui.label(format!(
+                                                    "{}",
+                                                    madf.params.zenith.step_count_wrapped()
+                                                ));
+                                                ui.end_row()
+                                            }
+
+                                            ui.label("φ:");
+                                            ui.label(format!(
+                                                "{} ~ {}, every {}",
+                                                madf.params.azimuth.start.prettified(),
+                                                madf.params.azimuth.stop.prettified(),
+                                                madf.params.azimuth.step_size.prettified(),
+                                            ));
+                                            ui.end_row();
+
+                                            #[cfg(debug_assertions)]
+                                            {
+                                                ui.label("φ bins count:");
+                                                ui.label(format!(
+                                                    "{}",
+                                                    madf.params.azimuth.step_count_wrapped()
+                                                ));
+                                                ui.end_row()
+                                            }
+                                        }
+                                        MeasuredData::Mmsf(mmsf) => {
+                                            ui.label("θ:");
+                                            ui.label(format!(
+                                                "{} ~ {}, every {}",
+                                                mmsf.params.zenith.start.prettified(),
+                                                mmsf.params.zenith.stop.prettified(),
+                                                mmsf.params.zenith.step_size.prettified()
+                                            ));
+                                            ui.end_row();
+
+                                            #[cfg(debug_assertions)]
+                                            {
+                                                ui.label("θ bins count:");
+                                                ui.label(format!(
+                                                    "{}",
+                                                    mmsf.params.zenith.step_count_wrapped()
+                                                ));
+                                                ui.end_row()
+                                            }
+
+                                            ui.label("φ:");
+                                            ui.label(format!(
+                                                "{} ~ {}, every {}",
+                                                mmsf.params.azimuth.start.prettified(),
+                                                mmsf.params.azimuth.stop.prettified(),
+                                                mmsf.params.azimuth.step_size.prettified(),
+                                            ));
+                                            ui.end_row();
+
+                                            #[cfg(debug_assertions)]
+                                            {
+                                                ui.label("φ bins count:");
+                                                ui.label(format!(
+                                                    "{}",
+                                                    mmsf.params.azimuth.step_count_wrapped()
+                                                ));
+                                                ui.end_row()
+                                            }
+                                        }
+                                        MeasuredData::Bsdf(_) => {}
+                                    }
                                 }
                             }
                         }
