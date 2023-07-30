@@ -721,12 +721,12 @@ impl MeasurementDataSource {
 /// Different kinds of measurement data.
 #[derive(Debug, Clone)]
 pub enum MeasuredData {
+    /// Bidirectional scattering distribution function.
+    Bsdf(MeasuredBsdfData),
     /// Micro-facet area distribution.
     Madf(MeasuredMadfData),
     /// Micro-facet shadowing-masking function.
     Mmsf(MeasuredMmsfData),
-    /// Bidirectional scattering distribution function.
-    Bsdf(MeasuredBsdfData),
 }
 
 impl MeasuredData {

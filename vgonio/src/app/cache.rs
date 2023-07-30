@@ -4,14 +4,15 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    measure::measurement::MeasurementData,
+    measure::measurement::{MeasuredData, MeasurementData},
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Medium,
 };
 use std::{
+    any::TypeId,
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
-    hash::Hash,
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -72,6 +73,23 @@ where
         }
     }
 
+    /// Creates a new handle with type id of `T` and a possibly variant id.
+    ///
+    /// This is useful for embedding the type information in the handle.
+    ///
+    /// - The type id starts from the 9th byte up to the 16th byte of the
+    ///   handle's id, stored in little endian.
+    /// - The variant id is the 8th byte of the handle's id.
+    pub fn with_type_id(variant: u8) -> Self {
+        let mut id = Uuid::new_v4().into_bytes();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        hasher.write_u128(unsafe { std::mem::transmute(TypeId::of::<T>()) });
+        let type_id = hasher.finish();
+        id[8..].copy_from_slice(&type_id.to_le_bytes());
+        id[7] = variant;
+        Self::with_id(Uuid::from_bytes(id))
+    }
+
     pub fn with_id(id: Uuid) -> Self {
         Self {
             id,
@@ -92,6 +110,18 @@ where
 
     /// Returns true if the handle is valid.
     pub fn is_valid(&self) -> bool { !self.id.is_nil() }
+
+    /// Returns if the embedded type id is the same as `T`.
+    pub fn same_type_id_as<U: 'static>(&self) -> bool {
+        let embedded = u64::from_le_bytes(self.id.as_bytes()[8..].try_into().unwrap());
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        hasher.write_u128(unsafe { std::mem::transmute(TypeId::of::<U>()) });
+        let type_id_hash = hasher.finish();
+        embedded == type_id_hash
+    }
+
+    /// Returns the variant id embedded in the handle.
+    pub fn variant_id(&self) -> u8 { self.id.as_bytes()[7] }
 }
 
 /// Default handle is an invalid handle.
@@ -101,6 +131,24 @@ impl<T: Asset> Default for Handle<T> {
 
 impl From<Uuid> for Handle<MicroSurface> {
     fn from(id: Uuid) -> Self { Self::with_id(id) }
+}
+
+#[test]
+fn test_handle_type_id_embedding() {
+    #[repr(u8)]
+    #[derive(Debug, PartialEq, Eq)]
+    enum OwnType {
+        Variant1 = 0,
+        Variant2 = 1,
+    }
+    impl Asset for OwnType {}
+
+    let hdl1 = Handle::<OwnType>::with_type_id(OwnType::Variant1 as u8);
+    let hdl2 = Handle::<OwnType>::with_type_id(OwnType::Variant2 as u8);
+    assert_eq!(hdl1.same_type_as(), TypeId::of::<OwnType>());
+    assert_eq!(hdl2.same_type_as(), TypeId::of::<OwnType>());
+    assert_eq!(hdl1.variant_id(), OwnType::Variant1 as u8);
+    assert_eq!(hdl2.variant_id(), OwnType::Variant2 as u8);
 }
 
 impl Asset for MicroSurface {}
@@ -430,7 +478,7 @@ impl Cache {
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
                     let data = MeasurementData::read_from_file(&filepath)?;
-                    let handle = Handle::new();
+                    let handle = Handle::with_type_id(data.measured.kind() as u8);
                     self.measurements_data.insert(handle, data);
                     Ok(handle)
                 }

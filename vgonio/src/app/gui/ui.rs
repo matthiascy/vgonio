@@ -132,33 +132,39 @@ impl VgonioGui {
                 }
             },
             VgonioEvent::Graphing { kind, data } => {
-                if !self.plotters.iter().any(|(_, p)| p.data_handle() == *data) {
-                    let prop = self.properties.read().unwrap();
-                    let cache = self.cache.read().unwrap();
-                    let plotter: Box<dyn PlottingWidget> = match kind {
-                        MeasurementKind::Bsdf => Box::new(PlotInspector::new(
-                            prop.measured.get(data).unwrap().name.clone(),
-                            *data,
-                            BsdfPlotExtraData::new(),
-                            &cache,
-                            self.event_loop.clone(),
-                        )),
-                        MeasurementKind::Madf => Box::new(PlotInspector::new(
-                            prop.measured.get(data).unwrap().name.clone(),
-                            *data,
-                            MadfPlotExtraData::default(),
-                            &cache,
-                            self.event_loop.clone(),
-                        )),
-                        MeasurementKind::Mmsf => Box::new(PlotInspector::new(
-                            prop.measured.get(data).unwrap().name.clone(),
-                            *data,
-                            MmsfPlotExtraData::default(),
-                            &cache,
-                            self.event_loop.clone(),
-                        )),
-                    };
-                    self.plotters.push((true, plotter));
+                let pos = self
+                    .plotters
+                    .iter()
+                    .position(|(_, p)| p.measurement_data_handle() == *data);
+                match pos {
+                    None => {
+                        let prop = self.properties.read().unwrap();
+                        let cache = self.cache.read().unwrap();
+                        let plotter: Box<dyn PlottingWidget> = match kind {
+                            MeasurementKind::Bsdf => Box::new(PlotInspector::new_bsdf(
+                                prop.measured.get(data).unwrap().name.clone(),
+                                *data,
+                                &cache,
+                                self.event_loop.clone(),
+                            )),
+                            MeasurementKind::Madf => Box::new(PlotInspector::new_madf(
+                                prop.measured.get(data).unwrap().name.clone(),
+                                *data,
+                                &cache,
+                                self.event_loop.clone(),
+                            )),
+                            MeasurementKind::Mmsf => Box::new(PlotInspector::new_mmsf(
+                                prop.measured.get(data).unwrap().name.clone(),
+                                *data,
+                                &cache,
+                                self.event_loop.clone(),
+                            )),
+                        };
+                        self.plotters.push((true, plotter));
+                    }
+                    Some(idx) => {
+                        self.plotters[idx].0 = true;
+                    }
                 }
                 EventResponse::Handled
             }
