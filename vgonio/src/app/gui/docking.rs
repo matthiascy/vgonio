@@ -139,6 +139,11 @@ impl DockSpace {
                         .unwrap();
                     widget
                 }
+                WidgetKind::Properties => Box::new(PropertyInspector::new(
+                    self.event_loop.clone(),
+                    self.cache.clone(),
+                    data.clone(),
+                )),
                 _ => Box::new(DockableString::new(String::from("Hello world"))),
             };
             self.inner.push_to_focused_leaf(DockingWidget {
@@ -240,8 +245,15 @@ impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
             });
         }
 
+        if ui.button("Properties").clicked() {
+            self.added.push(NewWidget {
+                kind: WidgetKind::Properties,
+                parent: parent.0,
+            });
+        }
+
         #[cfg(debug_assertions)]
-        if ui.button("String").clicked() {
+        if ui.button("Debug String").clicked() {
             self.added.push(NewWidget {
                 kind: WidgetKind::String,
                 parent: parent.0,
@@ -253,7 +265,7 @@ impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
 /// Test utility structure to render a string tab in the dock space.
 #[cfg(debug_assertions)]
 pub struct DockableString {
-    pub uuid: uuid::Uuid,
+    pub uuid: Uuid,
     pub content: String,
 }
 
@@ -264,7 +276,7 @@ impl DockableString {
 impl From<String> for DockableString {
     fn from(content: String) -> Self {
         Self {
-            uuid: uuid::Uuid::new_v4(),
+            uuid: Uuid::new_v4(),
             content,
         }
     }
@@ -276,7 +288,7 @@ impl Dockable for DockableString {
 
     fn title(&self) -> egui::WidgetText { "Dockable String".into() }
 
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+    fn uuid(&self) -> Uuid { self.uuid }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.label(&self.content);
