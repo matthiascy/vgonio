@@ -7,7 +7,10 @@ use crate::{
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
-        measurement::{BsdfMeasurementParams, MadfMeasurementParams, MmsfMeasurementParams},
+        measurement::{
+            BsdfMeasurementParams, MadfMeasurementParams, MeasurementData, MeasurementKind,
+            MmsfMeasurementParams,
+        },
         CollectorScheme, RtcMethod,
     },
 };
@@ -18,7 +21,7 @@ use vgcore::{
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
-use super::outliner::OutlinerItem;
+use super::outliner::Item;
 
 /// Event loop proxy with Vgonio events.
 pub type EventLoopProxy = winit::event_loop::EventLoopProxy<VgonioEvent>;
@@ -36,7 +39,6 @@ pub enum VgonioEvent {
         m_zenith: Degrees,
         opening_angle: Degrees,
     },
-
     BsdfViewer(BsdfViewerEvent),
     Debugging(DebuggingEvent),
     Measure(MeasureEvent),
@@ -49,6 +51,10 @@ pub enum VgonioEvent {
     UpdateThemeKind(ThemeKind),
     SurfaceViewer(SurfaceViewerEvent),
     Outliner(OutlinerEvent),
+    Graphing {
+        kind: MeasurementKind,
+        data: Handle<MeasurementData>,
+    },
 }
 
 /// Events used by [`SurfaceViewer`].
@@ -163,8 +169,9 @@ pub enum DebuggingEvent {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum OutlinerEvent {
-    SelectItem(OutlinerItem),
+    SelectItem(Item),
 }
 
 #[derive(Debug)]

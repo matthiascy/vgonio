@@ -2,7 +2,8 @@ use crate::{
     app::{
         cache::Handle,
         gui::{
-            data::MeasurementDataProp,
+            data::PropertyData,
+            docking::{Dockable, WidgetKind},
             event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
         },
     },
@@ -11,11 +12,6 @@ use crate::{
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
 use vgsurf::MicroSurface;
-
-use crate::app::gui::{
-    data::{MicroSurfaceProp, PropertyData},
-    docking::{Dockable, WidgetKind},
-};
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
@@ -49,7 +45,7 @@ impl Outliner {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum OutlinerItem {
+pub enum Item {
     MicroSurface(Handle<MicroSurface>),
     MeasurementData(Handle<MeasurementData>),
 }
@@ -74,29 +70,21 @@ impl CollapsableHeader<Handle<MicroSurface>> {
             ui.vertical_centered_justified(|ui| {
                 ui.horizontal(|ui| {
                     let mut data = prop.write().unwrap();
-                    let mut selected = match &data.selected {
+                    let selected = match &data.selected {
                         None => false,
                         Some(item) => match item {
-                            OutlinerItem::MicroSurface(surf) => {
-                                if surf == &self.item {
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                            OutlinerItem::MeasurementData(_) => false,
+                            Item::MicroSurface(surf) => surf == &self.item,
+                            Item::MeasurementData(_) => false,
                         },
                     };
                     let state = data.surfaces.get(&self.item).unwrap();
-                    if ui.selectable_label(selected, &state.name).clicked() {
-                        if selected == false {
-                            data.selected = Some(OutlinerItem::MicroSurface(self.item));
-                            event_loop
-                                .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                    OutlinerItem::MicroSurface(self.item),
-                                )))
-                                .unwrap();
-                        }
+                    if ui.selectable_label(selected, &state.name).clicked() && !selected {
+                        data.selected = Some(Item::MicroSurface(self.item));
+                        event_loop
+                            .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                                Item::MicroSurface(self.item),
+                            )))
+                            .unwrap();
                     }
                 })
             });
@@ -132,7 +120,7 @@ impl CollapsableHeader<Handle<MeasurementData>> {
         prop: &Arc<RwLock<PropertyData>>,
         event_loop: &EventLoopProxy,
     ) {
-        egui::collapsing_header::CollapsingState::load_with_default_open(
+        let _ = egui::collapsing_header::CollapsingState::load_with_default_open(
             ui.ctx(),
             ui.make_persistent_id(self.item.id()),
             false,
@@ -141,11 +129,11 @@ impl CollapsableHeader<Handle<MeasurementData>> {
             ui.vertical_centered_justified(|ui| {
                 ui.horizontal(|ui| {
                     let mut data = prop.write().unwrap();
-                    let mut selected = match &data.selected {
+                    let selected = match &data.selected {
                         None => false,
                         Some(item) => match item {
-                            OutlinerItem::MicroSurface(_) => false,
-                            OutlinerItem::MeasurementData(data) => {
+                            Item::MicroSurface(_) => false,
+                            Item::MeasurementData(data) => {
                                 if data == &self.item {
                                     true
                                 } else {
@@ -155,67 +143,16 @@ impl CollapsableHeader<Handle<MeasurementData>> {
                         },
                     };
                     let state = data.measured.get(&self.item).unwrap();
-                    if ui.selectable_label(selected, &state.name).clicked() {
-                        if selected == false {
-                            data.selected = Some(OutlinerItem::MeasurementData(self.item));
-                            event_loop
-                                .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                    OutlinerItem::MeasurementData(self.item),
-                                )))
-                                .unwrap();
-                        }
+                    if ui.selectable_label(selected, &state.name).clicked() && !selected {
+                        data.selected = Some(Item::MeasurementData(self.item));
+                        event_loop
+                            .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                                Item::MeasurementData(self.item),
+                            )))
+                            .unwrap();
                     }
                 })
             });
-        })
-        .body(|ui| {
-            if ui.button("Graph").clicked() {
-                // TODO: Send message to bsdf viewer to plot this data.
-                // self.show_plot = true;
-                // if !plots.iter_mut().any(|p| p.0.ptr_eq(&data)) {
-                //     match &measured.measured {
-                //         MeasuredData::Madf(_) => {
-                //             plots.push((
-                //                 data.clone(),
-                //                 Box::new(PlottingInspector::new(
-                //                     measured.name.clone(),
-                //                     measured.clone(),
-                //                     MadfPlottingControls::default(),
-                //                     gpu,
-                //                     event_loop,
-                //                 )),
-                //             ));
-                //         }
-                //         MeasuredData::Mmsf(_) => {
-                //             plots.push((
-                //                 data.clone(),
-                //                 Box::new(PlottingInspector::new(
-                //                     measured.name.clone(),
-                //                     measured.clone(),
-                //                     MmsfPlottingControls::default(),
-                //                     gpu,
-                //                     event_loop,
-                //                 )),
-                //             ));
-                //         }
-                //         MeasuredData::Bsdf(_) => {
-                //             plots.push((
-                //                 data.clone(),
-                //                 Box::new(PlottingInspector::new(
-                //                     measured.name.clone(),
-                //                     measured.clone(),
-                //                     BsdfPlottingControls::new(
-                //
-                // bsdf_viewer.write().unwrap().create_new_view(),
-                //                     ),
-                //                     gpu,
-                //                     event_loop,
-                //                 )),
-                //             ));
-                //         }
-                //     }
-                // }
-            }
         });
     }
 }
@@ -261,18 +198,6 @@ impl Outliner {
                     }
                 })
             });
-
-        // TODO: draw plots in main loop.
-        // for (data, plot) in self.plotting_inspectors.iter_mut() {
-        //     let open = &mut self
-        //         .measurements
-        //         .iter_mut()
-        //         .find(|(d, _)| d.ptr_eq(data))
-        //         .unwrap()
-        //         .1
-        //         .show_plot;
-        //     plot.show(ui.ctx(), open);
-        // }
     }
 }
 

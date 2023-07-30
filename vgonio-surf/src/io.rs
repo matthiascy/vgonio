@@ -374,10 +374,7 @@ pub fn read_ascii_dong2015<R: BufRead>(
     read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
         VgonioError::new(
             format!("Failed to read samples from file {}", filepath.display()),
-            Some(Box::new(ReadFileError::from_parse_error(
-                filepath.clone(),
-                err,
-            ))),
+            Some(Box::new(ReadFileError::from_parse_error(filepath, err))),
         )
     })?;
 

@@ -559,8 +559,8 @@ pub fn generate_triangulated_hemisphere(
             let phi = phi_step_size * j as f32;
             vertices.push(spherical_to_cartesian(
                 1.0,
-                theta.into(),
-                phi.into(),
+                rad!(theta),
+                phi,
                 Handedness::RightHandedYUp,
             ));
         }

@@ -843,7 +843,7 @@ impl MicroSurface {
         let file = File::open(filepath).map_err(|err| {
             VgonioError::from_io_error(
                 err,
-                &format!("Failed to open micro-surface file: {}", filepath.display()))
+                format!("Failed to open micro-surface file: {}", filepath.display()))
         })?;
         let mut reader = BufReader::new(file);
 
@@ -859,7 +859,7 @@ impl MicroSurface {
             reader.read_exact(&mut buf).map_err(|err| {
                 VgonioError::from_io_error(
                     err,
-                    &format!("Failed to read first 4 bytes of file: {}", filepath.display()))
+                    format!("Failed to read first 4 bytes of file: {}", filepath.display()))
             })?;
             reader.seek(std::io::SeekFrom::Start(0)).unwrap(); // Reset the cursor to the beginning of the file.
             match std::str::from_utf8(&buf).unwrap() {
@@ -903,7 +903,7 @@ impl MicroSurface {
         let mut file = File::create(filepath).map_err(|err| {
             VgonioError::from_io_error(
                 err,
-                &format!(
+                format!(
                     "Failed to create micro-surface file: {}",
                     filepath.display()
                 ),

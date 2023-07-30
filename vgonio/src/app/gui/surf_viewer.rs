@@ -628,7 +628,6 @@ pub struct SurfaceViewer {
     // navigator: NavigationGizmo,
     color_attachment_id: egui::TextureId,
     event_loop: EventLoopProxy,
-    prop_data: Arc<RwLock<PropertyData>>, // TODO: remove
 }
 
 impl SurfaceViewer {
@@ -642,11 +641,7 @@ impl SurfaceViewer {
     /// The viewer's output is rendered to a texture, which can be accessed
     /// by egui through [`color_attachment_id`]. Resources needed for rendering
     /// are allocated by [`SurfaceViewerState`].
-    pub fn new(
-        gui: Arc<RwLock<GuiRenderer>>,
-        event_loop: EventLoopProxy,
-        prop_data: Arc<RwLock<PropertyData>>,
-    ) -> Self {
+    pub fn new(gui: Arc<RwLock<GuiRenderer>>, event_loop: EventLoopProxy) -> Self {
         let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
             viewport_size: egui::Vec2::new(
@@ -656,7 +651,6 @@ impl SurfaceViewer {
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             color_attachment_id,
             uuid: Uuid::new_v4(),
-            prop_data,
             event_loop,
         }
     }

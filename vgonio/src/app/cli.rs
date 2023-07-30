@@ -348,7 +348,7 @@ fn write_measured_data_to_file(
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     for (measurement, surface) in data.iter().zip(surfaces.iter()) {
         let filename = match measurement.kind() {
-            MeasurementKind::MicrofacetAreaDistribution => {
+            MeasurementKind::Madf => {
                 format!(
                     "microfacet-area-distribution-{}.vgmo",
                     cache
@@ -361,7 +361,7 @@ fn write_measured_data_to_file(
                         .unwrap()
                 )
             }
-            MeasurementKind::MicrofacetMaskingShadowing => {
+            MeasurementKind::Mmsf => {
                 format!(
                     "microfacet-masking-shadowing-{}.vgmo",
                     cache

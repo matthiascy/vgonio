@@ -178,11 +178,11 @@ pub mod vgmo {
                     meta,
                     bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::MicrofacetAreaDistribution => Ok(Self::Madf {
+                MeasurementKind::Madf => Ok(Self::Madf {
                     meta,
                     madf: MadfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::MicrofacetMaskingShadowing => Ok(Self::Mmsf {
+                MeasurementKind::Mmsf => Ok(Self::Mmsf {
                     meta,
                     mmsf: MmsfMeasurementParams::read_from_vgmo(reader)?,
                 }),
@@ -704,7 +704,7 @@ emitter is not implemented"
             params: MadfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
-                meta.kind == MeasurementKind::MicrofacetAreaDistribution,
+                meta.kind == MeasurementKind::Madf,
                 "Measurement kind
           mismatch"
             );
@@ -743,7 +743,7 @@ emitter is not implemented"
             params: MmsfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
-                meta.kind == MeasurementKind::MicrofacetMaskingShadowing,
+                meta.kind == MeasurementKind::Mmsf,
                 "Measurement kind
           mismatch"
             );
@@ -1222,7 +1222,7 @@ emitter is not implemented"
                     );
                     Header::Madf {
                         meta: HeaderMeta {
-                            kind: MeasurementKind::MicrofacetAreaDistribution,
+                            kind: MeasurementKind::Madf,
                             encoding,
                             compression,
                         },
@@ -1238,7 +1238,7 @@ emitter is not implemented"
                     );
                     Header::Mmsf {
                         meta: HeaderMeta {
-                            kind: MeasurementKind::MicrofacetMaskingShadowing,
+                            kind: MeasurementKind::Mmsf,
                             encoding,
                             compression,
                         },

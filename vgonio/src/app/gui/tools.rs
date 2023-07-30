@@ -1,11 +1,9 @@
 mod debugging;
-mod plotting;
 mod sampling;
 mod scratch;
 
 use crate::app::{cache::Cache, gfx::GpuContext, gui::event::EventLoopProxy};
 pub(crate) use debugging::DebuggingInspector;
-pub(crate) use plotting::*;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
 use std::sync::{Arc, RwLock};

@@ -9,6 +9,7 @@ mod icons;
 mod misc;
 mod notify;
 pub mod outliner;
+mod plotter;
 mod prop_inspector;
 mod simulations;
 pub mod state;

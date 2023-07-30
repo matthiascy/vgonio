@@ -31,13 +31,9 @@ where
 }
 
 impl<T: Asset> Clone for Handle<T> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            _phantom: Default::default(),
-        }
-    }
+    fn clone(&self) -> Self { *self }
 }
+
 impl<T: Asset> Copy for Handle<T> {}
 
 impl<T: Asset> PartialEq for Handle<T> {

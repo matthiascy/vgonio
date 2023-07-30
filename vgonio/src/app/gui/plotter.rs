@@ -1,17 +1,20 @@
 use crate::{
     app::{
-        gfx::GpuContext,
+        cache::{Cache, Handle},
         gui::{
-            event::{BsdfViewerEvent, EventLoopProxy, VgonioEvent},
-            tools::Tool,
+            event::EventLoopProxy,
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    measure::{measurement::MeasurementData, CollectorScheme},
+    measure::{
+        measurement::{MeasurementData, MeasurementKind},
+        CollectorScheme,
+    },
     RangeByStepSizeInclusive, SphericalPartition,
 };
-use egui::{plot::*, Align, Context, PointerButton, Response, Ui, Vec2};
-use std::{any::Any, ops::RangeInclusive, rc::Rc, sync::Arc};
+use egui::{plot::*, Align, Context, Response, Ui, Vec2};
+use std::ops::RangeInclusive;
+use uuid::Uuid;
 use vgcore::{
     math,
     math::{Handedness, Vec3},
@@ -25,10 +28,10 @@ enum PlotType {
 }
 
 pub trait PlottingWidget {
-    fn uuid(&self) -> uuid::Uuid;
+    fn uuid(&self) -> Uuid;
     fn name(&self) -> &str;
-    fn ui(&mut self, ui: &mut Ui);
-    fn show(&mut self, ctx: &Context, open: &mut bool) {
+    fn ui(&mut self, ui: &mut Ui, cache: &Cache);
+    fn show(&mut self, ctx: &Context, open: &mut bool, cache: &Cache) {
         egui::Window::new(self.name())
             .open(open)
             .resizable(true)
@@ -36,31 +39,36 @@ pub trait PlottingWidget {
                 egui::ScrollArea::new([false, true])
                     .min_scrolled_height(640.0)
                     .show(ui, |ui| {
-                        self.ui(ui);
+                        self.ui(ui, cache);
                     });
             });
     }
+    fn data_handle(&self) -> Handle<MeasurementData>;
+
+    fn data_kind(&self) -> MeasurementKind;
 }
 
-pub trait PlottingControls: 'static {}
+/// Trait for extra data to be used by the plotting inspector.
+pub trait ExtraData: 'static {
+    /// Initialise the extra data.
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache);
+}
 
-pub struct PlottingInspector<C: PlottingControls> {
+pub struct PlotInspector<C: ExtraData> {
     /// Unique ID for the plot widget.
-    uuid: uuid::Uuid,
+    uuid: Uuid,
     /// Unique name for the plot.
     name: String,
-    /// The data to be plotted
-    data: Rc<MeasurementData>,
+    /// The handle to the data to be plotted.
+    data: Handle<MeasurementData>,
     /// The legend to be displayed
     legend: Legend,
     /// The type of plot to be displayed
     plot_type: PlotType,
+    /// Extra data, including controls parameters and the pre-processed data.
+    extra: C,
     /// The event loop.
     event_loop: EventLoopProxy,
-    /// GPU context.
-    gpu: Arc<GpuContext>,
-    /// Controlling parameters for the plot.
-    controls: C,
 }
 
 /// Indicates which plot is currently being displayed.
@@ -73,29 +81,29 @@ enum BsdfPlotMode {
     Slice3D,
 }
 
-pub struct BsdfPlottingControls {
+pub struct BsdfPlotExtraData {
     azimuth_i: Radians,
     zenith_i: Radians,
     azimuth_o: Radians,
     mode: BsdfPlotMode,
-    view_id: egui::TextureId,
+    // view_id: egui::TextureId,
     changed: bool,
 }
 
-impl BsdfPlottingControls {
-    pub fn new(view_id: egui::TextureId) -> Self {
+impl BsdfPlotExtraData {
+    pub fn new(/*view_id: egui::TextureId*/) -> Self {
         Self {
             azimuth_i: rad!(0.0),
             zenith_i: rad!(0.0),
             azimuth_o: rad!(0.0),
             mode: BsdfPlotMode::Slice2D,
-            view_id,
+            // view_id,
             changed: true,
         }
     }
 }
 
-pub struct MadfPlottingControls {
+pub struct MadfPlotExtraData {
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in
     /// radians.
     azimuth_m: Radians,
@@ -104,7 +112,7 @@ pub struct MadfPlottingControls {
     zenith_m: Radians,
 }
 
-impl Default for MadfPlottingControls {
+impl Default for MadfPlotExtraData {
     fn default() -> Self {
         Self {
             azimuth_m: rad!(0.0),
@@ -113,7 +121,7 @@ impl Default for MadfPlottingControls {
     }
 }
 
-pub struct MmsfPlottingControls {
+pub struct MmsfPlotExtraData {
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in
     /// radians.
     azimuth_m: Radians,
@@ -124,7 +132,7 @@ pub struct MmsfPlottingControls {
     azimuth_i: Radians,
 }
 
-impl Default for MmsfPlottingControls {
+impl Default for MmsfPlotExtraData {
     fn default() -> Self {
         Self {
             azimuth_m: rad!(0.0),
@@ -134,18 +142,31 @@ impl Default for MmsfPlottingControls {
     }
 }
 
-impl PlottingControls for BsdfPlottingControls {}
-impl PlottingControls for MadfPlottingControls {}
-impl PlottingControls for MmsfPlottingControls {}
+impl ExtraData for BsdfPlotExtraData {
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
+        // TODO: pre-process data
+    }
+}
+impl ExtraData for MadfPlotExtraData {
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
+        // TODO: pre-process data
+    }
+}
+impl ExtraData for MmsfPlotExtraData {
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
+        // TODO: pre-process data
+    }
+}
 
-impl<C: PlottingControls> PlottingInspector<C> {
+impl<C: ExtraData> PlotInspector<C> {
     pub fn new(
         name: String,
-        data: Rc<MeasurementData>,
-        controls: C,
-        gpu: Arc<GpuContext>,
+        data: Handle<MeasurementData>,
+        mut extra: C,
+        cache: &Cache,
         event_loop: EventLoopProxy,
     ) -> Self {
+        extra.pre_process(data, cache);
         Self {
             name,
             data,
@@ -155,9 +176,8 @@ impl<C: PlottingControls> PlottingInspector<C> {
                 .position(Corner::RightTop),
             plot_type: PlotType::Line,
             event_loop,
-            gpu,
-            controls,
-            uuid: uuid::Uuid::new_v4(),
+            extra,
+            uuid: Uuid::new_v4(),
         }
     }
 
@@ -229,14 +249,15 @@ impl<C: PlottingControls> PlottingInspector<C> {
     }
 }
 
-impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+impl PlottingWidget for PlotInspector<MadfPlotExtraData> {
+    fn uuid(&self) -> Uuid { self.uuid }
 
     fn name(&self) -> &str { self.name.as_str() }
 
-    fn ui(&mut self, ui: &mut Ui) {
-        let zenith = self.data.measured.madf_or_mmsf_zenith().unwrap();
-        let azimuth = self.data.measured.madf_or_mmsf_azimuth().unwrap();
+    fn ui(&mut self, ui: &mut Ui, cache: &Cache) {
+        let measurement = &cache.get_measurement_data(self.data).unwrap();
+        let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        let azimuth = measurement.measured.madf_or_mmsf_azimuth().unwrap();
         let zenith_bin_width_rad = zenith.step_size.as_f32();
         self.plot_type_ui(ui);
         ui.allocate_ui_with_layout(
@@ -244,7 +265,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
             egui::Layout::left_to_right(Align::Center),
             |ui| {
                 ui.label("microfacet normal: ");
-                let mut opposite = self.controls.azimuth_m.wrap_to_tau().opposite();
+                let mut opposite = self.extra.azimuth_m.wrap_to_tau().opposite();
                 Self::angle_knob(
                     ui,
                     false,
@@ -257,7 +278,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
                 Self::angle_knob(
                     ui,
                     true,
-                    &mut self.controls.azimuth_m,
+                    &mut self.extra.azimuth_m,
                     azimuth.map(|x| x.value()).range_bound_inclusive(),
                     azimuth.step_size,
                     48.0,
@@ -265,7 +286,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
                 );
                 #[cfg(debug_assertions)]
                 Self::debug_print_angle_pair(
-                    self.controls.azimuth_m,
+                    self.extra.azimuth_m,
                     &azimuth,
                     ui,
                     "debug_print_φ_pair",
@@ -273,7 +294,7 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
             },
         );
         let data: Vec<_> = {
-            let (starting, opposite) = self.data.adf_data_slice(self.controls.azimuth_m);
+            let (starting, opposite) = measurement.adf_data_slice(self.extra.azimuth_m);
 
             // Data of the opposite azimuthal angle side of the slice, if exists.
             let data_opposite_part = opposite.map(|data| {
@@ -372,16 +393,21 @@ impl PlottingWidget for PlottingInspector<MadfPlottingControls> {
             }
         });
     }
+
+    fn data_handle(&self) -> Handle<MeasurementData> { self.data }
+
+    fn data_kind(&self) -> MeasurementKind { MeasurementKind::Madf }
 }
 
-impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+impl PlottingWidget for PlotInspector<MmsfPlotExtraData> {
+    fn uuid(&self) -> Uuid { self.uuid }
 
     fn name(&self) -> &str { self.name.as_str() }
 
-    fn ui(&mut self, ui: &mut Ui) {
-        let zenith = self.data.measured.madf_or_mmsf_zenith().unwrap();
-        let azimuth = self.data.measured.madf_or_mmsf_azimuth().unwrap();
+    fn ui(&mut self, ui: &mut Ui, cache: &Cache) {
+        let measurement = cache.get_measurement_data(self.data).unwrap();
+        let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        let azimuth = measurement.measured.madf_or_mmsf_azimuth().unwrap();
         let zenith_bin_width_rad = zenith.step_size.value();
         self.plot_type_ui(ui);
         ui.allocate_ui_with_layout(
@@ -392,7 +418,7 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
                 Self::angle_knob(
                     ui,
                     true,
-                    &mut self.controls.zenith_m,
+                    &mut self.extra.zenith_m,
                     zenith.range_bound_inclusive_f32(),
                     zenith.step_size,
                     48.0,
@@ -401,7 +427,7 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
                 Self::angle_knob(
                     ui,
                     true,
-                    &mut self.controls.azimuth_m,
+                    &mut self.extra.azimuth_m,
                     azimuth.range_bound_inclusive_f32(),
                     azimuth.step_size,
                     48.0,
@@ -410,12 +436,12 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
                 #[cfg(debug_assertions)]
                 {
                     Self::debug_print_angle_pair(
-                        self.controls.azimuth_m,
+                        self.extra.azimuth_m,
                         &azimuth,
                         ui,
                         "debug_print_φ",
                     );
-                    Self::debug_print_angle(self.controls.zenith_m, &zenith, ui, "debug_print_θ");
+                    Self::debug_print_angle(self.extra.zenith_m, &zenith, ui, "debug_print_θ");
                 }
             },
         );
@@ -424,7 +450,7 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
             egui::Layout::left_to_right(Align::Center),
             |ui| {
                 ui.label("incident direction: ");
-                let mut opposite = self.controls.azimuth_i.opposite();
+                let mut opposite = self.extra.azimuth_i.opposite();
                 Self::angle_knob(
                     ui,
                     false,
@@ -437,7 +463,7 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
                 Self::angle_knob(
                     ui,
                     true,
-                    &mut self.controls.azimuth_i,
+                    &mut self.extra.azimuth_i,
                     azimuth.range_bound_inclusive_f32(),
                     azimuth.step_size,
                     48.0,
@@ -445,7 +471,7 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
                 );
                 #[cfg(debug_assertions)]
                 Self::debug_print_angle_pair(
-                    self.controls.azimuth_i,
+                    self.extra.azimuth_i,
                     &azimuth,
                     ui,
                     "debug_print_φ_pair",
@@ -453,10 +479,10 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
             },
         );
         let data: Vec<_> = {
-            let (starting, opposite) = self.data.msf_data_slice(
-                self.controls.azimuth_m,
-                self.controls.zenith_m,
-                self.controls.azimuth_i,
+            let (starting, opposite) = measurement.msf_data_slice(
+                self.extra.azimuth_m,
+                self.extra.zenith_m,
+                self.extra.azimuth_i,
             );
             let data_opposite_part = opposite.map(|data| {
                 data.iter()
@@ -552,21 +578,26 @@ impl PlottingWidget for PlottingInspector<MmsfPlottingControls> {
             }
         });
     }
+
+    fn data_handle(&self) -> Handle<MeasurementData> { self.data }
+
+    fn data_kind(&self) -> MeasurementKind { MeasurementKind::Mmsf }
 }
 
-impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
-    fn uuid(&self) -> uuid::Uuid { self.uuid }
+impl PlottingWidget for PlotInspector<BsdfPlotExtraData> {
+    fn uuid(&self) -> uuidUuid { self.uuid }
 
     fn name(&self) -> &str { self.name.as_str() }
 
-    fn ui(&mut self, ui: &mut Ui) {
+    fn ui(&mut self, ui: &mut Ui, cache: &Cache) {
+        let measurement = cache.get_measurement_data(self.data).unwrap();
         ui.horizontal(|ui| {
             ui.label("Plot mode:");
-            ui.selectable_value(&mut self.controls.mode, BsdfPlotMode::Slice2D, "Slice 2D");
-            ui.selectable_value(&mut self.controls.mode, BsdfPlotMode::Slice3D, "Slice 3D");
+            ui.selectable_value(&mut self.extra.mode, BsdfPlotMode::Slice2D, "Slice 2D");
+            ui.selectable_value(&mut self.extra.mode, BsdfPlotMode::Slice3D, "Slice 3D");
         });
-        let is_3d = self.controls.mode == BsdfPlotMode::Slice3D;
-        let bsdf_data = self.data.measured.bsdf_data().unwrap();
+        let is_3d = self.extra.mode == BsdfPlotMode::Slice3D;
+        let bsdf_data = measurement.measured.bsdf_data().unwrap();
         let zenith_i = bsdf_data.params.emitter.zenith;
         let azimuth_i = bsdf_data.params.emitter.azimuth;
         let (zenith_o, azimuth_o) = match bsdf_data.params.collector.scheme {
@@ -591,7 +622,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 let r0 = Self::angle_knob(
                     ui,
                     true,
-                    &mut self.controls.zenith_i,
+                    &mut self.extra.zenith_i,
                     zenith_i.range_bound_inclusive_f32(),
                     zenith_i.step_size,
                     48.0,
@@ -601,7 +632,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 let r1 = Self::angle_knob(
                     ui,
                     true,
-                    &mut self.controls.azimuth_i,
+                    &mut self.extra.azimuth_i,
                     azimuth_i.range_bound_inclusive_f32(),
                     azimuth_i.step_size,
                     48.0,
@@ -610,15 +641,15 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                 .changed();
                 #[cfg(debug_assertions)]
                 {
-                    Self::debug_print_angle(self.controls.zenith_i, &zenith_i, ui, "debug_print_θ");
+                    Self::debug_print_angle(self.extra.zenith_i, &zenith_i, ui, "debug_print_θ");
                     Self::debug_print_angle_pair(
-                        self.controls.azimuth_i,
+                        self.extra.azimuth_i,
                         &azimuth_i,
                         ui,
                         "debug_print_φ",
                     );
                 }
-                self.controls.changed |= r0 || r1;
+                self.extra.changed |= r0 || r1;
             },
         );
 
@@ -631,7 +662,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     let r0 = Self::angle_knob(
                         ui,
                         true,
-                        &mut self.controls.azimuth_o,
+                        &mut self.extra.azimuth_o,
                         azimuth_o.range_bound_inclusive_f32(),
                         azimuth_o.step_size,
                         48.0,
@@ -641,20 +672,20 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     #[cfg(debug_assertions)]
                     {
                         Self::debug_print_angle_pair(
-                            self.controls.azimuth_o,
+                            self.extra.azimuth_o,
                             &azimuth_o,
                             ui,
                             "debug_print_φ",
                         );
                     }
-                    self.controls.changed |= r0;
+                    self.extra.changed |= r0;
                 },
             );
         }
 
         let zenith_i_count = zenith_i.step_count_wrapped();
-        let zenith_i_idx = zenith_i.index_of(self.controls.zenith_i);
-        let azimuth_i_idx = azimuth_i.index_of(self.controls.azimuth_i);
+        let zenith_i_idx = zenith_i.index_of(self.extra.zenith_i);
+        let azimuth_i_idx = azimuth_i.index_of(self.extra.azimuth_i);
         let data_point = &bsdf_data.samples[azimuth_i_idx * zenith_i_count + zenith_i_idx];
         let spectrum = bsdf_data.params.emitter.spectrum;
         let wavelengths = spectrum
@@ -663,7 +694,7 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             .collect::<Vec<_>>();
         let num_rays = bsdf_data.params.emitter.num_rays;
 
-        if self.controls.changed {
+        if self.extra.changed {
             let (zenith_range, azimuth_range) = bsdf_data.params.collector.scheme.ranges();
             let count = bsdf_data.params.collector.scheme.total_sample_count();
             debug_assert_eq!(
@@ -690,25 +721,25 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     }
                 }
             }
-            let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(&format!("bsdf_view_buffer_{:?}", self.controls.view_id)),
-                size: std::mem::size_of::<Vec3>() as u64 * count as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            self.gpu.queue.write_buffer(
-                &buffer,
-                0,
-                bytemuck::cast_slice(&samples_per_wavelength[0]),
-            );
-            self.event_loop
-                .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::UpdateBuffer {
-                    id: self.controls.view_id,
-                    buffer: Some(buffer),
-                    count: samples_per_wavelength[0].len() as u32,
-                }))
-                .unwrap();
-            self.controls.changed = false;
+            // let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            //     label: Some(&format!("bsdf_view_buffer_{:?}", self.controls.view_id)),
+            //     size: std::mem::size_of::<Vec3>() as u64 * count as u64,
+            //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            //     mapped_at_creation: false,
+            // });
+            // self.gpu.queue.write_buffer(
+            //     &buffer,
+            //     0,
+            //     bytemuck::cast_slice(&samples_per_wavelength[0]),
+            // );
+            // self.event_loop
+            //     .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::UpdateBuffer {
+            //         id: self.controls.view_id,
+            //         buffer: Some(buffer),
+            //         count: samples_per_wavelength[0].len() as u32,
+            //     }))
+            //     .unwrap();
+            self.extra.changed = false;
         }
 
         // Figure of per wavelength plot, it contains:
@@ -998,23 +1029,23 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
                     .striped(true)
                     .num_columns(2)
                     .show(ui, |ui| {
-                        ui.label("Energy");
-                        let response = ui.add(
-                            egui::Image::new(self.controls.view_id, [256.0, 256.0])
-                                .sense(egui::Sense::click_and_drag()),
-                        );
-                        if response.dragged_by(PointerButton::Primary) {
-                            let delta_x = response.drag_delta().x;
-                            if delta_x != 0.0 {
-                                self.event_loop
-                                    .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
-                                        id: self.controls.view_id,
-                                        angle: delta_x / 256.0 * std::f32::consts::PI,
-                                    }))
-                                    .unwrap()
-                            }
-                        }
-                        ui.end_row();
+                        // ui.label("Energy");
+                        // let response = ui.add(
+                        //     egui::Image::new(self.extra.view_id, [256.0, 256.0])
+                        //         .sense(egui::Sense::click_and_drag()),
+                        // );
+                        // if response.dragged_by(PointerButton::Primary) {
+                        //     let delta_x = response.drag_delta().x;
+                        //     if delta_x != 0.0 {
+                        //         self.event_loop
+                        //             .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
+                        //                 id: self.extra.view_id,
+                        //                 angle: delta_x / 256.0 * std::f32::consts::PI,
+                        //             }))
+                        //             .unwrap()
+                        //     }
+                        // }
+                        // ui.end_row();
 
                         ui.label("Rays");
                         ui.end_row();
@@ -1022,29 +1053,16 @@ impl PlottingWidget for PlottingInspector<BsdfPlottingControls> {
             })
             .header_response;
 
-        if response.changed() {
-            self.event_loop
-                .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::ToggleView(
-                    self.controls.view_id,
-                )))
-                .unwrap()
-        }
-    }
-}
-
-impl<C: PlottingControls> Tool for PlottingInspector<C>
-where
-    PlottingInspector<C>: PlottingWidget,
-{
-    fn name(&self) -> &str { self.name.as_str() }
-
-    fn show(&mut self, ctx: &Context, open: &mut bool) {
-        <Self as PlottingWidget>::show(self, ctx, open);
+        // if response.changed() {
+        //     self.event_loop
+        //         .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::ToggleView(
+        //             self.extra.view_id,
+        //         )))
+        //         .unwrap()
+        // }
     }
 
-    fn ui(&mut self, ui: &mut Ui) { <Self as PlottingWidget>::ui(self, ui); }
+    fn data_handle(&self) -> Handle<MeasurementData> { self.data }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-
-    fn as_any(&self) -> &dyn Any { self }
+    fn data_kind(&self) -> MeasurementKind { MeasurementKind::Bsdf }
 }

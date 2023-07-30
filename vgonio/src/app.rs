@@ -136,7 +136,7 @@ impl Config {
         log::info!("Loading configurations...");
         let sys_config_dir = {
             let mut config_dir = dirs::config_dir().ok_or(VgonioError::new(
-                format!("System configuration directory not found."),
+                "System configuration directory not found.",
                 Some(Box::new(RuntimeError::SysConfigDirNotFound)),
             ))?;
             config_dir.push("vgonio");
@@ -144,7 +144,7 @@ impl Config {
         };
         let sys_cache_dir = {
             let mut cache_dir = dirs::cache_dir().ok_or(VgonioError::new(
-                format!("System cache directory not found."),
+                "System cache directory not found.",
                 Some(Box::new(RuntimeError::SysCacheDirNotFound)),
             ))?;
             cache_dir.push("vgonio");
@@ -152,7 +152,7 @@ impl Config {
         };
         let sys_data_dir = {
             let mut data_dir = dirs::data_dir().ok_or(VgonioError::new(
-                format!("System data files directory not found."),
+                "System data files directory not found.",
                 Some(Box::new(RuntimeError::SysDataDirNotFound)),
             ))?;
             data_dir.push("vgonio");

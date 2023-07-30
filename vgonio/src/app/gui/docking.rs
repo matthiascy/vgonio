@@ -53,11 +53,7 @@ impl DockSpace {
         event_loop: EventLoopProxy,
     ) -> Self {
         log::info!("Creating default dock space layout");
-        let surf_viewer = Box::new(SurfaceViewer::new(
-            gui.clone(),
-            event_loop.clone(),
-            data.clone(),
-        ));
+        let surf_viewer = Box::new(SurfaceViewer::new(gui.clone(), event_loop.clone()));
         log::info!("Created surface viewer");
         event_loop
             .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {
@@ -82,7 +78,11 @@ impl DockSpace {
             0.5,
             vec![DockingWidget {
                 index: 2,
-                dockable: Box::new(PropertyInspector::new(cache.clone(), data.clone())),
+                dockable: Box::new(PropertyInspector::new(
+                    event_loop.clone(),
+                    cache.clone(),
+                    data.clone(),
+                )),
             }],
         );
         Self {
@@ -130,7 +130,6 @@ impl DockSpace {
                     let widget = Box::new(SurfaceViewer::new(
                         self.gui.clone(),
                         self.event_loop.clone(),
-                        self.data.clone(),
                     ));
                     self.event_loop
                         .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {

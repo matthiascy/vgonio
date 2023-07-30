@@ -563,9 +563,9 @@ pub enum MeasurementKind {
     /// BSDF measurement.
     Bsdf = 0x00,
     /// Micro-facet area distribution measurement.
-    MicrofacetAreaDistribution = 0x01,
+    Madf = 0x01,
     /// Micro-surface shadowing-masking function measurement.
-    MicrofacetMaskingShadowing = 0x02,
+    Mmsf = 0x02,
 }
 
 impl Display for MeasurementKind {
@@ -574,10 +574,10 @@ impl Display for MeasurementKind {
             MeasurementKind::Bsdf => {
                 write!(f, "BSDF")
             }
-            MeasurementKind::MicrofacetAreaDistribution => {
+            MeasurementKind::Madf => {
                 write!(f, "NDF")
             }
-            MeasurementKind::MicrofacetMaskingShadowing => {
+            MeasurementKind::Mmsf => {
                 write!(f, "Masking/Shadowing")
             }
         }
@@ -588,8 +588,8 @@ impl From<u8> for MeasurementKind {
     fn from(value: u8) -> Self {
         match value {
             0x00 => Self::Bsdf,
-            0x01 => Self::MicrofacetAreaDistribution,
-            0x02 => Self::MicrofacetMaskingShadowing,
+            0x01 => Self::Madf,
+            0x02 => Self::Mmsf,
             _ => panic!("Invalid measurement kind! {}", value),
         }
     }
@@ -733,8 +733,8 @@ impl MeasuredData {
     /// Returns the measurement kind.
     pub fn kind(&self) -> MeasurementKind {
         match self {
-            MeasuredData::Madf(_) => MeasurementKind::MicrofacetAreaDistribution,
-            MeasuredData::Mmsf(_) => MeasurementKind::MicrofacetMaskingShadowing,
+            MeasuredData::Madf(_) => MeasurementKind::Madf,
+            MeasuredData::Mmsf(_) => MeasurementKind::Mmsf,
             MeasuredData::Bsdf(_) => MeasurementKind::Bsdf,
         }
     }
@@ -834,7 +834,7 @@ impl MeasurementData {
     ///
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn adf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
-        debug_assert!(self.kind() == MeasurementKind::MicrofacetAreaDistribution);
+        debug_assert!(self.kind() == MeasurementKind::Madf);
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_m_idx = self_azimuth.index_of(azimuth_m);
@@ -856,7 +856,7 @@ impl MeasurementData {
     /// azimuthal angle index.
     pub fn adf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        debug_assert!(self.kind() == MeasurementKind::MicrofacetAreaDistribution);
+        debug_assert!(self.kind() == MeasurementKind::Madf);
         debug_assert!(
             azimuth_idx < self_azimuth.step_count_wrapped(),
             "index out of range"
@@ -880,7 +880,7 @@ impl MeasurementData {
         azimuth_i: Radians,
     ) -> (&[f32], Option<&[f32]>) {
         debug_assert!(
-            self.kind() == MeasurementKind::MicrofacetMaskingShadowing,
+            self.kind() == MeasurementKind::Mmsf,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
@@ -916,7 +916,7 @@ impl MeasurementData {
     ) -> &[f32] {
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         let self_zenith = self.measured.madf_or_mmsf_zenith().unwrap();
-        debug_assert!(self.kind() == MeasurementKind::MicrofacetMaskingShadowing);
+        debug_assert!(self.kind() == MeasurementKind::Mmsf);
         debug_assert!(
             azimuth_m_idx < self_azimuth.step_count_wrapped(),
             "index out of range"

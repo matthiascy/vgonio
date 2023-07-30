@@ -9,6 +9,11 @@ use crate::{
             gizmo::NavigationGizmo,
             icons,
             notify::{NotifyKind, NotifySystem},
+            outliner::Item,
+            plotter::{
+                BsdfPlotExtraData, MadfPlotExtraData, MmsfPlotExtraData, PlotInspector,
+                PlottingWidget,
+            },
             simulations::Simulations,
             state::GuiRenderer,
             theme::ThemeKind,
@@ -17,7 +22,7 @@ use crate::{
         },
         Config,
     },
-    measure::measurement::MeasurementData,
+    measure::measurement::{MeasurementData, MeasurementKind},
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
@@ -28,7 +33,7 @@ use std::{
 use vgcore::math::Mat4;
 use vgsurf::MicroSurface;
 
-use super::{docking::DockSpace, event::EventResponse, tools::PlottingWidget};
+use super::{docking::DockSpace, event::EventResponse};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -37,9 +42,6 @@ pub struct VgonioGui {
 
     /// Event loop proxy for sending user defined events.
     event_loop: EventLoopProxy,
-
-    /// Tools are small windows that can be opened and closed.
-    pub(crate) tools: Tools,
 
     gpu_ctx: Arc<GpuContext>,
 
@@ -55,7 +57,11 @@ pub struct VgonioGui {
     /// Notification system.
     notif: NotifySystem,
 
-    plotting_inspectors: Vec<Box<dyn PlottingWidget>>,
+    /// Plotters are windows that contain plots.
+    plotters: Vec<(bool, Box<dyn PlottingWidget>)>,
+
+    /// Tools are small windows that can be opened and closed.
+    pub(crate) tools: Tools,
 
     pub simulations: Simulations,
     pub properties: Arc<RwLock<PropertyData>>,
@@ -84,7 +90,7 @@ impl VgonioGui {
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             simulations: Simulations::new(event_loop.clone()),
-            plotting_inspectors: vec![],
+            plotters: vec![],
             dock_space: DockSpace::default_layout(
                 gui.clone(),
                 cache,
@@ -124,8 +130,38 @@ impl VgonioGui {
                     properties.on_item_selected(*item);
                     EventResponse::Handled
                 }
-                _ => EventResponse::Ignored(event),
             },
+            VgonioEvent::Graphing { kind, data } => {
+                if !self.plotters.iter().any(|(_, p)| p.data_handle() == *data) {
+                    let prop = self.properties.read().unwrap();
+                    let cache = self.cache.read().unwrap();
+                    let plotter: Box<dyn PlottingWidget> = match kind {
+                        MeasurementKind::Bsdf => Box::new(PlotInspector::new(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            BsdfPlotExtraData::new(),
+                            &cache,
+                            self.event_loop.clone(),
+                        )),
+                        MeasurementKind::Madf => Box::new(PlotInspector::new(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            MadfPlotExtraData::default(),
+                            &cache,
+                            self.event_loop.clone(),
+                        )),
+                        MeasurementKind::Mmsf => Box::new(PlotInspector::new(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            MmsfPlotExtraData::default(),
+                            &cache,
+                            self.event_loop.clone(),
+                        )),
+                    };
+                    self.plotters.push((true, plotter));
+                }
+                EventResponse::Handled
+            }
             _ => EventResponse::Ignored(event),
         }
     }
@@ -149,6 +185,10 @@ impl VgonioGui {
         self.navigator.show(ctx);
         self.simulations.show_all(ctx);
         self.notif.show(ctx);
+        let cache = self.cache.read().unwrap();
+        for (is_open, plotter) in &mut self.plotters {
+            plotter.show(ctx, is_open, &cache);
+        }
     }
 
     pub fn on_open_files(&mut self, files: &[rfd::FileHandle]) {
