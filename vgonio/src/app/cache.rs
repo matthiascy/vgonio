@@ -4,7 +4,7 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    measure::measurement::{MeasuredData, MeasurementData},
+    measure::measurement::MeasurementData,
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Medium,
 };

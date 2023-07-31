@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::app::gui::{
     event::{SurfaceViewerEvent, VgonioEvent},
     outliner::Outliner,
+    plotter::PlotInspector,
     prop_inspector::PropertyInspector,
     state::GuiRenderer,
     surf_viewer::SurfaceViewer,
@@ -39,6 +40,8 @@ impl Deref for DockSpace {
 impl DerefMut for DockSpace {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
 }
+
+// TODO: deal with the case where the tab is closed
 
 impl DockSpace {
     /// Create a new dock space with a default layout.
@@ -144,12 +147,31 @@ impl DockSpace {
                     self.cache.clone(),
                     data.clone(),
                 )),
-                _ => Box::new(DockableString::new(String::from("Hello world"))),
+                WidgetKind::Plotting => Box::new(PlotInspector::new(
+                    "New Plot",
+                    self.cache.clone(),
+                    self.event_loop.clone(),
+                )),
             };
             self.inner.push_to_focused_leaf(DockingWidget {
                 index,
                 dockable: widget,
             });
+        });
+    }
+
+    pub fn add_existing_widget(&mut self, widget: Box<dyn Dockable>) {
+        if self
+            .inner
+            .tabs()
+            .any(|t| t.dockable.uuid() == widget.uuid())
+        {
+            return;
+        }
+
+        self.inner.push_to_first_leaf(DockingWidget {
+            index: self.inner.num_tabs(),
+            dockable: widget,
         });
     }
 }
@@ -172,12 +194,11 @@ pub trait Dockable {
 /// Kind of a possible widget.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum WidgetKind {
-    #[cfg(debug_assertions)]
-    String,
     Outliner,
     SurfViewer,
-    BsdfViewer,
+    // BsdfViewer, TODO:
     Properties,
+    Plotting,
 }
 
 /// A tab that can be stored in the dock space.
@@ -231,12 +252,12 @@ impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
             });
         }
 
-        if ui.button("BsdfViewer").clicked() {
-            self.added.push(NewWidget {
-                kind: WidgetKind::BsdfViewer,
-                parent: parent.0,
-            });
-        }
+        // if ui.button("BsdfViewer").clicked() {
+        //     self.added.push(NewWidget {
+        //         kind: WidgetKind::BsdfViewer,
+        //         parent: parent.0,
+        //     });
+        // }
 
         if ui.button("Outliner").clicked() {
             self.added.push(NewWidget {
@@ -252,46 +273,11 @@ impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
             });
         }
 
-        #[cfg(debug_assertions)]
-        if ui.button("Debug String").clicked() {
+        if ui.button("Plotting").clicked() {
             self.added.push(NewWidget {
-                kind: WidgetKind::String,
+                kind: WidgetKind::Plotting,
                 parent: parent.0,
             });
         }
-    }
-}
-
-/// Test utility structure to render a string tab in the dock space.
-#[cfg(debug_assertions)]
-pub struct DockableString {
-    pub uuid: Uuid,
-    pub content: String,
-}
-
-impl DockableString {
-    pub fn new(content: String) -> Self { Self::from(content) }
-}
-
-impl From<String> for DockableString {
-    fn from(content: String) -> Self {
-        Self {
-            uuid: Uuid::new_v4(),
-            content,
-        }
-    }
-}
-
-#[cfg(debug_assertions)]
-impl Dockable for DockableString {
-    fn kind(&self) -> WidgetKind { WidgetKind::String }
-
-    fn title(&self) -> egui::WidgetText { "Dockable String".into() }
-
-    fn uuid(&self) -> Uuid { self.uuid }
-
-    fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(&self.content);
-        ui.label(&format!("uuid: {}, content: {}", self.uuid, self.content));
     }
 }

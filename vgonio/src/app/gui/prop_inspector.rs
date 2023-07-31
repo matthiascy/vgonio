@@ -213,14 +213,26 @@ impl PropertyInspector {
                                     MeasuredData::Bsdf(_) => {}
                                 }
                             });
-                            if ui.button("Graph").clicked() {
-                                self.event_loop
-                                    .send_event(VgonioEvent::Graphing {
-                                        kind: state.kind,
-                                        data: meas,
-                                    })
-                                    .unwrap();
-                            }
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.button("Graph(new window)").clicked() {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Graphing {
+                                            kind: state.kind,
+                                            data: meas,
+                                            independent: true,
+                                        })
+                                        .unwrap();
+                                }
+                                if ui.button("Graph(new tab)").clicked() {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Graphing {
+                                            kind: state.kind,
+                                            data: meas,
+                                            independent: false,
+                                        })
+                                        .unwrap();
+                                }
+                            });
                         }
                     }
                 }

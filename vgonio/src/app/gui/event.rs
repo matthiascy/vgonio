@@ -54,6 +54,7 @@ pub enum VgonioEvent {
     Graphing {
         kind: MeasurementKind,
         data: Handle<MeasurementData>,
+        independent: bool,
     },
 }
 

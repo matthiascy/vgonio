@@ -131,7 +131,11 @@ impl VgonioGui {
                     EventResponse::Handled
                 }
             },
-            VgonioEvent::Graphing { kind, data } => {
+            VgonioEvent::Graphing {
+                kind,
+                data,
+                independent,
+            } => {
                 let pos = self
                     .plotters
                     .iter()
@@ -139,31 +143,36 @@ impl VgonioGui {
                 match pos {
                     None => {
                         let prop = self.properties.read().unwrap();
-                        let cache = self.cache.read().unwrap();
-                        let plotter: Box<dyn PlottingWidget> = match kind {
+                        let plotter = match kind {
                             MeasurementKind::Bsdf => Box::new(PlotInspector::new_bsdf(
                                 prop.measured.get(data).unwrap().name.clone(),
                                 *data,
-                                &cache,
+                                self.cache.clone(),
                                 self.event_loop.clone(),
                             )),
                             MeasurementKind::Madf => Box::new(PlotInspector::new_madf(
                                 prop.measured.get(data).unwrap().name.clone(),
                                 *data,
-                                &cache,
+                                self.cache.clone(),
                                 self.event_loop.clone(),
                             )),
                             MeasurementKind::Mmsf => Box::new(PlotInspector::new_mmsf(
                                 prop.measured.get(data).unwrap().name.clone(),
                                 *data,
-                                &cache,
+                                self.cache.clone(),
                                 self.event_loop.clone(),
                             )),
                         };
-                        self.plotters.push((true, plotter));
+                        if *independent {
+                            self.plotters.push((true, plotter));
+                        } else {
+                            self.dock_space.add_existing_widget(plotter)
+                        }
                     }
                     Some(idx) => {
-                        self.plotters[idx].0 = true;
+                        if *independent {
+                            self.plotters[idx].0 = true;
+                        }
                     }
                 }
                 EventResponse::Handled
@@ -193,7 +202,7 @@ impl VgonioGui {
         self.notif.show(ctx);
         let cache = self.cache.read().unwrap();
         for (is_open, plotter) in &mut self.plotters {
-            plotter.show(ctx, is_open, &cache);
+            plotter.show(ctx, is_open);
         }
     }
 

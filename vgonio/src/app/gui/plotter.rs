@@ -2,6 +2,7 @@ use crate::{
     app::{
         cache::{Cache, Handle},
         gui::{
+            docking::{Dockable, WidgetKind},
             event::EventLoopProxy,
             widgets::{AngleKnob, AngleKnobWinding},
         },
@@ -12,8 +13,12 @@ use crate::{
     },
     RangeByStepSizeInclusive, SphericalPartition,
 };
-use egui::{plot::*, Align, Context, Response, Ui, Vec2};
-use std::{any::Any, cell::RefCell, ops::RangeInclusive};
+use egui::{plot::*, Align, Context, Response, Ui, Vec2, WidgetText};
+use std::{
+    any::Any,
+    ops::RangeInclusive,
+    sync::{Arc, RwLock},
+};
 use uuid::Uuid;
 use vgcore::{
     math,
@@ -32,9 +37,9 @@ pub trait PlottingWidget {
 
     fn name(&self) -> &str;
 
-    fn ui(&mut self, ui: &mut Ui, cache: &Cache);
+    fn ui(&mut self, ui: &mut Ui);
 
-    fn show(&mut self, ctx: &Context, open: &mut bool, cache: &Cache) {
+    fn show(&mut self, ctx: &Context, open: &mut bool) {
         egui::Window::new(self.name())
             .open(open)
             .resizable(true)
@@ -42,7 +47,7 @@ pub trait PlottingWidget {
                 egui::ScrollArea::new([false, true])
                     .min_scrolled_height(640.0)
                     .show(ui, |ui| {
-                        self.ui(ui, cache);
+                        self.ui(ui);
                     });
             });
     }
@@ -69,6 +74,8 @@ pub struct PlotInspector {
     name: String,
     /// The handle to the data to be plotted.
     data_handle: Handle<MeasurementData>,
+    /// Cache of the application.
+    cache: Arc<RwLock<Cache>>,
     /// The legend to be displayed
     legend: Legend,
     /// The type of plot to be displayed
@@ -183,16 +190,17 @@ impl PlotInspector {
     pub fn new_madf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: &Cache,
+        cache: Arc<RwLock<Cache>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = MadfPlotExtraData::default();
-        extra.pre_process(data, cache);
+        // extra.pre_process(data, cache);
         Self::new_inner(
             name,
             data,
             PlotType::Line,
             Some(Box::new(extra)),
+            cache,
             event_loop,
         )
     }
@@ -201,16 +209,17 @@ impl PlotInspector {
     pub fn new_mmsf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: &Cache,
+        cache: Arc<RwLock<Cache>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = MmsfPlotExtraData::default();
-        extra.pre_process(data, cache);
+        // extra.pre_process(data, cache);
         Self::new_inner(
             name,
             data,
             PlotType::Line,
             Some(Box::new(extra)),
+            cache,
             event_loop,
         )
     }
@@ -220,25 +229,31 @@ impl PlotInspector {
     pub fn new_bsdf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: &Cache,
+        cache: Arc<RwLock<Cache>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = BsdfPlotExtraData::new(/*view_id*/);
-        extra.pre_process(data, cache);
+        // extra.pre_process(data, cache);
         Self::new_inner(
             name,
             data,
             PlotType::Line,
             Some(Box::new(extra)),
+            cache,
             event_loop,
         )
     }
 
-    /// Creates a new inspector with no extra data.
-    pub fn new(name: String, data: Handle<MeasurementData>, event_loop: EventLoopProxy) -> Self {
+    /// Creates a new inspector with data to be plotted.
+    pub fn new<S: Into<String>>(
+        name: S,
+        cache: Arc<RwLock<Cache>>,
+        event_loop: EventLoopProxy,
+    ) -> Self {
         Self {
-            name,
-            data_handle: data,
+            name: name.into(),
+            data_handle: Handle::invalid(),
+            cache,
             legend: Legend::default()
                 .text_style(egui::TextStyle::Monospace)
                 .background_alpha(1.0)
@@ -255,12 +270,14 @@ impl PlotInspector {
         data: Handle<MeasurementData>,
         plot_type: PlotType,
         extra: Option<Box<dyn ExtraData>>,
+        cache: Arc<RwLock<Cache>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         Self {
             uuid: Uuid::new_v4(),
             name,
             data_handle: data,
+            cache,
             legend: Legend::default()
                 .text_style(egui::TextStyle::Monospace)
                 .background_alpha(1.0)
@@ -344,7 +361,11 @@ impl PlottingWidget for PlotInspector {
 
     fn name(&self) -> &str { self.name.as_str() }
 
-    fn ui(&mut self, ui: &mut Ui, cache: &Cache) {
+    fn ui(&mut self, ui: &mut Ui) {
+        if !self.data_handle.is_valid() {
+            ui.label("No data selected!");
+            return;
+        }
         match self.measurement_data_kind() {
             MeasurementKind::Bsdf => {
                 if let Some(extra) = &mut self.extra {
@@ -352,6 +373,7 @@ impl PlottingWidget for PlotInspector {
                         .as_any_mut()
                         .downcast_mut::<BsdfPlotExtraData>()
                         .unwrap();
+                    let cache = self.cache.read().unwrap();
                     let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                     ui.horizontal(|ui| {
                         ui.label("Plot mode:");
@@ -865,7 +887,8 @@ impl PlottingWidget for PlotInspector {
                         .as_any_mut()
                         .downcast_mut::<MadfPlotExtraData>()
                         .unwrap();
-                    let measurement = &cache.get_measurement_data(self.data_handle).unwrap();
+                    let cache = self.cache.read().unwrap();
+                    let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                     let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
                     let azimuth = measurement.measured.madf_or_mmsf_azimuth().unwrap();
                     let zenith_bin_width_rad = zenith.step_size.as_f32();
@@ -1016,6 +1039,7 @@ impl PlottingWidget for PlotInspector {
                         .as_any_mut()
                         .downcast_mut::<MmsfPlotExtraData>()
                         .unwrap();
+                    let cache = self.cache.read().unwrap();
                     let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                     let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
                     let azimuth = measurement.measured.madf_or_mmsf_azimuth().unwrap();
@@ -1216,4 +1240,14 @@ impl PlottingWidget for PlotInspector {
             }
         }
     }
+}
+
+impl Dockable for PlotInspector {
+    fn kind(&self) -> WidgetKind { WidgetKind::Plotting }
+
+    fn title(&self) -> WidgetText { "Plot inspector".into() }
+
+    fn uuid(&self) -> Uuid { self.uuid }
+
+    fn ui(&mut self, ui: &mut Ui) { PlottingWidget::ui(self, ui); }
 }
