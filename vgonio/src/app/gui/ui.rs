@@ -172,6 +172,7 @@ impl VgonioGui {
                     Some(idx) => {
                         if *independent {
                             self.plotters[idx].0 = true;
+                        } else {
                         }
                     }
                 }
