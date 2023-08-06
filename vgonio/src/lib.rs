@@ -12,6 +12,7 @@ extern crate core;
 
 mod app;
 mod error;
+pub mod fitting;
 mod io;
 pub mod measure;
 pub mod optics;

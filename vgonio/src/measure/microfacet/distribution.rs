@@ -20,8 +20,9 @@ use crate::{
 pub struct MeasuredMadfData {
     /// The measurement parameters.
     pub params: MadfMeasurementParams,
-    /// The distribution data. The first index is the azimuthal angle, and the
-    /// second index is the zenith angle.
+    /// The distribution data. The outermost index is the azimuthal angle of the
+    /// microfacet normal, and the inner index is the zenith angle of the
+    /// microfacet normal.
     pub samples: Vec<f32>,
 }
 

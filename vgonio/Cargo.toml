@@ -48,6 +48,8 @@ toml = "0.7"
 type-map = "0.5"
 winit = "0.28"
 wgpu = { version = "0.16", features = ["spirv"] }
+levenberg-marquardt = "0.13"
+nalgebra = "0.32"
 vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
 vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 

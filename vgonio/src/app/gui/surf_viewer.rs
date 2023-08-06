@@ -15,7 +15,7 @@ use crate::app::{
         GpuContext, Texture,
     },
     gui::{
-        data::{MicroSurfaceProp, PropertyData},
+        data::MicroSurfaceProp,
         docking::{Dockable, WidgetKind},
         event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
         state::{camera::CameraState, InputState},
