@@ -5,7 +5,6 @@ pub use beckmann_spizzichino::*;
 pub use trowbridge_reitz::*;
 
 use crate::measure::microfacet::MeasuredMadfData;
-use approx::assert_relative_eq;
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
 use nalgebra::{Dim, Dyn, Matrix, Owned, RealField, VecStorage, Vector1, Vector2, Vector3, U1, U2};
 use std::{
@@ -13,7 +12,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     marker::PhantomData,
 };
-use vgcore::math::{Cartesian, DVec3, Handedness, SphericalCoord, Vec3};
+use vgcore::math::{DVec3, Handedness, SphericalCoord, Vec3};
 
 /// Possible fitting models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -299,17 +298,12 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMadfFittingProblem<'a, U1> {
                     } else {
                         1.0 / cos_theta_m2 - cos_theta_m2
                     };
-                    let tan_theta_m = tan_theta_m2.sqrt() * cos_theta_m.signum();
 
-                    let upper = 2.0 * alpha * (tan_theta_m2 - alpha2) * sec_theta_m2 * sec_theta_m2;
-                    let lower = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
+                    let numerator =
+                        2.0 * alpha * (tan_theta_m2 - alpha2) * sec_theta_m2 * sec_theta_m2;
+                    let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
 
-                    // let upper =
-                    //     4.0 * alpha2 * (alpha2 - 1.0) * tan_theta_m * sec_theta_m2 *
-                    // sec_theta_m2; let lower = std::f64::consts::PI * (alpha2
-                    // + tan_theta_m2).powi(3);
-
-                    upper / lower
+                    numerator / denominator
                 })
                 .collect(),
             FittingModel::BeckmannSpizzichino => self
@@ -333,23 +327,15 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMadfFittingProblem<'a, U1> {
                     } else {
                         1.0 / cos_theta_m2 - cos_theta_m2
                     };
-                    let tan_theta_m = tan_theta_m2.sqrt() * cos_theta_m.signum();
 
-                    let upper = 2.0
+                    let numerator = 2.0
                         * (-tan_theta_m2 / alpha2).exp()
                         * (tan_theta_m2 - alpha2)
                         * sec_theta_m2
                         * sec_theta_m2;
-                    let lower = std::f64::consts::PI * alpha.powi(5);
+                    let denominator = std::f64::consts::PI * alpha.powi(5);
 
-                    // let upper = 2.0
-                    //     * tan_theta_m
-                    //     * (-tan_theta_m2 / alpha2).exp()
-                    //     * sec_theta_m4
-                    //     * (2.0 * alpha2 - sec_theta_m2);
-                    // let lower = std::f64::consts::PI * alpha2 * alpha2;
-
-                    upper / lower
+                    numerator / denominator
                 })
                 .collect(),
         };

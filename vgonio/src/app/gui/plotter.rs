@@ -206,7 +206,7 @@ impl PlotInspector {
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
-        let mut extra = MadfPlotExtraData::default();
+        let extra = MadfPlotExtraData::default();
         // extra.pre_process(data, cache);
         Self::new_inner(
             name,
@@ -249,7 +249,7 @@ impl PlotInspector {
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
-        let mut extra = BsdfPlotExtraData::new(/*view_id*/);
+        let extra = BsdfPlotExtraData::new(/*view_id*/);
         // extra.pre_process(data, cache);
         Self::new_inner(
             name,
@@ -1330,7 +1330,7 @@ impl PlottingWidget for PlotInspector {
 impl Dockable for PlotInspector {
     fn kind(&self) -> WidgetKind { WidgetKind::Plotting }
 
-    fn title(&self) -> WidgetText { "Plot inspector".into() }
+    fn title(&self) -> WidgetText { self.name().into() }
 
     fn uuid(&self) -> Uuid { self.uuid }
 
