@@ -2,11 +2,13 @@ use crate::{
     app::{
         cache::{Cache, Handle},
         gui::{
+            data::PropertyData,
             docking::{Dockable, WidgetKind},
             event::EventLoopProxy,
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
+    fitting::FittedModel,
     measure::{
         measurement::{MeasurementData, MeasurementKind},
         CollectorScheme,
@@ -16,6 +18,7 @@ use crate::{
 use egui::{plot::*, Align, Context, Response, Ui, Vec2, WidgetText};
 use std::{
     any::Any,
+    io::Read,
     ops::RangeInclusive,
     sync::{Arc, RwLock},
 };
@@ -31,6 +34,13 @@ enum PlotType {
     Line,
     Bar,
 }
+
+const LINE_COLORS: [egui::Color32; 4] = [
+    egui::Color32::LIGHT_RED,
+    egui::Color32::LIGHT_BLUE,
+    egui::Color32::LIGHT_GREEN,
+    egui::Color32::LIGHT_YELLOW,
+];
 
 pub trait PlottingWidget {
     fn uuid(&self) -> Uuid;
@@ -76,6 +86,8 @@ pub struct PlotInspector {
     data_handle: Handle<MeasurementData>,
     /// Cache of the application.
     cache: Arc<RwLock<Cache>>,
+    /// Inspector properties data might used by the plot.
+    props: Arc<RwLock<PropertyData>>,
     /// The legend to be displayed
     legend: Legend,
     /// The type of plot to be displayed
@@ -191,6 +203,7 @@ impl PlotInspector {
         name: String,
         data: Handle<MeasurementData>,
         cache: Arc<RwLock<Cache>>,
+        props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = MadfPlotExtraData::default();
@@ -201,6 +214,7 @@ impl PlotInspector {
             PlotType::Line,
             Some(Box::new(extra)),
             cache,
+            props,
             event_loop,
         )
     }
@@ -210,6 +224,7 @@ impl PlotInspector {
         name: String,
         data: Handle<MeasurementData>,
         cache: Arc<RwLock<Cache>>,
+        props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = MmsfPlotExtraData::default();
@@ -220,6 +235,7 @@ impl PlotInspector {
             PlotType::Line,
             Some(Box::new(extra)),
             cache,
+            props,
             event_loop,
         )
     }
@@ -230,6 +246,7 @@ impl PlotInspector {
         name: String,
         data: Handle<MeasurementData>,
         cache: Arc<RwLock<Cache>>,
+        props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = BsdfPlotExtraData::new(/*view_id*/);
@@ -240,6 +257,7 @@ impl PlotInspector {
             PlotType::Line,
             Some(Box::new(extra)),
             cache,
+            props,
             event_loop,
         )
     }
@@ -248,12 +266,14 @@ impl PlotInspector {
     pub fn new<S: Into<String>>(
         name: S,
         cache: Arc<RwLock<Cache>>,
+        props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         Self {
             name: name.into(),
             data_handle: Handle::invalid(),
             cache,
+            props,
             legend: Legend::default()
                 .text_style(egui::TextStyle::Monospace)
                 .background_alpha(1.0)
@@ -271,6 +291,7 @@ impl PlotInspector {
         plot_type: PlotType,
         extra: Option<Box<dyn ExtraData>>,
         cache: Arc<RwLock<Cache>>,
+        props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         Self {
@@ -278,6 +299,7 @@ impl PlotInspector {
             name,
             data_handle: data,
             cache,
+            props,
             legend: Legend::default()
                 .text_style(egui::TextStyle::Monospace)
                 .background_alpha(1.0)
@@ -366,6 +388,13 @@ impl PlottingWidget for PlotInspector {
             ui.label("No data selected!");
             return;
         }
+
+        let fitted = {
+            let props = self.props.read().unwrap();
+            let prop = props.measured.get(&self.data_handle).unwrap();
+            prop.fitted.clone()
+        };
+
         match self.measurement_data_kind() {
             MeasurementKind::Bsdf => {
                 if let Some(extra) = &mut self.extra {
@@ -897,7 +926,7 @@ impl PlottingWidget for PlotInspector {
                         Vec2::new(ui.available_width(), 48.0),
                         egui::Layout::left_to_right(Align::Center),
                         |ui| {
-                            ui.label("microfacet normal: ");
+                            ui.label("Microfacet normal: ");
                             let mut opposite = extra.azimuth_m.wrap_to_tau().opposite();
                             Self::angle_knob(
                                 ui,
@@ -926,7 +955,8 @@ impl PlottingWidget for PlotInspector {
                             );
                         },
                     );
-                    let data: Vec<_> = {
+
+                    let data_line: Vec<_> = {
                         let (starting, opposite) = measurement.adf_data_slice(extra.azimuth_m);
 
                         // Data of the opposite azimuthal angle side of the slice, if exists.
@@ -952,11 +982,13 @@ impl PlottingWidget for PlotInspector {
                     };
 
                     let (max_x, max_y) =
-                        data.iter().fold((0.01, 0.01), |(max_x, max_y), [x, y]| {
-                            let val_x = x.abs().max(max_x);
-                            let val_y = y.max(max_y);
-                            (val_x, val_y)
-                        });
+                        data_line
+                            .iter()
+                            .fold((0.01, 0.01), |(max_x, max_y), [x, y]| {
+                                let val_x = x.abs().max(max_x);
+                                let val_y = y.max(max_y);
+                                (val_x, val_y)
+                            });
 
                     let plot = Plot::new("plotting")
                         .legend(self.legend.clone())
@@ -999,21 +1031,74 @@ impl PlottingWidget for PlotInspector {
                             }),
                         );
 
+                    let fitted_lines = if !fitted.is_empty() {
+                        ui.label("Fitted models: ");
+                        for model in &fitted {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(
+                                    egui::RichText::from(model.name())
+                                        .text_style(egui::TextStyle::Monospace),
+                                );
+                                ui.label(
+                                    egui::RichText::from(model.params_string())
+                                        .text_style(egui::TextStyle::Button),
+                                );
+                            });
+                        }
+                        let xs = zenith
+                            .values_rev()
+                            .map(|x| -x.as_f32())
+                            .chain(zenith.values().skip(1).map(|x| x.as_f32()))
+                            .collect::<Vec<_>>();
+                        fitted
+                            .iter()
+                            .map(|f| match f {
+                                FittedModel::Bsdf(_) => {
+                                    todo!()
+                                }
+                                FittedModel::Madf(model) => xs
+                                    .clone()
+                                    .into_iter()
+                                    .map(|theta_m| model.eval_with_theta_m(theta_m as f64))
+                                    .zip(xs.clone().into_iter())
+                                    .map(|(y, x)| [x as f64, y])
+                                    .collect::<Vec<_>>(),
+                                FittedModel::Mmsf(_) => {
+                                    todo!()
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    } else {
+                        vec![]
+                    };
+
                     plot.show(ui, |plot_ui| match self.plot_type {
                         PlotType::Line => {
                             plot_ui.line(
-                                Line::new(data)
-                                    .stroke(egui::epaint::Stroke::new(
-                                        2.0,
-                                        egui::Color32::LIGHT_RED,
-                                    ))
+                                Line::new(data_line)
+                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
                                     .name("Microfacet area distribution"),
                             );
+                            if !fitted_lines.is_empty() {
+                                for (i, (line, model)) in
+                                    fitted_lines.into_iter().zip(fitted.iter()).enumerate()
+                                {
+                                    plot_ui.line(
+                                        Line::new(line)
+                                            .stroke(egui::epaint::Stroke::new(
+                                                2.0,
+                                                LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                            ))
+                                            .name(model.name()),
+                                    );
+                                }
+                            }
                         }
                         PlotType::Bar => {
                             plot_ui.bar_chart(
                                 BarChart::new(
-                                    data.iter()
+                                    data_line
+                                        .iter()
                                         .map(|[x, y]| {
                                             Bar::new(*x, *y)
                                                 .width(zenith_bin_width_rad as f64)
@@ -1049,7 +1134,7 @@ impl PlottingWidget for PlotInspector {
                         Vec2::new(ui.available_width(), 48.0),
                         egui::Layout::left_to_right(Align::Center),
                         |ui| {
-                            ui.label("microfacet normal: ");
+                            ui.label("Microfacet normal: ");
                             Self::angle_knob(
                                 ui,
                                 true,

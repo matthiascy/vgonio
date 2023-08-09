@@ -5,6 +5,7 @@ use vgsurf::MicroSurface;
 
 use crate::{
     app::cache::{Cache, Handle},
+    fitting::FittedModel,
     measure::measurement::{MeasurementData, MeasurementDataSource, MeasurementKind},
 };
 
@@ -32,7 +33,7 @@ pub struct MicroSurfaceProp {
 }
 
 /// Measured data properties.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct MeasurementDataProp {
     /// The kind of the measured data.
     pub kind: MeasurementKind,
@@ -40,6 +41,8 @@ pub struct MeasurementDataProp {
     pub name: String,
     /// Source of the measured data.
     pub source: MeasurementDataSource,
+    /// Fitted model.
+    pub fitted: Vec<FittedModel>,
 }
 
 /// Property data.
@@ -123,6 +126,7 @@ impl PropertyData {
                     kind: data.kind(),
                     source: data.source.clone(),
                     name: data.name.clone(),
+                    fitted: Vec::with_capacity(4),
                 });
             }
         }

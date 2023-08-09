@@ -12,6 +12,7 @@ use crate::{
             outliner::Item,
         },
     },
+    fitting::FittingModel,
     measure::measurement::{MeasuredData, MeasurementDataSource},
 };
 
@@ -229,6 +230,24 @@ impl PropertyInspector {
                                             kind: state.kind,
                                             data: meas,
                                             independent: false,
+                                        })
+                                        .unwrap();
+                                }
+                                if ui.button("Fit TrowbridgeReitz").clicked() {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Fitting {
+                                            kind: state.kind,
+                                            model: FittingModel::TrowbridgeReitz,
+                                            data: meas,
+                                        })
+                                        .unwrap();
+                                }
+                                if ui.button("Fit BeckmannSpizzichino").clicked() {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::Fitting {
+                                            kind: state.kind,
+                                            model: FittingModel::BeckmannSpizzichino,
+                                            data: meas,
                                         })
                                         .unwrap();
                                 }

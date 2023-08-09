@@ -150,6 +150,7 @@ impl DockSpace {
                 WidgetKind::Plotting => Box::new(PlotInspector::new(
                     "New Plot",
                     self.cache.clone(),
+                    self.data.clone(),
                     self.event_loop.clone(),
                 )),
             };

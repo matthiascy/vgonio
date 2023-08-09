@@ -9,11 +9,7 @@ use crate::{
             gizmo::NavigationGizmo,
             icons,
             notify::{NotifyKind, NotifySystem},
-            outliner::Item,
-            plotter::{
-                BsdfPlotExtraData, MadfPlotExtraData, MmsfPlotExtraData, PlotInspector,
-                PlottingWidget,
-            },
+            plotter::{PlotInspector, PlottingWidget},
             simulations::Simulations,
             state::GuiRenderer,
             theme::ThemeKind,
@@ -22,15 +18,20 @@ use crate::{
         },
         Config,
     },
+    fitting::{
+        BeckmannSpizzichinoIsotropicMadf, FittedModel, FittingModel, FittingProblem,
+        MadfFittingProblem, TrowbridgeReitzIsotropicMadf,
+    },
     measure::measurement::{MeasurementData, MeasurementKind},
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
+use pyo3::{prelude::PyModule, Py, PyAny, Python};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use vgcore::math::Mat4;
+use vgcore::math::{Mat4, Vec3};
 use vgsurf::MicroSurface;
 
 use super::{docking::DockSpace, event::EventResponse};
@@ -136,45 +137,92 @@ impl VgonioGui {
                 data,
                 independent,
             } => {
-                let pos = self
+                let plotter_win_idx = self
                     .plotters
                     .iter()
                     .position(|(_, p)| p.measurement_data_handle() == *data);
-                match pos {
-                    None => {
-                        let prop = self.properties.read().unwrap();
-                        let plotter = match kind {
-                            MeasurementKind::Bsdf => Box::new(PlotInspector::new_bsdf(
-                                prop.measured.get(data).unwrap().name.clone(),
-                                *data,
-                                self.cache.clone(),
-                                self.event_loop.clone(),
-                            )),
-                            MeasurementKind::Madf => Box::new(PlotInspector::new_madf(
-                                prop.measured.get(data).unwrap().name.clone(),
-                                *data,
-                                self.cache.clone(),
-                                self.event_loop.clone(),
-                            )),
-                            MeasurementKind::Mmsf => Box::new(PlotInspector::new_mmsf(
-                                prop.measured.get(data).unwrap().name.clone(),
-                                *data,
-                                self.cache.clone(),
-                                self.event_loop.clone(),
-                            )),
-                        };
-                        if *independent {
-                            self.plotters.push((true, plotter));
-                        } else {
-                            self.dock_space.add_existing_widget(plotter)
+
+                if plotter_win_idx.is_some() && *independent {
+                    self.plotters[plotter_win_idx.unwrap()].0 = true;
+                } else {
+                    let prop = self.properties.read().unwrap();
+                    let plotter = match kind {
+                        MeasurementKind::Bsdf => Box::new(PlotInspector::new_bsdf(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            self.cache.clone(),
+                            self.properties.clone(),
+                            self.event_loop.clone(),
+                        )),
+                        MeasurementKind::Madf => Box::new(PlotInspector::new_madf(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            self.cache.clone(),
+                            self.properties.clone(),
+                            self.event_loop.clone(),
+                        )),
+                        MeasurementKind::Mmsf => Box::new(PlotInspector::new_mmsf(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            self.cache.clone(),
+                            self.properties.clone(),
+                            self.event_loop.clone(),
+                        )),
+                    };
+                    if *independent {
+                        self.plotters.push((true, plotter));
+                    } else {
+                        self.dock_space.add_existing_widget(plotter)
+                    }
+                }
+                EventResponse::Handled
+            }
+            VgonioEvent::Fitting { kind, model, data } => {
+                match kind {
+                    MeasurementKind::Bsdf => {}
+                    MeasurementKind::Madf => {
+                        let mut prop = self.properties.write().unwrap();
+                        let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
+                        if !fitted.iter().any(|f| f.is_same_model(*model)) {
+                            let cache = self.cache.read().unwrap();
+                            let measurement = cache.get_measurement_data(*data).unwrap();
+                            let data = measurement
+                                .measured
+                                .madf_data()
+                                .expect("Measurement has no MADF data.");
+                            let problem = match model {
+                                FittingModel::TrowbridgeReitz => MadfFittingProblem::new(
+                                    data,
+                                    TrowbridgeReitzIsotropicMadf { width: 0.05 },
+                                    Vec3::Y,
+                                ),
+                                FittingModel::BeckmannSpizzichino => MadfFittingProblem::new(
+                                    data,
+                                    BeckmannSpizzichinoIsotropicMadf { roughness: 0.05 },
+                                    Vec3::Y,
+                                ),
+                            };
+                            let (result, report) = problem.lsq_lm_fit();
+                            log::info!("Report: {:?}", report);
+                            log::info!("Result: {:?}", result);
+
+                            // {
+                            //     Python::with_gil(|py| {
+                            //         let code = std::include_str!(
+                            //             "../../../../scripts/trowbridge_reitz.py"
+                            //         );
+                            //         let pymodule = PyModule::from_code(py, code, "", "")?;
+                            //         let func: Py<PyAny> =
+                            //             pymodule.getattr("plot_trowbridge_reitz_ndf")?.into();
+                            //         func.call0(py)
+                            //     })
+                            //     .unwrap();
+                            // }
+
+                            fitted.push(FittedModel::Madf(result));
                         }
                     }
-                    Some(idx) => {
-                        if *independent {
-                            self.plotters[idx].0 = true;
-                        } else {
-                        }
-                    }
+                    MeasurementKind::Mmsf => {}
                 }
                 EventResponse::Handled
             }

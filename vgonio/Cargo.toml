@@ -36,7 +36,11 @@ embree = { workspace = true, optional = true }
 env_logger = "0.10"
 futures-intrusive = "0.5"
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
+levenberg-marquardt = "0.13"
+nalgebra = "0.32"
+numpy = "0.19"
 pollster = "0.3"
+pyo3 = { version = "0.19", features = ["auto-initialize"] }
 rfd = { version = "0.11", features = ["file-handle-inner"] }
 rayon = "1.6"
 rand = "0.8"
@@ -48,8 +52,6 @@ toml = "0.7"
 type-map = "0.5"
 winit = "0.28"
 wgpu = { version = "0.16", features = ["spirv"] }
-levenberg-marquardt = "0.13"
-nalgebra = "0.32"
 vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
 vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 
