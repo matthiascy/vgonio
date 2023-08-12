@@ -9,7 +9,9 @@ pub struct BeckmannSpizzichinoMadf {
 }
 
 impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoMadf {
-    fn model(&self) -> FittingModel { FittingModel::BeckmannSpizzichino }
+    fn name(&self) -> &'static str { "Beckmann-Spizzichino ADF" }
+
+    fn fitting_model(&self) -> FittingModel { FittingModel::BeckmannSpizzichino }
 
     fn is_isotropic(&self) -> bool { true }
 

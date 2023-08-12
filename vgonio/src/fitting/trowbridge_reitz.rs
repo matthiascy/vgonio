@@ -16,7 +16,9 @@ pub struct TrowbridgeReitzMadf {
 }
 
 impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
-    fn model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
+    fn name(&self) -> &'static str { "Trowbridge-Reitz ADF" }
+
+    fn fitting_model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
 
     fn is_isotropic(&self) -> bool { true }
 

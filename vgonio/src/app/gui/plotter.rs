@@ -8,7 +8,7 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    fitting::FittedModel,
+    fitting::{FittedModel, FittingModel, MicrofacetAreaDistributionModel},
     measure::{
         measurement::{MeasurementData, MeasurementKind},
         CollectorScheme,
@@ -74,6 +74,9 @@ pub trait ExtraData {
 
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
+
+    /// Updates the fitted curves according to the given fitted models.
+    fn update_fitted_curves(&mut self, fitted: &[FittedModel]);
 
     fn as_any(&self) -> &dyn Any;
 
@@ -209,6 +212,8 @@ pub struct AreaDistributionExtra {
     /// Curve cache extracted from the measurement data, indexed by the
     /// azimuthal angle.
     curves: Vec<Curve>,
+    /// The fitted curves together with the fitted model.
+    fitted: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Curve)>,
 }
 
 impl Default for AreaDistributionExtra {
@@ -226,6 +231,7 @@ impl Default for AreaDistributionExtra {
             },
             azimuth_m: rad!(0.0),
             curves: vec![],
+            fitted: vec![],
         }
     }
 }
@@ -279,6 +285,8 @@ impl ExtraData for BsdfPlotExtraData {
 
     fn current_curve(&self) -> Option<&Curve> { todo!("bsdf current curve") }
 
+    fn update_fitted_curves(&mut self, fitted: &[FittedModel]) { todo!() }
+
     fn as_any(&self) -> &dyn Any { self }
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
@@ -310,6 +318,48 @@ impl ExtraData for AreaDistributionExtra {
         let index = self.azimuth_range.index_of(azimuth_m);
         debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
         self.curves.get(index)
+    }
+
+    fn update_fitted_curves(&mut self, models: &[FittedModel]) {
+        let theta_values = self
+            .zenith_range
+            .values_rev()
+            .map(|x| -x.as_f64())
+            .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
+            .collect::<Vec<_>>();
+        let to_add = models
+            .iter()
+            .filter(|model| {
+                !self
+                    .fitted
+                    .iter()
+                    .any(|(existing_model, _)| model.is_same_model(existing_model.fitting_model()))
+            })
+            .collect::<Vec<_>>();
+
+        if to_add.is_empty() {
+            return;
+        } else {
+            for fitted in to_add {
+                match fitted {
+                    FittedModel::Madf(model) => {
+                        // Generate the curve for this model.
+                        let points = theta_values
+                            .iter()
+                            .zip(
+                                theta_values
+                                    .iter()
+                                    .map(|theta_m| model.eval_with_theta_m(*theta_m)),
+                            )
+                            .map(|(x, y)| [*x, y]);
+                        self.fitted.push((model.clone_box(), Curve::from(points)));
+                    }
+                    _ => {
+                        unreachable!("Wrong model type for area distribution!")
+                    }
+                }
+            }
+        }
     }
 
     fn as_any(&self) -> &dyn Any { self }
@@ -354,6 +404,23 @@ impl ExtraData for AreaDistributionExtra {
                 );
             },
         );
+
+        ui.label("Fitted models: ");
+        if self.fitted.is_empty() {
+            ui.label("None");
+        } else {
+            for (model, _) in &self.fitted {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        egui::RichText::from(model.name()).text_style(egui::TextStyle::Monospace),
+                    );
+                    ui.label(
+                        egui::RichText::from(format!("α = {:.4}", model.params()[0]))
+                            .text_style(egui::TextStyle::Button),
+                    );
+                });
+            }
+        }
     }
 }
 
@@ -393,6 +460,8 @@ impl ExtraData for MaskingShadowingExtra {
         debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
         self.curves.get(index)
     }
+
+    fn update_fitted_curves(&mut self, fitted: &[FittedModel]) { todo!() }
 
     fn as_any(&self) -> &dyn Any { self }
 
@@ -609,11 +678,13 @@ impl PlottingWidget for PlotInspector {
             return;
         }
 
-        let fitted_models = {
+        {
             let props = self.props.read().unwrap();
             let prop = props.measured.get(&self.data_handle).unwrap();
-            prop.fitted.clone()
-        };
+            if let Some(extra) = &mut self.extra {
+                extra.update_fitted_curves(&prop.fitted);
+            }
+        }
 
         match self.measurement_data_kind() {
             MeasurementKind::Bsdf => {
@@ -1157,48 +1228,6 @@ impl PlottingWidget for PlotInspector {
                                     )
                                 }),
                             );
-
-                        let fitted_lines = if !fitted_models.is_empty() {
-                            ui.label("Fitted models: ");
-                            for model in &fitted_models {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.label(
-                                        egui::RichText::from(model.name())
-                                            .text_style(egui::TextStyle::Monospace),
-                                    );
-                                    ui.label(
-                                        egui::RichText::from(model.params_string())
-                                            .text_style(egui::TextStyle::Button),
-                                    );
-                                });
-                            }
-                            let xs = zenith
-                                .values_rev()
-                                .map(|x| -x.as_f32())
-                                .chain(zenith.values().skip(1).map(|x| x.as_f32()))
-                                .collect::<Vec<_>>();
-                            fitted_models
-                                .iter()
-                                .map(|f| match f {
-                                    FittedModel::Bsdf(_) => {
-                                        todo!()
-                                    }
-                                    FittedModel::Madf(model) => xs
-                                        .clone()
-                                        .into_iter()
-                                        .map(|theta_m| model.eval_with_theta_m(theta_m as f64))
-                                        .zip(xs.clone().into_iter())
-                                        .map(|(y, x)| [x as f64, y])
-                                        .collect::<Vec<_>>(),
-                                    FittedModel::Mmsf(_) => {
-                                        todo!()
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                        } else {
-                            vec![]
-                        };
-
                         plot.show(ui, |plot_ui| match self.plot_type {
                             PlotType::Line => {
                                 plot_ui.line(
@@ -1206,20 +1235,22 @@ impl PlottingWidget for PlotInspector {
                                         .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
                                         .name("Microfacet area distribution"),
                                 );
-                                if !fitted_lines.is_empty() {
-                                    for (i, (line, model)) in fitted_lines
-                                        .into_iter()
-                                        .zip(fitted_models.iter())
-                                        .enumerate()
+                                {
+                                    let concrete_extra = extra
+                                        .as_any()
+                                        .downcast_ref::<AreaDistributionExtra>()
+                                        .unwrap();
+                                    for (i, (model, curve)) in
+                                        concrete_extra.fitted.iter().enumerate()
                                     {
                                         plot_ui.line(
-                                            Line::new(line)
+                                            Line::new(curve.points.clone())
                                                 .stroke(egui::epaint::Stroke::new(
                                                     2.0,
                                                     LINE_COLORS[(i + 1) % LINE_COLORS.len()],
                                                 ))
                                                 .name(model.name()),
-                                        );
+                                        )
                                     }
                                 }
                             }

@@ -23,6 +23,15 @@ pub enum FittingModel {
     BeckmannSpizzichino,
 }
 
+impl Display for FittingModel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FittingModel::TrowbridgeReitz => write!(f, "Trowbridge-Reitz"),
+            FittingModel::BeckmannSpizzichino => write!(f, "Beckmann-Spizzichino"),
+        }
+    }
+}
+
 /// A model after fitting.
 #[derive(Debug, Clone)]
 pub enum FittedModel {
@@ -56,10 +65,11 @@ impl FittedModel {
         }
     }
 
+    // TODO: remove this method.
     /// Returns the name of the fitted model.
     pub fn name(&self) -> &'static str {
         match self {
-            FittedModel::Madf(m) => match m.model() {
+            FittedModel::Madf(m) => match m.fitting_model() {
                 FittingModel::TrowbridgeReitz => "Trowbridge-Reitz ADF",
                 FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino ADF",
             },
@@ -71,9 +81,10 @@ impl FittedModel {
         }
     }
 
+    // TODO: Remove this method.
     pub fn params_string(&self) -> String {
         match self {
-            FittedModel::Madf(m) => match m.model() {
+            FittedModel::Madf(m) => match m.fitting_model() {
                 FittingModel::TrowbridgeReitz => {
                     format!("α = {:.4}", m.params()[0])
                 }
@@ -97,7 +108,7 @@ impl FittedModel {
     /// fitting model.
     pub fn is_same_model(&self, model: FittingModel) -> bool {
         match self {
-            FittedModel::Madf(m) => m.model() == model,
+            FittedModel::Madf(m) => m.fitting_model() == model,
             FittedModel::Bsdf(b) => b.model() == model,
             FittedModel::Mmsf(m) => m.model() == model,
         }
@@ -106,8 +117,11 @@ impl FittedModel {
 
 /// A microfacet area distribution function model.
 pub trait MicrofacetAreaDistributionModel: Debug {
+    /// Returns the name of the model.
+    fn name(&self) -> &'static str;
+
     /// Returns the concrete model of the MADF.
-    fn model(&self) -> FittingModel;
+    fn fitting_model(&self) -> FittingModel;
 
     /// Returns if the model is isotropic.
     fn is_isotropic(&self) -> bool;
@@ -266,7 +280,7 @@ pub struct MadfFittingProblem<'a> {
 impl<'a> Display for MadfFittingProblem<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MadfFittingProblem")
-            .field("target_model", &self.model.model())
+            .field("target_model", &self.model.fitting_model())
             .finish()
     }
 }
@@ -336,7 +350,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMadfFittingProblem<'a, U1> {
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         let alpha = self.params().x;
         let alpha2 = alpha * alpha;
-        let derivatives = match self.model.model() {
+        let derivatives = match self.model.fitting_model() {
             FittingModel::TrowbridgeReitz => self
                 .measured
                 .samples
