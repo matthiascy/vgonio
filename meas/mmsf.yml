@@ -5,9 +5,11 @@ type: !mmsf # !microfacet-masking-shadowing-function
   resolution: 2048
   strict: true
 surfaces:
-  # - usr://surfaces/varying_density_05_res_1000.txt
+  - usr://surfaces/aluminium1bar100.vgms
+  - usr://surfaces/aluminium1bar200.vgms
+  - usr://surfaces/aluminium1bar200fine.vgms
+  - usr://surfaces/aluminium2bar100.vgms
+  - usr://surfaces/aluminium3bar100.vgms
+  - usr://surfaces/aluminium4bar100.vgms
   - usr://surfaces/aluminium65bar100.vgms
-  # - usr://surfaces/al8x8.vgms
-  # - usr://surfaces/8x8.vgms\
-  # - usr://surfaces/AluminiumMirror.txt
-  # - usr://surfaces/generated/8x8_flat.txt
+  - usr://surfaces/aluminiummirror.vgms

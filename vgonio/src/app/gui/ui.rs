@@ -19,8 +19,9 @@ use crate::{
         Config,
     },
     fitting::{
-        BeckmannSpizzichinoIsotropicMadf, FittedModel, FittingModel, FittingProblem,
-        MadfFittingProblem, TrowbridgeReitzIsotropicMadf,
+        BeckmannSpizzichinoMadf, BeckmannSpizzichinoMmsf, FittedModel, FittingModel,
+        FittingProblem, MadfFittingProblem, MmsfFittingProblem, TrowbridgeReitzMadf,
+        TrowbridgeReitzMmsf,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
 };
@@ -193,12 +194,12 @@ impl VgonioGui {
                             let problem = match model {
                                 FittingModel::TrowbridgeReitz => MadfFittingProblem::new(
                                     data,
-                                    TrowbridgeReitzIsotropicMadf { width: 0.05 },
+                                    TrowbridgeReitzMadf { width: 0.05 },
                                     Vec3::Y,
                                 ),
                                 FittingModel::BeckmannSpizzichino => MadfFittingProblem::new(
                                     data,
-                                    BeckmannSpizzichinoIsotropicMadf { roughness: 0.05 },
+                                    BeckmannSpizzichinoMadf { roughness: 0.05 },
                                     Vec3::Y,
                                 ),
                             };
@@ -222,7 +223,34 @@ impl VgonioGui {
                             fitted.push(FittedModel::Madf(result));
                         }
                     }
-                    MeasurementKind::Mmsf => {}
+                    MeasurementKind::Mmsf => {
+                        let mut prop = self.properties.write().unwrap();
+                        let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
+                        if !fitted.iter().any(|f| f.is_same_model(*model)) {
+                            let cache = self.cache.read().unwrap();
+                            let measurement = cache.get_measurement_data(*data).unwrap();
+                            let data = measurement
+                                .measured
+                                .mmsf_data()
+                                .expect("Measurement has no MMSF data.");
+                            let problem = match model {
+                                FittingModel::TrowbridgeReitz => MmsfFittingProblem::new(
+                                    data,
+                                    TrowbridgeReitzMmsf { width: 0.05 },
+                                    Vec3::Y,
+                                ),
+                                FittingModel::BeckmannSpizzichino => MmsfFittingProblem::new(
+                                    data,
+                                    BeckmannSpizzichinoMmsf { roughness: 0.05 },
+                                    Vec3::Y,
+                                ),
+                            };
+                            let (result, report) = problem.lsq_lm_fit();
+                            log::info!("Report: {:?}", report);
+                            log::info!("Result: {:?}", result);
+                            fitted.push(FittedModel::Mmsf(result));
+                        }
+                    }
                 }
                 EventResponse::Handled
             }

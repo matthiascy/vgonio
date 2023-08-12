@@ -1,4 +1,7 @@
-use crate::fitting::{FittingModel, MicrofacetAreaDistributionModel};
+use crate::fitting::{
+    FittingModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
+};
+use vgcore::math::DVec3;
 
 /// Trowbridge-Reitz(GGX) microfacet area distribution function.
 ///
@@ -8,12 +11,12 @@ use crate::fitting::{FittingModel, MicrofacetAreaDistributionModel};
 /// where $\alpha$ is the width parameter of the NDF, $\theta_m$ is the angle
 /// between the microfacet normal and the normal of the surface.
 #[derive(Debug, Copy, Clone)]
-pub struct TrowbridgeReitzIsotropicMadf {
+pub struct TrowbridgeReitzMadf {
     /// Width parameter of the NDF.
     pub width: f64,
 }
 
-impl MicrofacetAreaDistributionModel for TrowbridgeReitzIsotropicMadf {
+impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
     fn model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
 
     fn is_isotropic(&self) -> bool { true }
@@ -33,7 +36,7 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzIsotropicMadf {
     fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
 }
 
-pub type GGXMadfIsotropic = TrowbridgeReitzIsotropicMadf;
+pub type GGXMadfIsotropic = TrowbridgeReitzMadf;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TrowbridgeReitzMadfAnisotropic {
@@ -41,4 +44,27 @@ pub struct TrowbridgeReitzMadfAnisotropic {
     pub width_u: f32,
     /// Width parameter along the vertical axis of the NDF.
     pub width_v: f32,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct TrowbridgeReitzMmsf {
+    /// Width parameter of the MSF.
+    pub width: f64,
+}
+
+impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMmsf {
+    fn model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
+
+    fn param(&self) -> f64 { self.width }
+
+    fn set_param(&mut self, param: f64) { self.width = param; }
+
+    fn eval_with_cos_theta_v(&self, cos_theta_v: f64) -> f64 {
+        let alpha2 = self.width * self.width;
+        let cos_theta_v2 = cos_theta_v * cos_theta_v;
+        let tan_theta_v2 = (1.0 - cos_theta_v2) / cos_theta_v2;
+        2.0 / (1.0 + (1.0 + alpha2 * tan_theta_v2).sqrt())
+    }
+
+    fn clone_box(&self) -> Box<dyn MicrofacetMaskingShadowingModel> { Box::new(*self) }
 }

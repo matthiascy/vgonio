@@ -48,7 +48,7 @@ pub fn measure_area_distribution(
             let mesh = mesh.unwrap();
             let macro_area = mesh.macro_surface_area();
             let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
-            let divisor = macro_area * solid_angle;
+            let denominator = macro_area * solid_angle;
             let half_zenith_bin_size_cos = (params.zenith.step_size / 2.0).cos();
             log::debug!("-- macro surface area: {}", macro_area);
             log::debug!("-- solid angle per measurement: {}", solid_angle);
@@ -80,7 +80,7 @@ pub fn measure_area_distribution(
                             })
                             .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
                             .reduce(|| 0.0, |a, b| a + b);
-                        let value = facets_surface_area / divisor;
+                        let value = facets_surface_area / denominator;
                         log::trace!(
                             "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
                             azimuth.prettified(),

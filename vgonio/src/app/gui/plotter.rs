@@ -389,7 +389,7 @@ impl PlottingWidget for PlotInspector {
             return;
         }
 
-        let fitted = {
+        let fitted_models = {
             let props = self.props.read().unwrap();
             let prop = props.measured.get(&self.data_handle).unwrap();
             prop.fitted.clone()
@@ -1031,9 +1031,9 @@ impl PlottingWidget for PlotInspector {
                             }),
                         );
 
-                    let fitted_lines = if !fitted.is_empty() {
+                    let fitted_lines = if !fitted_models.is_empty() {
                         ui.label("Fitted models: ");
-                        for model in &fitted {
+                        for model in &fitted_models {
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(
                                     egui::RichText::from(model.name())
@@ -1050,7 +1050,7 @@ impl PlottingWidget for PlotInspector {
                             .map(|x| -x.as_f32())
                             .chain(zenith.values().skip(1).map(|x| x.as_f32()))
                             .collect::<Vec<_>>();
-                        fitted
+                        fitted_models
                             .iter()
                             .map(|f| match f {
                                 FittedModel::Bsdf(_) => {
@@ -1080,8 +1080,10 @@ impl PlottingWidget for PlotInspector {
                                     .name("Microfacet area distribution"),
                             );
                             if !fitted_lines.is_empty() {
-                                for (i, (line, model)) in
-                                    fitted_lines.into_iter().zip(fitted.iter()).enumerate()
+                                for (i, (line, model)) in fitted_lines
+                                    .into_iter()
+                                    .zip(fitted_models.iter())
+                                    .enumerate()
                                 {
                                     plot_ui.line(
                                         Line::new(line)
@@ -1286,6 +1288,24 @@ impl PlottingWidget for PlotInspector {
                                     ))
                                     .name("Microfacet masking shadowing"),
                             );
+                            // if !fitted_lines.is_empty() {
+                            //     for (i, (line, model)) in
+                            //         fitted_lines.into_iter().zip(fitted.
+                            // iter()).enumerate()
+                            //     {
+                            //         println!("draw fitted line {}", i);
+                            //         plot_ui.line(
+                            //             Line::new(line)
+                            //
+                            // .stroke(egui::epaint::Stroke::new(
+                            //                     2.0,
+                            //                     LINE_COLORS[(i + 1) %
+                            // LINE_COLORS.len()],
+                            //                 ))
+                            //                 .name(model.name()),
+                            //         );
+                            //     }
+                            // }
                         }
                         PlotType::Bar => {
                             plot_ui.bar_chart(

@@ -4,9 +4,11 @@ pub mod trowbridge_reitz;
 pub use beckmann_spizzichino::*;
 pub use trowbridge_reitz::*;
 
-use crate::measure::microfacet::MeasuredMadfData;
+use crate::measure::microfacet::{MeasuredMadfData, MeasuredMmsfData};
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
-use nalgebra::{Dim, Dyn, Matrix, Owned, RealField, VecStorage, Vector1, Vector2, Vector3, U1, U2};
+use nalgebra::{
+    Dim, Dyn, Matrix, Owned, RealField, VecStorage, Vector, Vector1, Vector2, Vector3, U1, U2,
+};
 use std::{
     any::Any,
     fmt::{Debug, Display, Formatter},
@@ -64,7 +66,10 @@ impl FittedModel {
                 FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino ADF",
             },
             FittedModel::Bsdf(_) => "TODO: Microfacet BSDF",
-            FittedModel::Mmsf(_) => "TODO: Microfacet MSF",
+            FittedModel::Mmsf(m) => match m.model() {
+                FittingModel::TrowbridgeReitz => "Trowbridge-Reitz MSF",
+                FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino MSF",
+            },
         }
     }
 
@@ -79,7 +84,14 @@ impl FittedModel {
                 }
             },
             FittedModel::Bsdf(_) => String::from("TODO: Microfacet BSDF"),
-            FittedModel::Mmsf(_) => String::from("TODO: Microfacet MSF"),
+            FittedModel::Mmsf(m) => match m.model() {
+                FittingModel::TrowbridgeReitz => {
+                    format!("α = {:.4}", m.param())
+                }
+                FittingModel::BeckmannSpizzichino => {
+                    format!("α = {:.4}", m.param())
+                }
+            },
         }
     }
 
@@ -128,7 +140,7 @@ pub trait MicrofacetAreaDistributionModel: Debug {
     ///
     /// * `m` - The microfacet normal vector.
     /// * `n` - The normal vector of the macro-surface.
-    fn eval_with_m(&self, m: DVec3, n: DVec3) -> f64 {
+    fn eval(&self, m: DVec3, n: DVec3) -> f64 {
         self.eval_with_cos_theta_m(m.normalize().dot(n.normalize()))
     }
 
@@ -160,7 +172,57 @@ impl Clone for Box<dyn MicrofacetAreaDistributionModel> {
 
 /// A microfacet masking-shadowing function model.
 pub trait MicrofacetMaskingShadowingModel: Debug {
+    /// Returns the base model of the MMSF.
     fn model(&self) -> FittingModel;
+
+    /// Returns the parameter of the model.
+    fn param(&self) -> f64;
+
+    /// Sets the parameter of the model.
+    fn set_param(&mut self, param: f64);
+
+    /// Evaluates the model.
+    ///
+    /// # Arguments
+    ///
+    /// * `m` - The microfacet normal vector.
+    /// * `n` - The normal vector of the macro-surface.
+    /// * `v` - The view vector (any direction, either the incident or outgoing
+    ///   direction).
+    fn eval(&self, m: DVec3, n: DVec3, v: DVec3) -> f64 {
+        let n = n.normalize();
+        let cos_theta_v = v.normalize().dot(n);
+        let cos_theta_m = m.normalize().dot(n);
+        if cos_theta_m / cos_theta_v <= 0.0 {
+            0.0
+        } else {
+            self.eval_with_cos_theta_v(cos_theta_v)
+        }
+    }
+
+    /// Evaluates the model with the given cosine of the angle between the
+    /// microfacet normal and the normal vector of the macro-surface, and
+    /// the cosine of the angle between the view vector and the normal vector
+    /// of the macro-surface.
+    ///
+    /// # Arguments
+    ///
+    /// * `cos_theta_m` - The cosine of the angle between the microfacet normal
+    ///  and the normal vector of the macro-surface.
+    /// * `cos_theta_v` - The cosine of the angle between the view vector and
+    ///  the normal vector of the macro-surface.
+    fn eval_with_cos_theta_m_v(&self, cos_theta_m: f64, cos_theta_v: f64) -> f64 {
+        debug_assert!(
+            cos_theta_m > 0.0 && cos_theta_m <= 1.0 && cos_theta_v > 0.0 && cos_theta_v <= 1.0
+        );
+        self.eval_with_cos_theta_v(cos_theta_v)
+    }
+
+    /// Evaluates the model with the given cosine of the angle between the
+    /// microfacet normal and the normal vector of the macro-surface. This
+    /// function assumes that the cosine of the angle between the microfacet
+    /// normal and the macro-surface normal is positive.
+    fn eval_with_cos_theta_v(&self, cos_theta_v: f64) -> f64;
 
     /// Clones the model.
     fn clone_box(&self) -> Box<dyn MicrofacetMaskingShadowingModel>;
@@ -265,7 +327,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMadfFittingProblem<'a, U1> {
                 let m = SphericalCoord::new(1.0, theta, phi)
                     .to_cartesian(Handedness::RightHandedYUp)
                     .as_dvec3();
-                self.model.eval_with_m(m, self.normal) - *meas as f64
+                self.model.eval(m, self.normal) - *meas as f64
             })
             .collect();
         Some(Matrix::<f64, Dyn, U1, Self::ResidualStorage>::from_vec(
@@ -348,12 +410,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMadfFittingProblem<'a, U1> {
 impl<'a> FittingProblem for MadfFittingProblem<'a> {
     type Model = Box<dyn MicrofacetAreaDistributionModel>;
 
-    fn lsq_lm_fit(
-        self,
-    ) -> (
-        Box<dyn MicrofacetAreaDistributionModel>,
-        MinimizationReport<f64>,
-    ) {
+    fn lsq_lm_fit(self) -> (Self::Model, MinimizationReport<f64>) {
         let effective_params_count = self.model.effective_params_count();
         if effective_params_count == 1 {
             let inner_problem = InnerMadfFittingProblem::<U1> {
@@ -370,5 +427,148 @@ impl<'a> FittingProblem for MadfFittingProblem<'a> {
         } else {
             todo!("3 effective params count")
         }
+    }
+}
+
+pub struct MmsfFittingProblem<'a> {
+    inner: InnerMmsfFittingProblem<'a>,
+}
+
+impl<'a> MmsfFittingProblem<'a> {
+    pub fn new<M: MicrofacetMaskingShadowingModel + 'static>(
+        measured: &'a MeasuredMmsfData,
+        model: M,
+        normal: Vec3,
+    ) -> Self {
+        Self {
+            inner: InnerMmsfFittingProblem {
+                measured,
+                normal,
+                model: Box::new(model),
+            },
+        }
+    }
+}
+
+struct InnerMmsfFittingProblem<'a> {
+    measured: &'a MeasuredMmsfData,
+    normal: Vec3,
+    model: Box<dyn MicrofacetMaskingShadowingModel>,
+}
+
+impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMmsfFittingProblem<'a> {
+    type ResidualStorage = VecStorage<f64, Dyn, U1>;
+    type JacobianStorage = Owned<f64, Dyn, U1>;
+    type ParameterStorage = Owned<f64, U1, U1>;
+
+    fn set_params(&mut self, x: &Vector<f64, U1, Self::ParameterStorage>) {
+        self.model.set_param(x[0]);
+    }
+
+    fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
+        Vector::<f64, U1, Self::ParameterStorage>::from_vec(vec![self.model.param()])
+    }
+
+    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
+        let phi_step_count = self.measured.params.azimuth.step_count_wrapped();
+        let theta_step_count = self.measured.params.zenith.step_count_wrapped();
+        // Only the first phi_step_count * theta_step_count samples are used
+        let residuals = self
+            .measured
+            .samples
+            .iter()
+            .take(phi_step_count * theta_step_count)
+            .enumerate()
+            .map(|(idx, meas)| {
+                let phi_v_idx = idx / theta_step_count;
+                let theta_v_idx = idx % theta_step_count;
+                let theta_v = self.measured.params.zenith.step(theta_v_idx);
+                let cos_theta_v = theta_v.cos() as f64;
+                self.model.eval_with_cos_theta_v(cos_theta_v) - *meas as f64
+            })
+            .collect();
+        Some(Matrix::<f64, Dyn, U1, Self::ResidualStorage>::from_vec(
+            residuals,
+        ))
+    }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
+        let alpha = self.params().x;
+        let alpha2 = alpha * alpha;
+        let phi_step_count = self.measured.params.azimuth.step_count_wrapped();
+        let theta_step_count = self.measured.params.zenith.step_count_wrapped();
+        let derivatives = match self.model.model() {
+            FittingModel::TrowbridgeReitz => self
+                .measured
+                .samples
+                .iter()
+                .take(phi_step_count * theta_step_count)
+                .enumerate()
+                .map(|(idx, meas)| {
+                    let phi_v_idx = idx / theta_step_count;
+                    let theta_v_idx = idx % theta_step_count;
+                    let theta_v = self.measured.params.zenith.step(theta_v_idx);
+                    let phi_v = self.measured.params.azimuth.step(phi_v_idx);
+                    let v = SphericalCoord::new(1.0, theta_v, phi_v)
+                        .to_cartesian(Handedness::RightHandedYUp);
+                    let cos_theta_v = v.dot(self.normal) as f64;
+                    let cos_theta_v2 = cos_theta_v * cos_theta_v;
+                    let tan_theta_v2 = if cos_theta_v2 == 0.0 {
+                        f64::INFINITY
+                    } else {
+                        1.0 / cos_theta_v2 - cos_theta_v2
+                    };
+                    let a = (alpha2 * tan_theta_v2 + 1.0).sqrt();
+                    let numerator = 2.0 * alpha * tan_theta_v2;
+                    let denominator = a * a * a + 2.0 * a * a + a;
+                    numerator / denominator
+                })
+                .collect(),
+            FittingModel::BeckmannSpizzichino => self
+                .measured
+                .samples
+                .iter()
+                .take(phi_step_count * theta_step_count)
+                .enumerate()
+                .map(|(idx, meas)| {
+                    let phi_v_idx = idx / theta_step_count;
+                    let theta_v_idx = idx % theta_step_count;
+                    let theta_v = self.measured.params.zenith.step(theta_v_idx);
+                    let phi_v = self.measured.params.azimuth.step(phi_v_idx);
+                    let v = SphericalCoord::new(1.0, theta_v, phi_v)
+                        .to_cartesian(Handedness::RightHandedYUp);
+                    let cos_theta_v = v.dot(self.normal) as f64;
+                    let cos_theta_v2 = cos_theta_v * cos_theta_v;
+                    let tan_theta_v = if cos_theta_v2 == 0.0 {
+                        f64::INFINITY
+                    } else {
+                        (1.0 - cos_theta_v2).sqrt() / cos_theta_v
+                    };
+
+                    let cot_theta_v = 1.0 / tan_theta_v;
+                    let a = cot_theta_v / alpha;
+                    let e = (-a * a).exp();
+                    let erf = libm::erf(a);
+                    let sqrt_pi = std::f64::consts::PI.sqrt();
+                    let b = (1.0 + erf + e * alpha * tan_theta_v / sqrt_pi);
+                    let numerator = 2.0 * e * tan_theta_v;
+                    let denominator = sqrt_pi * b * b;
+                    numerator / denominator
+                })
+                .collect(),
+        };
+        Some(Matrix::<f64, Dyn, U1, Self::JacobianStorage>::from_vec(
+            derivatives,
+        ))
+    }
+}
+
+impl<'a> FittingProblem for MmsfFittingProblem<'a> {
+    type Model = Box<dyn MicrofacetMaskingShadowingModel>;
+
+    fn lsq_lm_fit(self) -> (Self::Model, MinimizationReport<f64>) {
+        let solver = LevenbergMarquardt::new();
+        let (result, report) = solver.minimize(self.inner);
+        (result.model, report)
     }
 }

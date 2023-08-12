@@ -3,11 +3,12 @@ type: !microfacet-area-distribution-function # !madf
   azimuth: 0 rad .. =360 deg / 5 deg
   zenith: 0 rad .. =90 deg / 2 deg
 surfaces:
-  - usr://surfaces/aluminium1bar100.vgms
-  - usr://surfaces/aluminium1bar200.vgms
-  - usr://surfaces/aluminium1bar200fine.vgms
-  - usr://surfaces/aluminium2bar100.vgms
-  - usr://surfaces/aluminium3bar100.vgms
-  - usr://surfaces/aluminium4bar100.vgms
-  - usr://surfaces/aluminium65bar100.vgms
-  - usr://surfaces/aluminiummirror.vgms
+#  - usr://surfaces/aluminium1bar100.vgms
+#  - usr://surfaces/aluminium1bar200.vgms
+#  - usr://surfaces/aluminium1bar200fine.vgms
+#  - usr://surfaces/aluminium2bar100.vgms
+#  - usr://surfaces/aluminium3bar100.vgms
+#  - usr://surfaces/aluminium4bar100.vgms
+#  - usr://surfaces/aluminium65bar100.vgms
+#  - usr://surfaces/aluminiummirror.vgms
+  - usr://surfaces/generated/128x128.txt
