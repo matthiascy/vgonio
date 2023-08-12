@@ -19,7 +19,7 @@ use egui::{plot::*, Align, Context, Response, Ui, Vec2, WidgetText};
 use std::{
     any::Any,
     io::Read,
-    ops::RangeInclusive,
+    ops::{Deref, RangeInclusive},
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
@@ -72,9 +72,14 @@ pub trait ExtraData {
     /// Initialise the extra data.
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache);
 
+    /// Returns the curve to be displayed.
+    fn current_curve(&self) -> Option<&Curve>;
+
     fn as_any(&self) -> &dyn Any;
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn ui(&mut self, ui: &mut Ui);
 }
 
 pub struct PlotInspector {
@@ -130,20 +135,67 @@ impl BsdfPlotExtraData {
     }
 }
 
-pub struct MadfPlotExtraData {
+/// A curve to be plotted.
+pub struct Curve {
+    /// The data to be plotted.
+    pub points: Vec<[f64; 2]>,
+    /// Maximum value of the data.
+    pub max_val: [f64; 2],
+}
+
+impl<I> From<I> for Curve
+where
+    I: Iterator<Item = [f64; 2]>,
+{
+    fn from(values: I) -> Self {
+        let points: Vec<[f64; 2]> = values.collect();
+        let max_val = points.iter().fold([0.01; 2], |[max_x, max_y], [x, y]| {
+            [x.abs().max(max_x), y.abs().max(max_y)]
+        });
+        Self { points, max_val }
+    }
+}
+
+impl AsRef<[[f64; 2]]> for Curve {
+    fn as_ref(&self) -> &[[f64; 2]] { &self.points }
+}
+
+impl Deref for Curve {
+    type Target = Vec<[f64; 2]>;
+
+    fn deref(&self) -> &Self::Target { &self.points }
+}
+pub struct AreaDistributionExtra {
+    /// The azimuthal angle range of the measured data, in radians.
+    azimuth_m_range: RangeByStepSizeInclusive<Radians>,
+    /// The zenith angle range of the measured data, in radians.
+    zenith_m_range: RangeByStepSizeInclusive<Radians>,
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in
     /// radians.
     azimuth_m: Radians,
     /// The zenith angle of (facet normal m) the slice to be displayed, in
     /// radians.
     zenith_m: Radians,
+    /// Curve cache extracted from the measurement data.
+    curves: Vec<Curve>,
 }
 
-impl Default for MadfPlotExtraData {
+impl Default for AreaDistributionExtra {
     fn default() -> Self {
         Self {
+            azimuth_m_range: RangeByStepSizeInclusive {
+                start: rad!(0.0),
+                stop: rad!(0.0),
+                step_size: rad!(0.0),
+            },
+            zenith_m_range: RangeByStepSizeInclusive {
+                start: rad!(0.0),
+                stop: rad!(0.0),
+                step_size: rad!(0.0),
+            },
             azimuth_m: rad!(0.0),
             zenith_m: rad!(0.0),
+            curves: vec![],
         }
     }
 }
@@ -174,40 +226,122 @@ impl ExtraData for BsdfPlotExtraData {
         // TODO: pre-process data
     }
 
+    fn current_curve(&self) -> Option<&Curve> { todo!("bsdf current curve") }
+
     fn as_any(&self) -> &dyn Any { self }
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
+
+    fn ui(&mut self, ui: &mut Ui) { todo!() }
 }
-impl ExtraData for MadfPlotExtraData {
+impl ExtraData for AreaDistributionExtra {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
-        // TODO: pre-process data
+        let measurement = cache.get_measurement_data(data).unwrap();
+        self.azimuth_m_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
+        self.zenith_m_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        let zenith_step_count = self.zenith_m_range.step_count_wrapped();
+        for phi in self.azimuth_m_range.values() {
+            let (starting, opposite) = measurement.adf_data_slice(phi);
+            let first_part_points = starting
+                .iter()
+                .zip(self.zenith_m_range.values())
+                .map(|(y, x)| [x.as_f64(), *y as f64]);
+            let curve = match opposite {
+                None => Curve::from(first_part_points),
+                Some(opposite) => {
+                    let second_part_points = opposite
+                        .iter()
+                        .rev()
+                        .zip(self.zenith_m_range.values_rev().map(|x| -x.as_f64()))
+                        .take(zenith_step_count - 1)
+                        .map(|(y, x)| [x, *y as f64]);
+                    Curve::from(second_part_points.chain(first_part_points))
+                }
+            };
+            self.curves.push(curve);
+        }
+    }
+
+    fn current_curve(&self) -> Option<&Curve> {
+        let azimuth_m = self.azimuth_m.wrap_to_tau();
+        let index = self.azimuth_m_range.index_of(azimuth_m);
+        debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
+        self.curves.get(index)
     }
 
     fn as_any(&self) -> &dyn Any { self }
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
+
+    fn ui(&mut self, ui: &mut Ui) {
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), 48.0),
+            egui::Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.label("Microfacet normal: ");
+                let mut opposite = self.azimuth_m.wrap_to_tau().opposite();
+                angle_knob(
+                    ui,
+                    false,
+                    &mut opposite,
+                    self.azimuth_m_range
+                        .map(|x| x.value())
+                        .range_bound_inclusive(),
+                    self.azimuth_m_range.step_size,
+                    48.0,
+                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                );
+                angle_knob(
+                    ui,
+                    true,
+                    &mut self.azimuth_m,
+                    self.azimuth_m_range
+                        .map(|x| x.value())
+                        .range_bound_inclusive(),
+                    self.azimuth_m_range.step_size,
+                    48.0,
+                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                );
+                #[cfg(debug_assertions)]
+                debug_print_angle_pair(
+                    self.azimuth_m,
+                    &self.azimuth_m_range,
+                    ui,
+                    "debug_print_φ_pair",
+                );
+            },
+        );
+    }
 }
+
 impl ExtraData for MmsfPlotExtraData {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
         // TODO: pre-process data
     }
 
+    fn current_curve(&self) -> Option<&Curve> { todo!() }
+
     fn as_any(&self) -> &dyn Any { self }
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
+
+    fn ui(&mut self, ui: &mut Ui) { todo!() }
 }
 
 impl PlotInspector {
     /// Creates a new inspector for a microfacet area distribution function.
-    pub fn new_madf(
+    pub fn new_area_distrib_plot(
         name: String,
         data: Handle<MeasurementData>,
         cache: Arc<RwLock<Cache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
-        let extra = MadfPlotExtraData::default();
-        // extra.pre_process(data, cache);
+        let mut extra = AreaDistributionExtra::default();
+        {
+            let cache = cache.read().unwrap();
+            extra.pre_process(data, &cache);
+        }
         Self::new_inner(
             name,
             data,
@@ -310,48 +444,6 @@ impl PlotInspector {
         }
     }
 
-    fn angle_knob(
-        ui: &mut Ui,
-        interactive: bool,
-        angle: &mut Radians,
-        range: RangeInclusive<f32>,
-        snap: Radians,
-        diameter: f32,
-        formatter: impl Fn(f32) -> String,
-    ) -> Response {
-        let response = ui.add(
-            AngleKnob::new(angle)
-                .interactive(interactive)
-                .min(Some((*range.start()).into()))
-                .max(Some((*range.end()).into()))
-                .snap(Some(snap))
-                .winding(AngleKnobWinding::CounterClockwise)
-                .diameter(diameter)
-                .axis_count((Radians::TAU / snap).ceil() as u32),
-        );
-        ui.label(formatter(angle.value()));
-        response
-    }
-
-    #[cfg(debug_assertions)]
-    fn debug_print_angle_pair(
-        initial: Radians,
-        range: &RangeByStepSizeInclusive<Radians>,
-        ui: &mut Ui,
-        text: &str,
-    ) {
-        if ui.button(text).clicked() {
-            let opposite = initial.opposite();
-            println!(
-                "initial = {}, index = {} | opposite = {}, index = {}",
-                initial.to_degrees(),
-                range.index_of(initial),
-                opposite.to_degrees(),
-                range.index_of(opposite),
-            );
-        }
-    }
-
     #[cfg(debug_assertions)]
     fn debug_print_angle(
         initial: Radians,
@@ -434,7 +526,7 @@ impl PlottingWidget for PlotInspector {
                         egui::Layout::left_to_right(Align::Center),
                         |ui| {
                             ui.label("Incident direction: ");
-                            let r0 = Self::angle_knob(
+                            let r0 = angle_knob(
                                 ui,
                                 true,
                                 &mut extra.zenith_i,
@@ -444,7 +536,7 @@ impl PlottingWidget for PlotInspector {
                                 |v| format!("θ = {:>6.2}°", v.to_degrees()),
                             )
                             .changed();
-                            let r1 = Self::angle_knob(
+                            let r1 = angle_knob(
                                 ui,
                                 true,
                                 &mut extra.azimuth_i,
@@ -462,7 +554,7 @@ impl PlottingWidget for PlotInspector {
                                     ui,
                                     "debug_print_θ",
                                 );
-                                Self::debug_print_angle_pair(
+                                debug_print_angle_pair(
                                     extra.azimuth_i,
                                     &azimuth_i,
                                     ui,
@@ -479,7 +571,7 @@ impl PlottingWidget for PlotInspector {
                             egui::Layout::left_to_right(Align::Center),
                             |ui| {
                                 ui.label("Outgoing direction: ");
-                                let r0 = Self::angle_knob(
+                                let r0 = angle_knob(
                                     ui,
                                     true,
                                     &mut extra.azimuth_o,
@@ -491,7 +583,7 @@ impl PlottingWidget for PlotInspector {
                                 .changed();
                                 #[cfg(debug_assertions)]
                                 {
-                                    Self::debug_print_angle_pair(
+                                    debug_print_angle_pair(
                                         extra.azimuth_o,
                                         &azimuth_o,
                                         ui,
@@ -912,212 +1004,126 @@ impl PlottingWidget for PlotInspector {
             }
             MeasurementKind::Madf => {
                 if let Some(extra) = &mut self.extra {
-                    let extra = extra
-                        .as_any_mut()
-                        .downcast_mut::<MadfPlotExtraData>()
-                        .unwrap();
                     let cache = self.cache.read().unwrap();
                     let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                     let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
-                    let azimuth = measurement.measured.madf_or_mmsf_azimuth().unwrap();
                     let zenith_bin_width_rad = zenith.step_size.as_f32();
                     Self::plot_type_ui(&mut self.plot_type, ui);
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(ui.available_width(), 48.0),
-                        egui::Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.label("Microfacet normal: ");
-                            let mut opposite = extra.azimuth_m.wrap_to_tau().opposite();
-                            Self::angle_knob(
-                                ui,
-                                false,
-                                &mut opposite,
-                                azimuth.map(|x| x.value()).range_bound_inclusive(),
-                                azimuth.step_size,
-                                48.0,
-                                |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                    extra.ui(ui);
+                    if let Some(curve) = extra.current_curve() {
+                        let aspect = curve.max_val[0] / curve.max_val[1];
+                        let plot = Plot::new("plotting")
+                            .legend(self.legend.clone())
+                            .data_aspect(aspect as f32)
+                            //.clamp_grid(true)
+                            .center_x_axis(true)
+                            .sharp_grid_lines(true)
+                            .x_grid_spacer(adf_msf_x_grid_spacer)
+                            .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
+                            .coordinates_formatter(
+                                Corner::LeftBottom,
+                                CoordinatesFormatter::new(move |p, _| {
+                                    let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
+                                    let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
+                                    let half_bin_width =
+                                        zenith_bin_width_rad.to_degrees() as f64 * 0.5;
+                                    format!(
+                                        "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2} \
+                                         sr⁻¹",
+                                        0.0, bin, p.y
+                                    )
+                                }),
                             );
-                            Self::angle_knob(
-                                ui,
-                                true,
-                                &mut extra.azimuth_m,
-                                azimuth.map(|x| x.value()).range_bound_inclusive(),
-                                azimuth.step_size,
-                                48.0,
-                                |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                            );
-                            #[cfg(debug_assertions)]
-                            Self::debug_print_angle_pair(
-                                extra.azimuth_m,
-                                &azimuth,
-                                ui,
-                                "debug_print_φ_pair",
-                            );
-                        },
-                    );
 
-                    let data_line: Vec<_> = {
-                        let (starting, opposite) = measurement.adf_data_slice(extra.azimuth_m);
-
-                        // Data of the opposite azimuthal angle side of the slice, if exists.
-                        let data_opposite_part = opposite.map(|data| {
-                            data.iter()
-                                .rev()
-                                .zip(zenith.values_rev().map(|x| -x))
-                                .map(|(y, x)| [x.as_f64(), *y as f64])
-                        });
-
-                        let data_starting_part = starting
-                            .iter()
-                            .zip(zenith.values())
-                            .map(|(y, x)| [x.as_f64(), *y as f64]);
-
-                        match data_opposite_part {
-                            None => data_starting_part.collect(),
-                            Some(opposite) => opposite
-                                .take(zenith.step_count_wrapped() - 1)
-                                .chain(data_starting_part)
-                                .collect(),
-                        }
-                    };
-
-                    let (max_x, max_y) =
-                        data_line
-                            .iter()
-                            .fold((0.01, 0.01), |(max_x, max_y), [x, y]| {
-                                let val_x = x.abs().max(max_x);
-                                let val_y = y.max(max_y);
-                                (val_x, val_y)
-                            });
-
-                    let plot = Plot::new("plotting")
-                        .legend(self.legend.clone())
-                        .data_aspect((max_x / max_y) as f32)
-                        //.clamp_grid(true)
-                        .center_x_axis(true)
-                        .sharp_grid_lines(true)
-                        .x_grid_spacer(|input| {
-                            let mut marks = vec![];
-                            let (min, max) = input.bounds;
-                            let min = min.floor().to_degrees() as i32;
-                            let max = max.ceil().to_degrees() as i32;
-                            for i in min..=max {
-                                let step_size = if i % 30 == 0 {
-                                    // 5 degrees
-                                    30.0f64.to_radians()
-                                } else if i % 10 == 0 {
-                                    10.0f64.to_radians()
-                                } else {
-                                    continue;
-                                };
-                                marks.push(GridMark {
-                                    value: (i as f64).to_radians(),
-                                    step_size,
+                        let fitted_lines = if !fitted_models.is_empty() {
+                            ui.label("Fitted models: ");
+                            for model in &fitted_models {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(
+                                        egui::RichText::from(model.name())
+                                            .text_style(egui::TextStyle::Monospace),
+                                    );
+                                    ui.label(
+                                        egui::RichText::from(model.params_string())
+                                            .text_style(egui::TextStyle::Button),
+                                    );
                                 });
                             }
-                            marks
-                        })
-                        .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                        .coordinates_formatter(
-                            Corner::LeftBottom,
-                            CoordinatesFormatter::new(move |p, _| {
-                                let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
-                                let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
-                                let half_bin_width = zenith_bin_width_rad.to_degrees() as f64 * 0.5;
-                                format!(
-                                    "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2} sr⁻¹",
-                                    0.0, bin, p.y
-                                )
-                            }),
-                        );
+                            let xs = zenith
+                                .values_rev()
+                                .map(|x| -x.as_f32())
+                                .chain(zenith.values().skip(1).map(|x| x.as_f32()))
+                                .collect::<Vec<_>>();
+                            fitted_models
+                                .iter()
+                                .map(|f| match f {
+                                    FittedModel::Bsdf(_) => {
+                                        todo!()
+                                    }
+                                    FittedModel::Madf(model) => xs
+                                        .clone()
+                                        .into_iter()
+                                        .map(|theta_m| model.eval_with_theta_m(theta_m as f64))
+                                        .zip(xs.clone().into_iter())
+                                        .map(|(y, x)| [x as f64, y])
+                                        .collect::<Vec<_>>(),
+                                    FittedModel::Mmsf(_) => {
+                                        todo!()
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                        } else {
+                            vec![]
+                        };
 
-                    let fitted_lines = if !fitted_models.is_empty() {
-                        ui.label("Fitted models: ");
-                        for model in &fitted_models {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(
-                                    egui::RichText::from(model.name())
-                                        .text_style(egui::TextStyle::Monospace),
+                        plot.show(ui, |plot_ui| match self.plot_type {
+                            PlotType::Line => {
+                                plot_ui.line(
+                                    Line::new(curve.points.clone())
+                                        .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
+                                        .name("Microfacet area distribution"),
                                 );
-                                ui.label(
-                                    egui::RichText::from(model.params_string())
-                                        .text_style(egui::TextStyle::Button),
-                                );
-                            });
-                        }
-                        let xs = zenith
-                            .values_rev()
-                            .map(|x| -x.as_f32())
-                            .chain(zenith.values().skip(1).map(|x| x.as_f32()))
-                            .collect::<Vec<_>>();
-                        fitted_models
-                            .iter()
-                            .map(|f| match f {
-                                FittedModel::Bsdf(_) => {
-                                    todo!()
-                                }
-                                FittedModel::Madf(model) => xs
-                                    .clone()
-                                    .into_iter()
-                                    .map(|theta_m| model.eval_with_theta_m(theta_m as f64))
-                                    .zip(xs.clone().into_iter())
-                                    .map(|(y, x)| [x as f64, y])
-                                    .collect::<Vec<_>>(),
-                                FittedModel::Mmsf(_) => {
-                                    todo!()
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                    } else {
-                        vec![]
-                    };
-
-                    plot.show(ui, |plot_ui| match self.plot_type {
-                        PlotType::Line => {
-                            plot_ui.line(
-                                Line::new(data_line)
-                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                    .name("Microfacet area distribution"),
-                            );
-                            if !fitted_lines.is_empty() {
-                                for (i, (line, model)) in fitted_lines
-                                    .into_iter()
-                                    .zip(fitted_models.iter())
-                                    .enumerate()
-                                {
-                                    plot_ui.line(
-                                        Line::new(line)
-                                            .stroke(egui::epaint::Stroke::new(
-                                                2.0,
-                                                LINE_COLORS[(i + 1) % LINE_COLORS.len()],
-                                            ))
-                                            .name(model.name()),
-                                    );
+                                if !fitted_lines.is_empty() {
+                                    for (i, (line, model)) in fitted_lines
+                                        .into_iter()
+                                        .zip(fitted_models.iter())
+                                        .enumerate()
+                                    {
+                                        plot_ui.line(
+                                            Line::new(line)
+                                                .stroke(egui::epaint::Stroke::new(
+                                                    2.0,
+                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                ))
+                                                .name(model.name()),
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        PlotType::Bar => {
-                            plot_ui.bar_chart(
-                                BarChart::new(
-                                    data_line
-                                        .iter()
-                                        .map(|[x, y]| {
-                                            Bar::new(*x, *y)
-                                                .width(zenith_bin_width_rad as f64)
-                                                .stroke(egui::epaint::Stroke::new(
-                                                    1.0,
-                                                    egui::Color32::LIGHT_RED,
-                                                ))
-                                                .fill(egui::Color32::from_rgba_unmultiplied(
-                                                    255, 128, 128, 128,
-                                                ))
-                                        })
-                                        .collect(),
-                                )
-                                .name("Microfacet area distribution"),
-                            );
-                        }
-                    });
+                            PlotType::Bar => {
+                                plot_ui.bar_chart(
+                                    BarChart::new(
+                                        curve
+                                            .points
+                                            .iter()
+                                            .map(|[x, y]| {
+                                                Bar::new(*x, *y)
+                                                    .width(zenith_bin_width_rad as f64)
+                                                    .stroke(egui::epaint::Stroke::new(
+                                                        1.0,
+                                                        egui::Color32::LIGHT_RED,
+                                                    ))
+                                                    .fill(egui::Color32::from_rgba_unmultiplied(
+                                                        255, 128, 128, 128,
+                                                    ))
+                                            })
+                                            .collect(),
+                                    )
+                                    .name("Microfacet area distribution"),
+                                );
+                            }
+                        });
+                    }
                 }
             }
             MeasurementKind::Mmsf => {
@@ -1137,7 +1143,7 @@ impl PlottingWidget for PlotInspector {
                         egui::Layout::left_to_right(Align::Center),
                         |ui| {
                             ui.label("Microfacet normal: ");
-                            Self::angle_knob(
+                            angle_knob(
                                 ui,
                                 true,
                                 &mut extra.zenith_m,
@@ -1146,7 +1152,7 @@ impl PlottingWidget for PlotInspector {
                                 48.0,
                                 |v| format!("θ = {:>6.2}°", v.to_degrees()),
                             );
-                            Self::angle_knob(
+                            angle_knob(
                                 ui,
                                 true,
                                 &mut extra.azimuth_m,
@@ -1157,7 +1163,7 @@ impl PlottingWidget for PlotInspector {
                             );
                             #[cfg(debug_assertions)]
                             {
-                                Self::debug_print_angle_pair(
+                                debug_print_angle_pair(
                                     extra.azimuth_m,
                                     &azimuth,
                                     ui,
@@ -1178,7 +1184,7 @@ impl PlottingWidget for PlotInspector {
                         |ui| {
                             ui.label("incident direction: ");
                             let mut opposite = extra.azimuth_i.opposite();
-                            Self::angle_knob(
+                            angle_knob(
                                 ui,
                                 false,
                                 &mut opposite,
@@ -1187,7 +1193,7 @@ impl PlottingWidget for PlotInspector {
                                 48.0,
                                 |v| format!("φ = {:>6.2}°", v.to_degrees()),
                             );
-                            Self::angle_knob(
+                            angle_knob(
                                 ui,
                                 true,
                                 &mut extra.azimuth_i,
@@ -1197,7 +1203,7 @@ impl PlottingWidget for PlotInspector {
                                 |v| format!("φ = {:>6.2}°", v.to_degrees()),
                             );
                             #[cfg(debug_assertions)]
-                            Self::debug_print_angle_pair(
+                            debug_print_angle_pair(
                                 extra.azimuth_i,
                                 &azimuth,
                                 ui,
@@ -1242,28 +1248,7 @@ impl PlottingWidget for PlotInspector {
                         //.clamp_grid(true)
                         .center_x_axis(true)
                         .sharp_grid_lines(true)
-                        .x_grid_spacer(|input| {
-                            let mut marks = vec![];
-                            let (min, max) = input.bounds;
-                            let min = min.floor().to_degrees() as i32;
-                            let max = max.ceil().to_degrees() as i32;
-                            for i in min..=max {
-                                let step_size = if i % 30 == 0 {
-                                    // 30 degrees
-                                    30.0f64.to_radians()
-                                } else if i % 10 == 0 {
-                                    // 10 degrees
-                                    10.0f64.to_radians()
-                                } else {
-                                    continue;
-                                };
-                                marks.push(GridMark {
-                                    value: (i as f64).to_radians(),
-                                    step_size,
-                                });
-                            }
-                            marks
-                        })
+                        .x_grid_spacer(adf_msf_x_grid_spacer)
                         .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                         .coordinates_formatter(
                             Corner::LeftBottom,
@@ -1355,4 +1340,68 @@ impl Dockable for PlotInspector {
     fn uuid(&self) -> Uuid { self.uuid }
 
     fn ui(&mut self, ui: &mut Ui) { PlottingWidget::ui(self, ui); }
+}
+
+/// Calculates the ticks for x axis of the ADF or MSF plot.
+fn adf_msf_x_grid_spacer(input: GridInput) -> Vec<GridMark> {
+    let mut marks = vec![];
+    let (min, max) = input.bounds;
+    let min = min.floor().to_degrees() as i32;
+    let max = max.ceil().to_degrees() as i32;
+    for i in min..=max {
+        let step_size = if i % 30 == 0 {
+            30.0f64.to_radians()
+        } else if i % 10 == 0 {
+            10.0f64.to_radians()
+        } else {
+            continue;
+        };
+        marks.push(GridMark {
+            value: (i as f64).to_radians(),
+            step_size,
+        });
+    }
+    marks
+}
+
+fn angle_knob(
+    ui: &mut Ui,
+    interactive: bool,
+    angle: &mut Radians,
+    range: RangeInclusive<f32>,
+    snap: Radians,
+    diameter: f32,
+    formatter: impl Fn(f32) -> String,
+) -> Response {
+    let response = ui.add(
+        AngleKnob::new(angle)
+            .interactive(interactive)
+            .min(Some((*range.start()).into()))
+            .max(Some((*range.end()).into()))
+            .snap(Some(snap))
+            .winding(AngleKnobWinding::CounterClockwise)
+            .diameter(diameter)
+            .axis_count((Radians::TAU / snap).ceil() as u32),
+    );
+    ui.label(formatter(angle.value()));
+    response
+}
+
+#[cfg(debug_assertions)]
+fn debug_print_angle_pair(
+    initial: Radians,
+    range: &RangeByStepSizeInclusive<Radians>,
+    ui: &mut Ui,
+    text: &str,
+) {
+    if ui.button(text).clicked() {
+        let opposite = initial.opposite();
+        println!(
+            "initial = {}, index = {} | opposite = {}, index = {}",
+            initial.to_degrees(),
+            range.index_of(initial),
+            opposite.to_degrees(),
+            range.index_of(opposite),
+        );
+    }
 }

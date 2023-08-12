@@ -155,7 +155,7 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Madf => Box::new(PlotInspector::new_madf(
+                        MeasurementKind::Madf => Box::new(PlotInspector::new_area_distrib_plot(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
