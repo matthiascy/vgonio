@@ -8,7 +8,9 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    fitting::{FittedModel, FittingModel, MicrofacetAreaDistributionModel},
+    fitting::{
+        FittedModel, FittingModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
+    },
     measure::{
         measurement::{MeasurementData, MeasurementKind},
         CollectorScheme,
@@ -255,6 +257,8 @@ pub struct MaskingShadowingExtra {
     /// angle of microfacet normal m, the third index is the azimuthal angle of
     /// incident/outgoing direction v.
     curves: Vec<Curve>,
+    /// The fitted curves together with the fitted model.
+    fitted: Vec<(Box<dyn MicrofacetMaskingShadowingModel>, Curve)>,
 }
 
 impl Default for MaskingShadowingExtra {
@@ -274,6 +278,7 @@ impl Default for MaskingShadowingExtra {
                 step_size: rad!(0.0),
             },
             curves: vec![],
+            fitted: vec![],
         }
     }
 }
@@ -461,7 +466,47 @@ impl ExtraData for MaskingShadowingExtra {
         self.curves.get(index)
     }
 
-    fn update_fitted_curves(&mut self, fitted: &[FittedModel]) { todo!() }
+    fn update_fitted_curves(&mut self, models: &[FittedModel]) {
+        let theta_values = self
+            .zenith_range
+            .values_rev()
+            .map(|x| -x.as_f64())
+            .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
+            .collect::<Vec<_>>();
+        let to_add = models
+            .iter()
+            .filter(|model| {
+                !self
+                    .fitted
+                    .iter()
+                    .any(|(existing_model, _)| model.is_same_model(existing_model.fitting_model()))
+            })
+            .collect::<Vec<_>>();
+
+        if to_add.is_empty() {
+            return;
+        } else {
+            for fitted in to_add {
+                match fitted {
+                    FittedModel::Mmsf(model) => {
+                        // Generate the curve for this model.
+                        let points = theta_values
+                            .iter()
+                            .zip(
+                                theta_values
+                                    .iter()
+                                    .map(|theta_m| model.eval_with_cos_theta_v(theta_m.cos())),
+                            )
+                            .map(|(x, y)| [*x, y]);
+                        self.fitted.push((model.clone_box(), Curve::from(points)));
+                    }
+                    _ => {
+                        unreachable!("Wrong model type for masking-shadowing!")
+                    }
+                }
+            }
+        }
+    }
 
     fn as_any(&self) -> &dyn Any { self }
 
@@ -1326,24 +1371,24 @@ impl PlottingWidget for PlotInspector {
                                         ))
                                         .name("Microfacet masking shadowing"),
                                 );
-                                // if !fitted_lines.is_empty() {
-                                //     for (i, (line, model)) in
-                                //         fitted_lines.into_iter().zip(fitted.
-                                // iter()).enumerate()
-                                //     {
-                                //         println!("draw fitted line {}", i);
-                                //         plot_ui.line(
-                                //             Line::new(line)
-                                //
-                                // .stroke(egui::epaint::Stroke::new(
-                                //                     2.0,
-                                //                     LINE_COLORS[(i + 1) %
-                                // LINE_COLORS.len()],
-                                //                 ))
-                                //                 .name(model.name()),
-                                //         );
-                                //     }
-                                // }
+                                {
+                                    let concrete_extra = extra
+                                        .as_any()
+                                        .downcast_ref::<MaskingShadowingExtra>()
+                                        .unwrap();
+                                    for (i, (model, curve)) in
+                                        concrete_extra.fitted.iter().enumerate()
+                                    {
+                                        plot_ui.line(
+                                            Line::new(curve.points.clone())
+                                                .stroke(egui::epaint::Stroke::new(
+                                                    2.0,
+                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                ))
+                                                .name(model.name()),
+                                        )
+                                    }
+                                }
                             }
                             PlotType::Bar => {
                                 plot_ui.bar_chart(

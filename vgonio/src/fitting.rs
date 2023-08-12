@@ -74,7 +74,7 @@ impl FittedModel {
                 FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino ADF",
             },
             FittedModel::Bsdf(_) => "TODO: Microfacet BSDF",
-            FittedModel::Mmsf(m) => match m.model() {
+            FittedModel::Mmsf(m) => match m.fitting_model() {
                 FittingModel::TrowbridgeReitz => "Trowbridge-Reitz MSF",
                 FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino MSF",
             },
@@ -93,7 +93,7 @@ impl FittedModel {
                 }
             },
             FittedModel::Bsdf(_) => String::from("TODO: Microfacet BSDF"),
-            FittedModel::Mmsf(m) => match m.model() {
+            FittedModel::Mmsf(m) => match m.fitting_model() {
                 FittingModel::TrowbridgeReitz => {
                     format!("α = {:.4}", m.param())
                 }
@@ -110,7 +110,7 @@ impl FittedModel {
         match self {
             FittedModel::Madf(m) => m.fitting_model() == model,
             FittedModel::Bsdf(b) => b.model() == model,
-            FittedModel::Mmsf(m) => m.model() == model,
+            FittedModel::Mmsf(m) => m.fitting_model() == model,
         }
     }
 }
@@ -184,8 +184,11 @@ impl Clone for Box<dyn MicrofacetAreaDistributionModel> {
 
 /// A microfacet masking-shadowing function model.
 pub trait MicrofacetMaskingShadowingModel: Debug {
+    /// Returns the name of the model.
+    fn name(&self) -> &'static str;
+
     /// Returns the base model of the MMSF.
-    fn model(&self) -> FittingModel;
+    fn fitting_model(&self) -> FittingModel;
 
     /// Returns the parameter of the model.
     fn param(&self) -> f64;
@@ -509,7 +512,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMmsfFittingProblem<'a> {
         let alpha2 = alpha * alpha;
         let phi_step_count = self.measured.params.azimuth.step_count_wrapped();
         let theta_step_count = self.measured.params.zenith.step_count_wrapped();
-        let derivatives = match self.model.model() {
+        let derivatives = match self.model.fitting_model() {
             FittingModel::TrowbridgeReitz => self
                 .measured
                 .samples

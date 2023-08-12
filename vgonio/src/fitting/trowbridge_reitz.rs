@@ -57,7 +57,9 @@ pub struct TrowbridgeReitzMmsf {
 }
 
 impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMmsf {
-    fn model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
+    fn name(&self) -> &'static str { "Trowbridge-Reitz MSF" }
+
+    fn fitting_model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
 
     fn param(&self) -> f64 { self.width }
 

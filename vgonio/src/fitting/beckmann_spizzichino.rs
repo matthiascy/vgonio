@@ -45,7 +45,9 @@ pub struct BeckmannSpizzichinoMmsf {
 }
 
 impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMmsf {
-    fn model(&self) -> FittingModel { FittingModel::BeckmannSpizzichino }
+    fn name(&self) -> &'static str { "Beckmann-Spizzichino MSF" }
+
+    fn fitting_model(&self) -> FittingModel { FittingModel::BeckmannSpizzichino }
 
     fn param(&self) -> f64 { self.roughness }
 
