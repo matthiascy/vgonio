@@ -6,9 +6,7 @@ pub use trowbridge_reitz::*;
 
 use crate::measure::microfacet::{MeasuredMadfData, MeasuredMmsfData};
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
-use nalgebra::{
-    Dim, Dyn, Matrix, Owned, RealField, VecStorage, Vector, Vector1, Vector2, Vector3, U1, U2,
-};
+use nalgebra::{Dim, Dyn, Matrix, Owned, VecStorage, Vector, Vector1, U1};
 use std::{
     any::Any,
     fmt::{Debug, Display, Formatter},
@@ -550,7 +548,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMmsfFittingProblem<'a> {
                     let e = (-a * a).exp();
                     let erf = libm::erf(a);
                     let sqrt_pi = std::f64::consts::PI.sqrt();
-                    let b = (1.0 + erf + e * alpha * tan_theta_v / sqrt_pi);
+                    let b = 1.0 + erf + e * alpha * tan_theta_v / sqrt_pi;
                     let numerator = 2.0 * e * tan_theta_v;
                     let denominator = sqrt_pi * b * b;
                     numerator / denominator

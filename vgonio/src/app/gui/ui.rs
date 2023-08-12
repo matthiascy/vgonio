@@ -27,7 +27,6 @@ use crate::{
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
-use pyo3::{prelude::PyModule, Py, PyAny, Python};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -277,7 +276,6 @@ impl VgonioGui {
         self.navigator.show(ctx);
         self.simulations.show_all(ctx);
         self.notif.show(ctx);
-        let cache = self.cache.read().unwrap();
         for (is_open, plotter) in &mut self.plotters {
             plotter.show(ctx, is_open);
         }

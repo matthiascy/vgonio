@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
-    ops::{Add, Div, Mul, Range, RangeInclusive, Sub},
+    ops::{Add, Div, Mul, RangeInclusive, Sub},
     str::FromStr,
 };
 use vgcore::{

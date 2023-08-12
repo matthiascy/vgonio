@@ -143,6 +143,37 @@ pub struct Curve {
     pub max_val: [f64; 2],
 }
 
+impl Curve {
+    /// Creates a curve from a MADF or MMSF data.
+    ///
+    /// # Arguments
+    ///
+    /// * `first_part` - The first part of the data, which is the measured data
+    /// for the selected azimuthal angle.
+    /// * `opposite` - The second part of the data, which is the measured data
+    /// for the opposite azimuthal angle. If `None`, the curve is created from
+    /// the first part only.
+    fn from_madf_or_mmsf_data(
+        first_part: impl Iterator<Item = [f64; 2]>,
+        opposite: Option<&[f32]>,
+        zenith_range: &RangeByStepSizeInclusive<Radians>,
+    ) -> Curve {
+        let zenith_step_count = zenith_range.step_count_wrapped();
+        match opposite {
+            None => Curve::from(first_part),
+            Some(opposite) => {
+                let second_part_points = opposite
+                    .iter()
+                    .rev()
+                    .zip(zenith_range.values_rev().map(|x| -x.as_f64()))
+                    .take(zenith_step_count - 1)
+                    .map(|(y, x)| [x, *y as f64]);
+                Curve::from(second_part_points.chain(first_part))
+            }
+        }
+    }
+}
+
 impl<I> From<I> for Curve
 where
     I: Iterator<Item = [f64; 2]>,
@@ -165,58 +196,78 @@ impl Deref for Curve {
 
     fn deref(&self) -> &Self::Target { &self.points }
 }
+
+/// Extra data for the area distribution plot.
 pub struct AreaDistributionExtra {
     /// The azimuthal angle range of the measured data, in radians.
-    azimuth_m_range: RangeByStepSizeInclusive<Radians>,
+    azimuth_range: RangeByStepSizeInclusive<Radians>,
     /// The zenith angle range of the measured data, in radians.
-    zenith_m_range: RangeByStepSizeInclusive<Radians>,
+    zenith_range: RangeByStepSizeInclusive<Radians>,
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in
     /// radians.
     azimuth_m: Radians,
-    /// The zenith angle of (facet normal m) the slice to be displayed, in
-    /// radians.
-    zenith_m: Radians,
-    /// Curve cache extracted from the measurement data.
+    /// Curve cache extracted from the measurement data, indexed by the
+    /// azimuthal angle.
     curves: Vec<Curve>,
 }
 
 impl Default for AreaDistributionExtra {
     fn default() -> Self {
         Self {
-            azimuth_m_range: RangeByStepSizeInclusive {
+            azimuth_range: RangeByStepSizeInclusive {
                 start: rad!(0.0),
                 stop: rad!(0.0),
                 step_size: rad!(0.0),
             },
-            zenith_m_range: RangeByStepSizeInclusive {
+            zenith_range: RangeByStepSizeInclusive {
                 start: rad!(0.0),
                 stop: rad!(0.0),
                 step_size: rad!(0.0),
             },
             azimuth_m: rad!(0.0),
-            zenith_m: rad!(0.0),
             curves: vec![],
         }
     }
 }
 
-pub struct MmsfPlotExtraData {
+pub struct MaskingShadowingExtra {
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in
     /// radians.
     azimuth_m: Radians,
     /// The zenith angle of (facet normal m) the slice to be displayed, in
     /// radians.
     zenith_m: Radians,
-    /// The azimuthal angle (incident direction i) of the slice to be displayed,
-    azimuth_i: Radians,
+    /// The azimuthal angle (incident/outgoing direction v) of the slice to be
+    /// displayed,
+    azimuth_v: Radians,
+    /// The azimuthal angle range of the measured data, in radians.
+    azimuth_range: RangeByStepSizeInclusive<Radians>,
+    /// The zenith angle range of the measured data, in radians.
+    zenith_range: RangeByStepSizeInclusive<Radians>,
+    /// Curve cache extracted from the measurement data. The first index is the
+    /// azimuthal angle of microfacet normal m, the second index is the zenith
+    /// angle of microfacet normal m, the third index is the azimuthal angle of
+    /// incident/outgoing direction v.
+    curves: Vec<Curve>,
 }
 
-impl Default for MmsfPlotExtraData {
+impl Default for MaskingShadowingExtra {
     fn default() -> Self {
         Self {
             azimuth_m: rad!(0.0),
             zenith_m: rad!(0.0),
-            azimuth_i: rad!(0.0),
+            azimuth_v: rad!(0.0),
+            azimuth_range: RangeByStepSizeInclusive {
+                start: rad!(0.0),
+                stop: rad!(0.0),
+                step_size: rad!(0.0),
+            },
+            zenith_range: RangeByStepSizeInclusive {
+                start: rad!(0.0),
+                stop: rad!(0.0),
+                step_size: rad!(0.0),
+            },
+            curves: vec![],
         }
     }
 }
@@ -234,37 +285,29 @@ impl ExtraData for BsdfPlotExtraData {
 
     fn ui(&mut self, ui: &mut Ui) { todo!() }
 }
+
 impl ExtraData for AreaDistributionExtra {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
         let measurement = cache.get_measurement_data(data).unwrap();
-        self.azimuth_m_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
-        self.zenith_m_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
-        let zenith_step_count = self.zenith_m_range.step_count_wrapped();
-        for phi in self.azimuth_m_range.values() {
+        self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
+        self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        for phi in self.azimuth_range.values_wrapped() {
             let (starting, opposite) = measurement.adf_data_slice(phi);
             let first_part_points = starting
                 .iter()
-                .zip(self.zenith_m_range.values())
+                .zip(self.zenith_range.values())
                 .map(|(y, x)| [x.as_f64(), *y as f64]);
-            let curve = match opposite {
-                None => Curve::from(first_part_points),
-                Some(opposite) => {
-                    let second_part_points = opposite
-                        .iter()
-                        .rev()
-                        .zip(self.zenith_m_range.values_rev().map(|x| -x.as_f64()))
-                        .take(zenith_step_count - 1)
-                        .map(|(y, x)| [x, *y as f64]);
-                    Curve::from(second_part_points.chain(first_part_points))
-                }
-            };
-            self.curves.push(curve);
+            self.curves.push(Curve::from_madf_or_mmsf_data(
+                first_part_points,
+                opposite,
+                &self.zenith_range,
+            ));
         }
     }
 
     fn current_curve(&self) -> Option<&Curve> {
         let azimuth_m = self.azimuth_m.wrap_to_tau();
-        let index = self.azimuth_m_range.index_of(azimuth_m);
+        let index = self.azimuth_range.index_of(azimuth_m);
         debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
         self.curves.get(index)
     }
@@ -284,10 +327,10 @@ impl ExtraData for AreaDistributionExtra {
                     ui,
                     false,
                     &mut opposite,
-                    self.azimuth_m_range
+                    self.azimuth_range
                         .map(|x| x.value())
                         .range_bound_inclusive(),
-                    self.azimuth_m_range.step_size,
+                    self.azimuth_range.step_size,
                     48.0,
                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
                 );
@@ -295,17 +338,17 @@ impl ExtraData for AreaDistributionExtra {
                     ui,
                     true,
                     &mut self.azimuth_m,
-                    self.azimuth_m_range
+                    self.azimuth_range
                         .map(|x| x.value())
                         .range_bound_inclusive(),
-                    self.azimuth_m_range.step_size,
+                    self.azimuth_range.step_size,
                     48.0,
                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
                 );
                 #[cfg(debug_assertions)]
                 debug_print_angle_pair(
                     self.azimuth_m,
-                    &self.azimuth_m_range,
+                    &self.azimuth_range,
                     ui,
                     "debug_print_φ_pair",
                 );
@@ -314,18 +357,117 @@ impl ExtraData for AreaDistributionExtra {
     }
 }
 
-impl ExtraData for MmsfPlotExtraData {
+impl ExtraData for MaskingShadowingExtra {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
-        // TODO: pre-process data
+        let measurement = cache.get_measurement_data(data).unwrap();
+        self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
+        self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        // let zenith_step_count = self.zenith_range.step_count_wrapped();
+        for phi_m in self.azimuth_range.values_wrapped() {
+            for theta_m in self.zenith_range.values() {
+                for phi_v in self.azimuth_range.values_wrapped() {
+                    let (starting, opposite) = measurement.msf_data_slice(phi_m, theta_m, phi_v);
+                    let first_part_points = starting
+                        .iter()
+                        .zip(self.zenith_range.values())
+                        .map(|(y, x)| [x.as_f64(), *y as f64]);
+                    self.curves.push(Curve::from_madf_or_mmsf_data(
+                        first_part_points,
+                        opposite,
+                        &self.zenith_range,
+                    ));
+                }
+            }
+        }
     }
 
-    fn current_curve(&self) -> Option<&Curve> { todo!() }
+    fn current_curve(&self) -> Option<&Curve> {
+        let phi_m_idx = self.azimuth_range.index_of(self.azimuth_m.wrap_to_tau());
+        let theta_m_idx = self.zenith_range.index_of(self.zenith_m);
+        let phi_v_idx = self.azimuth_range.index_of(self.azimuth_v.wrap_to_tau());
+        let azimuth_step_count = self.azimuth_range.step_count_wrapped();
+        let zenith_step_count = self.zenith_range.step_count_wrapped();
+        let index = phi_m_idx * zenith_step_count * azimuth_step_count
+            + theta_m_idx * azimuth_step_count
+            + phi_v_idx;
+        debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
+        self.curves.get(index)
+    }
 
     fn as_any(&self) -> &dyn Any { self }
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(&mut self, ui: &mut Ui) { todo!() }
+    fn ui(&mut self, ui: &mut Ui) {
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), 48.0),
+            egui::Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.label("Microfacet normal: ");
+                angle_knob(
+                    ui,
+                    true,
+                    &mut self.zenith_m,
+                    self.zenith_range.range_bound_inclusive_f32(),
+                    self.zenith_range.step_size,
+                    48.0,
+                    |v| format!("θ = {:>6.2}°", v.to_degrees()),
+                );
+                angle_knob(
+                    ui,
+                    true,
+                    &mut self.azimuth_m,
+                    self.azimuth_range.range_bound_inclusive_f32(),
+                    self.azimuth_range.step_size,
+                    48.0,
+                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                );
+                #[cfg(debug_assertions)]
+                {
+                    debug_print_angle_pair(
+                        self.azimuth_m,
+                        &self.azimuth_range,
+                        ui,
+                        "debug_print_φ",
+                    );
+                    debug_print_angle(self.zenith_m, &self.zenith_range, ui, "debug_print_θ");
+                }
+            },
+        );
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), 48.0),
+            egui::Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.label("incident direction: ");
+                let mut opposite = self.azimuth_v.opposite();
+                angle_knob(
+                    ui,
+                    false,
+                    &mut opposite,
+                    self.azimuth_range.range_bound_inclusive_f32(),
+                    self.azimuth_range.step_size,
+                    48.0,
+                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                );
+                angle_knob(
+                    ui,
+                    true,
+                    &mut self.azimuth_v,
+                    self.azimuth_range.range_bound_inclusive_f32(),
+                    self.azimuth_range.step_size,
+                    48.0,
+                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                );
+                #[cfg(debug_assertions)]
+                debug_print_angle_pair(
+                    self.azimuth_v,
+                    &self.azimuth_range,
+                    ui,
+                    "debug_print_φ_pair",
+                );
+            },
+        );
+    }
 }
 
 impl PlotInspector {
@@ -361,8 +503,11 @@ impl PlotInspector {
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
-        let mut extra = MmsfPlotExtraData::default();
-        // extra.pre_process(data, cache);
+        let mut extra = MaskingShadowingExtra::default();
+        {
+            let cache = cache.read().unwrap();
+            extra.pre_process(data, &cache);
+        }
         Self::new_inner(
             name,
             data,
@@ -441,23 +586,6 @@ impl PlotInspector {
             plot_type,
             extra,
             event_loop,
-        }
-    }
-
-    #[cfg(debug_assertions)]
-    fn debug_print_angle(
-        initial: Radians,
-        range: &RangeByStepSizeInclusive<Radians>,
-        ui: &mut Ui,
-        text: &str,
-    ) {
-        if ui.button(text).clicked() {
-            let initial = initial.wrap_to_tau();
-            println!(
-                "angle = {}, index = {}",
-                initial.to_degrees(),
-                range.index_of(initial),
-            );
         }
     }
 
@@ -548,12 +676,7 @@ impl PlottingWidget for PlotInspector {
                             .changed();
                             #[cfg(debug_assertions)]
                             {
-                                Self::debug_print_angle(
-                                    extra.zenith_i,
-                                    &zenith_i,
-                                    ui,
-                                    "debug_print_θ",
-                                );
+                                debug_print_angle(extra.zenith_i, &zenith_i, ui, "debug_print_θ");
                                 debug_print_angle_pair(
                                     extra.azimuth_i,
                                     &azimuth_i,
@@ -1130,189 +1253,91 @@ impl PlottingWidget for PlotInspector {
                 if let Some(extra) = &mut self.extra {
                     let extra = extra
                         .as_any_mut()
-                        .downcast_mut::<MmsfPlotExtraData>()
+                        .downcast_mut::<MaskingShadowingExtra>()
                         .unwrap();
                     let cache = self.cache.read().unwrap();
                     let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                     let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
-                    let azimuth = measurement.measured.madf_or_mmsf_azimuth().unwrap();
                     let zenith_bin_width_rad = zenith.step_size.value();
                     Self::plot_type_ui(&mut self.plot_type, ui);
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(ui.available_width(), 48.0),
-                        egui::Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.label("Microfacet normal: ");
-                            angle_knob(
-                                ui,
-                                true,
-                                &mut extra.zenith_m,
-                                zenith.range_bound_inclusive_f32(),
-                                zenith.step_size,
-                                48.0,
-                                |v| format!("θ = {:>6.2}°", v.to_degrees()),
+                    extra.ui(ui);
+                    if let Some(curve) = extra.current_curve() {
+                        let aspect = curve.max_val[0] / curve.max_val[1];
+                        let plot = Plot::new("plot_msf")
+                            .legend(self.legend.clone())
+                            .data_aspect(aspect as f32)
+                            //.clamp_grid(true)
+                            .center_x_axis(true)
+                            .sharp_grid_lines(true)
+                            .x_grid_spacer(adf_msf_x_grid_spacer)
+                            .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
+                            .coordinates_formatter(
+                                Corner::LeftBottom,
+                                CoordinatesFormatter::new(move |p, _| {
+                                    let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
+                                    let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
+                                    let half_bin_width =
+                                        zenith_bin_width_rad.to_degrees() as f64 * 0.5;
+                                    format!(
+                                        "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2}",
+                                        0.0, bin, p.y
+                                    )
+                                }),
                             );
-                            angle_knob(
-                                ui,
-                                true,
-                                &mut extra.azimuth_m,
-                                azimuth.range_bound_inclusive_f32(),
-                                azimuth.step_size,
-                                48.0,
-                                |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                            );
-                            #[cfg(debug_assertions)]
-                            {
-                                debug_print_angle_pair(
-                                    extra.azimuth_m,
-                                    &azimuth,
-                                    ui,
-                                    "debug_print_φ",
+
+                        plot.show(ui, |plot_ui| match self.plot_type {
+                            PlotType::Line => {
+                                plot_ui.line(
+                                    Line::new(curve.points.clone())
+                                        .stroke(egui::epaint::Stroke::new(
+                                            2.0,
+                                            egui::Color32::LIGHT_RED,
+                                        ))
+                                        .name("Microfacet masking shadowing"),
                                 );
-                                Self::debug_print_angle(
-                                    extra.zenith_m,
-                                    &zenith,
-                                    ui,
-                                    "debug_print_θ",
+                                // if !fitted_lines.is_empty() {
+                                //     for (i, (line, model)) in
+                                //         fitted_lines.into_iter().zip(fitted.
+                                // iter()).enumerate()
+                                //     {
+                                //         println!("draw fitted line {}", i);
+                                //         plot_ui.line(
+                                //             Line::new(line)
+                                //
+                                // .stroke(egui::epaint::Stroke::new(
+                                //                     2.0,
+                                //                     LINE_COLORS[(i + 1) %
+                                // LINE_COLORS.len()],
+                                //                 ))
+                                //                 .name(model.name()),
+                                //         );
+                                //     }
+                                // }
+                            }
+                            PlotType::Bar => {
+                                plot_ui.bar_chart(
+                                    BarChart::new(
+                                        curve
+                                            .points
+                                            .iter()
+                                            .map(|[x, y]| {
+                                                Bar::new(*x, *y)
+                                                    .width(zenith_bin_width_rad as f64)
+                                                    .stroke(egui::epaint::Stroke::new(
+                                                        1.0,
+                                                        egui::Color32::LIGHT_RED,
+                                                    ))
+                                                    .fill(egui::Color32::from_rgba_unmultiplied(
+                                                        255, 128, 128, 128,
+                                                    ))
+                                            })
+                                            .collect(),
+                                    )
+                                    .name("Microfacet masking shadowing"),
                                 );
                             }
-                        },
-                    );
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(ui.available_width(), 48.0),
-                        egui::Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.label("incident direction: ");
-                            let mut opposite = extra.azimuth_i.opposite();
-                            angle_knob(
-                                ui,
-                                false,
-                                &mut opposite,
-                                azimuth.range_bound_inclusive_f32(),
-                                azimuth.step_size,
-                                48.0,
-                                |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                            );
-                            angle_knob(
-                                ui,
-                                true,
-                                &mut extra.azimuth_i,
-                                azimuth.range_bound_inclusive_f32(),
-                                azimuth.step_size,
-                                48.0,
-                                |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                            );
-                            #[cfg(debug_assertions)]
-                            debug_print_angle_pair(
-                                extra.azimuth_i,
-                                &azimuth,
-                                ui,
-                                "debug_print_φ_pair",
-                            );
-                        },
-                    );
-                    let data: Vec<_> = {
-                        let (starting, opposite) = measurement.msf_data_slice(
-                            extra.azimuth_m,
-                            extra.zenith_m,
-                            extra.azimuth_i,
-                        );
-                        let data_opposite_part = opposite.map(|data| {
-                            data.iter()
-                                .rev()
-                                .zip(zenith.values_rev().map(|v| -v))
-                                .map(|(y, x)| [x.as_f64(), *y as f64])
                         });
-                        let data_starting_part = starting
-                            .iter()
-                            .zip(zenith.values())
-                            .map(|(y, x)| [x.as_f64(), *y as f64]);
-
-                        match data_opposite_part {
-                            None => data_starting_part.collect(),
-                            Some(opposite) => opposite
-                                .take(zenith.step_count_wrapped() - 1)
-                                .chain(data_starting_part)
-                                .collect(),
-                        }
-                    };
-                    let (max_x, max_y) =
-                        data.iter().fold((0.01, 0.01), |(max_x, max_y), [x, y]| {
-                            let val_x = x.abs().max(max_x);
-                            let val_y = y.abs().max(max_y);
-                            (val_x, val_y)
-                        });
-                    let plot = Plot::new("plot_msf")
-                        .legend(self.legend.clone())
-                        .data_aspect((max_x / max_y) as f32)
-                        //.clamp_grid(true)
-                        .center_x_axis(true)
-                        .sharp_grid_lines(true)
-                        .x_grid_spacer(adf_msf_x_grid_spacer)
-                        .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                        .coordinates_formatter(
-                            Corner::LeftBottom,
-                            CoordinatesFormatter::new(move |p, _| {
-                                let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
-                                let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
-                                let half_bin_width = zenith_bin_width_rad.to_degrees() as f64 * 0.5;
-                                format!(
-                                    "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2}",
-                                    0.0, bin, p.y
-                                )
-                            }),
-                        );
-
-                    plot.show(ui, |plot_ui| match self.plot_type {
-                        PlotType::Line => {
-                            plot_ui.line(
-                                Line::new(data)
-                                    .stroke(egui::epaint::Stroke::new(
-                                        2.0,
-                                        egui::Color32::LIGHT_RED,
-                                    ))
-                                    .name("Microfacet masking shadowing"),
-                            );
-                            // if !fitted_lines.is_empty() {
-                            //     for (i, (line, model)) in
-                            //         fitted_lines.into_iter().zip(fitted.
-                            // iter()).enumerate()
-                            //     {
-                            //         println!("draw fitted line {}", i);
-                            //         plot_ui.line(
-                            //             Line::new(line)
-                            //
-                            // .stroke(egui::epaint::Stroke::new(
-                            //                     2.0,
-                            //                     LINE_COLORS[(i + 1) %
-                            // LINE_COLORS.len()],
-                            //                 ))
-                            //                 .name(model.name()),
-                            //         );
-                            //     }
-                            // }
-                        }
-                        PlotType::Bar => {
-                            plot_ui.bar_chart(
-                                BarChart::new(
-                                    data.iter()
-                                        .map(|[x, y]| {
-                                            Bar::new(*x, *y)
-                                                .width(zenith_bin_width_rad as f64)
-                                                .stroke(egui::epaint::Stroke::new(
-                                                    1.0,
-                                                    egui::Color32::LIGHT_RED,
-                                                ))
-                                                .fill(egui::Color32::from_rgba_unmultiplied(
-                                                    255, 128, 128, 128,
-                                                ))
-                                        })
-                                        .collect(),
-                                )
-                                .name("Microfacet masking shadowing"),
-                            );
-                        }
-                    });
+                    }
                 }
             }
         }
@@ -1402,6 +1427,23 @@ fn debug_print_angle_pair(
             range.index_of(initial),
             opposite.to_degrees(),
             range.index_of(opposite),
+        );
+    }
+}
+
+#[cfg(debug_assertions)]
+fn debug_print_angle(
+    initial: Radians,
+    range: &RangeByStepSizeInclusive<Radians>,
+    ui: &mut Ui,
+    text: &str,
+) {
+    if ui.button(text).clicked() {
+        let initial = initial.wrap_to_tau();
+        println!(
+            "angle = {}, index = {}",
+            initial.to_degrees(),
+            range.index_of(initial),
         );
     }
 }

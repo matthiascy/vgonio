@@ -1,7 +1,6 @@
 use crate::fitting::{
     FittingModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
 };
-use vgcore::math::DVec3;
 
 /// Trowbridge-Reitz(GGX) microfacet area distribution function.
 ///
@@ -36,8 +35,10 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
     fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
 }
 
+/// Trowbridge-Reitz model is also known as GGX model.
 pub type GGXMadfIsotropic = TrowbridgeReitzMadf;
 
+/// Anisotropic Trowbridge-Reitz microfacet area distribution function.
 #[derive(Debug, Copy, Clone)]
 pub struct TrowbridgeReitzMadfAnisotropic {
     /// Width parameter along the horizontal axis of the NDF.
@@ -46,6 +47,7 @@ pub struct TrowbridgeReitzMadfAnisotropic {
     pub width_v: f32,
 }
 
+/// Trowbridge-Reitz microfacet masking-shadowing function.
 #[derive(Debug, Copy, Clone)]
 pub struct TrowbridgeReitzMmsf {
     /// Width parameter of the MSF.
