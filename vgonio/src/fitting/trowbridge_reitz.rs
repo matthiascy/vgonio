@@ -1,5 +1,6 @@
 use crate::fitting::{
-    FittingModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
+    MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
+    ReflectionModelFamily,
 };
 
 /// Trowbridge-Reitz(GGX) microfacet area distribution function.
@@ -18,7 +19,9 @@ pub struct TrowbridgeReitzMadf {
 impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
     fn name(&self) -> &'static str { "Trowbridge-Reitz ADF" }
 
-    fn fitting_model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
+    fn family(&self) -> ReflectionModelFamily {
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
+    }
 
     fn is_isotropic(&self) -> bool { true }
 
@@ -59,7 +62,9 @@ pub struct TrowbridgeReitzMmsf {
 impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMmsf {
     fn name(&self) -> &'static str { "Trowbridge-Reitz MSF" }
 
-    fn fitting_model(&self) -> FittingModel { FittingModel::TrowbridgeReitz }
+    fn family(&self) -> ReflectionModelFamily {
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
+    }
 
     fn param(&self) -> f64 { self.width }
 
@@ -73,4 +78,18 @@ impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMmsf {
     }
 
     fn clone_box(&self) -> Box<dyn MicrofacetMaskingShadowingModel> { Box::new(*self) }
+}
+
+#[test]
+fn trowbridge_reitz_family() {
+    let madf = TrowbridgeReitzMadf { width: 0.1 };
+    assert_eq!(
+        madf.family(),
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
+    );
+    let mmsf = TrowbridgeReitzMmsf { width: 0.1 };
+    assert_eq!(
+        mmsf.family(),
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
+    );
 }

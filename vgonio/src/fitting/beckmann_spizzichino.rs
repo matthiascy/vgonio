@@ -1,26 +1,34 @@
 use crate::fitting::{
-    FittingModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
+    MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
+    ReflectionModelFamily,
 };
 
+/// Beckmann-Spizzichino microfacet area distribution function.
+///
+/// Based on the Gaussian distribution of microfacet slopes. If σ is the
+/// RMS slope of the microfacets, then the alpha parameter of the Beckmann
+/// distribution is given by: $\alpha = \sqrt{2} \sigma$.
 #[derive(Debug, Copy, Clone)]
 pub struct BeckmannSpizzichinoMadf {
     /// Roughness parameter of the NDF.
-    pub roughness: f64,
+    pub alpha: f64,
 }
 
 impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoMadf {
     fn name(&self) -> &'static str { "Beckmann-Spizzichino ADF" }
 
-    fn fitting_model(&self) -> FittingModel { FittingModel::BeckmannSpizzichino }
+    fn family(&self) -> ReflectionModelFamily {
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
+    }
 
     fn is_isotropic(&self) -> bool { true }
 
-    fn params(&self) -> [f64; 2] { [self.roughness, self.roughness] }
+    fn params(&self) -> [f64; 2] { [self.alpha, self.alpha] }
 
-    fn set_params(&mut self, params: [f64; 2]) { self.roughness = params[0]; }
+    fn set_params(&mut self, params: [f64; 2]) { self.alpha = params[0]; }
 
     fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64 {
-        let alpha2 = self.roughness * self.roughness;
+        let alpha2 = self.alpha * self.alpha;
         let cos_theta_m2 = cos_theta_m * cos_theta_m;
         let tan_theta_m2 = (1.0 - cos_theta_m2) / cos_theta_m2;
         let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
@@ -47,7 +55,9 @@ pub struct BeckmannSpizzichinoMmsf {
 impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMmsf {
     fn name(&self) -> &'static str { "Beckmann-Spizzichino MSF" }
 
-    fn fitting_model(&self) -> FittingModel { FittingModel::BeckmannSpizzichino }
+    fn family(&self) -> ReflectionModelFamily {
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
+    }
 
     fn param(&self) -> f64 { self.roughness }
 
@@ -64,4 +74,18 @@ impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMmsf {
     }
 
     fn clone_box(&self) -> Box<dyn MicrofacetMaskingShadowingModel> { Box::new(*self) }
+}
+
+#[test]
+fn beckmann_spizzichino_family() {
+    let madf = BeckmannSpizzichinoMadf { alpha: 0.1 };
+    assert_eq!(
+        madf.family(),
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
+    );
+    let mmsf = BeckmannSpizzichinoMmsf { roughness: 0.1 };
+    assert_eq!(
+        mmsf.family(),
+        ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
+    );
 }

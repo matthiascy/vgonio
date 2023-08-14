@@ -4,7 +4,7 @@ use crate::{
         gfx::RenderableMesh,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
-    fitting::FittingModel,
+    fitting::ReflectionModelFamily,
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
@@ -59,7 +59,7 @@ pub enum VgonioEvent {
     },
     Fitting {
         kind: MeasurementKind,
-        model: FittingModel,
+        family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
     },
 }

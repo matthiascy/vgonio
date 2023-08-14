@@ -8,9 +8,7 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    fitting::{
-        FittedModel, FittingModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
-    },
+    fitting::{FittedModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel},
     measure::{
         measurement::{MeasurementData, MeasurementKind},
         CollectorScheme,
@@ -338,7 +336,7 @@ impl ExtraData for AreaDistributionExtra {
                 !self
                     .fitted
                     .iter()
-                    .any(|(existing_model, _)| model.is_same_model(existing_model.fitting_model()))
+                    .any(|(existing_model, _)| model.family() == existing_model.family())
             })
             .collect::<Vec<_>>();
 
@@ -479,7 +477,7 @@ impl ExtraData for MaskingShadowingExtra {
                 !self
                     .fitted
                     .iter()
-                    .any(|(existing_model, _)| model.is_same_model(existing_model.fitting_model()))
+                    .any(|(existing_model, _)| model.family() == existing_model.family())
             })
             .collect::<Vec<_>>();
 

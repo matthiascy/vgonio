@@ -145,8 +145,8 @@ fn test_handle_type_id_embedding() {
 
     let hdl1 = Handle::<OwnType>::with_type_id(OwnType::Variant1 as u8);
     let hdl2 = Handle::<OwnType>::with_type_id(OwnType::Variant2 as u8);
-    assert_eq!(hdl1.same_type_as(), TypeId::of::<OwnType>());
-    assert_eq!(hdl2.same_type_as(), TypeId::of::<OwnType>());
+    assert!(hdl1.same_type_id_as::<OwnType>());
+    assert!(hdl2.same_type_id_as::<OwnType>());
     assert_eq!(hdl1.variant_id(), OwnType::Variant1 as u8);
     assert_eq!(hdl2.variant_id(), OwnType::Variant2 as u8);
 }

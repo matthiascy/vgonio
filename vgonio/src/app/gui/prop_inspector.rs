@@ -12,7 +12,7 @@ use crate::{
             outliner::Item,
         },
     },
-    fitting::FittingModel,
+    fitting::{MicrofacetModelFamily, ReflectionModelFamily},
     measure::measurement::{MeasuredData, MeasurementDataSource},
 };
 
@@ -237,7 +237,9 @@ impl PropertyInspector {
                                     self.event_loop
                                         .send_event(VgonioEvent::Fitting {
                                             kind: state.kind,
-                                            model: FittingModel::TrowbridgeReitz,
+                                            family: ReflectionModelFamily::Microfacet(
+                                                MicrofacetModelFamily::TrowbridgeReitz,
+                                            ),
                                             data: meas,
                                         })
                                         .unwrap();
@@ -246,7 +248,9 @@ impl PropertyInspector {
                                     self.event_loop
                                         .send_event(VgonioEvent::Fitting {
                                             kind: state.kind,
-                                            model: FittingModel::BeckmannSpizzichino,
+                                            family: ReflectionModelFamily::Microfacet(
+                                                MicrofacetModelFamily::BeckmannSpizzichino,
+                                            ),
                                             data: meas,
                                         })
                                         .unwrap();

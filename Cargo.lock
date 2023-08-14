@@ -2801,6 +2801,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shaderc",
+ "static_assertions",
  "toml",
  "type-map",
  "uuid",

@@ -14,22 +14,26 @@ use std::{
 };
 use vgcore::math::{DVec3, Handedness, SphericalCoord, Vec3};
 
-/// Possible fitting models.
+/// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum FittingModel {
-    /// Trowbridge-Reitz model (a.k.a. GGX).
+pub enum ReflectionModelFamily {
+    /// Microfacet based reflection model.
+    Microfacet(MicrofacetModelFamily),
+}
+
+/// Variation of microfacet based reflection model.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum MicrofacetModelFamily {
+    /// Trowbridge-Reitz (a.k.a. GGX) reflection model.
     TrowbridgeReitz,
-    /// Beckmann-Spizzichino model.
+    /// Beckmann-Spizzichino reflection model.
     BeckmannSpizzichino,
 }
 
-impl Display for FittingModel {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FittingModel::TrowbridgeReitz => write!(f, "Trowbridge-Reitz"),
-            FittingModel::BeckmannSpizzichino => write!(f, "Beckmann-Spizzichino"),
-        }
-    }
+/// A reflection model component.
+pub enum ReflectionModelComponent {
+    MicrofacetAreaDistribution,
+    MicrofacetMaskingShadowing,
 }
 
 /// A model after fitting.
@@ -65,52 +69,12 @@ impl FittedModel {
         }
     }
 
-    // TODO: remove this method.
-    /// Returns the name of the fitted model.
-    pub fn name(&self) -> &'static str {
+    /// Returns the family of the fitted model.
+    pub fn family(&self) -> ReflectionModelFamily {
         match self {
-            FittedModel::Madf(m) => match m.fitting_model() {
-                FittingModel::TrowbridgeReitz => "Trowbridge-Reitz ADF",
-                FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino ADF",
-            },
-            FittedModel::Bsdf(_) => "TODO: Microfacet BSDF",
-            FittedModel::Mmsf(m) => match m.fitting_model() {
-                FittingModel::TrowbridgeReitz => "Trowbridge-Reitz MSF",
-                FittingModel::BeckmannSpizzichino => "Beckmann-Spizzichino MSF",
-            },
-        }
-    }
-
-    // TODO: Remove this method.
-    pub fn params_string(&self) -> String {
-        match self {
-            FittedModel::Madf(m) => match m.fitting_model() {
-                FittingModel::TrowbridgeReitz => {
-                    format!("α = {:.4}", m.params()[0])
-                }
-                FittingModel::BeckmannSpizzichino => {
-                    format!("α = {:.4}", m.params()[0])
-                }
-            },
-            FittedModel::Bsdf(_) => String::from("TODO: Microfacet BSDF"),
-            FittedModel::Mmsf(m) => match m.fitting_model() {
-                FittingModel::TrowbridgeReitz => {
-                    format!("α = {:.4}", m.param())
-                }
-                FittingModel::BeckmannSpizzichino => {
-                    format!("α = {:.4}", m.param())
-                }
-            },
-        }
-    }
-
-    /// Checks if the fitted model (MADF/MMSF/BSDF) is the same as the given
-    /// fitting model.
-    pub fn is_same_model(&self, model: FittingModel) -> bool {
-        match self {
-            FittedModel::Madf(m) => m.fitting_model() == model,
-            FittedModel::Bsdf(b) => b.model() == model,
-            FittedModel::Mmsf(m) => m.fitting_model() == model,
+            FittedModel::Bsdf(m) => m.family(),
+            FittedModel::Madf(m) => m.family(),
+            FittedModel::Mmsf(m) => m.family(),
         }
     }
 }
@@ -121,7 +85,7 @@ pub trait MicrofacetAreaDistributionModel: Debug {
     fn name(&self) -> &'static str;
 
     /// Returns the concrete model of the MADF.
-    fn fitting_model(&self) -> FittingModel;
+    fn family(&self) -> ReflectionModelFamily;
 
     /// Returns if the model is isotropic.
     fn is_isotropic(&self) -> bool;
@@ -188,7 +152,7 @@ pub trait MicrofacetMaskingShadowingModel: Debug {
     fn name(&self) -> &'static str;
 
     /// Returns the base model of the MMSF.
-    fn fitting_model(&self) -> FittingModel;
+    fn family(&self) -> ReflectionModelFamily;
 
     /// Returns the parameter of the model.
     fn param(&self) -> f64;
@@ -249,7 +213,7 @@ impl Clone for Box<dyn MicrofacetMaskingShadowingModel> {
 
 /// A microfacet bidirectional scattering distribution function model.
 pub trait BsdfModel: Debug {
-    fn model(&self) -> FittingModel;
+    fn family(&self) -> ReflectionModelFamily;
 
     /// Clones the model.
     fn clone_box(&self) -> Box<dyn BsdfModel>;
@@ -283,7 +247,7 @@ pub struct MadfFittingProblem<'a> {
 impl<'a> Display for MadfFittingProblem<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MadfFittingProblem")
-            .field("target_model", &self.model.fitting_model())
+            .field("target_model", &self.model.family())
             .finish()
     }
 }
@@ -353,68 +317,70 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMadfFittingProblem<'a, U1> {
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         let alpha = self.params().x;
         let alpha2 = alpha * alpha;
-        let derivatives = match self.model.fitting_model() {
-            FittingModel::TrowbridgeReitz => self
-                .measured
-                .samples
-                .iter()
-                .enumerate()
-                .map(move |(idx, meas)| {
-                    let phi_idx = idx / self.measured.params.zenith.step_count_wrapped();
-                    let theta_idx = idx % self.measured.params.zenith.step_count_wrapped();
-                    let theta = self.measured.params.zenith.step(theta_idx);
-                    let phi = self.measured.params.azimuth.step(phi_idx);
-                    let m = SphericalCoord::new(1.0, theta, phi)
-                        .to_cartesian(Handedness::RightHandedYUp)
-                        .as_dvec3();
-                    let cos_theta_m = m.dot(self.normal);
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
+        let derivatives = match self.model.family() {
+            ReflectionModelFamily::Microfacet(m) => match m {
+                MicrofacetModelFamily::TrowbridgeReitz => self
+                    .measured
+                    .samples
+                    .iter()
+                    .enumerate()
+                    .map(move |(idx, meas)| {
+                        let phi_idx = idx / self.measured.params.zenith.step_count_wrapped();
+                        let theta_idx = idx % self.measured.params.zenith.step_count_wrapped();
+                        let theta = self.measured.params.zenith.step(theta_idx);
+                        let phi = self.measured.params.azimuth.step(phi_idx);
+                        let m = SphericalCoord::new(1.0, theta, phi)
+                            .to_cartesian(Handedness::RightHandedYUp)
+                            .as_dvec3();
+                        let cos_theta_m = m.dot(self.normal);
+                        let cos_theta_m2 = cos_theta_m * cos_theta_m;
+                        let sec_theta_m2 = 1.0 / cos_theta_m2;
+                        let tan_theta_m2 = if cos_theta_m2 == 0.0 {
+                            f64::INFINITY
+                        } else {
+                            1.0 / cos_theta_m2 - cos_theta_m2
+                        };
 
-                    let numerator =
-                        2.0 * alpha * (tan_theta_m2 - alpha2) * sec_theta_m2 * sec_theta_m2;
-                    let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
+                        let numerator =
+                            2.0 * alpha * (tan_theta_m2 - alpha2) * sec_theta_m2 * sec_theta_m2;
+                        let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
 
-                    numerator / denominator
-                })
-                .collect(),
-            FittingModel::BeckmannSpizzichino => self
-                .measured
-                .samples
-                .iter()
-                .enumerate()
-                .map(move |(idx, meas)| {
-                    let phi_idx = idx / self.measured.params.zenith.step_count_wrapped();
-                    let theta_idx = idx % self.measured.params.zenith.step_count_wrapped();
-                    let theta = self.measured.params.zenith.step(theta_idx);
-                    let phi = self.measured.params.azimuth.step(phi_idx);
-                    let m = SphericalCoord::new(1.0, theta, phi)
-                        .to_cartesian(Handedness::RightHandedYUp)
-                        .as_dvec3();
-                    let cos_theta_m = m.dot(self.normal);
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
+                        numerator / denominator
+                    })
+                    .collect(),
+                MicrofacetModelFamily::BeckmannSpizzichino => self
+                    .measured
+                    .samples
+                    .iter()
+                    .enumerate()
+                    .map(move |(idx, meas)| {
+                        let phi_idx = idx / self.measured.params.zenith.step_count_wrapped();
+                        let theta_idx = idx % self.measured.params.zenith.step_count_wrapped();
+                        let theta = self.measured.params.zenith.step(theta_idx);
+                        let phi = self.measured.params.azimuth.step(phi_idx);
+                        let m = SphericalCoord::new(1.0, theta, phi)
+                            .to_cartesian(Handedness::RightHandedYUp)
+                            .as_dvec3();
+                        let cos_theta_m = m.dot(self.normal);
+                        let cos_theta_m2 = cos_theta_m * cos_theta_m;
+                        let sec_theta_m2 = 1.0 / cos_theta_m2;
+                        let tan_theta_m2 = if cos_theta_m2 == 0.0 {
+                            f64::INFINITY
+                        } else {
+                            1.0 / cos_theta_m2 - cos_theta_m2
+                        };
 
-                    let numerator = 2.0
-                        * (-tan_theta_m2 / alpha2).exp()
-                        * (tan_theta_m2 - alpha2)
-                        * sec_theta_m2
-                        * sec_theta_m2;
-                    let denominator = std::f64::consts::PI * alpha.powi(5);
+                        let numerator = 2.0
+                            * (-tan_theta_m2 / alpha2).exp()
+                            * (tan_theta_m2 - alpha2)
+                            * sec_theta_m2
+                            * sec_theta_m2;
+                        let denominator = std::f64::consts::PI * alpha.powi(5);
 
-                    numerator / denominator
-                })
-                .collect(),
+                        numerator / denominator
+                    })
+                    .collect(),
+            },
         };
         Some(Matrix::<f64, Dyn, U1, Self::JacobianStorage>::from_vec(
             derivatives,
@@ -512,65 +478,67 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for InnerMmsfFittingProblem<'a> {
         let alpha2 = alpha * alpha;
         let phi_step_count = self.measured.params.azimuth.step_count_wrapped();
         let theta_step_count = self.measured.params.zenith.step_count_wrapped();
-        let derivatives = match self.model.fitting_model() {
-            FittingModel::TrowbridgeReitz => self
-                .measured
-                .samples
-                .iter()
-                .take(phi_step_count * theta_step_count)
-                .enumerate()
-                .map(|(idx, meas)| {
-                    let phi_v_idx = idx / theta_step_count;
-                    let theta_v_idx = idx % theta_step_count;
-                    let theta_v = self.measured.params.zenith.step(theta_v_idx);
-                    let phi_v = self.measured.params.azimuth.step(phi_v_idx);
-                    let v = SphericalCoord::new(1.0, theta_v, phi_v)
-                        .to_cartesian(Handedness::RightHandedYUp);
-                    let cos_theta_v = v.dot(self.normal) as f64;
-                    let cos_theta_v2 = cos_theta_v * cos_theta_v;
-                    let tan_theta_v2 = if cos_theta_v2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_v2 - cos_theta_v2
-                    };
-                    let a = (alpha2 * tan_theta_v2 + 1.0).sqrt();
-                    let numerator = 2.0 * alpha * tan_theta_v2;
-                    let denominator = a * a * a + 2.0 * a * a + a;
-                    numerator / denominator
-                })
-                .collect(),
-            FittingModel::BeckmannSpizzichino => self
-                .measured
-                .samples
-                .iter()
-                .take(phi_step_count * theta_step_count)
-                .enumerate()
-                .map(|(idx, meas)| {
-                    let phi_v_idx = idx / theta_step_count;
-                    let theta_v_idx = idx % theta_step_count;
-                    let theta_v = self.measured.params.zenith.step(theta_v_idx);
-                    let phi_v = self.measured.params.azimuth.step(phi_v_idx);
-                    let v = SphericalCoord::new(1.0, theta_v, phi_v)
-                        .to_cartesian(Handedness::RightHandedYUp);
-                    let cos_theta_v = v.dot(self.normal) as f64;
-                    let cos_theta_v2 = cos_theta_v * cos_theta_v;
-                    let tan_theta_v = if cos_theta_v2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        (1.0 - cos_theta_v2).sqrt() / cos_theta_v
-                    };
+        let derivatives = match self.model.family() {
+            ReflectionModelFamily::Microfacet(m) => match m {
+                MicrofacetModelFamily::TrowbridgeReitz => self
+                    .measured
+                    .samples
+                    .iter()
+                    .take(phi_step_count * theta_step_count)
+                    .enumerate()
+                    .map(|(idx, meas)| {
+                        let phi_v_idx = idx / theta_step_count;
+                        let theta_v_idx = idx % theta_step_count;
+                        let theta_v = self.measured.params.zenith.step(theta_v_idx);
+                        let phi_v = self.measured.params.azimuth.step(phi_v_idx);
+                        let v = SphericalCoord::new(1.0, theta_v, phi_v)
+                            .to_cartesian(Handedness::RightHandedYUp);
+                        let cos_theta_v = v.dot(self.normal) as f64;
+                        let cos_theta_v2 = cos_theta_v * cos_theta_v;
+                        let tan_theta_v2 = if cos_theta_v2 == 0.0 {
+                            f64::INFINITY
+                        } else {
+                            1.0 / cos_theta_v2 - cos_theta_v2
+                        };
+                        let a = (alpha2 * tan_theta_v2 + 1.0).sqrt();
+                        let numerator = 2.0 * alpha * tan_theta_v2;
+                        let denominator = a * a * a + 2.0 * a * a + a;
+                        numerator / denominator
+                    })
+                    .collect(),
+                MicrofacetModelFamily::BeckmannSpizzichino => self
+                    .measured
+                    .samples
+                    .iter()
+                    .take(phi_step_count * theta_step_count)
+                    .enumerate()
+                    .map(|(idx, meas)| {
+                        let phi_v_idx = idx / theta_step_count;
+                        let theta_v_idx = idx % theta_step_count;
+                        let theta_v = self.measured.params.zenith.step(theta_v_idx);
+                        let phi_v = self.measured.params.azimuth.step(phi_v_idx);
+                        let v = SphericalCoord::new(1.0, theta_v, phi_v)
+                            .to_cartesian(Handedness::RightHandedYUp);
+                        let cos_theta_v = v.dot(self.normal) as f64;
+                        let cos_theta_v2 = cos_theta_v * cos_theta_v;
+                        let tan_theta_v = if cos_theta_v2 == 0.0 {
+                            f64::INFINITY
+                        } else {
+                            (1.0 - cos_theta_v2).sqrt() / cos_theta_v
+                        };
 
-                    let cot_theta_v = 1.0 / tan_theta_v;
-                    let a = cot_theta_v / alpha;
-                    let e = (-a * a).exp();
-                    let erf = libm::erf(a);
-                    let sqrt_pi = std::f64::consts::PI.sqrt();
-                    let b = 1.0 + erf + e * alpha * tan_theta_v / sqrt_pi;
-                    let numerator = 2.0 * e * tan_theta_v;
-                    let denominator = sqrt_pi * b * b;
-                    numerator / denominator
-                })
-                .collect(),
+                        let cot_theta_v = 1.0 / tan_theta_v;
+                        let a = cot_theta_v / alpha;
+                        let e = (-a * a).exp();
+                        let erf = libm::erf(a);
+                        let sqrt_pi = std::f64::consts::PI.sqrt();
+                        let b = 1.0 + erf + e * alpha * tan_theta_v / sqrt_pi;
+                        let numerator = 2.0 * e * tan_theta_v;
+                        let denominator = sqrt_pi * b * b;
+                        numerator / denominator
+                    })
+                    .collect(),
+            },
         };
         Some(Matrix::<f64, Dyn, U1, Self::JacobianStorage>::from_vec(
             derivatives,

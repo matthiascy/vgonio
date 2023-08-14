@@ -19,9 +19,9 @@ use crate::{
         Config,
     },
     fitting::{
-        BeckmannSpizzichinoMadf, BeckmannSpizzichinoMmsf, FittedModel, FittingModel,
-        FittingProblem, MadfFittingProblem, MmsfFittingProblem, TrowbridgeReitzMadf,
-        TrowbridgeReitzMmsf,
+        BeckmannSpizzichinoMadf, BeckmannSpizzichinoMmsf, FittedModel, FittingProblem,
+        MadfFittingProblem, MicrofacetModelFamily, MmsfFittingProblem, ReflectionModelFamily,
+        TrowbridgeReitzMadf, TrowbridgeReitzMmsf,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
 };
@@ -177,30 +177,36 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            VgonioEvent::Fitting { kind, model, data } => {
+            VgonioEvent::Fitting { kind, family, data } => {
                 match kind {
                     MeasurementKind::Bsdf => {}
                     MeasurementKind::Madf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.iter().any(|f| f.is_same_model(*model)) {
+                        if !fitted.iter().any(|f| f.family() == *family) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = measurement
                                 .measured
                                 .madf_data()
                                 .expect("Measurement has no MADF data.");
-                            let problem = match model {
-                                FittingModel::TrowbridgeReitz => MadfFittingProblem::new(
-                                    data,
-                                    TrowbridgeReitzMadf { width: 0.05 },
-                                    Vec3::Y,
-                                ),
-                                FittingModel::BeckmannSpizzichino => MadfFittingProblem::new(
-                                    data,
-                                    BeckmannSpizzichinoMadf { roughness: 0.05 },
-                                    Vec3::Y,
-                                ),
+                            let problem = match family {
+                                ReflectionModelFamily::Microfacet(m) => match m {
+                                    MicrofacetModelFamily::TrowbridgeReitz => {
+                                        MadfFittingProblem::new(
+                                            data,
+                                            TrowbridgeReitzMadf { width: 0.05 },
+                                            Vec3::Y,
+                                        )
+                                    }
+                                    MicrofacetModelFamily::BeckmannSpizzichino => {
+                                        MadfFittingProblem::new(
+                                            data,
+                                            BeckmannSpizzichinoMadf { alpha: 0.05 },
+                                            Vec3::Y,
+                                        )
+                                    }
+                                },
                             };
                             let (result, report) = problem.lsq_lm_fit();
                             log::info!("Report: {:?}", report);
@@ -225,24 +231,30 @@ impl VgonioGui {
                     MeasurementKind::Mmsf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.iter().any(|f| f.is_same_model(*model)) {
+                        if !fitted.iter().any(|f| f.family() == *family) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = measurement
                                 .measured
                                 .mmsf_data()
                                 .expect("Measurement has no MMSF data.");
-                            let problem = match model {
-                                FittingModel::TrowbridgeReitz => MmsfFittingProblem::new(
-                                    data,
-                                    TrowbridgeReitzMmsf { width: 0.05 },
-                                    Vec3::Y,
-                                ),
-                                FittingModel::BeckmannSpizzichino => MmsfFittingProblem::new(
-                                    data,
-                                    BeckmannSpizzichinoMmsf { roughness: 0.05 },
-                                    Vec3::Y,
-                                ),
+                            let problem = match family {
+                                ReflectionModelFamily::Microfacet(m) => match m {
+                                    MicrofacetModelFamily::TrowbridgeReitz => {
+                                        MmsfFittingProblem::new(
+                                            data,
+                                            TrowbridgeReitzMmsf { width: 0.05 },
+                                            Vec3::Y,
+                                        )
+                                    }
+                                    MicrofacetModelFamily::BeckmannSpizzichino => {
+                                        MmsfFittingProblem::new(
+                                            data,
+                                            BeckmannSpizzichinoMmsf { roughness: 0.05 },
+                                            Vec3::Y,
+                                        )
+                                    }
+                                },
                             };
                             let (result, report) = problem.lsq_lm_fit();
                             log::info!("Report: {:?}", report);
