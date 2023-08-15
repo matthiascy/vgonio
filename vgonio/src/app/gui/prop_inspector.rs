@@ -235,16 +235,73 @@ impl PropertyInspector {
                                 }
                                 if ui.button("Fit TrowbridgeReitz").clicked() {
                                     self.event_loop
+                                        .send_event(
+                                            #[cfg(feature = "adf-fitting-scaling")]
+                                            {
+                                                VgonioEvent::Fitting {
+                                                    kind: state.kind,
+                                                    family: ReflectionModelFamily::Microfacet(
+                                                        MicrofacetModelFamily::TrowbridgeReitz,
+                                                    ),
+                                                    data: meas,
+                                                    scaled: false,
+                                                }
+                                            },
+                                            #[cfg(not(feature = "adf-fitting-scaling"))]
+                                            {
+                                                VgonioEvent::Fitting {
+                                                    kind: state.kind,
+                                                    family: ReflectionModelFamily::Microfacet(
+                                                        MicrofacetModelFamily::TrowbridgeReitz,
+                                                    ),
+                                                    data: meas,
+                                                }
+                                            },
+                                        )
+                                        .unwrap();
+                                }
+                                #[cfg(feature = "adf-fitting-scaling")]
+                                if ui.button("Fit Scaled TrowbridgeReitz").clicked() {
+                                    self.event_loop
                                         .send_event(VgonioEvent::Fitting {
                                             kind: state.kind,
                                             family: ReflectionModelFamily::Microfacet(
                                                 MicrofacetModelFamily::TrowbridgeReitz,
                                             ),
                                             data: meas,
+                                            scaled: true,
                                         })
                                         .unwrap();
                                 }
                                 if ui.button("Fit BeckmannSpizzichino").clicked() {
+                                    self.event_loop
+                                        .send_event(
+                                            #[cfg(feature = "adf-fitting-scaling")]
+                                            {
+                                                VgonioEvent::Fitting {
+                                                    kind: state.kind,
+                                                    family: ReflectionModelFamily::Microfacet(
+                                                        MicrofacetModelFamily::BeckmannSpizzichino,
+                                                    ),
+                                                    data: meas,
+                                                    scaled: false,
+                                                }
+                                            },
+                                            #[cfg(not(feature = "adf-fitting-scaling"))]
+                                            {
+                                                VgonioEvent::Fitting {
+                                                    kind: state.kind,
+                                                    family: ReflectionModelFamily::Microfacet(
+                                                        MicrofacetModelFamily::BeckmannSpizzichino,
+                                                    ),
+                                                    data: meas,
+                                                }
+                                            },
+                                        )
+                                        .unwrap();
+                                }
+                                #[cfg(feature = "adf-fitting-scaling")]
+                                if ui.button("Fit Scaled BeckmannSpizzichino").clicked() {
                                     self.event_loop
                                         .send_event(VgonioEvent::Fitting {
                                             kind: state.kind,
@@ -252,6 +309,7 @@ impl PropertyInspector {
                                                 MicrofacetModelFamily::BeckmannSpizzichino,
                                             ),
                                             data: meas,
+                                            scaled: true,
                                         })
                                         .unwrap();
                                 }

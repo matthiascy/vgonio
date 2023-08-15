@@ -11,13 +11,43 @@ use crate::fitting::{
 /// where $\alpha$ is the width parameter of the NDF, $\theta_m$ is the angle
 /// between the microfacet normal and the normal of the surface.
 #[derive(Debug, Copy, Clone)]
-pub struct TrowbridgeReitzMadf {
+pub struct TrowbridgeReitzADF {
     /// Width parameter of the NDF.
     pub width: f64,
+    #[cfg(feature = "adf-fitting-scaling")]
+    /// The scale factor of the NDF.
+    pub scale: Option<f64>,
 }
 
-impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
-    fn name(&self) -> &'static str { "Trowbridge-Reitz ADF" }
+impl TrowbridgeReitzADF {
+    pub fn default() -> Self {
+        TrowbridgeReitzADF {
+            width: 0.1,
+            #[cfg(feature = "adf-fitting-scaling")]
+            scale: None,
+        }
+    }
+
+    pub fn default_with_scale() -> Self {
+        TrowbridgeReitzADF {
+            width: 0.1,
+            #[cfg(feature = "adf-fitting-scaling")]
+            scale: Some(1.0),
+        }
+    }
+}
+
+impl MicrofacetAreaDistributionModel for TrowbridgeReitzADF {
+    fn name(&self) -> &'static str {
+        #[cfg(feature = "adf-fitting-scaling")]
+        if self.scale.is_none() {
+            "Trowbridge-Reitz ADF"
+        } else {
+            "Scaled Trowbridge-Reitz ADF"
+        }
+        #[cfg(not(feature = "adf-fitting-scaling"))]
+        "Scaled Trowbridge-Reitz ADF"
+    }
 
     fn family(&self) -> ReflectionModelFamily {
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
@@ -28,6 +58,18 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
     fn params(&self) -> [f64; 2] { [self.width, self.width] }
 
     fn set_params(&mut self, params: [f64; 2]) { self.width = params[0]; }
+
+    #[cfg(feature = "adf-fitting-scaling")]
+    fn scale(&self) -> Option<f64> { self.scale }
+
+    #[cfg(feature = "adf-fitting-scaling")]
+    fn set_scale(&mut self, scale: f64) {
+        #[cfg(debug_assertions)]
+        if self.scale.is_none() {
+            panic!("Trying to set the scale on a non-scaled Trowbridge Reitz ADF");
+        }
+        self.scale.replace(scale);
+    }
 
     fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64 {
         let alpha2 = self.width * self.width;
@@ -41,11 +83,11 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzMadf {
 }
 
 /// Trowbridge-Reitz model is also known as GGX model.
-pub type GGXMadfIsotropic = TrowbridgeReitzMadf;
+pub type GGXIsotropicADF = TrowbridgeReitzADF;
 
 /// Anisotropic Trowbridge-Reitz microfacet area distribution function.
 #[derive(Debug, Copy, Clone)]
-pub struct TrowbridgeReitzMadfAnisotropic {
+pub struct TrowbridgeReitzAnisotropicADF {
     /// Width parameter along the horizontal axis of the NDF.
     pub width_u: f32,
     /// Width parameter along the vertical axis of the NDF.
@@ -54,12 +96,12 @@ pub struct TrowbridgeReitzMadfAnisotropic {
 
 /// Trowbridge-Reitz microfacet masking-shadowing function.
 #[derive(Debug, Copy, Clone)]
-pub struct TrowbridgeReitzMmsf {
+pub struct TrowbridgeReitzMSF {
     /// Width parameter of the MSF.
     pub width: f64,
 }
 
-impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMmsf {
+impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMSF {
     fn name(&self) -> &'static str { "Trowbridge-Reitz MSF" }
 
     fn family(&self) -> ReflectionModelFamily {
@@ -82,12 +124,12 @@ impl MicrofacetMaskingShadowingModel for TrowbridgeReitzMmsf {
 
 #[test]
 fn trowbridge_reitz_family() {
-    let madf = TrowbridgeReitzMadf { width: 0.1 };
+    let madf = TrowbridgeReitzADF::default();
     assert_eq!(
         madf.family(),
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
     );
-    let mmsf = TrowbridgeReitzMmsf { width: 0.1 };
+    let mmsf = TrowbridgeReitzMSF { width: 0.1 };
     assert_eq!(
         mmsf.family(),
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)

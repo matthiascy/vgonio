@@ -57,6 +57,14 @@ pub enum VgonioEvent {
         data: Handle<MeasurementData>,
         independent: bool,
     },
+    #[cfg(feature = "adf-fitting-scaling")]
+    Fitting {
+        kind: MeasurementKind,
+        family: ReflectionModelFamily,
+        data: Handle<MeasurementData>,
+        scaled: bool,
+    },
+    #[cfg(not(feature = "adf-fitting-scaling"))]
     Fitting {
         kind: MeasurementKind,
         family: ReflectionModelFamily,

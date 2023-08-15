@@ -11,6 +11,7 @@ publish = false
 default = []
 embree = ["dep:embree", "vgsurf/embree"]
 optix = []
+adf-fitting-scaling = []
 verbose_debug = []
 
 [dependencies]
@@ -32,7 +33,7 @@ dirs = "5.0"
 egui = { version = "0.22", features = ["bytemuck"] }
 egui_dock = { version = "0.6" }
 egui_extras = "0.22"
-egui-winit = { version = "0.22", default-features = false }
+egui-winit = { version = "0.22" }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
 egui-toast = "0.8"
 env_logger = "0.10"

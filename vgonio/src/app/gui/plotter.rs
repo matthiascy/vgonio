@@ -8,7 +8,10 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    fitting::{FittedModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel},
+    fitting::{
+        BeckmannSpizzichinoADF, FittedModel, MicrofacetAreaDistributionModel,
+        MicrofacetMaskingShadowingModel, TrowbridgeReitzADF,
+    },
     measure::{
         measurement::{MeasurementData, MeasurementKind},
         CollectorScheme,
@@ -35,11 +38,17 @@ enum PlotType {
     Bar,
 }
 
-const LINE_COLORS: [egui::Color32; 4] = [
-    egui::Color32::LIGHT_RED,
-    egui::Color32::LIGHT_BLUE,
-    egui::Color32::LIGHT_GREEN,
-    egui::Color32::LIGHT_YELLOW,
+const LINE_COLORS: [egui::Color32; 10] = [
+    egui::Color32::from_rgb(254, 128, 127),
+    egui::Color32::from_rgb(146, 225, 145),
+    egui::Color32::from_rgb(63, 89, 66),
+    egui::Color32::from_rgb(117, 213, 225),
+    egui::Color32::from_rgb(10, 127, 178),
+    egui::Color32::from_rgb(188, 197, 235),
+    egui::Color32::from_rgb(51, 74, 171),
+    egui::Color32::from_rgb(173, 213, 31),
+    egui::Color32::from_rgb(117, 72, 25),
+    egui::Color32::from_rgb(248, 186, 124),
 ];
 
 pub trait PlottingWidget {
@@ -102,6 +111,10 @@ pub struct PlotInspector {
     plot_type: PlotType,
     /// Extra data, including controls parameters and the pre-processed data.
     extra: Option<Box<dyn ExtraData>>,
+    new_curve_kind: CurveKind,
+    // (model, uuid)
+    madf_models: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Uuid)>,
+    mmsf_models: Vec<Box<dyn MicrofacetMaskingShadowingModel>>,
     /// The event loop.
     event_loop: EventLoopProxy,
 }
@@ -333,10 +346,20 @@ impl ExtraData for AreaDistributionExtra {
         let to_add = models
             .iter()
             .filter(|model| {
-                !self
-                    .fitted
-                    .iter()
-                    .any(|(existing_model, _)| model.family() == existing_model.family())
+                #[cfg(feature = "adf-fitting-scaling")]
+                {
+                    !self.fitted.iter().any(|(existing_model, _)| {
+                        model.family() == existing_model.family()
+                            && model.is_scaled() == existing_model.scale().is_some()
+                    })
+                }
+                #[cfg(not(feature = "adf-fitting-scaling"))]
+                {
+                    !self
+                        .fitted
+                        .iter()
+                        .any(|(existing_model, _)| model.family() == existing_model.family())
+                }
             })
             .collect::<Vec<_>>();
 
@@ -347,14 +370,23 @@ impl ExtraData for AreaDistributionExtra {
                 match fitted {
                     FittedModel::Madf(model) => {
                         // Generate the curve for this model.
-                        let points = theta_values
-                            .iter()
-                            .zip(
-                                theta_values
-                                    .iter()
-                                    .map(|theta_m| model.eval_with_theta_m(*theta_m)),
-                            )
-                            .map(|(x, y)| [*x, y]);
+                        let points = {
+                            theta_values
+                                .iter()
+                                .zip(theta_values.iter().map(|theta_m| {
+                                    #[cfg(feature = "adf-fitting-scaling")]
+                                    {
+                                        model.eval_with_theta_m(*theta_m)
+                                            * model.scale().unwrap_or(1.0)
+                                    }
+                                    #[cfg(not(feature = "adf-fitting-scaling"))]
+                                    {
+                                        model.eval_with_theta_m(*theta_m)
+                                    }
+                                }))
+                                .map(|(x, y)| [*x, y])
+                        };
+
                         self.fitted.push((model.clone_box(), Curve::from(points)));
                     }
                     _ => {
@@ -398,6 +430,19 @@ impl ExtraData for AreaDistributionExtra {
                     48.0,
                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
                 );
+                if ui.button("📋").clicked() {
+                    println!("is empty curve {}", self.current_curve().is_none());
+                    ui.output_mut(|o| {
+                        if let Some(curve) = self.current_curve() {
+                            println!("Copying data to clipboard");
+                            let mut content = String::new();
+                            for [x, y] in &curve.points {
+                                content.push_str(&format!("{}, {}\n", x, y));
+                            }
+                            o.copied_text = content;
+                        }
+                    });
+                }
                 #[cfg(debug_assertions)]
                 debug_print_angle_pair(
                     self.azimuth_m,
@@ -418,9 +463,25 @@ impl ExtraData for AreaDistributionExtra {
                         egui::RichText::from(model.name()).text_style(egui::TextStyle::Monospace),
                     );
                     ui.label(
-                        egui::RichText::from(format!("α = {:.4}", model.params()[0]))
-                            .text_style(egui::TextStyle::Button),
-                    );
+                        #[cfg(feature = "adf-fitting-scaling")]
+                        {
+                            match model.scale() {
+                                None => {
+                                    egui::RichText::from(format!("α = {:.4}", model.params()[0],))
+                                }
+                                Some(scale) => egui::RichText::from(format!(
+                                    "α = {:.4}, scale = {:.4}",
+                                    model.params()[0],
+                                    scale
+                                ))
+                                .text_style(egui::TextStyle::Button),
+                            }
+                        },
+                        #[cfg(not(feature = "adf-fitting-scaling"))]
+                        {
+                            egui::RichText::from(format!("α = {:.4}", model.params()[0],));
+                        },
+                    )
                 });
             }
         }
@@ -672,7 +733,10 @@ impl PlotInspector {
             plot_type: PlotType::Line,
             event_loop,
             extra: None,
+            new_curve_kind: CurveKind::None,
+            madf_models: vec![],
             uuid: Uuid::new_v4(),
+            mmsf_models: vec![],
         }
     }
 
@@ -697,6 +761,9 @@ impl PlotInspector {
                 .position(Corner::RightTop),
             plot_type,
             extra,
+            new_curve_kind: CurveKind::None,
+            madf_models: vec![],
+            mmsf_models: vec![],
             event_loop,
         }
     }
@@ -710,707 +777,877 @@ impl PlotInspector {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CurveKind {
+    None,
+    TrowbridgeReitzADF,
+    BeckmannSpizzichinoADF,
+}
+
 impl PlottingWidget for PlotInspector {
     fn uuid(&self) -> Uuid { self.uuid }
 
     fn name(&self) -> &str { self.name.as_str() }
 
     fn ui(&mut self, ui: &mut Ui) {
-        if !self.data_handle.is_valid() {
-            ui.label("No data selected!");
-            return;
+        {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Add curve").clicked() {
+                    match self.new_curve_kind {
+                        CurveKind::None => {}
+                        CurveKind::BeckmannSpizzichinoADF => {
+                            self.madf_models.push((
+                                Box::new(BeckmannSpizzichinoADF::default()),
+                                Uuid::new_v4(),
+                            ));
+                        }
+                        CurveKind::TrowbridgeReitzADF => self
+                            .madf_models
+                            .push((Box::new(TrowbridgeReitzADF::default()), Uuid::new_v4())),
+                    }
+                }
+                egui::ComboBox::from_label("kind")
+                    .selected_text(format!("{:?}", self.new_curve_kind))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.new_curve_kind,
+                            CurveKind::TrowbridgeReitzADF,
+                            "Trowbridge-Reitz",
+                        );
+                        ui.selectable_value(
+                            &mut self.new_curve_kind,
+                            CurveKind::BeckmannSpizzichinoADF,
+                            "Beckmann-Spizzichino",
+                        );
+                    });
+            });
         }
 
         {
-            let props = self.props.read().unwrap();
-            let prop = props.measured.get(&self.data_handle).unwrap();
-            if let Some(extra) = &mut self.extra {
-                extra.update_fitted_curves(&prop.fitted);
+            let mut to_be_removed = vec![];
+            for (i, (model, uuid)) in self.madf_models.iter_mut().enumerate() {
+                ui.horizontal_wrapped(|ui| {
+                    if model.is_isotropic() {
+                        let mut value = model.params()[0];
+                        ui.label(format!(
+                            "Model: {}#{}",
+                            model.name(),
+                            &uuid.to_string().as_str()[..6]
+                        ));
+                        if ui
+                            .add(egui::Slider::new(&mut value, 0.0..=1.0).text("alpha"))
+                            .changed()
+                        {
+                            model.set_params([value, value]);
+                        }
+                        #[cfg(feature = "adf-fitting-scaling")]
+                        {
+                            if let Some(scale) = model.scale() {
+                                let mut scale = scale;
+                                ui.label("Scale: ");
+                                if ui.add(egui::DragValue::new(&mut scale)).changed() {
+                                    model.set_scale(scale);
+                                }
+                            }
+                        }
+                        if ui.button("Remove").clicked() {
+                            to_be_removed.push(i);
+                        }
+                    } else {
+                        todo!("Anisotropic models")
+                    }
+                });
+            }
+            for i in to_be_removed {
+                self.madf_models.remove(i);
             }
         }
 
-        match self.measurement_data_kind() {
-            MeasurementKind::Bsdf => {
-                if let Some(extra) = &mut self.extra {
-                    let extra = extra
-                        .as_any_mut()
-                        .downcast_mut::<BsdfPlotExtraData>()
-                        .unwrap();
-                    let cache = self.cache.read().unwrap();
-                    let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                    ui.horizontal(|ui| {
-                        ui.label("Plot mode:");
-                        ui.selectable_value(&mut extra.mode, BsdfPlotMode::Slice2D, "Slice 2D");
-                        ui.selectable_value(&mut extra.mode, BsdfPlotMode::Slice3D, "Slice 3D");
-                    });
-                    let is_3d = extra.mode == BsdfPlotMode::Slice3D;
-                    let bsdf_data = measurement.measured.bsdf_data().unwrap();
-                    let zenith_i = bsdf_data.params.emitter.zenith;
-                    let azimuth_i = bsdf_data.params.emitter.azimuth;
-                    let (zenith_o, azimuth_o) = match bsdf_data.params.collector.scheme {
-                        CollectorScheme::Partitioned { partition } => match partition {
-                            SphericalPartition::EqualAngle { zenith, azimuth } => (zenith, azimuth),
-                            SphericalPartition::EqualArea { zenith, azimuth } => {
-                                (zenith.into(), azimuth)
-                            }
-                            SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                                (zenith.into(), azimuth)
-                            }
-                        },
-                        CollectorScheme::SingleRegion {
-                            zenith, azimuth, ..
-                        } => (zenith, azimuth),
-                    };
-
-                    // Incident direction controls
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(ui.available_width(), 48.0),
-                        egui::Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.label("Incident direction: ");
-                            let r0 = angle_knob(
-                                ui,
-                                true,
-                                &mut extra.zenith_i,
-                                zenith_i.range_bound_inclusive_f32(),
-                                zenith_i.step_size,
-                                48.0,
-                                |v| format!("θ = {:>6.2}°", v.to_degrees()),
-                            )
-                            .changed();
-                            let r1 = angle_knob(
-                                ui,
-                                true,
-                                &mut extra.azimuth_i,
-                                azimuth_i.range_bound_inclusive_f32(),
-                                azimuth_i.step_size,
-                                48.0,
-                                |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                            )
-                            .changed();
-                            #[cfg(debug_assertions)]
-                            {
-                                debug_print_angle(extra.zenith_i, &zenith_i, ui, "debug_print_θ");
-                                debug_print_angle_pair(
-                                    extra.azimuth_i,
-                                    &azimuth_i,
-                                    ui,
-                                    "debug_print_φ",
-                                );
-                            }
-                            extra.changed |= r0 || r1;
-                        },
+        if !self.data_handle.is_valid() {
+            ui.label("No data selected!");
+            let plot = Plot::new("madf_plot")
+                .legend(self.legend.clone())
+                //.data_aspect(aspect as f32)
+                //.clamp_grid(true)
+                .center_x_axis(true)
+                .sharp_grid_lines(true)
+                .x_grid_spacer(adf_msf_x_angle_spacer)
+                .y_grid_spacer(adf_msf_y_uniform_spacer)
+                .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()));
+            plot.show(ui, |plot_ui| {
+                for (i, (model, uuid)) in self.madf_models.iter().enumerate() {
+                    let points: Vec<_> = (0..=180)
+                        .map(|x| {
+                            let theta = x as f64 * std::f64::consts::PI / 180.0
+                                - std::f64::consts::PI * 0.5;
+                            let value = {
+                                #[cfg(feature = "adf-fitting-scaling")]
+                                {
+                                    model.eval_with_theta_m(theta.cos())
+                                        * model.scale().unwrap_or(1.0)
+                                }
+                                #[cfg(not(feature = "adf-fitting-scaling"))]
+                                {
+                                    model.eval_with_theta_m(theta.cos())
+                                }
+                            };
+                            [theta, value]
+                        })
+                        .collect();
+                    plot_ui.line(
+                        Line::new(points)
+                            .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[i]))
+                            .name(format!(
+                                "{}#{}",
+                                model.name(),
+                                &uuid.to_string().as_str()[..6]
+                            )),
                     );
+                }
+            });
+        } else {
+            {
+                let props = self.props.read().unwrap();
+                let prop = props.measured.get(&self.data_handle).unwrap();
+                if let Some(extra) = &mut self.extra {
+                    extra.update_fitted_curves(&prop.fitted);
+                }
+            }
 
-                    if !is_3d {
+            match self.measurement_data_kind() {
+                MeasurementKind::Bsdf => {
+                    if let Some(extra) = &mut self.extra {
+                        let extra = extra
+                            .as_any_mut()
+                            .downcast_mut::<BsdfPlotExtraData>()
+                            .unwrap();
+                        let cache = self.cache.read().unwrap();
+                        let measurement = cache.get_measurement_data(self.data_handle).unwrap();
+                        ui.horizontal(|ui| {
+                            ui.label("Plot mode:");
+                            ui.selectable_value(&mut extra.mode, BsdfPlotMode::Slice2D, "Slice 2D");
+                            ui.selectable_value(&mut extra.mode, BsdfPlotMode::Slice3D, "Slice 3D");
+                        });
+                        let is_3d = extra.mode == BsdfPlotMode::Slice3D;
+                        let bsdf_data = measurement.measured.bsdf_data().unwrap();
+                        let zenith_i = bsdf_data.params.emitter.zenith;
+                        let azimuth_i = bsdf_data.params.emitter.azimuth;
+                        let (zenith_o, azimuth_o) = match bsdf_data.params.collector.scheme {
+                            CollectorScheme::Partitioned { partition } => match partition {
+                                SphericalPartition::EqualAngle { zenith, azimuth } => {
+                                    (zenith, azimuth)
+                                }
+                                SphericalPartition::EqualArea { zenith, azimuth } => {
+                                    (zenith.into(), azimuth)
+                                }
+                                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
+                                    (zenith.into(), azimuth)
+                                }
+                            },
+                            CollectorScheme::SingleRegion {
+                                zenith, azimuth, ..
+                            } => (zenith, azimuth),
+                        };
+
+                        // Incident direction controls
                         ui.allocate_ui_with_layout(
                             Vec2::new(ui.available_width(), 48.0),
                             egui::Layout::left_to_right(Align::Center),
                             |ui| {
-                                ui.label("Outgoing direction: ");
+                                ui.label("Incident direction: ");
                                 let r0 = angle_knob(
                                     ui,
                                     true,
-                                    &mut extra.azimuth_o,
-                                    azimuth_o.range_bound_inclusive_f32(),
-                                    azimuth_o.step_size,
+                                    &mut extra.zenith_i,
+                                    zenith_i.range_bound_inclusive_f32(),
+                                    zenith_i.step_size,
+                                    48.0,
+                                    |v| format!("θ = {:>6.2}°", v.to_degrees()),
+                                )
+                                .changed();
+                                let r1 = angle_knob(
+                                    ui,
+                                    true,
+                                    &mut extra.azimuth_i,
+                                    azimuth_i.range_bound_inclusive_f32(),
+                                    azimuth_i.step_size,
                                     48.0,
                                     |v| format!("φ = {:>6.2}°", v.to_degrees()),
                                 )
                                 .changed();
                                 #[cfg(debug_assertions)]
                                 {
+                                    debug_print_angle(
+                                        extra.zenith_i,
+                                        &zenith_i,
+                                        ui,
+                                        "debug_print_θ",
+                                    );
                                     debug_print_angle_pair(
-                                        extra.azimuth_o,
-                                        &azimuth_o,
+                                        extra.azimuth_i,
+                                        &azimuth_i,
                                         ui,
                                         "debug_print_φ",
                                     );
                                 }
-                                extra.changed |= r0;
+                                extra.changed |= r0 || r1;
                             },
                         );
-                    }
 
-                    let zenith_i_count = zenith_i.step_count_wrapped();
-                    let zenith_i_idx = zenith_i.index_of(extra.zenith_i);
-                    let azimuth_i_idx = azimuth_i.index_of(extra.azimuth_i);
-                    let data_point =
-                        &bsdf_data.samples[azimuth_i_idx * zenith_i_count + zenith_i_idx];
-                    let spectrum = bsdf_data.params.emitter.spectrum;
-                    let wavelengths = spectrum
-                        .values()
-                        .map(|w| w.value() / 100.0)
-                        .collect::<Vec<_>>();
-                    let num_rays = bsdf_data.params.emitter.num_rays;
+                        if !is_3d {
+                            ui.allocate_ui_with_layout(
+                                Vec2::new(ui.available_width(), 48.0),
+                                egui::Layout::left_to_right(Align::Center),
+                                |ui| {
+                                    ui.label("Outgoing direction: ");
+                                    let r0 = angle_knob(
+                                        ui,
+                                        true,
+                                        &mut extra.azimuth_o,
+                                        azimuth_o.range_bound_inclusive_f32(),
+                                        azimuth_o.step_size,
+                                        48.0,
+                                        |v| format!("φ = {:>6.2}°", v.to_degrees()),
+                                    )
+                                    .changed();
+                                    #[cfg(debug_assertions)]
+                                    {
+                                        debug_print_angle_pair(
+                                            extra.azimuth_o,
+                                            &azimuth_o,
+                                            ui,
+                                            "debug_print_φ",
+                                        );
+                                    }
+                                    extra.changed |= r0;
+                                },
+                            );
+                        }
 
-                    if extra.changed {
-                        let (zenith_range, azimuth_range) =
-                            bsdf_data.params.collector.scheme.ranges();
-                        let count = bsdf_data.params.collector.scheme.total_sample_count();
-                        debug_assert_eq!(
-                            count,
-                            zenith_range.step_count_wrapped() * azimuth_range.step_count_wrapped()
-                        );
-                        let mut samples_per_wavelength =
-                            vec![vec![Vec3::ZERO; count]; wavelengths.len()];
-                        let zenith_range_step_count = zenith_range.step_count_wrapped();
-                        for (lambda_idx, samples) in samples_per_wavelength.iter_mut().enumerate() {
-                            for (azimuth_idx, azimuth) in azimuth_range.values_wrapped().enumerate()
+                        let zenith_i_count = zenith_i.step_count_wrapped();
+                        let zenith_i_idx = zenith_i.index_of(extra.zenith_i);
+                        let azimuth_i_idx = azimuth_i.index_of(extra.azimuth_i);
+                        let data_point =
+                            &bsdf_data.samples[azimuth_i_idx * zenith_i_count + zenith_i_idx];
+                        let spectrum = bsdf_data.params.emitter.spectrum;
+                        let wavelengths = spectrum
+                            .values()
+                            .map(|w| w.value() / 100.0)
+                            .collect::<Vec<_>>();
+                        let num_rays = bsdf_data.params.emitter.num_rays;
+
+                        if extra.changed {
+                            let (zenith_range, azimuth_range) =
+                                bsdf_data.params.collector.scheme.ranges();
+                            let count = bsdf_data.params.collector.scheme.total_sample_count();
+                            debug_assert_eq!(
+                                count,
+                                zenith_range.step_count_wrapped()
+                                    * azimuth_range.step_count_wrapped()
+                            );
+                            let mut samples_per_wavelength =
+                                vec![vec![Vec3::ZERO; count]; wavelengths.len()];
+                            let zenith_range_step_count = zenith_range.step_count_wrapped();
+                            for (lambda_idx, samples) in
+                                samples_per_wavelength.iter_mut().enumerate()
                             {
-                                for (zenith_idx, zenith) in
-                                    zenith_range.values_wrapped().enumerate()
+                                for (azimuth_idx, azimuth) in
+                                    azimuth_range.values_wrapped().enumerate()
                                 {
-                                    let idx = azimuth_idx * zenith_range_step_count + zenith_idx;
-                                    let mut coord = math::spherical_to_cartesian(
-                                        1.0,
-                                        zenith,
-                                        azimuth,
-                                        Handedness::RightHandedYUp,
-                                    );
-                                    coord.y = data_point.data
-                                        [azimuth_idx * zenith_range_step_count + zenith_idx]
-                                        .0[lambda_idx]
-                                        .total_energy;
-                                    samples[idx] = coord;
+                                    for (zenith_idx, zenith) in
+                                        zenith_range.values_wrapped().enumerate()
+                                    {
+                                        let idx =
+                                            azimuth_idx * zenith_range_step_count + zenith_idx;
+                                        let mut coord = math::spherical_to_cartesian(
+                                            1.0,
+                                            zenith,
+                                            azimuth,
+                                            Handedness::RightHandedYUp,
+                                        );
+                                        coord.y = data_point.data
+                                            [azimuth_idx * zenith_range_step_count + zenith_idx]
+                                            .0[lambda_idx]
+                                            .total_energy;
+                                        samples[idx] = coord;
+                                    }
                                 }
                             }
+                            // let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                            //     label: Some(&format!("bsdf_view_buffer_{:?}",
+                            // self.controls.view_id)),
+                            //     size: std::mem::size_of::<Vec3>() as u64 * count as u64,
+                            //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            //     mapped_at_creation: false,
+                            // });
+                            // self.gpu.queue.write_buffer(
+                            //     &buffer,
+                            //     0,
+                            //     bytemuck::cast_slice(&samples_per_wavelength[0]),
+                            // );
+                            // self.event_loop
+                            //     .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::UpdateBuffer
+                            // {         id: self.controls.view_id,
+                            //         buffer: Some(buffer),
+                            //         count: samples_per_wavelength[0].len() as u32,
+                            //     }))
+                            //     .unwrap();
+                            extra.changed = false;
                         }
-                        // let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                        //     label: Some(&format!("bsdf_view_buffer_{:?}",
-                        // self.controls.view_id)),
-                        //     size: std::mem::size_of::<Vec3>() as u64 * count as u64,
-                        //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                        //     mapped_at_creation: false,
-                        // });
-                        // self.gpu.queue.write_buffer(
-                        //     &buffer,
-                        //     0,
-                        //     bytemuck::cast_slice(&samples_per_wavelength[0]),
-                        // );
-                        // self.event_loop
-                        //     .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::UpdateBuffer {
-                        //         id: self.controls.view_id,
-                        //         buffer: Some(buffer),
-                        //         count: samples_per_wavelength[0].len() as u32,
-                        //     }))
-                        //     .unwrap();
-                        extra.changed = false;
-                    }
 
-                    // Figure of per wavelength plot, it contains:
-                    // - the number of absorbed rays per wavelength
-                    // - the number of reflected rays per wavelength
-                    // - the number of captured rays per wavelength
-                    // - the number of captured energy per wavelength
-                    let per_wavelength_plot = Plot::new("per_wavelength_plot")
-                        .center_y_axis(false)
-                        .data_aspect(1.0)
-                        .legend(
-                            Legend::default()
-                                .text_style(egui::TextStyle::Monospace)
-                                .background_alpha(1.0)
-                                .position(Corner::RightTop),
-                        )
-                        .x_grid_spacer(move |input| {
-                            let mut marks = vec![];
-                            let (min, max) = input.bounds;
-                            let min = min as u32;
-                            let n = max as u32 - min;
-                            for i in 0..=n * 2 {
-                                marks.push(GridMark {
-                                    value: i as f64 * 0.5 + min as f64,
-                                    step_size: 0.5,
-                                })
-                            }
-                            marks
-                        })
-                        .y_grid_spacer(move |input| {
-                            let mut marks = vec![];
-                            let (min, max) = input.bounds;
-                            let min = min as u32 * 10;
-                            let max = max as u32 * 10;
-                            for i in min..=max {
-                                let step_size = if i % 2 == 0 { 0.2 } else { continue };
-                                marks.push(GridMark {
-                                    value: i as f64 * 0.1,
-                                    step_size,
-                                })
-                            }
-                            marks
-                        })
-                        .x_axis_formatter(|x, _| format!("{:.0}nm", x * 100.0))
-                        .y_axis_formatter(move |y, _| format!("{:.0}", y * num_rays as f64))
-                        .coordinates_formatter(
-                            Corner::LeftBottom,
-                            CoordinatesFormatter::new(move |p, _| {
-                                format!("λ = {:.0}nm", p.x * 100.0,)
-                            }),
-                        )
-                        .label_formatter(move |name, value| {
-                            if name.starts_with('E') {
-                                format!(
-                                    "{}: λ = {:.0}, e = {:.2}%)",
-                                    name,
-                                    value.x * 100.0,
-                                    value.y * 100.0
-                                )
-                            } else {
-                                format!(
-                                    "{}: λ = {:.0}, n = {:.0})",
-                                    name,
-                                    value.x * 100.0,
-                                    value.y * num_rays as f64
-                                )
-                            }
-                        })
-                        .min_size(Vec2::new(400.0, 240.0));
-
-                    let per_bounce_plot = Plot::new("per_bounce_plot")
-                        .center_y_axis(false)
-                        .data_aspect(2.5)
-                        .legend(
-                            Legend::default()
-                                .text_style(egui::TextStyle::Monospace)
-                                .background_alpha(1.0)
-                                .position(Corner::RightTop),
-                        )
-                        .x_grid_spacer(move |input| {
-                            let (min, max) = input.bounds;
-                            (min as u32..=max as u32)
-                                .map(move |i| GridMark {
-                                    value: i as f64,
-                                    step_size: 1.0,
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .x_axis_formatter(|x, _| format!("{}", x))
-                        .y_grid_spacer(move |input| {
-                            let (min, max) = input.bounds;
-                            let mut i = (min.floor().max(0.0) * 10.0) as u32;
-                            let mut marks = vec![];
-                            while i <= (max.ceil() * 10.0) as u32 {
-                                let step_size = if i % 2 == 0 {
-                                    0.2
+                        // Figure of per wavelength plot, it contains:
+                        // - the number of absorbed rays per wavelength
+                        // - the number of reflected rays per wavelength
+                        // - the number of captured rays per wavelength
+                        // - the number of captured energy per wavelength
+                        let per_wavelength_plot = Plot::new("per_wavelength_plot")
+                            .center_y_axis(false)
+                            .data_aspect(1.0)
+                            .legend(
+                                Legend::default()
+                                    .text_style(egui::TextStyle::Monospace)
+                                    .background_alpha(1.0)
+                                    .position(Corner::RightTop),
+                            )
+                            .x_grid_spacer(move |input| {
+                                let mut marks = vec![];
+                                let (min, max) = input.bounds;
+                                let min = min as u32;
+                                let n = max as u32 - min;
+                                for i in 0..=n * 2 {
+                                    marks.push(GridMark {
+                                        value: i as f64 * 0.5 + min as f64,
+                                        step_size: 0.5,
+                                    })
+                                }
+                                marks
+                            })
+                            .y_grid_spacer(move |input| {
+                                let mut marks = vec![];
+                                let (min, max) = input.bounds;
+                                let min = min as u32 * 10;
+                                let max = max as u32 * 10;
+                                for i in min..=max {
+                                    let step_size = if i % 2 == 0 { 0.2 } else { continue };
+                                    marks.push(GridMark {
+                                        value: i as f64 * 0.1,
+                                        step_size,
+                                    })
+                                }
+                                marks
+                            })
+                            .x_axis_formatter(|x, _| format!("{:.0}nm", x * 100.0))
+                            .y_axis_formatter(move |y, _| format!("{:.0}", y * num_rays as f64))
+                            .coordinates_formatter(
+                                Corner::LeftBottom,
+                                CoordinatesFormatter::new(move |p, _| {
+                                    format!("λ = {:.0}nm", p.x * 100.0,)
+                                }),
+                            )
+                            .label_formatter(move |name, value| {
+                                if name.starts_with('E') {
+                                    format!(
+                                        "{}: λ = {:.0}, e = {:.2}%)",
+                                        name,
+                                        value.x * 100.0,
+                                        value.y * 100.0
+                                    )
                                 } else {
+                                    format!(
+                                        "{}: λ = {:.0}, n = {:.0})",
+                                        name,
+                                        value.x * 100.0,
+                                        value.y * num_rays as f64
+                                    )
+                                }
+                            })
+                            .min_size(Vec2::new(400.0, 240.0));
+
+                        let per_bounce_plot = Plot::new("per_bounce_plot")
+                            .center_y_axis(false)
+                            .data_aspect(2.5)
+                            .legend(
+                                Legend::default()
+                                    .text_style(egui::TextStyle::Monospace)
+                                    .background_alpha(1.0)
+                                    .position(Corner::RightTop),
+                            )
+                            .x_grid_spacer(move |input| {
+                                let (min, max) = input.bounds;
+                                (min as u32..=max as u32)
+                                    .map(move |i| GridMark {
+                                        value: i as f64,
+                                        step_size: 1.0,
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .x_axis_formatter(|x, _| format!("{}", x))
+                            .y_grid_spacer(move |input| {
+                                let (min, max) = input.bounds;
+                                let mut i = (min.floor().max(0.0) * 10.0) as u32;
+                                let mut marks = vec![];
+                                while i <= (max.ceil() * 10.0) as u32 {
+                                    let step_size = if i % 2 == 0 {
+                                        0.2
+                                    } else {
+                                        i += 1;
+                                        continue;
+                                    };
+                                    marks.push(GridMark {
+                                        value: i as f64 / 10.0,
+                                        step_size,
+                                    });
                                     i += 1;
-                                    continue;
-                                };
-                                marks.push(GridMark {
-                                    value: i as f64 / 10.0,
-                                    step_size,
-                                });
-                                i += 1;
-                            }
-                            marks
-                        })
-                        .min_size(Vec2::new(400.0, 240.0));
+                                }
+                                marks
+                            })
+                            .min_size(Vec2::new(400.0, 240.0));
 
-                    // Figure of bsdf measurement statistics
-                    egui::CollapsingHeader::new("Stats")
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            egui::Grid::new("stats_grid").num_columns(2).show(ui, |ui| {
-                                ui.label("Received rays:");
-                                ui.label(format!("{}", data_point.stats.n_received))
-                                    .on_hover_text(
-                                        "Number of emitted rays that hit the surface; invariant \
-                                         over wavelength",
-                                    );
-                                ui.end_row();
+                        // Figure of bsdf measurement statistics
+                        egui::CollapsingHeader::new("Stats")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                egui::Grid::new("stats_grid").num_columns(2).show(ui, |ui| {
+                                    ui.label("Received rays:");
+                                    ui.label(format!("{}", data_point.stats.n_received))
+                                        .on_hover_text(
+                                            "Number of emitted rays that hit the surface; \
+                                             invariant over wavelength",
+                                        );
+                                    ui.end_row();
 
-                                ui.label("Per Wavelength: ");
-                                let n_reflected = wavelengths
-                                    .iter()
-                                    .zip(
-                                        data_point
-                                            .stats
-                                            .n_reflected
-                                            .iter()
-                                            .map(|n| *n as f64 / num_rays as f64),
-                                    )
-                                    .map(|(s, n)| [*s as f64, n])
-                                    .collect::<Vec<_>>();
-
-                                let n_absorbed = wavelengths
-                                    .iter()
-                                    .zip(
-                                        data_point
-                                            .stats
-                                            .n_absorbed
-                                            .iter()
-                                            .map(|n| *n as f64 / num_rays as f64),
-                                    )
-                                    .map(|(s, n)| [*s as f64, n])
-                                    .collect::<Vec<_>>();
-
-                                let n_captured = wavelengths
-                                    .iter()
-                                    .zip(
-                                        data_point
-                                            .stats
-                                            .n_captured
-                                            .iter()
-                                            .map(|n| *n as f64 / num_rays as f64),
-                                    )
-                                    .map(|(s, n)| [*s as f64, n])
-                                    .collect::<Vec<_>>();
-
-                                // Calculate the captured energy per wavelength by dividing the
-                                // captured energy by the number of
-                                // captured rays per wavelength
-                                let e_captured = wavelengths
-                                    .iter()
-                                    .zip(data_point.stats.e_captured.iter())
-                                    .zip(data_point.stats.n_captured.iter())
-                                    .map(|((l, e), n)| [*l as f64, *e as f64 / *n as f64])
-                                    .collect::<Vec<_>>();
-
-                                per_wavelength_plot.show(ui, |plot_ui| {
-                                    plot_ui.line(
-                                        Line::new(n_captured.clone())
-                                            .name("Nº Captured")
-                                            .width(2.0),
-                                    );
-                                    plot_ui.points(
-                                        Points::new(n_captured)
-                                            .shape(MarkerShape::Circle)
-                                            .radius(4.0)
-                                            .name("Nº Captured"),
-                                    );
-
-                                    plot_ui.line(
-                                        Line::new(n_absorbed.clone())
-                                            .name("Nº Absorbed")
-                                            .width(2.0),
-                                    );
-                                    plot_ui.points(
-                                        Points::new(n_absorbed)
-                                            .shape(MarkerShape::Diamond)
-                                            .radius(4.0)
-                                            .name("Nº Absorbed"),
-                                    );
-
-                                    plot_ui.line(
-                                        Line::new(n_reflected.clone())
-                                            .name("Nº Reflected")
-                                            .width(2.0),
-                                    );
-                                    plot_ui.points(
-                                        Points::new(n_reflected)
-                                            .shape(MarkerShape::Square)
-                                            .radius(4.0)
-                                            .name("Nº Reflected"),
-                                    );
-
-                                    plot_ui.line(
-                                        Line::new(e_captured.clone()).name("E Captured").width(2.0),
-                                    );
-                                    plot_ui.points(
-                                        Points::new(e_captured)
-                                            .shape(MarkerShape::Cross)
-                                            .radius(4.0)
-                                            .name("E Captured"),
-                                    );
-                                });
-                                ui.end_row();
-
-                                ui.label("Per Bounce:");
-                                let num_rays_bar_charts = data_point
-                                    .stats
-                                    .num_rays_per_bounce
-                                    .iter()
-                                    .zip(data_point.stats.n_reflected.iter())
-                                    .zip(wavelengths.iter())
-                                    .map(|((per_bounce_data, total), lambda)| {
-                                        BarChart::new(
-                                            per_bounce_data
+                                    ui.label("Per Wavelength: ");
+                                    let n_reflected = wavelengths
+                                        .iter()
+                                        .zip(
+                                            data_point
+                                                .stats
+                                                .n_reflected
                                                 .iter()
-                                                .enumerate()
-                                                .map(|(i, n)| {
-                                                    // Center the bar on the bounce number
-                                                    // and scale the percentage to the range [0, 2]
-                                                    Bar::new(
-                                                        i as f64 + 0.5,
-                                                        (*n as f64 / *total as f64) * 2.0,
-                                                    )
-                                                    .width(1.0)
-                                                })
-                                                .collect(),
+                                                .map(|n| *n as f64 / num_rays as f64),
                                         )
-                                        .name(format!("Nº of rays, λ = {}", lambda))
-                                        .element_formatter(
-                                            Box::new(|bar, _| -> String {
+                                        .map(|(s, n)| [*s as f64, n])
+                                        .collect::<Vec<_>>();
+
+                                    let n_absorbed = wavelengths
+                                        .iter()
+                                        .zip(
+                                            data_point
+                                                .stats
+                                                .n_absorbed
+                                                .iter()
+                                                .map(|n| *n as f64 / num_rays as f64),
+                                        )
+                                        .map(|(s, n)| [*s as f64, n])
+                                        .collect::<Vec<_>>();
+
+                                    let n_captured = wavelengths
+                                        .iter()
+                                        .zip(
+                                            data_point
+                                                .stats
+                                                .n_captured
+                                                .iter()
+                                                .map(|n| *n as f64 / num_rays as f64),
+                                        )
+                                        .map(|(s, n)| [*s as f64, n])
+                                        .collect::<Vec<_>>();
+
+                                    // Calculate the captured energy per wavelength by dividing the
+                                    // captured energy by the number of
+                                    // captured rays per wavelength
+                                    let e_captured = wavelengths
+                                        .iter()
+                                        .zip(data_point.stats.e_captured.iter())
+                                        .zip(data_point.stats.n_captured.iter())
+                                        .map(|((l, e), n)| [*l as f64, *e as f64 / *n as f64])
+                                        .collect::<Vec<_>>();
+
+                                    per_wavelength_plot.show(ui, |plot_ui| {
+                                        plot_ui.line(
+                                            Line::new(n_captured.clone())
+                                                .name("Nº Captured")
+                                                .width(2.0),
+                                        );
+                                        plot_ui.points(
+                                            Points::new(n_captured)
+                                                .shape(MarkerShape::Circle)
+                                                .radius(4.0)
+                                                .name("Nº Captured"),
+                                        );
+
+                                        plot_ui.line(
+                                            Line::new(n_absorbed.clone())
+                                                .name("Nº Absorbed")
+                                                .width(2.0),
+                                        );
+                                        plot_ui.points(
+                                            Points::new(n_absorbed)
+                                                .shape(MarkerShape::Diamond)
+                                                .radius(4.0)
+                                                .name("Nº Absorbed"),
+                                        );
+
+                                        plot_ui.line(
+                                            Line::new(n_reflected.clone())
+                                                .name("Nº Reflected")
+                                                .width(2.0),
+                                        );
+                                        plot_ui.points(
+                                            Points::new(n_reflected)
+                                                .shape(MarkerShape::Square)
+                                                .radius(4.0)
+                                                .name("Nº Reflected"),
+                                        );
+
+                                        plot_ui.line(
+                                            Line::new(e_captured.clone())
+                                                .name("E Captured")
+                                                .width(2.0),
+                                        );
+                                        plot_ui.points(
+                                            Points::new(e_captured)
+                                                .shape(MarkerShape::Cross)
+                                                .radius(4.0)
+                                                .name("E Captured"),
+                                        );
+                                    });
+                                    ui.end_row();
+
+                                    ui.label("Per Bounce:");
+                                    let num_rays_bar_charts = data_point
+                                        .stats
+                                        .num_rays_per_bounce
+                                        .iter()
+                                        .zip(data_point.stats.n_reflected.iter())
+                                        .zip(wavelengths.iter())
+                                        .map(|((per_bounce_data, total), lambda)| {
+                                            BarChart::new(
+                                                per_bounce_data
+                                                    .iter()
+                                                    .enumerate()
+                                                    .map(|(i, n)| {
+                                                        // Center the bar on the bounce number
+                                                        // and scale the percentage to the range [0,
+                                                        // 2]
+                                                        Bar::new(
+                                                            i as f64 + 0.5,
+                                                            (*n as f64 / *total as f64) * 2.0,
+                                                        )
+                                                        .width(1.0)
+                                                    })
+                                                    .collect(),
+                                            )
+                                            .name(format!("Nº of rays, λ = {}", lambda))
+                                            .element_formatter(Box::new(|bar, _| -> String {
                                                 format!(
                                                     "bounce = {:.0}, number of rays = {:.0}%",
                                                     bar.argument + 0.5,
                                                     (bar.value / 2.0) * 100.0
                                                 )
-                                            }),
-                                        )
-                                    });
+                                            }))
+                                        });
 
-                                let energy_bar_charts = data_point
-                                    .stats
-                                    .energy_per_bounce
-                                    .iter()
-                                    .zip(data_point.stats.e_captured.iter())
-                                    .zip(wavelengths.iter())
-                                    .map(|((energy_per_bounce, total), lambda)| {
-                                        BarChart::new(
-                                            energy_per_bounce
-                                                .iter()
-                                                .enumerate()
-                                                .map(|(i, e)| {
-                                                    // Center the bar on the bounce number
-                                                    // and scale the percentage to the range [0, 2]
-                                                    Bar::new(
-                                                        i as f64 + 0.5,
-                                                        (*e as f64 / *total as f64) * 2.0,
-                                                    )
-                                                    .width(1.0)
-                                                })
-                                                .collect(),
-                                        )
-                                        .name(format!("Energy, λ = {}", lambda))
-                                        .element_formatter(
-                                            Box::new(|bar, _| -> String {
+                                    let energy_bar_charts = data_point
+                                        .stats
+                                        .energy_per_bounce
+                                        .iter()
+                                        .zip(data_point.stats.e_captured.iter())
+                                        .zip(wavelengths.iter())
+                                        .map(|((energy_per_bounce, total), lambda)| {
+                                            BarChart::new(
+                                                energy_per_bounce
+                                                    .iter()
+                                                    .enumerate()
+                                                    .map(|(i, e)| {
+                                                        // Center the bar on the bounce number
+                                                        // and scale the percentage to the range [0,
+                                                        // 2]
+                                                        Bar::new(
+                                                            i as f64 + 0.5,
+                                                            (*e as f64 / *total as f64) * 2.0,
+                                                        )
+                                                        .width(1.0)
+                                                    })
+                                                    .collect(),
+                                            )
+                                            .name(format!("Energy, λ = {}", lambda))
+                                            .element_formatter(Box::new(|bar, _| -> String {
                                                 format!(
                                                     "bounce = {:.0}, energy = {:.0}%",
                                                     bar.argument + 0.5,
                                                     (bar.value / 2.0) * 100.0
                                                 )
-                                            }),
-                                        )
+                                            }))
+                                        });
+
+                                    per_bounce_plot.show(ui, |plot_ui| {
+                                        for bar_chart in num_rays_bar_charts {
+                                            plot_ui.bar_chart(bar_chart);
+                                        }
+                                        for bar_chart in energy_bar_charts {
+                                            plot_ui.bar_chart(bar_chart);
+                                        }
                                     });
-
-                                per_bounce_plot.show(ui, |plot_ui| {
-                                    for bar_chart in num_rays_bar_charts {
-                                        plot_ui.bar_chart(bar_chart);
-                                    }
-                                    for bar_chart in energy_bar_charts {
-                                        plot_ui.bar_chart(bar_chart);
-                                    }
-                                });
-                                ui.end_row();
-                            });
-                        });
-
-                    // Actual BSDF plot
-                    let collapsing = egui::CollapsingHeader::new("BSDF");
-                    let response = collapsing
-                        .show(ui, |ui| {
-                            egui::Grid::new("bsdf_grid")
-                                .striped(true)
-                                .num_columns(2)
-                                .show(ui, |ui| {
-                                    // ui.label("Energy");
-                                    // let response = ui.add(
-                                    //     egui::Image::new(self.extra.view_id, [256.0, 256.0])
-                                    //         .sense(egui::Sense::click_and_drag()),
-                                    // );
-                                    // if response.dragged_by(PointerButton::Primary) {
-                                    //     let delta_x = response.drag_delta().x;
-                                    //     if delta_x != 0.0 {
-                                    //         self.event_loop
-                                    //
-                                    // .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
-                                    //                 id: self.extra.view_id,
-                                    //                 angle: delta_x / 256.0 *
-                                    // std::f32::consts::PI,
-                                    //             }))
-                                    //             .unwrap()
-                                    //     }
-                                    // }
-                                    // ui.end_row();
-
-                                    ui.label("Rays");
                                     ui.end_row();
                                 });
-                        })
-                        .header_response;
+                            });
 
-                    // if response.changed() {
-                    //     self.event_loop
-                    //         .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::ToggleView(
-                    //             self.extra.view_id,
-                    //         )))
-                    //         .unwrap()
-                    // }
-                }
-            }
-            MeasurementKind::Madf => {
-                if let Some(extra) = &mut self.extra {
-                    let cache = self.cache.read().unwrap();
-                    let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                    let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
-                    let zenith_bin_width_rad = zenith.step_size.as_f32();
-                    Self::plot_type_ui(&mut self.plot_type, ui);
-                    extra.ui(ui);
-                    if let Some(curve) = extra.current_curve() {
-                        let aspect = curve.max_val[0] / curve.max_val[1];
-                        let plot = Plot::new("plotting")
-                            .legend(self.legend.clone())
-                            .data_aspect(aspect as f32)
-                            //.clamp_grid(true)
-                            .center_x_axis(true)
-                            .sharp_grid_lines(true)
-                            .x_grid_spacer(adf_msf_x_grid_spacer)
-                            .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                            .coordinates_formatter(
-                                Corner::LeftBottom,
-                                CoordinatesFormatter::new(move |p, _| {
-                                    let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
-                                    let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
-                                    let half_bin_width =
-                                        zenith_bin_width_rad.to_degrees() as f64 * 0.5;
-                                    format!(
-                                        "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2} \
-                                         sr⁻¹",
-                                        0.0, bin, p.y
-                                    )
-                                }),
-                            );
-                        plot.show(ui, |plot_ui| match self.plot_type {
-                            PlotType::Line => {
-                                plot_ui.line(
-                                    Line::new(curve.points.clone())
-                                        .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                        .name("Microfacet area distribution"),
-                                );
-                                {
-                                    let concrete_extra = extra
-                                        .as_any()
-                                        .downcast_ref::<AreaDistributionExtra>()
-                                        .unwrap();
-                                    for (i, (model, curve)) in
-                                        concrete_extra.fitted.iter().enumerate()
-                                    {
-                                        plot_ui.line(
-                                            Line::new(curve.points.clone())
-                                                .stroke(egui::epaint::Stroke::new(
-                                                    2.0,
-                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
-                                                ))
-                                                .name(model.name()),
-                                        )
-                                    }
-                                }
-                            }
-                            PlotType::Bar => {
-                                plot_ui.bar_chart(
-                                    BarChart::new(
-                                        curve
-                                            .points
-                                            .iter()
-                                            .map(|[x, y]| {
-                                                Bar::new(*x, *y)
-                                                    .width(zenith_bin_width_rad as f64)
-                                                    .stroke(egui::epaint::Stroke::new(
-                                                        1.0,
-                                                        egui::Color32::LIGHT_RED,
-                                                    ))
-                                                    .fill(egui::Color32::from_rgba_unmultiplied(
-                                                        255, 128, 128, 128,
-                                                    ))
-                                            })
-                                            .collect(),
-                                    )
-                                    .name("Microfacet area distribution"),
-                                );
-                            }
-                        });
+                        // Actual BSDF plot
+                        let collapsing = egui::CollapsingHeader::new("BSDF");
+                        let response = collapsing
+                            .show(ui, |ui| {
+                                egui::Grid::new("bsdf_grid")
+                                    .striped(true)
+                                    .num_columns(2)
+                                    .show(ui, |ui| {
+                                        // ui.label("Energy");
+                                        // let response = ui.add(
+                                        //     egui::Image::new(self.extra.view_id, [256.0, 256.0])
+                                        //         .sense(egui::Sense::click_and_drag()),
+                                        // );
+                                        // if response.dragged_by(PointerButton::Primary) {
+                                        //     let delta_x = response.drag_delta().x;
+                                        //     if delta_x != 0.0 {
+                                        //         self.event_loop
+                                        //
+                                        // .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::Rotate {
+                                        //                 id: self.extra.view_id,
+                                        //                 angle: delta_x / 256.0 *
+                                        // std::f32::consts::PI,
+                                        //             }))
+                                        //             .unwrap()
+                                        //     }
+                                        // }
+                                        // ui.end_row();
+
+                                        ui.label("Rays");
+                                        ui.end_row();
+                                    });
+                            })
+                            .header_response;
+
+                        // if response.changed() {
+                        //     self.event_loop
+                        //         .send_event(VgonioEvent::BsdfViewer(BsdfViewerEvent::ToggleView(
+                        //             self.extra.view_id,
+                        //         )))
+                        //         .unwrap()
+                        // }
                     }
                 }
-            }
-            MeasurementKind::Mmsf => {
-                if let Some(extra) = &mut self.extra {
-                    let extra = extra
-                        .as_any_mut()
-                        .downcast_mut::<MaskingShadowingExtra>()
-                        .unwrap();
-                    let cache = self.cache.read().unwrap();
-                    let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                    let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
-                    let zenith_bin_width_rad = zenith.step_size.value();
-                    Self::plot_type_ui(&mut self.plot_type, ui);
-                    extra.ui(ui);
-                    if let Some(curve) = extra.current_curve() {
-                        let aspect = curve.max_val[0] / curve.max_val[1];
-                        let plot = Plot::new("plot_msf")
-                            .legend(self.legend.clone())
-                            .data_aspect(aspect as f32)
-                            //.clamp_grid(true)
-                            .center_x_axis(true)
-                            .sharp_grid_lines(true)
-                            .x_grid_spacer(adf_msf_x_grid_spacer)
-                            .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
-                            .coordinates_formatter(
-                                Corner::LeftBottom,
-                                CoordinatesFormatter::new(move |p, _| {
-                                    let n_bin = (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
-                                    let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
-                                    let half_bin_width =
-                                        zenith_bin_width_rad.to_degrees() as f64 * 0.5;
-                                    format!(
-                                        "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: {:.2}",
-                                        0.0, bin, p.y
-                                    )
-                                }),
-                            );
-
-                        plot.show(ui, |plot_ui| match self.plot_type {
-                            PlotType::Line => {
-                                plot_ui.line(
-                                    Line::new(curve.points.clone())
-                                        .stroke(egui::epaint::Stroke::new(
-                                            2.0,
-                                            egui::Color32::LIGHT_RED,
-                                        ))
-                                        .name("Microfacet masking shadowing"),
+                MeasurementKind::Madf => {
+                    if let Some(extra) = &mut self.extra {
+                        let cache = self.cache.read().unwrap();
+                        let measurement = cache.get_measurement_data(self.data_handle).unwrap();
+                        let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
+                        let zenith_bin_width_rad = zenith.step_size.as_f32();
+                        Self::plot_type_ui(&mut self.plot_type, ui);
+                        extra.ui(ui);
+                        if let Some(curve) = extra.current_curve() {
+                            let aspect = curve.max_val[0] / curve.max_val[1];
+                            let plot = Plot::new("madf_plot")
+                                .legend(self.legend.clone())
+                                .data_aspect(aspect as f32)
+                                //.clamp_grid(true)
+                                .center_x_axis(true)
+                                .sharp_grid_lines(true)
+                                .x_grid_spacer(adf_msf_x_angle_spacer)
+                                .y_grid_spacer(adf_msf_y_uniform_spacer)
+                                .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
+                                .coordinates_formatter(
+                                    Corner::LeftBottom,
+                                    CoordinatesFormatter::new(move |p, _| {
+                                        let n_bin =
+                                            (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
+                                        let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
+                                        let half_bin_width =
+                                            zenith_bin_width_rad.to_degrees() as f64 * 0.5;
+                                        format!(
+                                            "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: \
+                                             {:.2} sr⁻¹",
+                                            0.0, bin, p.y
+                                        )
+                                    }),
                                 );
-                                {
-                                    let concrete_extra = extra
-                                        .as_any()
-                                        .downcast_ref::<MaskingShadowingExtra>()
-                                        .unwrap();
-                                    for (i, (model, curve)) in
-                                        concrete_extra.fitted.iter().enumerate()
+                            plot.show(ui, |plot_ui| match self.plot_type {
+                                PlotType::Line => {
+                                    plot_ui.line(
+                                        Line::new(curve.points.clone())
+                                            .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
+                                            .name("Measured - ADF"),
+                                    );
+                                    let mut color_idx_base = 1;
                                     {
+                                        let concrete_extra = extra
+                                            .as_any()
+                                            .downcast_ref::<AreaDistributionExtra>()
+                                            .unwrap();
+                                        for (i, (model, curve)) in
+                                            concrete_extra.fitted.iter().enumerate()
+                                        {
+                                            plot_ui.line(
+                                                Line::new(curve.points.clone())
+                                                    .stroke(egui::epaint::Stroke::new(
+                                                        2.0,
+                                                        LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                    ))
+                                                    .name(model.name()),
+                                            )
+                                        }
+                                        color_idx_base += concrete_extra.fitted.len();
+                                    }
+                                    for (i, (model, uuid)) in self.madf_models.iter().enumerate() {
+                                        let points: Vec<_> = (0..=180)
+                                            .map(|x| {
+                                                let theta = x as f64 * std::f64::consts::PI / 180.0
+                                                    - std::f64::consts::PI * 0.5;
+                                                #[cfg(feature = "adf-fitting-scaling")]
+                                                let value = model
+                                                    .eval_with_cos_theta_m(theta.cos())
+                                                    * model.scale().unwrap_or(1.0);
+                                                #[cfg(not(feature = "adf-fitting-scaling"))]
+                                                let value =
+                                                    model.eval_with_cos_theta_m(theta.cos());
+                                                [theta, value]
+                                            })
+                                            .collect();
                                         plot_ui.line(
-                                            Line::new(curve.points.clone())
+                                            Line::new(points)
                                                 .stroke(egui::epaint::Stroke::new(
                                                     2.0,
-                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                    LINE_COLORS
+                                                        [(i + color_idx_base) % LINE_COLORS.len()],
                                                 ))
-                                                .name(model.name()),
-                                        )
+                                                .name(format!(
+                                                    "{}#{}",
+                                                    model.name(),
+                                                    &uuid.to_string().as_str()[..6]
+                                                )),
+                                        );
                                     }
                                 }
-                            }
-                            PlotType::Bar => {
-                                plot_ui.bar_chart(
-                                    BarChart::new(
-                                        curve
-                                            .points
-                                            .iter()
-                                            .map(|[x, y]| {
-                                                Bar::new(*x, *y)
-                                                    .width(zenith_bin_width_rad as f64)
-                                                    .stroke(egui::epaint::Stroke::new(
-                                                        1.0,
-                                                        egui::Color32::LIGHT_RED,
-                                                    ))
-                                                    .fill(egui::Color32::from_rgba_unmultiplied(
-                                                        255, 128, 128, 128,
-                                                    ))
-                                            })
-                                            .collect(),
-                                    )
-                                    .name("Microfacet masking shadowing"),
+                                PlotType::Bar => {
+                                    plot_ui.bar_chart(
+                                        BarChart::new(
+                                            curve
+                                                .points
+                                                .iter()
+                                                .map(|[x, y]| {
+                                                    Bar::new(*x, *y)
+                                                        .width(zenith_bin_width_rad as f64)
+                                                        .stroke(egui::epaint::Stroke::new(
+                                                            1.0,
+                                                            egui::Color32::LIGHT_RED,
+                                                        ))
+                                                        .fill(
+                                                            egui::Color32::from_rgba_unmultiplied(
+                                                                255, 128, 128, 128,
+                                                            ),
+                                                        )
+                                                })
+                                                .collect(),
+                                        )
+                                        .name("Microfacet area distribution"),
+                                    );
+                                }
+                            });
+                        }
+                    }
+                }
+                MeasurementKind::Mmsf => {
+                    if let Some(extra) = &mut self.extra {
+                        let extra = extra
+                            .as_any_mut()
+                            .downcast_mut::<MaskingShadowingExtra>()
+                            .unwrap();
+                        let cache = self.cache.read().unwrap();
+                        let measurement = cache.get_measurement_data(self.data_handle).unwrap();
+                        let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
+                        let zenith_bin_width_rad = zenith.step_size.value();
+                        Self::plot_type_ui(&mut self.plot_type, ui);
+                        extra.ui(ui);
+                        if let Some(curve) = extra.current_curve() {
+                            let aspect = curve.max_val[0] / curve.max_val[1];
+                            let plot = Plot::new("plot_msf")
+                                .legend(self.legend.clone())
+                                .data_aspect(aspect as f32)
+                                //.clamp_grid(true)
+                                .center_x_axis(true)
+                                .sharp_grid_lines(true)
+                                .x_grid_spacer(adf_msf_x_angle_spacer)
+                                .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
+                                .coordinates_formatter(
+                                    Corner::LeftBottom,
+                                    CoordinatesFormatter::new(move |p, _| {
+                                        let n_bin =
+                                            (p.x / zenith_bin_width_rad as f64 + 0.5).floor();
+                                        let bin = n_bin * zenith_bin_width_rad.to_degrees() as f64;
+                                        let half_bin_width =
+                                            zenith_bin_width_rad.to_degrees() as f64 * 0.5;
+                                        format!(
+                                            "φ: {:.2}° θ: {:.2}°±{half_bin_width:.2}°\nValue: \
+                                             {:.2}",
+                                            0.0, bin, p.y
+                                        )
+                                    }),
                                 );
-                            }
-                        });
+
+                            plot.show(ui, |plot_ui| match self.plot_type {
+                                PlotType::Line => {
+                                    plot_ui.line(
+                                        Line::new(curve.points.clone())
+                                            .stroke(egui::epaint::Stroke::new(
+                                                2.0,
+                                                egui::Color32::LIGHT_RED,
+                                            ))
+                                            .name("Microfacet masking shadowing"),
+                                    );
+                                    {
+                                        let concrete_extra = extra
+                                            .as_any()
+                                            .downcast_ref::<MaskingShadowingExtra>()
+                                            .unwrap();
+                                        for (i, (model, curve)) in
+                                            concrete_extra.fitted.iter().enumerate()
+                                        {
+                                            plot_ui.line(
+                                                Line::new(curve.points.clone())
+                                                    .stroke(egui::epaint::Stroke::new(
+                                                        2.0,
+                                                        LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                    ))
+                                                    .name(model.name()),
+                                            )
+                                        }
+                                    }
+                                }
+                                PlotType::Bar => {
+                                    plot_ui.bar_chart(
+                                        BarChart::new(
+                                            curve
+                                                .points
+                                                .iter()
+                                                .map(|[x, y]| {
+                                                    Bar::new(*x, *y)
+                                                        .width(zenith_bin_width_rad as f64)
+                                                        .stroke(egui::epaint::Stroke::new(
+                                                            1.0,
+                                                            egui::Color32::LIGHT_RED,
+                                                        ))
+                                                        .fill(
+                                                            egui::Color32::from_rgba_unmultiplied(
+                                                                255, 128, 128, 128,
+                                                            ),
+                                                        )
+                                                })
+                                                .collect(),
+                                        )
+                                        .name("Microfacet masking shadowing"),
+                                    );
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -1442,7 +1679,7 @@ impl Dockable for PlotInspector {
 }
 
 /// Calculates the ticks for x axis of the ADF or MSF plot.
-fn adf_msf_x_grid_spacer(input: GridInput) -> Vec<GridMark> {
+fn adf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
     let mut marks = vec![];
     let (min, max) = input.bounds;
     let min = min.floor().to_degrees() as i32;
@@ -1457,6 +1694,21 @@ fn adf_msf_x_grid_spacer(input: GridInput) -> Vec<GridMark> {
         };
         marks.push(GridMark {
             value: (i as f64).to_radians(),
+            step_size,
+        });
+    }
+    marks
+}
+
+fn adf_msf_y_uniform_spacer(input: GridInput) -> Vec<GridMark> {
+    let mut marks = vec![];
+    let (min, max) = input.bounds;
+    let min = min.floor();
+    let max = max.ceil();
+    let step_size = (max - min.max(0.0)) / 10.0;
+    for i in 0..10 {
+        marks.push(GridMark {
+            value: i as f64 * step_size,
             step_size,
         });
     }

@@ -9,13 +9,43 @@ use crate::fitting::{
 /// RMS slope of the microfacets, then the alpha parameter of the Beckmann
 /// distribution is given by: $\alpha = \sqrt{2} \sigma$.
 #[derive(Debug, Copy, Clone)]
-pub struct BeckmannSpizzichinoMadf {
+pub struct BeckmannSpizzichinoADF {
     /// Roughness parameter of the NDF.
     pub alpha: f64,
+    #[cfg(feature = "adf-fitting-scaling")]
+    /// The scale factor of the NDF.
+    pub scale: Option<f64>,
 }
 
-impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoMadf {
-    fn name(&self) -> &'static str { "Beckmann-Spizzichino ADF" }
+impl BeckmannSpizzichinoADF {
+    pub fn default() -> Self {
+        BeckmannSpizzichinoADF {
+            alpha: 0.1,
+            #[cfg(feature = "adf-fitting-scaling")]
+            scale: None,
+        }
+    }
+
+    #[cfg(feature = "adf-fitting-scaling")]
+    pub fn default_with_scale() -> Self {
+        BeckmannSpizzichinoADF {
+            alpha: 0.1,
+            scale: Some(1.0),
+        }
+    }
+}
+
+impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoADF {
+    fn name(&self) -> &'static str {
+        #[cfg(feature = "adf-fitting-scaling")]
+        if self.scale.is_none() {
+            "Beckmann-Spizzichino ADF"
+        } else {
+            "Scaled Beckmann-Spizzichino ADF"
+        }
+        #[cfg(not(feature = "adf-fitting-scaling"))]
+        "Beckmann-Spizzichino ADF"
+    }
 
     fn family(&self) -> ReflectionModelFamily {
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
@@ -26,6 +56,18 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoMadf {
     fn params(&self) -> [f64; 2] { [self.alpha, self.alpha] }
 
     fn set_params(&mut self, params: [f64; 2]) { self.alpha = params[0]; }
+
+    #[cfg(feature = "adf-fitting-scaling")]
+    fn scale(&self) -> Option<f64> { self.scale }
+
+    #[cfg(feature = "adf-fitting-scaling")]
+    fn set_scale(&mut self, scale: f64) {
+        #[cfg(debug_assertions)]
+        if self.scale.is_none() {
+            panic!("Trying to set the scale on a non-scaled Beckmann Spizzichino ADF");
+        }
+        self.scale.replace(scale);
+    }
 
     fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64 {
         let alpha2 = self.alpha * self.alpha;
@@ -39,7 +81,7 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoMadf {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct BeckmannSpizzichinoMadfAnisotropic {
+pub struct BeckmannSpizzichinoAnisotropicADF {
     /// Roughness parameter along the horizontal axis of the NDF.
     pub roughness_u: f32,
     /// Roughness parameter along the vertical axis of the NDF.
@@ -47,12 +89,12 @@ pub struct BeckmannSpizzichinoMadfAnisotropic {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct BeckmannSpizzichinoMmsf {
+pub struct BeckmannSpizzichinoMSF {
     /// Roughness parameter of the MSF.
     pub roughness: f64,
 }
 
-impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMmsf {
+impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMSF {
     fn name(&self) -> &'static str { "Beckmann-Spizzichino MSF" }
 
     fn family(&self) -> ReflectionModelFamily {
@@ -78,12 +120,12 @@ impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMmsf {
 
 #[test]
 fn beckmann_spizzichino_family() {
-    let madf = BeckmannSpizzichinoMadf { alpha: 0.1 };
+    let madf = BeckmannSpizzichinoADF { alpha: 0.1 };
     assert_eq!(
         madf.family(),
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
     );
-    let mmsf = BeckmannSpizzichinoMmsf { roughness: 0.1 };
+    let mmsf = BeckmannSpizzichinoMSF { roughness: 0.1 };
     assert_eq!(
         mmsf.family(),
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
