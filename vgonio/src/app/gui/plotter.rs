@@ -45,17 +45,23 @@ enum PlotType {
     Bar,
 }
 
-const LINE_COLORS: [egui::Color32; 10] = [
+const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),
-    egui::Color32::from_rgb(146, 225, 145),
-    egui::Color32::from_rgb(63, 89, 66),
-    egui::Color32::from_rgb(117, 213, 225),
-    egui::Color32::from_rgb(10, 127, 178),
-    egui::Color32::from_rgb(188, 197, 235),
-    egui::Color32::from_rgb(51, 74, 171),
-    egui::Color32::from_rgb(173, 213, 31),
-    egui::Color32::from_rgb(117, 72, 25),
-    egui::Color32::from_rgb(248, 186, 124),
+    egui::Color32::from_rgb(35, 152, 13),
+    egui::Color32::from_rgb(119, 52, 147),
+    egui::Color32::from_rgb(177, 230, 50),
+    egui::Color32::from_rgb(26, 101, 135),
+    egui::Color32::from_rgb(72, 182, 234),
+    egui::Color32::from_rgb(37, 80, 38),
+    egui::Color32::from_rgb(57, 242, 122),
+    egui::Color32::from_rgb(156, 64, 80),
+    egui::Color32::from_rgb(131, 217, 150),
+    egui::Color32::from_rgb(237, 75, 4),
+    egui::Color32::from_rgb(241, 203, 213),
+    egui::Color32::from_rgb(109, 76, 43),
+    egui::Color32::from_rgb(226, 198, 39),
+    egui::Color32::from_rgb(210, 14, 77),
+    egui::Color32::from_rgb(108, 142, 69),
 ];
 
 pub trait PlottingWidget {
@@ -1098,18 +1104,16 @@ impl PlottingWidget for PlotInspector {
                                                     .name(name),
                                             )
                                         }
+                                        color_idx_base += concrete_extra.fitted.len() + 1;
                                         if concrete_extra.show_accumulated {
                                             plot_ui.line(
                                                 Line::new(concrete_extra.curves[0].points.clone())
                                                     .stroke(egui::epaint::Stroke::new(
                                                         2.0,
-                                                        LINE_COLORS[(concrete_extra.fitted.len()
-                                                            + 1)
-                                                            % LINE_COLORS.len()],
+                                                        LINE_COLORS[15],
                                                     )),
                                             )
                                         }
-                                        color_idx_base += concrete_extra.fitted.len() + 2;
                                     }
                                     for (i, (model, uuid)) in self.madf_models.iter().enumerate() {
                                         let points: Vec<_> = (0..=180)
