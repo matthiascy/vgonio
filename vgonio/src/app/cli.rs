@@ -18,7 +18,7 @@ use crate::{
         self,
         measurement::{
             BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementData,
-            MeasurementKind, MeasurementKindDescription, MmsfMeasurementParams,
+            MeasurementKind, MeasurementParams, MmsfMeasurementParams,
         },
         CollectorScheme,
     },
@@ -82,15 +82,15 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
                 .iter()
                 .map(|kind| match kind {
                     FastMeasurementKind::Bsdf => Measurement {
-                        desc: MeasurementKindDescription::Bsdf(BsdfMeasurementParams::default()),
+                        params: MeasurementParams::Bsdf(BsdfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetAreaDistribution => Measurement {
-                        desc: MeasurementKindDescription::Madf(MadfMeasurementParams::default()),
+                        params: MeasurementParams::Madf(MadfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {
-                        desc: MeasurementKindDescription::Mmsf(MmsfMeasurementParams::default()),
+                        params: MeasurementParams::Mmsf(MmsfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
                 })
@@ -103,7 +103,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     );
 
     // Load data files: refractive indices, spd etc. if needed.
-    if measurements.iter().any(|meas| meas.desc.is_bsdf()) {
+    if measurements.iter().any(|meas| meas.params.is_bsdf()) {
         println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
         cache.load_ior_database(&config);
         println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
@@ -138,8 +138,8 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     let start_time = Instant::now();
     for (measurement, surfaces) in tasks {
         let measurement_start_time = std::time::SystemTime::now();
-        let measured_data = match measurement.desc {
-            MeasurementKindDescription::Bsdf(measurement) => {
+        let measured_data = match measurement.params {
+            MeasurementParams::Bsdf(measurement) => {
                 let collector_info = match measurement.collector.scheme {
                     CollectorScheme::Partitioned { partition } => match partition {
                         SphericalPartition::EqualAngle { zenith, azimuth } => {
@@ -210,7 +210,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
                 );
                 measure::bsdf::measure_bsdf_rt(measurement, &surfaces, measurement.sim_kind, &cache)
             }
-            MeasurementKindDescription::Madf(measurement) => {
+            MeasurementParams::Madf(measurement) => {
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet area distribution:
     • parameters:
@@ -221,7 +221,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
                 );
                 measure::microfacet::measure_area_distribution(measurement, &surfaces, &cache)
             }
-            MeasurementKindDescription::Mmsf(measurement) => {
+            MeasurementParams::Mmsf(measurement) => {
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
     • parameters:
@@ -418,13 +418,20 @@ fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
             ConvertKind::MicroSurfaceProfile => {
                 let (profile, filename) = {
                     let loaded = MicroSurface::read_from_file(&resolved, None)?;
-
-                    let resized = if let Some(new_size) = opts.resize.as_ref() {
+                    let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
                         let (w, h) = (new_size[0] as usize, new_size[1] as usize);
                         println!("  {BRIGHT_YELLOW}>{RESET} Resizing to {}x{}...", w, h);
-                        loaded.resize(w, h)
+                        (w, h)
                     } else {
-                        loaded
+                        (loaded.cols, loaded.rows)
+                    };
+
+                    let (w, h) = if opts.squaring {
+                        let s = w.min(h);
+                        println!("  {BRIGHT_YELLOW}>{RESET} Squaring to {}x{}...", s, s);
+                        (s, s)
+                    } else {
+                        (w, h)
                     };
 
                     let filename = format!(
@@ -436,7 +443,7 @@ fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
                             .to_str()
                             .unwrap()
                     );
-                    (resized, filename)
+                    (loaded.resize(h, w), filename)
                 };
                 println!(
                     "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",

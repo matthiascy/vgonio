@@ -11,7 +11,7 @@ publish = false
 default = []
 embree = ["dep:embree", "vgsurf/embree"]
 optix = []
-adf-fitting-scaling = []
+scaled-adf-fitting = []
 verbose_debug = []
 
 [dependencies]

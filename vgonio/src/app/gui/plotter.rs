@@ -1,16 +1,23 @@
+mod madf;
+mod mmsf;
+
+pub use madf::*;
+pub use mmsf::*;
+
 use crate::{
     app::{
         cache::{Cache, Handle},
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
-            event::EventLoopProxy,
+            event::{EventLoopProxy, VgonioEvent},
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
     fitting::{
-        BeckmannSpizzichinoADF, FittedModel, MicrofacetAreaDistributionModel,
-        MicrofacetMaskingShadowingModel, TrowbridgeReitzADF,
+        AreaDistributionFittingMode, BeckmannSpizzichinoADF, FittedModel,
+        MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
+        ReflectionModelFamily, TrowbridgeReitzADF,
     },
     measure::{
         measurement::{MeasurementData, MeasurementKind},
@@ -77,7 +84,7 @@ pub trait PlottingWidget {
 }
 
 /// Trait for extra data to be used by the plotting inspector.
-pub trait ExtraData {
+pub trait VariantData {
     /// Initialise the extra data.
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache);
 
@@ -91,7 +98,7 @@ pub trait ExtraData {
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn ui(&mut self, ui: &mut Ui);
+    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle<MeasurementData>);
 }
 
 pub struct PlotInspector {
@@ -109,8 +116,8 @@ pub struct PlotInspector {
     legend: Legend,
     /// The type of plot to be displayed
     plot_type: PlotType,
-    /// Extra data, including controls parameters and the pre-processed data.
-    extra: Option<Box<dyn ExtraData>>,
+    /// Variant data for the plot depending on the type of the measurement data.
+    variant: Option<Box<dyn VariantData>>,
     new_curve_kind: CurveKind,
     // (model, uuid)
     madf_models: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Uuid)>,
@@ -213,88 +220,7 @@ impl Deref for Curve {
     fn deref(&self) -> &Self::Target { &self.points }
 }
 
-/// Extra data for the area distribution plot.
-pub struct AreaDistributionExtra {
-    /// The azimuthal angle range of the measured data, in radians.
-    azimuth_range: RangeByStepSizeInclusive<Radians>,
-    /// The zenith angle range of the measured data, in radians.
-    zenith_range: RangeByStepSizeInclusive<Radians>,
-    /// The azimuthal angle (facet normal m) of the slice to be displayed, in
-    /// radians.
-    azimuth_m: Radians,
-    /// Curve cache extracted from the measurement data, indexed by the
-    /// azimuthal angle.
-    curves: Vec<Curve>,
-    /// The fitted curves together with the fitted model.
-    fitted: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Curve)>,
-}
-
-impl Default for AreaDistributionExtra {
-    fn default() -> Self {
-        Self {
-            azimuth_range: RangeByStepSizeInclusive {
-                start: rad!(0.0),
-                stop: rad!(0.0),
-                step_size: rad!(0.0),
-            },
-            zenith_range: RangeByStepSizeInclusive {
-                start: rad!(0.0),
-                stop: rad!(0.0),
-                step_size: rad!(0.0),
-            },
-            azimuth_m: rad!(0.0),
-            curves: vec![],
-            fitted: vec![],
-        }
-    }
-}
-
-pub struct MaskingShadowingExtra {
-    /// The azimuthal angle (facet normal m) of the slice to be displayed, in
-    /// radians.
-    azimuth_m: Radians,
-    /// The zenith angle of (facet normal m) the slice to be displayed, in
-    /// radians.
-    zenith_m: Radians,
-    /// The azimuthal angle (incident/outgoing direction v) of the slice to be
-    /// displayed,
-    azimuth_v: Radians,
-    /// The azimuthal angle range of the measured data, in radians.
-    azimuth_range: RangeByStepSizeInclusive<Radians>,
-    /// The zenith angle range of the measured data, in radians.
-    zenith_range: RangeByStepSizeInclusive<Radians>,
-    /// Curve cache extracted from the measurement data. The first index is the
-    /// azimuthal angle of microfacet normal m, the second index is the zenith
-    /// angle of microfacet normal m, the third index is the azimuthal angle of
-    /// incident/outgoing direction v.
-    curves: Vec<Curve>,
-    /// The fitted curves together with the fitted model.
-    fitted: Vec<(Box<dyn MicrofacetMaskingShadowingModel>, Curve)>,
-}
-
-impl Default for MaskingShadowingExtra {
-    fn default() -> Self {
-        Self {
-            azimuth_m: rad!(0.0),
-            zenith_m: rad!(0.0),
-            azimuth_v: rad!(0.0),
-            azimuth_range: RangeByStepSizeInclusive {
-                start: rad!(0.0),
-                stop: rad!(0.0),
-                step_size: rad!(0.0),
-            },
-            zenith_range: RangeByStepSizeInclusive {
-                start: rad!(0.0),
-                stop: rad!(0.0),
-                step_size: rad!(0.0),
-            },
-            curves: vec![],
-            fitted: vec![],
-        }
-    }
-}
-
-impl ExtraData for BsdfPlotExtraData {
+impl VariantData for BsdfPlotExtraData {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
         // TODO: pre-process data
     }
@@ -307,339 +233,8 @@ impl ExtraData for BsdfPlotExtraData {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(&mut self, ui: &mut Ui) { todo!() }
-}
-
-impl ExtraData for AreaDistributionExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
-        let measurement = cache.get_measurement_data(data).unwrap();
-        self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
-        self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
-        for phi in self.azimuth_range.values_wrapped() {
-            let (starting, opposite) = measurement.adf_data_slice(phi);
-            let first_part_points = starting
-                .iter()
-                .zip(self.zenith_range.values())
-                .map(|(y, x)| [x.as_f64(), *y as f64]);
-            self.curves.push(Curve::from_madf_or_mmsf_data(
-                first_part_points,
-                opposite,
-                &self.zenith_range,
-            ));
-        }
-    }
-
-    fn current_curve(&self) -> Option<&Curve> {
-        let azimuth_m = self.azimuth_m.wrap_to_tau();
-        let index = self.azimuth_range.index_of(azimuth_m);
-        debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
-        self.curves.get(index)
-    }
-
-    fn update_fitted_curves(&mut self, models: &[FittedModel]) {
-        let theta_values = self
-            .zenith_range
-            .values_rev()
-            .map(|x| -x.as_f64())
-            .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
-            .collect::<Vec<_>>();
-        let to_add = models
-            .iter()
-            .filter(|model| {
-                #[cfg(feature = "adf-fitting-scaling")]
-                {
-                    !self.fitted.iter().any(|(existing_model, _)| {
-                        model.family() == existing_model.family()
-                            && model.is_scaled() == existing_model.scale().is_some()
-                    })
-                }
-                #[cfg(not(feature = "adf-fitting-scaling"))]
-                {
-                    !self
-                        .fitted
-                        .iter()
-                        .any(|(existing_model, _)| model.family() == existing_model.family())
-                }
-            })
-            .collect::<Vec<_>>();
-
-        if to_add.is_empty() {
-            return;
-        } else {
-            for fitted in to_add {
-                match fitted {
-                    FittedModel::Madf(model) => {
-                        // Generate the curve for this model.
-                        let points = {
-                            theta_values
-                                .iter()
-                                .zip(theta_values.iter().map(|theta_m| {
-                                    #[cfg(feature = "adf-fitting-scaling")]
-                                    {
-                                        model.eval_with_theta_m(*theta_m)
-                                            * model.scale().unwrap_or(1.0)
-                                    }
-                                    #[cfg(not(feature = "adf-fitting-scaling"))]
-                                    {
-                                        model.eval_with_theta_m(*theta_m)
-                                    }
-                                }))
-                                .map(|(x, y)| [*x, y])
-                        };
-
-                        self.fitted.push((model.clone_box(), Curve::from(points)));
-                    }
-                    _ => {
-                        unreachable!("Wrong model type for area distribution!")
-                    }
-                }
-            }
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-
-    fn ui(&mut self, ui: &mut Ui) {
-        ui.allocate_ui_with_layout(
-            Vec2::new(ui.available_width(), 48.0),
-            egui::Layout::left_to_right(Align::Center),
-            |ui| {
-                ui.label("Microfacet normal: ");
-                let mut opposite = self.azimuth_m.wrap_to_tau().opposite();
-                angle_knob(
-                    ui,
-                    false,
-                    &mut opposite,
-                    self.azimuth_range
-                        .map(|x| x.value())
-                        .range_bound_inclusive(),
-                    self.azimuth_range.step_size,
-                    48.0,
-                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                );
-                angle_knob(
-                    ui,
-                    true,
-                    &mut self.azimuth_m,
-                    self.azimuth_range
-                        .map(|x| x.value())
-                        .range_bound_inclusive(),
-                    self.azimuth_range.step_size,
-                    48.0,
-                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                );
-                if ui.button("📋").clicked() {
-                    println!("is empty curve {}", self.current_curve().is_none());
-                    ui.output_mut(|o| {
-                        if let Some(curve) = self.current_curve() {
-                            println!("Copying data to clipboard");
-                            let mut content = String::new();
-                            for [x, y] in &curve.points {
-                                content.push_str(&format!("{}, {}\n", x, y));
-                            }
-                            o.copied_text = content;
-                        }
-                    });
-                }
-                #[cfg(debug_assertions)]
-                debug_print_angle_pair(
-                    self.azimuth_m,
-                    &self.azimuth_range,
-                    ui,
-                    "debug_print_φ_pair",
-                );
-            },
-        );
-
-        ui.label("Fitted models: ");
-        if self.fitted.is_empty() {
-            ui.label("None");
-        } else {
-            for (model, _) in &self.fitted {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        egui::RichText::from(model.name()).text_style(egui::TextStyle::Monospace),
-                    );
-                    ui.label(
-                        #[cfg(feature = "adf-fitting-scaling")]
-                        {
-                            match model.scale() {
-                                None => {
-                                    egui::RichText::from(format!("α = {:.4}", model.params()[0],))
-                                }
-                                Some(scale) => egui::RichText::from(format!(
-                                    "α = {:.4}, scale = {:.4}",
-                                    model.params()[0],
-                                    scale
-                                ))
-                                .text_style(egui::TextStyle::Button),
-                            }
-                        },
-                        #[cfg(not(feature = "adf-fitting-scaling"))]
-                        {
-                            egui::RichText::from(format!("α = {:.4}", model.params()[0],));
-                        },
-                    )
-                });
-            }
-        }
-    }
-}
-
-impl ExtraData for MaskingShadowingExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
-        let measurement = cache.get_measurement_data(data).unwrap();
-        self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
-        self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
-        // let zenith_step_count = self.zenith_range.step_count_wrapped();
-        for phi_m in self.azimuth_range.values_wrapped() {
-            for theta_m in self.zenith_range.values() {
-                for phi_v in self.azimuth_range.values_wrapped() {
-                    let (starting, opposite) = measurement.msf_data_slice(phi_m, theta_m, phi_v);
-                    let first_part_points = starting
-                        .iter()
-                        .zip(self.zenith_range.values())
-                        .map(|(y, x)| [x.as_f64(), *y as f64]);
-                    self.curves.push(Curve::from_madf_or_mmsf_data(
-                        first_part_points,
-                        opposite,
-                        &self.zenith_range,
-                    ));
-                }
-            }
-        }
-    }
-
-    fn current_curve(&self) -> Option<&Curve> {
-        let phi_m_idx = self.azimuth_range.index_of(self.azimuth_m.wrap_to_tau());
-        let theta_m_idx = self.zenith_range.index_of(self.zenith_m);
-        let phi_v_idx = self.azimuth_range.index_of(self.azimuth_v.wrap_to_tau());
-        let azimuth_step_count = self.azimuth_range.step_count_wrapped();
-        let zenith_step_count = self.zenith_range.step_count_wrapped();
-        let index = phi_m_idx * zenith_step_count * azimuth_step_count
-            + theta_m_idx * azimuth_step_count
-            + phi_v_idx;
-        debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
-        self.curves.get(index)
-    }
-
-    fn update_fitted_curves(&mut self, models: &[FittedModel]) {
-        let theta_values = self
-            .zenith_range
-            .values_rev()
-            .map(|x| -x.as_f64())
-            .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
-            .collect::<Vec<_>>();
-        let to_add = models
-            .iter()
-            .filter(|model| {
-                !self
-                    .fitted
-                    .iter()
-                    .any(|(existing_model, _)| model.family() == existing_model.family())
-            })
-            .collect::<Vec<_>>();
-
-        if to_add.is_empty() {
-            return;
-        } else {
-            for fitted in to_add {
-                match fitted {
-                    FittedModel::Mmsf(model) => {
-                        // Generate the curve for this model.
-                        let points = theta_values
-                            .iter()
-                            .zip(
-                                theta_values
-                                    .iter()
-                                    .map(|theta_m| model.eval_with_cos_theta_v(theta_m.cos())),
-                            )
-                            .map(|(x, y)| [*x, y]);
-                        self.fitted.push((model.clone_box(), Curve::from(points)));
-                    }
-                    _ => {
-                        unreachable!("Wrong model type for masking-shadowing!")
-                    }
-                }
-            }
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-
-    fn ui(&mut self, ui: &mut Ui) {
-        ui.allocate_ui_with_layout(
-            Vec2::new(ui.available_width(), 48.0),
-            egui::Layout::left_to_right(Align::Center),
-            |ui| {
-                ui.label("Microfacet normal: ");
-                angle_knob(
-                    ui,
-                    true,
-                    &mut self.zenith_m,
-                    self.zenith_range.range_bound_inclusive_f32(),
-                    self.zenith_range.step_size,
-                    48.0,
-                    |v| format!("θ = {:>6.2}°", v.to_degrees()),
-                );
-                angle_knob(
-                    ui,
-                    true,
-                    &mut self.azimuth_m,
-                    self.azimuth_range.range_bound_inclusive_f32(),
-                    self.azimuth_range.step_size,
-                    48.0,
-                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                );
-                #[cfg(debug_assertions)]
-                {
-                    debug_print_angle_pair(
-                        self.azimuth_m,
-                        &self.azimuth_range,
-                        ui,
-                        "debug_print_φ",
-                    );
-                    debug_print_angle(self.zenith_m, &self.zenith_range, ui, "debug_print_θ");
-                }
-            },
-        );
-        ui.allocate_ui_with_layout(
-            Vec2::new(ui.available_width(), 48.0),
-            egui::Layout::left_to_right(Align::Center),
-            |ui| {
-                ui.label("incident direction: ");
-                let mut opposite = self.azimuth_v.opposite();
-                angle_knob(
-                    ui,
-                    false,
-                    &mut opposite,
-                    self.azimuth_range.range_bound_inclusive_f32(),
-                    self.azimuth_range.step_size,
-                    48.0,
-                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                );
-                angle_knob(
-                    ui,
-                    true,
-                    &mut self.azimuth_v,
-                    self.azimuth_range.range_bound_inclusive_f32(),
-                    self.azimuth_range.step_size,
-                    48.0,
-                    |v| format!("φ = {:>6.2}°", v.to_degrees()),
-                );
-                #[cfg(debug_assertions)]
-                debug_print_angle_pair(
-                    self.azimuth_v,
-                    &self.azimuth_range,
-                    ui,
-                    "debug_print_φ_pair",
-                );
-            },
-        );
+    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle<MeasurementData>) {
+        todo!()
     }
 }
 
@@ -732,7 +327,7 @@ impl PlotInspector {
                 .position(Corner::RightTop),
             plot_type: PlotType::Line,
             event_loop,
-            extra: None,
+            variant: None,
             new_curve_kind: CurveKind::None,
             madf_models: vec![],
             uuid: Uuid::new_v4(),
@@ -744,7 +339,7 @@ impl PlotInspector {
         name: String,
         data: Handle<MeasurementData>,
         plot_type: PlotType,
-        extra: Option<Box<dyn ExtraData>>,
+        extra: Option<Box<dyn VariantData>>,
         cache: Arc<RwLock<Cache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -760,7 +355,7 @@ impl PlotInspector {
                 .background_alpha(1.0)
                 .position(Corner::RightTop),
             plot_type,
-            extra,
+            variant: extra,
             new_curve_kind: CurveKind::None,
             madf_models: vec![],
             mmsf_models: vec![],
@@ -840,7 +435,7 @@ impl PlottingWidget for PlotInspector {
                         {
                             model.set_params([value, value]);
                         }
-                        #[cfg(feature = "adf-fitting-scaling")]
+                        #[cfg(feature = "scaled-adf-fitting")]
                         {
                             if let Some(scale) = model.scale() {
                                 let mut scale = scale;
@@ -881,12 +476,12 @@ impl PlottingWidget for PlotInspector {
                             let theta = x as f64 * std::f64::consts::PI / 180.0
                                 - std::f64::consts::PI * 0.5;
                             let value = {
-                                #[cfg(feature = "adf-fitting-scaling")]
+                                #[cfg(feature = "scaled-adf-fitting")]
                                 {
                                     model.eval_with_theta_m(theta.cos())
                                         * model.scale().unwrap_or(1.0)
                                 }
-                                #[cfg(not(feature = "adf-fitting-scaling"))]
+                                #[cfg(not(feature = "scaled-adf-fitting"))]
                                 {
                                     model.eval_with_theta_m(theta.cos())
                                 }
@@ -909,14 +504,14 @@ impl PlottingWidget for PlotInspector {
             {
                 let props = self.props.read().unwrap();
                 let prop = props.measured.get(&self.data_handle).unwrap();
-                if let Some(extra) = &mut self.extra {
-                    extra.update_fitted_curves(&prop.fitted);
+                if let Some(extra) = &mut self.variant {
+                    extra.update_fitted_curves(prop.fitted.as_ref());
                 }
             }
 
             match self.measurement_data_kind() {
                 MeasurementKind::Bsdf => {
-                    if let Some(extra) = &mut self.extra {
+                    if let Some(extra) = &mut self.variant {
                         let extra = extra
                             .as_any_mut()
                             .downcast_mut::<BsdfPlotExtraData>()
@@ -1437,14 +1032,14 @@ impl PlottingWidget for PlotInspector {
                     }
                 }
                 MeasurementKind::Madf => {
-                    if let Some(extra) = &mut self.extra {
+                    if let Some(variant) = &mut self.variant {
                         let cache = self.cache.read().unwrap();
                         let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                         let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
                         Self::plot_type_ui(&mut self.plot_type, ui);
-                        extra.ui(ui);
-                        if let Some(curve) = extra.current_curve() {
+                        variant.ui(ui, &mut self.event_loop, self.data_handle);
+                        if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("madf_plot")
                                 .legend(self.legend.clone())
@@ -1479,34 +1074,53 @@ impl PlottingWidget for PlotInspector {
                                     );
                                     let mut color_idx_base = 1;
                                     {
-                                        let concrete_extra = extra
+                                        let concrete_extra = variant
                                             .as_any()
                                             .downcast_ref::<AreaDistributionExtra>()
                                             .unwrap();
-                                        for (i, (model, curve)) in
+                                        for (i, (model, mode, curve)) in
                                             concrete_extra.fitted.iter().enumerate()
                                         {
+                                            let name = match mode {
+                                                AreaDistributionFittingMode::Complete => {
+                                                    model.name().to_string()
+                                                }
+                                                AreaDistributionFittingMode::Accumulated => {
+                                                    format!("{} (Accumulated)", model.name())
+                                                }
+                                            };
                                             plot_ui.line(
                                                 Line::new(curve.points.clone())
                                                     .stroke(egui::epaint::Stroke::new(
                                                         2.0,
                                                         LINE_COLORS[(i + 1) % LINE_COLORS.len()],
                                                     ))
-                                                    .name(model.name()),
+                                                    .name(name),
                                             )
                                         }
-                                        color_idx_base += concrete_extra.fitted.len();
+                                        if concrete_extra.show_accumulated {
+                                            plot_ui.line(
+                                                Line::new(concrete_extra.curves[0].points.clone())
+                                                    .stroke(egui::epaint::Stroke::new(
+                                                        2.0,
+                                                        LINE_COLORS[(concrete_extra.fitted.len()
+                                                            + 1)
+                                                            % LINE_COLORS.len()],
+                                                    )),
+                                            )
+                                        }
+                                        color_idx_base += concrete_extra.fitted.len() + 2;
                                     }
                                     for (i, (model, uuid)) in self.madf_models.iter().enumerate() {
                                         let points: Vec<_> = (0..=180)
                                             .map(|x| {
                                                 let theta = x as f64 * std::f64::consts::PI / 180.0
                                                     - std::f64::consts::PI * 0.5;
-                                                #[cfg(feature = "adf-fitting-scaling")]
+                                                #[cfg(feature = "scaled-adf-fitting")]
                                                 let value = model
                                                     .eval_with_cos_theta_m(theta.cos())
                                                     * model.scale().unwrap_or(1.0);
-                                                #[cfg(not(feature = "adf-fitting-scaling"))]
+                                                #[cfg(not(feature = "scaled-adf-fitting"))]
                                                 let value =
                                                     model.eval_with_cos_theta_m(theta.cos());
                                                 [theta, value]
@@ -1556,8 +1170,8 @@ impl PlottingWidget for PlotInspector {
                     }
                 }
                 MeasurementKind::Mmsf => {
-                    if let Some(extra) = &mut self.extra {
-                        let extra = extra
+                    if let Some(extra) = &mut self.variant {
+                        let variant = extra
                             .as_any_mut()
                             .downcast_mut::<MaskingShadowingExtra>()
                             .unwrap();
@@ -1566,8 +1180,8 @@ impl PlottingWidget for PlotInspector {
                         let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
                         let zenith_bin_width_rad = zenith.step_size.value();
                         Self::plot_type_ui(&mut self.plot_type, ui);
-                        extra.ui(ui);
-                        if let Some(curve) = extra.current_curve() {
+                        variant.ui(ui, &mut self.event_loop, self.data_handle);
+                        if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("plot_msf")
                                 .legend(self.legend.clone())
@@ -1604,7 +1218,7 @@ impl PlottingWidget for PlotInspector {
                                             .name("Microfacet masking shadowing"),
                                     );
                                     {
-                                        let concrete_extra = extra
+                                        let concrete_extra = variant
                                             .as_any()
                                             .downcast_ref::<MaskingShadowingExtra>()
                                             .unwrap();

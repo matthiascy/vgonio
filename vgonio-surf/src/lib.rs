@@ -596,6 +596,18 @@ impl MicroSurface {
     /// The samples will be taken from the top-left corner of the heightfield.
     /// TODO: add more options for different resizing methods.
     pub fn resize(&self, rows: usize, cols: usize) -> Self {
+        if rows == self.rows && cols == self.cols {
+            return Self::from_samples(
+                self.rows,
+                self.cols,
+                self.du,
+                self.dv,
+                self.unit,
+                &self.samples,
+                None,
+                None,
+            );
+        }
         let mut ms = Self::new(rows, cols, self.du, self.dv, 0.0, self.unit);
         let min_rows = rows.min(self.rows);
         let min_cols = cols.min(self.cols);

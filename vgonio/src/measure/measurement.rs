@@ -482,7 +482,7 @@ impl MmsfMeasurementParams {
 /// Describes the different kind of measurements with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum MeasurementKindDescription {
+pub enum MeasurementParams {
     /// Measure the BSDF of a micro-surface.
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
@@ -493,7 +493,7 @@ pub enum MeasurementKindDescription {
     Mmsf(MmsfMeasurementParams),
 }
 
-impl MeasurementKindDescription {
+impl MeasurementParams {
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, VgonioError> {
         match self {
@@ -515,7 +515,7 @@ impl MeasurementKindDescription {
 
     /// Get the BSDF measurement parameters.
     pub fn bsdf(&self) -> Option<&BsdfMeasurementParams> {
-        if let MeasurementKindDescription::Bsdf(bsdf) = self {
+        if let MeasurementParams::Bsdf(bsdf) = self {
             Some(bsdf)
         } else {
             None
@@ -524,7 +524,7 @@ impl MeasurementKindDescription {
 
     /// Get the micro-facet distribution measurement parameters.
     pub fn microfacet_distribution(&self) -> Option<&MadfMeasurementParams> {
-        if let MeasurementKindDescription::Madf(mfd) = self {
+        if let MeasurementParams::Madf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -533,7 +533,7 @@ impl MeasurementKindDescription {
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
     pub fn micro_surface_shadow_masking(&self) -> Option<&MmsfMeasurementParams> {
-        if let MeasurementKindDescription::Mmsf(mfd) = self {
+        if let MeasurementParams::Mmsf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -549,7 +549,7 @@ impl MeasurementKindDescription {
 pub struct Measurement {
     /// Type of measurement.
     #[serde(rename = "type")]
-    pub desc: MeasurementKindDescription,
+    pub params: MeasurementParams,
     /// Surfaces to be measured. surface's path can be prefixed with either
     /// `usr://` or `sys://` to indicate the user-defined data file path
     /// or system-defined data file path.
@@ -682,19 +682,19 @@ impl Measurement {
     /// Validate the measurement description.
     pub fn validate(self) -> Result<Self, VgonioError> {
         log::info!("Validating measurement description...");
-        let details = self.desc.validate()?;
+        let details = self.params.validate()?;
         Ok(Self {
-            desc: details,
+            params: details,
             ..self
         })
     }
 
     /// Measurement kind in the form of a string.
     pub fn name(&self) -> &'static str {
-        match self.desc {
-            MeasurementKindDescription::Bsdf { .. } => "BSDF measurement",
-            MeasurementKindDescription::Madf { .. } => "microfacet-distribution measurement",
-            MeasurementKindDescription::Mmsf { .. } => "micro-surface-shadow-masking measurement",
+        match self.params {
+            MeasurementParams::Bsdf { .. } => "BSDF measurement",
+            MeasurementParams::Madf { .. } => "microfacet-distribution measurement",
+            MeasurementParams::Mmsf { .. } => "micro-surface-shadow-masking measurement",
         }
     }
 }

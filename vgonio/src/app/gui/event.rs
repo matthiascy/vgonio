@@ -4,7 +4,7 @@ use crate::{
         gfx::RenderableMesh,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
-    fitting::ReflectionModelFamily,
+    fitting::{AreaDistributionFittingMode, ReflectionModelFamily},
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
@@ -57,18 +57,20 @@ pub enum VgonioEvent {
         data: Handle<MeasurementData>,
         independent: bool,
     },
-    #[cfg(feature = "adf-fitting-scaling")]
+    #[cfg(feature = "scaled-adf-fitting")]
     Fitting {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
+        mode: Option<AreaDistributionFittingMode>,
         scaled: bool,
     },
-    #[cfg(not(feature = "adf-fitting-scaling"))]
+    #[cfg(not(feature = "scaled-adf-fitting"))]
     Fitting {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
+        mode: Option<AreaDistributionFittingMode>,
     },
 }
 

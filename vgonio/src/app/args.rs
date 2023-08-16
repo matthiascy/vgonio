@@ -164,9 +164,17 @@ pub struct ConvertOptions {
         long,
         value_name = "WIDTH HEIGHT",
         num_args(2),
-        help = "Resize the micro-surface profile to the given resolution."
+        help = "Resize the micro-surface profile to the given resolution. The \n resolution \
+                should besamller than the original."
     )]
     pub resize: Option<Vec<u32>>,
+
+    #[clap(
+        long,
+        help = "Resize the micro-surface profile to make it square. The\nresolution will be the \
+                minimum of the width and height."
+    )]
+    pub squaring: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

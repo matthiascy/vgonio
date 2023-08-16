@@ -4,7 +4,7 @@ use crate::{
         Config,
     },
     measure::measurement::{
-        BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementKindDescription,
+        BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementParams,
         MmsfMeasurementParams,
     },
 };
@@ -96,21 +96,21 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
-                desc: MeasurementKindDescription::Madf(MadfMeasurementParams::default()),
+                params: MeasurementParams::Madf(MadfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                desc: MeasurementKindDescription::Mmsf(MmsfMeasurementParams::default()),
+                params: MeasurementParams::Mmsf(MmsfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                desc: MeasurementKindDescription::Bsdf(BsdfMeasurementParams::default()),
+                params: MeasurementParams::Bsdf(BsdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

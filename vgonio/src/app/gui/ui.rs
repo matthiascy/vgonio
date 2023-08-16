@@ -19,9 +19,9 @@ use crate::{
         Config,
     },
     fitting::{
-        BeckmannSpizzichinoADF, BeckmannSpizzichinoMSF, FittedModel, FittingProblem,
-        MadfFittingProblem, MicrofacetModelFamily, MmsfFittingProblem, ReflectionModelFamily,
-        TrowbridgeReitzADF, TrowbridgeReitzMSF,
+        AreaDistributionFittingMode, AreaDistributionFittingProblem, BeckmannSpizzichinoADF,
+        BeckmannSpizzichinoMSF, FittedModel, FittingProblem, MicrofacetModelFamily,
+        MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzADF, TrowbridgeReitzMSF,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
 };
@@ -177,11 +177,12 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            #[cfg(feature = "adf-fitting-scaling")]
+            #[cfg(feature = "scaled-adf-fitting")]
             VgonioEvent::Fitting {
                 kind,
                 family,
                 data,
+                mode,
                 scaled,
             } => {
                 match kind {
@@ -189,45 +190,51 @@ impl VgonioGui {
                     MeasurementKind::Madf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted
-                            .iter()
-                            .any(|f| f.family() == *family && f.is_scaled() == *scaled)
-                        {
+                        if !fitted.contains(
+                            *family,
+                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                            *scaled,
+                        ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = measurement
                                 .measured
                                 .madf_data()
                                 .expect("Measurement has no MADF data.");
+                            let mode = mode.unwrap_or(AreaDistributionFittingMode::Complete);
                             let problem = match family {
                                 ReflectionModelFamily::Microfacet(m) => match m {
                                     MicrofacetModelFamily::TrowbridgeReitz => {
                                         if *scaled {
-                                            MadfFittingProblem::new(
+                                            AreaDistributionFittingProblem::new(
                                                 data,
                                                 TrowbridgeReitzADF::default_with_scale(),
                                                 Vec3::Y,
+                                                mode,
                                             )
                                         } else {
-                                            MadfFittingProblem::new(
+                                            AreaDistributionFittingProblem::new(
                                                 data,
                                                 TrowbridgeReitzADF::default(),
                                                 Vec3::Y,
+                                                mode,
                                             )
                                         }
                                     }
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
                                         if *scaled {
-                                            MadfFittingProblem::new(
+                                            AreaDistributionFittingProblem::new(
                                                 data,
                                                 BeckmannSpizzichinoADF::default_with_scale(),
                                                 Vec3::Y,
+                                                mode,
                                             )
                                         } else {
-                                            MadfFittingProblem::new(
+                                            AreaDistributionFittingProblem::new(
                                                 data,
                                                 BeckmannSpizzichinoADF::default(),
                                                 Vec3::Y,
+                                                mode,
                                             )
                                         }
                                     }
@@ -237,26 +244,20 @@ impl VgonioGui {
                             log::info!("Report: {:?}", report);
                             log::info!("Result: {:?}", result);
 
-                            // {
-                            //     Python::with_gil(|py| {
-                            //         let code = std::include_str!(
-                            //             "../../../../scripts/trowbridge_reitz.py"
-                            //         );
-                            //         let pymodule = PyModule::from_code(py, code, "", "")?;
-                            //         let func: Py<PyAny> =
-                            //             pymodule.getattr("plot_trowbridge_reitz_ndf")?.into();
-                            //         func.call0(py)
-                            //     })
-                            //     .unwrap();
-                            // }
-
-                            fitted.push(FittedModel::Madf(result));
+                            fitted.push(FittedModel::Madf {
+                                model: result,
+                                mode,
+                            });
                         }
                     }
                     MeasurementKind::Mmsf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.iter().any(|f| f.family() == *family) {
+                        if !fitted.contains(
+                            *family,
+                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                            *scaled,
+                        ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = measurement
@@ -275,7 +276,7 @@ impl VgonioGui {
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
                                         MmsfFittingProblem::new(
                                             data,
-                                            BeckmannSpizzichinoMSF { roughness: 0.05 },
+                                            BeckmannSpizzichinoMSF { alpha: 0.05 },
                                             Vec3::Y,
                                         )
                                     }
@@ -290,14 +291,22 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            #[cfg(not(feature = "adf-fitting-scaling"))]
-            VgonioEvent::Fitting { kind, family, data } => {
+            #[cfg(not(feature = "scaled-adf-fitting"))]
+            VgonioEvent::Fitting {
+                kind,
+                family,
+                data,
+                mode,
+            } => {
                 match kind {
                     MeasurementKind::Bsdf => {}
                     MeasurementKind::Madf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.iter().any(|f| f.family() == *family) {
+                        if !fitted.contains(
+                            *family,
+                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                        ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = measurement
@@ -307,17 +316,19 @@ impl VgonioGui {
                             let problem = match family {
                                 ReflectionModelFamily::Microfacet(m) => match m {
                                     MicrofacetModelFamily::TrowbridgeReitz => {
-                                        MadfFittingProblem::new(
+                                        AreaDistributionFittingProblem::new(
                                             data,
                                             TrowbridgeReitzADF::default(),
                                             Vec3::Y,
+                                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
                                         )
                                     }
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
-                                        MadfFittingProblem::new(
+                                        AreaDistributionFittingProblem::new(
                                             data,
                                             BeckmannSpizzichinoADF::default(),
                                             Vec3::Y,
+                                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
                                         )
                                     }
                                 },
@@ -325,13 +336,19 @@ impl VgonioGui {
                             let (result, report) = problem.lsq_lm_fit();
                             log::info!("Report: {:?}", report);
                             log::info!("Result: {:?}", result);
-                            fitted.push(FittedModel::Madf(result));
+                            fitted.push(FittedModel::Madf {
+                                model: result,
+                                mode: mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                            });
                         }
                     }
                     MeasurementKind::Mmsf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.iter().any(|f| f.family() == *family) {
+                        if fitted.contains(
+                            *family,
+                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                        ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = measurement
@@ -350,7 +367,7 @@ impl VgonioGui {
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
                                         MmsfFittingProblem::new(
                                             data,
-                                            BeckmannSpizzichinoMSF { roughness: 0.05 },
+                                            BeckmannSpizzichinoMSF { alpha: 0.05 },
                                             Vec3::Y,
                                         )
                                     }

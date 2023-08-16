@@ -233,86 +233,107 @@ impl PropertyInspector {
                                         })
                                         .unwrap();
                                 }
-                                if ui.button("Fit TrowbridgeReitz").clicked() {
-                                    self.event_loop
-                                        .send_event(
-                                            #[cfg(feature = "adf-fitting-scaling")]
-                                            {
-                                                VgonioEvent::Fitting {
-                                                    kind: state.kind,
-                                                    family: ReflectionModelFamily::Microfacet(
-                                                        MicrofacetModelFamily::TrowbridgeReitz,
-                                                    ),
-                                                    data: meas,
-                                                    scaled: false,
-                                                }
-                                            },
-                                            #[cfg(not(feature = "adf-fitting-scaling"))]
-                                            {
-                                                VgonioEvent::Fitting {
-                                                    kind: state.kind,
-                                                    family: ReflectionModelFamily::Microfacet(
-                                                        MicrofacetModelFamily::TrowbridgeReitz,
-                                                    ),
-                                                    data: meas,
-                                                }
-                                            },
-                                        )
-                                        .unwrap();
-                                }
-                                #[cfg(feature = "adf-fitting-scaling")]
-                                if ui.button("Fit Scaled TrowbridgeReitz").clicked() {
-                                    self.event_loop
-                                        .send_event(VgonioEvent::Fitting {
-                                            kind: state.kind,
-                                            family: ReflectionModelFamily::Microfacet(
-                                                MicrofacetModelFamily::TrowbridgeReitz,
-                                            ),
-                                            data: meas,
-                                            scaled: true,
-                                        })
-                                        .unwrap();
-                                }
-                                if ui.button("Fit BeckmannSpizzichino").clicked() {
-                                    self.event_loop
-                                        .send_event(
-                                            #[cfg(feature = "adf-fitting-scaling")]
-                                            {
-                                                VgonioEvent::Fitting {
-                                                    kind: state.kind,
-                                                    family: ReflectionModelFamily::Microfacet(
-                                                        MicrofacetModelFamily::BeckmannSpizzichino,
-                                                    ),
-                                                    data: meas,
-                                                    scaled: false,
-                                                }
-                                            },
-                                            #[cfg(not(feature = "adf-fitting-scaling"))]
-                                            {
-                                                VgonioEvent::Fitting {
-                                                    kind: state.kind,
-                                                    family: ReflectionModelFamily::Microfacet(
-                                                        MicrofacetModelFamily::BeckmannSpizzichino,
-                                                    ),
-                                                    data: meas,
-                                                }
-                                            },
-                                        )
-                                        .unwrap();
-                                }
-                                #[cfg(feature = "adf-fitting-scaling")]
-                                if ui.button("Fit Scaled BeckmannSpizzichino").clicked() {
-                                    self.event_loop
-                                        .send_event(VgonioEvent::Fitting {
-                                            kind: state.kind,
-                                            family: ReflectionModelFamily::Microfacet(
-                                                MicrofacetModelFamily::BeckmannSpizzichino,
-                                            ),
-                                            data: meas,
-                                            scaled: true,
-                                        })
-                                        .unwrap();
-                                }
+                                // if ui.button("Fit TrowbridgeReitz").clicked()
+                                // {
+                                //     self.event_loop
+                                //         .send_event(
+                                //             #[cfg(feature =
+                                // "scaled-adf-fitting")]
+                                //             {
+                                //                 VgonioEvent::Fitting {
+                                //                     kind: state.kind,
+                                //                     family:
+                                // ReflectionModelFamily::Microfacet(
+                                //                         
+                                // MicrofacetModelFamily::TrowbridgeReitz,
+                                //                     ),
+                                //                     data: meas,
+                                //                     scaled: false,
+                                //                 }
+                                //             },
+                                //             #[cfg(not(feature =
+                                // "scaled-adf-fitting"))]
+                                //             {
+                                //                 VgonioEvent::Fitting {
+                                //                     kind: state.kind,
+                                //                     family:
+                                // ReflectionModelFamily::Microfacet(
+                                //                         
+                                // MicrofacetModelFamily::TrowbridgeReitz,
+                                //                     ),
+                                //                     data: meas,
+                                //                 }
+                                //             },
+                                //         )
+                                //         .unwrap();
+                                // }
+                                // #[cfg(feature = "scaled-adf-fitting")]
+                                // if ui.button("Fit Scaled
+                                // TrowbridgeReitz").clicked() {
+                                //     self.event_loop
+                                //         .send_event(VgonioEvent::Fitting {
+                                //             kind: state.kind,
+                                //             family:
+                                // ReflectionModelFamily::Microfacet(
+                                //                 
+                                // MicrofacetModelFamily::TrowbridgeReitz,
+                                //             ),
+                                //             data: meas,
+                                //             scaled: true,
+                                //         })
+                                //         .unwrap();
+                                // }
+                                // if ui.button("Fit
+                                // BeckmannSpizzichino").clicked() {
+                                //     self.event_loop
+                                //         .send_event(
+                                //             #[cfg(feature =
+                                // "scaled-adf-fitting")]
+                                //             {
+                                //                 VgonioEvent::Fitting {
+                                //                     kind: state.kind,
+                                //                     family:
+                                // ReflectionModelFamily::Microfacet(
+                                //                         
+                                // MicrofacetModelFamily::BeckmannSpizzichino,
+                                //                     ),
+                                //                     data: meas,
+                                //                     mode: None,
+                                //                     scaled: false,
+                                //                 }
+                                //             },
+                                //             #[cfg(not(feature =
+                                // "scaled-adf-fitting"))]
+                                //             {
+                                //                 VgonioEvent::Fitting {
+                                //                     kind: state.kind,
+                                //                     family:
+                                // ReflectionModelFamily::Microfacet(
+                                //                         
+                                // MicrofacetModelFamily::BeckmannSpizzichino,
+                                //                     ),
+                                //                     data: meas,
+                                //                 }
+                                //             },
+                                //         )
+                                //         .unwrap();
+                                // }
+                                // #[cfg(feature = "scaled-adf-fitting")]
+                                // if ui.button("Fit Scaled
+                                // BeckmannSpizzichino").clicked() {
+                                //     self.event_loop
+                                //         .send_event(VgonioEvent::Fitting {
+                                //             kind: state.kind,
+                                //             family:
+                                // ReflectionModelFamily::Microfacet(
+                                //                 
+                                // MicrofacetModelFamily::BeckmannSpizzichino,
+                                //             ),
+                                //             data: meas,
+                                //             scaled: true,
+                                //         })
+                                //         .unwrap();
+                                // }
                             });
                         }
                     }
