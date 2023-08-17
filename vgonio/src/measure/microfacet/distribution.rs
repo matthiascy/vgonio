@@ -59,7 +59,6 @@ impl MeasuredMadfData {
             let theta = i as f32 * self.params.zenith.step_size
                 - (num_zenith_bins - 1) as f32 * self.params.zenith.step_size;
             sample.0 = theta.as_f32();
-            println!("theta: {}", theta.prettified());
         }
 
         accumulated
@@ -68,7 +67,7 @@ impl MeasuredMadfData {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    params: MadfMeasurementParams,
+    mut params: MadfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MeasurementData> {
@@ -87,51 +86,105 @@ pub fn measure_area_distribution(
             }
             let mesh = mesh.unwrap();
             let macro_area = mesh.macro_surface_area();
-            let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
-            let denominator = macro_area * solid_angle;
             let half_zenith_bin_size_cos = (params.zenith.step_size / 2.0).cos();
-            log::debug!("-- macro surface area: {}", macro_area);
-            log::debug!("-- solid angle per measurement: {}", solid_angle);
-            let samples = (0..params.azimuth.step_count_wrapped())
-                .flat_map(move |azimuth_idx| {
-                    // NOTE: the zenith angle is measured from the top of the
-                    // hemisphere. The center of the zenith/azimuth bin are at the zenith/azimuth
-                    // angle calculated below.
-                    (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
-                        let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
-                        let zenith = zenith_idx as f32 * params.zenith.step_size;
-                        let dir = math::spherical_to_cartesian(
-                            1.0,
-                            zenith,
-                            azimuth,
-                            Handedness::RightHandedYUp,
-                        )
-                        .normalize();
-                        let facets_surface_area = mesh
-                            .facet_normals
-                            .par_iter()
-                            .enumerate()
-                            .filter_map(|(idx, normal)| {
-                                if normal.dot(dir) >= half_zenith_bin_size_cos {
-                                    Some(idx)
-                                } else {
-                                    None
-                                }
-                            })
-                            .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
-                            .reduce(|| 0.0, |a, b| a + b);
-                        let value = facets_surface_area / denominator;
-                        log::trace!(
-                            "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
-                            azimuth.prettified(),
-                            zenith.prettified(),
-                            facets_surface_area,
-                            value
-                        );
-                        value
+
+            let samples = if params.single_slice {
+                params.azimuth =
+                    RangeByStepSizeInclusive::new(Radians::new(0.0), Radians::TAU, Radians::PI);
+                (0..2)
+                    .flat_map(move |azimuth_idx| {
+                        let condition = move |phi: f32| {
+                            if azimuth_idx == 0 {
+                                (phi >= 0.0 && phi < std::f32::consts::FRAC_PI_2)
+                                    || (phi >= std::f32::consts::FRAC_PI_2 * 3.0
+                                        && phi < std::f32::consts::TAU)
+                            } else {
+                                let diff = (phi - std::f32::consts::PI).abs();
+                                diff >= std::f32::consts::FRAC_PI_2
+                                    && diff < std::f32::consts::FRAC_PI_2 * 3.0
+                            }
+                        };
+                        let azimuth = azimuth_idx as f32 * Radians::PI;
+                        (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
+                            let zenith = zenith_idx as f32 * params.zenith.step_size;
+                            let solid_angle = if zenith_idx == 0 {
+                                units::solid_angle_of_spherical_cap(params.zenith.step_size)
+                                    .as_f32()
+                            } else {
+                                units::solid_angle_of_spherical_strip(
+                                    zenith + params.zenith.step_size / 2.0,
+                                    zenith - params.zenith.step_size / 2.0,
+                                )
+                                .as_f32()
+                            };
+                            let facets_surface_area = mesh
+                                .facet_normals
+                                .par_iter()
+                                .enumerate()
+                                .filter_map(|(idx, normal)| {
+                                    // Assume the right-handed y-up coordinate system.
+                                    let phi = ((normal.z).atan2(normal.x) + std::f32::consts::TAU)
+                                        % std::f32::consts::TAU;
+                                    let theta_diff = ((normal.y).acos() - zenith.as_f32()).abs();
+                                    if theta_diff <= half_zenith_bin_size_cos && condition(phi) {
+                                        Some(idx)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
+                                .reduce(|| 0.0, |a, b| a + b);
+                            facets_surface_area / (macro_area * solid_angle)
+                        })
                     })
-                })
-                .collect::<Vec<_>>();
+                    .collect::<Vec<_>>()
+            } else {
+                let solid_angle =
+                    units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
+                let denominator = macro_area * solid_angle;
+                log::debug!("-- macro surface area: {}", macro_area);
+                log::debug!("-- solid angle per measurement: {}", solid_angle);
+                (0..params.azimuth.step_count_wrapped())
+                    .flat_map(move |azimuth_idx| {
+                        // NOTE: the zenith angle is measured from the top of the
+                        // hemisphere. The center of the zenith/azimuth bin are at the
+                        // zenith/azimuth angle calculated below.
+                        (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
+                            let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
+                            let zenith = zenith_idx as f32 * params.zenith.step_size;
+                            let dir = math::spherical_to_cartesian(
+                                1.0,
+                                zenith,
+                                azimuth,
+                                Handedness::RightHandedYUp,
+                            )
+                            .normalize();
+                            let facets_surface_area = mesh
+                                .facet_normals
+                                .par_iter()
+                                .enumerate()
+                                .filter_map(|(idx, normal)| {
+                                    if normal.dot(dir) >= half_zenith_bin_size_cos {
+                                        Some(idx)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
+                                .reduce(|| 0.0, |a, b| a + b);
+                            let value = facets_surface_area / denominator;
+                            log::trace!(
+                                "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
+                                azimuth.prettified(),
+                                zenith.prettified(),
+                                facets_surface_area,
+                                value
+                            );
+                            value
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            };
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
