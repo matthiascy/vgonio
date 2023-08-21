@@ -8,7 +8,7 @@ use vgcore::math;
 use crate::measure::{
     bsdf::MeasuredBsdfData,
     measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
-    microfacet::{MeasuredMadfData, MeasuredMmsfData},
+    microfacet::{MeasuredMmsfData, MeasuredMndfData},
 };
 
 pub mod vgmo {
@@ -19,8 +19,8 @@ pub mod vgmo {
             collector::BounceAndEnergy,
             emitter::RegionShape,
             measurement::{
-                BsdfMeasurementParams, MadfMeasurementParams, MeasurementKind,
-                MmsfMeasurementParams, Radius, SimulationKind,
+                BsdfMeasurementParams, MeasurementKind, MmsfMeasurementParams,
+                MndfMeasurementParams, Radius, SimulationKind,
             },
             Collector, CollectorScheme, Emitter,
         },
@@ -134,7 +134,7 @@ pub mod vgmo {
         },
         Madf {
             meta: HeaderMeta,
-            madf: MadfMeasurementParams,
+            madf: MndfMeasurementParams,
         },
         Mmsf {
             meta: HeaderMeta,
@@ -180,7 +180,7 @@ pub mod vgmo {
                 }),
                 MeasurementKind::Madf => Ok(Self::Madf {
                     meta,
-                    madf: MadfMeasurementParams::read_from_vgmo(reader)?,
+                    madf: MndfMeasurementParams::read_from_vgmo(reader)?,
                 }),
                 MeasurementKind::Mmsf => Ok(Self::Mmsf {
                     meta,
@@ -297,7 +297,7 @@ pub mod vgmo {
         writer.write_all(&header).map_err(|err| err.into())
     }
 
-    impl MadfMeasurementParams {
+    impl MndfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
             let (azimuth, zenith, single_slice) = read_madf_mmsf_params_from_vgmo(
@@ -712,12 +712,12 @@ emitter is not implemented"
         }
     }
 
-    impl MeasuredMadfData {
+    impl MeasuredMndfData {
         /// Reads the measured MADF data from the given reader.
         pub fn read<R: Read>(
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
-            params: MadfMeasurementParams,
+            params: MndfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
                 meta.kind == MeasurementKind::Madf,
@@ -730,7 +730,7 @@ emitter is not implemented"
                 meta.encoding,
                 meta.compression,
             )?;
-            Ok(MeasuredMadfData { params, samples })
+            Ok(MeasuredMndfData { params, samples })
         }
 
         /// Writes the measured MADF data to the given writer.
@@ -1186,7 +1186,7 @@ emitter is not implemented"
                 }
                 Header::Madf { meta, madf } => {
                     let measured =
-                        MeasuredMadfData::read(&mut reader, meta, madf).map_err(|err| {
+                        MeasuredMndfData::read(&mut reader, meta, madf).map_err(|err| {
                             VgonioError::from_read_file_error(
                                 ReadFileError {
                                     path: filepath.to_owned().into_boxed_path(),

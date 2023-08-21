@@ -1,6 +1,6 @@
 use crate::{
     fitting::{MicrofacetAreaDistributionModel, MicrofacetModelFamily, ReflectionModelFamily},
-    measure::microfacet::MeasuredMadfData,
+    measure::microfacet::MeasuredMndfData,
 };
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
 use nalgebra::{Dim, Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, Vector1, U1, U2};
@@ -34,7 +34,7 @@ impl AreaDistributionFittingMode {
 /// The problem has 1 parameter and 1 residual.
 pub struct AreaDistributionFittingProblem<'a> {
     /// The measured data to fit to.
-    measured: &'a MeasuredMadfData,
+    measured: &'a MeasuredMndfData,
     /// The normal vector of the microfacet.
     normal: Vec3,
     /// The target model.
@@ -60,7 +60,7 @@ impl<'a> AreaDistributionFittingProblem<'a> {
     /// * `model` - The target model.
     /// * `n` - The normal vector of the microfacet.
     pub fn new<M: MicrofacetAreaDistributionModel + 'static>(
-        measured: &'a MeasuredMadfData,
+        measured: &'a MeasuredMndfData,
         model: M,
         n: Vec3,
         mode: AreaDistributionFittingMode,
@@ -80,7 +80,7 @@ impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
     fn lsq_lm_fit(self) -> (Self::Model, MinimizationReport<f64>) {
         let effective_params_count = self.model.effective_params_count();
         if effective_params_count == 1 {
-            #[cfg(not(feature = "scaled-adf-fitting"))]
+            #[cfg(not(feature = "scaled-ndf-fitting"))]
             {
                 let problem = AreaDistributionFittingProblemProxy::<U1> {
                     measured: self.measured,
@@ -93,7 +93,7 @@ impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
                 let (result, report) = solver.minimize(problem);
                 (result.model, report)
             }
-            #[cfg(feature = "scaled-adf-fitting")]
+            #[cfg(feature = "scaled-ndf-fitting")]
             {
                 if self.model.scale().is_some() {
                     let problem = AreaDistributionFittingProblemProxy::<U1, true> {
@@ -130,11 +130,11 @@ impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
 const SCALED: bool = true;
 const UNSCALED: bool = false;
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// The inner fitting problem for the microfacet area distribution function of
 /// different effective parameters count.
 ///
-/// If the feature `scaled-adf-fitting` is enabled, and the model is created
+/// If the feature `scaled-ndf-fitting` is enabled, and the model is created
 /// with a non-none scale factor, the fitting problem is a N + 1 parameter
 /// fitting problem, where N is the number of effective parameters of the model,
 /// and the additional parameter is the scale factor.
@@ -145,20 +145,20 @@ const UNSCALED: bool = false;
 /// effective parameters (anisotropic models), the fitting problem is a 2
 /// parameter fitting problem.
 struct AreaDistributionFittingProblemProxy<'a, N: Dim, const Scaled: bool> {
-    measured: &'a MeasuredMadfData,
+    measured: &'a MeasuredMndfData,
     normal: DVec3,
     model: Box<dyn MicrofacetAreaDistributionModel>,
     mode: AreaDistributionFittingMode,
     marker: PhantomData<N>,
 }
 
-#[cfg(not(feature = "scaled-adf-fitting"))]
+#[cfg(not(feature = "scaled-ndf-fitting"))]
 /// The inner fitting problem for the microfacet area distribution function of
 /// different effective parameters count. `N` is the number of effective
 /// parameters of the model, this is introduced because the levenberg_marquardt
 /// crate requires the parameter count to be a type parameter.
 struct AreaDistributionFittingProblemProxy<'a, N: Dim> {
-    measured: &'a MeasuredMadfData,
+    measured: &'a MeasuredMndfData,
     normal: DVec3,
     model: Box<dyn MicrofacetAreaDistributionModel>,
     mode: AreaDistributionFittingMode,
@@ -168,7 +168,7 @@ struct AreaDistributionFittingProblemProxy<'a, N: Dim> {
 /// Calculates the residuals of the evaluated model against the whole measured
 /// data.
 fn calculate_madf_residuals_complete(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     normal: DVec3,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
 ) -> OMatrix<f64, Dyn, U1> {
@@ -192,7 +192,7 @@ fn calculate_madf_residuals_complete(
 }
 
 fn calculate_madf_residuals_accumulated(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
 ) -> OMatrix<f64, Dyn, U1> {
     let theta_step_count = measured.params.zenith.step_count_wrapped();
@@ -206,11 +206,11 @@ fn calculate_madf_residuals_accumulated(
     )
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// Calculates the residuals of the scaled evaluated model against the measured
 /// data.
 fn calculate_scaled_madf_residuals_complete(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     normal: DVec3,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
 ) -> OMatrix<f64, Dyn, U1> {
@@ -234,11 +234,11 @@ fn calculate_scaled_madf_residuals_complete(
     OMatrix::<f64, Dyn, U1>::from_vec(residuals)
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// Calculates the residuals of the scaled evaluated model against the measured
 /// data.
 fn calculate_scaled_madf_residuals_accumulated(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
 ) -> OMatrix<f64, Dyn, U1> {
     let scale = model.scale().unwrap_or(1.0);
@@ -254,7 +254,7 @@ fn calculate_scaled_madf_residuals_accumulated(
 
 /// Calculates the partial derivative of the fitting parameter.
 fn calculate_single_param_madf_jacobian(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     alpha: f64,
     normal: DVec3,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
@@ -329,7 +329,7 @@ fn calculate_single_param_madf_jacobian(
 
 /// Calculates the partial derivative of the fitting parameter.
 fn calculate_single_param_madf_jacobian_accumulated(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     alpha: f64,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
 ) -> OMatrix<f64, Dyn, U1> {
@@ -384,9 +384,9 @@ fn calculate_single_param_madf_jacobian_accumulated(
     OMatrix::<f64, Dyn, U1>::from_vec(derivatives)
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 fn calculate_scaled_madf_jacobian_complete(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     alpha: f64,
     normal: DVec3,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
@@ -479,9 +479,9 @@ fn calculate_scaled_madf_jacobian_complete(
     OMatrix::<f64, Dyn, U2>::from_row_slice(&derivatives)
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 fn calculate_scaled_madf_jacobian_accumulated(
-    measured: &MeasuredMadfData,
+    measured: &MeasuredMndfData,
     alpha: f64,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
 ) -> OMatrix<f64, Dyn, U2> {
@@ -557,9 +557,9 @@ fn calculate_scaled_madf_jacobian_accumulated(
     OMatrix::<f64, Dyn, U2>::from_row_slice(&derivatives)
 }
 
-// When the feature `scaled-adf-fitting` is not enabled, the fitting problem
+// When the feature `scaled-ndf-fitting` is not enabled, the fitting problem
 // is simplified to a single parameter fitting problem.
-#[cfg(not(feature = "scaled-adf-fitting"))]
+#[cfg(not(feature = "scaled-ndf-fitting"))]
 impl<'a> LeastSquaresProblem<f64, Dyn, U1> for AreaDistributionFittingProblemProxy<'a, U1> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
@@ -602,7 +602,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for AreaDistributionFittingProblemPro
     }
 }
 
-#[cfg(not(feature = "scaled-adf-fitting"))]
+#[cfg(not(feature = "scaled-ndf-fitting"))]
 impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemProxy<'a, U2> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -624,11 +624,11 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
 }
 
 use crate::fitting::FittingProblem;
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 use nalgebra::U3;
 use vgcore::units::Radians;
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// Isotropic MADF fitting problem without the scaling factor.
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
     for AreaDistributionFittingProblemProxy<'a, U1, UNSCALED>
@@ -674,7 +674,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
     }
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// Isotropic MADF fitting problem with a scaling factor.
 impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemProxy<'a, U1, SCALED> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
@@ -723,7 +723,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     }
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// Anisotropic MADF fitting problem without the scaling factor.
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     for AreaDistributionFittingProblemProxy<'a, U2, UNSCALED>
@@ -745,7 +745,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> { todo!() }
 }
 
-#[cfg(feature = "scaled-adf-fitting")]
+#[cfg(feature = "scaled-ndf-fitting")]
 /// Anisotropic MADF fitting problem with a scaling factor.
 impl<'a> LeastSquaresProblem<f64, Dyn, U3> for AreaDistributionFittingProblemProxy<'a, U2, SCALED> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;

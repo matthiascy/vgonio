@@ -19,9 +19,9 @@ use crate::{
         Config,
     },
     fitting::{
-        AreaDistributionFittingMode, AreaDistributionFittingProblem, BeckmannSpizzichinoADF,
-        BeckmannSpizzichinoMSF, FittedModel, FittingProblem, MicrofacetModelFamily,
-        MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzADF, TrowbridgeReitzMSF,
+        AreaDistributionFittingMode, AreaDistributionFittingProblem, BeckmannSpizzichinoMSF,
+        BeckmannSpizzichinoNDF, FittedModel, FittingProblem, MicrofacetModelFamily,
+        MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzMSF, TrowbridgeReitzNDF,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
 };
@@ -177,7 +177,7 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            #[cfg(feature = "scaled-adf-fitting")]
+            #[cfg(feature = "scaled-ndf-fitting")]
             VgonioEvent::Fitting {
                 kind,
                 family,
@@ -208,14 +208,14 @@ impl VgonioGui {
                                         if *scaled {
                                             AreaDistributionFittingProblem::new(
                                                 data,
-                                                TrowbridgeReitzADF::default_with_scale(),
+                                                TrowbridgeReitzNDF::default_with_scale(),
                                                 Vec3::Y,
                                                 mode,
                                             )
                                         } else {
                                             AreaDistributionFittingProblem::new(
                                                 data,
-                                                TrowbridgeReitzADF::default(),
+                                                TrowbridgeReitzNDF::default(),
                                                 Vec3::Y,
                                                 mode,
                                             )
@@ -225,14 +225,14 @@ impl VgonioGui {
                                         if *scaled {
                                             AreaDistributionFittingProblem::new(
                                                 data,
-                                                BeckmannSpizzichinoADF::default_with_scale(),
+                                                BeckmannSpizzichinoNDF::default_with_scale(),
                                                 Vec3::Y,
                                                 mode,
                                             )
                                         } else {
                                             AreaDistributionFittingProblem::new(
                                                 data,
-                                                BeckmannSpizzichinoADF::default(),
+                                                BeckmannSpizzichinoNDF::default(),
                                                 Vec3::Y,
                                                 mode,
                                             )
@@ -291,7 +291,7 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            #[cfg(not(feature = "scaled-adf-fitting"))]
+            #[cfg(not(feature = "scaled-ndf-fitting"))]
             VgonioEvent::Fitting {
                 kind,
                 family,
@@ -318,7 +318,7 @@ impl VgonioGui {
                                     MicrofacetModelFamily::TrowbridgeReitz => {
                                         AreaDistributionFittingProblem::new(
                                             data,
-                                            TrowbridgeReitzADF::default(),
+                                            TrowbridgeReitzNDF::default(),
                                             Vec3::Y,
                                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
                                         )
@@ -326,7 +326,7 @@ impl VgonioGui {
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
                                         AreaDistributionFittingProblem::new(
                                             data,
-                                            BeckmannSpizzichinoADF::default(),
+                                            BeckmannSpizzichinoNDF::default(),
                                             Vec3::Y,
                                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
                                         )

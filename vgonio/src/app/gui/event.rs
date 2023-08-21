@@ -9,8 +9,8 @@ use crate::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{
-            BsdfMeasurementParams, MadfMeasurementParams, MeasurementData, MeasurementKind,
-            MmsfMeasurementParams,
+            BsdfMeasurementParams, MeasurementData, MeasurementKind, MmsfMeasurementParams,
+            MndfMeasurementParams,
         },
         CollectorScheme, RtcMethod,
     },
@@ -57,7 +57,7 @@ pub enum VgonioEvent {
         data: Handle<MeasurementData>,
         independent: bool,
     },
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     Fitting {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
@@ -65,7 +65,7 @@ pub enum VgonioEvent {
         mode: Option<AreaDistributionFittingMode>,
         scaled: bool,
     },
-    #[cfg(not(feature = "scaled-adf-fitting"))]
+    #[cfg(not(feature = "scaled-ndf-fitting"))]
     Fitting {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
@@ -194,7 +194,7 @@ pub enum OutlinerEvent {
 #[derive(Debug)]
 pub enum MeasureEvent {
     Madf {
-        params: MadfMeasurementParams,
+        params: MndfMeasurementParams,
         surfaces: Vec<Handle<MicroSurface>>,
     },
     Mmsf {

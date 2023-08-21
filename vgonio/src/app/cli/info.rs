@@ -4,8 +4,8 @@ use crate::{
         Config,
     },
     measure::measurement::{
-        BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementParams,
-        MmsfMeasurementParams,
+        BsdfMeasurementParams, Measurement, MeasurementParams, MmsfMeasurementParams,
+        MndfMeasurementParams,
     },
 };
 use std::{
@@ -14,7 +14,7 @@ use std::{
 };
 use vgcore::error::VgonioError;
 
-impl Display for MadfMeasurementParams {
+impl Display for MndfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -82,7 +82,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         println!(
             "Microfacet distribution default parameters:\n\n{}",
-            MadfMeasurementParams::default()
+            MndfMeasurementParams::default()
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
@@ -96,7 +96,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
-                params: MeasurementParams::Madf(MadfMeasurementParams::default()),
+                params: MeasurementParams::Madf(MndfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

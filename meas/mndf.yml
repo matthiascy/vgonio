@@ -2,16 +2,28 @@
 type: !microfacet-area-distribution-function # !madf
   azimuth: 0 rad .. =360 deg / 2 deg
   zenith: 0 rad .. =90 deg / 2 deg
-  single_slice: true
+  single_slice: false
 surfaces:
+  - usr://surfaces/generated/msurf-random_h0.1.vgms
+  - usr://surfaces/generated/msurf-random_h0.2.vgms
+  - usr://surfaces/generated/msurf-random_h0.3.vgms
+  - usr://surfaces/generated/msurf-random_h0.4.vgms
+  - usr://surfaces/generated/msurf-random_h0.5.vgms
+  - usr://surfaces/generated/msurf-random_h0.6.vgms
+  - usr://surfaces/generated/msurf-random_h0.7.vgms
+  - usr://surfaces/generated/msurf-random_h0.8.vgms
+  - usr://surfaces/generated/msurf-random_h0.9.vgms
+  - usr://surfaces/generated/msurf-random_h1.0.vgms
 #  - usr://surfaces/squared/aluminium1bar100_squared.vgms
 #  - usr://surfaces/squared/aluminium1bar200_squared.vgms
 #  - usr://surfaces/squared/aluminium1bar200fine_squared.vgms
 #  - usr://surfaces/squared/aluminium2bar100_squared.vgms
 #  - usr://surfaces/squared/aluminium3bar100_squared.vgms
 #  - usr://surfaces/squared/aluminium4bar100_squared.vgms
-  - usr://surfaces/squared/aluminium65bar100_squared.vgms
-  - usr://surfaces/squared/aluminiummirror_squared.vgms
+
+#  - usr://surfaces/squared/aluminium65bar100_squared.vgms
+#  - usr://surfaces/squared/aluminiummirror_squared.vgms
+
 #  - usr://surfaces/aluminium1bar100.vgms
 #  - usr://surfaces/aluminium1bar200.vgms
 #  - usr://surfaces/aluminium1bar200fine.vgms

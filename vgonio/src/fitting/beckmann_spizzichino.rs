@@ -9,41 +9,41 @@ use crate::fitting::{
 /// RMS slope of the microfacets, then the alpha parameter of the Beckmann
 /// distribution is given by: $\alpha = \sqrt{2} \sigma$.
 #[derive(Debug, Copy, Clone)]
-pub struct BeckmannSpizzichinoADF {
+pub struct BeckmannSpizzichinoNDF {
     /// Roughness parameter of the NDF.
     pub alpha: f64,
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     /// The scale factor of the NDF.
     pub scale: Option<f64>,
 }
 
-impl BeckmannSpizzichinoADF {
+impl BeckmannSpizzichinoNDF {
     pub fn default() -> Self {
-        BeckmannSpizzichinoADF {
+        BeckmannSpizzichinoNDF {
             alpha: 0.1,
-            #[cfg(feature = "scaled-adf-fitting")]
+            #[cfg(feature = "scaled-ndf-fitting")]
             scale: None,
         }
     }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     pub fn default_with_scale() -> Self {
-        BeckmannSpizzichinoADF {
+        BeckmannSpizzichinoNDF {
             alpha: 0.1,
             scale: Some(1.0),
         }
     }
 }
 
-impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoADF {
+impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
     fn name(&self) -> &'static str {
-        #[cfg(feature = "scaled-adf-fitting")]
+        #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
             "Beckmann-Spizzichino ADF"
         } else {
             "Scaled Beckmann-Spizzichino ADF"
         }
-        #[cfg(not(feature = "scaled-adf-fitting"))]
+        #[cfg(not(feature = "scaled-ndf-fitting"))]
         "Beckmann-Spizzichino ADF"
     }
 
@@ -57,10 +57,10 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoADF {
 
     fn set_params(&mut self, params: [f64; 2]) { self.alpha = params[0]; }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     fn scale(&self) -> Option<f64> { self.scale }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     fn set_scale(&mut self, scale: f64) {
         #[cfg(debug_assertions)]
         if self.scale.is_none() {
@@ -81,25 +81,25 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoADF {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct BeckmannSpizzichinoAnisotropicADF {
+pub struct BeckmannSpizzichinoAnisotropicNDF {
     /// Roughness parameter along the horizontal axis of the NDF.
     pub alpha_x: f64,
     /// Roughness parameter along the vertical axis of the NDF.
     pub alpha_y: f64,
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     /// The scale factor of the NDF.
     pub scale: Option<f64>,
 }
 
-impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicADF {
+impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     fn name(&self) -> &'static str {
-        #[cfg(feature = "scaled-adf-fitting")]
+        #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
             "Beckmann-Spizzichino anisotropic ADF"
         } else {
             "Scaled Beckmann-Spizzichino anisotropic ADF"
         }
-        #[cfg(not(feature = "scaled-adf-fitting"))]
+        #[cfg(not(feature = "scaled-ndf-fitting"))]
         "Beckmann-Spizzichino anisotropic ADF"
     }
 
@@ -116,10 +116,10 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicADF {
         self.alpha_y = params[1];
     }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     fn scale(&self) -> Option<f64> { self.scale }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     fn set_scale(&mut self, scale: f64) {
         #[cfg(debug_assertions)]
         if self.scale.is_none() {
@@ -165,7 +165,7 @@ impl MicrofacetMaskingShadowingModel for BeckmannSpizzichinoMSF {
 
 #[test]
 fn beckmann_spizzichino_family() {
-    let madf = BeckmannSpizzichinoADF::default();
+    let madf = BeckmannSpizzichinoNDF::default();
     assert_eq!(
         madf.family(),
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)

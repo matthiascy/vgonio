@@ -238,13 +238,13 @@ impl PropertyInspector {
                                 //     self.event_loop
                                 //         .send_event(
                                 //             #[cfg(feature =
-                                // "scaled-adf-fitting")]
+                                // "scaled-ndf-fitting")]
                                 //             {
                                 //                 VgonioEvent::Fitting {
                                 //                     kind: state.kind,
                                 //                     family:
                                 // ReflectionModelFamily::Microfacet(
-                                //                         
+                                //
                                 // MicrofacetModelFamily::TrowbridgeReitz,
                                 //                     ),
                                 //                     data: meas,
@@ -252,13 +252,13 @@ impl PropertyInspector {
                                 //                 }
                                 //             },
                                 //             #[cfg(not(feature =
-                                // "scaled-adf-fitting"))]
+                                // "scaled-ndf-fitting"))]
                                 //             {
                                 //                 VgonioEvent::Fitting {
                                 //                     kind: state.kind,
                                 //                     family:
                                 // ReflectionModelFamily::Microfacet(
-                                //                         
+                                //
                                 // MicrofacetModelFamily::TrowbridgeReitz,
                                 //                     ),
                                 //                     data: meas,
@@ -267,7 +267,7 @@ impl PropertyInspector {
                                 //         )
                                 //         .unwrap();
                                 // }
-                                // #[cfg(feature = "scaled-adf-fitting")]
+                                // #[cfg(feature = "scaled-ndf-fitting")]
                                 // if ui.button("Fit Scaled
                                 // TrowbridgeReitz").clicked() {
                                 //     self.event_loop
@@ -275,7 +275,7 @@ impl PropertyInspector {
                                 //             kind: state.kind,
                                 //             family:
                                 // ReflectionModelFamily::Microfacet(
-                                //                 
+                                //
                                 // MicrofacetModelFamily::TrowbridgeReitz,
                                 //             ),
                                 //             data: meas,
@@ -288,13 +288,13 @@ impl PropertyInspector {
                                 //     self.event_loop
                                 //         .send_event(
                                 //             #[cfg(feature =
-                                // "scaled-adf-fitting")]
+                                // "scaled-ndf-fitting")]
                                 //             {
                                 //                 VgonioEvent::Fitting {
                                 //                     kind: state.kind,
                                 //                     family:
                                 // ReflectionModelFamily::Microfacet(
-                                //                         
+                                //
                                 // MicrofacetModelFamily::BeckmannSpizzichino,
                                 //                     ),
                                 //                     data: meas,
@@ -303,13 +303,13 @@ impl PropertyInspector {
                                 //                 }
                                 //             },
                                 //             #[cfg(not(feature =
-                                // "scaled-adf-fitting"))]
+                                // "scaled-ndf-fitting"))]
                                 //             {
                                 //                 VgonioEvent::Fitting {
                                 //                     kind: state.kind,
                                 //                     family:
                                 // ReflectionModelFamily::Microfacet(
-                                //                         
+                                //
                                 // MicrofacetModelFamily::BeckmannSpizzichino,
                                 //                     ),
                                 //                     data: meas,
@@ -318,7 +318,7 @@ impl PropertyInspector {
                                 //         )
                                 //         .unwrap();
                                 // }
-                                // #[cfg(feature = "scaled-adf-fitting")]
+                                // #[cfg(feature = "scaled-ndf-fitting")]
                                 // if ui.button("Fit Scaled
                                 // BeckmannSpizzichino").clicked() {
                                 //     self.event_loop
@@ -326,7 +326,7 @@ impl PropertyInspector {
                                 //             kind: state.kind,
                                 //             family:
                                 // ReflectionModelFamily::Microfacet(
-                                //                 
+                                //
                                 // MicrofacetModelFamily::BeckmannSpizzichino,
                                 //             ),
                                 //             data: meas,

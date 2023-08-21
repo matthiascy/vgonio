@@ -1,8 +1,8 @@
-mod madf;
 mod mmsf;
+mod mndf;
 
-pub use madf::*;
 pub use mmsf::*;
+pub use mndf::*;
 
 use crate::{
     app::{
@@ -15,9 +15,9 @@ use crate::{
         },
     },
     fitting::{
-        AreaDistributionFittingMode, BeckmannSpizzichinoADF, FittedModel,
+        AreaDistributionFittingMode, BeckmannSpizzichinoNDF, FittedModel,
         MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
-        ReflectionModelFamily, TrowbridgeReitzADF,
+        ReflectionModelFamily, TrowbridgeReitzNDF,
     },
     measure::{
         measurement::{MeasurementData, MeasurementKind},
@@ -398,13 +398,13 @@ impl PlottingWidget for PlotInspector {
                         CurveKind::None => {}
                         CurveKind::BeckmannSpizzichinoADF => {
                             self.madf_models.push((
-                                Box::new(BeckmannSpizzichinoADF::default()),
+                                Box::new(BeckmannSpizzichinoNDF::default()),
                                 Uuid::new_v4(),
                             ));
                         }
                         CurveKind::TrowbridgeReitzADF => self
                             .madf_models
-                            .push((Box::new(TrowbridgeReitzADF::default()), Uuid::new_v4())),
+                            .push((Box::new(TrowbridgeReitzNDF::default()), Uuid::new_v4())),
                     }
                 }
                 egui::ComboBox::from_label("kind")
@@ -436,12 +436,12 @@ impl PlottingWidget for PlotInspector {
                             &uuid.to_string().as_str()[..6]
                         ));
                         if ui
-                            .add(egui::Slider::new(&mut value, 0.0..=1.0).text("alpha"))
+                            .add(egui::Slider::new(&mut value, 0.0..=5.0).text("alpha"))
                             .changed()
                         {
                             model.set_params([value, value]);
                         }
-                        #[cfg(feature = "scaled-adf-fitting")]
+                        #[cfg(feature = "scaled-ndf-fitting")]
                         {
                             if let Some(scale) = model.scale() {
                                 let mut scale = scale;
@@ -482,12 +482,12 @@ impl PlottingWidget for PlotInspector {
                             let theta = x as f64 * std::f64::consts::PI / 180.0
                                 - std::f64::consts::PI * 0.5;
                             let value = {
-                                #[cfg(feature = "scaled-adf-fitting")]
+                                #[cfg(feature = "scaled-ndf-fitting")]
                                 {
                                     model.eval_with_theta_m(theta.cos())
                                         * model.scale().unwrap_or(1.0)
                                 }
-                                #[cfg(not(feature = "scaled-adf-fitting"))]
+                                #[cfg(not(feature = "scaled-ndf-fitting"))]
                                 {
                                     model.eval_with_theta_m(theta.cos())
                                 }
@@ -1120,11 +1120,11 @@ impl PlottingWidget for PlotInspector {
                                             .map(|x| {
                                                 let theta = x as f64 * std::f64::consts::PI / 180.0
                                                     - std::f64::consts::PI * 0.5;
-                                                #[cfg(feature = "scaled-adf-fitting")]
+                                                #[cfg(feature = "scaled-ndf-fitting")]
                                                 let value = model
                                                     .eval_with_cos_theta_m(theta.cos())
                                                     * model.scale().unwrap_or(1.0);
-                                                #[cfg(not(feature = "scaled-adf-fitting"))]
+                                                #[cfg(not(feature = "scaled-ndf-fitting"))]
                                                 let value =
                                                     model.eval_with_cos_theta_m(theta.cos());
                                                 [theta, value]

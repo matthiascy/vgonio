@@ -19,8 +19,8 @@ use crate::{
     measure::{
         self,
         measurement::{
-            BsdfMeasurementParams, MadfMeasurementParams, Measurement, MeasurementData,
-            MeasurementKind, MeasurementParams, MmsfMeasurementParams,
+            BsdfMeasurementParams, Measurement, MeasurementData, MeasurementKind,
+            MeasurementParams, MmsfMeasurementParams, MndfMeasurementParams,
         },
         CollectorScheme,
     },
@@ -88,7 +88,7 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetAreaDistribution => Measurement {
-                        params: MeasurementParams::Madf(MadfMeasurementParams::default()),
+                        params: MeasurementParams::Madf(MndfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
                     FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {

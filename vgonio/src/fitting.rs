@@ -1,12 +1,12 @@
 pub mod beckmann_spizzichino;
-mod madf;
+mod mndf;
 pub mod trowbridge_reitz;
 
 pub use beckmann_spizzichino::*;
-pub use madf::*;
+pub use mndf::*;
 pub use trowbridge_reitz::*;
 
-use crate::measure::microfacet::{MeasuredMadfData, MeasuredMmsfData};
+use crate::measure::microfacet::{MeasuredMmsfData, MeasuredMndfData};
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
 use nalgebra::{
     Dim, Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, Vector1, Vector2, U1, U2, U3,
@@ -54,7 +54,7 @@ impl FittedModel {
         }
     }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     pub fn is_scaled(&self) -> bool {
         match self {
             FittedModel::Madf { model, .. } => model.scale().is_some(),
@@ -77,7 +77,7 @@ pub struct FittedModels(Vec<FittedModel>);
 impl FittedModels {
     pub fn new() -> Self { Self(Vec::new()) }
 
-    #[cfg(not(feature = "scaled-adf-fitting"))]
+    #[cfg(not(feature = "scaled-ndf-fitting"))]
     pub fn contains(
         &self,
         family: ReflectionModelFamily,
@@ -88,7 +88,7 @@ impl FittedModels {
             .any(|f| f.family() == family && f.mode() == Some(mode))
     }
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     pub fn contains(
         &self,
         family: ReflectionModelFamily,
@@ -128,14 +128,14 @@ pub trait MicrofacetAreaDistributionModel: Debug {
     /// Sets the parameters of the model.
     fn set_params(&mut self, params: [f64; 2]);
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     /// Returns the scaling factor of the model.
     ///
     /// If the model is not scaled, this function returns `None`. Otherwise, it
     /// returns the scaling factor.
     fn scale(&self) -> Option<f64>;
 
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     /// Sets the scaling factor of the model.
     fn set_scale(&mut self, scale: f64);
 

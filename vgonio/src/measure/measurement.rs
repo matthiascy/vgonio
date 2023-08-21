@@ -6,7 +6,7 @@ use crate::{
         bsdf::{BsdfKind, MeasuredBsdfData},
         collector::CollectorScheme,
         emitter::RegionShape,
-        microfacet::{MeasuredMadfData, MeasuredMmsfData},
+        microfacet::{MeasuredMmsfData, MeasuredMndfData},
         Collector, Emitter, RtcMethod,
     },
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
@@ -356,7 +356,7 @@ const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
 
 /// Parameters for microfacet area distribution measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MadfMeasurementParams {
+pub struct MndfMeasurementParams {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
@@ -366,7 +366,7 @@ pub struct MadfMeasurementParams {
     pub single_slice: bool,
 }
 
-impl Default for MadfMeasurementParams {
+impl Default for MndfMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -376,7 +376,7 @@ impl Default for MadfMeasurementParams {
     }
 }
 
-impl MadfMeasurementParams {
+impl MndfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
@@ -491,7 +491,7 @@ pub enum MeasurementParams {
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Madf(MadfMeasurementParams),
+    Madf(MndfMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
     Mmsf(MmsfMeasurementParams),
@@ -527,7 +527,7 @@ impl MeasurementParams {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MadfMeasurementParams> {
+    pub fn microfacet_distribution(&self) -> Option<&MndfMeasurementParams> {
         if let MeasurementParams::Madf(mfd) = self {
             Some(mfd)
         } else {
@@ -728,7 +728,7 @@ pub enum MeasuredData {
     /// Bidirectional scattering distribution function.
     Bsdf(MeasuredBsdfData),
     /// Micro-facet area distribution.
-    Madf(MeasuredMadfData),
+    Madf(MeasuredMndfData),
     /// Micro-facet shadowing-masking function.
     Mmsf(MeasuredMmsfData),
 }
@@ -752,7 +752,7 @@ impl MeasuredData {
     }
 
     /// Returns the MADF data if it is a MADF.
-    pub fn madf_data(&self) -> Option<&MeasuredMadfData> {
+    pub fn madf_data(&self) -> Option<&MeasuredMndfData> {
         match self {
             MeasuredData::Madf(madf) => Some(madf),
             _ => None,
@@ -837,7 +837,7 @@ impl MeasurementData {
     /// # Arguments
     ///
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
-    pub fn adf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
+    pub fn ndf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind() == MeasurementKind::Madf);
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
@@ -851,14 +851,14 @@ impl MeasurementData {
             None
         };
         (
-            self.adf_data_slice_inner(azimuth_m_idx),
-            opposite_index.map(|index| self.adf_data_slice_inner(index)),
+            self.ndf_data_slice_inner(azimuth_m_idx),
+            opposite_index.map(|index| self.ndf_data_slice_inner(index)),
         )
     }
 
     /// Returns a data slice of the Area Distribution Function for the given
     /// azimuthal angle index.
-    pub fn adf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
+    fn ndf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         debug_assert!(self.kind() == MeasurementKind::Madf);
         debug_assert!(

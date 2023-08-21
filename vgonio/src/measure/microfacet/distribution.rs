@@ -6,7 +6,7 @@ use vgsurf::MicroSurface;
 use crate::{
     app::cache::{Cache, Handle},
     measure::measurement::{
-        MadfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource,
+        MeasuredData, MeasurementData, MeasurementDataSource, MndfMeasurementParams,
     },
     RangeByStepSizeInclusive,
 };
@@ -18,16 +18,16 @@ use crate::{
 /// precisely, the relative total facet surface area per unit solid angle of
 /// surface normals pointed in any given direction.
 #[derive(Debug, Clone)]
-pub struct MeasuredMadfData {
+pub struct MeasuredMndfData {
     /// The measurement parameters.
-    pub params: MadfMeasurementParams,
+    pub params: MndfMeasurementParams,
     /// The distribution data. The outermost index is the azimuthal angle of the
     /// microfacet normal, and the inner index is the zenith angle of the
     /// microfacet normal.
     pub samples: Vec<f32>,
 }
 
-impl MeasuredMadfData {
+impl MeasuredMndfData {
     /// Accumulate each slice (two opposite azimuthal angles) of the
     /// distribution data into a single slice.
     ///
@@ -67,7 +67,7 @@ impl MeasuredMadfData {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    mut params: MadfMeasurementParams,
+    mut params: MndfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MeasurementData> {
@@ -189,7 +189,7 @@ pub fn measure_area_distribution(
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
-                measured: MeasuredData::Madf(MeasuredMadfData { params, samples }),
+                measured: MeasuredData::Madf(MeasuredMndfData { params, samples }),
             })
         })
         .collect()
@@ -205,14 +205,14 @@ pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        measure::{measurement::MadfMeasurementParams, microfacet::MeasuredMadfData},
+        measure::{measurement::MndfMeasurementParams, microfacet::MeasuredMndfData},
         RangeByStepSizeInclusive,
     };
     use vgcore::units::{deg, rad, Radians};
 
     #[test]
-    fn madf_accumulated_slice() {
-        let params = MadfMeasurementParams {
+    fn mndf_accumulated_slice() {
+        let params = MndfMeasurementParams {
             azimuth: RangeByStepSizeInclusive::new(rad!(0.0), Radians::TAU, Radians::HALF_PI),
             zenith: RangeByStepSizeInclusive::new(
                 rad!(0.0),
@@ -221,7 +221,7 @@ mod tests {
             ),
             single_slice: false,
         };
-        let data = MeasuredMadfData {
+        let data = MeasuredMndfData {
             params,
             samples: vec![
                 1.0, 2.0, 3.0, 4.0, // phi = 0

@@ -11,7 +11,7 @@ publish = false
 default = []
 embree = ["dep:embree", "vgsurf/embree"]
 optix = []
-scaled-adf-fitting = []
+scaled-ndf-fitting = []
 verbose_debug = []
 
 [dependencies]
@@ -55,7 +55,7 @@ toml = "0.7"
 type-map = "0.5"
 winit = "0.28"
 wgpu = { version = "0.16", features = ["spirv"] }
-vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
+vgsurf = { package = "vgonio-surf", path = "../vgonio-surf", features = ["surf-gen"] }
 vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 
 [build-dependencies]

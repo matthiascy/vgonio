@@ -24,10 +24,10 @@ use crate::app::gui::plotter::debug_print_angle_pair;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MadfModel {
     BeckmannSpizzichino,
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     ScaledBeckmannSpizzichino,
     TrowbridgeReitz,
-    #[cfg(feature = "scaled-adf-fitting")]
+    #[cfg(feature = "scaled-ndf-fitting")]
     ScaledTrowbridgeReitz,
 }
 
@@ -86,8 +86,6 @@ impl VariantData for AreaDistributionExtra {
         let measurement = cache.get_measurement_data(data).unwrap();
         self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
         self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
-        let theta_step_size = self.zenith_range.step_size;
-        let theta_step_count = self.zenith_range.step_count();
         self.curves.push(Curve::from(
             measurement
                 .measured
@@ -99,7 +97,7 @@ impl VariantData for AreaDistributionExtra {
         ));
 
         for phi in self.azimuth_range.values_wrapped() {
-            let (starting, opposite) = measurement.adf_data_slice(phi);
+            let (starting, opposite) = measurement.ndf_data_slice(phi);
             let first_part_points = starting
                 .iter()
                 .zip(self.zenith_range.values())
@@ -130,7 +128,7 @@ impl VariantData for AreaDistributionExtra {
             .iter()
             .filter(|fitted_model| match fitted_model {
                 FittedModel::Bsdf(_) | FittedModel::Mmsf(_) => {
-                    #[cfg(feature = "scaled-adf-fitting")]
+                    #[cfg(feature = "scaled-ndf-fitting")]
                     {
                         !self.fitted.iter().any(|(existing_model, _, _)| {
                             fitted_model.family() == existing_model.family()
@@ -138,7 +136,7 @@ impl VariantData for AreaDistributionExtra {
                         })
                     }
 
-                    #[cfg(not(feature = "scaled-adf-fitting"))]
+                    #[cfg(not(feature = "scaled-ndf-fitting"))]
                     {
                         !self.fitted.iter().any(|(existing_model, _, _)| {
                             fitted_model.family() == existing_model.family()
@@ -146,7 +144,7 @@ impl VariantData for AreaDistributionExtra {
                     }
                 }
                 FittedModel::Madf { model, mode } => {
-                    #[cfg(feature = "scaled-adf-fitting")]
+                    #[cfg(feature = "scaled-ndf-fitting")]
                     {
                         !self.fitted.iter().any(|(existing_model, fitting_mode, _)| {
                             fitted_model.family() == existing_model.family()
@@ -154,7 +152,7 @@ impl VariantData for AreaDistributionExtra {
                                 && mode == fitting_mode
                         })
                     }
-                    #[cfg(not(feature = "scaled-adf-fitting"))]
+                    #[cfg(not(feature = "scaled-ndf-fitting"))]
                     {
                         !self.fitted.iter().any(|(existing_model, fitting_mode, _)| {
                             fitted_model.family() == existing_model.family() && mode == fitting_mode
@@ -175,12 +173,12 @@ impl VariantData for AreaDistributionExtra {
                             theta_values
                                 .iter()
                                 .zip(theta_values.iter().map(|theta_m| {
-                                    #[cfg(feature = "scaled-adf-fitting")]
+                                    #[cfg(feature = "scaled-ndf-fitting")]
                                     {
                                         model.eval_with_theta_m(*theta_m)
                                             * model.scale().unwrap_or(1.0)
                                     }
-                                    #[cfg(not(feature = "scaled-adf-fitting"))]
+                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
                                     {
                                         model.eval_with_theta_m(*theta_m)
                                     }
@@ -268,7 +266,7 @@ impl VariantData for AreaDistributionExtra {
                         MadfModel::BeckmannSpizzichino,
                         "Beckmann-Spizzichino",
                     );
-                    #[cfg(feature = "scaled-adf-fitting")]
+                    #[cfg(feature = "scaled-ndf-fitting")]
                     ui.selectable_value(
                         &mut self.model,
                         MadfModel::ScaledBeckmannSpizzichino,
@@ -279,7 +277,7 @@ impl VariantData for AreaDistributionExtra {
                         MadfModel::TrowbridgeReitz,
                         "Trowbridge-Reitz",
                     );
-                    #[cfg(feature = "scaled-adf-fitting")]
+                    #[cfg(feature = "scaled-ndf-fitting")]
                     ui.selectable_value(
                         &mut self.model,
                         MadfModel::ScaledTrowbridgeReitz,
@@ -308,28 +306,28 @@ impl VariantData for AreaDistributionExtra {
                     .clicked()
                 {
                     let family = match self.model {
-                        #[cfg(feature = "scaled-adf-fitting")]
+                        #[cfg(feature = "scaled-ndf-fitting")]
                         MadfModel::BeckmannSpizzichino | MadfModel::ScaledBeckmannSpizzichino => {
                             ReflectionModelFamily::Microfacet(
                                 MicrofacetModelFamily::BeckmannSpizzichino,
                             )
                         }
-                        #[cfg(feature = "scaled-adf-fitting")]
+                        #[cfg(feature = "scaled-ndf-fitting")]
                         MadfModel::TrowbridgeReitz | MadfModel::ScaledTrowbridgeReitz => {
                             ReflectionModelFamily::Microfacet(
                                 MicrofacetModelFamily::TrowbridgeReitz,
                             )
                         }
-                        #[cfg(not(feature = "scaled-adf-fitting"))]
+                        #[cfg(not(feature = "scaled-ndf-fitting"))]
                         MadfModel::BeckmannSpizzichino => ReflectionModelFamily::Microfacet(
                             MicrofacetModelFamily::BeckmannSpizzichino,
                         ),
-                        #[cfg(not(feature = "scaled-adf-fitting"))]
+                        #[cfg(not(feature = "scaled-ndf-fitting"))]
                         MadfModel::TrowbridgeReitz => ReflectionModelFamily::Microfacet(
                             MicrofacetModelFamily::TrowbridgeReitz,
                         ),
                     };
-                    #[cfg(feature = "scaled-adf-fitting")]
+                    #[cfg(feature = "scaled-ndf-fitting")]
                     let scaled = match self.model {
                         MadfModel::ScaledBeckmannSpizzichino | MadfModel::ScaledTrowbridgeReitz => {
                             true
@@ -339,7 +337,7 @@ impl VariantData for AreaDistributionExtra {
                     log::debug!("Fitting with model {:?} and mode {:?}", family, self.mode);
                     event_loop
                         .send_event(
-                            #[cfg(feature = "scaled-adf-fitting")]
+                            #[cfg(feature = "scaled-ndf-fitting")]
                             {
                                 VgonioEvent::Fitting {
                                     kind: MeasurementKind::Madf,
@@ -349,7 +347,7 @@ impl VariantData for AreaDistributionExtra {
                                     scaled,
                                 }
                             },
-                            #[cfg(not(feature = "scaled-adf-fitting"))]
+                            #[cfg(not(feature = "scaled-ndf-fitting"))]
                             {
                                 VgonioEvent::Fitting {
                                     kind: MeasurementKind::Madf,
@@ -377,7 +375,7 @@ impl VariantData for AreaDistributionExtra {
                                 .text_style(egui::TextStyle::Monospace),
                             );
                             ui.label(
-                                #[cfg(feature = "scaled-adf-fitting")]
+                                #[cfg(feature = "scaled-ndf-fitting")]
                                 {
                                     match model.scale() {
                                         None => egui::RichText::from(format!(
@@ -392,7 +390,7 @@ impl VariantData for AreaDistributionExtra {
                                         .text_style(egui::TextStyle::Button),
                                     }
                                 },
-                                #[cfg(not(feature = "scaled-adf-fitting"))]
+                                #[cfg(not(feature = "scaled-ndf-fitting"))]
                                 {
                                     egui::RichText::from(format!("α = {:.4}", model.params()[0],))
                                 },
