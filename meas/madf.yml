@@ -4,12 +4,12 @@ type: !microfacet-area-distribution-function # !madf
   zenith: 0 rad .. =90 deg / 2 deg
   single_slice: true
 surfaces:
-  - usr://surfaces/squared/aluminium1bar100_squared.vgms
-  - usr://surfaces/squared/aluminium1bar200_squared.vgms
-  - usr://surfaces/squared/aluminium1bar200fine_squared.vgms
-  - usr://surfaces/squared/aluminium2bar100_squared.vgms
-  - usr://surfaces/squared/aluminium3bar100_squared.vgms
-  - usr://surfaces/squared/aluminium4bar100_squared.vgms
+#  - usr://surfaces/squared/aluminium1bar100_squared.vgms
+#  - usr://surfaces/squared/aluminium1bar200_squared.vgms
+#  - usr://surfaces/squared/aluminium1bar200fine_squared.vgms
+#  - usr://surfaces/squared/aluminium2bar100_squared.vgms
+#  - usr://surfaces/squared/aluminium3bar100_squared.vgms
+#  - usr://surfaces/squared/aluminium4bar100_squared.vgms
   - usr://surfaces/squared/aluminium65bar100_squared.vgms
   - usr://surfaces/squared/aluminiummirror_squared.vgms
 #  - usr://surfaces/aluminium1bar100.vgms

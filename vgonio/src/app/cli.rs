@@ -1,10 +1,12 @@
+use egui::output;
 use std::{fs::OpenOptions, path::PathBuf, time::Instant};
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math::Handedness,
+    units::LengthUnit,
 };
-use vgsurf::MicroSurface;
+use vgsurf::{MicroSurface, RandomGenMethod, SurfGenKind};
 
 use crate::{
     app::{
@@ -274,64 +276,80 @@ fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     Ok(())
 }
 
-// TODO: use vgms file format
-/// Generates a micro-surface using 2D gaussian distribution.
+/// Generates a micro-surface.
 fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
-    let mut data: Vec<f32> = Vec::with_capacity((opts.res_x * opts.res_y) as usize);
-    for i in 0..opts.res_y {
-        for j in 0..opts.res_x {
-            let x = ((i as f32 / opts.res_x as f32) * 2.0 - 1.0) * opts.sigma_x * 4.0;
-            let y = ((j as f32 / opts.res_y as f32) * 2.0 - 1.0) * opts.sigma_y * 4.0;
-            data.push(
-                opts.amplitude
-                    * (-(x - opts.mean_x) * (x - opts.mean_x)
-                        / (2.0 * opts.sigma_x * opts.sigma_x)
-                        - (y - opts.mean_y) * (y - opts.mean_y)
-                            / (2.0 * opts.sigma_y * opts.sigma_y))
-                        .exp(),
+    let (res_x, res_y) = (opts.res[0], opts.res[1]);
+    let (du, dv) = (opts.spacing[0], opts.spacing[1]);
+    println!(
+        "  {BRIGHT_YELLOW}>{RESET} Generating surface with resolution {}x{}...",
+        res_x, res_y
+    );
+
+    let surf = match opts.kind {
+        SurfGenKind::Random => match opts.method.unwrap() {
+            RandomGenMethod::WhiteNoise => {
+                println!("    {BRIGHT_YELLOW}>{RESET} Generating surface from white noise...");
+                MicroSurface::from_white_noise(
+                    res_y as usize,
+                    res_x as usize,
+                    du,
+                    dv,
+                    opts.max_height,
+                    LengthUnit::UM,
+                )
+            }
+            _ => {
+                todo!()
+            }
+        },
+        SurfGenKind::Gaussian2D => {
+            println!(
+                "  {BRIGHT_YELLOW}>{RESET} Generating surface from 2D gaussian distribution..."
             );
+            let mut data: Vec<f32> = Vec::with_capacity((res_x * res_y) as usize);
+            let (sigma_x, sigma_y) = (opts.sigma_x.unwrap(), opts.sigma_y.unwrap());
+            let (mean_x, mean_y) = (opts.mean_x.unwrap(), opts.mean_y.unwrap());
+            let amp = opts.amplitude.unwrap();
+            MicroSurface::new_by(
+                res_y as usize,
+                res_x as usize,
+                du,
+                dv,
+                LengthUnit::UM,
+                |r, c| {
+                    let x = ((c as f32 / res_x as f32) * 2.0 - 1.0) * sigma_x * 4.0;
+                    let y = ((r as f32 / res_y as f32) * 2.0 - 1.0) * sigma_y * 4.0;
+                    amp * (-(x - mean_x) * (x - mean_x) / (2.0 * sigma_x * sigma_x)
+                        - (y - mean_y) * (y - mean_y) / (2.0 * sigma_y * sigma_y))
+                        .exp()
+                },
+            )
         }
-    }
+    };
 
     let path = {
+        let base = resolve_output_dir(&config, &opts.output)?;
         let p = if let Some(path) = opts.output {
             path
         } else {
-            PathBuf::from("micro-surface.txt")
+            PathBuf::from(
+                format!(
+                    "msurf-{:?}_{}.vgms",
+                    opts.kind,
+                    chrono::Local::now().format("%d-%m-%H-%M-%S")
+                )
+                .to_lowercase(),
+            )
         };
-        resolve_path(&config.cwd, Some(&p))
+        resolve_path(&base, Some(&p))
     };
 
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&path)
-        .map_err(|err| {
-            VgonioError::from_io_error(err, format!("Failed to open file {}", path.display()))
-        })?;
-
-    use std::io::Write;
-
-    writeln!(file, "AsciiMatrix {} {} 0.5 0.5", opts.res_x, opts.res_y).map_err(|err| {
-        VgonioError::from_io_error(err, format!("Failed to write to file {}", path.display()))
-    })?;
-
-    for i in 0..opts.res_y {
-        for j in 0..opts.res_x {
-            write!(file, "{} ", data[(i * opts.res_x + j) as usize]).map_err(|err| {
-                VgonioError::from_io_error(
-                    err,
-                    format!("Failed to write to file {}", path.display()),
-                )
-            })?;
-        }
-        writeln!(file).map_err(|err| {
-            VgonioError::from_io_error(err, format!("Failed to write to file {}", path.display()))
-        })?;
-    }
-
-    Ok(())
+    println!("    {BRIGHT_CYAN}✓{RESET} Surface generated");
+    println!(
+        "    {BRIGHT_YELLOW}>{RESET} Saving to \"{}\"",
+        path.display()
+    );
+    surf.write_to_file(&path, opts.encoding, opts.compression)
 }
 
 /// Writes the measured data to a file.

@@ -1,6 +1,10 @@
 //! Heightfield
 #![warn(missing_docs)]
 
+#[cfg(feature = "surf-gen")]
+mod gen;
+#[cfg(feature = "surf-gen")]
+pub use gen::*;
 pub mod io;
 
 #[cfg(feature = "embree")]
@@ -197,10 +201,10 @@ impl MicroSurface {
         du: f32,
         dv: f32,
         unit: LengthUnit,
-        setter: F,
+        mut setter: F,
     ) -> MicroSurface
     where
-        F: Fn(usize, usize) -> f32,
+        F: FnMut(usize, usize) -> f32,
     {
         assert!(cols > 1 && rows > 1);
         let mut samples = Vec::with_capacity(cols * rows);

@@ -3018,6 +3018,7 @@ dependencies = [
  "flate2",
  "glam",
  "log",
+ "rand",
  "serde",
  "uuid",
  "vgonio-core",

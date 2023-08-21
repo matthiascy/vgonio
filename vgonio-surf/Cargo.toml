@@ -8,6 +8,7 @@ description = "Library for manipulating, reading and writing micro-surfaces."
 [features]
 default = []
 embree = ["dep:embree"]
+surf-gen = []
 
 [dependencies]
 byteorder.workspace = true
@@ -15,6 +16,7 @@ clap.workspace = true
 flate2.workspace = true
 glam.workspace = true
 log.workspace = true
+rand.workspace = true
 serde.workspace = true
 uuid.workspace = true
 embree = { workspace = true, optional = true }

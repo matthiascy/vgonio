@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, str::FromStr};
+use std::{fmt::Display, path::PathBuf, str::FromStr};
 use vgcore::io::{CompressionScheme, FileEncoding};
+use vgsurf::{RandomGenMethod, SurfGenKind};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]
@@ -224,58 +225,63 @@ pub enum FastMeasurementKind {
 #[derive(clap::Args, Debug)]
 #[clap(about = "Generate a micro-geometry level surface using Gaussian distribution.")]
 pub struct GenerateOptions {
-    #[clap(
-        help = "Horizontal resolution of the generated micro-geometry profile (height map).",
-        default_value_t = 512
-    )]
-    pub res_x: u32,
+    /// Horizontal and vertical resolution of the generated micro-geometry
+    /// profile.
+    #[arg(long = "res", num_args(2), default_values_t = [1024; 2])]
+    pub res: Vec<u32>,
 
-    #[clap(
-        help = "Vertical resolution of the generated micro-geometry profile (height map).",
-        default_value_t = 512
-    )]
-    pub res_y: u32,
+    /// Horizontal and vertical spacing between micro-geometry height samples,
+    /// in micrometers.
+    #[arg(long = "spacing", num_args(2), default_values_t = [0.1; 2])]
+    pub spacing: Vec<f32>,
 
-    #[clap(
-        long = "amp",
-        help = "Amplitude of the 2D gaussian.",
-        default_value_t = 1.0
-    )]
-    pub amplitude: f32,
+    /// Highest height of the generated micro-geometry profile, in micrometers.
+    /// The lowest height is always 0.
+    #[arg(long = "height", default_value_t = 1.0)]
+    pub max_height: f32,
 
-    #[clap(
-        long = "sx",
-        help = "Standard deviation of the 2D gaussian distribution in horizontal direction.",
-        default_value_t = 1.0
-    )]
-    pub sigma_x: f32,
+    /// Type of surface to generate.
+    #[arg(ignore_case = true, long = "kind")]
+    pub kind: SurfGenKind,
 
-    #[clap(
-        long = "sy",
-        help = "Standard deviation of the 2D gaussian distribution in vertical direction.",
-        default_value_t = 1.0
-    )]
-    pub sigma_y: f32,
+    /// Amplitude of the 2D gaussian. Only used when `kind` is `gaussian2d`.
+    #[arg(long = "amp", required_if_eq("kind", "gaussian2d"))]
+    pub amplitude: Option<f32>,
 
-    #[clap(
-        long = "mx",
-        help = "Mean of 2D gaussian distribution on horizontal axis.",
-        default_value_t = 0.0
-    )]
-    pub mean_x: f32,
+    /// Standard deviation of the 2D gaussian distribution in horizontal
+    /// direction. Only used when `kind` is `gaussian2d`.
+    #[arg(long = "sx", required_if_eq("kind", "gaussian2d"))]
+    pub sigma_x: Option<f32>,
 
-    #[clap(
-        long = "my",
-        help = "Mean of 2D gaussian distribution on vertical axis.",
-        default_value_t = 0.0
-    )]
-    pub mean_y: f32,
+    /// Standard deviation of the 2D gaussian distribution in vertical
+    /// direction. Only used when `kind` is `gaussian2d`.
+    #[arg(long = "sy", required_if_eq("kind", "gaussian2d"))]
+    pub sigma_y: Option<f32>,
 
-    #[clap(
-        short,
-        long,
-        help = "Path to the file where to save the generated micro-geometry profile."
-    )]
+    /// Mean of 2D gaussian distribution on horizontal axis. Only used when
+    /// `kind` is `gaussian2d`.
+    #[arg(long = "mx", required_if_eq("kind", "gaussian2d"))]
+    pub mean_x: Option<f32>,
+
+    /// Mean of 2D gaussian distribution on vertical axis. Only used when
+    /// `kind` is `gaussian2d`.
+    #[arg(long = "my", required_if_eq("kind", "gaussian2d"))]
+    pub mean_y: Option<f32>,
+
+    /// Random method to use. Only used when `kind` is `random`.
+    #[arg(ignore_case = true, long = "method", required_if_eq("kind", "random"))]
+    pub method: Option<RandomGenMethod>,
+
+    /// Data format for the surface generation output.
+    #[arg(short, long, default_value_t = FileEncoding::Binary)]
+    pub encoding: FileEncoding,
+
+    /// Data compression for the surface generation output.
+    #[arg(short, long, default_value_t = CompressionScheme::None)]
+    pub compression: CompressionScheme,
+
+    /// Path to the file where to save the generated micro-geometry profile.
+    #[arg(short, long)]
     pub output: Option<PathBuf>,
 }
 
