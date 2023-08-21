@@ -272,6 +272,10 @@ pub struct GenerateOptions {
     #[arg(ignore_case = true, long = "method", required_if_eq("kind", "random"))]
     pub method: Option<RandomGenMethod>,
 
+    /// Number of initial seed points for Worley noise. Should be a power of 2.
+    #[arg(long = "num-seeds", required_if_eq_all([("kind", "random"), ("method", "worley-noise")]))]
+    pub num_seeds: Option<u32>,
+
     /// Data format for the surface generation output.
     #[arg(short, long, default_value_t = FileEncoding::Binary)]
     pub encoding: FileEncoding,

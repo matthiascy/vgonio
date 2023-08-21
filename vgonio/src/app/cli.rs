@@ -298,6 +298,18 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
                     LengthUnit::UM,
                 )
             }
+            RandomGenMethod::WorleyNoise => {
+                println!("    {BRIGHT_YELLOW}>{RESET} Generating surface from Worley noise...");
+                MicroSurface::from_worley_noise(
+                    res_y as usize,
+                    res_x as usize,
+                    du,
+                    dv,
+                    opts.max_height,
+                    opts.num_seeds.unwrap() as usize,
+                    LengthUnit::UM,
+                )
+            }
             _ => {
                 todo!()
             }
@@ -306,7 +318,6 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
             println!(
                 "  {BRIGHT_YELLOW}>{RESET} Generating surface from 2D gaussian distribution..."
             );
-            let mut data: Vec<f32> = Vec::with_capacity((res_x * res_y) as usize);
             let (sigma_x, sigma_y) = (opts.sigma_x.unwrap(), opts.sigma_y.unwrap());
             let (mean_x, mean_y) = (opts.mean_x.unwrap(), opts.mean_y.unwrap());
             let amp = opts.amplitude.unwrap();
@@ -333,11 +344,20 @@ fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
             path
         } else {
             PathBuf::from(
-                format!(
-                    "msurf-{:?}_{}.vgms",
-                    opts.kind,
-                    chrono::Local::now().format("%d-%m-%H-%M-%S")
-                )
+                if opts.kind == SurfGenKind::Random {
+                    format!(
+                        "msurf-{:?}_{:?}_{}.vgms",
+                        opts.kind,
+                        opts.method.unwrap(),
+                        chrono::Local::now().format("%d-%m-%H-%M-%S")
+                    )
+                } else {
+                    format!(
+                        "msurf-{:?}_{}.vgms",
+                        opts.kind,
+                        chrono::Local::now().format("%d-%m-%H-%M-%S")
+                    )
+                }
                 .to_lowercase(),
             )
         };

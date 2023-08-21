@@ -112,10 +112,7 @@ impl FittedModels {
         })
     }
 
-    pub fn push(&mut self, model: FittedModel) {
-        self.0.push(model);
-        log::debug!("Fitted models: {:?}", self.0);
-    }
+    pub fn push(&mut self, model: FittedModel) { self.0.push(model); }
 }
 
 impl AsRef<[FittedModel]> for FittedModels {
