@@ -196,8 +196,8 @@ impl VgonioGui {
                         if !fitted.contains(
                             *family,
                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
-                            *scaled,
                             *isotropic,
+                            *scaled,
                         ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
@@ -286,8 +286,8 @@ impl VgonioGui {
                         if !fitted.contains(
                             *family,
                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
-                            *scaled,
                             *isotropic,
+                            *scaled,
                         ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
@@ -328,6 +328,7 @@ impl VgonioGui {
                 family,
                 data,
                 mode,
+                isotropic,
             } => {
                 match kind {
                     MeasurementKind::Bsdf => {}
@@ -337,6 +338,7 @@ impl VgonioGui {
                         if !fitted.contains(
                             *family,
                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                            *isotropic,
                         ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
@@ -347,20 +349,46 @@ impl VgonioGui {
                             let problem = match family {
                                 ReflectionModelFamily::Microfacet(m) => match m {
                                     MicrofacetModelFamily::TrowbridgeReitz => {
-                                        AreaDistributionFittingProblem::new(
-                                            data,
-                                            TrowbridgeReitzNDF::default(),
-                                            Vec3::Y,
-                                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
-                                        )
+                                        if *isotropic {
+                                            AreaDistributionFittingProblem::new(
+                                                data,
+                                                TrowbridgeReitzNDF::default(),
+                                                Vec3::Y,
+                                                mode.unwrap_or(
+                                                    AreaDistributionFittingMode::Complete,
+                                                ),
+                                            )
+                                        } else {
+                                            AreaDistributionFittingProblem::new(
+                                                data,
+                                                TrowbridgeReitzAnisotropicNDF::default(),
+                                                Vec3::Y,
+                                                mode.unwrap_or(
+                                                    AreaDistributionFittingMode::Complete,
+                                                ),
+                                            )
+                                        }
                                     }
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
-                                        AreaDistributionFittingProblem::new(
-                                            data,
-                                            BeckmannSpizzichinoNDF::default(),
-                                            Vec3::Y,
-                                            mode.unwrap_or(AreaDistributionFittingMode::Complete),
-                                        )
+                                        if *isotropic {
+                                            AreaDistributionFittingProblem::new(
+                                                data,
+                                                BeckmannSpizzichinoNDF::default(),
+                                                Vec3::Y,
+                                                mode.unwrap_or(
+                                                    AreaDistributionFittingMode::Complete,
+                                                ),
+                                            )
+                                        } else {
+                                            AreaDistributionFittingProblem::new(
+                                                data,
+                                                BeckmannSpizzichinoAnisotropicNDF::default(),
+                                                Vec3::Y,
+                                                mode.unwrap_or(
+                                                    AreaDistributionFittingMode::Complete,
+                                                ),
+                                            )
+                                        }
                                     }
                                 },
                             };
@@ -379,6 +407,7 @@ impl VgonioGui {
                         if fitted.contains(
                             *family,
                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
+                            *isotropic,
                         ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();

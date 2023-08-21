@@ -193,12 +193,12 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
-            "Beckmann-Spizzichino anisotropic NDF"
+            "Beckmann-Spizzichino NDF (anisotropic)"
         } else {
-            "Scaled Beckmann-Spizzichino anisotropic NDF"
+            "Scaled Beckmann-Spizzichino NDF (anisotropic)"
         }
         #[cfg(not(feature = "scaled-ndf-fitting"))]
-        "Beckmann-Spizzichino anisotropic ADF"
+        "Beckmann-Spizzichino NDF (anisotropic)"
     }
 
     fn family(&self) -> ReflectionModelFamily {
@@ -280,6 +280,7 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
             .collect()
     }
 
+    #[cfg(feature = "scaled-ndf-fitting")]
     fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
         unimplemented!(
             "Can't calculate partial derivatives of isotropic parameters on anisotropic \
@@ -287,6 +288,7 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
         )
     }
 
+    #[cfg(feature = "scaled-ndf-fitting")]
     fn calc_param_pd_anisotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
         let alpha_x = self.alpha_x;
         let alpha_y = self.alpha_y;

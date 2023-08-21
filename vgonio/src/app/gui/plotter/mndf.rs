@@ -394,7 +394,12 @@ impl VariantData for AreaDistributionExtra {
                         | MndfModel::ScaledTrowbridgeReitzAnisotropic => true,
                         _ => false,
                     };
-                    log::debug!("Fitting with model {:?} and mode {:?}", family, self.mode);
+                    log::debug!(
+                        "Fitting with model {:?}, isotropic {}, mode {:?}",
+                        family,
+                        self.selected_model.is_isotropic(),
+                        self.mode
+                    );
                     event_loop
                         .send_event(
                             #[cfg(feature = "scaled-ndf-fitting")]

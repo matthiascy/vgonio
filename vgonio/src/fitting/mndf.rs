@@ -457,6 +457,24 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
         Vector::<f64, U2, Self::ParameterStorage>::from(self.model.params())
     }
+
+    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
+        Some(calculate_mndf_residuals(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
+    }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
+        Some(calculate_anisotropic_mndf_jacobian(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
+    }
 }
 
 use crate::fitting::FittingProblem;

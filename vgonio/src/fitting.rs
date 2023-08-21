@@ -89,10 +89,11 @@ impl FittedModels {
         &self,
         family: ReflectionModelFamily,
         mode: AreaDistributionFittingMode,
+        isotropic: bool,
     ) -> bool {
-        self.0
-            .iter()
-            .any(|f| f.family() == family && f.mode() == Some(mode))
+        self.0.iter().any(|f| {
+            f.family() == family && f.mode() == Some(mode) && f.is_isotropic() == isotropic
+        })
     }
 
     #[cfg(feature = "scaled-ndf-fitting")]
@@ -100,8 +101,8 @@ impl FittedModels {
         &self,
         family: ReflectionModelFamily,
         mode: AreaDistributionFittingMode,
-        scaled: bool,
         isotropic: bool,
+        scaled: bool,
     ) -> bool {
         self.0.iter().any(|f| {
             f.family() == family
@@ -111,7 +112,10 @@ impl FittedModels {
         })
     }
 
-    pub fn push(&mut self, model: FittedModel) { self.0.push(model); }
+    pub fn push(&mut self, model: FittedModel) {
+        self.0.push(model);
+        log::debug!("Fitted models: {:?}", self.0);
+    }
 }
 
 impl AsRef<[FittedModel]> for FittedModels {

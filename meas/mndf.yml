@@ -1,19 +1,21 @@
 ---
 type: !microfacet-area-distribution-function # !madf
-  azimuth: 0 rad .. =360 deg / 2 deg
+  azimuth: 0 rad .. =360 deg / 5 deg
   zenith: 0 rad .. =90 deg / 2 deg
   single_slice: false
 surfaces:
-  - usr://surfaces/generated/msurf-random_h0.1.vgms
-  - usr://surfaces/generated/msurf-random_h0.2.vgms
-  - usr://surfaces/generated/msurf-random_h0.3.vgms
-  - usr://surfaces/generated/msurf-random_h0.4.vgms
-  - usr://surfaces/generated/msurf-random_h0.5.vgms
-  - usr://surfaces/generated/msurf-random_h0.6.vgms
-  - usr://surfaces/generated/msurf-random_h0.7.vgms
-  - usr://surfaces/generated/msurf-random_h0.8.vgms
-  - usr://surfaces/generated/msurf-random_h0.9.vgms
-  - usr://surfaces/generated/msurf-random_h1.0.vgms
+  - usr://surfaces/dong2015/al
+#  - usr://surfaces/generated/msurf-random_h0.1.vgms
+#  - usr://surfaces/generated/msurf-random_h0.2.vgms
+#  - usr://surfaces/generated/msurf-random_h0.3.vgms
+#  - usr://surfaces/generated/msurf-random_h0.4.vgms
+#  - usr://surfaces/generated/msurf-random_h0.5.vgms
+#  - usr://surfaces/generated/msurf-random_h0.6.vgms
+#  - usr://surfaces/generated/msurf-random_h0.7.vgms
+#  - usr://surfaces/generated/msurf-random_h0.8.vgms
+#  - usr://surfaces/generated/msurf-random_h0.9.vgms
+#  - usr://surfaces/generated/msurf-random_h1.0.vgms
+
 #  - usr://surfaces/squared/aluminium1bar100_squared.vgms
 #  - usr://surfaces/squared/aluminium1bar200_squared.vgms
 #  - usr://surfaces/squared/aluminium1bar200fine_squared.vgms
