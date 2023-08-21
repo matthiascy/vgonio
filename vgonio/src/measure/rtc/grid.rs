@@ -490,8 +490,8 @@ impl<C: Cell> Grid<C> {
                 (0.0, 1.0)
             } else {
                 log::debug!("The ray is not parallel to either the grid x or y axis");
-                let m = ray_dir.y * math::rcp(ray_dir.x);
-                (m, math::rcp(m))
+                let m = ray_dir.y * math::rcp_f32(ray_dir.x);
+                (m, math::rcp_f32(m))
             }
         };
         log::debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);
@@ -868,8 +868,8 @@ impl Grid<BaseCell> {
                 (0.0, 1.0)
             } else {
                 debug!("The ray is not parallel to either the grid x or y axis");
-                let m = ray_dir.y * math::rcp(ray_dir.x);
-                (m, math::rcp(m))
+                let m = ray_dir.y * math::rcp_f32(ray_dir.x);
+                (m, math::rcp_f32(m))
             }
         };
         debug!("Slope of the ray on the grid: {}, reciprocal: {}", m, m_rcp);

@@ -63,6 +63,7 @@ pub enum VgonioEvent {
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
         mode: Option<AreaDistributionFittingMode>,
+        isotropic: bool,
         scaled: bool,
     },
     #[cfg(not(feature = "scaled-ndf-fitting"))]
@@ -71,6 +72,7 @@ pub enum VgonioEvent {
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
         mode: Option<AreaDistributionFittingMode>,
+        isotropic: bool,
     },
 }
 

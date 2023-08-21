@@ -93,8 +93,8 @@
 //!   $$t_\parallel = \frac{2\eta_i\cos\theta_i}{\eta_t\cos\theta_i +
 //! \eta_i\cos\theta_t}$$
 //!
-//! + reflection and transmission coefficients for parallel polarized
-//!   light at the interface between a *conductor* and a *dielectric* medium:
+//! + reflection and transmission coefficients for parallel polarized light at
+//!   the interface between a *conductor* and a *dielectric* medium:
 //!
 //!   $$r_\parallel=r_\perp\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\
 //! theta+\ sin^4\theta}{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\sin^4\
@@ -131,13 +131,12 @@
 //!
 //! ## refractive indices
 //!
-//! + Dielectrics/Insulators
-//!   Dielectrics dont' conduct electricity, they have real-valued indices
-//!   of refraction and transmit a portion of the incident illumination.
+//! + Dielectrics/Insulators Dielectrics dont' conduct electricity, they have
+//!   real-valued indices of refraction and transmit a portion of the incident
+//!   illumination.
 //!
-//! + Conductors
-//!   In contrast to dielectrics, conductors have a complex-valued index of
-//!   refraction ῆ = η + ik
+//! + Conductors In contrast to dielectrics, conductors have a complex-valued
+//!   index of refraction ῆ = η + ik
 //!
 //! Give the incident direction $\omega_i$, and indices of refraction of two
 //! mediums, compute the reflection coefficients for waves parallel and
@@ -460,8 +459,10 @@ pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
     }
 
     let cos_t = (1.0 - sin_t * sin_t).sqrt();
-    let r_parl = (eta_t * cos_i_abs - eta_i * cos_t) * math::rcp(eta_t * cos_i_abs + eta_i * cos_t);
-    let r_perp = (eta_i * cos_i_abs - eta_t * cos_t) * math::rcp(eta_i * cos_i_abs + eta_t * cos_t);
+    let r_parl =
+        (eta_t * cos_i_abs - eta_i * cos_t) * math::rcp_f32(eta_t * cos_i_abs + eta_i * cos_t);
+    let r_perp =
+        (eta_i * cos_i_abs - eta_t * cos_t) * math::rcp_f32(eta_i * cos_i_abs + eta_t * cos_t);
 
     // No polarisation.
     0.5 * (r_parl * r_parl + r_perp * r_perp)

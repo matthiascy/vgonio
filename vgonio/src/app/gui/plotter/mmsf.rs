@@ -75,7 +75,7 @@ impl VariantData for MaskingShadowingExtra {
                         .iter()
                         .zip(self.zenith_range.values())
                         .map(|(y, x)| [x.as_f64(), *y as f64]);
-                    self.curves.push(Curve::from_madf_or_mmsf_data(
+                    self.curves.push(Curve::from_mndf_or_mmsf_data(
                         first_part_points,
                         opposite,
                         &self.zenith_range,

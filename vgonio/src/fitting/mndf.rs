@@ -79,7 +79,7 @@ impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
 
     fn lsq_lm_fit(self) -> (Self::Model, MinimizationReport<f64>) {
         let effective_params_count = self.model.effective_params_count();
-        if effective_params_count == 1 {
+        if self.model.is_isotropic() {
             #[cfg(not(feature = "scaled-ndf-fitting"))]
             {
                 let problem = AreaDistributionFittingProblemProxy::<U1> {
@@ -119,10 +119,46 @@ impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
                     (result.model, report)
                 }
             }
-        } else if effective_params_count == 2 {
-            todo!("2 effective params count")
         } else {
-            todo!("3 effective params count")
+            #[cfg(not(feature = "scaled-ndf-fitting"))]
+            {
+                let problem = AreaDistributionFittingProblemProxy::<U2> {
+                    measured: self.measured,
+                    normal: self.normal.as_dvec3(),
+                    model: self.model.clone_box(),
+                    mode: self.mode,
+                    marker: Default::default(),
+                };
+                let solver = LevenbergMarquardt::new();
+                let (result, report) = solver.minimize(problem);
+                (result.model, report)
+            }
+            #[cfg(feature = "scaled-ndf-fitting")]
+            {
+                if self.model.scale().is_some() {
+                    let problem = AreaDistributionFittingProblemProxy::<U2, SCALED> {
+                        measured: self.measured,
+                        normal: self.normal.as_dvec3(),
+                        model: self.model.clone_box(),
+                        mode: self.mode,
+                        marker: Default::default(),
+                    };
+                    let solver = LevenbergMarquardt::new();
+                    let (result, report) = solver.minimize(problem);
+                    (result.model, report)
+                } else {
+                    let problem = AreaDistributionFittingProblemProxy::<U2, UNSCALED> {
+                        measured: self.measured,
+                        normal: self.normal.as_dvec3(),
+                        model: self.model.clone_box(),
+                        mode: self.mode,
+                        marker: Default::default(),
+                    };
+                    let solver = LevenbergMarquardt::new();
+                    let (result, report) = solver.minimize(problem);
+                    (result.model, report)
+                }
+            }
         }
     }
 }
@@ -167,394 +203,213 @@ struct AreaDistributionFittingProblemProxy<'a, N: Dim> {
 
 /// Calculates the residuals of the evaluated model against the whole measured
 /// data.
-fn calculate_madf_residuals_complete(
+fn calculate_mndf_residuals(
     measured: &MeasuredMndfData,
     normal: DVec3,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
+    mode: AreaDistributionFittingMode,
 ) -> OMatrix<f64, Dyn, U1> {
-    let theta_step_count = measured.params.zenith.step_count_wrapped();
-    let residuals = measured
-        .samples
-        .iter()
-        .enumerate()
-        .map(|(idx, meas)| {
-            let phi_idx = idx / theta_step_count;
-            let theta_idx = idx % theta_step_count;
-            let theta = measured.params.zenith.step(theta_idx);
-            let phi = measured.params.azimuth.step(phi_idx);
-            let m = SphericalCoord::new(1.0, theta, phi)
-                .to_cartesian(Handedness::RightHandedYUp)
-                .as_dvec3();
-            model.eval(m, normal) - *meas as f64
-        })
-        .collect();
-    OMatrix::<f64, Dyn, U1>::from_vec(residuals)
-}
+    match mode {
+        AreaDistributionFittingMode::Complete => {
+            let theta_step_count = measured.params.zenith.step_count_wrapped();
+            let residuals = measured.samples.iter().enumerate().map(|(idx, meas)| {
+                let phi_idx = idx / theta_step_count;
+                let theta_idx = idx % theta_step_count;
+                let theta = measured.params.zenith.step(theta_idx);
+                let phi = measured.params.azimuth.step(phi_idx);
+                let m = SphericalCoord::new(1.0, theta, phi)
+                    .to_cartesian(Handedness::RightHandedYUp)
+                    .as_dvec3();
+                model.eval(m, normal) - *meas as f64
+            });
 
-fn calculate_madf_residuals_accumulated(
-    measured: &MeasuredMndfData,
-    model: &Box<dyn MicrofacetAreaDistributionModel>,
-) -> OMatrix<f64, Dyn, U1> {
-    let theta_step_count = measured.params.zenith.step_count_wrapped();
-    let theta_step_size = measured.params.zenith.step_size;
-    OMatrix::<f64, Dyn, U1>::from_iterator(
-        (theta_step_count * 2 - 1),
-        measured
-            .accumulated_slice()
-            .iter()
-            .map(|(theta, val)| model.eval_with_theta_m(*theta as f64) - *val as f64),
-    )
+            OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
+        }
+        AreaDistributionFittingMode::Accumulated => {
+            let theta_step_count = measured.params.zenith.step_count_wrapped();
+            OMatrix::<f64, Dyn, U1>::from_iterator(
+                (theta_step_count * 2 - 1),
+                measured
+                    .accumulated_slice()
+                    .iter()
+                    .map(|(theta, val)| model.eval_with_theta_m(*theta as f64) - *val as f64),
+            )
+        }
+    }
 }
 
 #[cfg(feature = "scaled-ndf-fitting")]
 /// Calculates the residuals of the scaled evaluated model against the measured
 /// data.
-fn calculate_scaled_madf_residuals_complete(
+fn calculate_scaled_mndf_residuals(
     measured: &MeasuredMndfData,
     normal: DVec3,
     model: &Box<dyn MicrofacetAreaDistributionModel>,
+    mode: AreaDistributionFittingMode,
 ) -> OMatrix<f64, Dyn, U1> {
     let theta_step_count = measured.params.zenith.step_count_wrapped();
     let scale = model.scale().unwrap();
-    let residuals = measured
+    match mode {
+        AreaDistributionFittingMode::Complete => {
+            let residuals = measured.samples.iter().enumerate().map(|(idx, meas)| {
+                let phi_idx = idx / theta_step_count;
+                let theta_idx = idx % theta_step_count;
+                let theta = measured.params.zenith.step(theta_idx);
+                let phi = measured.params.azimuth.step(phi_idx);
+                let m = SphericalCoord::new(1.0, theta, phi)
+                    .to_cartesian(Handedness::RightHandedYUp)
+                    .as_dvec3();
+                model.eval(m, normal) * scale - *meas as f64
+            });
+            OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
+        }
+        AreaDistributionFittingMode::Accumulated => OMatrix::<f64, Dyn, U1>::from_iterator(
+            (theta_step_count * 2 - 1),
+            measured
+                .accumulated_slice()
+                .iter()
+                .map(|(theta, val)| model.eval_with_theta_m(*theta as f64) * scale - *val as f64),
+        ),
+    }
+}
+
+/// Calculates the partial derivative of the fitting parameter.
+fn calculate_isotropic_mndf_jacobian(
+    measured: &MeasuredMndfData,
+    normal: DVec3,
+    model: &Box<dyn MicrofacetAreaDistributionModel>,
+    mode: AreaDistributionFittingMode,
+) -> OMatrix<f64, Dyn, U1> {
+    let theta_step_count = measured.params.zenith.step_count_wrapped();
+    let cos_theta_ms = match mode {
+        AreaDistributionFittingMode::Complete => {
+            if normal == DVec3::Y {
+                measured
+                    .samples
+                    .iter()
+                    .enumerate()
+                    .map(move |(idx, meas)| {
+                        let theta_idx = idx % theta_step_count;
+                        measured.params.zenith.step(theta_idx).cos() as f64
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                measured
+                    .samples
+                    .iter()
+                    .enumerate()
+                    .map(move |(idx, meas)| {
+                        let phi_idx = idx / theta_step_count;
+                        let theta_idx = idx % theta_step_count;
+                        let theta = measured.params.zenith.step(theta_idx);
+                        let phi = measured.params.azimuth.step(phi_idx);
+                        let m = SphericalCoord::new(1.0, theta, phi)
+                            .to_cartesian(Handedness::RightHandedYUp)
+                            .as_dvec3();
+                        m.dot(normal)
+                    })
+                    .collect::<Vec<_>>()
+            }
+        }
+        AreaDistributionFittingMode::Accumulated => measured
+            .accumulated_slice()
+            .iter()
+            .map(|(theta, _)| theta.cos() as f64)
+            .collect::<Vec<_>>(),
+    };
+    OMatrix::<f64, Dyn, U1>::from_vec(model.calc_param_pd_isotropic(&cos_theta_ms))
+}
+
+fn calculate_anisotropic_mndf_jacobian(
+    measured: &MeasuredMndfData,
+    normal: DVec3,
+    model: &Box<dyn MicrofacetAreaDistributionModel>,
+    mode: AreaDistributionFittingMode,
+) -> OMatrix<f64, Dyn, U2> {
+    assert!(
+        matches!(mode, AreaDistributionFittingMode::Complete),
+        "Anisotropic MADF fitting only supports complete mode"
+    );
+    let theta_step_count = measured.params.zenith.step_count_wrapped();
+    let cos_theta_ms = if normal == DVec3::Y {
+        measured
+            .samples
+            .iter()
+            .enumerate()
+            .map(move |(idx, meas)| {
+                let theta_idx = idx % theta_step_count;
+                measured.params.zenith.step(theta_idx).cos() as f64
+            })
+            .collect::<Vec<_>>()
+    } else {
+        measured
+            .samples
+            .iter()
+            .enumerate()
+            .map(move |(idx, meas)| {
+                let phi_idx = idx / theta_step_count;
+                let theta_idx = idx % theta_step_count;
+                let theta = measured.params.zenith.step(theta_idx);
+                let phi = measured.params.azimuth.step(phi_idx);
+                let m = SphericalCoord::new(1.0, theta, phi)
+                    .to_cartesian(Handedness::RightHandedYUp)
+                    .as_dvec3();
+                m.dot(normal)
+            })
+            .collect::<Vec<_>>()
+    };
+    OMatrix::<f64, Dyn, U2>::from_row_slice(&model.calc_param_pd_anisotropic(&cos_theta_ms))
+}
+
+#[cfg(feature = "scaled-ndf-fitting")]
+fn calculate_scaled_isotropic_mndf_jacobian(
+    measured: &MeasuredMndfData,
+    model: &Box<dyn MicrofacetAreaDistributionModel>,
+    mode: AreaDistributionFittingMode,
+) -> OMatrix<f64, Dyn, U2> {
+    let cos_theta_ms = match mode {
+        AreaDistributionFittingMode::Complete => {
+            let theta_step_count = measured.params.zenith.step_count_wrapped();
+            measured
+                .samples
+                .iter()
+                .enumerate()
+                .map(move |(idx, meas)| {
+                    let theta_idx = idx % theta_step_count;
+                    measured.params.zenith.step(theta_idx).cos() as f64
+                })
+                .collect::<Vec<_>>()
+        }
+        AreaDistributionFittingMode::Accumulated => measured
+            .accumulated_slice()
+            .iter()
+            .map(|(theta, _)| theta.cos() as f64)
+            .collect::<Vec<_>>(),
+    };
+    OMatrix::<f64, Dyn, U2>::from_row_slice(&model.calc_param_pd_isotropic_scaled(&cos_theta_ms))
+}
+
+#[cfg(feature = "scaled-ndf-fitting")]
+fn calculate_scaled_anisotropic_mndf_jacobian(
+    measured: &MeasuredMndfData,
+    model: &Box<dyn MicrofacetAreaDistributionModel>,
+    mode: AreaDistributionFittingMode,
+) -> OMatrix<f64, Dyn, U3> {
+    assert!(
+        matches!(mode, AreaDistributionFittingMode::Complete),
+        "Anisotropic MADF fitting only supports complete mode"
+    );
+    let theta_step_count = measured.params.zenith.step_count_wrapped();
+    let cos_theta_ms = measured
         .samples
         .iter()
         .enumerate()
-        .map(|(idx, meas)| {
-            let phi_idx = idx / theta_step_count;
+        .map(move |(idx, meas)| {
             let theta_idx = idx % theta_step_count;
-            let theta = measured.params.zenith.step(theta_idx);
-            let phi = measured.params.azimuth.step(phi_idx);
-            let m = SphericalCoord::new(1.0, theta, phi)
-                .to_cartesian(Handedness::RightHandedYUp)
-                .as_dvec3();
-            model.eval(m, normal) * scale - *meas as f64
+            measured.params.zenith.step(theta_idx).cos() as f64
         })
-        .collect();
-    OMatrix::<f64, Dyn, U1>::from_vec(residuals)
-}
-
-#[cfg(feature = "scaled-ndf-fitting")]
-/// Calculates the residuals of the scaled evaluated model against the measured
-/// data.
-fn calculate_scaled_madf_residuals_accumulated(
-    measured: &MeasuredMndfData,
-    model: &Box<dyn MicrofacetAreaDistributionModel>,
-) -> OMatrix<f64, Dyn, U1> {
-    let scale = model.scale().unwrap_or(1.0);
-    let theta_step_count = measured.params.zenith.step_count_wrapped();
-    OMatrix::<f64, Dyn, U1>::from_iterator(
-        (theta_step_count * 2 - 1),
-        measured
-            .accumulated_slice()
-            .iter()
-            .map(|(theta, val)| model.eval_with_theta_m(*theta as f64) * scale - *val as f64),
-    )
-}
-
-/// Calculates the partial derivative of the fitting parameter.
-fn calculate_single_param_madf_jacobian(
-    measured: &MeasuredMndfData,
-    alpha: f64,
-    normal: DVec3,
-    model: &Box<dyn MicrofacetAreaDistributionModel>,
-) -> OMatrix<f64, Dyn, U1> {
-    let alpha2 = alpha * alpha;
-    let theta_step_count = measured.params.zenith.step_count_wrapped();
-    let derivatives = match model.family() {
-        ReflectionModelFamily::Microfacet(m) => match m {
-            MicrofacetModelFamily::TrowbridgeReitz => measured
-                .samples
-                .iter()
-                .enumerate()
-                .map(move |(idx, meas)| {
-                    let phi_idx = idx / theta_step_count;
-                    let theta_idx = idx % theta_step_count;
-                    let theta = measured.params.zenith.step(theta_idx);
-                    let phi = measured.params.azimuth.step(phi_idx);
-                    let m = SphericalCoord::new(1.0, theta, phi)
-                        .to_cartesian(Handedness::RightHandedYUp)
-                        .as_dvec3();
-                    let cos_theta_m = m.dot(normal);
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    let numerator =
-                        2.0 * alpha * (tan_theta_m2 - alpha2) * sec_theta_m2 * sec_theta_m2;
-                    let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
-
-                    numerator / denominator
-                })
-                .collect(),
-            MicrofacetModelFamily::BeckmannSpizzichino => measured
-                .samples
-                .iter()
-                .enumerate()
-                .map(move |(idx, meas)| {
-                    let phi_idx = idx / theta_step_count;
-                    let theta_idx = idx % theta_step_count;
-                    let theta = measured.params.zenith.step(theta_idx);
-                    let phi = measured.params.azimuth.step(phi_idx);
-                    let m = SphericalCoord::new(1.0, theta, phi)
-                        .to_cartesian(Handedness::RightHandedYUp)
-                        .as_dvec3();
-                    let cos_theta_m = m.dot(normal);
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    let numerator = 2.0
-                        * (-tan_theta_m2 / alpha2).exp()
-                        * (tan_theta_m2 - alpha2)
-                        * sec_theta_m2
-                        * sec_theta_m2;
-                    let denominator = std::f64::consts::PI * alpha.powi(5);
-
-                    numerator / denominator
-                })
-                .collect(),
-        },
-    };
-    OMatrix::<f64, Dyn, U1>::from_vec(derivatives)
-}
-
-/// Calculates the partial derivative of the fitting parameter.
-fn calculate_single_param_madf_jacobian_accumulated(
-    measured: &MeasuredMndfData,
-    alpha: f64,
-    model: &Box<dyn MicrofacetAreaDistributionModel>,
-) -> OMatrix<f64, Dyn, U1> {
-    let alpha2 = alpha * alpha;
-    let derivatives = match model.family() {
-        ReflectionModelFamily::Microfacet(m) => match m {
-            MicrofacetModelFamily::TrowbridgeReitz => measured
-                .accumulated_slice()
-                .iter()
-                .map(move |(theta, _)| {
-                    let cos_theta_m = theta.cos() as f64;
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    let numerator =
-                        2.0 * alpha * (tan_theta_m2 - alpha2) * sec_theta_m2 * sec_theta_m2;
-                    let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
-
-                    numerator / denominator
-                })
-                .collect(),
-            MicrofacetModelFamily::BeckmannSpizzichino => measured
-                .accumulated_slice()
-                .iter()
-                .map(move |(theta, _)| {
-                    let cos_theta_m = theta.cos() as f64;
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    let numerator = 2.0
-                        * (-tan_theta_m2 / alpha2).exp()
-                        * (tan_theta_m2 - alpha2)
-                        * sec_theta_m2
-                        * sec_theta_m2;
-                    let denominator = std::f64::consts::PI * alpha.powi(5);
-
-                    numerator / denominator
-                })
-                .collect(),
-        },
-    };
-    OMatrix::<f64, Dyn, U1>::from_vec(derivatives)
-}
-
-#[cfg(feature = "scaled-ndf-fitting")]
-fn calculate_scaled_madf_jacobian_complete(
-    measured: &MeasuredMndfData,
-    alpha: f64,
-    normal: DVec3,
-    model: &Box<dyn MicrofacetAreaDistributionModel>,
-) -> OMatrix<f64, Dyn, U2> {
-    let alpha2 = alpha * alpha;
-    let scale = model.scale().unwrap();
-    let theta_step_count = measured.params.zenith.step_count_wrapped();
-    let derivatives: Vec<f64> = match model.family() {
-        ReflectionModelFamily::Microfacet(m) => match m {
-            MicrofacetModelFamily::TrowbridgeReitz => measured
-                .samples
-                .iter()
-                .enumerate()
-                .flat_map(move |(idx, meas)| {
-                    let phi_idx = idx / theta_step_count;
-                    let theta_idx = idx % theta_step_count;
-                    let theta = measured.params.zenith.step(theta_idx);
-                    let phi = measured.params.azimuth.step(phi_idx);
-                    let m = SphericalCoord::new(1.0, theta, phi)
-                        .to_cartesian(Handedness::RightHandedYUp)
-                        .as_dvec3();
-                    let cos_theta_m = m.dot(normal);
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    // Derivative of the Trowbridge-Reitz distribution with respect to alpha
-                    let d_alpha = {
-                        let numerator =
-                            2.0 * alpha * scale * (tan_theta_m2 - alpha2) * sec_theta_m4;
-                        let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
-                        numerator / denominator
-                    };
-                    let d_scale = {
-                        let numerator = alpha2 * sec_theta_m4;
-                        let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(2);
-                        numerator / denominator
-                    };
-                    [d_alpha, d_scale]
-                })
-                .collect(),
-            MicrofacetModelFamily::BeckmannSpizzichino => measured
-                .samples
-                .iter()
-                .enumerate()
-                .flat_map(move |(idx, meas)| {
-                    let phi_idx = idx / measured.params.zenith.step_count_wrapped();
-                    let theta_idx = idx % measured.params.zenith.step_count_wrapped();
-                    let theta = measured.params.zenith.step(theta_idx);
-                    let phi = measured.params.azimuth.step(phi_idx);
-                    let m = SphericalCoord::new(1.0, theta, phi)
-                        .to_cartesian(Handedness::RightHandedYUp)
-                        .as_dvec3();
-                    let cos_theta_m = m.dot(normal);
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    let d_alpha = {
-                        let numerator = 2.0
-                            * (-tan_theta_m2 / alpha2).exp()
-                            * (tan_theta_m2 - alpha2)
-                            * sec_theta_m4
-                            * scale;
-                        let denominator = std::f64::consts::PI * alpha.powi(5);
-
-                        numerator / denominator
-                    };
-
-                    let d_scale = {
-                        let numerator = (-tan_theta_m2 / alpha2).exp() * sec_theta_m4;
-                        let denominator = std::f64::consts::PI * alpha2;
-                        numerator / denominator
-                    };
-                    [d_alpha, d_scale]
-                })
-                .collect(),
-        },
-    };
-    OMatrix::<f64, Dyn, U2>::from_row_slice(&derivatives)
-}
-
-#[cfg(feature = "scaled-ndf-fitting")]
-fn calculate_scaled_madf_jacobian_accumulated(
-    measured: &MeasuredMndfData,
-    alpha: f64,
-    model: &Box<dyn MicrofacetAreaDistributionModel>,
-) -> OMatrix<f64, Dyn, U2> {
-    let alpha2 = alpha * alpha;
-    let scale = model.scale().unwrap();
-    let theta_step_count = measured.params.zenith.step_count_wrapped();
-    let derivatives: Vec<f64> = match model.family() {
-        ReflectionModelFamily::Microfacet(m) => match m {
-            MicrofacetModelFamily::TrowbridgeReitz => measured
-                .accumulated_slice()
-                .iter()
-                .flat_map(move |(theta, _)| {
-                    let cos_theta_m = theta.cos() as f64;
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    // Derivative of the Trowbridge-Reitz distribution with respect to alpha
-                    let d_alpha = {
-                        let numerator =
-                            2.0 * alpha * scale * (tan_theta_m2 - alpha2) * sec_theta_m4;
-                        let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(3);
-                        numerator / denominator
-                    };
-                    let d_scale = {
-                        let numerator = alpha2 * sec_theta_m4;
-                        let denominator = std::f64::consts::PI * (alpha2 + tan_theta_m2).powi(2);
-                        numerator / denominator
-                    };
-                    [d_alpha, d_scale]
-                })
-                .collect(),
-            MicrofacetModelFamily::BeckmannSpizzichino => measured
-                .accumulated_slice()
-                .iter()
-                .flat_map(move |(theta, _)| {
-                    let cos_theta_m = theta.cos() as f64;
-                    let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                    let sec_theta_m2 = 1.0 / cos_theta_m2;
-                    let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                    let tan_theta_m2 = if cos_theta_m2 == 0.0 {
-                        f64::INFINITY
-                    } else {
-                        1.0 / cos_theta_m2 - cos_theta_m2
-                    };
-
-                    let d_alpha = {
-                        let numerator = 2.0
-                            * (-tan_theta_m2 / alpha2).exp()
-                            * (tan_theta_m2 - alpha2)
-                            * sec_theta_m4
-                            * scale;
-                        let denominator = std::f64::consts::PI * alpha.powi(5);
-
-                        numerator / denominator
-                    };
-
-                    let d_scale = {
-                        let numerator = (-tan_theta_m2 / alpha2).exp() * sec_theta_m4;
-                        let denominator = std::f64::consts::PI * alpha2;
-                        numerator / denominator
-                    };
-                    [d_alpha, d_scale]
-                })
-                .collect(),
-        },
-    };
-    OMatrix::<f64, Dyn, U2>::from_row_slice(&derivatives)
+        .collect::<Vec<_>>();
+    OMatrix::<f64, Dyn, U3>::from_row_slice(&model.calc_param_pd_anisotropic_scaled(&cos_theta_ms))
 }
 
 // When the feature `scaled-ndf-fitting` is not enabled, the fitting problem
@@ -570,57 +425,38 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for AreaDistributionFittingProblemPro
     fn params(&self) -> Vector1<f64> { Vector1::new(self.model.params()[0]) }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        match self.mode {
-            AreaDistributionFittingMode::Complete => Some(calculate_madf_residuals_complete(
-                self.measured,
-                self.normal,
-                &self.model,
-            )),
-            AreaDistributionFittingMode::Accumulated => Some(calculate_madf_residuals_accumulated(
-                self.measured,
-                &self.model,
-            )),
-        }
+        Some(calculate_mndf_residuals(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
-        match self.mode {
-            AreaDistributionFittingMode::Complete => Some(calculate_single_param_madf_jacobian(
-                self.measured,
-                self.params().x,
-                self.normal,
-                &self.model,
-            )),
-            AreaDistributionFittingMode::Accumulated => {
-                Some(calculate_single_param_madf_jacobian_accumulated(
-                    self.measured,
-                    self.params().x,
-                    &self.model,
-                ))
-            }
-        }
+        Some(calculate_isotropic_mndf_jacobian(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
     }
 }
 
 #[cfg(not(feature = "scaled-ndf-fitting"))]
+/// Anisotropic MADF fitting problem.
 impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemProxy<'a, U2> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
     type ParameterStorage = Owned<f64, U2, U1>;
 
-    fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) { todo!() }
-
-    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> { todo!() }
-
-    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
-        Some(calculate_madf_residuals_complete(
-            self.measured,
-            self.normal,
-            &self.model,
-        ))
+    fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
+        self.model.set_params([x[0], x[1]]);
     }
 
-    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> { todo!() }
+    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
+        Vector::<f64, U2, Self::ParameterStorage>::from(self.model.params())
+    }
 }
 
 use crate::fitting::FittingProblem;
@@ -642,35 +478,21 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
     fn params(&self) -> Vector1<f64> { Vector1::new(self.model.params()[0]) }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        match self.mode {
-            AreaDistributionFittingMode::Complete => Some(calculate_madf_residuals_complete(
-                self.measured,
-                self.normal,
-                &self.model,
-            )),
-            AreaDistributionFittingMode::Accumulated => Some(calculate_madf_residuals_accumulated(
-                self.measured,
-                &self.model,
-            )),
-        }
+        Some(calculate_mndf_residuals(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
-        match self.mode {
-            AreaDistributionFittingMode::Complete => Some(calculate_single_param_madf_jacobian(
-                self.measured,
-                self.params().x,
-                self.normal,
-                &self.model,
-            )),
-            AreaDistributionFittingMode::Accumulated => {
-                Some(calculate_single_param_madf_jacobian_accumulated(
-                    self.measured,
-                    self.params().x,
-                    &self.model,
-                ))
-            }
-        }
+        Some(calculate_isotropic_mndf_jacobian(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
     }
 }
 
@@ -694,32 +516,20 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        match self.mode {
-            AreaDistributionFittingMode::Complete => Some(
-                calculate_scaled_madf_residuals_complete(self.measured, self.normal, &self.model),
-            ),
-            AreaDistributionFittingMode::Accumulated => Some(
-                calculate_scaled_madf_residuals_accumulated(self.measured, &self.model),
-            ),
-        }
+        Some(calculate_scaled_mndf_residuals(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
-        match self.mode {
-            AreaDistributionFittingMode::Complete => Some(calculate_scaled_madf_jacobian_complete(
-                self.measured,
-                self.params().x,
-                self.normal,
-                &self.model,
-            )),
-            AreaDistributionFittingMode::Accumulated => {
-                Some(calculate_scaled_madf_jacobian_accumulated(
-                    self.measured,
-                    self.params().x,
-                    &self.model,
-                ))
-            }
-        }
+        Some(calculate_scaled_isotropic_mndf_jacobian(
+            self.measured,
+            &self.model,
+            self.mode,
+        ))
     }
 }
 
@@ -740,9 +550,23 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
         Vector::<f64, U2, Self::ParameterStorage>::from(self.model.params())
     }
 
-    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> { todo!() }
+    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
+        Some(calculate_mndf_residuals(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
+    }
 
-    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> { todo!() }
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
+        Some(calculate_anisotropic_mndf_jacobian(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
+    }
 }
 
 #[cfg(feature = "scaled-ndf-fitting")]
@@ -765,7 +589,20 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U3> for AreaDistributionFittingProblemPro
         )
     }
 
-    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> { todo!() }
+    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
+        Some(calculate_scaled_mndf_residuals(
+            self.measured,
+            self.normal,
+            &self.model,
+            self.mode,
+        ))
+    }
 
-    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U3, Self::JacobianStorage>> { todo!() }
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U3, Self::JacobianStorage>> {
+        Some(calculate_scaled_anisotropic_mndf_jacobian(
+            self.measured,
+            &self.model,
+            self.mode,
+        ))
+    }
 }

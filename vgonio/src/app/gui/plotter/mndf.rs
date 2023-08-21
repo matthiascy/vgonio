@@ -22,13 +22,30 @@ use vgcore::units::{rad, Radians};
 use crate::app::gui::plotter::debug_print_angle_pair;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MadfModel {
+enum MndfModel {
     BeckmannSpizzichino,
+    BeckmannSpizzichinoAnisotropic,
     #[cfg(feature = "scaled-ndf-fitting")]
     ScaledBeckmannSpizzichino,
+    #[cfg(feature = "scaled-ndf-fitting")]
+    ScaledBeckmannSpizzichinoAnisotropic,
     TrowbridgeReitz,
+    TrowbridgeReitzAnisotropic,
     #[cfg(feature = "scaled-ndf-fitting")]
     ScaledTrowbridgeReitz,
+    #[cfg(feature = "scaled-ndf-fitting")]
+    ScaledTrowbridgeReitzAnisotropic,
+}
+
+impl MndfModel {
+    pub fn is_isotropic(&self) -> bool {
+        match self {
+            MndfModel::BeckmannSpizzichino | MndfModel::TrowbridgeReitz => true,
+            #[cfg(feature = "scaled-ndf-fitting")]
+            MndfModel::ScaledBeckmannSpizzichino | MndfModel::ScaledTrowbridgeReitz => true,
+            _ => false,
+        }
+    }
 }
 
 /// Extra data for the area distribution plot.
@@ -51,7 +68,7 @@ pub struct AreaDistributionExtra {
         Curve,
     )>,
     /// Model to be fitted.
-    model: MadfModel,
+    selected_model: MndfModel,
     /// Fitting mode.
     mode: AreaDistributionFittingMode,
     /// Whether to show the accumulated curve.
@@ -74,7 +91,7 @@ impl Default for AreaDistributionExtra {
             azimuth_m: rad!(0.0),
             curves: vec![],
             fitted: vec![],
-            model: MadfModel::BeckmannSpizzichino,
+            selected_model: MndfModel::BeckmannSpizzichino,
             mode: AreaDistributionFittingMode::Complete,
             show_accumulated: false,
         }
@@ -102,7 +119,7 @@ impl VariantData for AreaDistributionExtra {
                 .iter()
                 .zip(self.zenith_range.values())
                 .map(|(y, x)| [x.as_f64(), *y as f64]);
-            self.curves.push(Curve::from_madf_or_mmsf_data(
+            self.curves.push(Curve::from_mndf_or_mmsf_data(
                 first_part_points,
                 opposite,
                 &self.zenith_range,
@@ -143,19 +160,22 @@ impl VariantData for AreaDistributionExtra {
                         })
                     }
                 }
-                FittedModel::Madf { model, mode } => {
+                FittedModel::Mndf { model, mode } => {
                     #[cfg(feature = "scaled-ndf-fitting")]
                     {
                         !self.fitted.iter().any(|(existing_model, fitting_mode, _)| {
                             fitted_model.family() == existing_model.family()
                                 && fitted_model.is_scaled() == existing_model.scale().is_some()
                                 && mode == fitting_mode
+                                && model.is_isotropic() == existing_model.is_isotropic()
                         })
                     }
                     #[cfg(not(feature = "scaled-ndf-fitting"))]
                     {
                         !self.fitted.iter().any(|(existing_model, fitting_mode, _)| {
-                            fitted_model.family() == existing_model.family() && mode == fitting_mode
+                            fitted_model.family() == existing_model.family()
+                                && mode == fitting_mode
+                                && model.is_isotropic() == existing_model.is_isotropic()
                         })
                     }
                 }
@@ -167,7 +187,7 @@ impl VariantData for AreaDistributionExtra {
         } else {
             for fitted in to_add {
                 match fitted {
-                    FittedModel::Madf { model, mode } => {
+                    FittedModel::Mndf { model, mode } => {
                         // Generate the curve for this model.
                         let points = {
                             theta_values
@@ -261,41 +281,69 @@ impl VariantData for AreaDistributionExtra {
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Model: ");
-                    ui.selectable_value(
-                        &mut self.model,
-                        MadfModel::BeckmannSpizzichino,
-                        "Beckmann-Spizzichino",
-                    );
-                    #[cfg(feature = "scaled-ndf-fitting")]
-                    ui.selectable_value(
-                        &mut self.model,
-                        MadfModel::ScaledBeckmannSpizzichino,
-                        "Scaled Beckmann-Spizzichino",
-                    );
-                    ui.selectable_value(
-                        &mut self.model,
-                        MadfModel::TrowbridgeReitz,
-                        "Trowbridge-Reitz",
-                    );
-                    #[cfg(feature = "scaled-ndf-fitting")]
-                    ui.selectable_value(
-                        &mut self.model,
-                        MadfModel::ScaledTrowbridgeReitz,
-                        "Scaled Trowbridge-Reitz",
-                    );
+                    ui.vertical(|ui| {
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::BeckmannSpizzichino,
+                            "Beckmann-Spizzichino",
+                        );
+                        #[cfg(feature = "scaled-ndf-fitting")]
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::ScaledBeckmannSpizzichino,
+                            "Scaled Beckmann-Spizzichino",
+                        );
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::TrowbridgeReitz,
+                            "Trowbridge-Reitz",
+                        );
+                        #[cfg(feature = "scaled-ndf-fitting")]
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::ScaledTrowbridgeReitz,
+                            "Scaled Trowbridge-Reitz",
+                        );
+                    });
+                    ui.vertical(|ui| {
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::BeckmannSpizzichinoAnisotropic,
+                            "Beckmann-Spizzichino Anisotropic",
+                        );
+                        #[cfg(feature = "scaled-ndf-fitting")]
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::ScaledBeckmannSpizzichinoAnisotropic,
+                            "Scaled Beckmann-Spizzichino Anisotropic",
+                        );
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::TrowbridgeReitzAnisotropic,
+                            "Trowbridge-Reitz Anisotropic",
+                        );
+                        #[cfg(feature = "scaled-ndf-fitting")]
+                        ui.selectable_value(
+                            &mut self.selected_model,
+                            MndfModel::ScaledTrowbridgeReitzAnisotropic,
+                            "Scaled Trowbridge-Reitz Anisotropic",
+                        );
+                    });
                 });
 
                 ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(
-                        &mut self.mode,
-                        AreaDistributionFittingMode::Complete,
-                        "Complete",
-                    );
-                    ui.selectable_value(
-                        &mut self.mode,
-                        AreaDistributionFittingMode::Accumulated,
-                        "Accumulated",
-                    );
+                    if self.selected_model.is_isotropic() {
+                        ui.selectable_value(
+                            &mut self.mode,
+                            AreaDistributionFittingMode::Complete,
+                            "Complete",
+                        );
+                        ui.selectable_value(
+                            &mut self.mode,
+                            AreaDistributionFittingMode::Accumulated,
+                            "Accumulated",
+                        );
+                    }
                 });
 
                 if ui
@@ -305,34 +353,46 @@ impl VariantData for AreaDistributionExtra {
                     )
                     .clicked()
                 {
-                    let family = match self.model {
+                    let family = match self.selected_model {
                         #[cfg(feature = "scaled-ndf-fitting")]
-                        MadfModel::BeckmannSpizzichino | MadfModel::ScaledBeckmannSpizzichino => {
+                        MndfModel::BeckmannSpizzichino
+                        | MndfModel::ScaledBeckmannSpizzichino
+                        | MndfModel::ScaledBeckmannSpizzichinoAnisotropic
+                        | MndfModel::BeckmannSpizzichinoAnisotropic => {
                             ReflectionModelFamily::Microfacet(
                                 MicrofacetModelFamily::BeckmannSpizzichino,
                             )
                         }
                         #[cfg(feature = "scaled-ndf-fitting")]
-                        MadfModel::TrowbridgeReitz | MadfModel::ScaledTrowbridgeReitz => {
+                        MndfModel::TrowbridgeReitz
+                        | MndfModel::ScaledTrowbridgeReitz
+                        | MndfModel::ScaledTrowbridgeReitzAnisotropic
+                        | MndfModel::TrowbridgeReitzAnisotropic => {
                             ReflectionModelFamily::Microfacet(
                                 MicrofacetModelFamily::TrowbridgeReitz,
                             )
                         }
                         #[cfg(not(feature = "scaled-ndf-fitting"))]
-                        MadfModel::BeckmannSpizzichino => ReflectionModelFamily::Microfacet(
-                            MicrofacetModelFamily::BeckmannSpizzichino,
-                        ),
+                        MndfModel::BeckmannSpizzichino
+                        | MndfModel::BeckmannSpizzichinoAnisotropic => {
+                            ReflectionModelFamily::Microfacet(
+                                MicrofacetModelFamily::BeckmannSpizzichino,
+                            )
+                        }
                         #[cfg(not(feature = "scaled-ndf-fitting"))]
-                        MadfModel::TrowbridgeReitz => ReflectionModelFamily::Microfacet(
-                            MicrofacetModelFamily::TrowbridgeReitz,
-                        ),
+                        MndfModel::TrowbridgeReitz | MndfModel::TrowbridgeReitzAnisotropic => {
+                            ReflectionModelFamily::Microfacet(
+                                MicrofacetModelFamily::TrowbridgeReitz,
+                            )
+                        }
                     };
                     #[cfg(feature = "scaled-ndf-fitting")]
-                    let scaled = match self.model {
-                        MadfModel::ScaledBeckmannSpizzichino | MadfModel::ScaledTrowbridgeReitz => {
-                            true
-                        }
-                        MadfModel::BeckmannSpizzichino | MadfModel::TrowbridgeReitz => false,
+                    let scaled = match self.selected_model {
+                        MndfModel::ScaledBeckmannSpizzichino
+                        | MndfModel::ScaledTrowbridgeReitz
+                        | MndfModel::ScaledBeckmannSpizzichinoAnisotropic
+                        | MndfModel::ScaledTrowbridgeReitzAnisotropic => true,
+                        _ => false,
                     };
                     log::debug!("Fitting with model {:?} and mode {:?}", family, self.mode);
                     event_loop
@@ -340,20 +400,22 @@ impl VariantData for AreaDistributionExtra {
                             #[cfg(feature = "scaled-ndf-fitting")]
                             {
                                 VgonioEvent::Fitting {
-                                    kind: MeasurementKind::Madf,
+                                    kind: MeasurementKind::Mndf,
                                     family,
                                     data,
                                     mode: Some(self.mode),
+                                    isotropic: self.selected_model.is_isotropic(),
                                     scaled,
                                 }
                             },
                             #[cfg(not(feature = "scaled-ndf-fitting"))]
                             {
                                 VgonioEvent::Fitting {
-                                    kind: MeasurementKind::Madf,
+                                    kind: MeasurementKind::Mndf,
                                     family,
                                     data,
                                     mode: Some(self.mode),
+                                    isotropic: self.selected_model.is_isotropic(),
                                 }
                             },
                         )
@@ -374,7 +436,7 @@ impl VariantData for AreaDistributionExtra {
                                 ))
                                 .text_style(egui::TextStyle::Monospace),
                             );
-                            ui.label(
+                            ui.label(if model.is_isotropic() {
                                 #[cfg(feature = "scaled-ndf-fitting")]
                                 {
                                     match model.scale() {
@@ -389,12 +451,38 @@ impl VariantData for AreaDistributionExtra {
                                         ))
                                         .text_style(egui::TextStyle::Button),
                                     }
-                                },
+                                }
                                 #[cfg(not(feature = "scaled-ndf-fitting"))]
                                 {
                                     egui::RichText::from(format!("α = {:.4}", model.params()[0],))
-                                },
-                            )
+                                }
+                            } else {
+                                #[cfg(feature = "scaled-ndf-fitting")]
+                                {
+                                    match model.scale() {
+                                        None => egui::RichText::from(format!(
+                                            "αx = {:.4}, αy = {:.4}",
+                                            model.params()[0],
+                                            model.params()[1]
+                                        )),
+                                        Some(scale) => egui::RichText::from(format!(
+                                            "αx = {:.4}, αy = {:.4}, scale = {:.4}",
+                                            model.params()[0],
+                                            model.params()[1],
+                                            scale
+                                        ))
+                                        .text_style(egui::TextStyle::Button),
+                                    }
+                                }
+                                #[cfg(not(feature = "scaled-ndf-fitting"))]
+                                {
+                                    egui::RichText::from(format!(
+                                        "αx = {:.4}, αy = {:.4}",
+                                        model.params()[0],
+                                        model.params()[1]
+                                    ))
+                                }
+                            })
                         });
                     }
                 }

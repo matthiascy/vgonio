@@ -19,9 +19,11 @@ use crate::{
         Config,
     },
     fitting::{
-        AreaDistributionFittingMode, AreaDistributionFittingProblem, BeckmannSpizzichinoMSF,
-        BeckmannSpizzichinoNDF, FittedModel, FittingProblem, MicrofacetModelFamily,
-        MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzMSF, TrowbridgeReitzNDF,
+        AreaDistributionFittingMode, AreaDistributionFittingProblem,
+        BeckmannSpizzichinoAnisotropicNDF, BeckmannSpizzichinoMSF, BeckmannSpizzichinoNDF,
+        FittedModel, FittingProblem, MicrofacetModelFamily, MmsfFittingProblem,
+        ReflectionModelFamily, TrowbridgeReitzAnisotropicNDF, TrowbridgeReitzMSF,
+        TrowbridgeReitzNDF,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
 };
@@ -154,7 +156,7 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Madf => Box::new(PlotInspector::new_area_distrib_plot(
+                        MeasurementKind::Mndf => Box::new(PlotInspector::new_area_distrib_plot(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
@@ -183,17 +185,19 @@ impl VgonioGui {
                 family,
                 data,
                 mode,
+                isotropic,
                 scaled,
             } => {
                 match kind {
                     MeasurementKind::Bsdf => {}
-                    MeasurementKind::Madf => {
+                    MeasurementKind::Mndf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
                         if !fitted.contains(
                             *family,
                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
                             *scaled,
+                            *isotropic,
                         ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
@@ -205,37 +209,63 @@ impl VgonioGui {
                             let problem = match family {
                                 ReflectionModelFamily::Microfacet(m) => match m {
                                     MicrofacetModelFamily::TrowbridgeReitz => {
-                                        if *scaled {
-                                            AreaDistributionFittingProblem::new(
+                                        match (*scaled, *isotropic) {
+                                            (true, true) => AreaDistributionFittingProblem::new(
                                                 data,
                                                 TrowbridgeReitzNDF::default_with_scale(),
                                                 Vec3::Y,
                                                 mode,
-                                            )
-                                        } else {
-                                            AreaDistributionFittingProblem::new(
+                                            ),
+                                            (true, false) => AreaDistributionFittingProblem::new(
+                                                data,
+                                                TrowbridgeReitzAnisotropicNDF::default_with_scale(),
+                                                Vec3::Y,
+                                                mode,
+                                            ),
+                                            (false, true) => AreaDistributionFittingProblem::new(
                                                 data,
                                                 TrowbridgeReitzNDF::default(),
                                                 Vec3::Y,
                                                 mode,
-                                            )
+                                            ),
+                                            (false, false) => AreaDistributionFittingProblem::new(
+                                                data,
+                                                TrowbridgeReitzAnisotropicNDF::default(),
+                                                Vec3::Y,
+                                                mode,
+                                            ),
                                         }
                                     }
                                     MicrofacetModelFamily::BeckmannSpizzichino => {
-                                        if *scaled {
-                                            AreaDistributionFittingProblem::new(
+                                        match (*scaled, *isotropic) {
+                                            (true, true) => AreaDistributionFittingProblem::new(
                                                 data,
                                                 BeckmannSpizzichinoNDF::default_with_scale(),
                                                 Vec3::Y,
                                                 mode,
-                                            )
-                                        } else {
-                                            AreaDistributionFittingProblem::new(
+                                            ),
+                                            (true, false) => {
+                                                AreaDistributionFittingProblem::new(
+                                                    data,
+                                                    BeckmannSpizzichinoAnisotropicNDF::default_with_scale(),
+                                                    Vec3::Y,
+                                                    mode,
+                                                )
+                                            }
+                                            (false, true) => AreaDistributionFittingProblem::new(
                                                 data,
                                                 BeckmannSpizzichinoNDF::default(),
                                                 Vec3::Y,
                                                 mode,
-                                            )
+                                            ),
+                                            (false, false) => {
+                                                AreaDistributionFittingProblem::new(
+                                                    data,
+                                                    BeckmannSpizzichinoAnisotropicNDF::default(),
+                                                    Vec3::Y,
+                                                    mode,
+                                                )
+                                            }
                                         }
                                     }
                                 },
@@ -244,7 +274,7 @@ impl VgonioGui {
                             log::info!("Report: {:?}", report);
                             log::info!("Result: {:?}", result);
 
-                            fitted.push(FittedModel::Madf {
+                            fitted.push(FittedModel::Mndf {
                                 model: result,
                                 mode,
                             });
@@ -257,6 +287,7 @@ impl VgonioGui {
                             *family,
                             mode.unwrap_or(AreaDistributionFittingMode::Complete),
                             *scaled,
+                            *isotropic,
                         ) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
@@ -300,7 +331,7 @@ impl VgonioGui {
             } => {
                 match kind {
                     MeasurementKind::Bsdf => {}
-                    MeasurementKind::Madf => {
+                    MeasurementKind::Mndf => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
                         if !fitted.contains(
@@ -336,7 +367,7 @@ impl VgonioGui {
                             let (result, report) = problem.lsq_lm_fit();
                             log::info!("Report: {:?}", report);
                             log::info!("Result: {:?}", result);
-                            fitted.push(FittedModel::Madf {
+                            fitted.push(FittedModel::Mndf {
                                 model: result,
                                 mode: mode.unwrap_or(AreaDistributionFittingMode::Complete),
                             });

@@ -10,14 +10,14 @@ use crate::{
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
-            event::{EventLoopProxy, VgonioEvent},
+            event::EventLoopProxy,
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
     fitting::{
-        AreaDistributionFittingMode, BeckmannSpizzichinoNDF, FittedModel,
-        MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
-        ReflectionModelFamily, TrowbridgeReitzNDF,
+        AreaDistributionFittingMode, BeckmannSpizzichinoAnisotropicNDF, BeckmannSpizzichinoNDF,
+        FittedModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
+        TrowbridgeReitzAnisotropicNDF, TrowbridgeReitzNDF,
     },
     measure::{
         measurement::{MeasurementData, MeasurementKind},
@@ -126,7 +126,7 @@ pub struct PlotInspector {
     variant: Option<Box<dyn VariantData>>,
     new_curve_kind: CurveKind,
     // (model, uuid)
-    madf_models: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Uuid)>,
+    mndf_models: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Uuid)>,
     mmsf_models: Vec<Box<dyn MicrofacetMaskingShadowingModel>>,
     /// The event loop.
     event_loop: EventLoopProxy,
@@ -182,7 +182,7 @@ impl Curve {
     /// * `opposite` - The second part of the data, which is the measured data
     /// for the opposite azimuthal angle. If `None`, the curve is created from
     /// the first part only.
-    fn from_madf_or_mmsf_data(
+    fn from_mndf_or_mmsf_data(
         first_part: impl Iterator<Item = [f64; 2]>,
         opposite: Option<&[f32]>,
         zenith_range: &RangeByStepSizeInclusive<Radians>,
@@ -335,7 +335,7 @@ impl PlotInspector {
             event_loop,
             variant: None,
             new_curve_kind: CurveKind::None,
-            madf_models: vec![],
+            mndf_models: vec![],
             uuid: Uuid::new_v4(),
             mmsf_models: vec![],
         }
@@ -363,7 +363,7 @@ impl PlotInspector {
             plot_type,
             variant: extra,
             new_curve_kind: CurveKind::None,
-            madf_models: vec![],
+            mndf_models: vec![],
             mmsf_models: vec![],
             event_loop,
         }
@@ -381,8 +381,10 @@ impl PlotInspector {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CurveKind {
     None,
-    TrowbridgeReitzADF,
-    BeckmannSpizzichinoADF,
+    TrowbridgeReitzNDF,
+    TrowbridgeReitzNDFAnisotropic,
+    BeckmannSpizzichinoNDF,
+    BeckmannSpizzichinoNDFAnisotropic,
 }
 
 impl PlottingWidget for PlotInspector {
@@ -396,15 +398,25 @@ impl PlottingWidget for PlotInspector {
                 if ui.button("Add curve").clicked() {
                     match self.new_curve_kind {
                         CurveKind::None => {}
-                        CurveKind::BeckmannSpizzichinoADF => {
-                            self.madf_models.push((
+                        CurveKind::BeckmannSpizzichinoNDF => {
+                            self.mndf_models.push((
                                 Box::new(BeckmannSpizzichinoNDF::default()),
                                 Uuid::new_v4(),
                             ));
                         }
-                        CurveKind::TrowbridgeReitzADF => self
-                            .madf_models
+                        CurveKind::TrowbridgeReitzNDF => self
+                            .mndf_models
                             .push((Box::new(TrowbridgeReitzNDF::default()), Uuid::new_v4())),
+                        CurveKind::TrowbridgeReitzNDFAnisotropic => self.mndf_models.push((
+                            Box::new(TrowbridgeReitzAnisotropicNDF::default()),
+                            Uuid::new_v4(),
+                        )),
+                        CurveKind::BeckmannSpizzichinoNDFAnisotropic => {
+                            self.mndf_models.push((
+                                Box::new(BeckmannSpizzichinoAnisotropicNDF::default()),
+                                Uuid::new_v4(),
+                            ));
+                        }
                     }
                 }
                 egui::ComboBox::from_label("kind")
@@ -412,13 +424,23 @@ impl PlottingWidget for PlotInspector {
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::TrowbridgeReitzADF,
+                            CurveKind::TrowbridgeReitzNDF,
                             "Trowbridge-Reitz",
                         );
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::BeckmannSpizzichinoADF,
+                            CurveKind::BeckmannSpizzichinoNDF,
                             "Beckmann-Spizzichino",
+                        );
+                        ui.selectable_value(
+                            &mut self.new_curve_kind,
+                            CurveKind::TrowbridgeReitzNDFAnisotropic,
+                            "Trowbridge-Reitz (anisotropic)",
+                        );
+                        ui.selectable_value(
+                            &mut self.new_curve_kind,
+                            CurveKind::BeckmannSpizzichinoNDFAnisotropic,
+                            "Beckmann-Spizzichino (anisotropic)",
                         );
                     });
             });
@@ -426,20 +448,33 @@ impl PlottingWidget for PlotInspector {
 
         {
             let mut to_be_removed = vec![];
-            for (i, (model, uuid)) in self.madf_models.iter_mut().enumerate() {
+            for (i, (model, uuid)) in self.mndf_models.iter_mut().enumerate() {
                 ui.horizontal_wrapped(|ui| {
                     if model.is_isotropic() {
-                        let mut value = model.params()[0];
                         ui.label(format!(
                             "Model: {}#{}",
                             model.name(),
                             &uuid.to_string().as_str()[..6]
                         ));
-                        if ui
-                            .add(egui::Slider::new(&mut value, 0.0..=5.0).text("alpha"))
-                            .changed()
-                        {
-                            model.set_params([value, value]);
+                        if model.is_isotropic() {
+                            let mut alpha = model.params()[0];
+                            if ui
+                                .add(egui::Slider::new(&mut alpha, 0.0..=5.0).text("alpha"))
+                                .changed()
+                            {
+                                model.set_params([alpha, alpha]);
+                            }
+                        } else {
+                            let [mut alpha_x, mut alpha_y] = model.params();
+                            let alpha_x_changed = ui
+                                .add(egui::Slider::new(&mut alpha_x, 0.0..=5.0).text("alpha_x"))
+                                .changed();
+                            let alpha_y_changed = ui
+                                .add(egui::Slider::new(&mut alpha_y, 0.0..=5.0).text("alpha_y"))
+                                .changed();
+                            if alpha_x_changed || alpha_y_changed {
+                                model.set_params([alpha_x, alpha_y]);
+                            }
                         }
                         #[cfg(feature = "scaled-ndf-fitting")]
                         {
@@ -460,7 +495,7 @@ impl PlottingWidget for PlotInspector {
                 });
             }
             for i in to_be_removed {
-                self.madf_models.remove(i);
+                self.mndf_models.remove(i);
             }
         }
 
@@ -472,11 +507,11 @@ impl PlottingWidget for PlotInspector {
                 //.clamp_grid(true)
                 .center_x_axis(true)
                 .sharp_grid_lines(true)
-                .x_grid_spacer(adf_msf_x_angle_spacer)
-                .y_grid_spacer(adf_msf_y_uniform_spacer)
+                .x_grid_spacer(ndf_msf_x_angle_spacer)
+                .y_grid_spacer(ndf_msf_y_uniform_spacer)
                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()));
             plot.show(ui, |plot_ui| {
-                for (i, (model, uuid)) in self.madf_models.iter().enumerate() {
+                for (i, (model, uuid)) in self.mndf_models.iter().enumerate() {
                     let points: Vec<_> = (0..=180)
                         .map(|x| {
                             let theta = x as f64 * std::f64::consts::PI / 180.0
@@ -1037,7 +1072,7 @@ impl PlottingWidget for PlotInspector {
                         // }
                     }
                 }
-                MeasurementKind::Madf => {
+                MeasurementKind::Mndf => {
                     if let Some(variant) = &mut self.variant {
                         let cache = self.cache.read().unwrap();
                         let measurement = cache.get_measurement_data(self.data_handle).unwrap();
@@ -1047,14 +1082,13 @@ impl PlottingWidget for PlotInspector {
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
-                            let plot = Plot::new("madf_plot")
+                            let plot = Plot::new("mndf_plot")
                                 .legend(self.legend.clone())
                                 .data_aspect(aspect as f32)
-                                //.clamp_grid(true)
                                 .center_x_axis(true)
                                 .sharp_grid_lines(true)
-                                .x_grid_spacer(adf_msf_x_angle_spacer)
-                                .y_grid_spacer(adf_msf_y_uniform_spacer)
+                                .x_grid_spacer(ndf_msf_x_angle_spacer)
+                                .y_grid_spacer(ndf_msf_y_uniform_spacer)
                                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                                 .coordinates_formatter(
                                     Corner::LeftBottom,
@@ -1076,7 +1110,7 @@ impl PlottingWidget for PlotInspector {
                                     plot_ui.line(
                                         Line::new(curve.points.clone())
                                             .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                            .name("Measured - ADF"),
+                                            .name("Measured - NDF"),
                                     );
                                     let mut color_idx_base = 1;
                                     {
@@ -1115,7 +1149,7 @@ impl PlottingWidget for PlotInspector {
                                             )
                                         }
                                     }
-                                    for (i, (model, uuid)) in self.madf_models.iter().enumerate() {
+                                    for (i, (model, uuid)) in self.mndf_models.iter().enumerate() {
                                         let points: Vec<_> = (0..=180)
                                             .map(|x| {
                                                 let theta = x as f64 * std::f64::consts::PI / 180.0
@@ -1193,7 +1227,7 @@ impl PlottingWidget for PlotInspector {
                                 //.clamp_grid(true)
                                 .center_x_axis(true)
                                 .sharp_grid_lines(true)
-                                .x_grid_spacer(adf_msf_x_angle_spacer)
+                                .x_grid_spacer(ndf_msf_x_angle_spacer)
                                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                                 .coordinates_formatter(
                                     Corner::LeftBottom,
@@ -1277,7 +1311,7 @@ impl PlottingWidget for PlotInspector {
     fn measurement_data_kind(&self) -> MeasurementKind {
         match self.data_handle.variant_id() {
             0 => MeasurementKind::Bsdf,
-            1 => MeasurementKind::Madf,
+            1 => MeasurementKind::Mndf,
             2 => MeasurementKind::Mmsf,
             _ => {
                 unreachable!()
@@ -1297,7 +1331,7 @@ impl Dockable for PlotInspector {
 }
 
 /// Calculates the ticks for x axis of the ADF or MSF plot.
-fn adf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
+fn ndf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
     let mut marks = vec![];
     let (min, max) = input.bounds;
     let min = min.floor().to_degrees() as i32;
@@ -1318,7 +1352,7 @@ fn adf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
     marks
 }
 
-fn adf_msf_y_uniform_spacer(input: GridInput) -> Vec<GridMark> {
+fn ndf_msf_y_uniform_spacer(input: GridInput) -> Vec<GridMark> {
     let mut marks = vec![];
     let (min, max) = input.bounds;
     let min = min.floor();

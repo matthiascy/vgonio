@@ -290,7 +290,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
         }
 
         let (near, mut far) = {
-            let inv_d = math::rcp(ray.dir[i]);
+            let inv_d = math::rcp_f32(ray.dir[i]);
             let near = (bbox.min[i] - ray.org[i]) * inv_d;
             let far = (bbox.max[i] - ray.org[i]) * inv_d;
             if near > far {

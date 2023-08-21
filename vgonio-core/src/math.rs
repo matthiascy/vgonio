@@ -333,8 +333,8 @@ pub fn cartesian_to_spherical(
     handedness: Handedness,
 ) -> (f32, Radians, Radians) {
     let (zenith, azimuth) = match handedness {
-        Handedness::RightHandedZUp => (rad!((v.z * rcp(radius)).acos()), rad!(v.y.atan2(v.x))),
-        Handedness::RightHandedYUp => (rad!((v.y * rcp(radius)).acos()), rad!(v.z.atan2(v.x))),
+        Handedness::RightHandedZUp => (rad!((v.z * rcp_f32(radius)).acos()), rad!(v.y.atan2(v.x))),
+        Handedness::RightHandedYUp => (rad!((v.y * rcp_f32(radius)).acos()), rad!(v.z.atan2(v.x))),
     };
 
     (
@@ -356,7 +356,7 @@ pub fn cartesian_to_spherical(
 ///
 /// Newton-Raphson iteration is used to compute the reciprocal.
 #[inline(always)]
-pub fn rcp(x: f32) -> f32 {
+pub fn rcp_f32(x: f32) -> f32 {
     // Intel' intrinsic will give us NaN if x is 0.0 or -0.0
     if x == 0.0 {
         return f32::INFINITY * x.signum();
@@ -379,6 +379,37 @@ pub fn rcp(x: f32) -> f32 {
                     _mm_cvtss_f32(_mm_mul_ss(r, _mm_fnmadd_ss(r, a, _mm_set_ss(2.0))))
                 } else {
                     _mm_cvtss_f32(_mm_mul_ss(r, _mm_sub_ss(_mm_set_ss(2.0), _mm_mul_ss(r, a))))
+                }
+            }
+        } else {
+            1.0 / x
+        }
+    }
+}
+
+/// Returns the accurate reciprocal of the double precision floating point.
+pub fn rcp_f64(x: f64) -> f64 {
+    if x == 0.0 {
+        return f64::INFINITY * x.signum();
+    }
+
+    cfg_if! {
+        if #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sub_sd, _mm_mul_sd};
+            unsafe {
+                if is_x86_feature_detected!("avx512f") {
+                    use std::arch::x86_64::_mm_rcp14_sd;
+                    let a = _mm_set_sd(x);
+                    let r = _mm_rcp14_sd(_mm_set_sd(0.0), a); // error is less than 2^-14
+                    if is_x86_feature_detected!("fma") {
+                        use std::arch::x86_64::_mm_fnmadd_sd;
+                        _mm_cvtsd_f64(_mm_mul_sd(r, _mm_fnmadd_sd(r, a, _mm_set_sd(2.0))))
+                    } else {
+                        _mm_cvtsd_f64(_mm_mul_sd(r, _mm_sub_sd(_mm_set_sd(2.0), _mm_mul_sd(r, a))))
+                    }
+                } else {
+                    // There is no _mm_rcp_sd intrinsic, so we use _mm_rcp_ss instead.
+                    rcp_f32(x as f32) as f64
                 }
             }
         } else {
@@ -510,7 +541,7 @@ impl PartialEq for QuadraticSolution {
 #[inline(always)]
 pub fn solve_quadratic(a: f32, b: f32, c: f32) -> QuadraticSolution {
     let discriminant = b * b - 4.0 * a * c;
-    let rcp_2a = 0.5 * rcp(a);
+    let rcp_2a = 0.5 * rcp_f32(a);
     if discriminant < 0.0 {
         QuadraticSolution::None
     } else if discriminant == 0.0 {
@@ -668,7 +699,7 @@ pub fn calc_aligned_size(size: u32, alignment: u32) -> u32 {
 mod tests {
     use crate::{
         math::{
-            cartesian_to_spherical, madd, msub, nmadd, nmsub, rcp, rsqrt, solve_quadratic,
+            cartesian_to_spherical, madd, msub, nmadd, nmsub, rcp_f32, rsqrt, solve_quadratic,
             spherical_to_cartesian, ulp_eq, Handedness, QuadraticSolution, MACHINE_EPSILON_F32,
         },
         units::{degrees, radians},
@@ -736,34 +767,45 @@ mod tests {
 
     #[test]
     fn test_rcp() {
-        assert!(ulp_eq(rcp(1.0), 1.0));
-        assert!(ulp_eq(rcp(2.0), 0.5));
-        assert!(ulp_eq(rcp(4.0), 0.25));
-        assert!(ulp_eq(rcp(8.0), 0.125));
-        assert!(ulp_eq(rcp(16.0), 0.0625));
-        assert!(ulp_eq(rcp(32.0), 0.03125));
-        assert!(ulp_eq(rcp(64.0), 0.015625));
-        assert!(ulp_eq(rcp(128.0), 0.0078125));
-        assert!(ulp_eq(rcp(256.0), 0.00390625));
-        assert!(ulp_eq(rcp(512.0), 0.001953125));
-        assert!(ulp_eq(rcp(1024.0), 0.0009765625));
-        assert!(ulp_eq(rcp(2048.0), 0.00048828125));
-        assert!(ulp_eq(rcp(4096.0), 0.000244140625));
-        assert!(ulp_eq(rcp(8192.0), 0.0001220703125));
-        assert!(ulp_eq(rcp(16384.0), 6.103515625e-05));
-        assert!(ulp_eq(rcp(32768.0), 3.0517578125e-05));
-        assert!(ulp_eq(rcp(65536.0), 1.52587890625e-05));
-        assert!(ulp_eq(rcp(131072.0), 7.62939453125e-06));
-        assert!(ulp_eq(rcp(262144.0), 3.814697265625e-06));
-        assert!(ulp_eq(rcp(524288.0), 1.9073486328125e-06));
-        assert!(ulp_eq(rcp(1048576.0), 9.5367431640625e-07));
-        assert!(ulp_eq(rcp(2097152.0), 4.76837158203125e-07));
-        assert!(ulp_eq(rcp(4194304.0), 2.384185791015625e-07));
-        assert!(ulp_eq(rcp(8388608.0), 1.1920928955078125e-07));
-        assert!(ulp_eq(rcp(3.0), 1.0 / 3.0));
-        assert_eq!(1.0 / -0.0, rcp(-0.0));
-        assert_eq!(1.0 / 0.0, rcp(0.0));
-        assert_eq!(rcp(0.0), f32::INFINITY);
+        assert!(ulp_eq(rcp_f32(1.0), 1.0));
+        assert!(ulp_eq(rcp_f32(2.0), 0.5));
+        assert!(ulp_eq(rcp_f32(4.0), 0.25));
+        assert!(ulp_eq(rcp_f32(8.0), 0.125));
+        assert!(ulp_eq(rcp_f32(16.0), 0.0625));
+        assert!(ulp_eq(rcp_f32(32.0), 0.03125));
+        assert!(ulp_eq(rcp_f32(64.0), 0.015625));
+        assert!(ulp_eq(rcp_f32(128.0), 0.0078125));
+        assert!(ulp_eq(rcp_f32(256.0), 0.00390625));
+        assert!(ulp_eq(rcp_f32(512.0), 0.001953125));
+        assert!(ulp_eq(rcp_f32(1024.0), 0.0009765625));
+        assert!(ulp_eq(rcp_f32(2048.0), 0.00048828125));
+        assert!(ulp_eq(rcp_f32(4096.0), 0.000244140625));
+        assert!(ulp_eq(rcp_f32(8192.0), 0.0001220703125));
+        assert!(ulp_eq(rcp_f32(16384.0), 6.103515625e-05));
+        assert!(ulp_eq(rcp_f32(32768.0), 3.0517578125e-05));
+        assert!(ulp_eq(rcp_f32(65536.0), 1.52587890625e-05));
+        assert!(ulp_eq(rcp_f32(131072.0), 7.62939453125e-06));
+        assert!(ulp_eq(rcp_f32(262144.0), 3.814697265625e-06));
+        assert!(ulp_eq(rcp_f32(524288.0), 1.9073486328125e-06));
+        assert!(ulp_eq(rcp_f32(1048576.0), 9.5367431640625e-07));
+        assert!(ulp_eq(rcp_f32(2097152.0), 4.76837158203125e-07));
+        assert!(ulp_eq(rcp_f32(4194304.0), 2.384185791015625e-07));
+        assert!(ulp_eq(rcp_f32(8388608.0), 1.1920928955078125e-07));
+        assert!(ulp_eq(rcp_f32(3.0), 1.0 / 3.0));
+        assert_eq!(1.0 / -0.0, rcp_f32(-0.0));
+        assert_eq!(1.0 / 0.0, rcp_f32(0.0));
+        assert_eq!(rcp_f32(0.0), f32::INFINITY);
+    }
+
+    #[test]
+    fn test_rcpf64() {
+        use super::rcp_f64;
+        assert!(ulp_eq(rcp_f64(1.0) as f32, 1.0));
+        assert!(ulp_eq(rcp_f64(2.0) as f32, 0.5));
+        assert!(ulp_eq(rcp_f64(4.0) as f32, 0.25));
+        assert_eq!(rcp_f64(0.0), f64::INFINITY);
+        assert_eq!(1.0 / -0.0, rcp_f64(-0.0));
+        assert_eq!(1.0 / 0.0, rcp_f64(0.0));
     }
 
     #[test]
@@ -798,7 +840,7 @@ mod tests {
         assert!(ulp_eq(rsqrt(16384.0), 0.0078125));
         assert!(ulp_eq(rsqrt(65536.0), 0.00390625));
         assert!(ulp_eq(rsqrt(262144.0), 0.001953125));
-        println!("{:.20} - {:.20}", rsqrt(3.0), rcp(3.0f32.sqrt()));
+        println!("{:.20} - {:.20}", rsqrt(3.0), rcp_f32(3.0f32.sqrt()));
     }
 
     #[test]

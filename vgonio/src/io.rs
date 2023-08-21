@@ -178,7 +178,7 @@ pub mod vgmo {
                     meta,
                     bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::Madf => Ok(Self::Madf {
+                MeasurementKind::Mndf => Ok(Self::Madf {
                     meta,
                     madf: MndfMeasurementParams::read_from_vgmo(reader)?,
                 }),
@@ -720,7 +720,7 @@ emitter is not implemented"
             params: MndfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
-                meta.kind == MeasurementKind::Madf,
+                meta.kind == MeasurementKind::Mndf,
                 "Measurement kind
           mismatch"
             );
@@ -1238,7 +1238,7 @@ emitter is not implemented"
                     );
                     Header::Madf {
                         meta: HeaderMeta {
-                            kind: MeasurementKind::Madf,
+                            kind: MeasurementKind::Mndf,
                             encoding,
                             compression,
                         },

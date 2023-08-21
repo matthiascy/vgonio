@@ -37,7 +37,7 @@ pub enum MicrofacetModelFamily {
 #[derive(Debug, Clone)]
 pub enum FittedModel {
     Bsdf(Box<dyn BsdfModel>),
-    Madf {
+    Mndf {
         model: Box<dyn MicrofacetAreaDistributionModel>,
         mode: AreaDistributionFittingMode,
     },
@@ -49,7 +49,7 @@ impl FittedModel {
     pub fn family(&self) -> ReflectionModelFamily {
         match self {
             FittedModel::Bsdf(m) => m.family(),
-            FittedModel::Madf { model, .. } => model.family(),
+            FittedModel::Mndf { model, .. } => model.family(),
             FittedModel::Mmsf(m) => m.family(),
         }
     }
@@ -57,15 +57,22 @@ impl FittedModel {
     #[cfg(feature = "scaled-ndf-fitting")]
     pub fn is_scaled(&self) -> bool {
         match self {
-            FittedModel::Madf { model, .. } => model.scale().is_some(),
+            FittedModel::Mndf { model, .. } => model.scale().is_some(),
             _ => false,
+        }
+    }
+
+    pub fn is_isotropic(&self) -> bool {
+        match self {
+            FittedModel::Bsdf(_) | FittedModel::Mmsf(_) => true,
+            FittedModel::Mndf { model, .. } => model.is_isotropic(),
         }
     }
 
     pub fn mode(&self) -> Option<AreaDistributionFittingMode> {
         match self {
             FittedModel::Bsdf(_) | FittedModel::Mmsf(_) => None,
-            FittedModel::Madf { mode, .. } => Some(*mode),
+            FittedModel::Mndf { mode, .. } => Some(*mode),
         }
     }
 }
@@ -94,10 +101,14 @@ impl FittedModels {
         family: ReflectionModelFamily,
         mode: AreaDistributionFittingMode,
         scaled: bool,
+        isotropic: bool,
     ) -> bool {
-        self.0
-            .iter()
-            .any(|f| f.family() == family && f.is_scaled() == scaled && f.mode() == Some(mode))
+        self.0.iter().any(|f| {
+            f.family() == family
+                && f.is_scaled() == scaled
+                && f.mode() == Some(mode)
+                && f.is_isotropic() == isotropic
+        })
     }
 
     pub fn push(&mut self, model: FittedModel) { self.0.push(model); }
@@ -176,6 +187,38 @@ pub trait MicrofacetAreaDistributionModel: Debug {
     /// * `cos_theta_m` - The cosine of the angle between the microfacet normal
     ///  and the normal vector of the macro-surface.
     fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64;
+
+    /// Calculates the partial derivatives of the model with respect to
+    /// the single alpha parameter.
+    fn calc_param_pd_isotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+
+    /// Calculates the partial derivatives of the model with respect to
+    /// the two alpha parameters. The returned array contains the partial
+    /// derivatives in the following order: [∂/∂α_x, ∂/∂α_y] for each cosine
+    /// of the angle between the microfacet normal and the normal vector of
+    /// the macro-surface.
+    fn calc_param_pd_anisotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+
+    #[cfg(feature = "scaled-ndf-fitting")]
+    /// Calculates the partial derivatives of the model with respect to
+    /// the single alpha parameter and the scaling factor.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the model with respect to the single alpha
+    /// parameter and the scaling factor. The returned array contains the
+    /// partial derivatives in the following order: [∂/∂α, ∂/∂scale] for each
+    /// cosine of the angle between the microfacet normal and the normal vector
+    /// of the macro-surface.
+    fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+
+    #[cfg(feature = "scaled-ndf-fitting")]
+    /// Calculates the partial derivatives of the model with respect to
+    /// the two alpha parameters and the scaling factor. The returned array
+    /// contains the partial derivatives in the following order:
+    /// [∂/∂α_x, ∂/∂α_y, ∂/∂scale] for each cosine of the angle between the
+    /// microfacet normal and the normal vector of the macro-surface.
+    fn calc_param_pd_anisotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
 
     /// Clones the model.
     fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel>;

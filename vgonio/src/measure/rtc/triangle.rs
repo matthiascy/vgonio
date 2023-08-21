@@ -123,7 +123,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
         return None;
     }
 
-    let inv_det = math::rcp(det); 
+    let inv_det = math::rcp_f32(det); 
     let tvec = ray_o - p0; // O - A
 
     let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det
@@ -278,7 +278,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
     p2t = permute(p2t, kx, ky, kz);
 
     // Perform Shear and scale of vertices.
-    let rcp_dz = math::rcp(d.z);
+    let rcp_dz = math::rcp_f32(d.z);
     let sx = -d.x * rcp_dz;
     let sy = -d.y * rcp_dz;
     let sz = rcp_dz;
@@ -327,7 +327,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
     }
 
     // Compute barycentric coordinates and t value for triangle intersection.
-    let inv_det = math::rcp(det);
+    let inv_det = math::rcp_f32(det);
     let b0 = e0 * inv_det;
     let b1 = e1 * inv_det;
     let b2 = e2 * inv_det;
