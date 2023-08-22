@@ -10,6 +10,7 @@ pub mod io;
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
+use log::log;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -499,6 +500,11 @@ impl MicroSurface {
         }
     }
 
+    /// Computes the surface area of the height field.
+    pub fn area(&self) -> f32 {
+        (self.cols - 1) as f32 * (self.rows - 1) as f32 * self.du * self.dv
+    }
+
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
     /// The triangulation is done in the XZ plane.
     pub fn as_micro_surface_mesh(
@@ -518,6 +524,7 @@ impl MicroSurface {
 
         let mut normals = vec![Vec3::ZERO; num_faces];
         let mut areas = vec![0.0; num_faces];
+        let mut total_area = 0.0;
 
         for i in 0..num_faces {
             let p0 = verts[tri_faces[i * 3] as usize];
@@ -526,6 +533,7 @@ impl MicroSurface {
             let cross = (p1 - p0).cross(p2 - p0);
             normals[i] = cross.normalize();
             areas[i] = 0.5 * cross.length();
+            total_area += areas[i];
         }
 
         MicroSurfaceMesh {
@@ -540,6 +548,7 @@ impl MicroSurface {
             msurf: self.uuid,
             unit: self.unit,
             height_offset,
+            facet_total_area: total_area,
         }
     }
 
@@ -778,6 +787,9 @@ pub struct MicroSurfaceMesh {
     /// Surface area of each facet.
     pub facet_areas: Vec<f32>,
 
+    /// Total surface area of the triangles.
+    pub facet_total_area: f32,
+
     /// Length unit of inherited from the
     /// [`MicroSurface`](`crate::msurf::MicroSurface`).
     pub unit: LengthUnit,
@@ -904,6 +916,9 @@ impl MicroSurface {
             }
         }
             .map(|mut ms| {
+                log::debug!("Loaded micro-surface from file: {}", filepath.display());
+                log::debug!("- Resolution: {} x {}", ms.rows, ms.cols);
+                log::debug!("- Spacing: {} x {}", ms.du, ms.dv);
                 ms.fill_holes();
                 ms
             })
