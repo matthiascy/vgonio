@@ -58,7 +58,7 @@ impl MicroSurface {
         unit: LengthUnit,
     ) -> Self {
         use rand::distributions::{Distribution, Uniform};
-        let range: Uniform<f32> = Uniform::new(0.0, height * 0.5);
+        let range: Uniform<f32> = Uniform::new(0.0, 1.0);
         let mut rng = rand::thread_rng();
 
         let seeds_count_sqrt = (seeds_count as f32).sqrt().ceil() as usize;
@@ -70,7 +70,7 @@ impl MicroSurface {
                     range.sample(&mut rng) + cell.x as f32,
                     range.sample(&mut rng) + cell.y as f32,
                 ) * step_size;
-                let height = range.sample(&mut rng);
+                let height = range.sample(&mut rng) * height;
                 (pos, height)
             })
             .collect();
@@ -78,16 +78,53 @@ impl MicroSurface {
         MicroSurface::new_by(rows, cols, du, dv, unit, |row, col| {
             let x = col as f32 / cols as f32;
             let y = row as f32 / rows as f32;
-            let mut min_dist = f32::MAX;
-            let mut min_height = f32::MAX;
+            let mut dists = [f32::MAX; 3];
+            let mut poses = [Vec2::ZERO; 3];
+            let mut heights = [f32::MAX; 3];
             for (pos, height) in &seeds {
                 let dist = (Vec2::new(x, y) - *pos).length();
-                if dist < min_dist {
-                    min_dist = dist;
-                    min_height = *height;
+                if dist < dists[0] {
+                    dists[2] = dists[1];
+                    dists[1] = dists[0];
+                    dists[0] = dist;
+                    poses[2] = poses[1];
+                    poses[1] = poses[0];
+                    poses[0] = *pos;
+                    heights[2] = heights[1];
+                    heights[1] = heights[0];
+                    heights[0] = *height;
+                } else if dist < dists[1] {
+                    dists[2] = dists[1];
+                    dists[1] = dist;
+                    poses[2] = poses[1];
+                    poses[1] = *pos;
+                    heights[2] = heights[1];
+                    heights[1] = *height;
+                } else if dist < dists[2] {
+                    dists[2] = dist;
+                    poses[2] = *pos;
+                    heights[2] = *height;
                 }
             }
-            min_height
+            let a = x - poses[0].x;
+            let b = poses[1].x - poses[0].x;
+            let c = poses[2].x - poses[0].x;
+            let d = y - poses[0].y;
+            let e = poses[1].y - poses[0].y;
+            let f = poses[2].y - poses[0].y;
+            let det = b * f - c * e;
+            let u = (a * f - c * d) / det;
+            let v = (b * d - a * e) / det;
+            if u + v > 1.0 {
+                return heights[0];
+            }
+            if u < 0.0 {
+                return heights[1];
+            }
+            if v < 0.0 {
+                return heights[2];
+            }
+            (1.0 - u - v) * heights[0] + u * heights[1] + v * heights[2]
         })
     }
 }

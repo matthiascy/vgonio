@@ -150,7 +150,7 @@ pub struct TrowbridgeReitzAnisotropicNDF {
 impl TrowbridgeReitzAnisotropicNDF {
     pub fn default() -> Self {
         TrowbridgeReitzAnisotropicNDF {
-            alpha_x: 0.1,
+            alpha_x: 0.5,
             alpha_y: 0.1,
             #[cfg(feature = "scaled-ndf-fitting")]
             scale: None,
@@ -159,7 +159,7 @@ impl TrowbridgeReitzAnisotropicNDF {
 
     pub fn default_with_scale() -> Self {
         TrowbridgeReitzAnisotropicNDF {
-            alpha_x: 0.1,
+            alpha_x: 0.5,
             alpha_y: 0.1,
             #[cfg(feature = "scaled-ndf-fitting")]
             scale: Some(1.0),

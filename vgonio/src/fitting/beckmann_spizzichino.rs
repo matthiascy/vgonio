@@ -160,7 +160,7 @@ pub struct BeckmannSpizzichinoAnisotropicNDF {
 impl BeckmannSpizzichinoAnisotropicNDF {
     pub fn default() -> Self {
         BeckmannSpizzichinoAnisotropicNDF {
-            alpha_x: 0.1,
+            alpha_x: 0.5,
             alpha_y: 0.1,
             #[cfg(feature = "scaled-ndf-fitting")]
             scale: None,
@@ -170,7 +170,7 @@ impl BeckmannSpizzichinoAnisotropicNDF {
     #[cfg(feature = "scaled-ndf-fitting")]
     pub fn default_with_scale() -> Self {
         BeckmannSpizzichinoAnisotropicNDF {
-            alpha_x: 0.1,
+            alpha_x: 0.5,
             alpha_y: 0.1,
             scale: Some(1.0),
         }
