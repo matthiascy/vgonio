@@ -15,8 +15,8 @@ use crate::{
         },
     },
     fitting::{
-        AreaDistributionFittingMode, BeckmannSpizzichinoAnisotropicNDF, BeckmannSpizzichinoNDF,
-        FittedModel, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
+        BeckmannSpizzichinoAnisotropicNDF, BeckmannSpizzichinoNDF, FittedModel, Isotropy,
+        MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
         TrowbridgeReitzAnisotropicNDF, TrowbridgeReitzNDF,
     },
     measure::{
@@ -36,7 +36,7 @@ use uuid::Uuid;
 use vgcore::{
     math,
     math::{Handedness, Vec3},
-    units::{rad, Radians},
+    units::{deg, rad, Radians},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -130,6 +130,8 @@ pub struct PlotInspector {
     mmsf_models: Vec<Box<dyn MicrofacetMaskingShadowingModel>>,
     /// The event loop.
     event_loop: EventLoopProxy,
+
+    azimuth_m: Radians,
 }
 
 /// Indicates which plot is currently being displayed.
@@ -338,6 +340,7 @@ impl PlotInspector {
             mndf_models: vec![],
             uuid: Uuid::new_v4(),
             mmsf_models: vec![],
+            azimuth_m: rad!(0.0),
         }
     }
 
@@ -366,6 +369,7 @@ impl PlotInspector {
             mndf_models: vec![],
             mmsf_models: vec![],
             event_loop,
+            azimuth_m: rad!(0.0),
         }
     }
 
@@ -450,47 +454,54 @@ impl PlottingWidget for PlotInspector {
             let mut to_be_removed = vec![];
             for (i, (model, uuid)) in self.mndf_models.iter_mut().enumerate() {
                 ui.horizontal_wrapped(|ui| {
-                    if model.is_isotropic() {
-                        ui.label(format!(
-                            "Model: {}#{}",
-                            model.name(),
-                            &uuid.to_string().as_str()[..6]
-                        ));
-                        if model.is_isotropic() {
-                            let mut alpha = model.params()[0];
+                    match model.isotropy() {
+                        Isotropy::Isotropic => {
+                            ui.label(format!(
+                                "Model: {}#{}",
+                                model.name(),
+                                &uuid.to_string().as_str()[..6]
+                            ));
+                            let inner = model.as_isotropic_mut().unwrap();
+                            let mut alpha = inner.param();
                             if ui
                                 .add(egui::Slider::new(&mut alpha, 0.0..=5.0).text("alpha"))
                                 .changed()
                             {
-                                model.set_params([alpha, alpha]);
+                                inner.set_param(alpha);
                             }
-                        } else {
-                            let [mut alpha_x, mut alpha_y] = model.params();
+                        }
+                        Isotropy::Anisotropic => {
+                            ui.label(format!(
+                                "Model: {}#{}",
+                                model.name(),
+                                &uuid.to_string().as_str()[..6]
+                            ));
+                            let inner = model.as_anisotropic_mut().unwrap();
+                            let [mut alpha_x, mut alpha_y] = inner.params();
                             let alpha_x_changed = ui
                                 .add(egui::Slider::new(&mut alpha_x, 0.0..=5.0).text("alpha_x"))
                                 .changed();
                             let alpha_y_changed = ui
                                 .add(egui::Slider::new(&mut alpha_y, 0.0..=5.0).text("alpha_y"))
                                 .changed();
+
                             if alpha_x_changed || alpha_y_changed {
-                                model.set_params([alpha_x, alpha_y]);
+                                inner.set_params([alpha_x, alpha_y]);
                             }
                         }
-                        #[cfg(feature = "scaled-ndf-fitting")]
-                        {
-                            if let Some(scale) = model.scale() {
-                                let mut scale = scale;
-                                ui.label("Scale: ");
-                                if ui.add(egui::DragValue::new(&mut scale)).changed() {
-                                    model.set_scale(scale);
-                                }
+                    };
+                    #[cfg(feature = "scaled-ndf-fitting")]
+                    {
+                        if let Some(scale) = model.scale() {
+                            let mut scale = scale;
+                            ui.label("Scale: ");
+                            if ui.add(egui::DragValue::new(&mut scale)).changed() {
+                                model.set_scale(scale);
                             }
                         }
-                        if ui.button("Remove").clicked() {
-                            to_be_removed.push(i);
-                        }
-                    } else {
-                        todo!("Anisotropic models")
+                    }
+                    if ui.button("Remove").clicked() {
+                        to_be_removed.push(i);
                     }
                 });
             }
@@ -510,24 +521,56 @@ impl PlottingWidget for PlotInspector {
                 .x_grid_spacer(ndf_msf_x_angle_spacer)
                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()));
+            let azimuth_range =
+                RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TAU, deg!(1.0).to_radians());
+            angle_knob(
+                ui,
+                true,
+                &mut self.azimuth_m,
+                azimuth_range.map(|x| x.value()).range_bound_inclusive(),
+                azimuth_range.step_size,
+                48.0,
+                |v| format!("φ = {:>6.2}°", v.to_degrees()),
+            );
             plot.show(ui, |plot_ui| {
                 for (i, (model, uuid)) in self.mndf_models.iter().enumerate() {
                     let points: Vec<_> = (0..=180)
-                        .map(|x| {
-                            let theta = x as f64 * std::f64::consts::PI / 180.0
-                                - std::f64::consts::PI * 0.5;
-                            let value = {
+                        .map(|x| match model.isotropy() {
+                            Isotropy::Isotropic => {
+                                let inner = model.as_isotropic().unwrap();
+                                let theta = x as f64 * std::f64::consts::PI / 180.0
+                                    - std::f64::consts::PI * 0.5;
+                                let value = {
+                                    #[cfg(feature = "scaled-ndf-fitting")]
+                                    {
+                                        inner.eval_with_theta_m(theta.cos())
+                                            * model.scale().unwrap_or(1.0)
+                                    }
+                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
+                                    {
+                                        model.eval_with_theta_m(theta.cos())
+                                    }
+                                };
+                                [theta, value]
+                            }
+                            Isotropy::Anisotropic => {
+                                let inner = model.as_anisotropic().unwrap();
+                                let theta = x as f64 * std::f64::consts::PI / 180.0
+                                    - std::f64::consts::PI * 0.5;
+                                let current_phi = self.azimuth_m.wrap_to_tau();
+                                let phi = if theta > 0.0 {
+                                    current_phi
+                                } else {
+                                    current_phi.opposite()
+                                };
                                 #[cfg(feature = "scaled-ndf-fitting")]
-                                {
-                                    model.eval_with_theta_m(theta.cos())
-                                        * model.scale().unwrap_or(1.0)
-                                }
+                                let value = inner
+                                    .eval_with_cos_theta_phi_m(theta.cos(), phi.cos() as f64)
+                                    * model.scale().unwrap_or(1.0);
                                 #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                {
-                                    model.eval_with_theta_m(theta.cos())
-                                }
-                            };
-                            [theta, value]
+                                let value = inner.eval_with_cos_theta_phi_m(theta.cos(), phi.cos());
+                                [theta, value]
+                            }
                         })
                         .collect();
                     plot_ui.line(
@@ -1113,21 +1156,17 @@ impl PlottingWidget for PlotInspector {
                                             .name("Measured - NDF"),
                                     );
                                     let mut color_idx_base = 1;
+                                    let extra = variant
+                                        .as_any()
+                                        .downcast_ref::<AreaDistributionExtra>()
+                                        .unwrap();
                                     {
-                                        let concrete_extra = variant
-                                            .as_any()
-                                            .downcast_ref::<AreaDistributionExtra>()
-                                            .unwrap();
-                                        for (i, (model, mode, curve)) in
-                                            concrete_extra.fitted.iter().enumerate()
+                                        for (i, (model, curves)) in extra.fitted.iter().enumerate()
                                         {
-                                            let name = match mode {
-                                                AreaDistributionFittingMode::Complete => {
-                                                    model.name().to_string()
-                                                }
-                                                AreaDistributionFittingMode::Accumulated => {
-                                                    format!("{} (Accumulated)", model.name())
-                                                }
+                                            let curve = if model.is_isotropic() {
+                                                &curves[0]
+                                            } else {
+                                                &curves[extra.current_azimuth_idx()]
                                             };
                                             plot_ui.line(
                                                 Line::new(curve.points.clone())
@@ -1135,33 +1174,58 @@ impl PlottingWidget for PlotInspector {
                                                         2.0,
                                                         LINE_COLORS[(i + 1) % LINE_COLORS.len()],
                                                     ))
-                                                    .name(name),
+                                                    .name(model.name()),
                                             )
                                         }
-                                        color_idx_base += concrete_extra.fitted.len() + 1;
-                                        if concrete_extra.show_accumulated {
+                                        color_idx_base += extra.fitted.len() + 1;
+                                        if extra.show_accumulated {
                                             plot_ui.line(
-                                                Line::new(concrete_extra.curves[0].points.clone())
-                                                    .stroke(egui::epaint::Stroke::new(
-                                                        2.0,
-                                                        LINE_COLORS[15],
-                                                    )),
+                                                Line::new(extra.curves[0].points.clone()).stroke(
+                                                    egui::epaint::Stroke::new(2.0, LINE_COLORS[15]),
+                                                ),
                                             )
                                         }
                                     }
                                     for (i, (model, uuid)) in self.mndf_models.iter().enumerate() {
                                         let points: Vec<_> = (0..=180)
-                                            .map(|x| {
-                                                let theta = x as f64 * std::f64::consts::PI / 180.0
-                                                    - std::f64::consts::PI * 0.5;
-                                                #[cfg(feature = "scaled-ndf-fitting")]
-                                                let value = model
-                                                    .eval_with_cos_theta_m(theta.cos())
-                                                    * model.scale().unwrap_or(1.0);
-                                                #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                                let value =
-                                                    model.eval_with_cos_theta_m(theta.cos());
-                                                [theta, value]
+                                            .map(|x| match model.isotropy() {
+                                                Isotropy::Isotropic => {
+                                                    let inner = model.as_isotropic().unwrap();
+                                                    let theta = x as f64 * std::f64::consts::PI
+                                                        / 180.0
+                                                        - std::f64::consts::PI * 0.5;
+                                                    #[cfg(feature = "scaled-ndf-fitting")]
+                                                    let value = inner
+                                                        .eval_with_cos_theta_m(theta.cos())
+                                                        * model.scale().unwrap_or(1.0);
+                                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
+                                                    let value =
+                                                        inner.eval_with_cos_theta_m(theta.cos());
+                                                    [theta, value]
+                                                }
+                                                Isotropy::Anisotropic => {
+                                                    let inner = model.as_anisotropic().unwrap();
+                                                    let theta = x as f64 * std::f64::consts::PI
+                                                        / 180.0
+                                                        - std::f64::consts::PI * 0.5;
+                                                    let current_phi = extra.azimuth_m.wrap_to_tau();
+                                                    let phi = if theta > 0.0 {
+                                                        current_phi
+                                                    } else {
+                                                        current_phi.opposite()
+                                                    };
+                                                    #[cfg(feature = "scaled-ndf-fitting")]
+                                                    let value = inner.eval_with_cos_theta_phi_m(
+                                                        theta.cos(),
+                                                        phi.cos() as f64,
+                                                    ) * model.scale().unwrap_or(1.0);
+                                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
+                                                    let value = inner.eval_with_cos_theta_phi_m(
+                                                        theta.cos(),
+                                                        phi.cos(),
+                                                    );
+                                                    [theta, value]
+                                                }
                                             })
                                             .collect();
                                         plot_ui.line(

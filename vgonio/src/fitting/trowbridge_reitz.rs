@@ -1,6 +1,9 @@
 use crate::fitting::{
-    AreaDistributionFittingMode, MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
-    MicrofacetModelFamily, ReflectionModelFamily,
+    impl_get_set_scale, impl_microfacet_area_distribution_model_for_anisotropic_model,
+    impl_microfacet_area_distribution_model_for_isotropic_model,
+    AnisotropicMicrofacetAreaDistributionModel, IsotropicMicrofacetAreaDistributionModel,
+    MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
+    ReflectionModelFamily,
 };
 use vgcore::math::rcp_f64;
 
@@ -38,7 +41,7 @@ impl TrowbridgeReitzNDF {
     }
 }
 
-impl MicrofacetAreaDistributionModel for TrowbridgeReitzNDF {
+impl IsotropicMicrofacetAreaDistributionModel for TrowbridgeReitzNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
@@ -54,23 +57,12 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzNDF {
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
     }
 
-    fn is_isotropic(&self) -> bool { true }
+    fn param(&self) -> f64 { self.alpha }
 
-    fn params(&self) -> [f64; 2] { [self.alpha, self.alpha] }
-
-    fn set_params(&mut self, params: [f64; 2]) { self.alpha = params[0]; }
+    fn set_param(&mut self, param: f64) { self.alpha = param; }
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn scale(&self) -> Option<f64> { self.scale }
-
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn set_scale(&mut self, scale: f64) {
-        #[cfg(debug_assertions)]
-        if self.scale.is_none() {
-            panic!("Trying to set the scale on a non-scaled Trowbridge Reitz ADF");
-        }
-        self.scale.replace(scale);
-    }
+    impl_get_set_scale!(self);
 
     fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64 {
         let alpha2 = self.alpha * self.alpha;
@@ -80,7 +72,7 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzNDF {
         alpha2 / (std::f64::consts::PI * cos_theta_m4 * (alpha2 + tan_theta_m2).powi(2))
     }
 
-    fn calc_param_pd_isotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_param_pd(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
         let alpha = self.alpha;
         let alpha2 = alpha * alpha;
         cos_theta_ms
@@ -101,15 +93,8 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzNDF {
             .collect()
     }
 
-    fn calc_param_pd_anisotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate the partial derivatives of the anisotropic parameters on isotropic \
-             Trowbridge-Reitz NDF"
-        );
-    }
-
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_param_pd_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
         let alpha = self.alpha;
         let alpha2 = alpha * alpha;
         let scale = self.scale.expect("Model is not scalable");
@@ -142,19 +127,13 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzNDF {
             .collect()
     }
 
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_anisotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate the partial derivatives of the anisotropic parameters on isotropic \
-             Trowbridge-Reitz NDF"
-        );
-    }
-
-    fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
+    fn clone_box(&self) -> Box<dyn IsotropicMicrofacetAreaDistributionModel> { Box::new(*self) }
 }
 
 /// Trowbridge-Reitz model is also known as GGX model.
 pub type GGXIsotropicNDF = TrowbridgeReitzNDF;
+
+impl_microfacet_area_distribution_model_for_isotropic_model!(TrowbridgeReitzNDF);
 
 /// Anisotropic Trowbridge-Reitz microfacet area distribution function.
 #[derive(Debug, Copy, Clone)]
@@ -188,7 +167,7 @@ impl TrowbridgeReitzAnisotropicNDF {
     }
 }
 
-impl MicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
+impl AnisotropicMicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
@@ -204,8 +183,6 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::TrowbridgeReitz)
     }
 
-    fn is_isotropic(&self) -> bool { false }
-
     fn params(&self) -> [f64; 2] { [self.alpha_x, self.alpha_y] }
 
     fn set_params(&mut self, params: [f64; 2]) {
@@ -214,17 +191,15 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
     }
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn scale(&self) -> Option<f64> { return self.scale; }
+    impl_get_set_scale!(self);
 
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn set_scale(&mut self, scale: f64) { self.scale.replace(scale); }
-
-    fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64 {
+    fn eval_with_cos_theta_phi_m(&self, cos_theta_m: f64, cos_phi_m: f64) -> f64 {
         use std::f64::consts::PI;
         let cos_theta_m2 = cos_theta_m * cos_theta_m;
-        let sin_theta_m2 = 1.0 - cos_theta_m2;
         let tan_theta_m2 = (1.0 - cos_theta_m2) / cos_theta_m2;
         let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
+        let cos_phi_m2 = cos_phi_m * cos_phi_m;
+        let sin_phi_m2 = 1.0 - cos_phi_m2;
         let alpha_x = self.alpha_x;
         let alpha_y = self.alpha_y;
         let alpha_x2 = self.alpha_x * self.alpha_x;
@@ -235,57 +210,50 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
             PI * alpha_x
                 * alpha_y
                 * cos_theta_m4
-                * (tan_theta_m2 * (cos_theta_m2 * rcp_alpha_x2 + sin_theta_m2 * rcp_alpha_y2)
-                    + 1.0)
+                * (tan_theta_m2 * (cos_phi_m2 * rcp_alpha_x2 + sin_phi_m2 * rcp_alpha_y2) + 1.0)
                     .powi(2),
         )
     }
 
-    fn calc_param_pd_isotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate the partial derivatives of the isotropic parameters on anisotropic \
-             Trowbridge-Reitz NDF"
-        )
-    }
-
-    fn calc_param_pd_anisotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_params_pd(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64> {
         let alpha_x = self.alpha_x;
         let alpha_y = self.alpha_y;
         let alpha_x2 = alpha_x * alpha_x;
         let alpha_y2 = alpha_y * alpha_y;
         let alpha_x3 = alpha_x2 * alpha_x;
         let alpha_y3 = alpha_y2 * alpha_y;
-        cos_theta_ms
+        cos_theta_phi_ms
             .iter()
-            .flat_map(|cos_theta_m| {
+            .flat_map(|(cos_theta_m, cos_phi_m)| {
                 let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                let tan_theta_m2 = (1.0 - cos_theta_m2) / cos_theta_m2;
-                let tan_theta_m4 = tan_theta_m2 * tan_theta_m2;
-                let sec_theta_m2 = 1.0 / cos_theta_m2;
-                let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                let sec_theta_m8 = sec_theta_m4 * sec_theta_m4;
+                let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
+                let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
+                let sec_theta_m4 = rcp_f64(cos_theta_m4);
+                let cos_phi_m2 = cos_phi_m * cos_phi_m;
+                let sin_phi_m2 = 1.0 - cos_phi_m2;
+
                 let alpha_denominator = std::f64::consts::PI
-                    * (alpha_y2 * tan_theta_m2
-                        + alpha_x2 * (sec_theta_m2 * alpha_y2 + tan_theta_m4))
+                    * (alpha_y2 * cos_phi_m2 * tan_theta_m2
+                        + alpha_x2 * (alpha_y2 + sin_phi_m2 * tan_theta_m2))
                         .powi(3);
 
                 // Derivative of the Trowbridge-Reitz distribution with respect to alpha_x
                 let d_alpha_x = {
-                    let numerator = sec_theta_m8
-                        * alpha_x2
+                    let numerator = alpha_x2
                         * alpha_y3
-                        * (3.0 * alpha_y2 * tan_theta_m2
-                            - alpha_x2 * (sec_theta_m2 * alpha_y2 + tan_theta_m4));
+                        * sec_theta_m4
+                        * (3.0 * alpha_y2 * cos_phi_m2 * tan_theta_m2
+                            - alpha_x2 * (alpha_y2 + sin_phi_m2 * tan_theta_m2));
                     numerator / alpha_denominator
                 };
 
                 // Derivative of the Trowbridge-Reitz distribution with respect to alpha_y
                 let d_alpha_y = {
-                    let numerator = -sec_theta_m8
-                        * alpha_x3
+                    let numerator = -alpha_x3
                         * alpha_y2
-                        * (alpha_y2 * tan_theta_m2
-                            + alpha_x2 * (sec_theta_m2 * alpha_y2 - 3.0 * tan_theta_m4));
+                        * sec_theta_m4
+                        * (alpha_y2 * cos_phi_m2 * tan_theta_m2
+                            + alpha_x2 * (alpha_y2 - 3.0 * sin_phi_m2 * tan_theta_m2));
                     numerator / alpha_denominator
                 };
                 [d_alpha_x, d_alpha_y]
@@ -294,69 +262,60 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
     }
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate the partial derivatives of the isotropic parameters on anisotropic \
-             Trowbridge-Reitz NDF"
-        )
-    }
-
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_anisotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_params_pd_scaled(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64> {
+        let scale = self.scale.expect("Model is not scalable");
         let alpha_x = self.alpha_x;
         let alpha_y = self.alpha_y;
         let alpha_x2 = alpha_x * alpha_x;
         let alpha_y2 = alpha_y * alpha_y;
-        let rcp_alpha_x2 = rcp_f64(alpha_x2);
-        let rcp_alpha_y2 = rcp_f64(alpha_y2);
         let alpha_x3 = alpha_x2 * alpha_x;
         let alpha_y3 = alpha_y2 * alpha_y;
-        cos_theta_ms
+
+        cos_theta_phi_ms
             .iter()
-            .flat_map(|cos_theta_m| {
+            .flat_map(|(cos_theta_m, cos_phi_m)| {
                 let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                let sin_theta_m2 = 1.0 - cos_theta_m2;
-                let tan_theta_m2 = (1.0 - cos_theta_m2) / cos_theta_m2;
-                let tan_theta_m4 = tan_theta_m2 * tan_theta_m2;
+                let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
                 let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
-                let sec_theta_m2 = 1.0 / cos_theta_m2;
-                let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                let sec_theta_m8 = sec_theta_m4 * sec_theta_m4;
+                let sec_theta_m4 = rcp_f64(cos_theta_m4);
+                let cos_phi_m2 = cos_phi_m * cos_phi_m;
+                let sin_phi_m2 = 1.0 - cos_phi_m2;
+
                 let alpha_denominator = std::f64::consts::PI
-                    * (alpha_y2 * tan_theta_m2
-                        + alpha_x2 * (sec_theta_m2 * alpha_y2 + tan_theta_m4))
+                    * (alpha_y2 * cos_phi_m2 * tan_theta_m2
+                        + alpha_x2 * (alpha_y2 + sin_phi_m2 * tan_theta_m2))
                         .powi(3);
 
                 // Derivative of the Trowbridge-Reitz distribution with respect to alpha_x
                 let d_alpha_x = {
-                    let numerator = sec_theta_m8
+                    let numerator = scale
                         * alpha_x2
                         * alpha_y3
-                        * (3.0 * alpha_y2 * tan_theta_m2
-                            - alpha_x2 * (sec_theta_m2 * alpha_y2 + tan_theta_m4));
+                        * sec_theta_m4
+                        * (3.0 * alpha_y2 * cos_phi_m2 * tan_theta_m2
+                            - alpha_x2 * (alpha_y2 + sin_phi_m2 * tan_theta_m2));
                     numerator / alpha_denominator
                 };
 
                 // Derivative of the Trowbridge-Reitz distribution with respect to alpha_y
                 let d_alpha_y = {
-                    let numerator = -sec_theta_m8
+                    let numerator = -scale
                         * alpha_x3
                         * alpha_y2
-                        * (alpha_y2 * tan_theta_m2
-                            + alpha_x2 * (sec_theta_m2 * alpha_y2 - 3.0 * tan_theta_m4));
+                        * sec_theta_m4
+                        * (alpha_y2 * cos_phi_m2 * tan_theta_m2
+                            + alpha_x2 * (alpha_y2 - 3.0 * sin_phi_m2 * tan_theta_m2));
                     numerator / alpha_denominator
                 };
 
                 let d_scale = {
-                    let numerator = sec_theta_m4;
                     let denominator = std::f64::consts::PI
                         * alpha_x
                         * alpha_y
-                        * (1.0
-                            + rcp_alpha_x2 * sin_theta_m2
-                            + rcp_alpha_y2 * sin_theta_m2 * tan_theta_m2)
+                        * (1.0 + tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2))
                             .powi(2);
-                    numerator / denominator
+
+                    sec_theta_m4 / denominator
                 };
 
                 [d_alpha_x, d_alpha_y, d_scale]
@@ -364,8 +323,10 @@ impl MicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicNDF {
             .collect()
     }
 
-    fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
+    fn clone_box(&self) -> Box<dyn AnisotropicMicrofacetAreaDistributionModel> { Box::new(*self) }
 }
+
+impl_microfacet_area_distribution_model_for_anisotropic_model!(TrowbridgeReitzAnisotropicNDF);
 
 /// Trowbridge-Reitz microfacet masking-shadowing function.
 #[derive(Debug, Copy, Clone)]

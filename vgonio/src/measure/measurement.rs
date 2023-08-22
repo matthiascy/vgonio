@@ -361,9 +361,6 @@ pub struct MndfMeasurementParams {
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSizeInclusive<Radians>,
-    /// Whether to measure only one slice of the microfacet distribution. TODO
-    /// (rename). In this case, the azimuthal angle range is ignored.
-    pub single_slice: bool,
 }
 
 impl Default for MndfMeasurementParams {
@@ -371,7 +368,6 @@ impl Default for MndfMeasurementParams {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
             zenith: DEFAULT_ZENITH_RANGE,
-            single_slice: false,
         }
     }
 }

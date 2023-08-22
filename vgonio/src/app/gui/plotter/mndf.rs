@@ -7,19 +7,18 @@ use crate::{
         },
     },
     fitting::{
-        AreaDistributionFittingMode, FittedModel, MicrofacetAreaDistributionModel,
-        MicrofacetModelFamily, ReflectionModelFamily,
+        FittedModel, MicrofacetAreaDistributionModel, MicrofacetModelFamily, ReflectionModelFamily,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};
-use rand_distr::num_traits::real::Real;
 use std::any::Any;
 use vgcore::units::{rad, Radians};
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
+use crate::fitting::Isotropy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MndfModel {
@@ -64,13 +63,10 @@ pub struct AreaDistributionExtra {
     /// The fitted curves together with the fitted model.
     pub fitted: Vec<(
         Box<dyn MicrofacetAreaDistributionModel>,
-        AreaDistributionFittingMode,
-        Curve,
+        Vec<Curve>, // Only one curve for isotropic model, otherwise one for each azimuthal angle.
     )>,
     /// Model to be fitted.
     selected_model: MndfModel,
-    /// Fitting mode.
-    mode: AreaDistributionFittingMode,
     /// Whether to show the accumulated curve.
     pub show_accumulated: bool,
 }
@@ -92,9 +88,15 @@ impl Default for AreaDistributionExtra {
             curves: vec![],
             fitted: vec![],
             selected_model: MndfModel::BeckmannSpizzichino,
-            mode: AreaDistributionFittingMode::Complete,
             show_accumulated: false,
         }
+    }
+}
+
+impl AreaDistributionExtra {
+    pub fn current_azimuth_idx(&self) -> usize {
+        let azimuth_m = self.azimuth_m.wrap_to_tau();
+        self.azimuth_range.index_of(azimuth_m)
     }
 }
 
@@ -128,8 +130,7 @@ impl VariantData for AreaDistributionExtra {
     }
 
     fn current_curve(&self) -> Option<&Curve> {
-        let azimuth_m = self.azimuth_m.wrap_to_tau();
-        let index = self.azimuth_range.index_of(azimuth_m);
+        let index = self.current_azimuth_idx();
         debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
         self.curves.get(index + 1)
     }
@@ -141,13 +142,22 @@ impl VariantData for AreaDistributionExtra {
             .map(|x| -x.as_f64())
             .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
             .collect::<Vec<_>>();
+        let phi_values = self
+            .azimuth_range
+            .values_wrapped()
+            .map(|phi| {
+                // REVIEW: The opposite angle may not exist in the measurement range.
+                let opposite = phi.wrap_to_tau().opposite();
+                (opposite.as_f64(), phi.as_f64())
+            })
+            .collect::<Vec<_>>();
         let to_add = models
             .iter()
             .filter(|fitted_model| match fitted_model {
                 FittedModel::Bsdf(_) | FittedModel::Mmsf(_) => {
                     #[cfg(feature = "scaled-ndf-fitting")]
                     {
-                        !self.fitted.iter().any(|(existing_model, _, _)| {
+                        !self.fitted.iter().any(|(existing_model, _)| {
                             fitted_model.family() == existing_model.family()
                                 && fitted_model.is_scaled() == existing_model.scale().is_some()
                         })
@@ -155,26 +165,24 @@ impl VariantData for AreaDistributionExtra {
 
                     #[cfg(not(feature = "scaled-ndf-fitting"))]
                     {
-                        !self.fitted.iter().any(|(existing_model, _, _)| {
+                        !self.fitted.iter().any(|(existing_model, _)| {
                             fitted_model.family() == existing_model.family()
                         })
                     }
                 }
-                FittedModel::Mndf { model, mode } => {
+                FittedModel::Mndf(model) => {
                     #[cfg(feature = "scaled-ndf-fitting")]
                     {
-                        !self.fitted.iter().any(|(existing_model, fitting_mode, _)| {
+                        !self.fitted.iter().any(|(existing_model, _)| {
                             fitted_model.family() == existing_model.family()
                                 && fitted_model.is_scaled() == existing_model.scale().is_some()
-                                && mode == fitting_mode
                                 && model.is_isotropic() == existing_model.is_isotropic()
                         })
                     }
                     #[cfg(not(feature = "scaled-ndf-fitting"))]
                     {
-                        !self.fitted.iter().any(|(existing_model, fitting_mode, _)| {
+                        !self.fitted.iter().any(|(existing_model, _)| {
                             fitted_model.family() == existing_model.family()
-                                && mode == fitting_mode
                                 && model.is_isotropic() == existing_model.is_isotropic()
                         })
                     }
@@ -187,27 +195,62 @@ impl VariantData for AreaDistributionExtra {
         } else {
             for fitted in to_add {
                 match fitted {
-                    FittedModel::Mndf { model, mode } => {
+                    FittedModel::Mndf(model) => {
                         // Generate the curve for this model.
-                        let points = {
-                            theta_values
-                                .iter()
-                                .zip(theta_values.iter().map(|theta_m| {
-                                    #[cfg(feature = "scaled-ndf-fitting")]
-                                    {
-                                        model.eval_with_theta_m(*theta_m)
-                                            * model.scale().unwrap_or(1.0)
-                                    }
-                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                    {
-                                        model.eval_with_theta_m(*theta_m)
-                                    }
-                                }))
-                                .map(|(x, y)| [*x, y])
+                        let curves = match model.isotropy() {
+                            Isotropy::Isotropic => {
+                                let model = model.as_isotropic().unwrap();
+                                let points = {
+                                    theta_values
+                                        .iter()
+                                        .zip(theta_values.iter().map(|theta_m| {
+                                            #[cfg(feature = "scaled-ndf-fitting")]
+                                            {
+                                                model.eval_with_theta_m(*theta_m)
+                                                    * model.scale().unwrap_or(1.0)
+                                            }
+                                            #[cfg(not(feature = "scaled-ndf-fitting"))]
+                                            {
+                                                model.eval_with_theta_m(*theta_m)
+                                            }
+                                        }))
+                                        .map(|(x, y)| [*x, y])
+                                };
+                                vec![Curve::from(points)]
+                            }
+                            Isotropy::Anisotropic => {
+                                let model = model.as_anisotropic().unwrap();
+                                phi_values
+                                    .iter()
+                                    .map(|(phi_l, phi_r)| {
+                                        let points = {
+                                            theta_values
+                                                .iter()
+                                                .zip(theta_values.iter().map(|theta_m| {
+                                                    let phi_m = if theta_m < &0.0 {
+                                                        *phi_l
+                                                    } else {
+                                                        *phi_r
+                                                    };
+                                                    #[cfg(feature = "scaled-ndf-fitting")]
+                                                    {
+                                                        model.eval_with_theta_phi_m(*theta_m, phi_m)
+                                                            * model.scale().unwrap_or(1.0)
+                                                    }
+                                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
+                                                    {
+                                                        model.eval_with_theta_m(*theta_m, phi_m)
+                                                    }
+                                                }))
+                                                .map(|(x, y)| [*x, y])
+                                        };
+                                        Curve::from(points)
+                                    })
+                                    .collect()
+                            }
                         };
 
-                        self.fitted
-                            .push((model.clone_box(), *mode, Curve::from(points)));
+                        self.fitted.push((model.clone_box(), curves));
                     }
                     _ => {
                         unreachable!("Wrong model type for area distribution!")
@@ -331,21 +374,6 @@ impl VariantData for AreaDistributionExtra {
                     });
                 });
 
-                ui.horizontal_wrapped(|ui| {
-                    if self.selected_model.is_isotropic() {
-                        ui.selectable_value(
-                            &mut self.mode,
-                            AreaDistributionFittingMode::Complete,
-                            "Complete",
-                        );
-                        ui.selectable_value(
-                            &mut self.mode,
-                            AreaDistributionFittingMode::Accumulated,
-                            "Accumulated",
-                        );
-                    }
-                });
-
                 if ui
                     .button(
                         egui::WidgetText::RichText(egui::RichText::from("Fit"))
@@ -395,10 +423,9 @@ impl VariantData for AreaDistributionExtra {
                         _ => false,
                     };
                     log::debug!(
-                        "Fitting with model {:?}, isotropic {}, mode {:?}",
-                        family,
+                        "Fitting with {} model {:?}",
                         self.selected_model.is_isotropic(),
-                        self.mode
+                        family,
                     );
                     event_loop
                         .send_event(
@@ -408,7 +435,6 @@ impl VariantData for AreaDistributionExtra {
                                     kind: MeasurementKind::Mndf,
                                     family,
                                     data,
-                                    mode: Some(self.mode),
                                     isotropic: self.selected_model.is_isotropic(),
                                     scaled,
                                 }
@@ -419,7 +445,6 @@ impl VariantData for AreaDistributionExtra {
                                     kind: MeasurementKind::Mndf,
                                     family,
                                     data,
-                                    mode: Some(self.mode),
                                     isotropic: self.selected_model.is_isotropic(),
                                 }
                             },
@@ -431,27 +456,24 @@ impl VariantData for AreaDistributionExtra {
                 if self.fitted.is_empty() {
                     ui.label("None");
                 } else {
-                    for (model, mode, _) in &self.fitted {
+                    for (model, _) in &self.fitted {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
-                                egui::RichText::from(format!(
-                                    "{}{}",
-                                    model.name(),
-                                    mode.as_suffix_str()
-                                ))
-                                .text_style(egui::TextStyle::Monospace),
+                                egui::RichText::from(format!("{}", model.name(),))
+                                    .text_style(egui::TextStyle::Monospace),
                             );
                             ui.label(if model.is_isotropic() {
+                                let inner = model.as_isotropic().unwrap();
                                 #[cfg(feature = "scaled-ndf-fitting")]
                                 {
-                                    match model.scale() {
+                                    match inner.scale() {
                                         None => egui::RichText::from(format!(
                                             "α = {:.4}",
-                                            model.params()[0],
+                                            inner.param(),
                                         )),
                                         Some(scale) => egui::RichText::from(format!(
                                             "α = {:.4}, scale = {:.4}",
-                                            model.params()[0],
+                                            inner.param(),
                                             scale
                                         ))
                                         .text_style(egui::TextStyle::Button),
@@ -462,18 +484,19 @@ impl VariantData for AreaDistributionExtra {
                                     egui::RichText::from(format!("α = {:.4}", model.params()[0],))
                                 }
                             } else {
+                                let inner = model.as_anisotropic().unwrap();
                                 #[cfg(feature = "scaled-ndf-fitting")]
                                 {
                                     match model.scale() {
                                         None => egui::RichText::from(format!(
                                             "αx = {:.4}, αy = {:.4}",
-                                            model.params()[0],
-                                            model.params()[1]
+                                            inner.params()[0],
+                                            inner.params()[1]
                                         )),
                                         Some(scale) => egui::RichText::from(format!(
                                             "αx = {:.4}, αy = {:.4}, scale = {:.4}",
-                                            model.params()[0],
-                                            model.params()[1],
+                                            inner.params()[0],
+                                            inner.params()[1],
                                             scale
                                         ))
                                         .text_style(egui::TextStyle::Button),

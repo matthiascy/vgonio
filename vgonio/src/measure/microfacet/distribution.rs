@@ -96,57 +96,7 @@ pub fn measure_area_distribution(
             log::debug!("  -- macro surface area: {}", surface.unwrap().area());
             log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
 
-            let samples = if params.single_slice {
-                params.azimuth =
-                    RangeByStepSizeInclusive::new(Radians::new(0.0), Radians::TAU, Radians::PI);
-                (0..2)
-                    .flat_map(move |azimuth_idx| {
-                        let condition = move |phi: f32| {
-                            if azimuth_idx == 0 {
-                                (phi >= 0.0 && phi < std::f32::consts::FRAC_PI_2)
-                                    || (phi >= std::f32::consts::FRAC_PI_2 * 3.0
-                                        && phi < std::f32::consts::TAU)
-                            } else {
-                                let diff = (phi - std::f32::consts::PI).abs();
-                                diff >= std::f32::consts::FRAC_PI_2
-                                    && diff < std::f32::consts::FRAC_PI_2 * 3.0
-                            }
-                        };
-                        let azimuth = azimuth_idx as f32 * Radians::PI;
-                        (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
-                            let zenith = zenith_idx as f32 * params.zenith.step_size;
-                            let solid_angle = if zenith_idx == 0 {
-                                units::solid_angle_of_spherical_cap(params.zenith.step_size)
-                                    .as_f32()
-                            } else {
-                                units::solid_angle_of_spherical_strip(
-                                    zenith + params.zenith.step_size / 2.0,
-                                    zenith - params.zenith.step_size / 2.0,
-                                )
-                                .as_f32()
-                            };
-                            let facets_surface_area = mesh
-                                .facet_normals
-                                .par_iter()
-                                .enumerate()
-                                .filter_map(|(idx, normal)| {
-                                    // Assume the right-handed y-up coordinate system.
-                                    let phi = ((normal.z).atan2(normal.x) + std::f32::consts::TAU)
-                                        % std::f32::consts::TAU;
-                                    let theta_diff = ((normal.y).acos() - zenith.as_f32()).abs();
-                                    if theta_diff <= half_zenith_bin_size_cos && condition(phi) {
-                                        Some(idx)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
-                                .reduce(|| 0.0, |a, b| a + b);
-                            facets_surface_area / (macro_area * solid_angle)
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            } else {
+            let samples = {
                 let solid_angle =
                     units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
                 let denominator = macro_area * solid_angle;

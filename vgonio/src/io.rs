@@ -259,7 +259,6 @@ pub mod vgmo {
         (
             RangeByStepSizeInclusive<Radians>,
             RangeByStepSizeInclusive<Radians>,
-            bool,
         ),
         std::io::Error,
     > {
@@ -268,13 +267,12 @@ pub mod vgmo {
         let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
         let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
         let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
-        let single_slice = buf[36] == 0xff;
         #[cfg(debug_assertions)]
         debug_assert_eq!(
             sample_count as usize,
             madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf)
         );
-        Ok((azimuth, zenith, single_slice))
+        Ok((azimuth, zenith))
     }
 
     pub fn write_madf_mmsf_params_to_vgmo<W: Write>(
@@ -282,7 +280,6 @@ pub mod vgmo {
         zenith: &RangeByStepSizeInclusive<Radians>,
         writer: &mut BufWriter<W>,
         is_madf: bool,
-        single_slice: bool,
     ) -> Result<(), WriteFileErrorKind> {
         let mut header = [0x20; 40];
         azimuth.write_to_buf(&mut header[0..16]);
@@ -290,9 +287,6 @@ pub mod vgmo {
         header[32..36].copy_from_slice(
             &(madf_or_mmsf_samples_count(zenith, azimuth, is_madf) as u32).to_le_bytes(),
         );
-        if is_madf && single_slice {
-            header[36] = 0xff;
-        }
         header[39] = 0x0A; // LF
         writer.write_all(&header).map_err(|err| err.into())
     }
@@ -300,16 +294,12 @@ pub mod vgmo {
     impl MndfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let (azimuth, zenith, single_slice) = read_madf_mmsf_params_from_vgmo(
+            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
                 reader,
                 #[cfg(debug_assertions)]
                 true,
             )?;
-            Ok(Self {
-                azimuth,
-                zenith,
-                single_slice,
-            })
+            Ok(Self { azimuth, zenith })
         }
 
         /// Writes the measurement parameters to the VGMO file.
@@ -317,20 +307,14 @@ pub mod vgmo {
             &self,
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
-            write_madf_mmsf_params_to_vgmo(
-                &self.azimuth,
-                &self.zenith,
-                writer,
-                true,
-                self.single_slice,
-            )
+            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, true)
         }
     }
 
     impl MmsfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let (azimuth, zenith, _) = read_madf_mmsf_params_from_vgmo(
+            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
                 reader,
                 #[cfg(debug_assertions)]
                 false,
@@ -349,7 +333,7 @@ pub mod vgmo {
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
             // TODO: write resolution for MMSF
-            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, false, false)
+            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, false)
         }
     }
 

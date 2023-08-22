@@ -388,7 +388,7 @@ fn write_measured_data_to_file(
         let filename = match measurement.kind() {
             MeasurementKind::Mndf => {
                 format!(
-                    "microfacet-area-distribution-{}{}.vgmo",
+                    "microfacet-area-distribution-{}.vgmo",
                     cache
                         .get_micro_surface_filepath(*surface)
                         .unwrap()
@@ -397,17 +397,6 @@ fn write_measured_data_to_file(
                         .to_ascii_lowercase()
                         .to_str()
                         .unwrap(),
-                    if measurement
-                        .measured
-                        .madf_data()
-                        .unwrap()
-                        .params
-                        .single_slice
-                    {
-                        "-single"
-                    } else {
-                        ""
-                    }
                 )
             }
             MeasurementKind::Mmsf => {

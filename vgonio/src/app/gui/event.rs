@@ -4,7 +4,7 @@ use crate::{
         gfx::RenderableMesh,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
-    fitting::{AreaDistributionFittingMode, ReflectionModelFamily},
+    fitting::ReflectionModelFamily,
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
@@ -62,7 +62,6 @@ pub enum VgonioEvent {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
-        mode: Option<AreaDistributionFittingMode>,
         isotropic: bool,
         scaled: bool,
     },
@@ -71,7 +70,6 @@ pub enum VgonioEvent {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
-        mode: Option<AreaDistributionFittingMode>,
         isotropic: bool,
     },
 }

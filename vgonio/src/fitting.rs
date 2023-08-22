@@ -17,6 +17,15 @@ use std::{
 };
 use vgcore::math::{DVec3, Handedness, SphericalCoord, Vec3};
 
+/// Indicates if something is isotropic or anisotropic.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Isotropy {
+    /// Uniformity in all directions.
+    Isotropic,
+    /// Non-uniformity in some directions.
+    Anisotropic,
+}
+
 /// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ReflectionModelFamily {
@@ -37,10 +46,7 @@ pub enum MicrofacetModelFamily {
 #[derive(Debug, Clone)]
 pub enum FittedModel {
     Bsdf(Box<dyn BsdfModel>),
-    Mndf {
-        model: Box<dyn MicrofacetAreaDistributionModel>,
-        mode: AreaDistributionFittingMode,
-    },
+    Mndf(Box<dyn MicrofacetAreaDistributionModel>),
     Mmsf(Box<dyn MicrofacetMaskingShadowingModel>),
 }
 
@@ -49,7 +55,7 @@ impl FittedModel {
     pub fn family(&self) -> ReflectionModelFamily {
         match self {
             FittedModel::Bsdf(m) => m.family(),
-            FittedModel::Mndf { model, .. } => model.family(),
+            FittedModel::Mndf(m) => m.family(),
             FittedModel::Mmsf(m) => m.family(),
         }
     }
@@ -57,7 +63,7 @@ impl FittedModel {
     #[cfg(feature = "scaled-ndf-fitting")]
     pub fn is_scaled(&self) -> bool {
         match self {
-            FittedModel::Mndf { model, .. } => model.scale().is_some(),
+            FittedModel::Mndf(m) => m.scale().is_some(),
             _ => false,
         }
     }
@@ -65,14 +71,7 @@ impl FittedModel {
     pub fn is_isotropic(&self) -> bool {
         match self {
             FittedModel::Bsdf(_) | FittedModel::Mmsf(_) => true,
-            FittedModel::Mndf { model, .. } => model.is_isotropic(),
-        }
-    }
-
-    pub fn mode(&self) -> Option<AreaDistributionFittingMode> {
-        match self {
-            FittedModel::Bsdf(_) | FittedModel::Mmsf(_) => None,
-            FittedModel::Mndf { mode, .. } => Some(*mode),
+            FittedModel::Mndf(m) => m.is_isotropic(),
         }
     }
 }
@@ -97,18 +96,9 @@ impl FittedModels {
     }
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    pub fn contains(
-        &self,
-        family: ReflectionModelFamily,
-        mode: AreaDistributionFittingMode,
-        isotropic: bool,
-        scaled: bool,
-    ) -> bool {
+    pub fn contains(&self, family: ReflectionModelFamily, isotropic: bool, scaled: bool) -> bool {
         self.0.iter().any(|f| {
-            f.family() == family
-                && f.is_scaled() == scaled
-                && f.mode() == Some(mode)
-                && f.is_isotropic() == isotropic
+            f.family() == family && f.is_scaled() == scaled && f.is_isotropic() == isotropic
         })
     }
 
@@ -119,26 +109,31 @@ impl AsRef<[FittedModel]> for FittedModels {
     fn as_ref(&self) -> &[FittedModel] { self.0.as_ref() }
 }
 
-/// A microfacet area distribution function model.
-pub trait MicrofacetAreaDistributionModel: Debug {
+#[cfg(feature = "scaled-ndf-fitting")]
+macro impl_get_set_scale($self:ident) {
+    fn scale(&$self) -> Option<f64> { $self.scale }
+
+    fn set_scale(&mut $self, scale: f64) {
+        #[cfg(debug_assertions)]
+        if $self.scale.is_none() {
+            panic!("Trying to set the scale on a non-scaled Beckmann Spizzichino NDF");
+        }
+        $self.scale.replace(scale);
+    }
+}
+
+pub trait IsotropicMicrofacetAreaDistributionModel: Debug {
     /// Returns the name of the model.
     fn name(&self) -> &'static str;
 
-    /// Returns the concrete model of the MADF.
+    /// Returns the family of the reflection model.
     fn family(&self) -> ReflectionModelFamily;
 
-    /// Returns if the model is isotropic.
-    fn is_isotropic(&self) -> bool;
+    /// Returns the value of the parameter.
+    fn param(&self) -> f64;
 
-    /// Returns the parameters of the model.
-    ///
-    /// For isotropic models, elements in the returned array are the same.
-    /// For anisotropic models, the returned array contains the parameters
-    /// in the following order: [α_x, α_y].
-    fn params(&self) -> [f64; 2];
-
-    /// Sets the parameters of the model.
-    fn set_params(&mut self, params: [f64; 2]);
+    /// Sets the value of the parameter.
+    fn set_param(&mut self, param: f64);
 
     #[cfg(feature = "scaled-ndf-fitting")]
     /// Returns the scaling factor of the model.
@@ -150,15 +145,6 @@ pub trait MicrofacetAreaDistributionModel: Debug {
     #[cfg(feature = "scaled-ndf-fitting")]
     /// Sets the scaling factor of the model.
     fn set_scale(&mut self, scale: f64);
-
-    /// Returns the number of effective parameters of the model.
-    fn effective_params_count(&self) -> usize {
-        if self.is_isotropic() {
-            1
-        } else {
-            2
-        }
-    }
 
     /// Evaluates the model with the given microfacet normal and
     /// the normal vector of the macro-surface.
@@ -189,44 +175,262 @@ pub trait MicrofacetAreaDistributionModel: Debug {
     ///  and the normal vector of the macro-surface.
     fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64;
 
-    /// Calculates the partial derivatives of the model with respect to
-    /// the single alpha parameter.
-    fn calc_param_pd_isotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
-
-    /// Calculates the partial derivatives of the model with respect to
-    /// the two alpha parameters. The returned array contains the partial
-    /// derivatives in the following order: [∂/∂α_x, ∂/∂α_y] for each cosine
-    /// of the angle between the microfacet normal and the normal vector of
-    /// the macro-surface.
-    fn calc_param_pd_anisotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+    /// Returns the partial derivatives of the model with respect to the
+    /// parameter.
+    fn calc_param_pd(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    /// Calculates the partial derivatives of the model with respect to
-    /// the single alpha parameter and the scaling factor.
+    /// Returns the partial derivatives of the model with respect to the
+    /// parameter and the scaling factor.
     ///
     /// # Returns
     ///
-    /// The partial derivatives of the model with respect to the single alpha
-    /// parameter and the scaling factor. The returned array contains the
-    /// partial derivatives in the following order: [∂/∂α, ∂/∂scale] for each
-    /// cosine of the angle between the microfacet normal and the normal vector
-    /// of the macro-surface.
-    fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+    /// The partial derivatives of the model with respect to the parameter and
+    /// the scaling factor. The returned array contains the partial derivatives
+    /// in the following order: [∂/∂α, ∂/∂scale] for each cosine of the angle
+    /// between the microfacet normal and the normal vector of the
+    /// macro-surface.
+    fn calc_param_pd_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+
+    /// Clones the model.
+    fn clone_box(&self) -> Box<dyn IsotropicMicrofacetAreaDistributionModel>;
+}
+
+pub trait AnisotropicMicrofacetAreaDistributionModel: Debug {
+    /// Returns the name of the model.
+    fn name(&self) -> &'static str;
+
+    /// Returns the family of the reflection model.
+    fn family(&self) -> ReflectionModelFamily;
+
+    /// Returns the value of the parameter.
+    fn params(&self) -> [f64; 2];
+
+    /// Sets the value of the parameter.
+    fn set_params(&mut self, param: [f64; 2]);
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    /// Calculates the partial derivatives of the model with respect to
-    /// the two alpha parameters and the scaling factor. The returned array
-    /// contains the partial derivatives in the following order:
-    /// [∂/∂α_x, ∂/∂α_y, ∂/∂scale] for each cosine of the angle between the
+    /// Returns the scaling factor of the model.
+    ///
+    /// If the model is not scaled, this function returns `None`. Otherwise, it
+    /// returns the scaling factor.
+    fn scale(&self) -> Option<f64>;
+
+    #[cfg(feature = "scaled-ndf-fitting")]
+    /// Sets the scaling factor of the model.
+    fn set_scale(&mut self, scale: f64);
+
+    /// Evaluates the model with the given microfacet normal and
+    /// the normal vector of the macro-surface.
+    ///
+    /// # Arguments
+    ///
+    /// * `m` - The microfacet normal vector. Should be normalized.
+    /// * `n` - The normal vector of the macro-surface. Should be normalized.
+    fn eval(&self, m: DVec3, n: DVec3) -> f64 {
+        debug_assert!(m.is_normalized() && n.is_normalized());
+        let cos_theta_m = m.dot(n);
+        let cos_phi_m = (m.z.atan2(m.x) - n.z.atan2(n.x)).cos();
+        self.eval_with_cos_theta_phi_m(cos_theta_m, cos_phi_m)
+    }
+
+    /// Evaluates the model with the given angle between the microfacet normal
+    /// and the normal vector of the macro-surface.
+    ///
+    /// # Arguments
+    ///
+    /// * `theta_m` - The polar angle difference between the microfacet normal
+    ///   and the normal vector of the macro-surface.
+    /// * `phi_m` - The azimuthal angle difference between the microfacet normal
+    ///  and the normal vector of the macro-surface.
+    fn eval_with_theta_phi_m(&self, theta_m: f64, phi_m: f64) -> f64 {
+        self.eval_with_cos_theta_phi_m(theta_m.cos(), phi_m.cos())
+    }
+
+    /// Evaluates the model with the given cosine of the angle between the
     /// microfacet normal and the normal vector of the macro-surface.
-    fn calc_param_pd_anisotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64>;
+    ///
+    /// # Arguments
+    ///
+    /// * `cos_theta_m` - The cosine of the polar angle difference between the
+    ///   microfacet normal and the normal vector of the macro-surface.
+    /// * `cos_phi_m` - The cosine of the azimuthal angle difference between the
+    ///   microfacet normal and the normal vector of the macro-surface.
+    fn eval_with_cos_theta_phi_m(&self, cos_theta_m: f64, cos_phi_m: f64) -> f64;
+
+    /// Returns the partial derivatives of the model with respect to the
+    /// parameter.
+    ///
+    /// # Arguments
+    ///
+    /// * `cos_theta_phi_ms` - The cosines of angle difference between the
+    ///  microfacet normal and the normal vector of the macro-surface.
+    ///  The array contains the cosines in the following order: [(cos θ, cos φ)]
+    ///  for each cosine of the angle between the microfacet.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the model with respect to the parameter.
+    /// The returned array contains the partial derivatives in the following
+    /// order: [∂/∂αx, ∂/∂αy] for each cosine of the angle between the
+    /// microfacet
+    fn calc_params_pd(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64>;
+
+    #[cfg(feature = "scaled-ndf-fitting")]
+    /// Returns the partial derivatives of the model with respect to the
+    /// parameter and the scaling factor.
+    ///
+    /// # Arguments
+    ///
+    /// * `cos_theta_phi_ms` - The cosines of angle difference between the
+    /// microfacet normal and the normal vector of the macro-surface.
+    /// The array contains the cosines in the following order: [(cos θ, cos φ)]
+    /// for each cosine of the angle between the microfacet.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the model with respect to the parameter and
+    /// the scaling factor. The returned array contains the partial derivatives
+    /// in the following order: [∂/∂αx, ∂/∂αy, ∂/∂scale].
+    fn calc_params_pd_scaled(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64>;
+
+    /// Clones the model.
+    fn clone_box(&self) -> Box<dyn AnisotropicMicrofacetAreaDistributionModel>;
+}
+
+/// A microfacet area distribution function model.
+pub trait MicrofacetAreaDistributionModel: Debug {
+    /// Returns the name of the model.
+    fn name(&self) -> &'static str;
+
+    /// Returns the concrete model of the MADF.
+    fn family(&self) -> ReflectionModelFamily;
+
+    /// Returns if the model is isotropic.
+    fn is_isotropic(&self) -> bool;
+
+    /// Returns the isotropy of the model.
+    fn isotropy(&self) -> Isotropy {
+        if self.is_isotropic() {
+            Isotropy::Isotropic
+        } else {
+            Isotropy::Anisotropic
+        }
+    }
 
     /// Clones the model.
     fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel>;
+
+    /// Returns as the isotropic model if the model is isotropic.
+    fn as_isotropic(&self) -> Option<&dyn IsotropicMicrofacetAreaDistributionModel>;
+
+    /// Returns as the isotropic model if the model is isotropic.
+    fn as_isotropic_mut(&mut self) -> Option<&mut dyn IsotropicMicrofacetAreaDistributionModel>;
+
+    /// Returns as the anisotropic model if the model is anisotropic.
+    fn as_anisotropic(&self) -> Option<&dyn AnisotropicMicrofacetAreaDistributionModel>;
+
+    /// Returns as the anisotropic model if the model is anisotropic.
+    fn as_anisotropic_mut(&mut self)
+        -> Option<&mut dyn AnisotropicMicrofacetAreaDistributionModel>;
+
+    #[cfg(feature = "scaled-ndf-fitting")]
+    fn scale(&self) -> Option<f64>;
+
+    #[cfg(feature = "scaled-ndf-fitting")]
+    fn set_scale(&mut self, scale: f64);
 }
 
 impl Clone for Box<dyn MicrofacetAreaDistributionModel> {
     fn clone(&self) -> Self { self.clone_box() }
+}
+
+macro impl_microfacet_area_distribution_model_for_isotropic_model($t:ty) {
+    impl MicrofacetAreaDistributionModel for $t {
+        fn name(&self) -> &'static str {
+            <Self as IsotropicMicrofacetAreaDistributionModel>::name(self)
+        }
+
+        fn family(&self) -> ReflectionModelFamily {
+            <Self as IsotropicMicrofacetAreaDistributionModel>::family(self)
+        }
+
+        fn is_isotropic(&self) -> bool { true }
+
+        fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
+
+        fn as_isotropic(&self) -> Option<&dyn IsotropicMicrofacetAreaDistributionModel> {
+            Some(self)
+        }
+
+        fn as_isotropic_mut(
+            &mut self,
+        ) -> Option<&mut dyn IsotropicMicrofacetAreaDistributionModel> {
+            Some(self)
+        }
+
+        fn as_anisotropic(&self) -> Option<&dyn AnisotropicMicrofacetAreaDistributionModel> { None }
+
+        fn as_anisotropic_mut(
+            &mut self,
+        ) -> Option<&mut dyn AnisotropicMicrofacetAreaDistributionModel> {
+            None
+        }
+
+        #[cfg(feature = "scaled-ndf-fitting")]
+        fn scale(&self) -> Option<f64> {
+            <Self as IsotropicMicrofacetAreaDistributionModel>::scale(self)
+        }
+
+        #[cfg(feature = "scaled-ndf-fitting")]
+        fn set_scale(&mut self, scale: f64) {
+            <Self as IsotropicMicrofacetAreaDistributionModel>::set_scale(self, scale);
+        }
+    }
+}
+
+macro impl_microfacet_area_distribution_model_for_anisotropic_model($t:ty) {
+    impl MicrofacetAreaDistributionModel for $t {
+        fn name(&self) -> &'static str {
+            <Self as AnisotropicMicrofacetAreaDistributionModel>::name(self)
+        }
+
+        fn family(&self) -> ReflectionModelFamily {
+            <Self as AnisotropicMicrofacetAreaDistributionModel>::family(self)
+        }
+
+        fn is_isotropic(&self) -> bool { false }
+
+        fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
+
+        fn as_isotropic(&self) -> Option<&dyn IsotropicMicrofacetAreaDistributionModel> { None }
+
+        fn as_isotropic_mut(
+            &mut self,
+        ) -> Option<&mut dyn IsotropicMicrofacetAreaDistributionModel> {
+            None
+        }
+
+        fn as_anisotropic(&self) -> Option<&dyn AnisotropicMicrofacetAreaDistributionModel> {
+            Some(self)
+        }
+
+        fn as_anisotropic_mut(
+            &mut self,
+        ) -> Option<&mut dyn AnisotropicMicrofacetAreaDistributionModel> {
+            Some(self)
+        }
+
+        #[cfg(feature = "scaled-ndf-fitting")]
+        fn scale(&self) -> Option<f64> {
+            <Self as AnisotropicMicrofacetAreaDistributionModel>::scale(self)
+        }
+
+        #[cfg(feature = "scaled-ndf-fitting")]
+        fn set_scale(&mut self, scale: f64) {
+            <Self as AnisotropicMicrofacetAreaDistributionModel>::set_scale(self, scale);
+        }
+    }
 }
 
 /// A microfacet masking-shadowing function model.

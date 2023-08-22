@@ -2,7 +2,6 @@
 type: !microfacet-area-distribution-function # !madf
   azimuth: 0 rad .. =360 deg / 5 deg
   zenith: 0 rad .. =90 deg / 2 deg
-  single_slice: false
 surfaces:
 #  - usr://surfaces/2x2.txt
 #  - usr://surfaces/32x32.vgms

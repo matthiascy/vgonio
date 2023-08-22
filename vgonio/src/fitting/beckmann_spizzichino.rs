@@ -1,4 +1,7 @@
 use crate::fitting::{
+    impl_get_set_scale, impl_microfacet_area_distribution_model_for_anisotropic_model,
+    impl_microfacet_area_distribution_model_for_isotropic_model,
+    AnisotropicMicrofacetAreaDistributionModel, IsotropicMicrofacetAreaDistributionModel,
     MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
     ReflectionModelFamily,
 };
@@ -37,7 +40,7 @@ impl BeckmannSpizzichinoNDF {
     }
 }
 
-impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
+impl IsotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
@@ -53,11 +56,9 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
     }
 
-    fn is_isotropic(&self) -> bool { true }
+    fn param(&self) -> f64 { self.alpha }
 
-    fn params(&self) -> [f64; 2] { [self.alpha, self.alpha] }
-
-    fn set_params(&mut self, params: [f64; 2]) { self.alpha = params[0]; }
+    fn set_param(&mut self, param: f64) { self.alpha = param; }
 
     #[cfg(feature = "scaled-ndf-fitting")]
     fn scale(&self) -> Option<f64> { self.scale }
@@ -79,7 +80,7 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
         (-tan_theta_m2 / alpha2).exp() / (std::f64::consts::PI * alpha2 * cos_theta_m4)
     }
 
-    fn calc_param_pd_isotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_param_pd(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
         let alpha = self.alpha;
         let alpha2 = alpha * alpha;
         let denominator = std::f64::consts::PI * alpha.powi(5);
@@ -103,15 +104,8 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
             .collect()
     }
 
-    fn calc_param_pd_anisotropic(&self, _cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate partial derivatives of anisotropic parameters on isotropic \
-             Beckmann-Spizzichino NDF"
-        )
-    }
-
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_param_pd_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
         let alpha = self.alpha;
         let alpha2 = alpha * alpha;
         let scale = self.scale.expect("Model is not scalable");
@@ -147,16 +141,10 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoNDF {
             .collect()
     }
 
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_anisotropic_scaled(&self, _cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate partial derivatives of anisotropic parameters on isotropic \
-             Beckmann-Spizzichino NDF"
-        )
-    }
-
-    fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
+    fn clone_box(&self) -> Box<dyn IsotropicMicrofacetAreaDistributionModel> { todo!() }
 }
+
+impl_microfacet_area_distribution_model_for_isotropic_model!(BeckmannSpizzichinoNDF);
 
 #[derive(Debug, Copy, Clone)]
 pub struct BeckmannSpizzichinoAnisotropicNDF {
@@ -189,7 +177,7 @@ impl BeckmannSpizzichinoAnisotropicNDF {
     }
 }
 
-impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
+impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
         if self.scale.is_none() {
@@ -205,8 +193,6 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
         ReflectionModelFamily::Microfacet(MicrofacetModelFamily::BeckmannSpizzichino)
     }
 
-    fn is_isotropic(&self) -> bool { false }
-
     fn params(&self) -> [f64; 2] { [self.alpha_x, self.alpha_y] }
 
     fn set_params(&mut self, params: [f64; 2]) {
@@ -215,65 +201,47 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     }
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn scale(&self) -> Option<f64> { self.scale }
+    impl_get_set_scale!(self);
 
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn set_scale(&mut self, scale: f64) {
-        #[cfg(debug_assertions)]
-        if self.scale.is_none() {
-            panic!("Trying to set the scale on a non-scaled Beckmann Spizzichino NDF");
-        }
-        self.scale.replace(scale);
-    }
-
-    fn eval_with_cos_theta_m(&self, cos_theta_m: f64) -> f64 {
+    /// Evaluates the NDF for the given
+    fn eval_with_cos_theta_phi_m(&self, cos_theta_m: f64, cos_phi_m: f64) -> f64 {
         let alpha_x2 = self.alpha_x * self.alpha_x;
         let alpha_y2 = self.alpha_y * self.alpha_y;
         let cos_theta_m2 = cos_theta_m * cos_theta_m;
-        let sin_theta_m2 = (1.0 - cos_theta_m2).max(0.0);
-        let tan_theta_m2 = sin_theta_m2 / cos_theta_m2;
-        let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
-        let numerator = (-tan_theta_m2 * (cos_theta_m2 / alpha_x2 + sin_theta_m2 / alpha_y2)).exp();
-        let denominator = std::f64::consts::PI * alpha_x2 * alpha_y2 * cos_theta_m4;
-        numerator / denominator
+        let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
+        let sec_theta_m4 = rcp_f64(cos_theta_m2 * cos_theta_m2);
+        let cos_phi_m2 = cos_phi_m * cos_phi_m;
+        let sin_phi_m2 = (1.0 - cos_phi_m2).max(0.0);
+        let denominator =
+            std::f64::consts::PI * self.alpha_x * self.alpha_y * cos_theta_m2 * cos_theta_m2;
+        let numerator = (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp();
+        numerator * sec_theta_m4 / denominator
     }
 
-    fn calc_param_pd_isotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate partial derivatives of isotropic parameters on anisotropic \
-             Beckmann-Spizzichino NDF"
-        )
-    }
-
-    fn calc_param_pd_anisotropic(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        let alpha_x = self.alpha_x;
-        let alpha_y = self.alpha_y;
-        let alpha_x2 = alpha_x * alpha_x;
-        let alpha_y2 = alpha_y * alpha_y;
-        let alpha_x5 = alpha_x2 * alpha_x2 * alpha_x;
-        let alpha_y5 = alpha_y2 * alpha_y2 * alpha_y;
-        let rcp_alpha_x2 = rcp_f64(alpha_x2);
-        let rcp_alpha_y2 = rcp_f64(alpha_y2);
-        let denominator_d_alpha_x = std::f64::consts::PI * alpha_x5 * alpha_y2;
-        let denominator_d_alpha_y = std::f64::consts::PI * alpha_x2 * alpha_y5;
-        cos_theta_ms
+    fn calc_params_pd(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64> {
+        let alpha_x2 = self.alpha_x * self.alpha_x;
+        let alpha_x4 = alpha_x2 * alpha_x2;
+        let alpha_y2 = self.alpha_y * self.alpha_y;
+        let alpha_y4 = alpha_y2 * alpha_y2;
+        cos_theta_phi_ms
             .iter()
-            .flat_map(|cos_theta_m| {
+            .flat_map(|(cos_theta_m, cos_phi_m)| {
+                let cos_phi_m2 = cos_phi_m * cos_phi_m;
+                let sin_phi_m2 = (1.0 - cos_phi_m2).max(0.0);
                 let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                let sin_theta_m2 = (1.0 - cos_theta_m2).max(0.0);
-                let tan_theta_m2 = sin_theta_m2 / cos_theta_m2;
-                let tan_theta_m4 = tan_theta_m2 * tan_theta_m2;
-                let sec_theta_m2 = rcp_f64(cos_theta_m2);
-                let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                let common = (-sin_theta_m2 * (rcp_alpha_x2 + rcp_alpha_y2 * tan_theta_m2)).exp();
+                let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
+                let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
+                let sec_theta_m4 = rcp_f64(cos_theta_m4);
+                let exp = (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp();
                 let d_alpha_x = {
-                    let numerator = 2.0 * common * sec_theta_m4 * (sin_theta_m2 - alpha_x2);
-                    numerator / denominator_d_alpha_x
+                    let numerator =
+                        exp * sec_theta_m4 * (2.0 * cos_phi_m2 * tan_theta_m2 - alpha_x2);
+                    numerator / (std::f64::consts::PI * alpha_x4 * alpha_y2)
                 };
                 let d_alpha_y = {
                     let numerator =
-                        2.0 * common * (sec_theta_m2 * tan_theta_m4 - sec_theta_m4 * alpha_y2);
-                    numerator / denominator_d_alpha_y
+                        exp * sec_theta_m4 * (2.0 * sin_phi_m2 * tan_theta_m2 - alpha_y2);
+                    numerator / (std::f64::consts::PI * alpha_x2 * alpha_y4)
                 };
                 [d_alpha_x, d_alpha_y]
             })
@@ -281,56 +249,47 @@ impl MicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     }
 
     #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_isotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
-        unimplemented!(
-            "Can't calculate partial derivatives of isotropic parameters on anisotropic \
-             Beckmann-Spizzichino NDF"
-        )
-    }
-
-    #[cfg(feature = "scaled-ndf-fitting")]
-    fn calc_param_pd_anisotropic_scaled(&self, cos_theta_ms: &[f64]) -> Vec<f64> {
+    fn calc_params_pd_scaled(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64> {
+        let scale = self.scale.expect("Model is not scalable");
         let alpha_x = self.alpha_x;
         let alpha_y = self.alpha_y;
         let alpha_x2 = alpha_x * alpha_x;
+        let alpha_x4 = alpha_x2 * alpha_x2;
         let alpha_y2 = alpha_y * alpha_y;
-        let alpha_x5 = alpha_x2 * alpha_x2 * alpha_x;
-        let alpha_y5 = alpha_y2 * alpha_y2 * alpha_y;
-        let rcp_alpha_x2 = rcp_f64(alpha_x2);
-        let rcp_alpha_y2 = rcp_f64(alpha_y2);
-        let denominator_d_alpha_x = std::f64::consts::PI * alpha_x5 * alpha_y2;
-        let denominator_d_alpha_y = std::f64::consts::PI * alpha_x2 * alpha_y5;
-        let denominator_d_scale = std::f64::consts::PI * alpha_x2 * alpha_y2;
-        cos_theta_ms
+        let alpha_y4 = alpha_y2 * alpha_y2;
+        cos_theta_phi_ms
             .iter()
-            .flat_map(|cos_theta_m| {
+            .flat_map(|(cos_theta_m, cos_phi_m)| {
+                let cos_phi_m2 = cos_phi_m * cos_phi_m;
+                let sin_phi_m2 = (1.0 - cos_phi_m2).max(0.0);
                 let cos_theta_m2 = cos_theta_m * cos_theta_m;
-                let sin_theta_m2 = (1.0 - cos_theta_m2).max(0.0);
-                let tan_theta_m2 = sin_theta_m2 / cos_theta_m2;
-                let tan_theta_m4 = tan_theta_m2 * tan_theta_m2;
-                let sec_theta_m2 = rcp_f64(cos_theta_m2);
-                let sec_theta_m4 = sec_theta_m2 * sec_theta_m2;
-                let common = (-sin_theta_m2 * (rcp_alpha_x2 + rcp_alpha_y2 * tan_theta_m2)).exp();
+                let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
+                let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
+                let sec_theta_m4 = rcp_f64(cos_theta_m4);
+                let exp = (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp();
                 let d_alpha_x = {
-                    let numerator = 2.0 * common * sec_theta_m4 * (sin_theta_m2 - alpha_x2);
-                    numerator / denominator_d_alpha_x
+                    let numerator =
+                        scale * exp * sec_theta_m4 * (2.0 * cos_phi_m2 * tan_theta_m2 - alpha_x2);
+                    numerator / (std::f64::consts::PI * alpha_x4 * alpha_y2)
                 };
                 let d_alpha_y = {
                     let numerator =
-                        2.0 * common * (sec_theta_m2 * tan_theta_m4 - sec_theta_m4 * alpha_y2);
-                    numerator / denominator_d_alpha_y
+                        scale * exp * sec_theta_m4 * (2.0 * sin_phi_m2 * tan_theta_m2 - alpha_y2);
+                    numerator / (std::f64::consts::PI * alpha_x2 * alpha_y4)
                 };
                 let d_scale = {
-                    let numerator = common * sec_theta_m4;
-                    numerator / denominator_d_scale
+                    let numerator = exp * sec_theta_m4;
+                    numerator / (std::f64::consts::PI * alpha_x * alpha_y)
                 };
                 [d_alpha_x, d_alpha_y, d_scale]
             })
             .collect()
     }
 
-    fn clone_box(&self) -> Box<dyn MicrofacetAreaDistributionModel> { Box::new(*self) }
+    fn clone_box(&self) -> Box<dyn AnisotropicMicrofacetAreaDistributionModel> { Box::new(*self) }
 }
+
+impl_microfacet_area_distribution_model_for_anisotropic_model!(BeckmannSpizzichinoAnisotropicNDF);
 
 #[derive(Debug, Copy, Clone)]
 pub struct BeckmannSpizzichinoMSF {
