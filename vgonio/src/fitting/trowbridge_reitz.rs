@@ -194,10 +194,10 @@ impl AnisotropicMicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicND
     impl_get_set_scale!(self);
 
     fn eval_with_cos_theta_phi_m(&self, cos_theta_m: f64, cos_phi_m: f64) -> f64 {
-        use std::f64::consts::PI;
         let cos_theta_m2 = cos_theta_m * cos_theta_m;
         let tan_theta_m2 = (1.0 - cos_theta_m2) / cos_theta_m2;
         let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
+        let sec_theta_m4 = rcp_f64(cos_theta_m4);
         let cos_phi_m2 = cos_phi_m * cos_phi_m;
         let sin_phi_m2 = 1.0 - cos_phi_m2;
         let alpha_x = self.alpha_x;
@@ -206,13 +206,12 @@ impl AnisotropicMicrofacetAreaDistributionModel for TrowbridgeReitzAnisotropicND
         let alpha_y2 = self.alpha_y * self.alpha_y;
         let rcp_alpha_x2 = rcp_f64(alpha_x2);
         let rcp_alpha_y2 = rcp_f64(alpha_y2);
-        rcp_f64(
-            PI * alpha_x
-                * alpha_y
-                * cos_theta_m4
-                * (tan_theta_m2 * (cos_phi_m2 * rcp_alpha_x2 + sin_phi_m2 * rcp_alpha_y2) + 1.0)
-                    .powi(2),
-        )
+        let denominator = std::f64::consts::PI
+            * alpha_x
+            * alpha_y
+            * (1.0 + tan_theta_m2 * (cos_phi_m2 * rcp_alpha_x2 + sin_phi_m2 * rcp_alpha_y2))
+                .powi(2);
+        sec_theta_m4 / denominator
     }
 
     fn calc_params_pd(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64> {

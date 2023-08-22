@@ -79,18 +79,15 @@ impl MicroSurface {
             let x = col as f32 / cols as f32;
             let y = row as f32 / rows as f32;
             let mut min_dist = f32::MAX;
-            // let mut heights = [0.0; 2];
-            let cur_cell = IVec2::new(
-                (x * seeds_count_sqrt as f32) as i32,
-                (y * seeds_count_sqrt as f32) as i32,
-            );
+            let mut min_height = f32::MAX;
             for (pos, height) in &seeds {
                 let dist = (Vec2::new(x, y) - *pos).length();
                 if dist < min_dist {
                     min_dist = dist;
+                    min_height = *height;
                 }
             }
-            min_dist
+            min_height
         })
     }
 }

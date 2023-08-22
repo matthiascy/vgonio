@@ -194,6 +194,7 @@ fn calculate_anisotropic_mndf_residuals(
         let theta = measured.params.zenith.step(theta_idx);
         let phi_idx = idx / theta_step_count;
         let phi = measured.params.azimuth.step(phi_idx);
+        log::debug!("theta: {}, phi: {}", theta.prettified(), phi.prettified());
         model.eval_with_cos_theta_phi_m(theta.cos() as f64, phi.cos() as f64) - *meas as f64
     });
     OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
@@ -457,6 +458,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     type ParameterStorage = Owned<f64, U2, U1>;
 
     fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
+        println!("Anisotropic set params: {:?}", x);
         self.model
             .as_anisotropic_mut()
             .unwrap()

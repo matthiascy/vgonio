@@ -177,7 +177,6 @@ impl BeckmannSpizzichinoAnisotropicNDF {
     }
 }
 
-// TODO: Verify the correctness of the implementation
 impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
@@ -213,17 +212,21 @@ impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotrop
         let sec_theta_m4 = rcp_f64(cos_theta_m2 * cos_theta_m2);
         let cos_phi_m2 = cos_phi_m * cos_phi_m;
         let sin_phi_m2 = (1.0 - cos_phi_m2).max(0.0);
-        let denominator =
-            std::f64::consts::PI * self.alpha_x * self.alpha_y * cos_theta_m2 * cos_theta_m2;
-        let numerator = (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp();
-        numerator * sec_theta_m4 / denominator
+        let numerator =
+            (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp() * sec_theta_m4;
+        let denominator = std::f64::consts::PI * self.alpha_x * self.alpha_y;
+        numerator / denominator
     }
 
     fn calc_params_pd(&self, cos_theta_phi_ms: &[(f64, f64)]) -> Vec<f64> {
-        let alpha_x2 = self.alpha_x * self.alpha_x;
+        let alpha_x = self.alpha_x;
+        let alpha_y = self.alpha_y;
+        let alpha_x2 = alpha_x * alpha_x;
         let alpha_x4 = alpha_x2 * alpha_x2;
-        let alpha_y2 = self.alpha_y * self.alpha_y;
+        let alpha_y2 = alpha_y * alpha_y;
         let alpha_y4 = alpha_y2 * alpha_y2;
+        let d_alpha_x_denominator = std::f64::consts::PI * alpha_x4 * alpha_y;
+        let d_alpha_y_denominator = std::f64::consts::PI * alpha_x * alpha_y4;
         cos_theta_phi_ms
             .iter()
             .flat_map(|(cos_theta_m, cos_phi_m)| {
@@ -237,12 +240,12 @@ impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotrop
                 let d_alpha_x = {
                     let numerator =
                         exp * sec_theta_m4 * (2.0 * cos_phi_m2 * tan_theta_m2 - alpha_x2);
-                    numerator / (std::f64::consts::PI * alpha_x4 * alpha_y2)
+                    numerator / d_alpha_x_denominator
                 };
                 let d_alpha_y = {
                     let numerator =
                         exp * sec_theta_m4 * (2.0 * sin_phi_m2 * tan_theta_m2 - alpha_y2);
-                    numerator / (std::f64::consts::PI * alpha_x2 * alpha_y4)
+                    numerator / d_alpha_y_denominator
                 };
                 [d_alpha_x, d_alpha_y]
             })
@@ -258,6 +261,9 @@ impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotrop
         let alpha_x4 = alpha_x2 * alpha_x2;
         let alpha_y2 = alpha_y * alpha_y;
         let alpha_y4 = alpha_y2 * alpha_y2;
+        let d_alpha_x_denominator = std::f64::consts::PI * alpha_x4 * alpha_y;
+        let d_alpha_y_denominator = std::f64::consts::PI * alpha_x * alpha_y4;
+        let d_scale_denominator = std::f64::consts::PI * alpha_x * alpha_y;
         cos_theta_phi_ms
             .iter()
             .flat_map(|(cos_theta_m, cos_phi_m)| {
@@ -271,16 +277,16 @@ impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotrop
                 let d_alpha_x = {
                     let numerator =
                         scale * exp * sec_theta_m4 * (2.0 * cos_phi_m2 * tan_theta_m2 - alpha_x2);
-                    numerator / (std::f64::consts::PI * alpha_x4 * alpha_y2)
+                    numerator / d_alpha_x_denominator
                 };
                 let d_alpha_y = {
                     let numerator =
                         scale * exp * sec_theta_m4 * (2.0 * sin_phi_m2 * tan_theta_m2 - alpha_y2);
-                    numerator / (std::f64::consts::PI * alpha_x2 * alpha_y4)
+                    numerator / d_alpha_y_denominator
                 };
                 let d_scale = {
                     let numerator = exp * sec_theta_m4;
-                    numerator / (std::f64::consts::PI * alpha_x * alpha_y)
+                    numerator / d_scale_denominator
                 };
                 [d_alpha_x, d_alpha_y, d_scale]
             })
