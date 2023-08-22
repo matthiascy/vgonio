@@ -177,6 +177,7 @@ impl BeckmannSpizzichinoAnisotropicNDF {
     }
 }
 
+// TODO: Verify the correctness of the implementation
 impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotropicNDF {
     fn name(&self) -> &'static str {
         #[cfg(feature = "scaled-ndf-fitting")]
