@@ -548,7 +548,7 @@ impl PlottingWidget for PlotInspector {
                                     }
                                     #[cfg(not(feature = "scaled-ndf-fitting"))]
                                     {
-                                        model.eval_with_theta_m(theta.cos())
+                                        inner.eval_with_theta_m(theta.cos())
                                     }
                                 };
                                 [theta, value]
@@ -568,7 +568,8 @@ impl PlottingWidget for PlotInspector {
                                     .eval_with_cos_theta_phi_m(theta.cos(), phi.cos() as f64)
                                     * model.scale().unwrap_or(1.0);
                                 #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                let value = inner.eval_with_cos_theta_phi_m(theta.cos(), phi.cos());
+                                let value =
+                                    inner.eval_with_cos_theta_phi_m(theta.cos(), phi.cos() as f64);
                                 [theta, value]
                             }
                         })
@@ -1222,7 +1223,7 @@ impl PlottingWidget for PlotInspector {
                                                     #[cfg(not(feature = "scaled-ndf-fitting"))]
                                                     let value = inner.eval_with_cos_theta_phi_m(
                                                         theta.cos(),
-                                                        phi.cos(),
+                                                        phi.cos() as f64,
                                                     );
                                                     [theta, value]
                                                 }

@@ -4,7 +4,7 @@ use crate::{
         gfx::RenderableMesh,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
-    fitting::ReflectionModelFamily,
+    fitting::{Isotropy, ReflectionModelFamily},
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
@@ -62,7 +62,7 @@ pub enum VgonioEvent {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
-        isotropic: bool,
+        isotropy: Isotropy,
         scaled: bool,
     },
     #[cfg(not(feature = "scaled-ndf-fitting"))]
@@ -70,7 +70,7 @@ pub enum VgonioEvent {
         kind: MeasurementKind,
         family: ReflectionModelFamily,
         data: Handle<MeasurementData>,
-        isotropic: bool,
+        isotropy: Isotropy,
     },
 }
 

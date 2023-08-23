@@ -1,9 +1,14 @@
 use crate::{
-    fitting::{MicrofacetAreaDistributionModel, MicrofacetModelFamily, ReflectionModelFamily},
+    fitting::{
+        BeckmannSpizzichinoNDF, MicrofacetAreaDistributionModel, MicrofacetModelFamily,
+        ReflectionModelFamily,
+    },
     measure::microfacet::MeasuredMndfData,
     RangeByStepSizeInclusive,
 };
-use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
+use levenberg_marquardt::{
+    LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
+};
 use nalgebra::{Dim, Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, Vector1, U1, U2};
 use std::{fmt::Display, marker::PhantomData};
 use vgcore::math::{DVec3, Handedness, SphericalCoord, Vec3};
@@ -16,16 +21,19 @@ use vgcore::math::{DVec3, Handedness, SphericalCoord, Vec3};
 pub struct AreaDistributionFittingProblem<'a> {
     /// The measured data to fit to.
     measured: &'a MeasuredMndfData,
-    /// The normal vector of the microfacet.
-    normal: Vec3,
-    /// The target model.
-    model: Box<dyn MicrofacetAreaDistributionModel>,
+    /// The target model family.
+    family: ReflectionModelFamily,
+    /// Isotropy of the model.
+    isotropy: Isotropy,
+    #[cfg(feature = "scaled-ndf-fitting")]
+    scaled: bool,
 }
 
 impl<'a> Display for AreaDistributionFittingProblem<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MadfFittingProblem")
-            .field("target_model", &self.model.family())
+            .field("target_model", &self.family)
+            .field("isotropy", &self.isotropy)
             .finish()
     }
 }
@@ -36,17 +44,102 @@ impl<'a> AreaDistributionFittingProblem<'a> {
     /// # Arguments
     ///
     /// * `measured` - The measured data to fit to.
-    /// * `model` - The target model.
-    /// * `n` - The normal vector of the microfacet.
-    pub fn new<M: MicrofacetAreaDistributionModel + 'static>(
+    /// * `family` - The target model family.
+    /// * `isotropy` - Isotropy of the model.
+    pub fn new(
         measured: &'a MeasuredMndfData,
-        model: M,
-        n: Vec3,
+        family: ReflectionModelFamily,
+        isotropy: Isotropy,
+        #[cfg(feature = "scaled-ndf-fitting")] scaled: bool,
     ) -> Self {
         Self {
             measured,
-            normal: n,
-            model: Box::new(model),
+            family,
+            isotropy,
+            #[cfg(feature = "scaled-ndf-fitting")]
+            scaled,
+        }
+    }
+}
+
+fn initiate_microfacet_ndf_models(
+    num: u32,
+    family: MicrofacetModelFamily,
+    isotropy: Isotropy,
+    #[cfg(feature = "scaled-ndf-fitting")] scaled: bool,
+) -> Vec<Box<dyn MicrofacetAreaDistributionModel>> {
+    match isotropy {
+        Isotropy::Isotropic => {
+            #[cfg(not(feature = "scaled-ndf-fitting"))]
+            match family {
+                MicrofacetModelFamily::TrowbridgeReitz => (0..num)
+                    .map(|i| Box::new(TrowbridgeReitzNDF::new((i + 1) as f64 * 0.1)))
+                    .collect(),
+                MicrofacetModelFamily::BeckmannSpizzichino => (0..num)
+                    .map(|i| Box::new(BeckmannSpizzichinoNDF::new((i + 1) as f64 * 0.1)))
+                    .collect(),
+            }
+            #[cfg(feature = "scaled-ndf-fitting")]
+            {
+                let scale = if scaled { Some(1.0) } else { None };
+                match family {
+                    MicrofacetModelFamily::TrowbridgeReitz => (0..num)
+                        .map(|i| {
+                            Box::new(TrowbridgeReitzNDF::new((i + 1) as f64 * 0.1, scale)) as _
+                        })
+                        .collect(),
+                    MicrofacetModelFamily::BeckmannSpizzichino => (0..num)
+                        .map(|i| {
+                            Box::new(BeckmannSpizzichinoNDF::new((i + 1) as f64 * 0.1, scale)) as _
+                        })
+                        .collect(),
+                }
+            }
+        }
+        Isotropy::Anisotropic => {
+            #[cfg(not(feature = "scaled-ndf-fitting"))]
+            match family {
+                MicrofacetModelFamily::TrowbridgeReitz => (0..num)
+                    .map(|i| {
+                        Box::new(TrowbridgeReitzAnisotropicNDF::new(
+                            (i + 1) as f64 * 0.1,
+                            (i + 1) as f64 * 0.1,
+                        )) as _
+                    })
+                    .collect(),
+                MicrofacetModelFamily::BeckmannSpizzichino => (0..num)
+                    .map(|i| {
+                        Box::new(BeckmannSpizzichinoAnisotropicNDF::new(
+                            (i + 1) as f64 * 0.1,
+                            (i + 1) as f64 * 0.1,
+                        )) as _
+                    })
+                    .collect(),
+            }
+            #[cfg(feature = "scaled-ndf-fitting")]
+            {
+                let scale = if scaled { Some(1.0) } else { None };
+                match family {
+                    MicrofacetModelFamily::TrowbridgeReitz => (0..num)
+                        .map(|i| {
+                            Box::new(TrowbridgeReitzAnisotropicNDF::new(
+                                (i + 1) as f64 * 0.1,
+                                (i + 1) as f64 * 0.1,
+                                scale,
+                            )) as _
+                        })
+                        .collect(),
+                    MicrofacetModelFamily::BeckmannSpizzichino => (0..num)
+                        .map(|i| {
+                            Box::new(BeckmannSpizzichinoAnisotropicNDF::new(
+                                (i + 1) as f64 * 0.1,
+                                (i + 1) as f64 * 0.1,
+                                scale,
+                            )) as _
+                        })
+                        .collect(),
+                }
+            }
         }
     }
 }
@@ -54,75 +147,138 @@ impl<'a> AreaDistributionFittingProblem<'a> {
 impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
     type Model = Box<dyn MicrofacetAreaDistributionModel>;
 
-    fn lsq_lm_fit(self) -> (Self::Model, MinimizationReport<f64>) {
-        if self.model.is_isotropic() {
-            #[cfg(not(feature = "scaled-ndf-fitting"))]
-            {
-                let problem = AreaDistributionFittingProblemProxy::<U1> {
-                    measured: self.measured,
-                    normal: self.normal.as_dvec3(),
-                    model: self.model.clone_box(),
-                    marker: Default::default(),
+    fn lsq_lm_fit(self) -> FittingReport<Self::Model> {
+        let solver = LevenbergMarquardt::new();
+        match self.family {
+            ReflectionModelFamily::Microfacet(family) => {
+                #[cfg(not(feature = "scaled-ndf-fitting"))]
+                let mut result = {
+                    let models = initiate_microfacet_ndf_models(10, family, self.isotropy);
+                    match self.isotropy {
+                        Isotropy::Isotropic => models
+                            .into_iter()
+                            .filter_map(|model| {
+                                let problem = AreaDistributionFittingProblemProxy::<U1> {
+                                    measured: self.measured,
+                                    model,
+                                    marker: Default::default(),
+                                };
+                                let (result, report) = solver.minimize(problem);
+                                match report.termination {
+                                    TerminationReason::Converged { .. } => {
+                                        Some((result.model, report))
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
+                        Isotropy::Anisotropic => models
+                            .into_iter()
+                            .filter_map(|model| {
+                                let problem = AreaDistributionFittingProblemProxy::<U2> {
+                                    measured: self.measured,
+                                    model,
+                                    marker: Default::default(),
+                                };
+                                let (result, report) = solver.minimize(problem);
+                                match report.termination {
+                                    TerminationReason::Converged { .. } => {
+                                        Some((result.model, report))
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
+                    }
                 };
-                let solver = LevenbergMarquardt::new();
-                let (result, report) = solver.minimize(problem);
-                (result.model, report)
-            }
-            #[cfg(feature = "scaled-ndf-fitting")]
-            {
-                if self.model.scale().is_some() {
-                    let problem = AreaDistributionFittingProblemProxy::<U1, true> {
-                        measured: self.measured,
-                        model: self.model.clone_box(),
-                        marker: Default::default(),
-                    };
-                    let solver = LevenbergMarquardt::new();
-                    let (result, report) = solver.minimize(problem);
-                    (result.model, report)
-                } else {
-                    let problem = AreaDistributionFittingProblemProxy::<U1, false> {
-                        measured: self.measured,
-                        model: self.model.clone_box(),
-                        marker: Default::default(),
-                    };
-                    let solver = LevenbergMarquardt::new();
-                    let (result, report) = solver.minimize(problem);
-                    (result.model, report)
-                }
-            }
-        } else {
-            #[cfg(not(feature = "scaled-ndf-fitting"))]
-            {
-                let problem = AreaDistributionFittingProblemProxy::<U2> {
-                    measured: self.measured,
-                    model: self.model.clone_box(),
-                    marker: Default::default(),
+                #[cfg(feature = "scaled-ndf-fitting")]
+                let mut result: Vec<_> = {
+                    let models =
+                        initiate_microfacet_ndf_models(10, family, self.isotropy, self.scaled);
+                    match (self.isotropy, self.scaled) {
+                        (Isotropy::Isotropic, false) => models
+                            .into_iter()
+                            .filter_map(|model| {
+                                let problem = AreaDistributionFittingProblemProxy::<U1, UNSCALED> {
+                                    measured: self.measured,
+                                    model,
+                                    marker: Default::default(),
+                                };
+                                let (result, report) = solver.minimize(problem);
+                                match report.termination {
+                                    TerminationReason::Converged { .. } => {
+                                        Some((result.model, report))
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
+                        (Isotropy::Isotropic, true) => models
+                            .into_iter()
+                            .filter_map(|model| {
+                                let problem = AreaDistributionFittingProblemProxy::<U1, SCALED> {
+                                    measured: self.measured,
+                                    model,
+                                    marker: Default::default(),
+                                };
+                                let (result, report) = solver.minimize(problem);
+                                match report.termination {
+                                    TerminationReason::Converged { .. } => {
+                                        Some((result.model, report))
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
+                        (Isotropy::Anisotropic, false) => models
+                            .into_iter()
+                            .filter_map(|model| {
+                                let problem = AreaDistributionFittingProblemProxy::<U2, UNSCALED> {
+                                    measured: self.measured,
+                                    model,
+                                    marker: Default::default(),
+                                };
+                                let (result, report) = solver.minimize(problem);
+                                match report.termination {
+                                    TerminationReason::Converged { .. } => {
+                                        Some((result.model, report))
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
+                        (Isotropy::Anisotropic, true) => models
+                            .into_iter()
+                            .filter_map(|model| {
+                                let problem = AreaDistributionFittingProblemProxy::<U2, SCALED> {
+                                    measured: self.measured,
+                                    model,
+                                    marker: Default::default(),
+                                };
+                                let (result, report) = solver.minimize(problem);
+                                match report.termination {
+                                    TerminationReason::Converged { .. } => {
+                                        Some((result.model, report))
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
+                    }
                 };
-                let solver = LevenbergMarquardt::new();
-                let (result, report) = solver.minimize(problem);
-                (result.model, report)
-            }
-            #[cfg(feature = "scaled-ndf-fitting")]
-            {
-                if self.model.scale().is_some() {
-                    let problem = AreaDistributionFittingProblemProxy::<U2, SCALED> {
-                        measured: self.measured,
-                        model: self.model.clone_box(),
-                        marker: Default::default(),
-                    };
-                    let solver = LevenbergMarquardt::new();
-                    let (result, report) = solver.minimize(problem);
-                    (result.model, report)
-                } else {
-                    let problem = AreaDistributionFittingProblemProxy::<U2, UNSCALED> {
-                        measured: self.measured,
-                        model: self.model.clone_box(),
-                        marker: Default::default(),
-                    };
-                    let solver = LevenbergMarquardt::new();
-                    let (result, report) = solver.minimize(problem);
-                    (result.model, report)
+                let reports = result
+                    .into_iter()
+                    .filter(|(m, r)| matches!(r.termination, TerminationReason::Converged { .. }))
+                    .collect::<Vec<_>>();
+                let mut lowest = f64::INFINITY;
+                let mut best = 0;
+                for (i, (_, report)) in reports.iter().enumerate() {
+                    if report.objective_function < lowest {
+                        lowest = report.objective_function;
+                        best = i;
+                    }
                 }
+                FittingReport { best, reports }
             }
         }
     }
@@ -162,7 +318,6 @@ struct AreaDistributionFittingProblemProxy<'a, N: Dim, const Scaled: bool> {
 struct AreaDistributionFittingProblemProxy<'a, N: Dim> {
     measured: &'a MeasuredMndfData,
     model: Box<dyn MicrofacetAreaDistributionModel>,
-    mode: AreaDistributionFittingMode,
     marker: PhantomData<N>,
 }
 
@@ -194,7 +349,6 @@ fn calculate_anisotropic_mndf_residuals(
         let theta = measured.params.zenith.step(theta_idx);
         let phi_idx = idx / theta_step_count;
         let phi = measured.params.azimuth.step(phi_idx);
-        log::debug!("theta: {}, phi: {}", theta.prettified(), phi.prettified());
         model.eval_with_cos_theta_phi_m(theta.cos() as f64, phi.cos() as f64) - *meas as f64
     });
     OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
@@ -325,14 +479,15 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for AreaDistributionFittingProblemPro
     type JacobianStorage = Owned<f64, Dyn, U1>;
     type ParameterStorage = Owned<f64, U1, U1>;
 
-    fn set_params(&mut self, x: &Vector1<f64>) { self.model.set_params([x[0], x[0]]) }
+    fn set_params(&mut self, x: &Vector1<f64>) {
+        self.model.as_isotropic_mut().unwrap().set_param(x[0])
+    }
 
-    fn params(&self) -> Vector1<f64> { Vector1::new(self.model.params()[0]) }
+    fn params(&self) -> Vector1<f64> { Vector1::new(self.model.as_isotropic().unwrap().param()) }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
         Some(calculate_isotropic_mndf_residuals(
             self.measured,
-            self.normal,
             &self.model,
         ))
     }
@@ -340,7 +495,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for AreaDistributionFittingProblemPro
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         Some(calculate_isotropic_mndf_jacobian(
             self.measured,
-            self.normal,
             &self.model,
         ))
     }
@@ -354,36 +508,45 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     type ParameterStorage = Owned<f64, U2, U1>;
 
     fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
-        self.model.set_params([x[0], x[1]]);
+        self.model
+            .as_anisotropic_mut()
+            .unwrap()
+            .set_params([x[0], x[1]]);
     }
 
     fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
-        Vector::<f64, U2, Self::ParameterStorage>::from(self.model.params())
+        Vector::<f64, U2, Self::ParameterStorage>::from(
+            self.model.as_anisotropic().unwrap().params(),
+        )
     }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
         Some(calculate_isotropic_mndf_residuals(
             self.measured,
-            self.normal,
             &self.model,
-            self.mode,
         ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
         Some(calculate_anisotropic_mndf_jacobian(
             self.measured,
-            self.normal,
             &self.model,
-            self.mode,
         ))
     }
 }
 
-use crate::fitting::FittingProblem;
+use crate::{
+    fitting::{
+        BeckmannSpizzichinoAnisotropicNDF, FittingProblem, Isotropy, TrowbridgeReitzAnisotropicNDF,
+        TrowbridgeReitzNDF,
+    },
+    measure::measurement::MeasurementData,
+};
 #[cfg(feature = "scaled-ndf-fitting")]
 use nalgebra::U3;
 use vgcore::units::Radians;
+
+use super::FittingReport;
 
 #[cfg(feature = "scaled-ndf-fitting")]
 /// Isotropic MADF fitting problem without the scaling factor.
@@ -458,7 +621,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     type ParameterStorage = Owned<f64, U2, U1>;
 
     fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
-        println!("Anisotropic set params: {:?}", x);
         self.model
             .as_anisotropic_mut()
             .unwrap()

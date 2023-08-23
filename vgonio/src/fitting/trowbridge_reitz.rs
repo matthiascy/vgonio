@@ -1,5 +1,7 @@
+#[cfg(feature = "scaled-ndf-fitting")]
+use crate::fitting::impl_get_set_scale;
 use crate::fitting::{
-    impl_get_set_scale, impl_microfacet_area_distribution_model_for_anisotropic_model,
+    impl_microfacet_area_distribution_model_for_anisotropic_model,
     impl_microfacet_area_distribution_model_for_isotropic_model,
     AnisotropicMicrofacetAreaDistributionModel, IsotropicMicrofacetAreaDistributionModel,
     MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
@@ -24,6 +26,13 @@ pub struct TrowbridgeReitzNDF {
 }
 
 impl TrowbridgeReitzNDF {
+    pub fn new(alpha: f64, #[cfg(feature = "scaled-ndf-fitting")] scale: Option<f64>) -> Self {
+        TrowbridgeReitzNDF {
+            alpha,
+            #[cfg(feature = "scaled-ndf-fitting")]
+            scale,
+        }
+    }
     pub fn default() -> Self {
         TrowbridgeReitzNDF {
             alpha: 0.1,
@@ -148,6 +157,19 @@ pub struct TrowbridgeReitzAnisotropicNDF {
 }
 
 impl TrowbridgeReitzAnisotropicNDF {
+    pub fn new(
+        alpha_x: f64,
+        alpha_y: f64,
+        #[cfg(feature = "scaled-ndf-fitting")] scale: Option<f64>,
+    ) -> Self {
+        TrowbridgeReitzAnisotropicNDF {
+            alpha_x,
+            alpha_y,
+            #[cfg(feature = "scaled-ndf-fitting")]
+            scale,
+        }
+    }
+
     pub fn default() -> Self {
         TrowbridgeReitzAnisotropicNDF {
             alpha_x: 0.5,

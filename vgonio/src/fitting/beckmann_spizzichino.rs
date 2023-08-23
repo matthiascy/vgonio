@@ -1,12 +1,12 @@
+#[cfg(feature = "scaled-ndf-fitting")]
+use crate::fitting::impl_get_set_scale;
 use crate::fitting::{
-    impl_get_set_scale, impl_microfacet_area_distribution_model_for_anisotropic_model,
+    impl_microfacet_area_distribution_model_for_anisotropic_model,
     impl_microfacet_area_distribution_model_for_isotropic_model,
     AnisotropicMicrofacetAreaDistributionModel, IsotropicMicrofacetAreaDistributionModel,
-    MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel, MicrofacetModelFamily,
-    ReflectionModelFamily,
+    MicrofacetMaskingShadowingModel, MicrofacetModelFamily, ReflectionModelFamily,
 };
-use chrono::format::Item;
-use vgcore::math::{rcp_f32, rcp_f64};
+use vgcore::math::rcp_f64;
 
 /// Beckmann-Spizzichino microfacet area distribution function.
 ///
@@ -23,9 +23,17 @@ pub struct BeckmannSpizzichinoNDF {
 }
 
 impl BeckmannSpizzichinoNDF {
+    pub fn new(alpha: f64, #[cfg(feature = "scaled-ndf-fitting")] scale: Option<f64>) -> Self {
+        BeckmannSpizzichinoNDF {
+            alpha,
+            #[cfg(feature = "scaled-ndf-fitting")]
+            scale,
+        }
+    }
+
     pub fn default() -> Self {
         BeckmannSpizzichinoNDF {
-            alpha: 0.1,
+            alpha: 0.5,
             #[cfg(feature = "scaled-ndf-fitting")]
             scale: None,
         }
@@ -158,10 +166,23 @@ pub struct BeckmannSpizzichinoAnisotropicNDF {
 }
 
 impl BeckmannSpizzichinoAnisotropicNDF {
+    pub fn new(
+        alpha_x: f64,
+        alpha_y: f64,
+        #[cfg(feature = "scaled-ndf-fitting")] scale: Option<f64>,
+    ) -> Self {
+        BeckmannSpizzichinoAnisotropicNDF {
+            alpha_x,
+            alpha_y,
+            #[cfg(feature = "scaled-ndf-fitting")]
+            scale,
+        }
+    }
+
     pub fn default() -> Self {
         BeckmannSpizzichinoAnisotropicNDF {
-            alpha_x: 0.5,
-            alpha_y: 0.1,
+            alpha_x: 0.6008,
+            alpha_y: 0.6008,
             #[cfg(feature = "scaled-ndf-fitting")]
             scale: None,
         }
@@ -236,15 +257,18 @@ impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotrop
                 let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
                 let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
                 let sec_theta_m4 = rcp_f64(cos_theta_m4);
-                let exp = (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp();
+                let sin_phi_m2_tan_theta_m2 = sin_phi_m2 * tan_theta_m2;
+                let cos_phi_m2_tan_theta_m2 = cos_phi_m2 * tan_theta_m2;
+
+                let exp = (-tan_theta_m2
+                    * (cos_phi_m2 * rcp_f64(alpha_x2) + sin_phi_m2 * rcp_f64(alpha_y2)))
+                .exp();
                 let d_alpha_x = {
-                    let numerator =
-                        exp * sec_theta_m4 * (2.0 * cos_phi_m2 * tan_theta_m2 - alpha_x2);
+                    let numerator = exp * sec_theta_m4 * (2.0 * cos_phi_m2_tan_theta_m2 - alpha_x2);
                     numerator / d_alpha_x_denominator
                 };
                 let d_alpha_y = {
-                    let numerator =
-                        exp * sec_theta_m4 * (2.0 * sin_phi_m2 * tan_theta_m2 - alpha_y2);
+                    let numerator = exp * sec_theta_m4 * (2.0 * sin_phi_m2_tan_theta_m2 - alpha_y2);
                     numerator / d_alpha_y_denominator
                 };
                 [d_alpha_x, d_alpha_y]
@@ -273,15 +297,19 @@ impl AnisotropicMicrofacetAreaDistributionModel for BeckmannSpizzichinoAnisotrop
                 let cos_theta_m4 = cos_theta_m2 * cos_theta_m2;
                 let tan_theta_m2 = (1.0 - cos_theta_m2) * rcp_f64(cos_theta_m2);
                 let sec_theta_m4 = rcp_f64(cos_theta_m4);
-                let exp = (-tan_theta_m2 * (cos_phi_m2 / alpha_x2 + sin_phi_m2 / alpha_y2)).exp();
+                let sin_phi_m2_tan_theta_m2 = sin_phi_m2 * tan_theta_m2;
+                let cos_phi_m2_tan_theta_m2 = cos_phi_m2 * tan_theta_m2;
+                let exp = (-tan_theta_m2
+                    * (cos_phi_m2 * rcp_f64(alpha_x2) + sin_phi_m2 * rcp_f64(alpha_y2)))
+                .exp();
                 let d_alpha_x = {
                     let numerator =
-                        scale * exp * sec_theta_m4 * (2.0 * cos_phi_m2 * tan_theta_m2 - alpha_x2);
+                        scale * exp * sec_theta_m4 * (2.0 * cos_phi_m2_tan_theta_m2 - alpha_x2);
                     numerator / d_alpha_x_denominator
                 };
                 let d_alpha_y = {
                     let numerator =
-                        scale * exp * sec_theta_m4 * (2.0 * sin_phi_m2 * tan_theta_m2 - alpha_y2);
+                        scale * exp * sec_theta_m4 * (2.0 * sin_phi_m2_tan_theta_m2 - alpha_y2);
                     numerator / d_alpha_y_denominator
                 };
                 let d_scale = {

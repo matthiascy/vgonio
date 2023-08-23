@@ -37,12 +37,14 @@ enum MndfModel {
 }
 
 impl MndfModel {
-    pub fn is_isotropic(&self) -> bool {
+    pub fn isotropy(&self) -> Isotropy {
         match self {
-            MndfModel::BeckmannSpizzichino | MndfModel::TrowbridgeReitz => true,
+            MndfModel::BeckmannSpizzichino | MndfModel::TrowbridgeReitz => Isotropy::Isotropic,
             #[cfg(feature = "scaled-ndf-fitting")]
-            MndfModel::ScaledBeckmannSpizzichino | MndfModel::ScaledTrowbridgeReitz => true,
-            _ => false,
+            MndfModel::ScaledBeckmannSpizzichino | MndfModel::ScaledTrowbridgeReitz => {
+                Isotropy::Isotropic
+            }
+            _ => Isotropy::Anisotropic,
         }
     }
 }
@@ -239,7 +241,7 @@ impl VariantData for AreaDistributionExtra {
                                                     }
                                                     #[cfg(not(feature = "scaled-ndf-fitting"))]
                                                     {
-                                                        model.eval_with_theta_m(*theta_m, phi_m)
+                                                        model.eval_with_theta_phi_m(*theta_m, phi_m)
                                                     }
                                                 }))
                                                 .map(|(x, y)| [*x, y])
@@ -422,11 +424,7 @@ impl VariantData for AreaDistributionExtra {
                         | MndfModel::ScaledTrowbridgeReitzAnisotropic => true,
                         _ => false,
                     };
-                    log::debug!(
-                        "Fitting with {} model {:?}",
-                        self.selected_model.is_isotropic(),
-                        family,
-                    );
+                    log::debug!("Fitting with {:?} model {:?}", self.selected_model, family);
                     event_loop
                         .send_event(
                             #[cfg(feature = "scaled-ndf-fitting")]
@@ -435,7 +433,7 @@ impl VariantData for AreaDistributionExtra {
                                     kind: MeasurementKind::Mndf,
                                     family,
                                     data,
-                                    isotropic: self.selected_model.is_isotropic(),
+                                    isotropy: self.selected_model.isotropy(),
                                     scaled,
                                 }
                             },
@@ -445,7 +443,7 @@ impl VariantData for AreaDistributionExtra {
                                     kind: MeasurementKind::Mndf,
                                     family,
                                     data,
-                                    isotropic: self.selected_model.is_isotropic(),
+                                    isotropy: self.selected_model.isotropy(),
                                 }
                             },
                         )
@@ -481,7 +479,7 @@ impl VariantData for AreaDistributionExtra {
                                 }
                                 #[cfg(not(feature = "scaled-ndf-fitting"))]
                                 {
-                                    egui::RichText::from(format!("α = {:.4}", model.params()[0],))
+                                    egui::RichText::from(format!("α = {:.4}", inner.param(),))
                                 }
                             } else {
                                 let inner = model.as_anisotropic().unwrap();
@@ -506,8 +504,8 @@ impl VariantData for AreaDistributionExtra {
                                 {
                                     egui::RichText::from(format!(
                                         "αx = {:.4}, αy = {:.4}",
-                                        model.params()[0],
-                                        model.params()[1]
+                                        inner.params()[0],
+                                        inner.params()[1]
                                     ))
                                 }
                             })
