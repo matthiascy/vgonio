@@ -93,7 +93,7 @@ pub fn measure_area_distribution(
                 surface.unwrap().file_stem().unwrap()
             );
             log::debug!("  -- macro surface area (mesh): {}", macro_area);
-            log::debug!("  -- macro surface area: {}", surface.unwrap().area());
+            log::debug!("  -- macro surface area: {}", surface.unwrap().macro_area());
             log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
 
             let samples = {

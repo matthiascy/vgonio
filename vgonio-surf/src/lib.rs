@@ -20,7 +20,7 @@ use std::{
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
-    math::{Aabb, Vec3},
+    math::{rcp_f32, rcp_f64, Aabb, Vec3},
     units::LengthUnit,
 };
 
@@ -501,8 +501,17 @@ impl MicroSurface {
     }
 
     /// Computes the surface area of the height field.
-    pub fn area(&self) -> f32 {
+    pub fn macro_area(&self) -> f32 {
         (self.cols - 1) as f32 * (self.rows - 1) as f32 * self.du * self.dv
+    }
+
+    /// Computes the root mean square height of the height field.
+    pub fn rms_height(&self) -> f32 {
+        let rcp_n = rcp_f32(self.samples.len() as f32);
+        self.samples
+            .iter()
+            .fold(0.0, |acc, x| acc + x * x * rcp_n)
+            .sqrt()
     }
 
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
@@ -812,6 +821,19 @@ impl MicroSurfaceMesh {
     /// TODO(yang): unit of surface area
     pub fn macro_surface_area(&self) -> f32 {
         (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.z - self.bounds.min.z)
+    }
+
+    /// Calculate the root mean square slope of the mesh.
+    pub fn rms_slope(&self) -> f32 {
+        let rcp_n = rcp_f32(self.num_facets as f32);
+        self.facet_normals
+            .iter()
+            .fold(0.0, |acc, n| {
+                let cos_theta_sqr = n.y * n.y;
+                let slope_sqr = rcp_f32(cos_theta_sqr) - 1.0;
+                acc + slope_sqr * rcp_n
+            })
+            .sqrt()
     }
 
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.

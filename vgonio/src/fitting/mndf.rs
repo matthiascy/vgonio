@@ -63,20 +63,23 @@ impl<'a> AreaDistributionFittingProblem<'a> {
 }
 
 fn initiate_microfacet_ndf_models(
+    min: f64,
+    max: f64,
     num: u32,
     family: MicrofacetModelFamily,
     isotropy: Isotropy,
     #[cfg(feature = "scaled-ndf-fitting")] scaled: bool,
 ) -> Vec<Box<dyn MicrofacetAreaDistributionModel>> {
+    let step = (max - min) / (num as f64);
     match isotropy {
         Isotropy::Isotropic => {
             #[cfg(not(feature = "scaled-ndf-fitting"))]
             match family {
                 MicrofacetModelFamily::TrowbridgeReitz => (0..num)
-                    .map(|i| Box::new(TrowbridgeReitzNDF::new((i + 1) as f64 * 0.1)))
+                    .map(|i| Box::new(TrowbridgeReitzNDF::new((i + 1) as f64 * step)))
                     .collect(),
                 MicrofacetModelFamily::BeckmannSpizzichino => (0..num)
-                    .map(|i| Box::new(BeckmannSpizzichinoNDF::new((i + 1) as f64 * 0.1)))
+                    .map(|i| Box::new(BeckmannSpizzichinoNDF::new((i + 1) as f64 * step)))
                     .collect(),
             }
             #[cfg(feature = "scaled-ndf-fitting")]
@@ -85,12 +88,12 @@ fn initiate_microfacet_ndf_models(
                 match family {
                     MicrofacetModelFamily::TrowbridgeReitz => (0..num)
                         .map(|i| {
-                            Box::new(TrowbridgeReitzNDF::new((i + 1) as f64 * 0.1, scale)) as _
+                            Box::new(TrowbridgeReitzNDF::new((i + 1) as f64 * step, scale)) as _
                         })
                         .collect(),
                     MicrofacetModelFamily::BeckmannSpizzichino => (0..num)
                         .map(|i| {
-                            Box::new(BeckmannSpizzichinoNDF::new((i + 1) as f64 * 0.1, scale)) as _
+                            Box::new(BeckmannSpizzichinoNDF::new((i + 1) as f64 * step, scale)) as _
                         })
                         .collect(),
                 }
@@ -193,8 +196,14 @@ impl<'a> FittingProblem for AreaDistributionFittingProblem<'a> {
                 };
                 #[cfg(feature = "scaled-ndf-fitting")]
                 let mut result: Vec<_> = {
-                    let models =
-                        initiate_microfacet_ndf_models(10, family, self.isotropy, self.scaled);
+                    let models = initiate_microfacet_ndf_models(
+                        0.05,
+                        2.0,
+                        16,
+                        family,
+                        self.isotropy,
+                        self.scaled,
+                    );
                     match (self.isotropy, self.scaled) {
                         (Isotropy::Isotropic, false) => models
                             .into_iter()

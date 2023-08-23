@@ -12,7 +12,6 @@ use crate::{
             outliner::Item,
         },
     },
-    fitting::{MicrofacetModelFamily, ReflectionModelFamily},
     measure::measurement::{MeasuredData, MeasurementDataSource},
 };
 
@@ -89,6 +88,22 @@ impl PropertyInspector {
                                     "{:.4} {}",
                                     state.max, state.unit
                                 )));
+                                ui.end_row();
+
+                                ui.add(egui::Label::new("Macro area:"));
+                                ui.add(egui::Label::new(format!("{:.4}", state.macro_area)));
+                                ui.end_row();
+
+                                ui.add(egui::Label::new("Micro area:"));
+                                ui.add(egui::Label::new(format!("{:.4}", state.micro_area)));
+                                ui.end_row();
+
+                                ui.add(egui::Label::new("RMS height:"));
+                                ui.add(egui::Label::new(format!("{:.4}", state.rms_height)));
+                                ui.end_row();
+
+                                ui.add(egui::Label::new("RMS slope:"));
+                                ui.add(egui::Label::new(format!("{:.4}", state.rms_slope)));
                                 ui.end_row();
 
                                 // TODO: Add scale slider.
