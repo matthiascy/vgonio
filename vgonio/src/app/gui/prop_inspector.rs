@@ -9,7 +9,7 @@ use crate::{
         gui::{
             data::PropertyData,
             event::{EventLoopProxy, VgonioEvent},
-            outliner::Item,
+            outliner::OutlinerItem,
         },
     },
     measure::measurement::{MeasuredData, MeasurementDataSource},
@@ -63,7 +63,7 @@ impl PropertyInspector {
             match properties.selected {
                 Some(item) => {
                     match item {
-                        Item::MicroSurface(surf) => {
+                        OutlinerItem::MicroSurface(surf) => {
                             let state = properties.surfaces.get(&surf).unwrap();
                             Self::grid_layout(ui, |ui| {
                                 ui.label("Micro Surface");
@@ -121,7 +121,7 @@ impl PropertyInspector {
                                 // ui.end_row();
                             });
                         }
-                        Item::MeasurementData(meas) => {
+                        OutlinerItem::MeasurementData(meas) => {
                             let state = properties.measured.get(&meas).unwrap();
                             Self::grid_layout(ui, |ui| {
                                 ui.label("Measurement Data");

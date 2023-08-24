@@ -1,5 +1,6 @@
 //! Reading and writing of surface files.
 
+use byteorder::{LittleEndian, ReadBytesExt};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{BufRead, BufReader, BufWriter, Read, Write},
@@ -7,7 +8,10 @@ use std::{
 };
 use vgcore::{
     error::VgonioError,
-    io::{CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError},
+    io::{
+        CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
+        ReadFileErrorKind,
+    },
 };
 
 /// Write the data samples to the given writer.
@@ -142,8 +146,6 @@ where
         samples.len() >= count,
         "Samples' container must be large enough to hold all samples"
     );
-
-    use byteorder::{LittleEndian, ReadBytesExt};
 
     let results = samples
         .iter_mut()
@@ -515,6 +517,179 @@ fn read_line_ascii_usurf(line: &str) -> Vec<f32> {
             }
         })
         .collect()
+}
+
+/// Read micro-surface height field from OmniSurf3D data file.
+/// The file format is described in the following link:
+/// https://digitalmetrology.com/omnisurf3d-file-format/
+pub fn read_omni_surf_3d<R: BufRead>(
+    reader: &mut R,
+    filepath: &Path,
+) -> Result<MicroSurface, VgonioError> {
+    let mut file_type = [0u8; 10];
+    reader.read_exact(&mut file_type).map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!(
+                "Invalid magic number for OmniSurf3D file {}",
+                filepath.display()
+            ),
+        )
+    })?;
+    if &file_type != b"OmniSurf3D" {
+        return Err(VgonioError::new(
+            format!(
+                "Invalid file type \"{:?}\" for file: {}",
+                std::str::from_utf8(&file_type).unwrap(),
+                filepath.display()
+            ),
+            None,
+        ));
+    }
+    let (ver_major, ver_minor) = {
+        let major = reader.read_i32::<LittleEndian>().map_err(|err| {
+            VgonioError::from_io_error(err, format!("Failed to read major version number!"))
+        })?;
+        let minor = reader.read_i32::<LittleEndian>().map_err(|err| {
+            VgonioError::from_io_error(err, format!("Failed to read minor version number!"))
+        })?;
+        (major, minor)
+    };
+
+    if ver_major < 1 {
+        return Err(VgonioError::new(
+            format!(
+                "Invalid version number \"{}.{}\" for file: {}",
+                ver_major,
+                ver_minor,
+                filepath.display()
+            ),
+            None,
+        ));
+    }
+
+    let ident_str_len = {
+        let mut ident_str_len = [0u8; 4];
+        reader.read_exact(&mut ident_str_len).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!(
+                    "Failed to read ident string length from file {}",
+                    filepath.display()
+                ),
+            )
+        })?;
+        i32::from_le_bytes(ident_str_len)
+    };
+
+    let _ident_str = {
+        let mut ident_str = vec![0u8; ident_str_len as usize];
+        reader.read_exact(&mut ident_str).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!(
+                    "Failed to read ident string from file {}",
+                    filepath.display()
+                ),
+            )
+        })?;
+        String::from_utf8_lossy(ident_str.trim_ascii()).into_owned()
+    };
+    // Check for availability of date and time (later than version 1.01)
+    let _date = if ver_major >= 0 && ver_minor >= 1 {
+        let date_str_len = reader.read_i32::<LittleEndian>().unwrap();
+        let mut date_str = vec![0u8; date_str_len as usize];
+        reader.read_exact(&mut date_str).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!(
+                    "Failed to read date string from file {}",
+                    filepath.display()
+                ),
+            )
+        })?;
+        String::from_utf8_lossy(date_str.trim_ascii()).into_owned()
+    } else {
+        String::from("unknown")
+    };
+    // Read the number of rows and columns
+    let cols = reader.read_i32::<LittleEndian>().map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!(
+                "Failed to read number of columns from file {}",
+                filepath.display()
+            ),
+        )
+    })?;
+    let rows = reader.read_i32::<LittleEndian>().map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!(
+                "Failed to read number of rows from file {}",
+                filepath.display()
+            ),
+        )
+    })?;
+    // Read the horizontal and vertical spacing
+    let du = reader.read_f64::<LittleEndian>().map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!(
+                "Failed to read horizontal spacing from file {}",
+                filepath.display()
+            ),
+        )
+    })?;
+    let dv = reader.read_f64::<LittleEndian>().map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!(
+                "Failed to read vertical spacing from file {}",
+                filepath.display()
+            ),
+        )
+    })?;
+    // Read the origin
+    let _origin_x = reader.read_f64::<LittleEndian>().map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!("Failed to read origin x from file {}", filepath.display()),
+        )
+    })?;
+    let _origin_y = reader.read_f64::<LittleEndian>().map_err(|err| {
+        VgonioError::from_io_error(
+            err,
+            format!("Failed to read origin y from file {}", filepath.display()),
+        )
+    })?;
+    // Read the surface heights
+    let mut samples = vec![0.0; (rows * cols) as usize];
+
+    read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(|err| {
+        VgonioError::from_read_file_error(
+            ReadFileError {
+                path: filepath.to_owned().into_boxed_path(),
+                kind: ReadFileErrorKind::Parse(err),
+            },
+            "Failed to read OmniSurf3D file.",
+        )
+    })?;
+
+    // Ignore the rest of the file
+
+    Ok(MicroSurface::from_samples(
+        rows as usize,
+        cols as usize,
+        du as f32,
+        dv as f32,
+        LengthUnit::UM,
+        samples,
+        filepath
+            .file_name()
+            .and_then(|name| name.to_str().map(|name| name.to_owned())),
+        Some(filepath.into()),
+    ))
 }
 
 #[cfg(test)]

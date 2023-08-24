@@ -6,16 +6,20 @@ surfaces:
 #  - usr://surfaces/2x2.txt
 #  - usr://surfaces/32x32.vgms
 #  - usr://surfaces/dong2015/al
-  - usr://surfaces/generated/msurf-random_h0.1.vgms
+#  - usr://surfaces/generated/msurf-random_h0.1.vgms
 #  - usr://surfaces/generated/msurf-random_h0.2.vgms
 #  - usr://surfaces/generated/msurf-random_h0.3.vgms
 #  - usr://surfaces/generated/msurf-random_h0.4.vgms
-  - usr://surfaces/generated/msurf-random_h0.5.vgms
+#  - usr://surfaces/generated/msurf-random_h0.5.vgms
 #  - usr://surfaces/generated/msurf-random_h0.6.vgms
 #  - usr://surfaces/generated/msurf-random_h0.7.vgms
 #  - usr://surfaces/generated/msurf-random_h0.8.vgms
 #  - usr://surfaces/generated/msurf-random_h0.9.vgms
-  - usr://surfaces/generated/msurf-random_h1.0.vgms
+#  - usr://surfaces/generated/msurf-random_h1.0.vgms
+
+#  - usr://surfaces/omnisurf3d/Fish_Scales_Ozark_Bass_Amboplites_Constellatus-courtesy_dylan_wainwright.os3d
+#  - usr://surfaces/omnisurf3d/Pickleball_Paddle_Vufoxt_Desampled.os3d
+#  - usr://surfaces/omnisurf3d/FishScaleEdge.os3d
 
 #  - usr://surfaces/squared/aluminium1bar100_squared.vgms
 #  - usr://surfaces/squared/aluminium1bar200_squared.vgms

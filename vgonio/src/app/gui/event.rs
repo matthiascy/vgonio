@@ -22,7 +22,7 @@ use vgcore::{
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
-use super::outliner::Item;
+use super::outliner::OutlinerItem;
 
 /// Event loop proxy with Vgonio events.
 pub type EventLoopProxy = winit::event_loop::EventLoopProxy<VgonioEvent>;
@@ -188,7 +188,8 @@ pub enum DebuggingEvent {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum OutlinerEvent {
-    SelectItem(Item),
+    SelectItem(OutlinerItem),
+    RemoveItem(OutlinerItem),
 }
 
 #[derive(Debug)]

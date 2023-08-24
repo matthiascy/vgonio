@@ -45,7 +45,7 @@ impl Outliner {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Item {
+pub enum OutlinerItem {
     MicroSurface(Handle<MicroSurface>),
     MeasurementData(Handle<MeasurementData>),
 }
@@ -73,16 +73,16 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                     let selected = match &data.selected {
                         None => false,
                         Some(item) => match item {
-                            Item::MicroSurface(surf) => surf == &self.item,
-                            Item::MeasurementData(_) => false,
+                            OutlinerItem::MicroSurface(surf) => surf == &self.item,
+                            OutlinerItem::MeasurementData(_) => false,
                         },
                     };
                     let state = data.surfaces.get(&self.item).unwrap();
                     if ui.selectable_label(selected, &state.name).clicked() && !selected {
-                        data.selected = Some(Item::MicroSurface(self.item));
+                        data.selected = Some(OutlinerItem::MicroSurface(self.item));
                         event_loop
                             .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                Item::MicroSurface(self.item),
+                                OutlinerItem::MicroSurface(self.item),
                             )))
                             .unwrap();
                     }
@@ -92,6 +92,13 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                 let mut prop = prop.write().unwrap();
                 let state = prop.surfaces.get_mut(&self.item).unwrap();
                 ui.checkbox(&mut state.visible, "");
+                if ui.button("X").clicked() {
+                    event_loop
+                        .send_event(VgonioEvent::Outliner(OutlinerEvent::RemoveItem(
+                            OutlinerItem::MicroSurface(self.item),
+                        )))
+                        .unwrap();
+                }
             })
         })
         .body(|ui| {
@@ -132,8 +139,8 @@ impl CollapsableHeader<Handle<MeasurementData>> {
                     let selected = match &data.selected {
                         None => false,
                         Some(item) => match item {
-                            Item::MicroSurface(_) => false,
-                            Item::MeasurementData(data) => {
+                            OutlinerItem::MicroSurface(_) => false,
+                            OutlinerItem::MeasurementData(data) => {
                                 if data == &self.item {
                                     true
                                 } else {
@@ -144,10 +151,10 @@ impl CollapsableHeader<Handle<MeasurementData>> {
                     };
                     let state = data.measured.get(&self.item).unwrap();
                     if ui.selectable_label(selected, &state.name).clicked() && !selected {
-                        data.selected = Some(Item::MeasurementData(self.item));
+                        data.selected = Some(OutlinerItem::MeasurementData(self.item));
                         event_loop
                             .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                Item::MeasurementData(self.item),
+                                OutlinerItem::MeasurementData(self.item),
                             )))
                             .unwrap();
                     }

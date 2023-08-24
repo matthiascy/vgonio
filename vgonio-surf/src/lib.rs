@@ -1,3 +1,4 @@
+#![feature(byte_slice_trim_ascii)]
 //! Heightfield
 #![warn(missing_docs)]
 
@@ -10,7 +11,6 @@ pub mod io;
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
-use log::log;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -20,7 +20,7 @@ use std::{
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
-    math::{rcp_f32, rcp_f64, Aabb, Vec3},
+    math::{rcp_f32, Aabb, Vec3},
     units::LengthUnit,
 };
 
@@ -395,7 +395,7 @@ impl MicroSurface {
 
     /// Fill holes on the height field.
     /// TODO: bilinear interpolation
-    pub fn fill_holes(&mut self) {
+    pub fn repair(&mut self) {
         let mut idx = 0;
         for i in 0..self.cols * self.rows {
             if !self.samples[i].is_nan() {
@@ -865,11 +865,14 @@ impl MicroSurfaceMesh {
 /// Origin of the micro-geometry height field.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MicroSurfaceOrigin {
-    /// Micro-geometry height field from Predicting Appearance from Measured
-    /// Micro-geometry of Metal Surfaces.
+    /// Micro-geometry height field from the paper
+    /// "Predicting Appearance from the Measured Micro-geometry of Metal
+    /// Surfaces".
     Dong2015,
     /// Micro-geometry height field from µsurf confocal microscope system.
     Usurf,
+    /// Micro-geometry height field from OmniSurf3D.
+    OmniSurf3D,
 }
 
 impl MicroSurface {
@@ -902,6 +905,7 @@ impl MicroSurface {
             match origin {
                 MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(&mut reader, filepath),
                 MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(&mut reader, filepath),
+                MicroSurfaceOrigin::OmniSurf3D => io::read_omni_surf_3d(&mut reader, filepath),
             }
         } else {
             // Otherwise, try to figure out the file format by reading first several bytes.
@@ -934,6 +938,7 @@ impl MicroSurface {
                         Some(filepath.to_owned()),
                     ))
                 }
+                "Omni" => io::read_omni_surf_3d(&mut reader, filepath),
                 _ => Err(VgonioError::new("Unknown file format.", None))
             }
         }
@@ -941,7 +946,7 @@ impl MicroSurface {
                 log::debug!("Loaded micro-surface from file: {}", filepath.display());
                 log::debug!("- Resolution: {} x {}", ms.rows, ms.cols);
                 log::debug!("- Spacing: {} x {}", ms.du, ms.dv);
-                ms.fill_holes();
+                ms.repair();
                 ms
             })
     }

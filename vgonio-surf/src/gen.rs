@@ -1,5 +1,5 @@
 use crate::MicroSurface;
-use glam::{IVec2, UVec2, Vec2};
+use glam::{IVec2, Vec2};
 use serde::{Deserialize, Serialize};
 use vgcore::units::LengthUnit;
 

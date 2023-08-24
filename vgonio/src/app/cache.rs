@@ -455,6 +455,24 @@ impl Cache {
         }
     }
 
+    /// Unloads a micro-surface from the cache.
+    ///
+    /// This will remove the micro-surface from the cache, including surface
+    /// mesh and renderable mesh.
+    pub fn unload_micro_surface(
+        &mut self,
+        handle: Handle<MicroSurface>,
+    ) -> Result<(), VgonioError> {
+        let record = self.records.get(&handle).ok_or_else(|| {
+            VgonioError::new(format!("Failed to unload micro-surface: {}", handle), None)
+        })?;
+        self.msurfs.remove(&handle);
+        self.meshes.remove(&record.mesh);
+        self.renderables.remove(&record.renderable);
+        self.records.remove(&handle);
+        Ok(())
+    }
+
     /// Loads a micro-surface measurement data from the given path and returns
     /// its cache handle.
     pub fn load_micro_surface_measurement(

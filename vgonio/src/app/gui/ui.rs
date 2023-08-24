@@ -9,6 +9,7 @@ use crate::{
             gizmo::NavigationGizmo,
             icons,
             notify::{NotifyKind, NotifySystem},
+            outliner::OutlinerItem,
             plotter::{PlotInspector, PlottingWidget},
             simulations::Simulations,
             state::GuiRenderer,
@@ -130,6 +131,20 @@ impl VgonioGui {
                 OutlinerEvent::SelectItem(item) => {
                     let mut properties = self.properties.write().unwrap();
                     properties.on_item_selected(*item);
+                    EventResponse::Handled
+                }
+                OutlinerEvent::RemoveItem(item) => {
+                    let mut properties = self.properties.write().unwrap();
+                    let mut cache = self.cache.write().unwrap();
+                    match item {
+                        OutlinerItem::MicroSurface(handle) => {
+                            properties.surfaces.remove(handle);
+                            cache.unload_micro_surface(*handle).unwrap();
+                        }
+                        _ => {
+                            todo!("Remove measured data from cache")
+                        }
+                    }
                     EventResponse::Handled
                 }
             },
@@ -599,7 +614,7 @@ impl VgonioGui {
                             }
                         }
                     }
-                    "vgms" | "txt" => {
+                    "vgms" | "txt" | "os3d" => {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", path);
                         let mut locked_cache = self.cache.write().unwrap();
