@@ -51,6 +51,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
+ "getrandom",
  "once_cell",
  "version_check",
 ]
@@ -2796,6 +2797,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
+name = "tobj"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b450e3ba06251ec4fc76917dafeaf55805ffb26dbf7d5500bfb9511ce63a0d1f"
+dependencies = [
+ "ahash 0.8.3",
+]
+
+[[package]]
 name = "toml"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3012,6 +3022,7 @@ dependencies = [
 name = "vgonio-surf"
 version = "0.3.0"
 dependencies = [
+ "ahash 0.8.3",
  "byteorder",
  "clap",
  "embree",
@@ -3020,6 +3031,7 @@ dependencies = [
  "log",
  "rand",
  "serde",
+ "tobj",
  "uuid",
  "vgonio-core",
 ]

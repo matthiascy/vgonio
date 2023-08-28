@@ -12,6 +12,7 @@ use vgcore::{
         CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
         ReadFileErrorKind,
     },
+    math::Handedness,
 };
 
 /// Write the data samples to the given writer.
@@ -685,6 +686,104 @@ pub fn read_omni_surf_3d<R: BufRead>(
         dv as f32,
         LengthUnit::UM,
         samples,
+        filepath
+            .file_name()
+            .and_then(|name| name.to_str().map(|name| name.to_owned())),
+        Some(filepath.into()),
+    ))
+}
+
+#[cfg(feature = "wavefront")]
+/// Reads a Wavefront OBJ file and returns a micro-surface.
+pub fn read_wavefront<R: BufRead>(
+    reader: &mut R,
+    filepath: &Path,
+    handedness: Handedness,
+    unit: LengthUnit,
+) -> Result<MicroSurface, VgonioError> {
+    let result = tobj::load_obj_buf(reader, &tobj::GPU_LOAD_OPTIONS, |_| {
+        Ok((vec![], ahash::AHashMap::new()))
+    });
+    let models = result
+        .map_err(|err| {
+            VgonioError::new(
+                format!("Failed to read Wavefront file {}", filepath.display()),
+                Some(Box::new(err)),
+            )
+        })?
+        .0;
+    let mesh = &models[0].mesh;
+    let (min_x, max_x, min_y, max_y, min_z, max_z) = mesh.positions.chunks_exact(3).fold(
+        (f32::MAX, f32::MIN, f32::MAX, f32::MIN, f32::MAX, f32::MIN),
+        |(min_x, max_x, min_y, max_y, min_z, max_z), pos| {
+            let x = pos[0];
+            let y = pos[1];
+            let z = pos[2];
+            (
+                min_x.min(x),
+                max_x.max(x),
+                min_y.min(y),
+                max_y.max(y),
+                min_z.min(z),
+                max_z.max(z),
+            )
+        },
+    );
+    log::debug!(
+        "min_x: {}, max_x: {}, min_y: {}, max_y: {}, min_z: {}, max_z: {}, number of vertices: {}",
+        min_x,
+        max_x,
+        min_y,
+        max_y,
+        min_z,
+        max_z,
+        mesh.positions.len() / 3
+    );
+    // Extract the height values from the mesh.
+    let (du, dv, rows, cols, heights) = match handedness {
+        Handedness::RightHandedZUp => {
+            let p0 = &mesh.positions[0..3];
+            let p1 = &mesh.positions[3..6];
+            let p2 = &mesh.positions[6..9];
+            let du = (p0[0] - p1[0]).abs().max((p0[0] - p2[0]).abs());
+            let dv = (p0[1] - p1[1]).abs().max((p0[1] - p2[1]).abs());
+            (
+                du,
+                dv,
+                ((max_y - min_y) / dv) as usize + 1,
+                ((max_x - min_x) / du) as usize + 1,
+                mesh.positions
+                    .chunks_exact(3)
+                    .map(|chunk| chunk[2])
+                    .collect::<Vec<_>>(),
+            )
+        }
+        Handedness::RightHandedYUp => {
+            let p0 = &mesh.positions[0..3];
+            let p1 = &mesh.positions[3..6];
+            let p2 = &mesh.positions[6..9];
+            let du = (p0[0] - p1[0]).abs().max((p0[0] - p2[0]).abs());
+            let dv = (p0[2] - p1[2]).abs().max((p0[2] - p2[2]).abs());
+            (
+                du,
+                dv,
+                ((max_z - min_z) / dv) as usize + 1,
+                ((max_x - min_x) / du) as usize + 1,
+                mesh.positions
+                    .chunks_exact(3)
+                    .map(|chunk| chunk[1])
+                    .collect::<Vec<_>>(),
+            )
+        }
+    };
+    log::debug!("du: {}, dv: {}, cols: {}, rows: {}", du, dv, cols, rows);
+    Ok(MicroSurface::from_samples(
+        rows,
+        cols,
+        du,
+        dv,
+        unit,
+        heights,
         filepath
             .file_name()
             .and_then(|name| name.to_str().map(|name| name.to_owned())),

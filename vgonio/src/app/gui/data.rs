@@ -5,13 +5,13 @@ use vgsurf::MicroSurface;
 
 use crate::{
     app::cache::{Cache, Handle},
-    fitting::{FittedModel, FittedModels},
+    fitting::FittedModels,
     measure::measurement::{MeasurementData, MeasurementDataSource, MeasurementKind},
 };
 
 use super::outliner::OutlinerItem;
 
-/// Micor surface properties.
+/// Micro surface properties.
 #[derive(Clone, Debug)]
 pub struct MicroSurfaceProp {
     /// The name of the micro surface.
@@ -37,7 +37,11 @@ pub struct MicroSurfaceProp {
     /// Root mean square of the height.
     pub rms_height: f32,
     /// Root mean square of the slope.
-    pub rms_slope: f32,
+    pub rms_slope_tri: f32,
+    /// Root mean square of the slope along the x-axis.
+    pub rms_slope_x: f32,
+    /// Root mean square of the slope along the y-axis.
+    pub rms_slope_y: f32,
 }
 
 /// Measured data properties.
@@ -100,7 +104,9 @@ impl PropertyData {
                     micro_area: mesh.facet_total_area, /* TODO: maybe get this from the micro
                                                         * surface? */
                     rms_height: surf.rms_height(),
-                    rms_slope: mesh.rms_slope(),
+                    rms_slope_tri: mesh.rms_slope(),
+                    rms_slope_x: surf.rms_slope_x(),
+                    rms_slope_y: surf.rms_slope_y(),
                 });
             }
         }

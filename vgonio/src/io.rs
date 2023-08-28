@@ -8,7 +8,7 @@ use vgcore::math;
 use crate::measure::{
     bsdf::MeasuredBsdfData,
     measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
-    microfacet::{MeasuredMmsfData, MeasuredMndfData},
+    microfacet::{MeasuredMgafData, MeasuredMndfData},
 };
 
 pub mod vgmo {
@@ -19,7 +19,7 @@ pub mod vgmo {
             collector::BounceAndEnergy,
             emitter::RegionShape,
             measurement::{
-                BsdfMeasurementParams, MeasurementKind, MmsfMeasurementParams,
+                BsdfMeasurementParams, MeasurementKind, MgafMeasurementParams,
                 MndfMeasurementParams, Radius, SimulationKind,
             },
             Collector, CollectorScheme, Emitter,
@@ -138,7 +138,7 @@ pub mod vgmo {
         },
         Mmsf {
             meta: HeaderMeta,
-            mmsf: MmsfMeasurementParams,
+            mmsf: MgafMeasurementParams,
         },
     }
 
@@ -184,7 +184,7 @@ pub mod vgmo {
                 }),
                 MeasurementKind::Mmsf => Ok(Self::Mmsf {
                     meta,
-                    mmsf: MmsfMeasurementParams::read_from_vgmo(reader)?,
+                    mmsf: MgafMeasurementParams::read_from_vgmo(reader)?,
                 }),
             }
         }
@@ -311,7 +311,7 @@ pub mod vgmo {
         }
     }
 
-    impl MmsfMeasurementParams {
+    impl MgafMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
             let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
@@ -735,12 +735,12 @@ emitter is not implemented"
         }
     }
 
-    impl MeasuredMmsfData {
+    impl MeasuredMgafData {
         /// Reads the measured MMSF data from the given reader.
         pub fn read<R: Read>(
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
-            params: MmsfMeasurementParams,
+            params: MgafMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
                 meta.kind == MeasurementKind::Mmsf,
@@ -753,7 +753,7 @@ emitter is not implemented"
                 meta.encoding,
                 meta.compression,
             )?;
-            Ok(MeasuredMmsfData { params, samples })
+            Ok(MeasuredMgafData { params, samples })
         }
 
         /// Writes the measured MMSF data to the given writer.
@@ -1187,7 +1187,7 @@ emitter is not implemented"
                 }
                 Header::Mmsf { meta, mmsf } => {
                     let measured =
-                        MeasuredMmsfData::read(&mut reader, meta, mmsf).map_err(|err| {
+                        MeasuredMgafData::read(&mut reader, meta, mmsf).map_err(|err| {
                             VgonioError::from_read_file_error(
                                 ReadFileError {
                                     path: filepath.to_owned().into_boxed_path(),

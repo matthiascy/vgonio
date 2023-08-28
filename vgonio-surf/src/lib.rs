@@ -20,7 +20,7 @@ use std::{
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
-    math::{rcp_f32, Aabb, Vec3},
+    math::{rcp_f32, Aabb, Handedness, Vec3},
     units::LengthUnit,
 };
 
@@ -640,6 +640,45 @@ impl MicroSurface {
         }
         ms
     }
+
+    /// Computes the rms slope of the height field in the x(horizontal)
+    /// direction.
+    pub fn rms_slope_x(&self) -> f32 {
+        let slope_xs = (0..self.cols)
+            .flat_map(|x| {
+                (0..self.rows).map(move |y| {
+                    let nx = (x + 1).min(self.cols - 1);
+                    let dh = self.samples[y * self.cols + nx] - self.samples[y * self.cols + x];
+                    dh / self.du
+                })
+            })
+            .collect::<Vec<_>>();
+        let rcp_n = rcp_f32(slope_xs.len() as f32);
+        let mean = slope_xs.iter().sum::<f32>() * rcp_n;
+        slope_xs
+            .iter()
+            .fold(0.0, |acc, x| acc + rcp_n * (x - mean) * (x - mean))
+            .sqrt()
+    }
+
+    /// Computes the rms slope of the height field in the y(vertical) direction.
+    pub fn rms_slope_y(&self) -> f32 {
+        let slope_ys = (0..self.rows)
+            .flat_map(|y| {
+                (0..self.cols).map(move |x| {
+                    let ny = (y + 1).min(self.rows - 1);
+                    let dh = self.samples[ny * self.cols + x] - self.samples[y * self.cols + x];
+                    dh / self.dv
+                })
+            })
+            .collect::<Vec<_>>();
+        let rcp_n = rcp_f32(slope_ys.len() as f32);
+        let mean = slope_ys.iter().sum::<f32>() * rcp_n;
+        slope_ys
+            .iter()
+            .fold(0.0, |acc, x| acc + rcp_n * (x - mean) * (x - mean))
+            .sqrt()
+    }
 }
 
 /// Triangulation pattern for grid triangulation.
@@ -949,6 +988,34 @@ impl MicroSurface {
                 ms.repair();
                 ms
             })
+    }
+
+    #[cfg(feature = "wavefront")]
+    /// Creates micro-geometry height field by reading the samples stored in
+    /// Wavefront OBJ file.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - Path to the Wavefront OBJ file.
+    /// * `handedness` - Handedness of the micro-surface mesh.
+    /// * `unit` - Length unit of the micro-surface.
+    pub fn read_from_wavefront(
+        filepath: &Path,
+        handedness: Handedness,
+        unit: LengthUnit,
+    ) -> Result<MicroSurface, VgonioError> {
+        log::debug!(
+            "Loading micro-surface from Wavefront OBJ file: {}",
+            filepath.display()
+        );
+        let file = File::open(filepath).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!("Failed to open micro-surface file: {}", filepath.display()),
+            )
+        })?;
+        let mut reader = BufReader::new(file);
+        io::read_wavefront(&mut reader, filepath, handedness, unit)
     }
 
     /// Save the micro-surface height field to a file.

@@ -9,7 +9,7 @@ use crate::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{
-            BsdfMeasurementParams, MeasurementData, MeasurementKind, MmsfMeasurementParams,
+            BsdfMeasurementParams, MeasurementData, MeasurementKind, MgafMeasurementParams,
             MndfMeasurementParams,
         },
         CollectorScheme, RtcMethod,
@@ -199,7 +199,7 @@ pub enum MeasureEvent {
         surfaces: Vec<Handle<MicroSurface>>,
     },
     Mmsf {
-        params: MmsfMeasurementParams,
+        params: MgafMeasurementParams,
         surfaces: Vec<Handle<MicroSurface>>,
     },
     Bsdf {

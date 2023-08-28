@@ -17,7 +17,7 @@ pub use axis::*;
 pub use glam::*;
 
 /// Coordinate system handedness.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, clap::ValueEnum)]
 pub enum Handedness {
     /// Right-handed, Z-up coordinate system.
     RightHandedZUp,

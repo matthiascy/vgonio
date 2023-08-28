@@ -1,7 +1,7 @@
+use crate::app::cli::{ConvertOptions, GenerateOptions};
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 use vgcore::io::{CompressionScheme, FileEncoding};
-use vgsurf::{RandomGenMethod, SurfGenKind};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]
@@ -118,78 +118,6 @@ impl FromStr for NewSize {
 }
 
 #[derive(clap::Args, Debug)]
-#[clap(
-    about = "Converts non-vgonio surface files to vgonio files or resizes vgonio surface files."
-)]
-pub struct ConvertOptions {
-    /// Path to input files.
-    #[clap(
-        short,
-        long,
-        num_args(1..),
-        required = true,
-        help = "Files to be converted."
-    )]
-    pub inputs: Vec<PathBuf>,
-
-    /// Path to output file.
-    #[clap(short, long, help = "Path to store converted files.")]
-    pub output: Option<PathBuf>,
-
-    #[clap(
-        short,
-        long,
-        default_value_t = FileEncoding::Binary,
-        help = "Data encoding for the output."
-    )]
-    pub encoding: FileEncoding,
-
-    #[clap(
-        short,
-        long,
-        default_value_t = CompressionScheme::None,
-        help = "Data compression for the output."
-    )]
-    pub compression: CompressionScheme,
-
-    #[clap(
-        short,
-        long,
-        required = true,
-        help = "Type of conversion to perform. If not specified, the\nconversion will be inferred \
-                from the file extension."
-    )]
-    pub kind: ConvertKind,
-
-    #[clap(
-        long,
-        value_name = "WIDTH HEIGHT",
-        num_args(2),
-        help = "Resize the micro-surface profile to the given resolution. The \n resolution \
-                should besamller than the original."
-    )]
-    pub resize: Option<Vec<u32>>,
-
-    #[clap(
-        long,
-        help = "Resize the micro-surface profile to make it square. The\nresolution will be the \
-                minimum of the width and height."
-    )]
-    pub squaring: bool,
-}
-
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConvertKind {
-    #[clap(
-        name = "ms",
-        help = "Convert a micro-surface profile to .vgms file. Accepts files coming \
-                from\n\"Predicting Appearance from Measured Microgeometry of Metal \
-                Surfaces\",\nand plain text data coming from µsurf confocal microscope system."
-    )]
-    MicroSurfaceProfile,
-}
-
-#[derive(clap::Args, Debug)]
 #[clap(about = "Print information about vgonio.")]
 pub struct PrintInfoOptions {
     #[clap(
@@ -220,73 +148,6 @@ pub enum FastMeasurementKind {
     #[clap(name = "mmsf")]
     /// Micro-facet masking-shadowing function.
     MicrofacetMaskingShadowing,
-}
-
-#[derive(clap::Args, Debug)]
-#[clap(about = "Generate a micro-geometry level surface using Gaussian distribution.")]
-pub struct GenerateOptions {
-    /// Horizontal and vertical resolution of the generated micro-geometry
-    /// profile.
-    #[arg(long = "res", num_args(2), default_values_t = [1024; 2])]
-    pub res: Vec<u32>,
-
-    /// Horizontal and vertical spacing between micro-geometry height samples,
-    /// in micrometers.
-    #[arg(long = "spacing", num_args(2), default_values_t = [0.1; 2])]
-    pub spacing: Vec<f32>,
-
-    /// Highest height of the generated micro-geometry profile, in micrometers.
-    /// The lowest height is always 0.
-    #[arg(long = "height", default_value_t = 1.0)]
-    pub max_height: f32,
-
-    /// Type of surface to generate.
-    #[arg(ignore_case = true, long = "kind")]
-    pub kind: SurfGenKind,
-
-    /// Amplitude of the 2D gaussian. Only used when `kind` is `gaussian2d`.
-    #[arg(long = "amp", required_if_eq("kind", "gaussian2d"))]
-    pub amplitude: Option<f32>,
-
-    /// Standard deviation of the 2D gaussian distribution in horizontal
-    /// direction. Only used when `kind` is `gaussian2d`.
-    #[arg(long = "sx", required_if_eq("kind", "gaussian2d"))]
-    pub sigma_x: Option<f32>,
-
-    /// Standard deviation of the 2D gaussian distribution in vertical
-    /// direction. Only used when `kind` is `gaussian2d`.
-    #[arg(long = "sy", required_if_eq("kind", "gaussian2d"))]
-    pub sigma_y: Option<f32>,
-
-    /// Mean of 2D gaussian distribution on horizontal axis. Only used when
-    /// `kind` is `gaussian2d`.
-    #[arg(long = "mx", required_if_eq("kind", "gaussian2d"))]
-    pub mean_x: Option<f32>,
-
-    /// Mean of 2D gaussian distribution on vertical axis. Only used when
-    /// `kind` is `gaussian2d`.
-    #[arg(long = "my", required_if_eq("kind", "gaussian2d"))]
-    pub mean_y: Option<f32>,
-
-    /// Random method to use. Only used when `kind` is `random`.
-    #[arg(ignore_case = true, long = "method", required_if_eq("kind", "random"))]
-    pub method: Option<RandomGenMethod>,
-
-    /// Number of initial seed points for Worley noise. Should be a power of 2.
-    #[arg(long = "num-seeds", required_if_eq_all([("kind", "random"), ("method", "worley-noise")]))]
-    pub num_seeds: Option<u32>,
-
-    /// Data format for the surface generation output.
-    #[arg(short, long, default_value_t = FileEncoding::Binary)]
-    pub encoding: FileEncoding,
-
-    /// Data compression for the surface generation output.
-    #[arg(short, long, default_value_t = CompressionScheme::None)]
-    pub compression: CompressionScheme,
-
-    /// Path to the file where to save the generated micro-geometry profile.
-    #[arg(short, long)]
-    pub output: Option<PathBuf>,
 }
 
 /// Options for the `measure` command.

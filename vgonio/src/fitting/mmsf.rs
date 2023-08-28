@@ -1,5 +1,5 @@
-use crate::{fitting::FittingReport, measure::microfacet::MeasuredMmsfData};
-use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, MinimizationReport};
+use crate::{fitting::FittingReport, measure::microfacet::MeasuredMgafData};
+use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
 use nalgebra::{Dyn, Matrix, Owned, VecStorage, Vector, U1};
 use vgcore::math::{Handedness, SphericalCoord, Vec3};
 
@@ -13,7 +13,7 @@ pub struct MmsfFittingProblem<'a> {
 
 impl<'a> MmsfFittingProblem<'a> {
     pub fn new<M: MicrofacetMaskingShadowingModel + 'static>(
-        measured: &'a MeasuredMmsfData,
+        measured: &'a MeasuredMgafData,
         model: M,
         normal: Vec3,
     ) -> Self {
@@ -28,7 +28,7 @@ impl<'a> MmsfFittingProblem<'a> {
 }
 
 struct InnerMmsfFittingProblem<'a> {
-    measured: &'a MeasuredMmsfData,
+    measured: &'a MeasuredMgafData,
     normal: Vec3,
     model: Box<dyn MicrofacetMaskingShadowingModel>,
 }

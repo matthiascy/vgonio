@@ -20,10 +20,8 @@ use crate::{
         Config,
     },
     fitting::{
-        AreaDistributionFittingProblem, BeckmannSpizzichinoAnisotropicNDF, BeckmannSpizzichinoMSF,
-        BeckmannSpizzichinoNDF, FittedModel, FittingProblem, Isotropy, MicrofacetModelFamily,
-        MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzAnisotropicNDF,
-        TrowbridgeReitzMSF, TrowbridgeReitzNDF,
+        AreaDistributionFittingProblem, BeckmannSpizzichinoMSF, FittedModel, FittingProblem,
+        MicrofacetModelFamily, MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzMSF,
     },
     measure::measurement::{MeasurementData, MeasurementKind},
 };

@@ -3,11 +3,11 @@ use crate::{
         event::{EventLoopProxy, MeasureEvent, VgonioEvent},
         widgets::SurfaceSelector,
     },
-    measure::measurement::MmsfMeasurementParams,
+    measure::measurement::MgafMeasurementParams,
 };
 
 pub struct MmsfSimulation {
-    pub params: MmsfMeasurementParams,
+    pub params: MgafMeasurementParams,
     pub(crate) selector: SurfaceSelector,
     event_loop: EventLoopProxy,
 }
@@ -15,7 +15,7 @@ pub struct MmsfSimulation {
 impl MmsfSimulation {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
-            params: MmsfMeasurementParams::default(),
+            params: MgafMeasurementParams::default(),
             event_loop,
             selector: SurfaceSelector::multiple(),
         }
