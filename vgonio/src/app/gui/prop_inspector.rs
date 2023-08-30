@@ -156,7 +156,7 @@ impl PropertyInspector {
 
                                 let cache = self.cache.read().unwrap();
                                 match &cache.get_measurement_data(meas).unwrap().measured {
-                                    MeasuredData::Madf(madf) => {
+                                    MeasuredData::Adf(madf) => {
                                         ui.label("θ:");
                                         ui.label(format!(
                                             "{} ~ {}, every {}",
@@ -195,7 +195,7 @@ impl PropertyInspector {
                                             ui.end_row()
                                         }
                                     }
-                                    MeasuredData::Mmsf(mmsf) => {
+                                    MeasuredData::Msf(mmsf) => {
                                         ui.label("θ:");
                                         ui.label(format!(
                                             "{} ~ {}, every {}",

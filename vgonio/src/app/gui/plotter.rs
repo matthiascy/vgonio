@@ -1,8 +1,8 @@
-mod mmsf;
-mod mndf;
+mod adf;
+mod msf;
 
-pub use mmsf::*;
-pub use mndf::*;
+pub use adf::*;
+pub use msf::*;
 
 use crate::{
     app::{
@@ -14,11 +14,7 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    fitting::{
-        BeckmannSpizzichinoAnisotropicNDF, BeckmannSpizzichinoNDF, FittedModel, Isotropy,
-        MicrofacetAreaDistributionModel, MicrofacetMaskingShadowingModel,
-        TrowbridgeReitzAnisotropicNDF, TrowbridgeReitzNDF,
-    },
+    fitting::FittedModel,
     measure::{
         measurement::{MeasurementData, MeasurementKind},
         CollectorScheme,
@@ -28,22 +24,19 @@ use crate::{
 use egui::{plot::*, Align, Context, Response, Ui, Vec2, WidgetText};
 use std::{
     any::Any,
-    io::Read,
     ops::{Deref, RangeInclusive},
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
+use vgbxdf::{
+    BeckmannSpizzichinoDistribution, MicrofacetDistributionModel, TrowbridgeReitzDistribution,
+};
 use vgcore::{
     math,
     math::{Handedness, Vec3},
     units::{deg, rad, Radians},
+    Isotropy,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PlotType {
-    Line,
-    Bar,
-}
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),
@@ -120,14 +113,12 @@ pub struct PlotInspector {
     props: Arc<RwLock<PropertyData>>,
     /// The legend to be displayed
     legend: Legend,
-    /// The type of plot to be displayed
-    plot_type: PlotType,
     /// Variant data for the plot depending on the type of the measurement data.
     variant: Option<Box<dyn VariantData>>,
     new_curve_kind: CurveKind,
     // (model, uuid)
-    mndf_models: Vec<(Box<dyn MicrofacetAreaDistributionModel>, Uuid)>,
-    mmsf_models: Vec<Box<dyn MicrofacetMaskingShadowingModel>>,
+    adf_models: Vec<(Box<dyn MicrofacetDistributionModel>, Uuid)>,
+    // mmsf_models: Vec<Box<dyn MicrofacetGeometricalAttenuationModel>>, TODO: implement
     /// The event loop.
     event_loop: EventLoopProxy,
 
@@ -260,15 +251,7 @@ impl PlotInspector {
             let cache = cache.read().unwrap();
             extra.pre_process(data, &cache);
         }
-        Self::new_inner(
-            name,
-            data,
-            PlotType::Line,
-            Some(Box::new(extra)),
-            cache,
-            props,
-            event_loop,
-        )
+        Self::new_inner(name, data, Some(Box::new(extra)), cache, props, event_loop)
     }
 
     /// Creates a new inspector for a microfacet masking-shadowing function.
@@ -284,15 +267,7 @@ impl PlotInspector {
             let cache = cache.read().unwrap();
             extra.pre_process(data, &cache);
         }
-        Self::new_inner(
-            name,
-            data,
-            PlotType::Line,
-            Some(Box::new(extra)),
-            cache,
-            props,
-            event_loop,
-        )
+        Self::new_inner(name, data, Some(Box::new(extra)), cache, props, event_loop)
     }
 
     /// Creates a new inspector for a bidirectional scattering distribution
@@ -306,15 +281,7 @@ impl PlotInspector {
     ) -> Self {
         let extra = BsdfPlotExtraData::new(/*view_id*/);
         // extra.pre_process(data, cache);
-        Self::new_inner(
-            name,
-            data,
-            PlotType::Line,
-            Some(Box::new(extra)),
-            cache,
-            props,
-            event_loop,
-        )
+        Self::new_inner(name, data, Some(Box::new(extra)), cache, props, event_loop)
     }
 
     /// Creates a new inspector with data to be plotted.
@@ -333,13 +300,12 @@ impl PlotInspector {
                 .text_style(egui::TextStyle::Monospace)
                 .background_alpha(1.0)
                 .position(Corner::RightTop),
-            plot_type: PlotType::Line,
             event_loop,
             variant: None,
             new_curve_kind: CurveKind::None,
-            mndf_models: vec![],
+            adf_models: vec![],
             uuid: Uuid::new_v4(),
-            mmsf_models: vec![],
+            // mmsf_models: vec![],
             azimuth_m: rad!(0.0),
         }
     }
@@ -347,7 +313,6 @@ impl PlotInspector {
     fn new_inner(
         name: String,
         data: Handle<MeasurementData>,
-        plot_type: PlotType,
         extra: Option<Box<dyn VariantData>>,
         cache: Arc<RwLock<Cache>>,
         props: Arc<RwLock<PropertyData>>,
@@ -363,32 +328,21 @@ impl PlotInspector {
                 .text_style(egui::TextStyle::Monospace)
                 .background_alpha(1.0)
                 .position(Corner::RightTop),
-            plot_type,
             variant: extra,
             new_curve_kind: CurveKind::None,
-            mndf_models: vec![],
-            mmsf_models: vec![],
+            adf_models: vec![],
+            // mmsf_models: vec![],
             event_loop,
             azimuth_m: rad!(0.0),
         }
-    }
-
-    fn plot_type_ui(plot_type: &mut PlotType, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Plot type:");
-            ui.selectable_value(plot_type, PlotType::Line, "Line");
-            ui.selectable_value(plot_type, PlotType::Bar, "Bar");
-        });
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CurveKind {
     None,
-    TrowbridgeReitzNDF,
-    TrowbridgeReitzNDFAnisotropic,
-    BeckmannSpizzichinoNDF,
-    BeckmannSpizzichinoNDFAnisotropic,
+    TrowbridgeReitzADF,
+    BeckmannSpizzichinoADF,
 }
 
 impl PlottingWidget for PlotInspector {
@@ -399,106 +353,59 @@ impl PlottingWidget for PlotInspector {
     fn ui(&mut self, ui: &mut Ui) {
         {
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Add curve").clicked() {
-                    match self.new_curve_kind {
-                        CurveKind::None => {}
-                        CurveKind::BeckmannSpizzichinoNDF => {
-                            self.mndf_models.push((
-                                Box::new(BeckmannSpizzichinoNDF::default()),
-                                Uuid::new_v4(),
-                            ));
-                        }
-                        CurveKind::TrowbridgeReitzNDF => self
-                            .mndf_models
-                            .push((Box::new(TrowbridgeReitzNDF::default()), Uuid::new_v4())),
-                        CurveKind::TrowbridgeReitzNDFAnisotropic => self.mndf_models.push((
-                            Box::new(TrowbridgeReitzAnisotropicNDF::default()),
-                            Uuid::new_v4(),
-                        )),
-                        CurveKind::BeckmannSpizzichinoNDFAnisotropic => {
-                            self.mndf_models.push((
-                                Box::new(BeckmannSpizzichinoAnisotropicNDF::default()),
-                                Uuid::new_v4(),
-                            ));
-                        }
-                    }
-                }
                 egui::ComboBox::from_label("kind")
                     .selected_text(format!("{:?}", self.new_curve_kind))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::TrowbridgeReitzNDF,
+                            CurveKind::TrowbridgeReitzADF,
                             "Trowbridge-Reitz",
                         );
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::BeckmannSpizzichinoNDF,
+                            CurveKind::BeckmannSpizzichinoADF,
                             "Beckmann-Spizzichino",
                         );
-                        ui.selectable_value(
-                            &mut self.new_curve_kind,
-                            CurveKind::TrowbridgeReitzNDFAnisotropic,
-                            "Trowbridge-Reitz (anisotropic)",
-                        );
-                        ui.selectable_value(
-                            &mut self.new_curve_kind,
-                            CurveKind::BeckmannSpizzichinoNDFAnisotropic,
-                            "Beckmann-Spizzichino (anisotropic)",
-                        );
                     });
+                if ui.button("Graph").clicked() {
+                    match self.new_curve_kind {
+                        CurveKind::None => {}
+                        CurveKind::BeckmannSpizzichinoADF => {
+                            self.adf_models.push((
+                                Box::new(BeckmannSpizzichinoDistribution::new(0.5, 0.5)),
+                                Uuid::new_v4(),
+                            ));
+                        }
+                        CurveKind::TrowbridgeReitzADF => self.adf_models.push((
+                            Box::new(TrowbridgeReitzDistribution::new(0.5, 0.5)),
+                            Uuid::new_v4(),
+                        )),
+                    }
+                }
             });
         }
 
         {
             let mut to_be_removed = vec![];
-            for (i, (model, uuid)) in self.mndf_models.iter_mut().enumerate() {
+            for (i, (model, uuid)) in self.adf_models.iter_mut().enumerate() {
                 ui.horizontal_wrapped(|ui| {
-                    match model.isotropy() {
-                        Isotropy::Isotropic => {
-                            ui.label(format!(
-                                "Model: {}#{}",
-                                model.name(),
-                                &uuid.to_string().as_str()[..6]
-                            ));
-                            let inner = model.as_isotropic_mut().unwrap();
-                            let mut alpha = inner.param();
-                            if ui
-                                .add(egui::Slider::new(&mut alpha, 0.0..=5.0).text("alpha"))
-                                .changed()
-                            {
-                                inner.set_param(alpha);
-                            }
-                        }
-                        Isotropy::Anisotropic => {
-                            ui.label(format!(
-                                "Model: {}#{}",
-                                model.name(),
-                                &uuid.to_string().as_str()[..6]
-                            ));
-                            let inner = model.as_anisotropic_mut().unwrap();
-                            let [mut alpha_x, mut alpha_y] = inner.params();
-                            let alpha_x_changed = ui
-                                .add(egui::Slider::new(&mut alpha_x, 0.0..=5.0).text("alpha_x"))
-                                .changed();
-                            let alpha_y_changed = ui
-                                .add(egui::Slider::new(&mut alpha_y, 0.0..=5.0).text("alpha_y"))
-                                .changed();
+                    ui.label(format!(
+                        "Model: {}#{}",
+                        model.kind().to_str(),
+                        &uuid.to_string().as_str()[..6]
+                    ));
+                    let mut alpha_x = model.alpha_x();
+                    let mut alpha_y = model.alpha_y();
+                    let alpha_x_changed = ui
+                        .add(egui::Slider::new(&mut alpha_x, 0.00001..=10.0).text("alpha_x"))
+                        .changed();
+                    let alpha_y_changed = ui
+                        .add(egui::Slider::new(&mut alpha_y, 0.00001..=10.0).text("alpha_y"))
+                        .changed();
 
-                            if alpha_x_changed || alpha_y_changed {
-                                inner.set_params([alpha_x, alpha_y]);
-                            }
-                        }
-                    };
-                    #[cfg(feature = "scaled-ndf-fitting")]
-                    {
-                        if let Some(scale) = model.scale() {
-                            let mut scale = scale;
-                            ui.label("Scale: ");
-                            if ui.add(egui::DragValue::new(&mut scale)).changed() {
-                                model.set_scale(scale);
-                            }
-                        }
+                    if alpha_x_changed || alpha_y_changed {
+                        model.set_alpha_x(alpha_x);
+                        model.set_alpha_y(alpha_y);
                     }
                     if ui.button("Remove").clicked() {
                         to_be_removed.push(i);
@@ -506,7 +413,7 @@ impl PlottingWidget for PlotInspector {
                 });
             }
             for i in to_be_removed {
-                self.mndf_models.remove(i);
+                self.adf_models.remove(i);
             }
         }
 
@@ -518,7 +425,7 @@ impl PlottingWidget for PlotInspector {
                 //.clamp_grid(true)
                 .center_x_axis(true)
                 .sharp_grid_lines(true)
-                .x_grid_spacer(ndf_msf_x_angle_spacer)
+                .x_grid_spacer(adf_msf_x_angle_spacer)
                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()));
             let azimuth_range =
@@ -533,53 +440,28 @@ impl PlottingWidget for PlotInspector {
                 |v| format!("φ = {:>6.2}°", v.to_degrees()),
             );
             plot.show(ui, |plot_ui| {
-                for (i, (model, uuid)) in self.mndf_models.iter().enumerate() {
+                for (i, (model, uuid)) in self.adf_models.iter().enumerate() {
                     let points: Vec<_> = (0..=180)
-                        .map(|x| match model.isotropy() {
-                            Isotropy::Isotropic => {
-                                let inner = model.as_isotropic().unwrap();
-                                let theta = x as f64 * std::f64::consts::PI / 180.0
-                                    - std::f64::consts::PI * 0.5;
-                                let value = {
-                                    #[cfg(feature = "scaled-ndf-fitting")]
-                                    {
-                                        inner.eval_with_theta_m(theta.cos())
-                                            * model.scale().unwrap_or(1.0)
-                                    }
-                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                    {
-                                        inner.eval_with_theta_m(theta.cos())
-                                    }
-                                };
-                                [theta, value]
-                            }
-                            Isotropy::Anisotropic => {
-                                let inner = model.as_anisotropic().unwrap();
-                                let theta = x as f64 * std::f64::consts::PI / 180.0
-                                    - std::f64::consts::PI * 0.5;
-                                let current_phi = self.azimuth_m.wrap_to_tau();
-                                let phi = if theta > 0.0 {
-                                    current_phi
-                                } else {
-                                    current_phi.opposite()
-                                };
-                                #[cfg(feature = "scaled-ndf-fitting")]
-                                let value = inner
-                                    .eval_with_cos_theta_phi_m(theta.cos(), phi.cos() as f64)
-                                    * model.scale().unwrap_or(1.0);
-                                #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                let value =
-                                    inner.eval_with_cos_theta_phi_m(theta.cos(), phi.cos() as f64);
-                                [theta, value]
-                            }
+                        .map(|x| {
+                            let theta = x as f64 * std::f64::consts::PI / 180.0
+                                - std::f64::consts::PI * 0.5;
+                            let current_phi = self.azimuth_m.wrap_to_tau();
+                            let phi = if theta > 0.0 {
+                                current_phi
+                            } else {
+                                current_phi.opposite()
+                            };
+                            let value = model.eval_adf(theta.cos(), phi.cos() as f64);
+                            [theta, value]
                         })
                         .collect();
                     plot_ui.line(
                         Line::new(points)
                             .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[i]))
                             .name(format!(
-                                "{}#{}",
-                                model.name(),
+                                "{:?}{:?}#{}",
+                                model.isotropy(),
+                                model.kind(),
                                 &uuid.to_string().as_str()[..6]
                             )),
                     );
@@ -1116,13 +998,12 @@ impl PlottingWidget for PlotInspector {
                         // }
                     }
                 }
-                MeasurementKind::Mndf => {
+                MeasurementKind::Adf => {
                     if let Some(variant) = &mut self.variant {
                         let cache = self.cache.read().unwrap();
                         let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                         let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
-                        Self::plot_type_ui(&mut self.plot_type, ui);
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
@@ -1131,7 +1012,7 @@ impl PlottingWidget for PlotInspector {
                                 .data_aspect(aspect as f32)
                                 .center_x_axis(true)
                                 .sharp_grid_lines(true)
-                                .x_grid_spacer(ndf_msf_x_angle_spacer)
+                                .x_grid_spacer(adf_msf_x_angle_spacer)
                                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
                                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                                 .coordinates_formatter(
@@ -1149,130 +1030,79 @@ impl PlottingWidget for PlotInspector {
                                         )
                                     }),
                                 );
-                            plot.show(ui, |plot_ui| match self.plot_type {
-                                PlotType::Line => {
-                                    plot_ui.line(
-                                        Line::new(curve.points.clone())
-                                            .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                            .name("Measured - NDF"),
-                                    );
-                                    let mut color_idx_base = 1;
-                                    let extra = variant
-                                        .as_any()
-                                        .downcast_ref::<AreaDistributionExtra>()
-                                        .unwrap();
-                                    {
-                                        for (i, (model, curves)) in extra.fitted.iter().enumerate()
-                                        {
-                                            let curve = if model.is_isotropic() {
-                                                &curves[0]
-                                            } else {
+                            plot.show(ui, |plot_ui| {
+                                plot_ui.line(
+                                    Line::new(curve.points.clone())
+                                        .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
+                                        .name("Measured - NDF"),
+                                );
+                                let mut color_idx_base = 1;
+                                let extra = variant
+                                    .as_any()
+                                    .downcast_ref::<AreaDistributionExtra>()
+                                    .unwrap();
+                                {
+                                    for (i, (model, curves)) in extra.fitted.iter().enumerate() {
+                                        let curve = match model.isotropy() {
+                                            Isotropy::Isotropic => &curves[0],
+                                            Isotropy::Anisotropic => {
                                                 &curves[extra.current_azimuth_idx()]
-                                            };
-                                            plot_ui.line(
-                                                Line::new(curve.points.clone())
-                                                    .stroke(egui::epaint::Stroke::new(
-                                                        2.0,
-                                                        LINE_COLORS[(i + 1) % LINE_COLORS.len()],
-                                                    ))
-                                                    .name(model.name()),
-                                            )
-                                        }
-                                        color_idx_base += extra.fitted.len() + 1;
-                                        if extra.show_accumulated {
-                                            plot_ui.line(
-                                                Line::new(extra.curves[0].points.clone()).stroke(
-                                                    egui::epaint::Stroke::new(2.0, LINE_COLORS[15]),
-                                                ),
-                                            )
-                                        }
-                                    }
-                                    for (i, (model, uuid)) in self.mndf_models.iter().enumerate() {
-                                        let points: Vec<_> = (0..=180)
-                                            .map(|x| match model.isotropy() {
-                                                Isotropy::Isotropic => {
-                                                    let inner = model.as_isotropic().unwrap();
-                                                    let theta = x as f64 * std::f64::consts::PI
-                                                        / 180.0
-                                                        - std::f64::consts::PI * 0.5;
-                                                    #[cfg(feature = "scaled-ndf-fitting")]
-                                                    let value = inner
-                                                        .eval_with_cos_theta_m(theta.cos())
-                                                        * model.scale().unwrap_or(1.0);
-                                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                                    let value =
-                                                        inner.eval_with_cos_theta_m(theta.cos());
-                                                    [theta, value]
-                                                }
-                                                Isotropy::Anisotropic => {
-                                                    let inner = model.as_anisotropic().unwrap();
-                                                    let theta = x as f64 * std::f64::consts::PI
-                                                        / 180.0
-                                                        - std::f64::consts::PI * 0.5;
-                                                    let current_phi = extra.azimuth_m.wrap_to_tau();
-                                                    let phi = if theta > 0.0 {
-                                                        current_phi
-                                                    } else {
-                                                        current_phi.opposite()
-                                                    };
-                                                    #[cfg(feature = "scaled-ndf-fitting")]
-                                                    let value = inner.eval_with_cos_theta_phi_m(
-                                                        theta.cos(),
-                                                        phi.cos() as f64,
-                                                    ) * model.scale().unwrap_or(1.0);
-                                                    #[cfg(not(feature = "scaled-ndf-fitting"))]
-                                                    let value = inner.eval_with_cos_theta_phi_m(
-                                                        theta.cos(),
-                                                        phi.cos() as f64,
-                                                    );
-                                                    [theta, value]
-                                                }
-                                            })
-                                            .collect();
+                                            }
+                                        };
                                         plot_ui.line(
-                                            Line::new(points)
+                                            Line::new(curve.points.clone())
                                                 .stroke(egui::epaint::Stroke::new(
                                                     2.0,
-                                                    LINE_COLORS
-                                                        [(i + color_idx_base) % LINE_COLORS.len()],
+                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
                                                 ))
-                                                .name(format!(
-                                                    "{}#{}",
-                                                    model.name(),
-                                                    &uuid.to_string().as_str()[..6]
-                                                )),
-                                        );
-                                    }
-                                }
-                                PlotType::Bar => {
-                                    plot_ui.bar_chart(
-                                        BarChart::new(
-                                            curve
-                                                .points
-                                                .iter()
-                                                .map(|[x, y]| {
-                                                    Bar::new(*x, *y)
-                                                        .width(zenith_bin_width_rad as f64)
-                                                        .stroke(egui::epaint::Stroke::new(
-                                                            1.0,
-                                                            egui::Color32::LIGHT_RED,
-                                                        ))
-                                                        .fill(
-                                                            egui::Color32::from_rgba_unmultiplied(
-                                                                255, 128, 128, 128,
-                                                            ),
-                                                        )
-                                                })
-                                                .collect(),
+                                                .name(model.kind().to_str()),
                                         )
-                                        .name("Microfacet area distribution"),
+                                    }
+                                    color_idx_base += extra.fitted.len() + 1;
+                                }
+                                for (i, (model, uuid)) in self.adf_models.iter().enumerate() {
+                                    let points: Vec<_> = (0..=180)
+                                        .map(|x| match model.isotropy() {
+                                            Isotropy::Isotropic => {
+                                                let theta = x as f64 * std::f64::consts::PI / 180.0
+                                                    - std::f64::consts::PI * 0.5;
+                                                let value = model.eval_adf(theta.cos(), 0.0);
+                                                [theta, value]
+                                            }
+                                            Isotropy::Anisotropic => {
+                                                let theta = x as f64 * std::f64::consts::PI / 180.0
+                                                    - std::f64::consts::PI * 0.5;
+                                                let current_phi = extra.azimuth_m.wrap_to_tau();
+                                                let phi = if theta > 0.0 {
+                                                    current_phi
+                                                } else {
+                                                    current_phi.opposite()
+                                                };
+                                                let value =
+                                                    model.eval_adf(theta.cos(), phi.cos() as f64);
+                                                [theta, value]
+                                            }
+                                        })
+                                        .collect();
+                                    plot_ui.line(
+                                        Line::new(points)
+                                            .stroke(egui::epaint::Stroke::new(
+                                                2.0,
+                                                LINE_COLORS
+                                                    [(i + color_idx_base) % LINE_COLORS.len()],
+                                            ))
+                                            .name(format!(
+                                                "{}#{}",
+                                                model.kind().to_str(),
+                                                &uuid.to_string().as_str()[..6]
+                                            )),
                                     );
                                 }
                             });
                         }
                     }
                 }
-                MeasurementKind::Mmsf => {
+                MeasurementKind::Msf => {
                     if let Some(extra) = &mut self.variant {
                         let variant = extra
                             .as_any_mut()
@@ -1282,7 +1112,6 @@ impl PlottingWidget for PlotInspector {
                         let measurement = cache.get_measurement_data(self.data_handle).unwrap();
                         let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
                         let zenith_bin_width_rad = zenith.step_size.value();
-                        Self::plot_type_ui(&mut self.plot_type, ui);
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
@@ -1292,7 +1121,7 @@ impl PlottingWidget for PlotInspector {
                                 //.clamp_grid(true)
                                 .center_x_axis(true)
                                 .sharp_grid_lines(true)
-                                .x_grid_spacer(ndf_msf_x_angle_spacer)
+                                .x_grid_spacer(adf_msf_x_angle_spacer)
                                 .x_axis_formatter(|x, _| format!("{:.2}°", x.to_degrees()))
                                 .coordinates_formatter(
                                     Corner::LeftBottom,
@@ -1310,58 +1139,32 @@ impl PlottingWidget for PlotInspector {
                                     }),
                                 );
 
-                            plot.show(ui, |plot_ui| match self.plot_type {
-                                PlotType::Line => {
-                                    plot_ui.line(
-                                        Line::new(curve.points.clone())
-                                            .stroke(egui::epaint::Stroke::new(
-                                                2.0,
-                                                egui::Color32::LIGHT_RED,
-                                            ))
-                                            .name("Microfacet masking shadowing"),
-                                    );
-                                    {
-                                        let concrete_extra = variant
-                                            .as_any()
-                                            .downcast_ref::<MaskingShadowingExtra>()
-                                            .unwrap();
-                                        for (i, (model, curve)) in
-                                            concrete_extra.fitted.iter().enumerate()
-                                        {
-                                            plot_ui.line(
-                                                Line::new(curve.points.clone())
-                                                    .stroke(egui::epaint::Stroke::new(
-                                                        2.0,
-                                                        LINE_COLORS[(i + 1) % LINE_COLORS.len()],
-                                                    ))
-                                                    .name(model.name()),
-                                            )
-                                        }
-                                    }
-                                }
-                                PlotType::Bar => {
-                                    plot_ui.bar_chart(
-                                        BarChart::new(
-                                            curve
-                                                .points
-                                                .iter()
-                                                .map(|[x, y]| {
-                                                    Bar::new(*x, *y)
-                                                        .width(zenith_bin_width_rad as f64)
-                                                        .stroke(egui::epaint::Stroke::new(
-                                                            1.0,
-                                                            egui::Color32::LIGHT_RED,
-                                                        ))
-                                                        .fill(
-                                                            egui::Color32::from_rgba_unmultiplied(
-                                                                255, 128, 128, 128,
-                                                            ),
-                                                        )
-                                                })
-                                                .collect(),
-                                        )
+                            plot.show(ui, |plot_ui| {
+                                plot_ui.line(
+                                    Line::new(curve.points.clone())
+                                        .stroke(egui::epaint::Stroke::new(
+                                            2.0,
+                                            egui::Color32::LIGHT_RED,
+                                        ))
                                         .name("Microfacet masking shadowing"),
-                                    );
+                                );
+                                {
+                                    let concrete_extra = variant
+                                        .as_any()
+                                        .downcast_ref::<MaskingShadowingExtra>()
+                                        .unwrap();
+                                    for (i, (model, curve)) in
+                                        concrete_extra.fitted.iter().enumerate()
+                                    {
+                                        plot_ui.line(
+                                            Line::new(curve.points.clone())
+                                                .stroke(egui::epaint::Stroke::new(
+                                                    2.0,
+                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                ))
+                                                .name(model.kind().to_str()),
+                                        );
+                                    }
                                 }
                             });
                         }
@@ -1376,8 +1179,8 @@ impl PlottingWidget for PlotInspector {
     fn measurement_data_kind(&self) -> MeasurementKind {
         match self.data_handle.variant_id() {
             0 => MeasurementKind::Bsdf,
-            1 => MeasurementKind::Mndf,
-            2 => MeasurementKind::Mmsf,
+            1 => MeasurementKind::Adf,
+            2 => MeasurementKind::Msf,
             _ => {
                 unreachable!()
             }
@@ -1396,7 +1199,7 @@ impl Dockable for PlotInspector {
 }
 
 /// Calculates the ticks for x axis of the ADF or MSF plot.
-fn ndf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
+fn adf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
     let mut marks = vec![];
     let (min, max) = input.bounds;
     let min = min.floor().to_degrees() as i32;

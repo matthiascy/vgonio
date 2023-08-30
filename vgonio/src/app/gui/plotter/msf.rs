@@ -8,12 +8,13 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    fitting::{FittedModel, MicrofacetMaskingShadowingModel},
+    fitting::FittedModel,
     measure::measurement::MeasurementData,
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};
 use std::any::Any;
+use vgbxdf::MicrofacetDistributionModel;
 use vgcore::units::{rad, Radians};
 
 pub struct MaskingShadowingExtra {
@@ -35,8 +36,8 @@ pub struct MaskingShadowingExtra {
     /// angle of microfacet normal m, the third index is the azimuthal angle of
     /// incident/outgoing direction v.
     pub curves: Vec<Curve>,
-    /// The fitted curves together with the fitted model.
-    pub fitted: Vec<(Box<dyn MicrofacetMaskingShadowingModel>, Curve)>,
+    // /// The fitted curves together with the fitted model.
+    pub fitted: Vec<(Box<dyn MicrofacetDistributionModel>, Curve)>,
 }
 
 impl Default for MaskingShadowingExtra {
@@ -99,45 +100,46 @@ impl VariantData for MaskingShadowingExtra {
     }
 
     fn update_fitted_curves(&mut self, models: &[FittedModel]) {
-        let theta_values = self
-            .zenith_range
-            .values_rev()
-            .map(|x| -x.as_f64())
-            .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
-            .collect::<Vec<_>>();
-        let to_add = models
-            .iter()
-            .filter(|model| {
-                !self
-                    .fitted
-                    .iter()
-                    .any(|(existing_model, _)| model.family() == existing_model.family())
-            })
-            .collect::<Vec<_>>();
-
-        if to_add.is_empty() {
-            return;
-        } else {
-            for fitted in to_add {
-                match fitted {
-                    FittedModel::Mmsf(model) => {
-                        // Generate the curve for this model.
-                        let points = theta_values
-                            .iter()
-                            .zip(
-                                theta_values
-                                    .iter()
-                                    .map(|theta_m| model.eval_with_cos_theta_v(theta_m.cos())),
-                            )
-                            .map(|(x, y)| [*x, y]);
-                        self.fitted.push((model.clone_box(), Curve::from(points)));
-                    }
-                    _ => {
-                        unreachable!("Wrong model type for masking-shadowing!")
-                    }
-                }
-            }
-        }
+        // let theta_values = self
+        //     .zenith_range
+        //     .values_rev()
+        //     .map(|x| -x.as_f64())
+        //     .chain(self.zenith_range.values().skip(1).map(|x| x.as_f64()))
+        //     .collect::<Vec<_>>();
+        // let to_add = models
+        //     .iter()
+        //     .filter(|model| {
+        //         !self
+        //             .fitted
+        //             .iter()
+        //             .any(|(existing_model, _)| model.family() ==
+        // existing_model.family())     })
+        //     .collect::<Vec<_>>();
+        //
+        // if to_add.is_empty() {
+        //     return;
+        // } else {
+        //     for fitted in to_add {
+        //         match fitted {
+        //             FittedModel::Mmsf(model) => {
+        //                 // Generate the curve for this model.
+        //                 let points = theta_values
+        //                     .iter()
+        //                     .zip(
+        //                         theta_values
+        //                             .iter()
+        //                             .map(|theta_m|
+        //     model.eval_with_cos_theta_v(theta_m.cos())),                 )
+        //                     .map(|(x, y)| [*x, y]);
+        //                 self.fitted.push((model.clone_box(),
+        // Curve::from(points)));             }
+        //             _ => {
+        //                 unreachable!("Wrong model type for
+        // masking-shadowing!")             }
+        //         }
+        //     }
+        //     return;
+        // }
     }
 
     fn as_any(&self) -> &dyn Any { self }

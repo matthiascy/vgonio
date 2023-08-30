@@ -18,3 +18,12 @@ pub mod error;
 pub mod io;
 pub mod math;
 pub mod units;
+
+/// Indicates whether something is uniform in all directions or not.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Isotropy {
+    /// Uniformity in all directions.
+    Isotropic,
+    /// Non-uniformity in some directions.
+    Anisotropic,
+}

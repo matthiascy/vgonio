@@ -20,14 +20,18 @@ use crate::{
         Config,
     },
     fitting::{
-        AreaDistributionFittingProblem, BeckmannSpizzichinoMSF, FittedModel, FittingProblem,
-        MicrofacetModelFamily, MmsfFittingProblem, ReflectionModelFamily, TrowbridgeReitzMSF,
+        FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData,
+        MicrofacetDistributionFittingMethod, MicrofacetDistributionFittingProblem,
     },
-    measure::measurement::{MeasurementData, MeasurementKind},
+    measure::{
+        measurement::{MeasurementData, MeasurementKind},
+        microfacet::MeasuredMsfData,
+    },
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
 use std::{
+    borrow::Cow,
     path::PathBuf,
     sync::{Arc, RwLock},
 };
@@ -168,14 +172,14 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Mndf => Box::new(PlotInspector::new_area_distrib_plot(
+                        MeasurementKind::Adf => Box::new(PlotInspector::new_area_distrib_plot(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Mmsf => Box::new(PlotInspector::new_mmsf(
+                        MeasurementKind::Msf => Box::new(PlotInspector::new_mmsf(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
@@ -191,158 +195,40 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            #[cfg(feature = "scaled-ndf-fitting")]
-            VgonioEvent::Fitting {
-                kind,
-                family,
-                data,
-                isotropy,
-                scaled,
-            } => {
+            VgonioEvent::Fitting { kind, data } => {
                 match kind {
-                    MeasurementKind::Bsdf => {}
-                    MeasurementKind::Mndf => {
+                    FittingProblemKind::Bsdf() => {
+                        todo!("Fitting BSDF")
+                    }
+                    FittingProblemKind::Mdf { model, method } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.contains(*family, *isotropy, *scaled) {
+                        if !fitted.contains(kind) {
                             let cache = self.cache.read().unwrap();
                             let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = measurement
-                                .measured
-                                .madf_data()
-                                .expect("Measurement has no MNDF data.");
-                            let problem = AreaDistributionFittingProblem::new(
-                                data, *family, *isotropy, *scaled,
-                            );
+                            let data = match method {
+                                MicrofacetDistributionFittingMethod::Adf => {
+                                    MeasuredMdfData::Adf(Cow::Borrowed(
+                                        measurement
+                                            .measured
+                                            .adf_data()
+                                            .expect("Measurement has no ADF data."),
+                                    ))
+                                }
+                                MicrofacetDistributionFittingMethod::Msf => {
+                                    MeasuredMdfData::Msf(Cow::Borrowed(
+                                        measurement
+                                            .measured
+                                            .msf_data()
+                                            .expect("Measurement has no MSF data."),
+                                    ))
+                                }
+                            };
+                            let problem =
+                                MicrofacetDistributionFittingProblem::new(data, *method, *model);
                             let report = problem.lsq_lm_fit();
                             report.print_fitting_report();
-
-                            fitted.push(FittedModel::Mndf(report.best_model().clone_box()));
-                        }
-                    }
-                    MeasurementKind::Mmsf => {
-                        let mut prop = self.properties.write().unwrap();
-                        let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.contains(*family, *isotropy, *scaled) {
-                            let cache = self.cache.read().unwrap();
-                            let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = measurement
-                                .measured
-                                .mmsf_data()
-                                .expect("Measurement has no MMSF data.");
-                            let problem = match family {
-                                ReflectionModelFamily::Microfacet(m) => match m {
-                                    MicrofacetModelFamily::TrowbridgeReitz => {
-                                        MmsfFittingProblem::new(
-                                            data,
-                                            TrowbridgeReitzMSF { width: 0.05 },
-                                            Vec3::Y,
-                                        )
-                                    }
-                                    MicrofacetModelFamily::BeckmannSpizzichino => {
-                                        MmsfFittingProblem::new(
-                                            data,
-                                            BeckmannSpizzichinoMSF { alpha: 0.05 },
-                                            Vec3::Y,
-                                        )
-                                    }
-                                },
-                            };
-                            let report = problem.lsq_lm_fit();
-                            report.print_fitting_report();
-                            fitted.push(FittedModel::Mmsf(report.best_model().clone_box()));
-                        }
-                    }
-                }
-                EventResponse::Handled
-            }
-            #[cfg(not(feature = "scaled-ndf-fitting"))]
-            VgonioEvent::Fitting {
-                kind,
-                family,
-                data,
-                isotropy: isotropic,
-            } => {
-                match kind {
-                    MeasurementKind::Bsdf => {}
-                    MeasurementKind::Mndf => {
-                        let mut prop = self.properties.write().unwrap();
-                        let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.contains(*family, *isotropic) {
-                            let cache = self.cache.read().unwrap();
-                            let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = measurement
-                                .measured
-                                .madf_data()
-                                .expect("Measurement has no MADF data.");
-                            let problem = match family {
-                                ReflectionModelFamily::Microfacet(m) => match m {
-                                    MicrofacetModelFamily::TrowbridgeReitz => {
-                                        if *isotropic {
-                                            AreaDistributionFittingProblem::new(
-                                                data,
-                                                TrowbridgeReitzNDF::default(),
-                                            )
-                                        } else {
-                                            AreaDistributionFittingProblem::new(
-                                                data,
-                                                TrowbridgeReitzAnisotropicNDF::default(),
-                                            )
-                                        }
-                                    }
-                                    MicrofacetModelFamily::BeckmannSpizzichino => {
-                                        if *isotropic {
-                                            AreaDistributionFittingProblem::new(
-                                                data,
-                                                BeckmannSpizzichinoNDF::default(),
-                                            )
-                                        } else {
-                                            AreaDistributionFittingProblem::new(
-                                                data,
-                                                BeckmannSpizzichinoAnisotropicNDF::default(),
-                                            )
-                                        }
-                                    }
-                                },
-                            };
-                            let (result, report) = problem.lsq_lm_fit();
-                            log::info!("Report: {:?}", report);
-                            log::info!("Result: {:?}", result);
-                            fitted.push(FittedModel::Mndf(result));
-                        }
-                    }
-                    MeasurementKind::Mmsf => {
-                        let mut prop = self.properties.write().unwrap();
-                        let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if fitted.contains(*family, *isotropic) {
-                            let cache = self.cache.read().unwrap();
-                            let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = measurement
-                                .measured
-                                .mmsf_data()
-                                .expect("Measurement has no MMSF data.");
-                            let problem = match family {
-                                ReflectionModelFamily::Microfacet(m) => match m {
-                                    MicrofacetModelFamily::TrowbridgeReitz => {
-                                        MmsfFittingProblem::new(
-                                            data,
-                                            TrowbridgeReitzMSF { width: 0.05 },
-                                            Vec3::Y,
-                                        )
-                                    }
-                                    MicrofacetModelFamily::BeckmannSpizzichino => {
-                                        MmsfFittingProblem::new(
-                                            data,
-                                            BeckmannSpizzichinoMSF { alpha: 0.05 },
-                                            Vec3::Y,
-                                        )
-                                    }
-                                },
-                            };
-                            let (result, report) = problem.lsq_lm_fit();
-                            log::info!("Report: {:?}", report);
-                            log::info!("Result: {:?}", result);
-                            fitted.push(FittedModel::Mmsf(result));
+                            fitted.push(FittedModel::Adf(report.best_model().clone_box()));
                         }
                     }
                 }

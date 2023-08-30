@@ -8,7 +8,7 @@ use vgcore::math;
 use crate::measure::{
     bsdf::MeasuredBsdfData,
     measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
-    microfacet::{MeasuredMgafData, MeasuredMndfData},
+    microfacet::{MeasuredAdfData, MeasuredMsfData},
 };
 
 pub mod vgmo {
@@ -19,8 +19,8 @@ pub mod vgmo {
             collector::BounceAndEnergy,
             emitter::RegionShape,
             measurement::{
-                BsdfMeasurementParams, MeasurementKind, MgafMeasurementParams,
-                MndfMeasurementParams, Radius, SimulationKind,
+                BsdfMeasurementParams, MdfMeasurementParams, MeasurementKind,
+                MgafMeasurementParams, Radius, SimulationKind,
             },
             Collector, CollectorScheme, Emitter,
         },
@@ -134,7 +134,7 @@ pub mod vgmo {
         },
         Madf {
             meta: HeaderMeta,
-            madf: MndfMeasurementParams,
+            madf: MdfMeasurementParams,
         },
         Mmsf {
             meta: HeaderMeta,
@@ -178,11 +178,11 @@ pub mod vgmo {
                     meta,
                     bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::Mndf => Ok(Self::Madf {
+                MeasurementKind::Adf => Ok(Self::Madf {
                     meta,
-                    madf: MndfMeasurementParams::read_from_vgmo(reader)?,
+                    madf: MdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
-                MeasurementKind::Mmsf => Ok(Self::Mmsf {
+                MeasurementKind::Msf => Ok(Self::Mmsf {
                     meta,
                     mmsf: MgafMeasurementParams::read_from_vgmo(reader)?,
                 }),
@@ -291,7 +291,7 @@ pub mod vgmo {
         writer.write_all(&header).map_err(|err| err.into())
     }
 
-    impl MndfMeasurementParams {
+    impl MdfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
             let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
@@ -696,15 +696,15 @@ emitter is not implemented"
         }
     }
 
-    impl MeasuredMndfData {
+    impl MeasuredAdfData {
         /// Reads the measured MADF data from the given reader.
         pub fn read<R: Read>(
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
-            params: MndfMeasurementParams,
+            params: MdfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
-                meta.kind == MeasurementKind::Mndf,
+                meta.kind == MeasurementKind::Adf,
                 "Measurement kind
           mismatch"
             );
@@ -714,7 +714,7 @@ emitter is not implemented"
                 meta.encoding,
                 meta.compression,
             )?;
-            Ok(MeasuredMndfData { params, samples })
+            Ok(MeasuredAdfData { params, samples })
         }
 
         /// Writes the measured MADF data to the given writer.
@@ -735,7 +735,7 @@ emitter is not implemented"
         }
     }
 
-    impl MeasuredMgafData {
+    impl MeasuredMsfData {
         /// Reads the measured MMSF data from the given reader.
         pub fn read<R: Read>(
             reader: &mut BufReader<R>,
@@ -743,7 +743,7 @@ emitter is not implemented"
             params: MgafMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
-                meta.kind == MeasurementKind::Mmsf,
+                meta.kind == MeasurementKind::Msf,
                 "Measurement kind
           mismatch"
             );
@@ -753,7 +753,7 @@ emitter is not implemented"
                 meta.encoding,
                 meta.compression,
             )?;
-            Ok(MeasuredMgafData { params, samples })
+            Ok(MeasuredMsfData { params, samples })
         }
 
         /// Writes the measured MMSF data to the given writer.
@@ -1170,7 +1170,7 @@ emitter is not implemented"
                 }
                 Header::Madf { meta, madf } => {
                     let measured =
-                        MeasuredMndfData::read(&mut reader, meta, madf).map_err(|err| {
+                        MeasuredAdfData::read(&mut reader, meta, madf).map_err(|err| {
                             VgonioError::from_read_file_error(
                                 ReadFileError {
                                     path: filepath.to_owned().into_boxed_path(),
@@ -1182,12 +1182,12 @@ emitter is not implemented"
                     Ok(MeasurementData {
                         name,
                         source: MeasurementDataSource::Loaded(path),
-                        measured: MeasuredData::Madf(measured),
+                        measured: MeasuredData::Adf(measured),
                     })
                 }
                 Header::Mmsf { meta, mmsf } => {
                     let measured =
-                        MeasuredMgafData::read(&mut reader, meta, mmsf).map_err(|err| {
+                        MeasuredMsfData::read(&mut reader, meta, mmsf).map_err(|err| {
                             VgonioError::from_read_file_error(
                                 ReadFileError {
                                     path: filepath.to_owned().into_boxed_path(),
@@ -1199,7 +1199,7 @@ emitter is not implemented"
                     Ok(MeasurementData {
                         name,
                         source: MeasurementDataSource::Loaded(path),
-                        measured: MeasuredData::Mmsf(measured),
+                        measured: MeasuredData::Msf(measured),
                     })
                 }
             }
@@ -1213,7 +1213,7 @@ emitter is not implemented"
             compression: CompressionScheme,
         ) -> Result<(), VgonioError> {
             let header = match &self.measured {
-                MeasuredData::Madf(adf) => {
+                MeasuredData::Adf(adf) => {
                     assert_eq!(
                         adf.samples.len(),
                         adf.params.samples_count(),
@@ -1222,14 +1222,14 @@ emitter is not implemented"
                     );
                     Header::Madf {
                         meta: HeaderMeta {
-                            kind: MeasurementKind::Mndf,
+                            kind: MeasurementKind::Adf,
                             encoding,
                             compression,
                         },
                         madf: adf.params,
                     }
                 }
-                MeasuredData::Mmsf(msf) => {
+                MeasuredData::Msf(msf) => {
                     assert_eq!(
                         msf.samples.len(),
                         msf.params.samples_count(),
@@ -1238,7 +1238,7 @@ emitter is not implemented"
                     );
                     Header::Mmsf {
                         meta: HeaderMeta {
-                            kind: MeasurementKind::Mmsf,
+                            kind: MeasurementKind::Msf,
                             encoding,
                             compression,
                         },
@@ -1282,7 +1282,7 @@ emitter is not implemented"
             })?;
 
             match &self.measured {
-                MeasuredData::Madf(madf) => {
+                MeasuredData::Adf(madf) => {
                     madf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
                             VgonioError::from_write_file_error(
@@ -1294,7 +1294,7 @@ emitter is not implemented"
                             )
                         })
                 }
-                MeasuredData::Mmsf(mmsf) => {
+                MeasuredData::Msf(mmsf) => {
                     mmsf.write(&mut writer, encoding, compression)
                         .map_err(|err| {
                             VgonioError::from_write_file_error(

@@ -2,17 +2,19 @@
 use crate::{
     app::cache::{Asset, Handle},
     error::RuntimeError,
+    fitting::MeasuredMdfData,
     measure::{
         bsdf::{BsdfKind, MeasuredBsdfData},
         collector::CollectorScheme,
         emitter::RegionShape,
-        microfacet::{MeasuredMgafData, MeasuredMndfData},
+        microfacet::{MeasuredAdfData, MeasuredMsfData},
         Collector, Emitter, RtcMethod,
     },
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt::{Display, Formatter},
     fs::File,
     hash::Hash,
@@ -356,14 +358,14 @@ const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
 
 /// Parameters for microfacet area distribution measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MndfMeasurementParams {
+pub struct MdfMeasurementParams {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSizeInclusive<Radians>,
 }
 
-impl Default for MndfMeasurementParams {
+impl Default for MdfMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -372,7 +374,7 @@ impl Default for MndfMeasurementParams {
     }
 }
 
-impl MndfMeasurementParams {
+impl MdfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
@@ -488,7 +490,7 @@ pub enum MeasurementParams {
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Mndf(MndfMeasurementParams),
+    Mndf(MdfMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
     Mgaf(MgafMeasurementParams),
@@ -524,7 +526,7 @@ impl MeasurementParams {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MndfMeasurementParams> {
+    pub fn microfacet_distribution(&self) -> Option<&MdfMeasurementParams> {
         if let MeasurementParams::Mndf(mfd) = self {
             Some(mfd)
         } else {
@@ -563,10 +565,10 @@ pub struct Measurement {
 pub enum MeasurementKind {
     /// BSDF measurement.
     Bsdf = 0x00,
-    /// Micro-facet area distribution measurement.
-    Mndf = 0x01,
-    /// Micro-surface shadowing-masking function measurement.
-    Mmsf = 0x02,
+    /// Microfacet area distribution function measurement.
+    Adf = 0x01,
+    /// Microfacet Masking-shadowing function measurement.
+    Msf = 0x02,
 }
 
 impl Display for MeasurementKind {
@@ -575,11 +577,11 @@ impl Display for MeasurementKind {
             MeasurementKind::Bsdf => {
                 write!(f, "BSDF")
             }
-            MeasurementKind::Mndf => {
-                write!(f, "NDF")
+            MeasurementKind::Adf => {
+                write!(f, "MDF")
             }
-            MeasurementKind::Mmsf => {
-                write!(f, "Masking/Shadowing")
+            MeasurementKind::Msf => {
+                write!(f, "MSF")
             }
         }
     }
@@ -589,8 +591,8 @@ impl From<u8> for MeasurementKind {
     fn from(value: u8) -> Self {
         match value {
             0x00 => Self::Bsdf,
-            0x01 => Self::Mndf,
-            0x02 => Self::Mmsf,
+            0x01 => Self::Adf,
+            0x02 => Self::Msf,
             _ => panic!("Invalid measurement kind! {}", value),
         }
     }
@@ -724,18 +726,18 @@ impl MeasurementDataSource {
 pub enum MeasuredData {
     /// Bidirectional scattering distribution function.
     Bsdf(MeasuredBsdfData),
-    /// Micro-facet area distribution.
-    Madf(MeasuredMndfData),
-    /// Micro-facet shadowing-masking function.
-    Mmsf(MeasuredMgafData),
+    /// Microfacet distribution function.
+    Adf(MeasuredAdfData),
+    /// Shadowing-masking function.
+    Msf(MeasuredMsfData),
 }
 
 impl MeasuredData {
     /// Returns the measurement kind.
     pub fn kind(&self) -> MeasurementKind {
         match self {
-            MeasuredData::Madf(_) => MeasurementKind::Mndf,
-            MeasuredData::Mmsf(_) => MeasurementKind::Mmsf,
+            MeasuredData::Adf(_) => MeasurementKind::Adf,
+            MeasuredData::Msf(_) => MeasurementKind::Msf,
             MeasuredData::Bsdf(_) => MeasurementKind::Bsdf,
         }
     }
@@ -749,18 +751,26 @@ impl MeasuredData {
     }
 
     /// Returns the MADF data if it is a MADF.
-    pub fn madf_data(&self) -> Option<&MeasuredMndfData> {
+    pub fn adf_data(&self) -> Option<&MeasuredAdfData> {
         match self {
-            MeasuredData::Madf(madf) => Some(madf),
+            MeasuredData::Adf(madf) => Some(madf),
             _ => None,
         }
     }
 
     /// Returns the MMSF data if it is a MMSF.
-    pub fn mmsf_data(&self) -> Option<&MeasuredMgafData> {
+    pub fn msf_data(&self) -> Option<&MeasuredMsfData> {
         match self {
-            MeasuredData::Mmsf(mmsf) => Some(mmsf),
+            MeasuredData::Msf(mmsf) => Some(mmsf),
             _ => None,
+        }
+    }
+
+    pub fn mdf_data(&self) -> Option<MeasuredMdfData> {
+        match self {
+            MeasuredData::Bsdf(_) => None,
+            MeasuredData::Adf(adf) => Some(MeasuredMdfData::Adf(Cow::Borrowed(adf))),
+            MeasuredData::Msf(msf) => Some(MeasuredMdfData::Msf(Cow::Borrowed(msf))),
         }
     }
 
@@ -768,8 +778,8 @@ impl MeasuredData {
     /// MMSF.
     pub fn madf_or_mmsf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Madf(madf) => Some(madf.params.zenith),
-            MeasuredData::Mmsf(mmsf) => Some(mmsf.params.zenith),
+            MeasuredData::Adf(madf) => Some(madf.params.zenith),
+            MeasuredData::Msf(mmsf) => Some(mmsf.params.zenith),
             MeasuredData::Bsdf(_) => None,
         }
     }
@@ -778,8 +788,8 @@ impl MeasuredData {
     /// MMSF.
     pub fn madf_or_mmsf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Madf(madf) => Some(madf.params.azimuth),
-            MeasuredData::Mmsf(mmsf) => Some(mmsf.params.azimuth),
+            MeasuredData::Adf(madf) => Some(madf.params.azimuth),
+            MeasuredData::Msf(mmsf) => Some(mmsf.params.azimuth),
             MeasuredData::Bsdf(_) => None,
         }
     }
@@ -788,8 +798,8 @@ impl MeasuredData {
     /// Returns the samples of the measurement data.
     pub fn samples(&self) -> &[f32] {
         match self {
-            MeasuredData::Madf(madf) => &madf.samples,
-            MeasuredData::Mmsf(mmsf) => &mmsf.samples,
+            MeasuredData::Adf(madf) => &madf.samples,
+            MeasuredData::Msf(mmsf) => &mmsf.samples,
             MeasuredData::Bsdf(_bsdf) => todo!("implement this"),
         }
     }
@@ -835,7 +845,7 @@ impl MeasurementData {
     ///
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn ndf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
-        debug_assert!(self.kind() == MeasurementKind::Mndf);
+        debug_assert!(self.kind() == MeasurementKind::Adf);
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_m_idx = self_azimuth.index_of(azimuth_m);
@@ -857,7 +867,7 @@ impl MeasurementData {
     /// azimuthal angle index.
     fn ndf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        debug_assert!(self.kind() == MeasurementKind::Mndf);
+        debug_assert!(self.kind() == MeasurementKind::Adf);
         debug_assert!(
             azimuth_idx < self_azimuth.step_count_wrapped(),
             "index out of range"
@@ -881,7 +891,7 @@ impl MeasurementData {
         azimuth_i: Radians,
     ) -> (&[f32], Option<&[f32]>) {
         debug_assert!(
-            self.kind() == MeasurementKind::Mmsf,
+            self.kind() == MeasurementKind::Msf,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
@@ -917,7 +927,7 @@ impl MeasurementData {
     ) -> &[f32] {
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
         let self_zenith = self.measured.madf_or_mmsf_zenith().unwrap();
-        debug_assert!(self.kind() == MeasurementKind::Mmsf);
+        debug_assert!(self.kind() == MeasurementKind::Msf);
         debug_assert!(
             azimuth_m_idx < self_azimuth.step_count_wrapped(),
             "index out of range"

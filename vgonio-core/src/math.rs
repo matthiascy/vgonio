@@ -15,6 +15,7 @@ pub use aabb::*;
 pub use axis::*;
 
 pub use glam::*;
+use num_traits::Float;
 
 /// Coordinate system handedness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, clap::ValueEnum)]
@@ -352,6 +353,8 @@ pub fn cartesian_to_spherical(
     )
 }
 
+// TODO: generalise rcp to f32 and f64
+
 /// Returns the accurate reciprocal of the given value.
 ///
 /// Newton-Raphson iteration is used to compute the reciprocal.
@@ -420,7 +423,10 @@ pub fn rcp_f64(x: f64) -> f64 {
 
 /// Returns the square of the given value.
 #[inline(always)]
-pub fn sqr(x: f32) -> f32 { x * x }
+pub fn sqr<F: Float>(x: F) -> F { x * x }
+
+/// Returns the cube of the given value.
+pub fn cube<F: Float>(x: F) -> F { x * x * x }
 
 /// Returns the accurate reciprocal square root of the given value.
 #[inline(always)]

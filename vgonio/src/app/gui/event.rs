@@ -4,13 +4,13 @@ use crate::{
         gfx::RenderableMesh,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
-    fitting::{Isotropy, ReflectionModelFamily},
+    fitting::FittingProblemKind,
     measure::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{
-            BsdfMeasurementParams, MeasurementData, MeasurementKind, MgafMeasurementParams,
-            MndfMeasurementParams,
+            BsdfMeasurementParams, MdfMeasurementParams, MeasurementData, MeasurementKind,
+            MgafMeasurementParams,
         },
         CollectorScheme, RtcMethod,
     },
@@ -19,6 +19,7 @@ use uuid::Uuid;
 use vgcore::{
     math::{IVec2, Vec3},
     units::{Degrees, Radians},
+    Isotropy,
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
@@ -57,20 +58,9 @@ pub enum VgonioEvent {
         data: Handle<MeasurementData>,
         independent: bool,
     },
-    #[cfg(feature = "scaled-ndf-fitting")]
     Fitting {
-        kind: MeasurementKind,
-        family: ReflectionModelFamily,
+        kind: FittingProblemKind,
         data: Handle<MeasurementData>,
-        isotropy: Isotropy,
-        scaled: bool,
-    },
-    #[cfg(not(feature = "scaled-ndf-fitting"))]
-    Fitting {
-        kind: MeasurementKind,
-        family: ReflectionModelFamily,
-        data: Handle<MeasurementData>,
-        isotropy: Isotropy,
     },
 }
 
@@ -195,7 +185,7 @@ pub enum OutlinerEvent {
 #[derive(Debug)]
 pub enum MeasureEvent {
     Madf {
-        params: MndfMeasurementParams,
+        params: MdfMeasurementParams,
         surfaces: Vec<Handle<MicroSurface>>,
     },
     Mmsf {

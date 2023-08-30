@@ -2999,10 +2999,19 @@ dependencies = [
  "toml",
  "type-map",
  "uuid",
+ "vgonio-bxdf",
  "vgonio-core",
  "vgonio-surf",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "vgonio-bxdf"
+version = "0.3.0"
+dependencies = [
+ "num-traits",
+ "vgonio-core",
 ]
 
 [[package]]
@@ -3012,6 +3021,7 @@ dependencies = [
  "cfg-if",
  "clap",
  "glam",
+ "num-traits",
  "paste",
  "proptest",
  "serde",

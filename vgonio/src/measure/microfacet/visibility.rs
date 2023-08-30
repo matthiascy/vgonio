@@ -1345,7 +1345,7 @@ impl MeasurementPoint {
 ///
 /// This structure holds the data for G1(i, m).
 #[derive(Debug, Clone)]
-pub struct MeasuredMgafData {
+pub struct MeasuredMsfData {
     /// The measurement parameters.
     pub params: MgafMeasurementParams,
     /// The distribution data. The outermost dimension is the view direction
@@ -1545,7 +1545,7 @@ pub fn measure_masking_shadowing(
         results.push(MeasurementData {
             name: surface.unwrap().file_stem().unwrap().to_owned(),
             source: MeasurementDataSource::Measured(*hdl),
-            measured: MeasuredData::Mmsf(MeasuredMgafData {
+            measured: MeasuredData::Msf(MeasuredMsfData {
                 params,
                 samples: measurement,
             }),
