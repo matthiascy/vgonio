@@ -1,6 +1,6 @@
-mod microfacet_distribution;
+mod mdf;
 
-pub use microfacet_distribution::*;
+pub use mdf::*;
 
 use levenberg_marquardt::MinimizationReport;
 use std::fmt::Debug;
