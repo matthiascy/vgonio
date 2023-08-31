@@ -97,7 +97,7 @@ pub trait MicrofacetDistributionFittingModel: MicrofacetDistributionModel {
     /// ∂f/∂α for microfacet normals with the given polar angles and
     /// azimuthal angles. If the distribution is anisotropic, the returned
     /// vector contains the partial derivatives with respect to the roughness
-    /// parameters: ∂f/∂αx and ∂f/∂αx for microfacet normals with the given
+    /// parameters: ∂f/∂αx and ∂f/∂αy for microfacet normals with the given
     /// the polar angles and azimuthal angles.
     fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Vec<f64>;
 

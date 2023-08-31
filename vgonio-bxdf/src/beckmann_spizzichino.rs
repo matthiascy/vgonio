@@ -51,11 +51,11 @@ impl MicrofacetDistributionModel for BeckmannSpizzichinoDistribution {
         if cos_theta4 < 1.0e-16 {
             return 0.0;
         }
-        let alpha_xy = self.alpha_x * self.alpha_y;
         let cos_phi2 = sqr(cos_phi);
         let sin_phi2 = 1.0 - cos_phi2;
-        let e = tan_theta2 * (cos_phi2 / sqr(self.alpha_x) + sin_phi2 / sqr(self.alpha_y));
-        (-e).exp() * rcp_f64(std::f64::consts::PI * sqr(alpha_xy) * cos_theta4)
+        let e = tan_theta2
+            * (cos_phi2 * rcp_f64(sqr(self.alpha_x)) + sin_phi2 * rcp_f64(sqr(self.alpha_y)));
+        (-e).exp() * rcp_f64(std::f64::consts::PI * cos_theta4 * self.alpha_x * self.alpha_y)
     }
 
     fn eval_msf(&self, cos_theta_i: f64, cos_theta_o: f64, cos_theta_h: f64) -> f64 { todo!() }
@@ -74,8 +74,8 @@ impl MicrofacetDistributionFittingModel for BeckmannSpizzichinoDistribution {
         let alpha_y2 = sqr(self.alpha_y);
         let rcp_alpha_x2 = rcp_f64(alpha_x2);
         let rcp_alpha_y2 = rcp_f64(alpha_y2);
-        let alpha_x5 = sqr(alpha_x2) * self.alpha_x;
-        let alpha_y5 = sqr(alpha_y2) * self.alpha_y;
+        let d_alpha_x_rcp_denom = rcp_f64(std::f64::consts::PI * sqr(alpha_x2) * self.alpha_y);
+        let d_alpha_y_rcp_denom = rcp_f64(std::f64::consts::PI * self.alpha_x * sqr(alpha_y2));
         cos_thetas
             .iter()
             .zip(cos_phis.iter())
@@ -85,17 +85,14 @@ impl MicrofacetDistributionFittingModel for BeckmannSpizzichinoDistribution {
                 let sec_theta4 = rcp_f64(sqr(cos_theta2));
                 let cos_phi2 = sqr(*cos_phi);
                 let sin_phi2 = 1.0 - cos_phi2;
-                let exp = {
-                    let e = -tan_theta2 * (cos_phi2 * rcp_alpha_x2 + sin_phi2 * rcp_alpha_y2);
-                    e.exp()
-                };
+                let exp = (-tan_theta2 * (cos_phi2 * rcp_alpha_x2 + sin_phi2 * rcp_alpha_y2)).exp();
                 let d_alpha_x = {
-                    let numerator = 2.0 * exp * (sin_phi2 * tan_theta2 - alpha_x2) * sec_theta4;
-                    numerator * rcp_f64(std::f64::consts::PI * alpha_x5 * alpha_y2)
+                    let numerator = exp * sec_theta4 * (2.0 * cos_phi2 * tan_theta2 - alpha_x2);
+                    numerator * d_alpha_x_rcp_denom
                 };
                 let d_alpha_y = {
-                    let numerator = 2.0 * exp * (cos_phi2 * tan_theta2 - alpha_y2) * sec_theta4;
-                    numerator * rcp_f64(std::f64::consts::PI * alpha_x2 * alpha_y5)
+                    let numerator = exp * sec_theta4 * (2.0 * sin_phi2 * tan_theta2 - alpha_y2);
+                    numerator * d_alpha_y_rcp_denom
                 };
                 [d_alpha_x, d_alpha_y]
             })

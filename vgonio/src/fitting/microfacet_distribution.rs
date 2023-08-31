@@ -130,7 +130,10 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                 TerminationReason::Converged { .. } => {
                                     Some((result.model as _, report))
                                 }
-                                _ => None,
+                                _ => {
+                                    log::debug!("Model fitting failed: {:?}", report);
+                                    None
+                                }
                             }
                         })
                         .collect()

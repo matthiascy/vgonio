@@ -1034,7 +1034,7 @@ impl PlottingWidget for PlotInspector {
                                 plot_ui.line(
                                     Line::new(curve.points.clone())
                                         .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                        .name("Measured - NDF"),
+                                        .name("Measured - ADF"),
                                 );
                                 let mut color_idx_base = 1;
                                 let extra = variant
