@@ -8,10 +8,12 @@ use levenberg_marquardt::{
 };
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
+use std::convert::identity;
 use vgbxdf::{
-    BeckmannSpizzichinoDistribution, MicrofacetDistributionFittingModel,
+    BeckmannDistribution, MicrofacetDistributionFittingModel,
     MicrofacetDistributionModelKind, TrowbridgeReitzDistribution,
 };
+use vgcore::math::SphericalCoord;
 use vgcore::units::Radians;
 
 /// The measured data related to the microfacet distribution function (MDF).
@@ -118,7 +120,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         )> = {
             match self.measured {
                 MeasuredMdfData::Adf(measured) => {
-                    initialise_microfacet_adf_models(0.001, 3.0, 16, self.target)
+                    initialise_microfacet_mdf_models(0.001, 3.0, 16, self.target)
                         .into_iter()
                         .filter_map(|model| {
                             let problem = AreaDistributionFittingProblemProxy {
@@ -130,16 +132,28 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                 TerminationReason::Converged { .. } => {
                                     Some((result.model as _, report))
                                 }
-                                _ => {
-                                    log::debug!("Model fitting failed: {:?}", report);
-                                    None
-                                }
+                                _ => None,
                             }
                         })
                         .collect()
                 }
-                MeasuredMdfData::Msf(_) => {
-                    todo!()
+                MeasuredMdfData::Msf(measured) => {
+                    initialise_microfacet_mdf_models(0.001, 3.0, 16, self.target)
+                        .into_iter()
+                        .filter_map(|model| {
+                            let problem = MaskingShadowingFittingProblemProxy {
+                                measured: measured.as_ref(),
+                                model,
+                            };
+                            let (result, report) = solver.minimize(problem);
+                            match report.termination {
+                                TerminationReason::Converged { .. } => {
+                                    Some((result.model as _, report))
+                                }
+                                _ => None,
+                            }
+                        })
+                        .collect()
                 }
             }
         };
@@ -170,7 +184,7 @@ struct MaskingShadowingFittingProblemProxy<'a> {
     model: Box<dyn MicrofacetDistributionFittingModel>,
 }
 
-fn initialise_microfacet_adf_models(
+fn initialise_microfacet_mdf_models(
     min: f64,
     max: f64,
     num: u32,
@@ -180,7 +194,7 @@ fn initialise_microfacet_adf_models(
     match target {
         MicrofacetDistributionModelKind::BeckmannSpizzichino => (0..num)
             .map(|i| {
-                Box::new(BeckmannSpizzichinoDistribution::new(
+                Box::new(BeckmannDistribution::new(
                     (i + 1) as f64 * step,
                     (i + 1) as f64 * step,
                 )) as _
@@ -197,34 +211,43 @@ fn initialise_microfacet_adf_models(
     }
 }
 
-/// Extracts the cosine of all the measured zenith and azimuth angles.
-fn extract_thetas_phis(
-    len: usize,
-    zenith: RangeByStepSizeInclusive<Radians>,
+/// Extracts all the measured azimuth and zenith angles and applies the given
+/// operation to them.
+fn extract_azimuth_zenith_angles(
+    len: usize, // sample count
     azimuth: RangeByStepSizeInclusive<Radians>,
+    zenith: RangeByStepSizeInclusive<Radians>,
+    op: Option<impl Fn(Radians) -> f64>,
 ) -> (Vec<f64>, Vec<f64>) {
     let theta_step_count = zenith.step_count_wrapped();
-    (0..len)
-        .map(|idx| {
-            let theta_idx = idx % theta_step_count;
-            let phi_idx = idx / theta_step_count;
-            (
-                zenith.step(theta_idx).cos() as f64,
-                azimuth.step(phi_idx).cos() as f64,
-            )
-        })
-        .unzip()
+    match op {
+        None =>
+            (0..len)
+                .map(|idx| {
+                    let theta_idx = idx % theta_step_count;
+                    let phi_idx = idx / theta_step_count;
+                        (
+                        azimuth.step(phi_idx).as_f64(),
+                        zenith.step(theta_idx).as_f64()
+                        )
+                }).unzip(),
+        Some(op) =>
+            (0..len)
+                .map(|idx| {
+                    let theta_idx = idx % theta_step_count;
+                    let phi_idx = idx / theta_step_count;
+                    (
+                        op(azimuth.step(phi_idx)),
+                        op(zenith.step(theta_idx))
+                    )
+                })
+                .unzip()
+    }
 }
 
-/// Extracts the cosine of all the measured zenith angles.
-fn extract_thetas(len: usize, zenith: RangeByStepSizeInclusive<Radians>) -> Vec<f64> {
-    let theta_step_count = zenith.step_count_wrapped();
-    (0..len)
-        .map(|idx| {
-            let theta_idx = idx % theta_step_count;
-            zenith.step(theta_idx).cos() as f64
-        })
-        .collect()
+#[cfg(test)]
+fn extract_azimuth_zenith_angles() {
+    ext
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemProxy<'a> {
@@ -257,10 +280,11 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
-        let (cos_thetas, cos_phis) = extract_thetas_phis(
+        let (cos_phis, cos_thetas) = extract_azimuth_zenith_angles(
             self.measured.samples.len(),
-            self.measured.params.zenith,
             self.measured.params.azimuth,
+            self.measured.params.zenith,
+            f64::cos
         );
         Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
             &self.model.adf_partial_derivatives(&cos_thetas, &cos_phis),
@@ -268,8 +292,43 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     }
 }
 
-// TODO: implement this.
-// impl<'a> LeastSquaresProblem<f64, Dyn, U2> for
-// MaskingShadowingFittingProblemProxy<'a> {
-//
-// }
+impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MaskingShadowingFittingProblemProxy<'a> {
+    type ResidualStorage = VecStorage<f64, Dyn, U1>;
+    type JacobianStorage = Owned<f64, Dyn, U2>;
+    type ParameterStorage = Owned<f64, U2, U1>;
+
+    fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
+        self.model.set_alpha_x(x[0]);
+        self.model.set_alpha_y(x[1]);
+    }
+
+    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
+        Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(), self.model.alpha_y())
+    }
+
+    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
+        let (phis, thetas) = extract_azimuth_zenith_angles(
+            self.measured.samples.len(),
+            self.measured.params.azimuth,
+            self.measured.params.zenith,
+            identity,
+        );
+        phis
+            .iter()
+            .map(|phi_m| {
+                thetas.iter().map(|theta_m| {
+                    phis.iter().map(|phi_v| {
+                        thetas.iter().map(|theta_v| {
+                            let m = SphericalCoord::new(1.0, )
+                            self.model
+                                .eval_msf(*cos_theta_m, *cos_phi_m, *cos_theta_v, *cos_phi_v)
+                                * 0.25
+                        })
+                    })
+                })
+            })
+            .collect()
+    }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> { todo!() }
+}

@@ -3,11 +3,12 @@
 use std::fmt::Debug;
 use vgcore::Isotropy;
 
-mod beckmann_spizzichino;
+mod beckmann;
 mod trowbridge_reitz;
 
-pub use beckmann_spizzichino::BeckmannSpizzichinoDistribution;
+pub use beckmann::BeckmannDistribution;
 pub use trowbridge_reitz::TrowbridgeReitzDistribution;
+use vgcore::math::Vec3;
 
 /// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -63,8 +64,15 @@ pub trait MicrofacetDistributionModel: Debug {
     ///   normal.
     fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64;
 
-    /// Evaluates the masking-shadowing function.
-    fn eval_msf(&self, cos_theta_i: f64, cos_theta_o: f64, cos_theta_h: f64) -> f64;
+    /// Evaluates the Smith masking-shadowing function with the incident and
+    /// outgoing directions.
+    fn eval_msf(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
+        self.eval_msf1(m, i) * self.eval_msf1(m, o)
+    }
+
+    /// Evaluates the Smith masking-shadowing function with either the incident
+    /// or outgoing direction.
+    fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64;
 
     /// Clones the distribution model into a boxed trait object.
     fn clone_box(&self) -> Box<dyn MicrofacetDistributionModel>;
@@ -114,7 +122,7 @@ pub trait MicrofacetDistributionFittingModel: MicrofacetDistributionModel {
     /// normals.
     /// * `cos_phis` - The cosines of the azimuthal angles of the microfacet
     /// normals.
-    fn msf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Vec<f64>;
+    fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64;
 }
 
 macro impl_microfacet_distribution_common_methods() {

@@ -66,7 +66,7 @@ impl VariantData for MaskingShadowingExtra {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
         let measurement = cache.get_measurement_data(data).unwrap();
         self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
-        self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        self.zenith_range = measurement.measured.adf_or_msf_zenith().unwrap();
         // let zenith_step_count = self.zenith_range.step_count_wrapped();
         for phi_m in self.azimuth_range.values_wrapped() {
             for theta_m in self.zenith_range.values() {

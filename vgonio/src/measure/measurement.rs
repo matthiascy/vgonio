@@ -776,7 +776,7 @@ impl MeasuredData {
 
     /// Returns the zenith range of the measurement data if it is a MADF or
     /// MMSF.
-    pub fn madf_or_mmsf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
+    pub fn adf_or_msf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
             MeasuredData::Adf(madf) => Some(madf.params.zenith),
             MeasuredData::Msf(mmsf) => Some(mmsf.params.zenith),
@@ -872,7 +872,7 @@ impl MeasurementData {
             azimuth_idx < self_azimuth.step_count_wrapped(),
             "index out of range"
         );
-        let self_zenith = self.measured.madf_or_mmsf_zenith().unwrap();
+        let self_zenith = self.measured.adf_or_msf_zenith().unwrap();
         &self.measured.samples()[azimuth_idx * self_zenith.step_count_wrapped()
             ..(azimuth_idx + 1) * self_zenith.step_count_wrapped()]
     }
@@ -895,7 +895,7 @@ impl MeasurementData {
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        let self_zenith = self.measured.madf_or_mmsf_zenith().unwrap();
+        let self_zenith = self.measured.adf_or_msf_zenith().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_i = azimuth_i.wrap_to_tau();
         let zenith_m = zenith_m.clamp(self_zenith.start, self_zenith.stop);
@@ -926,7 +926,7 @@ impl MeasurementData {
         azimuth_i_idx: usize,
     ) -> &[f32] {
         let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        let self_zenith = self.measured.madf_or_mmsf_zenith().unwrap();
+        let self_zenith = self.measured.adf_or_msf_zenith().unwrap();
         debug_assert!(self.kind() == MeasurementKind::Msf);
         debug_assert!(
             azimuth_m_idx < self_azimuth.step_count_wrapped(),

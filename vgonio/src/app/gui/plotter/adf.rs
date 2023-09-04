@@ -7,16 +7,13 @@ use crate::{
         },
     },
     fitting::FittedModel,
-    measure::measurement::{MeasurementData, MeasurementKind},
+    measure::measurement::MeasurementData,
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};
 use std::any::Any;
 use vgbxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
-use vgcore::{
-    units::{rad, Radians},
-    Isotropy,
-};
+use vgcore::units::{rad, Radians};
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
@@ -24,7 +21,6 @@ use crate::fitting::{FittingProblemKind, MicrofacetDistributionFittingMethod};
 
 struct ModelSelector {
     model: MicrofacetDistributionModelKind,
-    isotropy: Isotropy,
 }
 
 impl ModelSelector {
@@ -85,7 +81,6 @@ impl Default for AreaDistributionExtra {
             fitted: vec![],
             selected: ModelSelector {
                 model: MicrofacetDistributionModelKind::BeckmannSpizzichino,
-                isotropy: Isotropy::Isotropic,
             },
         }
     }
@@ -102,7 +97,7 @@ impl VariantData for AreaDistributionExtra {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache) {
         let measurement = cache.get_measurement_data(data).unwrap();
         self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
-        self.zenith_range = measurement.measured.madf_or_mmsf_zenith().unwrap();
+        self.zenith_range = measurement.measured.adf_or_msf_zenith().unwrap();
         for phi in self.azimuth_range.values_wrapped() {
             let (starting, opposite) = measurement.ndf_data_slice(phi);
             let first_part_points = starting
@@ -244,24 +239,26 @@ impl VariantData for AreaDistributionExtra {
             .default_open(true)
             .show(ui, |ui| {
                 self.selected.ui(ui);
-                if ui
-                    .button(
-                        egui::WidgetText::RichText(egui::RichText::from("Fit"))
-                            .text_style(egui::TextStyle::Monospace),
-                    )
-                    .clicked()
-                {
-                    log::debug!("Fitting with {:?}", self.selected.model);
-                    event_loop
-                        .send_event(VgonioEvent::Fitting {
-                            kind: FittingProblemKind::Mdf {
-                                model: self.selected.model,
-                                method: MicrofacetDistributionFittingMethod::Adf,
-                            },
-                            data,
-                        })
-                        .unwrap();
-                }
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .button(
+                            egui::WidgetText::RichText(egui::RichText::from("Fit"))
+                                .text_style(egui::TextStyle::Monospace),
+                        )
+                        .clicked()
+                    {
+                        log::debug!("Fitting with {:?}", self.selected.model);
+                        event_loop
+                            .send_event(VgonioEvent::Fitting {
+                                kind: FittingProblemKind::Mdf {
+                                    model: self.selected.model,
+                                    method: MicrofacetDistributionFittingMethod::Adf,
+                                },
+                                data,
+                            })
+                            .unwrap();
+                    }
+                });
 
                 ui.label("Fitted models: ");
                 if self.fitted.is_empty() {

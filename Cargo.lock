@@ -2979,7 +2979,6 @@ dependencies = [
  "futures-intrusive",
  "image",
  "levenberg-marquardt",
- "libm",
  "log",
  "nalgebra",
  "numpy",
@@ -3010,6 +3009,7 @@ dependencies = [
 name = "vgonio-bxdf"
 version = "0.3.0"
 dependencies = [
+ "libm",
  "num-traits",
  "vgonio-core",
 ]

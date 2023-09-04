@@ -28,9 +28,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use vgbxdf::{
-    BeckmannSpizzichinoDistribution, MicrofacetDistributionModel, TrowbridgeReitzDistribution,
-};
+use vgbxdf::{BeckmannDistribution, MicrofacetDistributionModel, TrowbridgeReitzDistribution};
 use vgcore::{
     math,
     math::{Handedness, Vec3},
@@ -372,7 +370,7 @@ impl PlottingWidget for PlotInspector {
                         CurveKind::None => {}
                         CurveKind::BeckmannSpizzichinoADF => {
                             self.adf_models.push((
-                                Box::new(BeckmannSpizzichinoDistribution::new(0.5, 0.5)),
+                                Box::new(BeckmannDistribution::new(0.5, 0.5)),
                                 Uuid::new_v4(),
                             ));
                         }
@@ -1002,14 +1000,14 @@ impl PlottingWidget for PlotInspector {
                     if let Some(variant) = &mut self.variant {
                         let cache = self.cache.read().unwrap();
                         let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                        let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
+                        let zenith = measurement.measured.adf_or_msf_zenith().unwrap();
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("mndf_plot")
                                 .legend(self.legend.clone())
-                                .data_aspect(aspect as f32)
+                                .data_aspect(aspect as f32 * 0.25)
                                 .center_x_axis(true)
                                 .sharp_grid_lines(true)
                                 .x_grid_spacer(adf_msf_x_angle_spacer)
@@ -1032,9 +1030,15 @@ impl PlottingWidget for PlotInspector {
                                 );
                             plot.show(ui, |plot_ui| {
                                 plot_ui.line(
-                                    Line::new(curve.points.clone())
-                                        .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                        .name("Measured - ADF"),
+                                    Line::new(
+                                        curve
+                                            .points
+                                            .iter()
+                                            .map(|[x, y]| [*x, *y * 4.0])
+                                            .collect::<Vec<_>>(),
+                                    )
+                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
+                                    .name("Measured - ADF (scaled)"),
                                 );
                                 let mut color_idx_base = 1;
                                 let extra = variant
@@ -1043,45 +1047,33 @@ impl PlottingWidget for PlotInspector {
                                     .unwrap();
                                 {
                                     for (i, (model, curves)) in extra.fitted.iter().enumerate() {
-                                        let curve = match model.isotropy() {
-                                            Isotropy::Isotropic => &curves[0],
-                                            Isotropy::Anisotropic => {
-                                                &curves[extra.current_azimuth_idx()]
-                                            }
-                                        };
                                         plot_ui.line(
-                                            Line::new(curve.points.clone())
-                                                .stroke(egui::epaint::Stroke::new(
-                                                    2.0,
-                                                    LINE_COLORS[(i + 1) % LINE_COLORS.len()],
-                                                ))
-                                                .name(model.kind().to_str()),
+                                            Line::new(
+                                                curves[extra.current_azimuth_idx()].points.clone(),
+                                            )
+                                            .stroke(egui::epaint::Stroke::new(
+                                                2.0,
+                                                LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                            ))
+                                            .name(model.kind().to_str()),
                                         )
                                     }
                                     color_idx_base += extra.fitted.len() + 1;
                                 }
                                 for (i, (model, uuid)) in self.adf_models.iter().enumerate() {
                                     let points: Vec<_> = (0..=180)
-                                        .map(|x| match model.isotropy() {
-                                            Isotropy::Isotropic => {
-                                                let theta = x as f64 * std::f64::consts::PI / 180.0
-                                                    - std::f64::consts::PI * 0.5;
-                                                let value = model.eval_adf(theta.cos(), 0.0);
-                                                [theta, value]
-                                            }
-                                            Isotropy::Anisotropic => {
-                                                let theta = x as f64 * std::f64::consts::PI / 180.0
-                                                    - std::f64::consts::PI * 0.5;
-                                                let current_phi = extra.azimuth_m.wrap_to_tau();
-                                                let phi = if theta > 0.0 {
-                                                    current_phi
-                                                } else {
-                                                    current_phi.opposite()
-                                                };
-                                                let value =
-                                                    model.eval_adf(theta.cos(), phi.cos() as f64);
-                                                [theta, value]
-                                            }
+                                        .map(|x| {
+                                            let theta = x as f64 * std::f64::consts::PI / 180.0
+                                                - std::f64::consts::PI * 0.5;
+                                            let current_phi = extra.azimuth_m.wrap_to_tau();
+                                            let phi = if theta > 0.0 {
+                                                current_phi
+                                            } else {
+                                                current_phi.opposite()
+                                            };
+                                            let value =
+                                                model.eval_adf(theta.cos(), phi.cos() as f64);
+                                            [theta, value]
                                         })
                                         .collect();
                                     plot_ui.line(
@@ -1110,7 +1102,7 @@ impl PlottingWidget for PlotInspector {
                             .unwrap();
                         let cache = self.cache.read().unwrap();
                         let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                        let zenith = measurement.measured.madf_or_mmsf_zenith().unwrap();
+                        let zenith = measurement.measured.adf_or_msf_zenith().unwrap();
                         let zenith_bin_width_rad = zenith.step_size.value();
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {

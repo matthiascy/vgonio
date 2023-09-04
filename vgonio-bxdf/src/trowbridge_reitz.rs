@@ -4,7 +4,7 @@ use crate::{
 };
 use std::fmt::Debug;
 use vgcore::{
-    math::{cube, rcp_f64, sqr},
+    math::{cube, rcp_f64, sqr, Vec3},
     Isotropy,
 };
 
@@ -70,7 +70,15 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
         rcp_f64(alpha_xy * std::f64::consts::PI * cos_theta4 * sqr(1.0 + e))
     }
 
-    fn eval_msf(&self, cos_theta_i: f64, cos_theta_o: f64, cos_theta_h: f64) -> f64 { todo!() }
+    fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64 {
+        if m.dot(v) <= 0.0 {
+            return 0.0;
+        } else {
+            let cos_theta_v2 = sqr(v.y as f64);
+            let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
+            2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * self.alpha_x * self.alpha_y).sqrt())
+        }
+    }
 
     fn clone_box(&self) -> Box<dyn MicrofacetDistributionModel> { Box::new(*self) }
 }
@@ -120,5 +128,19 @@ impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
             .collect()
     }
 
-    fn msf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Vec<f64> { todo!() }
+    fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
+        let cos_theta_i2 = sqr(i.y as f64);
+        let tan_theta_i2 = (1.0 - cos_theta_i2) * rcp_f64(cos_theta_i2);
+        let cos_theta_o2 = sqr(o.y as f64);
+        let tan_theta_o2 = (1.0 - cos_theta_o2) * rcp_f64(cos_theta_o2);
+        let denominator = sqr(1.0 + (1.0 + tan_theta_i2 * sqr(self.alpha_x)).sqrt())
+            * sqr(1.0 + (1.0 + tan_theta_o2 * sqr(self.alpha_x)).sqrt());
+        let numerator = -4.0
+            * self.alpha_x
+            * ((1.0 + (1.0 + tan_theta_i2 * sqr(self.alpha_x)).sqrt()) * tan_theta_o2
+                / sqr((1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_o2).sqrt()))
+                + (1.0 + (1.0 + tan_theta_o2 * sqr(self.alpha_x)).sqrt()) * tan_theta_i2
+                    / sqr((1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_i2).sqrt())));
+        numerator * rcp_f64(denominator)
+    }
 }
