@@ -23,10 +23,7 @@ use crate::{
         FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData,
         MicrofacetDistributionFittingMethod, MicrofacetDistributionFittingProblem,
     },
-    measure::{
-        measurement::{MeasurementData, MeasurementKind},
-        microfacet::MeasuredMsfData,
-    },
+    measure::measurement::{MeasurementData, MeasurementKind},
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
@@ -203,33 +200,36 @@ impl VgonioGui {
                     FittingProblemKind::Mdf { model, method } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if !fitted.contains(kind) {
-                            let cache = self.cache.read().unwrap();
-                            let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = match method {
-                                MicrofacetDistributionFittingMethod::Adf => {
-                                    MeasuredMdfData::Adf(Cow::Borrowed(
-                                        measurement
-                                            .measured
-                                            .adf_data()
-                                            .expect("Measurement has no ADF data."),
-                                    ))
-                                }
-                                MicrofacetDistributionFittingMethod::Msf => {
-                                    MeasuredMdfData::Msf(Cow::Borrowed(
-                                        measurement
-                                            .measured
-                                            .msf_data()
-                                            .expect("Measurement has no MSF data."),
-                                    ))
-                                }
-                            };
-                            let problem =
-                                MicrofacetDistributionFittingProblem::new(data, *method, *model);
-                            let report = problem.lsq_lm_fit();
-                            report.print_fitting_report();
-                            fitted.push(FittedModel::Adf(report.best_model().clone_box()));
+                        log::debug!("Fitting MDF with {:?}", model);
+                        if fitted.contains(kind) {
+                            log::debug!("Already fitted, skipping");
+                            return EventResponse::Handled;
                         }
+                        let cache = self.cache.read().unwrap();
+                        let measurement = cache.get_measurement_data(*data).unwrap();
+                        let data = match method {
+                            MicrofacetDistributionFittingMethod::Adf => {
+                                MeasuredMdfData::Adf(Cow::Borrowed(
+                                    measurement
+                                        .measured
+                                        .adf_data()
+                                        .expect("Measurement has no ADF data."),
+                                ))
+                            }
+                            MicrofacetDistributionFittingMethod::Msf => {
+                                MeasuredMdfData::Msf(Cow::Borrowed(
+                                    measurement
+                                        .measured
+                                        .msf_data()
+                                        .expect("Measurement has no MSF data."),
+                                ))
+                            }
+                        };
+                        let problem =
+                            MicrofacetDistributionFittingProblem::new(data, *method, *model);
+                        let report = problem.lsq_lm_fit();
+                        report.log_fitting_report();
+                        fitted.push(FittedModel::Adf(report.best_model().clone_box()));
                     }
                 }
                 EventResponse::Handled

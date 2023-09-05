@@ -340,7 +340,7 @@ impl PlotInspector {
 enum CurveKind {
     None,
     TrowbridgeReitzADF,
-    BeckmannSpizzichinoADF,
+    BeckmannADF,
 }
 
 impl PlottingWidget for PlotInspector {
@@ -361,14 +361,14 @@ impl PlottingWidget for PlotInspector {
                         );
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::BeckmannSpizzichinoADF,
-                            "Beckmann-Spizzichino",
+                            CurveKind::BeckmannADF,
+                            "Beckmann",
                         );
                     });
                 if ui.button("Graph").clicked() {
                     match self.new_curve_kind {
                         CurveKind::None => {}
-                        CurveKind::BeckmannSpizzichinoADF => {
+                        CurveKind::BeckmannADF => {
                             self.adf_models.push((
                                 Box::new(BeckmannDistribution::new(0.5, 0.5)),
                                 Uuid::new_v4(),
@@ -395,16 +395,39 @@ impl PlottingWidget for PlotInspector {
                     let mut alpha_x = model.alpha_x();
                     let mut alpha_y = model.alpha_y();
                     let alpha_x_changed = ui
-                        .add(egui::Slider::new(&mut alpha_x, 0.00001..=10.0).text("alpha_x"))
+                        .add(
+                            egui::Slider::new(&mut alpha_x, 0.00001..=2.0)
+                                .drag_value_speed(0.0001)
+                                .text("αx"),
+                        )
                         .changed();
                     let alpha_y_changed = ui
-                        .add(egui::Slider::new(&mut alpha_y, 0.00001..=10.0).text("alpha_y"))
+                        .add(
+                            egui::Slider::new(&mut alpha_y, 0.00001..=2.0)
+                                .drag_value_speed(0.0001)
+                                .text("αy"),
+                        )
+                        .changed();
+
+                    let mut alpha = model.alpha_x();
+                    let alpha_changed = ui
+                        .add(
+                            egui::Slider::new(&mut alpha, 0.00001..=2.0)
+                                .drag_value_speed(0.0001)
+                                .text("α"),
+                        )
                         .changed();
 
                     if alpha_x_changed || alpha_y_changed {
                         model.set_alpha_x(alpha_x);
                         model.set_alpha_y(alpha_y);
                     }
+
+                    if alpha_changed {
+                        model.set_alpha_x(alpha);
+                        model.set_alpha_y(alpha);
+                    }
+
                     if ui.button("Remove").clicked() {
                         to_be_removed.push(i);
                     }

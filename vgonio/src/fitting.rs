@@ -88,17 +88,19 @@ impl<M> FittingReport<M> {
 
     pub fn best_model_report(&self) -> &(M, MinimizationReport<f64>) { &self.reports[self.best] }
 
-    pub fn print_fitting_report(&self)
+    /// Log the fitting report.
+    pub fn log_fitting_report(&self)
     where
         M: Debug,
     {
-        println!("Fitting report:");
-        println!("  Best model: {:?}", self.best_model());
-        println!("  Reports:");
+        log::info!("Fitting report:");
+        log::info!("  Best model: {:?}", self.best_model());
+        log::info!("  Reports:");
         for (m, r) in self.reports.iter() {
-            println!(
+            log::info!(
                 "    - Model: {:?}, objective_function: {}",
-                m, r.objective_function
+                m,
+                r.objective_function
             );
         }
     }

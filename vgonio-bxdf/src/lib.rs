@@ -19,8 +19,8 @@ pub enum ReflectionModelFamily {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MicrofacetDistributionModelKind {
-    /// Beckmann-Spizzichino microfacet distribution.
-    BeckmannSpizzichino,
+    /// Beckmann microfacet distribution.
+    Beckmann,
     /// Trowbridge-Reitz microfacet distribution.
     TrowbridgeReitz,
 }
@@ -28,7 +28,7 @@ pub enum MicrofacetDistributionModelKind {
 impl MicrofacetDistributionModelKind {
     pub fn to_str(&self) -> &'static str {
         match self {
-            MicrofacetDistributionModelKind::BeckmannSpizzichino => "Beckmann-Spizzichino",
+            MicrofacetDistributionModelKind::Beckmann => "Beckmann",
             MicrofacetDistributionModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
         }
     }

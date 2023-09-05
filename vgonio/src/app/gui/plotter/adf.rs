@@ -29,8 +29,8 @@ impl ModelSelector {
             ui.label("Model: ");
             ui.selectable_value(
                 &mut self.model,
-                MicrofacetDistributionModelKind::BeckmannSpizzichino,
-                "Beckmann-Spizzichino",
+                MicrofacetDistributionModelKind::Beckmann,
+                "Beckmann",
             );
             ui.selectable_value(
                 &mut self.model,
@@ -80,7 +80,7 @@ impl Default for AreaDistributionExtra {
             curves: vec![],
             fitted: vec![],
             selected: ModelSelector {
-                model: MicrofacetDistributionModelKind::BeckmannSpizzichino,
+                model: MicrofacetDistributionModelKind::Beckmann,
             },
         }
     }
@@ -247,7 +247,6 @@ impl VariantData for AreaDistributionExtra {
                         )
                         .clicked()
                     {
-                        log::debug!("Fitting with {:?}", self.selected.model);
                         event_loop
                             .send_event(VgonioEvent::Fitting {
                                 kind: FittingProblemKind::Mdf {

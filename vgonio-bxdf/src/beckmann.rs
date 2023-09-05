@@ -38,9 +38,7 @@ impl BeckmannDistribution {
 }
 
 impl MicrofacetDistributionModel for BeckmannDistribution {
-    fn kind(&self) -> MicrofacetDistributionModelKind {
-        MicrofacetDistributionModelKind::BeckmannSpizzichino
-    }
+    fn kind(&self) -> MicrofacetDistributionModelKind { MicrofacetDistributionModelKind::Beckmann }
 
     impl_microfacet_distribution_common_methods!();
 
@@ -92,6 +90,10 @@ impl MicrofacetDistributionFittingModel for BeckmannDistribution {
             .iter()
             .zip(cos_phis.iter())
             .flat_map(|(cos_theta, cos_phi)| {
+                if cos_theta.abs() < 1.0e-6 {
+                    // avoid 90 degree
+                    return [0.0, 0.0];
+                }
                 let cos_theta2 = sqr(*cos_theta);
                 let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
                 let sec_theta4 = rcp_f64(sqr(cos_theta2));
