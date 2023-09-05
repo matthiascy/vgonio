@@ -58,7 +58,7 @@ impl MicrofacetDistributionModel for BeckmannDistribution {
 
     fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64 {
         if m.dot(v) <= 0.0 {
-            return 0.0;
+            0.0
         } else {
             let cos_theta_v2 = sqr(v.y as f64);
             let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
@@ -113,14 +113,23 @@ impl MicrofacetDistributionFittingModel for BeckmannDistribution {
             .collect()
     }
 
+    /// Compute the partial derivative of the masking-shadowing function with
+    /// respect to the roughness parameters, αx and αy.
+    ///
+    /// NOTE: Currently, it's using isotropic Beckmann masking-shadowing
+    /// function.
     fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
+        if m.dot(i) <= 0.0 || m.dot(o) <= 0.0 {
+            return 0.0;
+        }
+        // TODO
         let cos_theta_i = i.y as f64;
         let cos_theta_o = o.y as f64;
         let cos_theta_i2 = sqr(cos_theta_i);
         let cos_theta_o2 = sqr(cos_theta_o);
-        let cot_theta_i2 = cos_theta_i2 * rcp_f64((1.0 - cos_theta_i2));
+        let cot_theta_i2 = cos_theta_i2 * rcp_f64(1.0 - cos_theta_i2);
         let cot_theta_i = cot_theta_i2.sqrt();
-        let cot_theta_o2 = cos_theta_o2 * rcp_f64((1.0 - cos_theta_o2));
+        let cot_theta_o2 = cos_theta_o2 * rcp_f64(1.0 - cos_theta_o2);
         let cot_theta_o = cot_theta_o2.sqrt();
         let sqrt_pi = std::f64::consts::PI.sqrt();
         let cot_theta_i_over_alpha = cot_theta_i * rcp_f64(self.alpha_x);
