@@ -1,4 +1,4 @@
-use crate::app::cli::ConvertOptions;
+use crate::app::cli::{ConvertOptions, GenerateOptions};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
 use vgcore::io::{CompressionScheme, FileEncoding};
