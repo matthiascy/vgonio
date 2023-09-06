@@ -100,6 +100,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
         match opts.kind {
             ConvertKind::MicroSurfaceProfile => {
                 let (profile, filename) = {
+                    #[cfg(feature = "wavefront")]
                     let loaded = match resolved.extension() {
                         None => MicroSurface::read_from_file(&resolved, None)?,
                         Some(ext) => {
@@ -114,6 +115,9 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             }
                         }
                     };
+                    #[cfg(not(feature = "wavefront"))]
+                    let loaded = MicroSurface::read_from_file(&resolved, None)?;
+
                     let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
                         let (w, h) = (new_size[0] as usize, new_size[1] as usize);
                         println!("  {BRIGHT_YELLOW}>{RESET} Resizing to {}x{}...", w, h);

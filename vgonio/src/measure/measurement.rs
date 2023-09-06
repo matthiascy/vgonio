@@ -358,14 +358,14 @@ const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
 
 /// Parameters for microfacet area distribution measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MdfMeasurementParams {
+pub struct AdfMeasurementParams {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
     pub zenith: RangeByStepSizeInclusive<Radians>,
 }
 
-impl Default for MdfMeasurementParams {
+impl Default for AdfMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -374,7 +374,7 @@ impl Default for MdfMeasurementParams {
     }
 }
 
-impl MdfMeasurementParams {
+impl AdfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
@@ -413,7 +413,7 @@ impl MdfMeasurementParams {
 /// Parameters for microfacet geometric attenuation (masking/shadowing) function
 /// measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MgafMeasurementParams {
+pub struct MsfMeasurementParams {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
@@ -425,7 +425,7 @@ pub struct MgafMeasurementParams {
     pub strict: bool,
 }
 
-impl Default for MgafMeasurementParams {
+impl Default for MsfMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -436,7 +436,7 @@ impl Default for MgafMeasurementParams {
     }
 }
 
-impl MgafMeasurementParams {
+impl MsfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         (self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()).pow(2)
@@ -490,10 +490,10 @@ pub enum MeasurementParams {
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Mndf(MdfMeasurementParams),
+    Adf(AdfMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
-    Mgaf(MgafMeasurementParams),
+    Msf(MsfMeasurementParams),
 }
 
 impl MeasurementParams {
@@ -501,8 +501,8 @@ impl MeasurementParams {
     pub fn validate(self) -> Result<Self, VgonioError> {
         match self {
             Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
-            Self::Mndf(mfd) => Ok(Self::Mndf(mfd.validate()?)),
-            Self::Mgaf(mfs) => Ok(Self::Mgaf(mfs.validate()?)),
+            Self::Adf(mfd) => Ok(Self::Adf(mfd.validate()?)),
+            Self::Msf(mfs) => Ok(Self::Msf(mfs.validate()?)),
         }
     }
 
@@ -510,11 +510,11 @@ impl MeasurementParams {
     pub fn is_bsdf(&self) -> bool { matches!(self, Self::Bsdf { .. }) }
 
     /// Whether the measurement is a micro-facet distribution measurement.
-    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Mndf { .. }) }
+    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Adf { .. }) }
 
     /// Whether the measurement is a micro-surface shadowing-masking function
     /// measurement.
-    pub fn is_micro_surface_shadow_masking(&self) -> bool { matches!(self, Self::Mgaf { .. }) }
+    pub fn is_micro_surface_shadow_masking(&self) -> bool { matches!(self, Self::Msf { .. }) }
 
     /// Get the BSDF measurement parameters.
     pub fn bsdf(&self) -> Option<&BsdfMeasurementParams> {
@@ -526,8 +526,8 @@ impl MeasurementParams {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&MdfMeasurementParams> {
-        if let MeasurementParams::Mndf(mfd) = self {
+    pub fn microfacet_distribution(&self) -> Option<&AdfMeasurementParams> {
+        if let MeasurementParams::Adf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -535,8 +535,8 @@ impl MeasurementParams {
     }
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
-    pub fn micro_surface_shadow_masking(&self) -> Option<&MgafMeasurementParams> {
-        if let MeasurementParams::Mgaf(mfd) = self {
+    pub fn micro_surface_shadow_masking(&self) -> Option<&MsfMeasurementParams> {
+        if let MeasurementParams::Msf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -696,8 +696,8 @@ impl Measurement {
     pub fn name(&self) -> &'static str {
         match self.params {
             MeasurementParams::Bsdf { .. } => "BSDF measurement",
-            MeasurementParams::Mndf { .. } => "microfacet-distribution measurement",
-            MeasurementParams::Mgaf { .. } => "micro-surface-shadow-masking measurement",
+            MeasurementParams::Adf { .. } => "microfacet-distribution measurement",
+            MeasurementParams::Msf { .. } => "micro-surface-shadow-masking measurement",
         }
     }
 }

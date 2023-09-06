@@ -1,4 +1,4 @@
-use crate::app::cli::{ConvertOptions, GenerateOptions};
+use crate::app::cli::ConvertOptions;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
 use vgcore::io::{CompressionScheme, FileEncoding};
@@ -66,6 +66,7 @@ pub struct CliArgs {
 /// Vgonio command.
 #[derive(clap::Subcommand, Debug)]
 pub enum SubCommand {
+    #[cfg(feature = "surf-gen")]
     /// Generates a new micro-geometry level surface.
     Generate(GenerateOptions),
 
@@ -142,12 +143,12 @@ pub enum FastMeasurementKind {
     #[clap(name = "bsdf")]
     /// Bidirectional reflectance distribution function.
     Bsdf,
-    #[clap(name = "madf")]
-    /// Micro-facet normal distribution function.
-    MicrofacetAreaDistribution,
-    #[clap(name = "mmsf")]
+    #[clap(name = "adf")]
+    /// Microfacet distribution function.
+    AreaDistributionFunction,
+    #[clap(name = "msf")]
     /// Micro-facet masking-shadowing function.
-    MicrofacetMaskingShadowing,
+    MaskingShadowingFunction,
 }
 
 /// Options for the `measure` command.

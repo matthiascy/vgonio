@@ -4,8 +4,8 @@ use crate::{
         Config,
     },
     measure::measurement::{
-        BsdfMeasurementParams, MdfMeasurementParams, Measurement, MeasurementParams,
-        MgafMeasurementParams,
+        AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
+        MsfMeasurementParams,
     },
 };
 use std::{
@@ -14,7 +14,7 @@ use std::{
 };
 use vgcore::error::VgonioError;
 
-impl Display for MdfMeasurementParams {
+impl Display for AdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -32,7 +32,7 @@ impl Display for MdfMeasurementParams {
     }
 }
 
-impl Display for MgafMeasurementParams {
+impl Display for MsfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -82,11 +82,11 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         println!(
             "Microfacet distribution default parameters:\n\n{}",
-            MdfMeasurementParams::default()
+            AdfMeasurementParams::default()
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
-            MgafMeasurementParams::default()
+            MsfMeasurementParams::default()
         );
         // TODO: print default parameters for brdf measurement (prettified
         // version)
@@ -96,14 +96,14 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
-                params: MeasurementParams::Mndf(MdfMeasurementParams::default()),
+                params: MeasurementParams::Adf(AdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             Measurement {
-                params: MeasurementParams::Mgaf(MgafMeasurementParams::default()),
+                params: MeasurementParams::Msf(MsfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

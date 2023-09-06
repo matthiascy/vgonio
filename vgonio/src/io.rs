@@ -19,8 +19,8 @@ pub mod vgmo {
             collector::BounceAndEnergy,
             emitter::RegionShape,
             measurement::{
-                BsdfMeasurementParams, MdfMeasurementParams, MeasurementKind,
-                MgafMeasurementParams, Radius, SimulationKind,
+                AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
+                Radius, SimulationKind,
             },
             Collector, CollectorScheme, Emitter,
         },
@@ -134,11 +134,11 @@ pub mod vgmo {
         },
         Madf {
             meta: HeaderMeta,
-            madf: MdfMeasurementParams,
+            madf: AdfMeasurementParams,
         },
         Mmsf {
             meta: HeaderMeta,
-            mmsf: MgafMeasurementParams,
+            mmsf: MsfMeasurementParams,
         },
     }
 
@@ -180,11 +180,11 @@ pub mod vgmo {
                 }),
                 MeasurementKind::Adf => Ok(Self::Madf {
                     meta,
-                    madf: MdfMeasurementParams::read_from_vgmo(reader)?,
+                    madf: AdfMeasurementParams::read_from_vgmo(reader)?,
                 }),
                 MeasurementKind::Msf => Ok(Self::Mmsf {
                     meta,
-                    mmsf: MgafMeasurementParams::read_from_vgmo(reader)?,
+                    mmsf: MsfMeasurementParams::read_from_vgmo(reader)?,
                 }),
             }
         }
@@ -291,7 +291,7 @@ pub mod vgmo {
         writer.write_all(&header).map_err(|err| err.into())
     }
 
-    impl MdfMeasurementParams {
+    impl AdfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
             let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
@@ -311,7 +311,7 @@ pub mod vgmo {
         }
     }
 
-    impl MgafMeasurementParams {
+    impl MsfMeasurementParams {
         /// Reads the measurement parameters from the VGMO file.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
             let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
@@ -701,7 +701,7 @@ emitter is not implemented"
         pub fn read<R: Read>(
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
-            params: MdfMeasurementParams,
+            params: AdfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
                 meta.kind == MeasurementKind::Adf,
@@ -740,7 +740,7 @@ emitter is not implemented"
         pub fn read<R: Read>(
             reader: &mut BufReader<R>,
             meta: HeaderMeta,
-            params: MgafMeasurementParams,
+            params: MsfMeasurementParams,
         ) -> Result<Self, ReadFileErrorKind> {
             debug_assert!(
                 meta.kind == MeasurementKind::Msf,

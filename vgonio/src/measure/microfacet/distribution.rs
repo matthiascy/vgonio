@@ -6,7 +6,7 @@ use vgsurf::MicroSurface;
 use crate::{
     app::cache::{Cache, Handle},
     measure::measurement::{
-        MdfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource,
+        AdfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource,
     },
     RangeByStepSizeInclusive,
 };
@@ -26,7 +26,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct MeasuredAdfData {
     /// The measurement parameters.
-    pub params: MdfMeasurementParams,
+    pub params: AdfMeasurementParams,
     /// The distribution data. The outermost index is the azimuthal angle of the
     /// microfacet normal, and the inner index is the zenith angle of the
     /// microfacet normal.
@@ -35,7 +35,7 @@ pub struct MeasuredAdfData {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    mut params: MdfMeasurementParams,
+    mut params: AdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MeasurementData> {
@@ -128,14 +128,14 @@ pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        measure::{measurement::MdfMeasurementParams, microfacet::MeasuredAdfData},
+        measure::{measurement::AdfMeasurementParams, microfacet::MeasuredAdfData},
         RangeByStepSizeInclusive,
     };
     use vgcore::units::{deg, rad, Radians};
 
     #[test]
     fn mndf_accumulated_slice() {
-        let params = MdfMeasurementParams {
+        let params = AdfMeasurementParams {
             azimuth: RangeByStepSizeInclusive::new(rad!(0.0), Radians::TAU, Radians::HALF_PI),
             zenith: RangeByStepSizeInclusive::new(
                 rad!(0.0),

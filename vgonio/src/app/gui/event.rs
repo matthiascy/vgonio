@@ -9,8 +9,8 @@ use crate::{
         collector::CollectorPatches,
         emitter::EmitterSamples,
         measurement::{
-            BsdfMeasurementParams, MdfMeasurementParams, MeasurementData, MeasurementKind,
-            MgafMeasurementParams,
+            AdfMeasurementParams, BsdfMeasurementParams, MeasurementData, MeasurementKind,
+            MsfMeasurementParams,
         },
         CollectorScheme, RtcMethod,
     },
@@ -185,11 +185,11 @@ pub enum OutlinerEvent {
 #[derive(Debug)]
 pub enum MeasureEvent {
     Madf {
-        params: MdfMeasurementParams,
+        params: AdfMeasurementParams,
         surfaces: Vec<Handle<MicroSurface>>,
     },
     Mmsf {
-        params: MgafMeasurementParams,
+        params: MsfMeasurementParams,
         surfaces: Vec<Handle<MicroSurface>>,
     },
     Bsdf {

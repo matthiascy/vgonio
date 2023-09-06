@@ -8,8 +8,8 @@ use crate::{
     measure,
     measure::{
         measurement::{
-            BsdfMeasurementParams, MdfMeasurementParams, Measurement, MeasurementParams,
-            MgafMeasurementParams,
+            AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
+            MsfMeasurementParams,
         },
         CollectorScheme,
     },
@@ -59,12 +59,12 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                         params: MeasurementParams::Bsdf(BsdfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
-                    FastMeasurementKind::MicrofacetAreaDistribution => Measurement {
-                        params: MeasurementParams::Mndf(MdfMeasurementParams::default()),
+                    FastMeasurementKind::AreaDistributionFunction => Measurement {
+                        params: MeasurementParams::Adf(AdfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
-                    FastMeasurementKind::MicrofacetMaskingShadowing => Measurement {
-                        params: MeasurementParams::Mgaf(MgafMeasurementParams::default()),
+                    FastMeasurementKind::MaskingShadowingFunction => Measurement {
+                        params: MeasurementParams::Msf(MsfMeasurementParams::default()),
                         surfaces: opts.inputs.clone(),
                     },
                 })
@@ -184,7 +184,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 );
                 measure::bsdf::measure_bsdf_rt(measurement, &surfaces, measurement.sim_kind, &cache)
             }
-            MeasurementParams::Mndf(measurement) => {
+            MeasurementParams::Adf(measurement) => {
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet area distribution:
     • parameters:
@@ -195,7 +195,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 );
                 measure::microfacet::measure_area_distribution(measurement, &surfaces, &cache)
             }
-            MeasurementParams::Mgaf(measurement) => {
+            MeasurementParams::Msf(measurement) => {
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
     • parameters:

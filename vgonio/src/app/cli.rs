@@ -21,11 +21,14 @@ pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
 pub const RESET: &str = "\u{001b}[0m";
 
 mod cmd_convert;
+
+#[cfg(feature = "surf-gen")]
 mod cmd_generate;
 mod cmd_info;
 mod cmd_measure;
 
 pub use cmd_convert::{ConvertKind, ConvertOptions};
+#[cfg(feature = "surf-gen")]
 pub use cmd_generate::GenerateOptions;
 
 /// Entry point of vgonio CLI.
@@ -33,7 +36,10 @@ pub fn run(cmd: SubCommand, config: Config) -> Result<(), VgonioError> {
     match cmd {
         SubCommand::Measure(opts) => cmd_measure::measure(opts, config),
         SubCommand::PrintInfo(opts) => cmd_info::print_info(opts, config),
+
+        #[cfg(feature = "surf-gen")]
         SubCommand::Generate(opts) => cmd_generate::generate(opts, config),
+
         SubCommand::Convert(opts) => cmd_convert::convert(opts, config),
     }
 }
