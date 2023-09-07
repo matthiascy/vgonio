@@ -36,8 +36,6 @@ pub struct MicroSurfaceProp {
     pub micro_area: f32,
     /// Root mean square of the height.
     pub rms_height: f32,
-    /// Root mean square of the slope.
-    pub rms_slope_tri: f32,
     /// Root mean square of the slope along the x-axis.
     pub rms_slope_x: f32,
     /// Root mean square of the slope along the y-axis.
@@ -104,7 +102,6 @@ impl PropertyData {
                     micro_area: mesh.facet_total_area, /* TODO: maybe get this from the micro
                                                         * surface? */
                     rms_height: surf.rms_height(),
-                    rms_slope_tri: mesh.rms_slope(),
                     rms_slope_x: surf.rms_slope_x(),
                     rms_slope_y: surf.rms_slope_y(),
                 });

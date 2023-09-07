@@ -102,10 +102,6 @@ impl PropertyInspector {
                                 ui.add(egui::Label::new(format!("{:.4}", state.rms_height)));
                                 ui.end_row();
 
-                                ui.add(egui::Label::new("RMS slope (tri):"));
-                                ui.add(egui::Label::new(format!("{:.4}", state.rms_slope_tri)));
-                                ui.end_row();
-
                                 ui.add(egui::Label::new("RMS slope - X:"));
                                 ui.add(egui::Label::new(format!("{:.4}", state.rms_slope_x)));
                                 ui.end_row();

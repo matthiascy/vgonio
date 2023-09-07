@@ -862,19 +862,6 @@ impl MicroSurfaceMesh {
         (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.z - self.bounds.min.z)
     }
 
-    /// Calculate the root mean square slope of the mesh.
-    pub fn rms_slope(&self) -> f32 {
-        let rcp_n = rcp_f32(self.num_facets as f32);
-        self.facet_normals
-            .iter()
-            .fold(0.0, |acc, n| {
-                let cos_theta_sqr = n.y * n.y;
-                let slope_sqr = rcp_f32(cos_theta_sqr) - 1.0;
-                acc + slope_sqr * rcp_n
-            })
-            .sqrt()
-    }
-
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
     #[cfg(feature = "embree")]
     pub fn as_embree_geometry<'g>(&self, device: &Device) -> Geometry<'g> {
