@@ -1,4 +1,6 @@
-use crate::app::cli::{ConvertOptions, GenerateOptions};
+use crate::app::cli::ConvertOptions;
+#[cfg(feature = "surf-gen")]
+use crate::app::cli::GenerateOptions;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
 use vgcore::io::{CompressionScheme, FileEncoding};

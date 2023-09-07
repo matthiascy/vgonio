@@ -9,7 +9,7 @@ description = "Library for manipulating, reading and writing micro-surfaces."
 default = []
 embree = ["dep:embree"]
 surf-gen = []
-wavefront = ["dep:tobj", "dep:ahash"]
+surf-obj = ["dep:tobj", "dep:ahash"]
 
 [dependencies]
 ahash = { workspace = true, optional = true }

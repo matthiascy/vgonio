@@ -693,7 +693,7 @@ pub fn read_omni_surf_3d<R: BufRead>(
     ))
 }
 
-#[cfg(feature = "wavefront")]
+#[cfg(feature = "surf-obj")]
 /// Reads a Wavefront OBJ file and returns a micro-surface.
 pub fn read_wavefront<R: BufRead>(
     reader: &mut R,

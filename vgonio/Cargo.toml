@@ -10,8 +10,8 @@ publish = false
 [features]
 default = []
 embree = ["dep:embree", "vgsurf/embree"]
-wavefront = ["vgsurf/wavefront"]
 optix = []
+surf-obj = ["vgsurf/surf-obj"]
 surf-gen = ["vgsurf/surf-gen"]
 verbose_debug = []
 

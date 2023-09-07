@@ -100,7 +100,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
         match opts.kind {
             ConvertKind::MicroSurfaceProfile => {
                 let (profile, filename) = {
-                    #[cfg(feature = "wavefront")]
+                    #[cfg(feature = "surf-obj")]
                     let loaded = match resolved.extension() {
                         None => MicroSurface::read_from_file(&resolved, None)?,
                         Some(ext) => {
@@ -115,7 +115,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             }
                         }
                     };
-                    #[cfg(not(feature = "wavefront"))]
+                    #[cfg(not(feature = "surf-obj"))]
                     let loaded = MicroSurface::read_from_file(&resolved, None)?;
 
                     let (w, h) = if let Some(new_size) = opts.resize.as_ref() {

@@ -3,10 +3,7 @@ use crate::{
     MicrofacetDistributionModel, MicrofacetDistributionModelKind,
 };
 use std::fmt::Debug;
-use vgcore::{
-    math::{cube, rcp_f64, sqr, Vec3},
-    Isotropy,
-};
+use vgcore::math::{cube, rcp_f64, sqr, Vec3};
 
 /// Trowbridge-Reitz(GGX) microfacet distribution function.
 ///
@@ -143,9 +140,9 @@ impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
         let numerator = -4.0
             * self.alpha_x
             * ((1.0 + (1.0 + tan_theta_i2 * sqr(self.alpha_x)).sqrt()) * tan_theta_o2
-                / sqr((1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_o2).sqrt()))
+                / sqr(1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_o2).sqrt())
                 + (1.0 + (1.0 + tan_theta_o2 * sqr(self.alpha_x)).sqrt()) * tan_theta_i2
-                    / sqr((1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_i2).sqrt())));
+                    / sqr(1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_i2).sqrt()));
         numerator * rcp_f64(denominator)
     }
 }

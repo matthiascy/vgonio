@@ -990,7 +990,7 @@ impl MicroSurface {
             })
     }
 
-    #[cfg(feature = "wavefront")]
+    #[cfg(feature = "surf-obj")]
     /// Creates micro-geometry height field by reading the samples stored in
     /// Wavefront OBJ file.
     ///
