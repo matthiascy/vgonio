@@ -3,5 +3,6 @@
 /tmp
 /venv
 /pyenv
+/.pyenv
 reflectance_*.csv
 debug_*/

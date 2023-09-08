@@ -473,6 +473,16 @@ impl Cache {
         Ok(())
     }
 
+    /// Adds a micro-surface measurement data to the cache.
+    pub fn add_micro_surface_measurement(
+        &mut self,
+        data: MeasurementData,
+    ) -> Result<Handle<MeasurementData>, VgonioError> {
+        let handle = Handle::with_type_id(data.measured.kind() as u8);
+        self.measurements_data.insert(handle, data);
+        Ok(handle)
+    }
+
     /// Loads a micro-surface measurement data from the given path and returns
     /// its cache handle.
     pub fn load_micro_surface_measurement(

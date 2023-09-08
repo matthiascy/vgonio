@@ -624,12 +624,18 @@ impl VgonioGuiApp {
                     Measure(event) => match event {
                         MeasureEvent::Madf { params, surfaces } => {
                             println!("Measuring area distribution");
-                            measure::microfacet::measure_area_distribution(
+                            let measured = measure::microfacet::measure_area_distribution(
                                 params,
                                 &surfaces,
                                 &self.cache.read().unwrap(),
                             );
-                            todo!("Save area distribution to file or display it in a window");
+                            {
+                                let mut cache = self.cache.write().unwrap();
+                                for meas in measured {
+                                    cache.add_micro_surface_measurement(meas).unwrap();
+                                }
+                                todo!("Show the measurement in the outliner");
+                            }
                         }
                         MeasureEvent::Mmsf { params, surfaces } => {
                             println!("Measuring masking/shadowing");
