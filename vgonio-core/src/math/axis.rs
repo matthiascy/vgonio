@@ -1,5 +1,6 @@
 //! Axis enum for indexing 3D structures.
 use crate::math::Vec3;
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 
@@ -13,7 +14,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// assert_eq!(pos[Axis::X], 0.0);
 /// ```
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ValueEnum)]
 pub enum Axis {
     /// X-axis.
     X = 0,

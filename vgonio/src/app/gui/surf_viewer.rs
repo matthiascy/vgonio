@@ -353,6 +353,7 @@ impl SurfaceViewerStates {
                     render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
                 }
             }
+
             {
                 state
                     .visual_grid

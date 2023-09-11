@@ -23,13 +23,11 @@ layout(location = 0) out vec4 color;
 //}
 
 vec4 grid(vec3 frag_pos, float scale, bool show_axis, bool is_dark_mode, float fading) {
-    vec2 coord = frag_pos.xz * scale; // use the scale variable to set the distance between the lines
+    vec2 coord = frag_pos.xy * scale; // use the scale variable to set the distance between the lines
     vec2 derivative = fwidth(coord);
     // Compute anti-aliased world-space grid lines
     vec2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
     float line = min(grid.x, grid.y);
-    float min_x = min(derivative.x, 1.0);
-    float min_z = min(derivative.y, 1.0);
 
     vec4 color = vec4(grid_line_color.xyz, 1.0 - min(line, 1.0));
 
@@ -37,14 +35,14 @@ vec4 grid(vec3 frag_pos, float scale, bool show_axis, bool is_dark_mode, float f
 
     if (show_axis) {
         float min_axis_x = min(derivative_scaled.x, 1.0);
-        float min_axis_z = min(derivative_scaled.y, 1.0);
-        // z axis
+        float min_axis_y = min(derivative_scaled.y, 1.0);
+        // y axis
         if (frag_pos.x > -0.1 * min_axis_x && frag_pos.x < 0.1 * min_axis_x) {
-            color = vec4(0.0, 0.28, 1.0, 1.0);
+            color = vec4(0.0, 1.0, 0.28, 1.0);
         }
 
         // x axis
-        if (frag_pos.z > -0.1 * min_axis_z && frag_pos.z < 0.1 * min_axis_z) {
+        if (frag_pos.y > -0.1 * min_axis_y && frag_pos.y < 0.1 * min_axis_y) {
             color = vec4(1.0, 0.0, 0.28, 1.0);
         }
     }
@@ -65,7 +63,10 @@ float compute_linear_depth(vec4 clip_space_pos) {
 
 void main() {
     // shoot the ray from near point to far point.
-    float t = near_point.y / (near_point.y - far_point.y);
+    // the ray is defined as: ray = near_point + t * (far_point - near_point)
+    // where t is the distance from near point to the intersection point with the ground
+    // NOTE: the unprojected points are in the world space (right-handed Z-up coordinate system)
+    float t = near_point.z / (near_point.z - far_point.z);
 
     // intersection point with the ground to get the pixel
     vec3 frag_pos = near_point + t * (far_point - near_point);

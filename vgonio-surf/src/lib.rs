@@ -20,7 +20,7 @@ use std::{
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
-    math::{rcp_f32, Aabb, Handedness, Vec3},
+    math::{rcp_f32, Aabb, Axis, Vec3},
     units::LengthUnit,
 };
 
@@ -59,30 +59,6 @@ impl HeightOffset {
             HeightOffset::None => 0.0,
         }
     }
-}
-
-/// Alignment used when generating height field.
-#[repr(u32)]
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum AxisAlignment {
-    /// Aligned with XY plane.
-    XY,
-
-    /// Aligned with XZ plane.
-    #[default]
-    XZ,
-
-    /// Aligned with YX plane.
-    YX,
-
-    /// Aligned with YZ plane.
-    YZ,
-
-    /// Aligned with ZX plane.
-    ZX,
-
-    /// Aligned with ZY plane.
-    ZY,
 }
 
 // TODO: support f64
@@ -527,7 +503,7 @@ impl MicroSurface {
             HeightOffset::Grounded => -self.min,
             HeightOffset::None => 0.0,
         };
-        let (verts, extent) = self.generate_vertices(AxisAlignment::XZ, height_offset);
+        let (verts, extent) = self.generate_vertices(height_offset);
         let tri_faces = regular_grid_triangulation(self.rows, self.cols, pattern);
         let num_faces = tri_faces.len() / 3;
 
@@ -564,16 +540,16 @@ impl MicroSurface {
     /// Generate vertices from the height values.
     ///
     /// The vertices are generated following the order from left to right, top
-    /// to bottom. The vertices are also aligned to the given axis. The center
-    /// of the heightfield is at the origin.
-    pub fn generate_vertices(
-        &self,
-        alignment: AxisAlignment,
-        height_offset: f32,
-    ) -> (Vec<Vec3>, Aabb) {
+    /// to bottom. The center of the heightfield is at the origin.
+    ///
+    /// The generated vertices are aligned to the xy plane of the right-handed,
+    /// Z-up coordinate system.
+    #[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../misc/imgs/heightfield.svg"))]
+    pub fn generate_vertices(&self, height_offset: f32) -> (Vec<Vec3>, Aabb) {
         log::info!(
-            "Generating height field vertices with {:?} alignment",
-            alignment
+            "Generating height field vertices with {} rows and {} cols",
+            self.rows,
+            self.cols
         );
         let (rows, cols, half_rows, half_cols, du, dv) = (
             self.rows,
@@ -587,17 +563,11 @@ impl MicroSurface {
         let mut extent = Aabb::default();
         for r in 0..rows {
             for c in 0..cols {
-                let u = (c as f32 - half_cols as f32) * du;
-                let v = (r as f32 - half_rows as f32) * dv;
-                let h = self.samples[r * cols + c] + height_offset;
-                let p = match alignment {
-                    AxisAlignment::XY => Vec3::new(u, v, h),
-                    AxisAlignment::XZ => Vec3::new(u, h, v),
-                    AxisAlignment::YX => Vec3::new(v, u, h),
-                    AxisAlignment::YZ => Vec3::new(h, u, v),
-                    AxisAlignment::ZX => Vec3::new(v, h, u),
-                    AxisAlignment::ZY => Vec3::new(h, v, u),
-                };
+                let p = Vec3::new(
+                    (c as f32 - half_cols as f32) * du,
+                    (half_rows as f32 - r as f32) * dv,
+                    self.samples[r * cols + c] + height_offset,
+                );
                 for k in 0..3 {
                     if p[k] > extent.max[k] {
                         extent.max[k] = p[k];
@@ -854,12 +824,8 @@ impl MicroSurfaceMesh {
     pub fn facet_surface_area(&self, facet: usize) -> f32 { self.facet_areas[facet] }
 
     /// Calculate the macro surface area of the mesh.
-    ///
-    /// REVIEW(yang): temporarily the surface mesh is generated on XZ plane in
-    /// right-handed Y up coordinate system.
-    /// TODO(yang): unit of surface area
     pub fn macro_surface_area(&self) -> f32 {
-        (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.z - self.bounds.min.z)
+        (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.y - self.bounds.min.y)
     }
 
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
@@ -984,11 +950,11 @@ impl MicroSurface {
     /// # Arguments
     ///
     /// * `filepath` - Path to the Wavefront OBJ file.
-    /// * `handedness` - Handedness of the micro-surface mesh.
+    /// * `axis` - Axis of the height of the micro-surface.
     /// * `unit` - Length unit of the micro-surface.
     pub fn read_from_wavefront(
         filepath: &Path,
-        handedness: Handedness,
+        axis: Axis,
         unit: LengthUnit,
     ) -> Result<MicroSurface, VgonioError> {
         log::debug!(
@@ -1002,7 +968,7 @@ impl MicroSurface {
             )
         })?;
         let mut reader = BufReader::new(file);
-        io::read_wavefront(&mut reader, filepath, handedness, unit)
+        io::read_wavefront(&mut reader, filepath, axis, unit)
     }
 
     /// Save the micro-surface height field to a file.

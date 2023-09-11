@@ -5,7 +5,7 @@ use std::{
 };
 
 use vgcore::{
-    math::{Handedness, Mat4, Vec3},
+    math::{Mat4, Vec3},
     units::deg,
 };
 use wgpu::util::DeviceExt;
@@ -109,14 +109,16 @@ impl Tool for SamplingInspector {
             );
         });
         if ui.button("Unit Sphere").clicked() {
-            self.samples = measure::emitter::uniform_sampling_on_unit_sphere(
+            self.samples = measure::uniform_sampling_on_unit_sphere(
                 self.sample_count as usize,
                 deg!(self.zenith_min).into(),
                 deg!(self.zenith_max).into(),
                 deg!(self.azimuth_min).into(),
                 deg!(self.azimuth_max).into(),
-                Handedness::RightHandedYUp,
             );
+        }
+        if ui.button("Unit Disk").clicked() {
+            self.samples = measure::uniform_sampling_on_unit_disk(self.sample_count as usize)
         }
         let response = ui.add(
             egui::Image::new(self.color_attachment_id, [256.0, 256.0]).sense(egui::Sense::drag()),
@@ -147,7 +149,7 @@ impl SamplingInspector {
         output_format: wgpu::TextureFormat,
         event_loop: EventLoopProxy,
     ) -> SamplingInspector {
-        let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO, Vec3::Y);
+        let camera = Camera::new(Vec3::new(2.0, 2.0, 1.5), Vec3::ZERO);
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);
         let proj_view_model = projection
             .matrix(crate::app::gfx::camera::ProjectionKind::Perspective)

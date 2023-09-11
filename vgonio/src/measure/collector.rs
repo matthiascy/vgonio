@@ -3,7 +3,7 @@ use crate::{
     RangeByStepSizeInclusive, SphericalPartition,
 };
 use std::ops::{Deref, DerefMut};
-use vgcore::math::{Handedness, SphericalCoord, Vec3, Vec3A};
+use vgcore::math::{Sph3, Vec3, Vec3A};
 
 use crate::{
     app::cache::Cache,
@@ -220,8 +220,8 @@ impl Collector {
                         .values_wrapped()
                         .flat_map(|phi| {
                             zenith.values_wrapped().map(move |theta| {
-                                let position = SphericalCoord::new(1.0, theta, phi);
-                                let cartesian = position.to_cartesian(Handedness::RightHandedYUp);
+                                let position = Sph3::new(1.0, theta, phi);
+                                let cartesian = position.to_cartesian();
                                 let solid_angle = self.scheme.shape().unwrap().solid_angle();
                                 Patch::SingleRegion(PatchSingleRegion {
                                     position,
@@ -253,7 +253,7 @@ impl Collector {
         &self,
         params: &BsdfMeasurementParams,
         mesh: &MicroSurfaceMesh,
-        position: SphericalCoord,
+        position: Sph3,
         trajectories: &[RayTrajectory],
         patches: &CollectorPatches,
         cache: &Cache,
@@ -531,9 +531,8 @@ pub struct PatchPartitioned {
 impl PatchPartitioned {
     /// Checks if a unit vector (ray direction) falls into the patch.
     pub fn contains(&self, unit_vector: Vec3A) -> bool {
-        let spherical =
-            SphericalCoord::from_cartesian(unit_vector.into(), 1.0, Handedness::RightHandedYUp);
-        let (zenith, azimuth) = (spherical.zenith, spherical.azimuth);
+        let spherical = Sph3::from_cartesian(unit_vector.into(), 1.0);
+        let (zenith, azimuth) = (spherical.theta, spherical.phi);
         let (zenith_start, zenith_stop) = self.zenith;
         let (azimuth_start, azimuth_stop) = self.azimuth;
         zenith >= zenith_start
@@ -547,7 +546,7 @@ impl PatchPartitioned {
 #[derive(Debug, Copy, Clone)]
 pub struct PatchSingleRegion {
     /// Position of the patch.
-    pub position: SphericalCoord,
+    pub position: Sph3,
 
     /// Shape of the patch.
     pub shape: RegionShape,
@@ -573,12 +572,8 @@ impl PatchSingleRegion {
                 unit_vector.dot(self.unit_vector) > zenith.cos()
             }
             RegionShape::SphericalRect { zenith, azimuth } => {
-                let spherical = SphericalCoord::from_cartesian(
-                    unit_vector.into(),
-                    1.0,
-                    Handedness::RightHandedYUp,
-                );
-                let (theta, phi) = (spherical.zenith, spherical.azimuth);
+                let spherical = Sph3::from_cartesian(unit_vector.into(), 1.0);
+                let (theta, phi) = (spherical.theta, spherical.phi);
                 let (zenith_start, zenith_stop) = zenith;
                 let (azimuth_start, azimuth_stop) = azimuth;
                 theta >= zenith_start
@@ -603,15 +598,10 @@ impl Patch {
     /// * `zenith` - Polar angle range (start, stop) of the patch (in radians).
     /// * `azimuth` - Azimuthal angle range (start, stop) of the patch (in
     ///   radians).
-    pub fn new_partitioned(
-        zenith: (Radians, Radians),
-        azimuth: (Radians, Radians),
-        handedness: Handedness,
-    ) -> Self {
+    pub fn new_partitioned(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
         let zenith_center = (zenith.0 + zenith.1) / 2.0;
         let azimuth_center = (azimuth.0 + azimuth.1) / 2.0;
-        let unit_vector =
-            SphericalCoord::new(1.0, zenith_center, azimuth_center).to_cartesian(handedness);
+        let unit_vector = Sph3::new(1.0, zenith_center, azimuth_center).to_cartesian();
         Self::Partitioned(PatchPartitioned {
             zenith,
             azimuth,
@@ -623,18 +613,11 @@ impl Patch {
     }
 
     /// Returns the default value of [`Self::SingleRegion`] variant.
-    pub fn new_single_region(
-        shape: RegionShape,
-        zenith: Radians,
-        azimuth: Radians,
-        handedness: Handedness,
-    ) -> Self {
+    pub fn new_single_region(shape: RegionShape, zenith: Radians, azimuth: Radians) -> Self {
         Self::SingleRegion(PatchSingleRegion {
-            position: SphericalCoord::new(1.0, zenith, azimuth),
+            position: Sph3::new(1.0, zenith, azimuth),
             shape,
-            unit_vector: SphericalCoord::new(1.0, zenith, azimuth)
-                .to_cartesian(handedness)
-                .into(),
+            unit_vector: Sph3::new(1.0, zenith, azimuth).to_cartesian().into(),
             solid_angle: shape.solid_angle(),
         })
     }

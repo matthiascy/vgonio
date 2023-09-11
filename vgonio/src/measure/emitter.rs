@@ -1,5 +1,5 @@
 use crate::{
-    measure::{measurement::Radius, rtc::Ray},
+    measure::{measurement::Radius, rtc::Ray, SphericalTransform},
     RangeByStepSizeInclusive,
 };
 use rand::{
@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use vgcore::{
-    math::{Handedness, Mat3, SphericalCoord, Vec3},
+    math::{Mat3, Sph3, Vec3},
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
 };
 use vgsurf::MicroSurfaceMesh;
@@ -198,6 +198,7 @@ impl DerefMut for EmitterSamples {
 }
 
 impl EmitterSamples {
+    /// Consumes the samples and returns an interator over the samples.
     pub fn into_iter(self) -> impl Iterator<Item = Vec3> { self.0.into_iter() }
 }
 
@@ -217,7 +218,7 @@ impl Emitter {
     }
 
     /// All possible measurement positions of the emitter.
-    pub fn measurement_points(&self) -> Vec<SphericalCoord> {
+    pub fn measurement_points(&self) -> Vec<Sph3> {
         log::trace!(
             "azimuth: {:?}",
             self.azimuth.values_wrapped().collect::<Vec<_>>()
@@ -230,11 +231,9 @@ impl Emitter {
         self.azimuth
             .values_wrapped()
             .flat_map(|azimuth| {
-                self.zenith.values().map(move |zenith| SphericalCoord {
-                    radius: 1.0,
-                    zenith,
-                    azimuth,
-                })
+                self.zenith
+                    .values()
+                    .map(move |zenith| Sph3::new(1.0, zenith, azimuth))
             })
             .collect()
     }
@@ -246,7 +245,7 @@ impl Emitter {
         let num_samples = self.num_rays as usize;
 
         let samples = if self.shape.is_disk() {
-            uniform_sampling_on_unit_disk(num_samples, Handedness::RightHandedYUp)
+            crate::measure::uniform_sampling_on_unit_disk(num_samples)
         } else {
             // Generates uniformly distributed samples using rejection sampling.
             let (zenith_start, zenith_stop, azimuth_start, azimuth_stop) = {
@@ -275,13 +274,12 @@ impl Emitter {
                 azimuth_stop.in_degrees().value()
             );
 
-            uniform_sampling_on_unit_sphere(
+            crate::measure::uniform_sampling_on_unit_sphere(
                 num_samples,
                 zenith_start,
                 zenith_stop,
                 azimuth_start,
                 azimuth_stop,
-                Handedness::RightHandedYUp,
             )
         };
 
@@ -301,6 +299,30 @@ impl Emitter {
         }
     }
 
+    /// Applies the transformation matrix for the emitter's samples at the
+    /// given position in spherical coordinates to the samples.
+    pub fn transform_samples(
+        sph_pos: Sph3,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
+        samples: &EmitterSamples,
+    ) -> Vec<Vec3> {
+        match shape_radius {
+            None => {
+                let transform = SphericalTransform::transform_cap(sph_pos, orbit_radius);
+                samples.par_iter().map(move |s| transform * *s).collect()
+            }
+            Some(disk_radius) => {
+                let transform =
+                    SphericalTransform::transform_disk(sph_pos, disk_radius, orbit_radius);
+                samples
+                    .par_iter()
+                    .map(move |s| transform * Vec3::new(s.x * sph_pos.theta.cos(), s.y, s.z))
+                    .collect()
+            }
+        }
+    }
+
     /// Emits rays from the patch located at `pos` with `orbit_radius`.
     /// If the emitter is a disk, `shape_radius` is used to generate rays on the
     /// disk.
@@ -308,172 +330,28 @@ impl Emitter {
     /// # Arguments
     ///
     /// * `samples` - The samples on the emitter's surface.
-    /// * `position` - Current position of the emitter.
+    /// * `sph_pos` - Current position of the emitter in spherical coordinates.
     /// * `orbit_radius` - The radius of the orbit.
     /// * `shape_radius` - The radius of the emitter's disk if it is a disk.
     pub fn emit_rays(
         samples: &EmitterSamples,
-        position: SphericalCoord,
+        sph_pos: Sph3,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) -> Vec<Ray> {
         log::trace!(
             "[Emitter] emitting rays from {} with orbit radius = {}, disk radius = {:?}",
-            position,
+            sph_pos,
             orbit_radius,
             shape_radius
         );
-        let mat = Mat3::from_axis_angle(-Vec3::Y, position.azimuth.value())
-            * Mat3::from_axis_angle(-Vec3::Z, position.zenith.value());
-        let dir = -position.to_cartesian(Handedness::RightHandedYUp);
+        let transform = SphericalTransform::transform_to(sph_pos);
+        let dir = -sph_pos.to_cartesian();
         log::trace!("[Emitter] emitting rays with dir = {:?}", dir);
 
-        let rays = match shape_radius {
-            None => samples
-                .par_iter()
-                .map(|s| {
-                    let origin = mat * (*s * orbit_radius);
-                    Ray::new(origin, dir)
-                })
-                .collect(),
-            Some(disk_radius) => {
-                let factor = position.zenith.cos();
-                samples
-                    .iter()
-                    .map(|s| {
-                        let origin = mat
-                            * Vec3::new(
-                                s.x * disk_radius * factor,
-                                orbit_radius,
-                                s.z * disk_radius,
-                            );
-                        Ray::new(origin, dir)
-                    })
-                    .collect()
-            }
-        };
-        rays
+        Self::transform_samples(sph_pos, orbit_radius, shape_radius, samples)
+            .into_iter()
+            .map(|origin| Ray::new(origin, dir))
+            .collect()
     }
-}
-
-/// Generates uniformly distributed samples on the unit sphere.
-///
-/// Depending on the handedness of the coordinate system, the samples are
-/// generated differently.
-///
-/// 1. Right-handed Z-up coordinate system:
-///
-/// x = cos phi * sin theta
-/// y = sin phi * sin theta
-/// z = cos theta
-///
-/// 2. Right-handed Y-up coordinate system:
-///
-/// x = cos phi * sin theta
-/// y = cos theta
-/// z = sin phi * sin theta
-pub fn uniform_sampling_on_unit_sphere(
-    num: usize,
-    theta_start: Radians,
-    theta_stop: Radians,
-    phi_start: Radians,
-    phi_stop: Radians,
-    handedness: Handedness,
-) -> Vec<Vec3> {
-    use std::f32::consts::PI;
-
-    const SEED: u64 = 0;
-
-    let range = Uniform::new(0.0, 1.0);
-    let mut samples = Vec::with_capacity(num);
-    samples.resize(num, Vec3::ZERO);
-    log::trace!("  - Generating samples following {:?}", handedness);
-
-    match handedness {
-        Handedness::RightHandedZUp => {
-            samples
-                .par_chunks_mut(8192)
-                .enumerate()
-                .for_each(|(i, chunks)| {
-                    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
-                    rng.set_stream(i as u64);
-
-                    let mut j = 0;
-                    while j < chunks.len() {
-                        let phi = radians!(range.sample(&mut rng) * PI * 2.0);
-                        let theta = radians!((1.0 - 2.0 * range.sample(&mut rng)).acos());
-                        if (theta_start..theta_stop).contains(&theta)
-                            && (phi_start..phi_stop).contains(&phi)
-                        {
-                            chunks[j] = Vec3::new(
-                                theta.sin() * phi.cos(),
-                                theta.sin() * phi.sin(),
-                                theta.cos(),
-                            );
-                            j += 1;
-                        }
-                    }
-                });
-        }
-        Handedness::RightHandedYUp => {
-            samples
-                .par_chunks_mut(8192)
-                .enumerate()
-                .for_each(|(i, chunks)| {
-                    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
-                    rng.set_stream(i as u64);
-
-                    let mut j = 0;
-                    while j < chunks.len() {
-                        let phi = radians!(range.sample(&mut rng) * PI * 2.0);
-                        let theta = radians!((1.0 - 2.0 * range.sample(&mut rng)).acos());
-                        if (theta_start..theta_stop).contains(&theta)
-                            && (phi_start..phi_stop).contains(&phi)
-                        {
-                            chunks[j] = Vec3::new(
-                                theta.sin() * phi.cos(),
-                                theta.cos(),
-                                theta.sin() * phi.sin(),
-                            );
-                            j += 1;
-                        }
-                    }
-                })
-        }
-    }
-
-    samples
-}
-
-/// Generates uniformly distributed samples on the unit disk.
-pub fn uniform_sampling_on_unit_disk(num: usize, handedness: Handedness) -> Vec<Vec3> {
-    const SEED: u64 = 0;
-
-    let range: Uniform<f32> = Uniform::new(0.0, 1.0);
-    let mut samples = Vec::with_capacity(num);
-    samples.resize(num, Vec3::ZERO);
-
-    match handedness {
-        Handedness::RightHandedZUp => {
-            todo!("uniform_sampling_on_unit_disk for RightHandedZUp")
-        }
-        Handedness::RightHandedYUp => {
-            samples
-                .par_chunks_mut(8192)
-                .enumerate()
-                .for_each(|(i, chunks)| {
-                    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
-                    rng.set_stream(i as u64);
-
-                    chunks.iter_mut().for_each(|v| {
-                        let r = range.sample(&mut rng).sqrt();
-                        let a = range.sample(&mut rng) * std::f32::consts::TAU;
-                        v.x = r * a.cos();
-                        v.z = r * a.sin();
-                    });
-                })
-        }
-    }
-
-    samples
 }

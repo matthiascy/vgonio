@@ -3,10 +3,7 @@
 use crate::units::{rad, radians, Radians};
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{Debug, Display, Formatter},
-    marker::PhantomData,
-};
+use std::fmt::{Debug, Display, Formatter};
 
 mod aabb;
 mod axis;
@@ -14,27 +11,10 @@ mod axis;
 pub use aabb::*;
 pub use axis::*;
 
-pub use glam::*;
+pub use glam::*; // TODO: remove this
 use num_traits::Float;
 
-/// Coordinate system handedness.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, clap::ValueEnum)]
-pub enum Handedness {
-    /// Right-handed, Z-up coordinate system.
-    RightHandedZUp,
-    /// Right-handed, Y-up coordinate system.
-    RightHandedYUp,
-}
-
-impl Handedness {
-    /// Returns the up vector of the reference coordinate system.
-    pub const fn up(self) -> Vec3 {
-        match self {
-            Self::RightHandedZUp => Vec3::Z,
-            Self::RightHandedYUp => Vec3::Y,
-        }
-    }
-}
+// TODO: self-contained math library, tailored for specific use cases
 
 /// Trait for converting from one primitive numeric type to another.
 #[const_trait]
@@ -108,186 +88,73 @@ pub fn ulp_eq(a: f32, b: f32) -> bool {
     }
 }
 
-/// Coordinate system.
-pub trait CoordSystem {}
-
-/// Cartesian coordinate system.
-pub struct Cartesian;
-
-/// Spherical coordinate system.
-pub struct Spherical;
-
-impl CoordSystem for Cartesian {}
-impl CoordSystem for Spherical {}
-
-/// 3D coordinate can be in Cartesian or Spherical coordinate system.
-pub struct Coord3<C: CoordSystem> {
-    inner: Vec3,
-    _marker: PhantomData<C>,
-}
-
-/// 3D coordinate in Cartesian coordinate system.
-pub type Coord3C = Coord3<Cartesian>;
-
-impl Coord3C {
-    /// Converts the coordinate to Spherical coordinate system.
-    pub fn to_spherical(self, radius: f32, handed: Handedness) -> Coord3S {
-        let (r, t, p) = cartesian_to_spherical(self.inner, radius, handed);
-        Coord3S::new(r, t, p)
-    }
-
-    /// Returns the x coordinate.
-    pub fn x(&self) -> f32 { self.inner.x }
-
-    /// Returns the y coordinate.
-    pub fn y(&self) -> f32 { self.inner.y }
-
-    /// Returns the z coordinate.
-    pub fn z(&self) -> f32 { self.inner.z }
-}
-
-/// 3D coordinate in Spherical coordinate system.
-pub type Coord3S = Coord3<Spherical>;
-
-impl Coord3S {
-    /// Creates a new spherical coordinate.
-    pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
-        Coord3S {
-            inner: Vec3::new(radius, zenith.value, azimuth.value),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Creates a new spherical coordinate with radius 1.
-    pub fn unit(zenith: Radians, azimuth: Radians) -> Self {
-        Coord3S {
-            inner: Vec3::new(1.0, zenith.value, azimuth.value),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Converts from spherical to cartesian coordinate system.
-    pub fn to_cartesian(self, handed: Handedness) -> Coord3C {
-        let vec = spherical_to_cartesian(
-            self.inner.x,
-            self.inner.y.into(),
-            self.inner.z.into(),
-            handed,
-        );
-        Coord3C {
-            inner: vec,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns the radius.
-    pub fn radius(&self) -> Radians { rad!(self.inner.x) }
-
-    /// Returns the zenith angle (polar angle) in radians. 0 is the zenith, pi
-    /// is the nadir. The zenith angle is the inclination angle between the
-    /// positive up-axis and the point on the sphere. The zenith angle is
-    /// always between 0 and pi. 0 ~ pi/2 is the upper hemisphere, pi/2 ~ pi
-    /// is the lower hemisphere.
-    pub fn zenith(&self) -> Radians { rad!(self.inner.y) }
-
-    /// Returns the azimuth angle (azimuthal angle) in radians. It is always
-    /// between 0 and 2pi.
-    pub fn azimuth(&self) -> Radians { rad!(self.inner.z) }
-}
-
-impl Debug for Coord3S {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{{ ρ: {}, θ: {}, φ: {} }}",
-            self.radius(),
-            self.zenith(),
-            self.azimuth()
-        )
-    }
-}
-
-impl Display for Coord3S {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{{ ρ: {}, θ: {}, φ: {} }}",
-            self.radius(),
-            self.zenith().to_degrees().prettified(),
-            self.azimuth().to_degrees().prettified()
-        )
-    }
-}
-
 /// Spherical coordinate in radians.
 #[derive(Copy, Clone, Serialize, Deserialize)]
-pub struct SphericalCoord {
+pub struct Sph3 {
     /// Radius of the sphere.
-    pub radius: f32,
+    pub rho: f32,
     /// Zenith angle (polar angle) in radians. 0 is the zenith, pi is the
     /// nadir. The zenith angle is the angle between the positive z-axis and
     /// the point on the sphere. The zenith angle is always between 0 and pi.
     /// 0 ~ pi/2 is the upper hemisphere, pi/2 ~ pi is the lower hemisphere.
-    pub zenith: Radians,
+    pub theta: Radians,
     /// Azimuth angle (azimuthal angle) in radians. It is always between 0
     /// and 2pi: 0 is the positive x-axis, pi/2 is the positive y-axis, pi is
     /// the negative x-axis, 3pi/2 is the negative y-axis.
-    pub azimuth: Radians,
+    pub phi: Radians,
 }
 
-impl SphericalCoord {
+impl Sph3 {
     /// Creates a new spherical coordinate.
     pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
         Self {
-            radius,
-            zenith,
-            azimuth,
+            rho: radius,
+            theta: zenith,
+            phi: azimuth,
         }
     }
 
     /// Creates a new spherical coordinate with radius 1.
     pub fn unit(zenith: Radians, azimuth: Radians) -> Self {
         Self {
-            radius: 1.0,
-            zenith,
-            azimuth,
+            rho: 1.0,
+            theta: zenith,
+            phi: azimuth,
         }
     }
 
     /// Convert to a cartesian coordinate.
-    pub fn to_cartesian(&self, handedness: Handedness) -> Vec3 {
-        spherical_to_cartesian(self.radius, self.zenith, self.azimuth, handedness)
-    }
+    pub fn to_cartesian(&self) -> Vec3 { spherical_to_cartesian(self.rho, self.theta, self.phi) }
 
     /// Convert from a cartesian coordinate.
-    pub fn from_cartesian(cartesian: Vec3, radius: f32, handedness: Handedness) -> Self {
-        let (radius, zenith, azimuth) = cartesian_to_spherical(cartesian, radius, handedness);
+    pub fn from_cartesian(cartesian: Vec3, radius: f32) -> Self {
+        let (radius, zenith, azimuth) = cartesian_to_spherical(cartesian, radius);
         Self {
-            radius,
-            zenith,
-            azimuth,
+            rho: radius,
+            theta: zenith,
+            phi: azimuth,
         }
     }
 }
 
-impl Debug for SphericalCoord {
+impl Debug for Sph3 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{{ ρ: {}, θ: {}, φ: {} }}",
-            self.radius, self.zenith, self.azimuth
+            self.rho, self.theta, self.phi
         )
     }
 }
 
-impl Display for SphericalCoord {
+impl Display for Sph3 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{{ ρ: {}, θ: {}, φ: {} }}",
-            self.radius,
-            self.zenith.in_degrees().prettified(),
-            self.azimuth.in_degrees().prettified()
+            self.rho,
+            self.theta.in_degrees().prettified(),
+            self.phi.in_degrees().prettified()
         )
     }
 }
@@ -300,20 +167,12 @@ impl Display for SphericalCoord {
 /// * `zenith` - polar angle
 /// * `azimuth` - azimuthal angle
 /// * `handedness` - handedness of the cartesian coordinate system
-pub fn spherical_to_cartesian(
-    r: f32,
-    zenith: Radians,
-    azimuth: Radians,
-    handedness: Handedness,
-) -> Vec3 {
-    let a = r * zenith.sin() * azimuth.cos();
-    let b = r * zenith.sin() * azimuth.sin();
-    let c = r * zenith.cos();
-
-    match handedness {
-        Handedness::RightHandedZUp => Vec3::new(a, b, c),
-        Handedness::RightHandedYUp => Vec3::new(a, c, b),
-    }
+pub fn spherical_to_cartesian(r: f32, zenith: Radians, azimuth: Radians) -> Vec3 {
+    Vec3::new(
+        r * zenith.sin() * azimuth.cos(),
+        r * zenith.sin() * azimuth.sin(),
+        r * zenith.cos(),
+    )
 }
 
 /// Conversion from cartesian coordinate system to spherical coordinate system.
@@ -328,15 +187,8 @@ pub fn spherical_to_cartesian(
 /// * `r` - radius
 /// * `zenith` - polar angle
 /// * `azimuth` - azimuthal angle
-pub fn cartesian_to_spherical(
-    v: Vec3,
-    radius: f32,
-    handedness: Handedness,
-) -> (f32, Radians, Radians) {
-    let (zenith, azimuth) = match handedness {
-        Handedness::RightHandedZUp => (rad!((v.z * rcp_f32(radius)).acos()), rad!(v.y.atan2(v.x))),
-        Handedness::RightHandedYUp => (rad!((v.y * rcp_f32(radius)).acos()), rad!(v.z.atan2(v.x))),
-    };
+pub fn cartesian_to_spherical(v: Vec3, radius: f32) -> (f32, Radians, Radians) {
+    let (zenith, azimuth) = (rad!((v.z * rcp_f32(radius)).acos()), rad!(v.y.atan2(v.x)));
 
     (
         radius,
@@ -583,23 +435,13 @@ pub fn generate_triangulated_hemisphere(
     let phi_step_size = Radians::TWO_PI / phi_steps as f32;
 
     // Generate top vertex
-    vertices.push(spherical_to_cartesian(
-        1.0,
-        Radians::ZERO,
-        Radians::ZERO,
-        Handedness::RightHandedYUp,
-    ));
+    vertices.push(spherical_to_cartesian(1.0, Radians::ZERO, Radians::ZERO));
 
     for i in 1..=theta_steps {
         let theta = theta_step_size * i as f32;
         for j in 0..phi_steps {
             let phi = phi_step_size * j as f32;
-            vertices.push(spherical_to_cartesian(
-                1.0,
-                rad!(theta),
-                phi,
-                Handedness::RightHandedYUp,
-            ));
+            vertices.push(spherical_to_cartesian(1.0, rad!(theta), phi));
         }
     }
 
@@ -648,23 +490,13 @@ pub fn generate_parametric_hemisphere_cells(
     let phi_step_size = Radians::TWO_PI / phi_steps as f32;
 
     // Generate top vertex
-    vertices.push(spherical_to_cartesian(
-        1.0,
-        Radians::ZERO,
-        Radians::ZERO,
-        Handedness::RightHandedYUp,
-    ));
+    vertices.push(spherical_to_cartesian(1.0, Radians::ZERO, Radians::ZERO));
 
     for i in 1..=theta_steps {
         let theta = theta_step_size * i as f32;
         for j in 0..phi_steps {
             let phi = phi_step_size * j as f32;
-            vertices.push(spherical_to_cartesian(
-                1.0,
-                theta,
-                phi,
-                Handedness::RightHandedYUp,
-            ));
+            vertices.push(spherical_to_cartesian(1.0, theta, phi));
         }
     }
 
@@ -706,7 +538,7 @@ mod tests {
     use crate::{
         math::{
             cartesian_to_spherical, madd, msub, nmadd, nmsub, rcp_f32, rsqrt, solve_quadratic,
-            spherical_to_cartesian, ulp_eq, Handedness, QuadraticSolution, MACHINE_EPSILON_F32,
+            spherical_to_cartesian, ulp_eq, QuadraticSolution, MACHINE_EPSILON_F32,
         },
         units::{degrees, radians},
     };
@@ -727,24 +559,18 @@ mod tests {
     fn spherical_cartesian_conversion() {
         println!(
             "{:?}",
-            spherical_to_cartesian(
-                1.0,
-                radians!(0.0),
-                radians!(0.0),
-                Handedness::RightHandedYUp
-            )
+            spherical_to_cartesian(1.0, radians!(0.0), radians!(0.0),)
         );
         println!(
             "{:?}",
-            cartesian_to_spherical(Vec3::new(0.0, 1.0, 0.0), 1.0, Handedness::RightHandedYUp)
+            cartesian_to_spherical(Vec3::new(0.0, 1.0, 0.0), 1.0)
         );
 
         let r = 1.0;
         let zenith = radians!(0.0);
         let azimuth = radians!(0.0);
-        let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
-        let (radius, sph_zenith, sph_azimuth) =
-            cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
+        let v = spherical_to_cartesian(r, zenith, azimuth);
+        let (radius, sph_zenith, sph_azimuth) = cartesian_to_spherical(v, r);
         assert!(ulp_eq(r, radius));
         println!("{:.20} {:.20}", zenith.value, sph_zenith.value);
         assert!(ulp_eq(zenith.value, sph_zenith.value));
@@ -753,19 +579,8 @@ mod tests {
         let r = 2.0;
         let zenith = degrees!(45.0).into();
         let azimuth = degrees!(120.0).into();
-        let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedZUp);
-        let (radius, sph_zenith, sph_azimuth) =
-            cartesian_to_spherical(v, r, Handedness::RightHandedZUp);
-        assert!(ulp_eq(r, radius));
-        assert!(ulp_eq(zenith.value, sph_zenith.value));
-        assert!(ulp_eq(azimuth.value, sph_azimuth.value));
-
-        let r = 1.5;
-        let zenith = degrees!(60.0).in_radians();
-        let azimuth = degrees!(90.0).in_radians();
-        let v = spherical_to_cartesian(r, zenith, azimuth, Handedness::RightHandedYUp);
-        let (radius, sph_zenith, sph_azimuth) =
-            cartesian_to_spherical(v, 1.5, Handedness::RightHandedYUp);
+        let v = spherical_to_cartesian(r, zenith, azimuth);
+        let (radius, sph_zenith, sph_azimuth) = cartesian_to_spherical(v, r);
         assert!(ulp_eq(r, radius));
         assert!(ulp_eq(zenith.value, sph_zenith.value));
         assert!(ulp_eq(azimuth.value, sph_azimuth.value));

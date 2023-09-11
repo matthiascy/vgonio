@@ -45,7 +45,7 @@ use crate::{
     error::RuntimeError,
     measure,
 };
-use vgcore::{error::VgonioError, math::Handedness};
+use vgcore::error::VgonioError;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
@@ -520,15 +520,13 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state.emitter_points_drawing = status;
                             }
                             DebuggingEvent::UpdateEmitterPosition {
-                                zenith,
-                                azimuth,
+                                position,
                                 orbit_radius,
                                 shape_radius,
                             } => {
                                 self.dbg_drawing_state.update_emitter_position(
                                     &self.ctx.gpu,
-                                    zenith,
-                                    azimuth,
+                                    position,
                                     orbit_radius,
                                     shape_radius,
                                 );
@@ -546,7 +544,7 @@ impl VgonioGuiApp {
                             DebuggingEvent::ToggleDebugDrawing(status) => {
                                 self.dbg_drawing_state.enabled = status;
                             }
-                            DebuggingEvent::ToggleCollectorDrawing {
+                            DebuggingEvent::UpdateCollectorDrawing {
                                 status,
                                 scheme,
                                 patches,
@@ -600,6 +598,13 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state
                                     .update_surface_primitive_id(mesh, id, status);
                             }
+                            DebuggingEvent::UpdateSurfaceNormalsDrawing { mesh, status } => {
+                                self.dbg_drawing_state.update_surface_normals(
+                                    &self.ctx.gpu,
+                                    mesh,
+                                    status,
+                                );
+                            }
                             DebuggingEvent::UpdateGridCellDrawing { .. } => {
                                 todo!("UpdateGridCellDrawing")
                             }
@@ -643,7 +648,6 @@ impl VgonioGuiApp {
                                 params,
                                 &surfaces,
                                 &self.cache.read().unwrap(),
-                                Handedness::RightHandedYUp,
                             );
                             todo!("Save area distribution to file or display it in a window");
                         }

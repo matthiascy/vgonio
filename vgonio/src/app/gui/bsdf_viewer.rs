@@ -65,7 +65,7 @@ impl BsdfViewer {
         gui: Arc<RwLock<GuiRenderer>>,
         event_loop: EventLoopProxy,
     ) -> Self {
-        let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO, Vec3::Y);
+        let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO);
         let projection = Projection::new(0.1, 100.0, 45.0, 256, 256);
         let proj_view = projection.matrix(crate::app::gfx::camera::ProjectionKind::Perspective)
             * camera.view_matrix();

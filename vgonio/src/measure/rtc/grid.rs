@@ -60,8 +60,8 @@ pub fn measure_bsdf(
     for pos in params.emitter.measurement_points() {
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
-            pos.zenith.in_degrees().value(),
-            pos.azimuth.in_degrees().value()
+            pos.theta.in_degrees().value(),
+            pos.phi.in_degrees().value()
         );
         let t = Instant::now();
         let emitted_rays = Emitter::emit_rays(samples, pos, orbit_radius, disk_radius);
@@ -72,8 +72,8 @@ pub fn measure_bsdf(
             "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
             num_emitted_rays,
             emitted_rays[0].dir,
-            pos.zenith.in_degrees().value(),
-            pos.azimuth.in_degrees().value(),
+            pos.theta.in_degrees().value(),
+            pos.phi.in_degrees().value(),
             elapsed.as_secs_f64(),
         );
 

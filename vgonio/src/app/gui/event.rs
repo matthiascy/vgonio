@@ -17,7 +17,7 @@ use crate::{
 };
 use uuid::Uuid;
 use vgcore::{
-    math::{IVec2, Vec3},
+    math::{IVec2, Sph3, Vec3},
     units::{Degrees, Radians},
     Isotropy,
 };
@@ -118,13 +118,6 @@ pub enum BsdfViewerEvent {
 #[derive(Debug)]
 pub enum DebuggingEvent {
     ToggleDebugDrawing(bool),
-    ToggleCollectorDrawing {
-        status: bool,
-        scheme: CollectorScheme,
-        patches: CollectorPatches,
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
-    },
     ToggleEmitterPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
     ToggleEmitterSamplesDrawing(bool),
@@ -141,6 +134,13 @@ pub enum DebuggingEvent {
     UpdateGridCellDrawing {
         pos: IVec2,
         status: bool,
+    },
+    UpdateCollectorDrawing {
+        status: bool,
+        scheme: CollectorScheme,
+        patches: CollectorPatches,
+        orbit_radius: f32,
+        shape_radius: Option<f32>,
     },
     ToggleSamplingRendering(bool),
     UpdateDepthMap,
@@ -159,14 +159,17 @@ pub enum DebuggingEvent {
         orbit_radius: f32,
     },
     UpdateEmitterPosition {
-        zenith: Radians,
-        azimuth: Radians,
+        position: Sph3,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     },
     UpdateSurfacePrimitiveId {
         mesh: Option<Handle<RenderableMesh>>,
         id: u32,
+        status: bool,
+    },
+    UpdateSurfaceNormalsDrawing {
+        mesh: Option<Handle<MicroSurfaceMesh>>,
         status: bool,
     },
     EmitRays {

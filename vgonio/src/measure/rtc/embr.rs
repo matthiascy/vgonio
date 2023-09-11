@@ -24,7 +24,7 @@ use rayon::prelude::*;
 use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose_debug"))]
 use std::time::Instant;
-use vgcore::math::{SphericalCoord, Vec3A};
+use vgcore::math::{Sph3, Vec3A};
 use vgsurf::MicroSurfaceMesh;
 
 /// Extra data associated with a ray stream.
@@ -212,7 +212,7 @@ pub(crate) fn measure_bsdf_at_point(
     samples: &EmitterSamples,
     patches: &CollectorPatches,
     cache: &Cache,
-    pos: SphericalCoord,
+    position: Sph3,
 ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
@@ -233,7 +233,7 @@ pub(crate) fn measure_bsdf_at_point(
     scene.commit();
 
     measure_bsdf_at_point_inner(
-        pos,
+        position,
         params,
         mesh,
         samples,
@@ -248,7 +248,7 @@ pub(crate) fn measure_bsdf_at_point(
 
 #[allow(clippy::too_many_arguments)]
 fn measure_bsdf_at_point_inner(
-    pos: SphericalCoord,
+    pos: Sph3,
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     samples: &EmitterSamples,

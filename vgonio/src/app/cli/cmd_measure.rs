@@ -16,7 +16,7 @@ use crate::{
     SphericalPartition,
 };
 use std::time::Instant;
-use vgcore::{error::VgonioError, math::Handedness};
+use vgcore::error::VgonioError;
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
@@ -213,12 +213,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     "Debug mode is enabled. Measuring MMSF in debug mode is not recommended."
                 );
 
-                measure::microfacet::measure_masking_shadowing(
-                    measurement,
-                    &surfaces,
-                    &cache,
-                    Handedness::RightHandedYUp,
-                )
+                measure::microfacet::measure_masking_shadowing(measurement, &surfaces, &cache)
             }
         };
 

@@ -12,7 +12,7 @@ use vgcore::{
         CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
         ReadFileErrorKind,
     },
-    math::Handedness,
+    math::Axis,
 };
 
 /// Write the data samples to the given writer.
@@ -695,10 +695,22 @@ pub fn read_omni_surf_3d<R: BufRead>(
 
 #[cfg(feature = "surf-obj")]
 /// Reads a Wavefront OBJ file and returns a micro-surface.
+///
+/// The OBJ file must contain a single mesh.
+///
+/// # Arguments
+///
+/// * `reader` - The reader to read the OBJ file from.
+///
+/// * `filepath` - The path to the OBJ file.
+///
+/// * `axis` - The axis along which the surface is oriented.
+///
+/// * `unit` - The unit used for the surface.
 pub fn read_wavefront<R: BufRead>(
     reader: &mut R,
     filepath: &Path,
-    handedness: Handedness,
+    axis: Axis,
     unit: LengthUnit,
 ) -> Result<MicroSurface, VgonioError> {
     let result = tobj::load_obj_buf(reader, &tobj::GPU_LOAD_OPTIONS, |_| {
@@ -739,43 +751,23 @@ pub fn read_wavefront<R: BufRead>(
         max_z,
         mesh.positions.len() / 3
     );
-    // Extract the height values from the mesh.
-    let (du, dv, rows, cols, heights) = match handedness {
-        Handedness::RightHandedZUp => {
-            let p0 = &mesh.positions[0..3];
-            let p1 = &mesh.positions[3..6];
-            let p2 = &mesh.positions[6..9];
-            let du = (p0[0] - p1[0]).abs().max((p0[0] - p2[0]).abs());
-            let dv = (p0[1] - p1[1]).abs().max((p0[1] - p2[1]).abs());
-            (
-                du,
-                dv,
-                ((max_y - min_y) / dv) as usize + 1,
-                ((max_x - min_x) / du) as usize + 1,
-                mesh.positions
-                    .chunks_exact(3)
-                    .map(|chunk| chunk[2])
-                    .collect::<Vec<_>>(),
-            )
-        }
-        Handedness::RightHandedYUp => {
-            let p0 = &mesh.positions[0..3];
-            let p1 = &mesh.positions[3..6];
-            let p2 = &mesh.positions[6..9];
-            let du = (p0[0] - p1[0]).abs().max((p0[0] - p2[0]).abs());
-            let dv = (p0[2] - p1[2]).abs().max((p0[2] - p2[2]).abs());
-            (
-                du,
-                dv,
-                ((max_z - min_z) / dv) as usize + 1,
-                ((max_x - min_x) / du) as usize + 1,
-                mesh.positions
-                    .chunks_exact(3)
-                    .map(|chunk| chunk[1])
-                    .collect::<Vec<_>>(),
-            )
-        }
+    let (iu, iv, ih) = match axis {
+        Axis::X => (1, 2, 0),
+        Axis::Y => (0, 2, 1),
+        Axis::Z => (0, 1, 2),
     };
+    let p0 = &mesh.positions[0..3];
+    let p1 = &mesh.positions[3..6];
+    let p2 = &mesh.positions[6..9];
+    let du = (p0[iu] - p1[iu]).abs().max((p0[iu] - p2[iu]).abs());
+    let dv = (p0[iv] - p1[iv]).abs().max((p0[iv] - p2[iv]).abs());
+    let rows = ((max_y - min_y) / dv) as usize + 1;
+    let cols = ((max_x - min_x) / du) as usize + 1;
+    let heights = mesh
+        .positions
+        .chunks_exact(3)
+        .map(|chunk| chunk[ih])
+        .collect::<Vec<_>>();
     log::debug!("du: {}, dv: {}, cols: {}, rows: {}", du, dv, cols, rows);
     Ok(MicroSurface::from_samples(
         rows,

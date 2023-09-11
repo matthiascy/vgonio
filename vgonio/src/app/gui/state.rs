@@ -29,7 +29,10 @@ use crate::{
 #[cfg(feature = "embree")]
 use crate::measure::rtc::embr;
 
-use crate::app::{gfx::RenderableMesh, gui::notify::NotifyKind};
+use crate::{
+    app::{gfx::RenderableMesh, gui::notify::NotifyKind},
+    measure::SphericalTransform,
+};
 use std::{
     default::Default,
     ops::Deref,
@@ -38,7 +41,7 @@ use std::{
 };
 use vgcore::{
     math,
-    math::{Handedness, Mat3, Mat4, SphericalCoord, UVec3, Vec3},
+    math::{Mat3, Mat4, Sph3, UVec3, Vec3},
     units::{rad, Radians},
 };
 use vgsurf::MicroSurfaceMesh;
@@ -304,8 +307,8 @@ pub struct DebugDrawingState {
     pub emitter_rays_drawing: bool,
     /// Whether to show emitter samples.
     pub emitter_samples_drawing: bool,
-    /// Emitter current position: (zenith, azimuth).
-    pub emitter_position: (Radians, Radians),
+    /// Emitter current position.
+    pub emitter_position: Sph3,
     /// Emitter samples.
     pub emitter_samples: Option<EmitterSamples>,
     /// Emitter samples buffer.
@@ -358,6 +361,8 @@ pub struct DebugDrawingState {
     surface_primitive_id: u32,
     /// Whether to show surface primitive.
     surface_primitive_drawing: bool,
+    /// Surface normals buffer.
+    surface_normals_buffer: Option<wgpu::Buffer>,
 
     event_loop: EventLoopProxy,
     cache: Arc<RwLock<Cache>>,
@@ -378,6 +383,7 @@ impl DebugDrawingState {
     pub const RAY_TRAJECTORIES_MISSED_COLOR: [f32; 4] = [0.6, 0.3, 0.4, 0.2];
     pub const RAY_TRAJECTORIES_REFLECTED_COLOR: [f32; 4] = [0.45, 0.5, 0.4, 0.3];
     pub const SURFACE_PRIMITIVE_COLOR: [f32; 4] = [0.12, 0.23, 0.9, 0.8];
+    pub const SURFACE_NORMAL_COLOR: [f32; 4] = [0.7, 0.23, 0.92, 0.8];
 
     pub fn new(
         ctx: &GpuContext,
@@ -583,7 +589,7 @@ impl DebugDrawingState {
             emitter_points_drawing: false,
             emitter_rays_drawing: false,
             emitter_samples_drawing: false,
-            emitter_position: (rad!(0.0), rad!(0.0)),
+            emitter_position: Sph3::unit(rad!(0.0), rad!(0.0)),
             emitter_samples: None,
             emitter_samples_buffer: None,
             emitter_samples_uniform_buffer: None,
@@ -677,6 +683,7 @@ impl DebugDrawingState {
             surface_of_interest: None,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
+            surface_normals_buffer: None,
         }
     }
 
@@ -710,7 +717,6 @@ impl DebugDrawingState {
             ctx,
             Some(samples),
             None,
-            None,
             orbit_radius,
             shape_radius,
         );
@@ -740,17 +746,15 @@ impl DebugDrawingState {
     pub fn update_emitter_position(
         &mut self,
         ctx: &Arc<GpuContext>,
-        zenith: Radians,
-        azimuth: Radians,
+        position: Sph3,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) {
-        log::trace!("Updating emitter position to {}, {}", zenith, azimuth);
+        log::trace!("Updating emitter position to {}", position);
         self.update_emitter_position_and_samples(
             ctx,
             None,
-            Some(zenith),
-            Some(azimuth),
+            Some(position),
             orbit_radius,
             shape_radius,
         );
@@ -769,15 +773,14 @@ impl DebugDrawingState {
             self.emitter_orbit_radius
         );
         self.emitter_rays_t = t;
-        self.update_emitter_position_and_samples(ctx, None, None, None, orbit_radius, shape_radius);
+        self.update_emitter_position_and_samples(ctx, None, None, orbit_radius, shape_radius);
     }
 
     fn update_emitter_position_and_samples(
         &mut self,
         ctx: &GpuContext,
         samples: Option<EmitterSamples>,
-        zenith: Option<Radians>,
-        azimuth: Option<Radians>,
+        position: Option<Sph3>,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) {
@@ -805,36 +808,18 @@ impl DebugDrawingState {
             self.emitter_samples = Some(new_samples);
         }
 
-        if let Some(zenith) = zenith {
-            self.emitter_position.0 = zenith;
-        }
-
-        if let Some(azimuth) = azimuth {
-            self.emitter_position.1 = azimuth;
+        if let Some(pos) = position {
+            self.emitter_position = pos;
         }
 
         if let Some(samples) = &self.emitter_samples {
-            let (zenith, azimuth) = self.emitter_position;
-            let mat = Mat3::from_axis_angle(-Vec3::Y, azimuth.value())
-                * Mat3::from_axis_angle(-Vec3::Z, zenith.value());
-            let vertices = if let Some(shape_radius) = shape_radius {
-                let factor = self.emitter_position.0.cos();
-                samples
-                    .iter()
-                    .map(|s| {
-                        mat * Vec3::new(
-                            s.x * shape_radius * factor,
-                            orbit_radius,
-                            s.z * shape_radius,
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                samples
-                    .iter()
-                    .map(|s| mat * (*s * orbit_radius))
-                    .collect::<Vec<_>>()
-            };
+            use rayon::iter::ParallelIterator;
+            let vertices = Emitter::transform_samples(
+                self.emitter_position,
+                orbit_radius,
+                shape_radius,
+                samples,
+            );
             ctx.queue.write_buffer(
                 self.emitter_samples_buffer.as_ref().unwrap(),
                 0,
@@ -859,14 +844,10 @@ impl DebugDrawingState {
                 .unwrap();
             return;
         }
-        log::trace!(
-            "Emitting rays at {} {}",
-            self.emitter_position.0,
-            self.emitter_position.1
-        );
+        log::trace!("Emitting rays at {}", self.emitter_position);
         self.emitter_rays = Some(Emitter::emit_rays(
             self.emitter_samples.as_ref().unwrap(),
-            SphericalCoord::unit(self.emitter_position.0, self.emitter_position.1),
+            self.emitter_position,
             orbit_radius,
             shape_radius,
         ));
@@ -919,30 +900,13 @@ impl DebugDrawingState {
                             Patch::Partitioned(p) => {
                                 let (phi_a, phi_b) = p.azimuth;
                                 let (theta_a, theta_b) = p.zenith;
-                                vertices[i * 4] = math::spherical_to_cartesian(
-                                    1.0,
-                                    theta_a,
-                                    phi_a,
-                                    Handedness::RightHandedYUp,
-                                );
-                                vertices[i * 4 + 1] = math::spherical_to_cartesian(
-                                    1.0,
-                                    theta_a,
-                                    phi_b,
-                                    Handedness::RightHandedYUp,
-                                );
-                                vertices[i * 4 + 2] = math::spherical_to_cartesian(
-                                    1.0,
-                                    theta_b,
-                                    phi_b,
-                                    Handedness::RightHandedYUp,
-                                );
-                                vertices[i * 4 + 3] = math::spherical_to_cartesian(
-                                    1.0,
-                                    theta_b,
-                                    phi_a,
-                                    Handedness::RightHandedYUp,
-                                );
+                                vertices[i * 4] = math::spherical_to_cartesian(1.0, theta_a, phi_a);
+                                vertices[i * 4 + 1] =
+                                    math::spherical_to_cartesian(1.0, theta_a, phi_b);
+                                vertices[i * 4 + 2] =
+                                    math::spherical_to_cartesian(1.0, theta_b, phi_b);
+                                vertices[i * 4 + 3] =
+                                    math::spherical_to_cartesian(1.0, theta_b, phi_a);
                                 indices[i * 8] = i as u32 * 4;
                                 indices[i * 8 + 1] = i as u32 * 4 + 1;
                                 indices[i * 8 + 2] = i as u32 * 4 + 1;
@@ -1001,13 +965,11 @@ impl DebugDrawingState {
                     }
                     RegionShape::Disk { .. } => {
                         log::trace!("[DebugDrawingState] Generating disk shape");
-                        let mut vertices = vec![Vec3::ZERO; 19];
+                        let mut vertices = vec![Vec3::Z; 19];
                         let mut indices = vec![UVec3::ZERO; 18];
                         for i in 0..18 {
                             let angle = i as f32 * std::f32::consts::PI / 9.0;
-                            let x = angle.cos();
-                            let y = angle.sin();
-                            vertices[i + 1] = Vec3::new(x, 0.0, y);
+                            vertices[i + 1] = Vec3::new(angle.cos(), angle.sin(), 1.0);
                             indices[i] = UVec3::new(0, i as u32 + 1, (i + 1) as u32 % 18 + 1);
                         }
                         self.collector_shape_vertex_buffer =
@@ -1030,6 +992,38 @@ impl DebugDrawingState {
             }
         }
         self.collector_patches = Some(patches);
+    }
+
+    pub fn update_surface_normals(
+        &mut self,
+        ctx: &GpuContext,
+        mesh: Option<Handle<MicroSurfaceMesh>>,
+        status: bool,
+    ) {
+        if status && mesh.is_some() {
+            let cache = self.cache.read().unwrap();
+            let mesh = cache.get_micro_surface_mesh(mesh.unwrap()).unwrap();
+            let normals = mesh
+                .facet_normals
+                .iter()
+                .zip(mesh.facets.chunks(3))
+                .flat_map(|(n, f)| {
+                    let center = f
+                        .iter()
+                        .fold(Vec3::ZERO, |acc, v| acc + mesh.verts[*v as usize] / 3.0);
+                    [center, center + *n * 0.5]
+                })
+                .collect::<Vec<_>>();
+            self.surface_normals_buffer = Some(ctx.device.create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("debug-surface-normals"),
+                    contents: bytemuck::cast_slice(&normals),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                },
+            ));
+        } else {
+            self.surface_normals_buffer = None;
+        }
     }
 
     pub fn update_surface_primitive_id(
@@ -1091,7 +1085,7 @@ impl DebugDrawingState {
                         self.emitter_samples.as_ref().unwrap(),
                         self.collector_patches.as_ref().unwrap(),
                         &cache,
-                        SphericalCoord::new(1.0, self.emitter_position.0, self.emitter_position.1),
+                        self.emitter_position,
                     );
 
                     let mut reflected = vec![];
@@ -1258,6 +1252,22 @@ impl DebugDrawingState {
                 );
             }
 
+            if self.surface_normals_buffer.is_some() {
+                let buffer = self.surface_normals_buffer.as_ref().unwrap();
+                render_pass.set_pipeline(&self.lines_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass
+                    .set_vertex_buffer(0, self.surface_normals_buffer.as_ref().unwrap().slice(..));
+                constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                constants[16..20].copy_from_slice(&Self::SURFACE_NORMAL_COLOR);
+                render_pass.set_push_constants(
+                    wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    0,
+                    bytemuck::cast_slice(&constants),
+                );
+                render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+            }
+
             if self.ray_trajectories_drawing_reflected || self.ray_trajectories_drawing_missed {
                 render_pass.set_pipeline(&self.lines_pipeline);
                 render_pass.set_bind_group(0, &self.bind_group, &[]);
@@ -1358,15 +1368,12 @@ impl DebugDrawingState {
                             constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
                             for phi in azimuth.values_wrapped() {
                                 for theta in zenith.values_wrapped() {
-                                    let mat = match shape {
+                                    let transform = match shape {
                                         RegionShape::SphericalCap { .. } => {
-                                            Mat4::from_axis_angle(-Vec3::Y, phi.value())
-                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value())
-                                                * Mat4::from_scale(Vec3::new(
-                                                    self.collector_orbit_radius,
-                                                    self.collector_orbit_radius,
-                                                    self.collector_orbit_radius,
-                                                ))
+                                            Mat4::from_mat3(SphericalTransform::transform_cap(
+                                                Sph3::unit(theta, phi),
+                                                self.collector_orbit_radius,
+                                            ))
                                         }
                                         RegionShape::SphericalRect { .. } => {
                                             log::warn!(
@@ -1376,21 +1383,14 @@ impl DebugDrawingState {
                                             Mat4::IDENTITY
                                         }
                                         RegionShape::Disk { .. } => {
-                                            Mat4::from_axis_angle(-Vec3::Y, phi.value())
-                                                * Mat4::from_axis_angle(-Vec3::Z, theta.value())
-                                                * Mat4::from_translation(Vec3::new(
-                                                    0.0,
-                                                    self.collector_orbit_radius,
-                                                    0.0,
-                                                ))
-                                                * Mat4::from_scale(Vec3::new(
-                                                    self.collector_shape_radius,
-                                                    1.0,
-                                                    self.collector_shape_radius,
-                                                ))
+                                            Mat4::from_mat3(SphericalTransform::transform_disk(
+                                                Sph3::unit(theta, phi),
+                                                self.collector_shape_radius,
+                                                self.collector_orbit_radius,
+                                            ))
                                         }
                                     };
-                                    constants[0..16].copy_from_slice(&mat.to_cols_array());
+                                    constants[0..16].copy_from_slice(&transform.to_cols_array());
                                     render_pass.set_push_constants(
                                         wgpu::ShaderStages::VERTEX_FRAGMENT,
                                         0,

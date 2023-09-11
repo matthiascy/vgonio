@@ -12,7 +12,7 @@ use vgbxdf::{
     BeckmannDistribution, MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
     TrowbridgeReitzDistribution,
 };
-use vgcore::{math::SphericalCoord, units::Radians};
+use vgcore::{math::Sph3, units::Radians};
 
 /// The measured data related to the microfacet distribution function (MDF).
 #[derive(Debug, Clone)]

@@ -29,7 +29,6 @@ use std::{
 };
 use vgcore::{
     error::VgonioError,
-    math::Handedness,
     units::{rad, Radians},
 };
 
@@ -333,7 +332,6 @@ impl SphericalPartition {
                                 i_phi as f32 * azimuth.step_size + azimuth.start,
                                 (i_phi + 1) as f32 * azimuth.step_size + azimuth.start,
                             ),
-                            Handedness::RightHandedYUp,
                         ));
                     }
                 }
@@ -375,7 +373,6 @@ impl SphericalPartition {
                                 phi_start + i_phi as f32 * phi_step,
                                 phi_start + (i_phi + 1) as f32 * phi_step,
                             ),
-                            Handedness::RightHandedYUp,
                         ));
                     }
                 }
@@ -407,7 +404,6 @@ impl SphericalPartition {
                             Patch::new_partitioned(
                                 (rad!(theta_start), rad!(theta_stop)),
                                 (phi_start, phi_stop),
-                                Handedness::RightHandedYUp,
                             )
                         })
                     })

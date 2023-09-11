@@ -16,7 +16,7 @@ use std::path::Path;
 use vgcore::{
     error::VgonioError,
     math,
-    math::{Handedness, Mat4, Vec3},
+    math::{Mat4, Vec3},
     units::Radians,
 };
 use vgsurf::MicroSurface;
@@ -1360,7 +1360,6 @@ pub fn measure_masking_shadowing(
     params: MsfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &Cache,
-    handedness: Handedness,
 ) -> Vec<MeasurementData> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {
@@ -1425,10 +1424,10 @@ pub fn measure_masking_shadowing(
                 let zenith =
                     params.zenith.step_size * (i % params.zenith.step_count_wrapped()) as f32;
                 let view_dir =
-                    math::spherical_to_cartesian(1.0, zenith, azimuth, handedness).normalize();
+                    math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
                 let pos = view_dir * diagonal;
                 let proj_view_mat = {
-                    let view_mat = Camera::new(pos, Vec3::ZERO, handedness.up()).view_matrix();
+                    let view_mat = Camera::new(pos, Vec3::ZERO).view_matrix();
                     proj_mat * view_mat
                 };
                 MeasurementPoint::new(azimuth, zenith, view_dir, proj_view_mat, i as u32)

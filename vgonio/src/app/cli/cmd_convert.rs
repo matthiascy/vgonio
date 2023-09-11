@@ -58,11 +58,10 @@ pub struct ConvertOptions {
     )]
     pub squaring: bool,
 
-    /// Handedness of the coordinate system, which is used to determine the
-    /// height axis of the micro-surface profile only when the input is a 3D
+    /// The height axis of the micro-surface profile only when the input is a 3D
     /// mesh file.
     #[arg(long)]
-    pub handedness: Option<Handedness>,
+    pub axis: Option<Axis>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,7 +85,7 @@ use std::path::PathBuf;
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
-    math::Handedness,
+    math::Axis,
     units::LengthUnit,
 };
 use vgsurf::MicroSurface;
@@ -107,7 +106,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             if ext == "obj" {
                                 MicroSurface::read_from_wavefront(
                                     &resolved,
-                                    opts.handedness.unwrap_or(Handedness::RightHandedZUp),
+                                    opts.axis.unwrap_or(Axis::Z),
                                     LengthUnit::UM,
                                 )?
                             } else {

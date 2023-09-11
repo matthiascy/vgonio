@@ -1,4 +1,4 @@
-use vgcore::{math, math::Handedness, units, units::Radians};
+use vgcore::{math, units, units::Radians};
 use vgsurf::MicroSurface;
 // NOTE(yang): The number of bins is determined by the bin size and the range of
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
@@ -8,7 +8,6 @@ use crate::{
     measure::measurement::{
         AdfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource,
     },
-    RangeByStepSizeInclusive,
 };
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -76,13 +75,8 @@ pub fn measure_area_distribution(
                         (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
                             let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
                             let zenith = zenith_idx as f32 * params.zenith.step_size;
-                            let dir = math::spherical_to_cartesian(
-                                1.0,
-                                zenith,
-                                azimuth,
-                                Handedness::RightHandedYUp,
-                            )
-                            .normalize();
+                            let dir =
+                                math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
                             let facets_surface_area = mesh
                                 .facet_normals
                                 .par_iter()

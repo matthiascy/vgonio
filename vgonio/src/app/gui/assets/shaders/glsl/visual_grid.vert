@@ -32,6 +32,7 @@ vec3 unproject(vec3 p) {
 
 void main() {
     vec3 p = grid_plane[gl_VertexIndex];
+    // The unprojected points will be in the right-handed Z-up coordinate system as it is the world space defined in the viewer.
     near_point = unproject(p);
     far_point = unproject(vec3(p.xy, 1.0));
 

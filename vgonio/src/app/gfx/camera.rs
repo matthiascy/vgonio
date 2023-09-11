@@ -116,8 +116,10 @@ impl Projection {
     }
 }
 
-/// Localization: X-right, Y-forward, Z-up
-/// Chirality: right-handed
+/// Defines the position and orientation of the camera in the world.
+///
+/// The world space is defined by a right-handed, Z-up coordinate system.
+/// The camera space is defined by a right-handed, Y-up coordinate system.
 pub struct Camera {
     /// Location of the view point
     pub eye: Vec3,
@@ -126,8 +128,9 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(position: Vec3, target: Vec3, up: Vec3) -> Self {
+    pub fn new(position: Vec3, target: Vec3) -> Self {
         let forward = (target - position).normalize();
+        let up = Vec3::Z;
         let right = {
             let cos = forward.dot(up.normalize());
             let up = if cos.partial_cmp(&1.0) == Some(Equal) {
@@ -147,34 +150,10 @@ impl Camera {
         }
     }
 
-    pub fn view_matrix(&self) -> Mat4 {
-        // let right = forward.cross(Vec3::Z);
-        // let up = right.cross(forward);
-        //
-        // Mat4::from_cols(
-        //     Vec4::new(right.x, up.x, forward.x, 0.0),
-        //     Vec4::new(right.y, up.y, forward.y, 0.0),
-        //     Vec4::new(right.z, up.z, forward.z, 0.0),
-        //     Vec4::new(
-        //         -right.dot(self.position),
-        //         -up.dot(self.position),
-        //         -forward.dot(self.position),
-        //         1.0,
-        //     ),
-        // )
-        Mat4::look_at_rh(self.eye, self.target, self.up)
-    }
-
-    // pub fn view_proj_matrix(&self) -> Mat4 {
-    //     // Scale depth from range [-1, 1] to range [0, 1]
-    //     let scale_depth = Mat4::from_cols(
-    //         Vec4::new(1.0, 0.0, 0.0, 0.0),
-    //         Vec4::new(0.0, 1.0, 0.0, 0.0),
-    //         Vec4::new(0.0, 0.0, 0.5, 0.0),
-    //         Vec4::new(0.0, 0.0, 0.5, 1.0),
-    //     );
-    //     scale_depth * self.proj_matrix() * self.matrix()
-    // }
+    /// Returns the view matrix of the camera.
+    ///
+    /// The view matrix transforms a point from world space to camera space.
+    pub fn view_matrix(&self) -> Mat4 { Mat4::look_at_rh(self.eye, self.target, self.up) }
 
     pub fn forward(&self) -> Vec3 { (self.target - self.eye).normalize() }
 

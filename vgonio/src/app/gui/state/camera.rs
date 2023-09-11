@@ -15,7 +15,7 @@ impl CameraState {
     /// Creates a new instance of the camera state with the default values,
     /// except for the size of the image plane.
     pub fn default_with_size(width: u32, height: u32) -> Self {
-        let camera = Camera::new(Vec3::new(0.0, 4.0, 10.0), Vec3::ZERO, Vec3::Y);
+        let camera = Camera::new(Vec3::new(0.0, -10.0, 8.0), Vec3::ZERO);
         let projection = Projection::new(0.1, 100.0, 75.0f32.to_radians(), width, height);
         CameraState::new(camera, projection, ProjectionKind::Perspective)
     }

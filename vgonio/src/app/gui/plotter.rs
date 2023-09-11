@@ -31,7 +31,7 @@ use uuid::Uuid;
 use vgbxdf::{BeckmannDistribution, MicrofacetDistributionModel, TrowbridgeReitzDistribution};
 use vgcore::{
     math,
-    math::{Handedness, Vec3},
+    math::Vec3,
     units::{deg, rad, Radians},
     Isotropy,
 };
@@ -642,12 +642,8 @@ impl PlottingWidget for PlotInspector {
                                     {
                                         let idx =
                                             azimuth_idx * zenith_range_step_count + zenith_idx;
-                                        let mut coord = math::spherical_to_cartesian(
-                                            1.0,
-                                            zenith,
-                                            azimuth,
-                                            Handedness::RightHandedYUp,
-                                        );
+                                        let mut coord =
+                                            math::spherical_to_cartesian(1.0, zenith, azimuth);
                                         coord.y = data_point.data
                                             [azimuth_idx * zenith_range_step_count + zenith_idx]
                                             .0[lambda_idx]
