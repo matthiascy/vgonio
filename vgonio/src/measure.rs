@@ -1,14 +1,14 @@
 //! Acquisition related.
 
 pub mod bsdf;
-pub(crate) mod collector;
 pub(crate) mod emitter;
+pub(crate) mod fetcher;
 pub mod measurement;
 pub mod microfacet;
 pub mod rtc;
 
-pub use collector::{Collector, CollectorScheme, Patch};
 pub use emitter::Emitter;
+pub use fetcher::{CollectorScheme, Fetcher, Patch};
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,

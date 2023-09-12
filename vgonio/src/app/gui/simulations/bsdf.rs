@@ -8,7 +8,7 @@ use crate::{
         bsdf::BsdfKind,
         emitter::RegionShape,
         measurement::{BsdfMeasurementParams, Radius},
-        Collector, CollectorScheme, Emitter,
+        CollectorScheme, Emitter, Fetcher,
     },
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
@@ -348,7 +348,7 @@ impl CollectorScheme {
     }
 }
 
-impl Collector {
+impl Fetcher {
     /// Creates the UI for parameterizing the collector.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Collector")

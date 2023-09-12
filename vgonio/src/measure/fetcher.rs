@@ -31,7 +31,7 @@ use vgsurf::MicroSurfaceMesh;
 /// The detectors are positioned on the center of each patch; the patches
 /// are partitioned using 1.0 as radius.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Collector {
+pub struct Fetcher {
     /// Distance from the collector's center to the specimen's center.
     pub radius: Radius,
 
@@ -199,7 +199,7 @@ impl Energy {
     }
 }
 
-impl Collector {
+impl Fetcher {
     /// Generates the patches of the collector.
     ///
     /// The patches are generated based on the scheme of the collector. They are
@@ -469,9 +469,9 @@ impl Collector {
     }
 }
 
-/// Represents patches on the surface of the spherical [`Collector`].
+/// Represents patches on the surface of the spherical [`Fetcher`].
 ///
-/// The domain of the whole collector is defined by the [`Collector`].
+/// The domain of the whole collector is defined by the [`Fetcher`].
 #[derive(Debug, Clone)]
 pub struct CollectorPatches(Vec<Patch>);
 
@@ -495,7 +495,7 @@ impl DerefMut for CollectorPatches {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-/// Represents a patch on the spherical [`Collector`].
+/// Represents a patch on the spherical [`Fetcher`].
 ///
 /// It could be a single region or a partitioned region.
 #[derive(Debug, Copy, Clone)]
@@ -506,7 +506,7 @@ pub enum Patch {
     SingleRegion(PatchSingleRegion),
 }
 
-/// Represents a patch issued from partitioning the spherical [`Collector`].
+/// Represents a patch issued from partitioning the spherical [`Fetcher`].
 #[derive(Debug, Copy, Clone)]
 pub struct PatchPartitioned {
     /// Polar angle range of the patch (in radians).

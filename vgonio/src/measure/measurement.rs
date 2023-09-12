@@ -5,10 +5,10 @@ use crate::{
     fitting::MeasuredMdfData,
     measure::{
         bsdf::{BsdfKind, MeasuredBsdfData},
-        collector::CollectorScheme,
         emitter::RegionShape,
+        fetcher::CollectorScheme,
         microfacet::{MeasuredAdfData, MeasuredMsfData},
-        Collector, Emitter, RtcMethod,
+        Emitter, Fetcher, RtcMethod,
     },
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
 };
@@ -172,7 +172,7 @@ pub struct BsdfMeasurementParams {
     pub emitter: Emitter,
 
     /// Description of the collector.
-    pub collector: Collector,
+    pub collector: Fetcher,
 }
 
 impl Default for BsdfMeasurementParams {
@@ -209,7 +209,7 @@ impl Default for BsdfMeasurementParams {
                     nanometres!(100.0),
                 ),
             },
-            collector: Collector {
+            collector: Fetcher {
                 radius: Radius::Auto(mm!(0.0)),
                 scheme: CollectorScheme::Partitioned {
                     partition: SphericalPartition::EqualArea {

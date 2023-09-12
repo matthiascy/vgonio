@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 
 def points_on_hemisphere():
-    count_phi = 40
-    count_theta = 20
+    count_phi = 20
+    count_theta = 10
     d_phi = math.tau / count_phi
     d_theta = np.pi * 0.5 / count_theta
     points = np.zeros((count_phi * (count_theta + 1), 3))
@@ -23,7 +23,7 @@ def points_on_hemisphere():
     return points
 
 
-def hemisphere2disk_equal_area(pts):
+def hemisphere2disc_lambert_equal_area(pts):
     theta = np.arccos(pts[:, 2])
     phi = np.arctan2(pts[:, 1], pts[:, 0])
     r = np.sin(theta * 0.5) * np.sqrt(2.0)
@@ -62,13 +62,13 @@ if __name__ == '__main__':
 
     ax = fig.add_subplot(1, 4, 3)
     ax.set_aspect('equal')
-    ax.set_title(r'Equal Area - $\sqrt{2} * \sin\frac{\theta}{2}$')
-    xs, ys = hemisphere2disk_equal_area(pts)
+    ax.set_title('Equal Area')
+    xs, ys = hemisphere2disc_lambert_equal_area(pts)
     ax.scatter(xs, ys, s=2)
 
     ax = fig.add_subplot(1, 4, 4)
     ax.set_aspect('equal')
-    ax.set_title('Conformal')
+    ax.set_title(r'Conformal - $\tan\frac{\theta}{2}$')
     xs, ys = hemisphere2disk_conformal(pts)
     ax.scatter(xs, ys, s=1)
 

@@ -16,13 +16,13 @@ pub mod vgmo {
     use crate::{
         measure::{
             bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            collector::BounceAndEnergy,
             emitter::RegionShape,
+            fetcher::BounceAndEnergy,
             measurement::{
                 AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
                 Radius, SimulationKind,
             },
-            Collector, CollectorScheme, Emitter,
+            CollectorScheme, Emitter, Fetcher,
         },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
     };
@@ -592,7 +592,7 @@ emitter is not implemented"
         }
     }
 
-    impl Collector {
+    impl Fetcher {
         /// The size of the buffer required to write the collector.
         pub const REQUIRED_SIZE: usize = 4 + CollectorScheme::REQUIRED_SIZE;
 
@@ -639,17 +639,17 @@ emitter is not implemented"
     impl BsdfMeasurementParams {
         /// Reads the BSDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
+            let mut buf = [0u8; Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
             reader.read_exact(&mut buf)?;
             let kind = BsdfKind::from(buf[0]);
             let incident_medium = Medium::from(buf[1]);
             let transmitted_medium = Medium::from(buf[2]);
             let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
             let emitter = Emitter::read_from_buf(&buf[4..4 + Emitter::REQUIRED_SIZE]);
-            let collector = Collector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
+            let collector = Fetcher::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
             let samples_count = u32::from_le_bytes(
-                buf[Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
-                    ..Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
+                buf[Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
+                    ..Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
                     .try_into()
                     .unwrap(),
             );
@@ -674,7 +674,7 @@ emitter is not implemented"
             &self,
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
-            let mut buf = [0x20; Collector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
+            let mut buf = [0x20; Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
             buf[0] = self.kind as u8;
             buf[1] = self.incident_medium as u8;
             buf[2] = self.transmitted_medium as u8;
@@ -686,8 +686,8 @@ emitter is not implemented"
                 .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
             self.collector
                 .write_to_buf(&mut buf[4 + Emitter::REQUIRED_SIZE..]);
-            buf[4 + Emitter::REQUIRED_SIZE + Collector::REQUIRED_SIZE
-                ..4 + Emitter::REQUIRED_SIZE + Collector::REQUIRED_SIZE + 4]
+            buf[4 + Emitter::REQUIRED_SIZE + Fetcher::REQUIRED_SIZE
+                ..4 + Emitter::REQUIRED_SIZE + Fetcher::REQUIRED_SIZE + 4]
                 .copy_from_slice(
                     &(self.collector.scheme.total_sample_count() as u32).to_le_bytes(),
                 );
@@ -1328,10 +1328,10 @@ mod tests {
     use crate::{
         measure::{
             bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            collector::BounceAndEnergy,
             emitter::RegionShape,
+            fetcher::BounceAndEnergy,
             measurement::{BsdfMeasurementParams, Radius, SimulationKind},
-            Collector, CollectorScheme, Emitter, RtcMethod,
+            CollectorScheme, Emitter, Fetcher, RtcMethod,
         },
         Medium, RangeByStepSizeInclusive, SphericalPartition,
     };
@@ -1482,7 +1482,7 @@ mod tests {
                 spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
                 solid_angle: Default::default(),
             },
-            collector: Collector {
+            collector: Fetcher {
                 radius: Radius::Auto(mm!(10.0)),
                 scheme: CollectorScheme::Partitioned {
                     partition: SphericalPartition::EqualAngle {

@@ -6,8 +6,8 @@ use crate::{
     },
     fitting::FittingProblemKind,
     measure::{
-        collector::CollectorPatches,
         emitter::EmitterSamples,
+        fetcher::CollectorPatches,
         measurement::{
             AdfMeasurementParams, BsdfMeasurementParams, MeasurementData, MeasurementKind,
             MsfMeasurementParams,

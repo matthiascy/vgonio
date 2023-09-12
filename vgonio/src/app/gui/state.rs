@@ -18,8 +18,8 @@ use crate::{
         gui::event::{EventLoopProxy, VgonioEvent},
     },
     measure::{
-        collector::CollectorPatches,
         emitter::{EmitterSamples, RegionShape},
+        fetcher::CollectorPatches,
         measurement::BsdfMeasurementParams,
         rtc::Ray,
         CollectorScheme, Emitter, Patch, RtcMethod,

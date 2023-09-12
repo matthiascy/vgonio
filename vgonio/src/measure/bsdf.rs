@@ -9,8 +9,8 @@ use crate::{
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     measure::{
-        collector::{BounceAndEnergy, CollectorPatches, PerPatchData},
         emitter::EmitterSamples,
+        fetcher::{BounceAndEnergy, CollectorPatches, PerPatchData},
         measurement::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
         rtc::RayTrajectory,
         RtcMethod,
