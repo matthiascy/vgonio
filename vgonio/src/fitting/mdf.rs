@@ -7,14 +7,17 @@ use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
 };
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use std::{assert_matches::debug_assert_matches, borrow::Cow, convert::identity, fmt::Display};
+use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
 use vgbxdf::{
     dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
     MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
 };
-use vgcore::{math::Sph3, units::Radians};
+use vgcore::units::Radians;
 
-/// The measured data related to the microfacet distribution function (MDF).
+/// The measured microfacet distribution data (MDF).
+///
+/// The measured data can be either the area distribution function (ADF) or the
+/// masking-shadowing function (MSF).
 #[derive(Debug, Clone)]
 pub enum MeasuredMdfData<'a> {
     /// The measured area distribution function (ADF).
@@ -169,7 +172,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         };
         let reports = result
             .into_iter()
-            .filter(|(m, r)| matches!(r.termination, TerminationReason::Converged { .. }))
+            .filter(|(_m, r)| matches!(r.termination, TerminationReason::Converged { .. }))
             .collect::<Vec<_>>();
         let mut lowest = f64::INFINITY;
         let mut best = 0;

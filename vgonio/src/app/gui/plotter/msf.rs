@@ -9,7 +9,7 @@ use crate::{
         },
     },
     fitting::FittedModel,
-    measure::params::MeasurementData,
+    measure::data::MeasurementData,
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};
@@ -99,7 +99,7 @@ impl VariantData for MaskingShadowingExtra {
         self.curves.get(index)
     }
 
-    fn update_fitted_curves(&mut self, models: &[FittedModel]) {
+    fn update_fitted_curves(&mut self, _models: &[FittedModel]) {
         // let theta_values = self
         //     .zenith_range
         //     .values_rev()
@@ -146,7 +146,7 @@ impl VariantData for MaskingShadowingExtra {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle<MeasurementData>) {
+    fn ui(&mut self, ui: &mut Ui, _event_loop: &EventLoopProxy, _data: Handle<MeasurementData>) {
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
             egui::Layout::left_to_right(Align::Center),

@@ -137,7 +137,7 @@ pub struct RayTriIsect {
 
 impl RayTriIsect {
     /// Constructs a new `RayTriIsect`. TODO: add error bounds.
-    pub fn new(p: Vec3, p_err: Vec3, n: Vec3, u: f32, v: f32) -> Self { Self { u, v, n, p } }
+    pub fn new(p: Vec3, _p_err: Vec3, n: Vec3, u: f32, v: f32) -> Self { Self { u, v, n, p } }
 
     /// Interpolates the given vertex attributes according to the barycentric
     /// coordinates.
@@ -516,4 +516,13 @@ mod tests {
             );
         }
     }
+}
+
+/// Ray tracing simulation result.
+#[derive(Debug, Clone)]
+pub struct RayTracingResult {
+    /// The ray trajectory.
+    pub trajectory: RayTrajectory,
+    /// The hit result.
+    pub hit: Hit,
 }

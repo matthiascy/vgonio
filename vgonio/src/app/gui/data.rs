@@ -6,7 +6,10 @@ use vgsurf::MicroSurface;
 use crate::{
     app::cache::{Cache, Handle},
     fitting::FittedModels,
-    measure::params::{MeasurementData, MeasurementDataSource, MeasurementKind},
+    measure::{
+        data::{MeasurementData, MeasurementDataSource},
+        params::MeasurementKind,
+    },
 };
 
 use super::outliner::OutlinerItem;

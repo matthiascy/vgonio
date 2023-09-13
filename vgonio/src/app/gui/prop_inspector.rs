@@ -12,7 +12,7 @@ use crate::{
             outliner::OutlinerItem,
         },
     },
-    measure::params::{MeasuredData, MeasurementDataSource},
+    measure::data::{MeasuredData, MeasurementDataSource},
 };
 
 /// The property inspector.

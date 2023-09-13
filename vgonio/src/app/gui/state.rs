@@ -25,13 +25,10 @@ use crate::measure::bsdf::rtc::embr;
 
 use crate::{
     app::{gfx::RenderableMesh, gui::notify::NotifyKind},
-    measure::{
-        bsdf::{
-            detector::{CollectorPatches, DetectorScheme, Patch},
-            emitter::{Emitter, EmitterSamples, RegionShape},
-            rtc::RtcMethod,
-        },
-        SphericalTransform,
+    measure::bsdf::{
+        detector::DetectorPatches,
+        emitter::{Emitter, EmitterParams},
+        rtc::RtcMethod,
     },
 };
 use std::{
@@ -41,9 +38,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 use vgcore::{
-    math,
-    math::{Mat3, Mat4, Sph3, UVec3, Vec3},
-    units::{rad, Radians},
+    math::{Mat4, Sph3, Vec3},
+    units::rad,
 };
 use vgsurf::MicroSurfaceMesh;
 use wgpu::util::DeviceExt;
@@ -310,8 +306,9 @@ pub struct DebugDrawingState {
     pub emitter_samples_drawing: bool,
     /// Emitter current position.
     pub emitter_position: Sph3,
+    pub emitter: Emitter,
     /// Emitter samples.
-    pub emitter_samples: Option<EmitterSamples>,
+    pub emitter_samples: Option<Vec<Vec3>>,
     /// Emitter samples buffer.
     pub emitter_samples_buffer: Option<wgpu::Buffer>,
     /// Emitter samples uniform buffer.
@@ -330,8 +327,6 @@ pub struct DebugDrawingState {
     pub collector_shape_vertex_buffer: wgpu::Buffer,
     /// Collector shape index buffer.
     pub collector_shape_index_buffer: wgpu::Buffer,
-    /// Collector shape/partition scheme.
-    pub collector_scheme: Option<DetectorScheme>,
     /// Collector orbit radius.
     pub collector_orbit_radius: f32,
     /// Collector shape radius.
@@ -341,7 +336,7 @@ pub struct DebugDrawingState {
     /// Index buffer for the collector dome.
     pub collector_dome_index_buffer: Option<wgpu::Buffer>,
     /// Collector's patches.
-    pub collector_patches: Option<CollectorPatches>,
+    pub collector_patches: Option<DetectorPatches>,
     /// Points on the collector's surface. (Rays hitting the collector's
     /// surface)
     pub collector_ray_hit_points_buffer: Option<wgpu::Buffer>,
@@ -591,6 +586,11 @@ impl DebugDrawingState {
             emitter_rays_drawing: false,
             emitter_samples_drawing: false,
             emitter_position: Sph3::unit(rad!(0.0), rad!(0.0)),
+            emitter: Emitter {
+                params: Default::default(),
+                measpts: ,
+                samples: (),
+            },
             emitter_samples: None,
             emitter_samples_buffer: None,
             emitter_samples_uniform_buffer: None,
@@ -671,7 +671,6 @@ impl DebugDrawingState {
             collector_dome_drawing: false,
             event_loop,
             collector_shape_index_buffer,
-            collector_scheme: None,
             collector_shape_radius: 1.0,
             collector_patches: None,
             collector_ray_hit_points_buffer: None,
@@ -710,7 +709,7 @@ impl DebugDrawingState {
     pub fn update_emitter_samples(
         &mut self,
         ctx: &GpuContext,
-        samples: EmitterSamples,
+        samples: Vec<Vec3>,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) {
@@ -780,7 +779,7 @@ impl DebugDrawingState {
     fn update_emitter_position_and_samples(
         &mut self,
         ctx: &GpuContext,
-        samples: Option<EmitterSamples>,
+        samples: Option<Vec<Vec3>>,
         position: Option<Sph3>,
         orbit_radius: f32,
         shape_radius: Option<f32>,
@@ -814,13 +813,9 @@ impl DebugDrawingState {
         }
 
         if let Some(samples) = &self.emitter_samples {
-            use rayon::iter::ParallelIterator;
-            let vertices = Emitter::transform_samples(
-                self.emitter_position,
-                orbit_radius,
-                shape_radius,
-                samples,
-            );
+            let vertices =
+                self.emitter
+                    .samples_at(self.emitter_position, orbit_radius, shape_radius, samples);
             ctx.queue.write_buffer(
                 self.emitter_samples_buffer.as_ref().unwrap(),
                 0,
@@ -846,7 +841,7 @@ impl DebugDrawingState {
             return;
         }
         log::trace!("Emitting rays at {}", self.emitter_position);
-        self.emitter_rays = Some(Emitter::emit_rays(
+        self.emitter_rays = Some(EmitterParams::emit_rays(
             self.emitter_samples.as_ref().unwrap(),
             self.emitter_position,
             orbit_radius,
@@ -872,13 +867,11 @@ impl DebugDrawingState {
         &mut self,
         ctx: &GpuContext,
         status: bool,
-        scheme: Option<DetectorScheme>,
-        patches: CollectorPatches,
+        patches: DetectorPatches,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     ) {
         log::trace!("[DebugDrawingState] Updating collector drawing");
-        self.collector_scheme = scheme;
         self.collector_dome_drawing = status;
         self.collector_orbit_radius = orbit_radius;
         self.collector_shape_radius = shape_radius.unwrap_or(1.0);
@@ -890,108 +883,108 @@ impl DebugDrawingState {
             "[DebugDrawingState] Collector shape radius: {}",
             self.collector_shape_radius
         );
-        if let Some(scheme) = scheme {
-            // Update the buffer accordingly
-            match scheme {
-                DetectorScheme::Partitioned { .. } => {
-                    let mut vertices = vec![Vec3::ZERO; patches.len() * 4];
-                    let mut indices = vec![0u32; patches.len() * 8];
-                    for (i, patch) in patches.iter().enumerate() {
-                        match patch {
-                            Patch::Partitioned(p) => {
-                                let (phi_a, phi_b) = p.azimuth;
-                                let (theta_a, theta_b) = p.zenith;
-                                vertices[i * 4] = math::spherical_to_cartesian(1.0, theta_a, phi_a);
-                                vertices[i * 4 + 1] =
-                                    math::spherical_to_cartesian(1.0, theta_a, phi_b);
-                                vertices[i * 4 + 2] =
-                                    math::spherical_to_cartesian(1.0, theta_b, phi_b);
-                                vertices[i * 4 + 3] =
-                                    math::spherical_to_cartesian(1.0, theta_b, phi_a);
-                                indices[i * 8] = i as u32 * 4;
-                                indices[i * 8 + 1] = i as u32 * 4 + 1;
-                                indices[i * 8 + 2] = i as u32 * 4 + 1;
-                                indices[i * 8 + 3] = i as u32 * 4 + 2;
-                                indices[i * 8 + 4] = i as u32 * 4 + 2;
-                                indices[i * 8 + 5] = i as u32 * 4 + 3;
-                                indices[i * 8 + 6] = i as u32 * 4 + 3;
-                                indices[i * 8 + 7] = i as u32 * 4;
-                            }
-                            Patch::SingleRegion(_) => {
-                                unreachable!(
-                                    "Single region patches should not be present in a partitioned \
-                                     scheme"
-                                )
-                            }
-                        }
-                    }
-                    self.collector_dome_vertex_buffer = Some(ctx.device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("debug-collector-dome"),
-                            contents: bytemuck::cast_slice(&vertices),
-                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                        },
-                    ));
-                    self.collector_dome_index_buffer = Some(ctx.device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("debug-collector-dome"),
-                            contents: bytemuck::cast_slice(&indices),
-                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                        },
-                    ));
-                }
-                DetectorScheme::SingleRegion { shape, .. } => match shape {
-                    RegionShape::SphericalCap { zenith } => {
-                        let steps = (zenith.value() / 2.0f32.to_radians()) as u32;
-                        let (vertices, indices) =
-                            math::generate_triangulated_hemisphere(zenith, steps, 18);
-                        self.collector_shape_vertex_buffer =
-                            ctx.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("debug-collector-shape"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX
-                                        | wgpu::BufferUsages::COPY_DST,
-                                });
-                        self.collector_shape_index_buffer =
-                            ctx.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("debug-collector-shape"),
-                                    contents: bytemuck::cast_slice(&indices),
-                                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                                });
-                    }
-                    RegionShape::SphericalRect { .. } => {
-                        todo!("Implement spherical rect drawing")
-                    }
-                    RegionShape::Disk { .. } => {
-                        log::trace!("[DebugDrawingState] Generating disk shape");
-                        let mut vertices = vec![Vec3::Z; 19];
-                        let mut indices = vec![UVec3::ZERO; 18];
-                        for i in 0..18 {
-                            let angle = i as f32 * std::f32::consts::PI / 9.0;
-                            vertices[i + 1] = Vec3::new(angle.cos(), angle.sin(), 1.0);
-                            indices[i] = UVec3::new(0, i as u32 + 1, (i + 1) as u32 % 18 + 1);
-                        }
-                        self.collector_shape_vertex_buffer =
-                            ctx.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("debug-collector-shape-vertices"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX
-                                        | wgpu::BufferUsages::COPY_DST,
-                                });
-                        self.collector_shape_index_buffer =
-                            ctx.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("debug-collector-shape-indices"),
-                                    contents: bytemuck::cast_slice(&indices),
-                                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                                });
-                    }
-                },
-            }
-        }
+        // if let Some(scheme) = scheme {
+        //     // Update the buffer accordingly
+        //     match scheme {
+        //         DetectorScheme::Partitioned { .. } => {
+        //             let mut vertices = vec![Vec3::ZERO; patches.len() * 4];
+        //             let mut indices = vec![0u32; patches.len() * 8];
+        //             for (i, patch) in patches.iter().enumerate() {
+        //                 match patch {
+        //                     Patch::Partitioned(p) => {
+        //                         let (phi_a, phi_b) = p.azimuth;
+        //                         let (theta_a, theta_b) = p.zenith;
+        //                         vertices[i * 4] = math::spherical_to_cartesian(1.0,
+        // theta_a, phi_a);                         vertices[i * 4 + 1] =
+        //                             math::spherical_to_cartesian(1.0, theta_a,
+        // phi_b);                         vertices[i * 4 + 2] =
+        //                             math::spherical_to_cartesian(1.0, theta_b,
+        // phi_b);                         vertices[i * 4 + 3] =
+        //                             math::spherical_to_cartesian(1.0, theta_b,
+        // phi_a);                         indices[i * 8] = i as u32 * 4;
+        //                         indices[i * 8 + 1] = i as u32 * 4 + 1;
+        //                         indices[i * 8 + 2] = i as u32 * 4 + 1;
+        //                         indices[i * 8 + 3] = i as u32 * 4 + 2;
+        //                         indices[i * 8 + 4] = i as u32 * 4 + 2;
+        //                         indices[i * 8 + 5] = i as u32 * 4 + 3;
+        //                         indices[i * 8 + 6] = i as u32 * 4 + 3;
+        //                         indices[i * 8 + 7] = i as u32 * 4;
+        //                     }
+        //                     Patch::SingleRegion(_) => {
+        //                         unreachable!(
+        //                             "Single region patches should not be present in a
+        // partitioned \                              scheme"
+        //                         )
+        //                     }
+        //                 }
+        //             }
+        //             self.collector_dome_vertex_buffer =
+        // Some(ctx.device.create_buffer_init(
+        // &wgpu::util::BufferInitDescriptor {                     label:
+        // Some("debug-collector-dome"),                     contents:
+        // bytemuck::cast_slice(&vertices),                     usage:
+        // wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        //                 },
+        //             ));
+        //             self.collector_dome_index_buffer =
+        // Some(ctx.device.create_buffer_init(
+        // &wgpu::util::BufferInitDescriptor {                     label:
+        // Some("debug-collector-dome"),                     contents:
+        // bytemuck::cast_slice(&indices),                     usage:
+        // wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+        // },             ));
+        //         }
+        //         DetectorScheme::SingleRegion { shape, .. } => match shape {
+        //             RegionShape::SphericalCap { zenith } => {
+        //                 let steps = (zenith.value() / 2.0f32.to_radians()) as u32;
+        //                 let (vertices, indices) =
+        //                     math::generate_triangulated_hemisphere(zenith, steps,
+        // 18);                 self.collector_shape_vertex_buffer =
+        //                     ctx.device
+        //                         .create_buffer_init(&wgpu::util::BufferInitDescriptor
+        // {                             label: Some("debug-collector-shape"),
+        //                             contents: bytemuck::cast_slice(&vertices),
+        //                             usage: wgpu::BufferUsages::VERTEX
+        //                                 | wgpu::BufferUsages::COPY_DST,
+        //                         });
+        //                 self.collector_shape_index_buffer =
+        //                     ctx.device
+        //                         .create_buffer_init(&wgpu::util::BufferInitDescriptor
+        // {                             label: Some("debug-collector-shape"),
+        //                             contents: bytemuck::cast_slice(&indices),
+        //                             usage: wgpu::BufferUsages::INDEX |
+        // wgpu::BufferUsages::COPY_DST,                         });
+        //             }
+        //             RegionShape::SphericalRect { .. } => {
+        //                 todo!("Implement spherical rect drawing")
+        //             }
+        //             RegionShape::Disk { .. } => {
+        //                 log::trace!("[DebugDrawingState] Generating disk shape");
+        //                 let mut vertices = vec![Vec3::Z; 19];
+        //                 let mut indices = vec![UVec3::ZERO; 18];
+        //                 for i in 0..18 {
+        //                     let angle = i as f32 * std::f32::consts::PI / 9.0;
+        //                     vertices[i + 1] = Vec3::new(angle.cos(), angle.sin(),
+        // 1.0);                     indices[i] = UVec3::new(0, i as u32 + 1, (i
+        // + 1) as u32 % 18 + 1);                 } self.collector_shape_vertex_buffer =
+        //   ctx.device .create_buffer_init(&wgpu::util::BufferInitDescriptor
+        // {                             label:
+        // Some("debug-collector-shape-vertices"),
+        // contents: bytemuck::cast_slice(&vertices),
+        // usage: wgpu::BufferUsages::VERTEX                                 |
+        // wgpu::BufferUsages::COPY_DST,                         });
+        //                 self.collector_shape_index_buffer =
+        //                     ctx.device
+        //                         .create_buffer_init(&wgpu::util::BufferInitDescriptor
+        // {                             label:
+        // Some("debug-collector-shape-indices"),
+        // contents: bytemuck::cast_slice(&indices),
+        // usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+        //                         });
+        //             }
+        //         },
+        //     }
+        // }
         self.collector_patches = Some(patches);
     }
 
@@ -1080,7 +1073,7 @@ impl DebugDrawingState {
                 {
                     let cache = self.cache.read().unwrap();
                     let mesh = cache.get_micro_surface_mesh(mesh).unwrap();
-                    let measured = embr::measure_bsdf_at_point(
+                    let measured = embr::measure_bsdf_once(
                         &params,
                         mesh,
                         self.emitter_samples.as_ref().unwrap(),
@@ -1319,93 +1312,25 @@ impl DebugDrawingState {
             }
 
             if self.collector_dome_drawing {
-                if let Some(scheme) = self.collector_scheme {
-                    render_pass.set_bind_group(0, &self.bind_group, &[]);
-                    match scheme {
-                        DetectorScheme::Partitioned { .. } => {
-                            if self.collector_dome_vertex_buffer.is_some()
-                                && self.collector_dome_index_buffer.is_some()
-                            {
-                                let vertex_buffer =
-                                    self.collector_dome_vertex_buffer.as_ref().unwrap();
-                                let index_buffer =
-                                    self.collector_dome_index_buffer.as_ref().unwrap();
-                                render_pass.set_pipeline(&self.lines_pipeline);
-                                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                                render_pass.set_index_buffer(
-                                    index_buffer.slice(..),
-                                    wgpu::IndexFormat::Uint32,
-                                );
-                                constants[0..16].copy_from_slice(
-                                    &Mat4::from_scale(Vec3::splat(self.collector_orbit_radius))
-                                        .to_cols_array(),
-                                );
-                                constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
-                                render_pass.set_push_constants(
-                                    wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                    0,
-                                    bytemuck::cast_slice(&constants),
-                                );
-                                render_pass.draw_indexed(
-                                    0..index_buffer.size() as u32 / 4,
-                                    0,
-                                    0..1,
-                                );
-                            }
-                        }
-                        DetectorScheme::SingleRegion {
-                            zenith,
-                            azimuth,
-                            shape,
-                            ..
-                        } => {
-                            render_pass.set_pipeline(&self.triangles_pipeline);
-                            render_pass
-                                .set_vertex_buffer(0, self.collector_shape_vertex_buffer.slice(..));
-                            render_pass.set_index_buffer(
-                                self.collector_shape_index_buffer.slice(..),
-                                wgpu::IndexFormat::Uint32,
-                            );
-                            constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
-                            for phi in azimuth.values_wrapped() {
-                                for theta in zenith.values_wrapped() {
-                                    let transform = match shape {
-                                        RegionShape::SphericalCap { .. } => {
-                                            Mat4::from_mat3(SphericalTransform::transform_cap(
-                                                Sph3::unit(theta, phi),
-                                                self.collector_orbit_radius,
-                                            ))
-                                        }
-                                        RegionShape::SphericalRect { .. } => {
-                                            log::warn!(
-                                                "SphericalRect collector shape is not supported \
-                                                 yet"
-                                            );
-                                            Mat4::IDENTITY
-                                        }
-                                        RegionShape::Disk { .. } => {
-                                            Mat4::from_mat3(SphericalTransform::transform_disk(
-                                                Sph3::unit(theta, phi),
-                                                self.collector_shape_radius,
-                                                self.collector_orbit_radius,
-                                            ))
-                                        }
-                                    };
-                                    constants[0..16].copy_from_slice(&transform.to_cols_array());
-                                    render_pass.set_push_constants(
-                                        wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                        0,
-                                        bytemuck::cast_slice(&constants),
-                                    );
-                                    render_pass.draw_indexed(
-                                        0..self.collector_shape_index_buffer.size() as u32 / 4,
-                                        0,
-                                        0..1,
-                                    );
-                                }
-                            }
-                        }
-                    }
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                if self.collector_dome_vertex_buffer.is_some()
+                    && self.collector_dome_index_buffer.is_some()
+                {
+                    let vertex_buffer = self.collector_dome_vertex_buffer.as_ref().unwrap();
+                    let index_buffer = self.collector_dome_index_buffer.as_ref().unwrap();
+                    render_pass.set_pipeline(&self.lines_pipeline);
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    constants[0..16].copy_from_slice(
+                        &Mat4::from_scale(Vec3::splat(self.collector_orbit_radius)).to_cols_array(),
+                    );
+                    constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        0,
+                        bytemuck::cast_slice(&constants),
+                    );
+                    render_pass.draw_indexed(0..index_buffer.size() as u32 / 4, 0, 0..1);
                 }
             }
         }

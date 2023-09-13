@@ -7,7 +7,10 @@ use crate::{
             GpuContext, RenderPass, Texture, WgpuConfig,
         },
     },
-    measure::params::{MeasuredData, MeasurementData, MeasurementDataSource, MsfMeasurementParams},
+    measure::{
+        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        params::MsfMeasurementParams,
+    },
 };
 use bytemuck::{Pod, Zeroable};
 use std::path::Path;

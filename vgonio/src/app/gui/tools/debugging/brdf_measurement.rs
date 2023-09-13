@@ -7,24 +7,21 @@ use crate::{
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
-    measure::{
-        bsdf::{detector::DetectorScheme, emitter::RegionShape, rtc::RtcMethod},
-        params::BsdfMeasurementParams,
-    },
+    measure,
+    measure::{bsdf::rtc::RtcMethod, params::BsdfMeasurementParams},
 };
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 use vgcore::{
     math,
     math::{IVec2, Sph3},
-    units::Radians,
 };
 use vgsurf::MicroSurface;
 
 pub(crate) struct BrdfMeasurementDebugging {
     cache: Arc<RwLock<Cache>>,
     /// The index of the emitter position in the list of emitter measurement
-    /// points. See [Emitter::measurement_points].
+    /// points. See [EmitterParams::measurement_points].
     emitter_position_index: i32,
     emitter_points_drawing: bool,
     emitter_rays_drawing: bool,
@@ -97,55 +94,7 @@ impl BrdfMeasurementDebugging {
 
     pub fn selected_viewer(&self) -> Option<Uuid> { self.focused_viewer }
 
-    fn estimate_emitter_radii(
-        &self,
-        record: Option<&MicroSurfaceRecord>,
-    ) -> Option<(f32, Option<f32>)> {
-        match record {
-            None => {
-                self.event_loop
-                    .send_event(VgonioEvent::Notify {
-                        kind: NotifyKind::Warning,
-                        text: "No surface selected to evaluate the radius".to_string(),
-                        time: 1.0,
-                    })
-                    .unwrap();
-                None
-            }
-            Some(record) => {
-                let (radius, disk_radius) = match self.params.emitter.shape {
-                    RegionShape::SphericalCap { .. } | RegionShape::SphericalRect { .. } => {
-                        let cache = self.cache.read().unwrap();
-                        let mesh = cache
-                            .get_micro_surface_mesh_by_surface_id(record.surf)
-                            .unwrap();
-                        (self.params.emitter.radius.estimate(mesh), None)
-                    }
-                    RegionShape::Disk { radius } => {
-                        let cache = self.cache.read().unwrap();
-                        let mesh = cache
-                            .get_micro_surface_mesh_by_surface_id(record.surf)
-                            .unwrap();
-                        (
-                            self.params.emitter.radius.estimate(mesh),
-                            Some(radius.estimate_disk_radius(mesh)),
-                        )
-                    }
-                };
-                log::trace!(
-                    "[BsdfMeasurementDebugging] evaluated radius: {}, {:?}",
-                    radius,
-                    disk_radius
-                );
-                Some((radius, disk_radius))
-            }
-        }
-    }
-
-    fn estimate_collector_radii(
-        &self,
-        record: Option<&MicroSurfaceRecord>,
-    ) -> Option<(f32, Option<f32>)> {
+    fn estimate_radii(&self, record: Option<&MicroSurfaceRecord>) -> Option<(f32, f32)> {
         match record {
             None => {
                 self.event_loop
@@ -162,25 +111,14 @@ impl BrdfMeasurementDebugging {
                 let mesh = cache
                     .get_micro_surface_mesh_by_surface_id(record.surf)
                     .unwrap();
-                let orbit_radius = self.params.detector.radius.estimate(mesh);
-
-                let (radius, disk_radius) = match self.params.detector.scheme {
-                    DetectorScheme::Partitioned { .. } => (orbit_radius, None),
-                    DetectorScheme::SingleRegion { shape, .. } => match shape {
-                        RegionShape::SphericalCap { .. } | RegionShape::SphericalRect { .. } => {
-                            (orbit_radius, None)
-                        }
-                        RegionShape::Disk { radius } => {
-                            (orbit_radius, Some(radius.estimate_disk_radius(mesh)))
-                        }
-                    },
-                };
+                let orbit_radius = measure::estimate_orbit_radius(mesh);
+                let disk_radius = measure::estimate_disc_radius(mesh);
                 log::trace!(
-                    "[BsdfMeasurementDebugging] evaluated radius: {}, {:?}",
-                    radius,
+                    "[BsdfMeasurementDebugging] evaluated radius: {}, {}",
+                    orbit_radius,
                     disk_radius
                 );
-                Some((radius, disk_radius))
+                Some((orbit_radius, disk_radius))
             }
         }
     }
@@ -204,7 +142,7 @@ impl BrdfMeasurementDebugging {
     }
 
     fn update_emitter_position_index(&mut self, delta: i32, record: Option<&MicroSurfaceRecord>) {
-        if let Some((orbit_radius, shape_radius)) = self.estimate_emitter_radii(record) {
+        if let Some((orbit_radius, shape_radius)) = self.estimate_radii(record) {
             self.emitter_position_index = ((self.emitter_position_index + delta).max(0) as usize
                 % (self.params.emitter.zenith.step_count_wrapped()
                     * self.params.emitter.azimuth.step_count_wrapped()))
@@ -437,7 +375,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Generate").clicked() {
                                 if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_emitter_radii(record.as_ref())
+                                    self.estimate_radii(record.as_ref())
                                 {
                                     println!(
                                         "orbit_radius: {}, shape_radius: {:?}",
@@ -486,7 +424,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                 .changed()
                             {
                                 if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_emitter_radii(record.as_ref())
+                                    self.estimate_radii(record.as_ref())
                                 {
                                     self.orbit_radius = orbit_radius;
 
@@ -522,7 +460,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                 .changed()
                             {
                                 if let Some((orbit_radius, shape_radius)) =
-                                    self.estimate_emitter_radii(record.as_ref())
+                                    self.estimate_radii(record.as_ref())
                                 {
                                     self.event_loop
                                         .send_event(VgonioEvent::Debugging(
@@ -555,12 +493,12 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                 let points = self
                                     .params
                                     .emitter
-                                    .measurement_points()
+                                    .generate_measurement_points()
                                     .into_iter()
                                     .map(|s| math::spherical_to_cartesian(1.0, s.theta, s.phi))
                                     .collect();
                                 if let Some((orbit_radius, _)) =
-                                    self.estimate_emitter_radii(record.as_ref())
+                                    self.estimate_radii(record.as_ref())
                                 {
                                     self.orbit_radius = orbit_radius;
                                     self.event_loop

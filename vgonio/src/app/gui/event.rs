@@ -6,22 +6,17 @@ use crate::{
     },
     fitting::FittingProblemKind,
     measure::{
-        bsdf::{
-            detector::{CollectorPatches, DetectorScheme},
-            emitter::EmitterSamples,
-            rtc::RtcMethod,
-        },
+        bsdf::{detector::DetectorPatches, rtc::RtcMethod},
+        data::MeasurementData,
         params::{
-            AdfMeasurementParams, BsdfMeasurementParams, MeasurementData, MeasurementKind,
-            MsfMeasurementParams,
+            AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
         },
     },
 };
 use uuid::Uuid;
 use vgcore::{
     math::{IVec2, Sph3, Vec3},
-    units::{Degrees, Radians},
-    Isotropy,
+    units::Degrees,
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
@@ -139,8 +134,7 @@ pub enum DebuggingEvent {
     },
     UpdateCollectorDrawing {
         status: bool,
-        scheme: DetectorScheme,
-        patches: CollectorPatches,
+        patches: DetectorPatches,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     },
@@ -152,7 +146,7 @@ pub enum DebuggingEvent {
         shape_radius: Option<f32>,
     },
     UpdateEmitterSamples {
-        samples: EmitterSamples,
+        samples: Vec<Vec3>,
         orbit_radius: f32,
         shape_radius: Option<f32>,
     },

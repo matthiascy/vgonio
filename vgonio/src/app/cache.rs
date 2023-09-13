@@ -4,7 +4,7 @@ use crate::{
         cli::{BRIGHT_RED, RESET},
         Config,
     },
-    measure::params::MeasurementData,
+    measure::data::MeasurementData,
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Medium,
 };
@@ -437,7 +437,7 @@ impl Cache {
                     let msurf_hdl = Handle::with_id(msurf.uuid);
                     let mesh = msurf
                         .as_micro_surface_mesh(HeightOffset::Grounded, config.user.triangulation);
-                    let mesh_hdl = Handle::new();
+                    let mesh_hdl = Handle::with_id(mesh.uuid);
                     self.msurfs.insert(msurf_hdl, msurf);
                     self.meshes.insert(mesh_hdl, mesh);
                     self.records.insert(

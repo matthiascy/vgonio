@@ -23,7 +23,7 @@ use crate::{
         FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData,
         MicrofacetDistributionFittingMethod, MicrofacetDistributionFittingProblem,
     },
-    measure::params::{MeasurementData, MeasurementKind},
+    measure::{data::MeasurementData, params::MeasurementKind},
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;
@@ -32,7 +32,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use vgcore::math::{Mat4, Vec3};
+use vgcore::math::Mat4;
 use vgsurf::MicroSurface;
 
 use super::{docking::DockSpace, event::EventResponse};

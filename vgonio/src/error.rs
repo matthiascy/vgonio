@@ -23,7 +23,7 @@ pub enum RuntimeError {
     /// Invalid emitter.
     InvalidEmitter,
     /// Invalid collector.
-    InvalidCollector,
+    InvalidDetector,
     /// User configuration not found.
     UserConfigNotFound,
     /// User data directory not configured.
@@ -46,7 +46,7 @@ impl Display for RuntimeError {
             Self::InvalidParameters => write!(f, "Invalid parameters"),
             Self::DirectoryOrFileNotFound => write!(f, "Directory or file not found"),
             Self::InvalidEmitter => write!(f, "Invalid emitter"),
-            Self::InvalidCollector => write!(f, "Invalid collector"),
+            Self::InvalidDetector => write!(f, "Invalid collector"),
             Self::UserConfigNotFound => write!(f, "User configuration not found"),
             Self::UserDataDirNotConfigured => write!(f, "User data directory not configured"),
             Self::Rhi(err) => write!(f, "Rendering Hardware Interface error: {}", err),

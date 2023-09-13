@@ -1,237 +1,194 @@
-use crate::{measure::params::Radius, RangeByStepSizeInclusive, SphericalPartition};
-use std::ops::{Deref, DerefMut};
-use vgcore::math::{Sph3, Vec3, Vec3A};
-
 use crate::{
     app::cache::Cache,
     measure::{
         bsdf::{
-            emitter::RegionShape, rtc::RayTrajectory, BsdfMeasurementDataPoint,
-            BsdfMeasurementStatsPoint, PerWavelength,
+            rtc::RayTrajectory, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength,
         },
         params::BsdfMeasurementParams,
     },
     optics::fresnel,
+    SphericalDomain,
 };
 use serde::{Deserialize, Serialize};
 use vgcore::{
     math,
-    units::{Radians, SolidAngle},
+    math::{Sph2, Vec3, Vec3A},
+    units::{rad, Radians},
 };
 use vgsurf::MicroSurfaceMesh;
 
-/// Description of a collector.
+/// Description of a detector collecting the data.
 ///
-/// A collector could be either a single shape or a set of patches.
-///
-/// The virtual goniophotometer's detectors represented by the patches
+/// The virtual goniophotometer's sensors are represented by the patches
 /// of a sphere (or an hemisphere) positioned around the specimen.
-/// The detectors are positioned on the center of each patch; the patches
-/// are partitioned using 1.0 as radius.
+///
+/// A detector is defined by its domain, the precision of the
+/// measurements and the partitioning scheme.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Detector {
-    /// Distance from the collector's center to the specimen's center.
-    pub radius: Radius,
-
-    /// Strategy for data collection.
+pub struct DetectorParams {
+    /// Domain of the collector.
+    pub domain: SphericalDomain,
+    /// Zenith angle step size (in radians).
+    pub precision: Radians,
+    /// Partitioning scheme of the collector.
     pub scheme: DetectorScheme,
 }
 
-// TODO: incorporate the domain into the collector
-/// Strategy for data collection.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-#[repr(u8)]
 pub enum DetectorScheme {
-    /// The patches are subdivided using a spherical partition.
-    Partitioned {
-        /// The spherical partition of the collector.
-        partition: SphericalPartition,
-    } = 0x00,
-    /// The collector is represented by a single shape on the surface of the
-    /// sphere.
-    SingleRegion {
-        /// Shape of the collector.
-        shape: RegionShape,
-        /// Collector's possible positions in spherical coordinates (inclination
-        /// angle range).
-        zenith: RangeByStepSizeInclusive<Radians>,
-        /// Collector's possible positions in spherical coordinates (azimuthal
-        /// angle range).
-        azimuth: RangeByStepSizeInclusive<Radians>,
-    } = 0x01,
+    /// Partition scheme based on "A general rule for disk and hemisphere
+    /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.
+    Beckers = 0x00,
+    /// Partition scheme based on "Subdivision of the sky hemisphere for
+    /// luminance measurements" by P.R. Tregenza.
+    Tregenza = 0x01,
 }
 
-impl DetectorScheme {
-    /// Returns the shape of the collector only if it is a single region.
-    pub fn shape(&self) -> Option<RegionShape> {
-        match self {
-            Self::Partitioned { .. } => None,
-            Self::SingleRegion { shape, .. } => Some(*shape),
+/// Partitioned patches of the collector.
+#[derive(Debug, Clone)]
+pub enum DetectorPatches {
+    Beckers {
+        /// The annuli of the collector.
+        rings: Vec<Ring>,
+        /// The patches of the collector.
+        patches: Vec<Patch>,
+    },
+    // TODO: implement Tregenza
+    Tregenza,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Patch {
+    /// Minimum zenith (theta) and azimuth (phi) angles of the patch.
+    pub min: Sph2,
+    /// Maximum zenith (theta) and azimuth (phi) angles of the patch.
+    pub max: Sph2,
+}
+
+impl Patch {
+    pub fn new(theta_min: Radians, theta_max: Radians, phi_min: Radians, phi_max: Radians) -> Self {
+        Self {
+            min: Sph2::new(theta_min, phi_min),
+            max: Sph2::new(theta_max, phi_max),
         }
     }
 
-    pub(crate) fn shape_mut(&mut self) -> Option<&mut RegionShape> {
-        match self {
-            Self::Partitioned { .. } => None,
-            Self::SingleRegion { shape, .. } => Some(shape),
-        }
-    }
-
-    pub(crate) fn zenith_mut(&mut self) -> Option<&mut RangeByStepSizeInclusive<Radians>> {
-        match self {
-            Self::Partitioned { .. } => None,
-            Self::SingleRegion { zenith, .. } => Some(zenith),
-        }
-    }
-
-    pub(crate) fn azimuth_mut(&mut self) -> Option<&mut RangeByStepSizeInclusive<Radians>> {
-        match self {
-            Self::Partitioned { .. } => None,
-            Self::SingleRegion { azimuth, .. } => Some(azimuth),
-        }
-    }
-
-    pub(crate) fn partition_mut(&mut self) -> Option<&mut SphericalPartition> {
-        match self {
-            Self::Partitioned { partition } => Some(partition),
-            Self::SingleRegion { .. } => None,
-        }
-    }
-
-    /// Returns true if the collector is partitioned.
-    pub fn is_partitioned(&self) -> bool {
-        match self {
-            Self::Partitioned { .. } => true,
-            Self::SingleRegion { .. } => false,
-        }
-    }
-
-    /// Returns true if the collector is a single region.
-    pub fn is_single_region(&self) -> bool {
-        match self {
-            Self::Partitioned { .. } => false,
-            Self::SingleRegion { .. } => true,
-        }
-    }
-
-    /// Returns the zenith angle range of the collector. If the collector is`
-    /// partitioned, the angle value is located at the center of each patch.
-    /// If the collector is a single region, the angle range is each
-    /// possible position of the collector.
-    pub fn ranges(
-        &self,
-    ) -> (
-        RangeByStepSizeInclusive<Radians>,
-        RangeByStepSizeInclusive<Radians>,
-    ) {
-        match self {
-            DetectorScheme::Partitioned { partition } => match partition {
-                SphericalPartition::EqualAngle { zenith, azimuth } => (*zenith, *azimuth),
-                SphericalPartition::EqualArea { zenith, azimuth }
-                | SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                    ((*zenith).into(), *azimuth)
-                }
-            },
-            DetectorScheme::SingleRegion {
-                zenith, azimuth, ..
-            } => (*zenith, *azimuth),
-        }
-    }
-
-    /// Returns the number of samples collected by the collector.
-    pub fn total_sample_count(&self) -> usize {
-        match self {
-            DetectorScheme::Partitioned { partition } => match partition {
-                SphericalPartition::EqualAngle { zenith, azimuth } => {
-                    zenith.step_count_wrapped() * azimuth.step_count_wrapped()
-                }
-                SphericalPartition::EqualArea { zenith, azimuth } => {
-                    zenith.step_count * azimuth.step_count_wrapped()
-                }
-                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                    zenith.step_count * azimuth.step_count_wrapped()
-                }
-            },
-            DetectorScheme::SingleRegion {
-                zenith, azimuth, ..
-            } => zenith.step_count_wrapped() * azimuth.step_count_wrapped(),
-        }
-    }
-
-    /// Returns the default value of [`DetectorScheme::Partitioned`].
-    pub fn default_partition() -> Self {
-        Self::Partitioned {
-            partition: SphericalPartition::default(),
-        }
-    }
-
-    /// Returns the default value of [`DetectorScheme::SingleRegion`].
-    pub fn default_single_region() -> Self {
-        Self::SingleRegion {
-            shape: RegionShape::default_spherical_cap(),
-            zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::from_degrees(5.0)),
-            azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::from_degrees(15.0)),
-        }
+    /// Returns the center of the patch.
+    pub fn center(&self) -> Sph2 {
+        Sph2::new(
+            (self.min.theta + self.max.theta) / 2.0,
+            (self.min.phi + self.max.phi) / 2.0,
+        )
     }
 }
 
-/// Energy after a ray is reflected by the micro-surface.
-///
-/// Used during the data collection process.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-enum Energy {
-    /// The ray of certain wavelength is absorbed by the micro-surface.
-    Absorbed,
-    /// The ray of a specific wavelength is reflected by the micro-surface.
-    Reflected(f32),
+/// A segment in form of an annulus of the collector.
+#[derive(Debug, Copy, Clone)]
+struct Ring {
+    /// Minimum theta angle of the annulus.
+    pub theta_inner: f32,
+    /// Maximum theta angle of the annulus.
+    pub theta_outer: f32,
+    /// Step size of the phi angle inside the annulus.
+    pub phi_step: f32,
+    /// Number of patches in the annulus: 2 * pi / phi_step == patch_count.
+    pub patch_count: usize,
+    /// Base index of the annulus in the patches buffer.
+    pub base_index: usize,
 }
 
-impl Energy {
-    /// Returns the energy of the ray.
-    fn energy(&self) -> f32 {
-        match self {
-            Self::Absorbed => 0.0,
-            Self::Reflected(energy) => *energy,
+mod beckers {
+    use vgcore::math::sqr;
+
+    /// Computes the number of cells inside the external circle of the ring.
+    pub fn compute_ks(k0: u32, num_rings: u32) -> Vec<u32> {
+        let mut ks = vec![0; num_rings as usize];
+        ks[0] = k0;
+        let sqrt_pi = std::f32::consts::PI.sqrt();
+        for i in 1..num_rings as usize {
+            ks[i] = sqr(f32::sqrt(ks[i - 1] as f32) + sqrt_pi).round() as u32;
         }
+        ks
+    }
+
+    /// Computes the radius of the rings.
+    pub fn compute_rs(ks: &[u32], num_rings: u32, radius: f32) -> Vec<f32> {
+        let mut rs = vec![0.0; num_rings as usize];
+        rs[0] = radius * f32::sqrt(ks[0] as f32 / ks[num_rings as usize - 1] as f32);
+        for i in 0..num_rings as usize {
+            rs[i] = (ks[i] as f32 / ks[i - 1] as f32).sqrt() * rs[i - 1]
+        }
+        rs
+    }
+
+    /// Computes the zenith angle of the rings on the hemisphere.
+    pub fn compute_ts(rs: &[f32]) -> Vec<f32> {
+        rs.iter().map(|r| 2.0 * (r / 2.0).asin()).collect()
     }
 }
 
-impl Detector {
+impl DetectorParams {
     /// Generates the patches of the collector.
     ///
     /// The patches are generated based on the scheme of the collector. They are
     /// used to collect the data. The patches are generated in the order of
     /// the azimuth angle first, then the zenith angle.
-    pub fn generate_patches(&self) -> CollectorPatches {
+    pub fn generate_patches(&self) -> DetectorPatches {
         match self.scheme {
-            DetectorScheme::Partitioned { partition } => {
-                log::trace!("[Collector] generating patches of the partitioned collector.");
-                CollectorPatches(partition.generate_patches())
+            DetectorScheme::Beckers => {
+                let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
+                let ks = beckers::compute_ks(1, num_rings);
+                let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
+                let ts = beckers::compute_ts(&rs);
+                log::debug!("ks: {:?}", ks);
+                log::debug!("rs: {:?}", rs);
+                log::debug!("ts: {:?}", ts);
+                let mut patches = Vec::with_capacity(ks[num_rings as usize - 1] as usize);
+                let mut rings = Vec::with_capacity(num_rings as usize);
+                for (i, (t, k)) in ts.iter().zip(ks.iter()).enumerate() {
+                    log::trace!("Ring {}: t = {}, k = {}", i, t.to_degrees(), k);
+                    let k_prev = if i == 0 { 0 } else { ks[i - 1] };
+                    let n = k - k_prev;
+                    let t_prev = if i == 0 { 0.0 } else { ts[i - 1] };
+                    let phi_step = Radians::TWO_PI / n as f32;
+                    rings.push(Ring {
+                        theta_inner: t_prev,
+                        theta_outer: *t,
+                        phi_step: phi_step.as_f32(),
+                        patch_count: n as usize,
+                        base_index: patches.len(),
+                    });
+                    for j in 0..n {
+                        let phi_min = phi_step * j as f32;
+                        let phi_max = phi_step * (j + 1) as f32;
+                        patches.push(Patch::new(
+                            t_prev.into(),
+                            rad!(*t),
+                            phi_min.into(),
+                            phi_max.into(),
+                        ));
+                    }
+                }
+                DetectorPatches::Beckers { rings, patches }
             }
-            DetectorScheme::SingleRegion {
-                zenith, azimuth, ..
-            } => {
-                log::trace!("[Collector] generating patches of a single region collector.");
-                CollectorPatches(
-                    azimuth
-                        .values_wrapped()
-                        .flat_map(|phi| {
-                            zenith.values_wrapped().map(move |theta| {
-                                let position = Sph3::new(1.0, theta, phi);
-                                let cartesian = position.to_cartesian();
-                                let solid_angle = self.scheme.shape().unwrap().solid_angle();
-                                Patch::SingleRegion(PatchSingleRegion {
-                                    position,
-                                    shape: self.scheme.shape().unwrap(),
-                                    unit_vector: cartesian.into(),
-                                    solid_angle,
-                                })
-                            })
-                        })
-                        .collect(),
-                )
+            DetectorScheme::Tregenza => {
+                todo!("Tregenza partitioning scheme is not implemented yet")
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Detector {
+    params: DetectorParams,
+    patches: DetectorPatches,
+}
+
+impl Detector {
+    pub fn new(params: &DetectorParams) -> Self {
+        Self {
+            params: *params,
+            patches: params.generate_patches(),
         }
     }
 
@@ -251,20 +208,14 @@ impl Detector {
         &self,
         params: &BsdfMeasurementParams,
         mesh: &MicroSurfaceMesh,
-        position: Sph3,
+        pos: Sph2,
         trajectories: &[RayTrajectory],
-        patches: &CollectorPatches,
         cache: &Cache,
     ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
         // TODO: use generic type for the data point
-        debug_assert!(
-            patches.matches_scheme(&self.scheme),
-            "Collector patches do not match the collector scheme"
-        );
-
         log::debug!(
             "[Collector] collecting data for BSDF measurement at position {}",
-            position
+            pos
         );
 
         let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
@@ -285,18 +236,14 @@ impl Detector {
         log::debug!("[Collector] transmitted medium IORs: {:?}", iors_t);
 
         // Calculate the radius of the collector.
-        let orbit_radius = self.radius.estimate(mesh);
-        let shape_radius = if let Some(shape) = self.scheme.shape() {
-            shape.disk_radius().map(|r| r.estimate_disk_radius(mesh))
-        } else {
-            None
-        };
+        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        let disc_radius = crate::measure::estimate_disc_radius(mesh);
         let max_bounces = params.emitter.max_bounces as usize;
         let mut stats = BsdfMeasurementStatsPoint::new(n_wavelengths, max_bounces);
         log::trace!(
             "[Collector] Estimated orbit radius: {}, shape radius: {:?}",
             orbit_radius,
-            shape_radius
+            disc_radius
         );
 
         #[derive(Debug, Copy, Clone)]
@@ -393,7 +340,8 @@ impl Detector {
 
         // For each patch, collect the rays that intersect it using the
         // outgoing_dirs vector.
-        let outgoing_dirs_per_patch = patches
+        let outgoing_dirs_per_patch = self
+            .patches
             .iter()
             .map(|patch| {
                 // Retrieve the ray indices (of trajectories) that intersect the patch.
@@ -402,9 +350,6 @@ impl Detector {
                     .filter_map(|outgoing| {
                         match patch {
                             Patch::Partitioned(p) => p.contains(outgoing.dir),
-                            Patch::SingleRegion(p) => {
-                                p.contains(outgoing.dir, orbit_radius, shape_radius)
-                            }
                         }
                         .then_some((outgoing.idx, outgoing.bounce))
                     })
@@ -467,172 +412,23 @@ impl Detector {
     }
 }
 
-/// Represents patches on the surface of the spherical [`Detector`].
+/// Energy after a ray is reflected by the micro-surface.
 ///
-/// The domain of the whole collector is defined by the [`Detector`].
-#[derive(Debug, Clone)]
-pub struct CollectorPatches(Vec<Patch>);
-
-impl CollectorPatches {
-    /// Checks if the collector patches match the collector scheme.
-    pub fn matches_scheme(&self, scheme: &DetectorScheme) -> bool {
-        debug_assert!(!self.0.is_empty(), "Collector patches must not be empty");
-        let is_self_partitioned = matches!(self.0[0], Patch::Partitioned(_));
-        let is_scheme_partitioned = matches!(scheme, DetectorScheme::Partitioned { .. });
-        is_self_partitioned == is_scheme_partitioned
-    }
+/// Used during the data collection process.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+enum Energy {
+    /// The ray of certain wavelength is absorbed by the micro-surface.
+    Absorbed,
+    /// The ray of a specific wavelength is reflected by the micro-surface.
+    Reflected(f32),
 }
 
-impl Deref for CollectorPatches {
-    type Target = [Patch];
-
-    fn deref(&self) -> &Self::Target { &self.0 }
-}
-
-impl DerefMut for CollectorPatches {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
-}
-
-/// Represents a patch on the spherical [`Detector`].
-///
-/// It could be a single region or a partitioned region.
-#[derive(Debug, Copy, Clone)]
-pub enum Patch {
-    /// A patch from spherical partitioning.
-    Partitioned(PatchPartitioned),
-    /// A patch from a single region.
-    SingleRegion(PatchSingleRegion),
-}
-
-/// Represents a patch issued from partitioning the spherical [`Detector`].
-#[derive(Debug, Copy, Clone)]
-pub struct PatchPartitioned {
-    /// Polar angle range of the patch (in radians).
-    pub zenith: (Radians, Radians),
-
-    /// Azimuthal angle range of the patch (in radians).
-    pub azimuth: (Radians, Radians),
-
-    /// Polar angle of the patch (in radians).
-    pub zenith_center: Radians,
-
-    /// Azimuthal angle of the patch (in radians).
-    pub azimuth_center: Radians,
-
-    /// Unit vector of the patch.
-    pub unit_vector: Vec3,
-
-    /// Solid angle of the patch (in radians).
-    pub solid_angle: SolidAngle,
-}
-
-impl PatchPartitioned {
-    /// Checks if a unit vector (ray direction) falls into the patch.
-    pub fn contains(&self, unit_vector: Vec3A) -> bool {
-        let spherical = Sph3::from_cartesian(unit_vector.into(), 1.0);
-        let (zenith, azimuth) = (spherical.theta, spherical.phi);
-        let (zenith_start, zenith_stop) = self.zenith;
-        let (azimuth_start, azimuth_stop) = self.azimuth;
-        zenith >= zenith_start
-            && zenith <= zenith_stop
-            && azimuth >= azimuth_start
-            && azimuth <= azimuth_stop
-    }
-}
-
-/// Represents a patch issued from a single region of the spherical.
-#[derive(Debug, Copy, Clone)]
-pub struct PatchSingleRegion {
-    /// Position of the patch.
-    pub position: Sph3,
-
-    /// Shape of the patch.
-    pub shape: RegionShape,
-
-    /// Unit vector of the patch.
-    pub unit_vector: Vec3A,
-
-    /// Solid angle of the patch (in radians).
-    pub solid_angle: SolidAngle,
-}
-
-impl PatchSingleRegion {
-    /// Checks if a unit vector (ray direction) falls into the patch.
-    pub fn contains(
-        &self,
-        unit_vector: Vec3A,
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
-    ) -> bool {
-        // TODO: check if this is correct
-        match self.shape {
-            RegionShape::SphericalCap { zenith } => {
-                unit_vector.dot(self.unit_vector) > zenith.cos()
-            }
-            RegionShape::SphericalRect { zenith, azimuth } => {
-                let spherical = Sph3::from_cartesian(unit_vector.into(), 1.0);
-                let (theta, phi) = (spherical.theta, spherical.phi);
-                let (zenith_start, zenith_stop) = zenith;
-                let (azimuth_start, azimuth_stop) = azimuth;
-                theta >= zenith_start
-                    && theta <= zenith_stop
-                    && phi >= azimuth_start
-                    && phi <= azimuth_stop
-            }
-            RegionShape::Disk { .. } => {
-                let shape_radius = shape_radius.unwrap();
-                let cos = orbit_radius
-                    / (shape_radius * shape_radius + orbit_radius * orbit_radius).sqrt();
-                unit_vector.dot(self.unit_vector) > cos
-            }
-        }
-    }
-}
-
-impl Patch {
-    /// Creates a new patch.
-    ///
-    /// # Arguments
-    /// * `zenith` - Polar angle range (start, stop) of the patch (in radians).
-    /// * `azimuth` - Azimuthal angle range (start, stop) of the patch (in
-    ///   radians).
-    pub fn new_partitioned(zenith: (Radians, Radians), azimuth: (Radians, Radians)) -> Self {
-        let zenith_center = (zenith.0 + zenith.1) / 2.0;
-        let azimuth_center = (azimuth.0 + azimuth.1) / 2.0;
-        let unit_vector = Sph3::new(1.0, zenith_center, azimuth_center).to_cartesian();
-        Self::Partitioned(PatchPartitioned {
-            zenith,
-            azimuth,
-            zenith_center,
-            azimuth_center,
-            unit_vector,
-            solid_angle: SolidAngle::from_angle_ranges(zenith, azimuth),
-        })
-    }
-
-    /// Returns the default value of [`Self::SingleRegion`] variant.
-    pub fn new_single_region(shape: RegionShape, zenith: Radians, azimuth: Radians) -> Self {
-        Self::SingleRegion(PatchSingleRegion {
-            position: Sph3::new(1.0, zenith, azimuth),
-            shape,
-            unit_vector: Sph3::new(1.0, zenith, azimuth).to_cartesian().into(),
-            solid_angle: shape.solid_angle(),
-        })
-    }
-
-    /// Returns the patch as a partitioned patch.
-    pub fn as_partitioned(&self) -> Option<&PatchPartitioned> {
+impl Energy {
+    /// Returns the energy of the ray.
+    fn energy(&self) -> f32 {
         match self {
-            Self::Partitioned(p) => Some(p),
-            _ => None,
-        }
-    }
-
-    /// Returns the patch as a single region patch.
-    pub fn as_single_region(&self) -> Option<&PatchSingleRegion> {
-        match self {
-            Self::SingleRegion(p) => Some(p),
-            _ => None,
+            Self::Absorbed => 0.0,
+            Self::Reflected(energy) => *energy,
         }
     }
 }

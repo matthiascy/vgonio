@@ -12,7 +12,7 @@ use crate::{
         Config,
     },
     error::RuntimeError,
-    measure::params::{MeasurementData, MeasurementKind},
+    measure::{data::MeasurementData, params::MeasurementKind},
 };
 
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";

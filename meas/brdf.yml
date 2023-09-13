@@ -7,18 +7,12 @@ type: !bsdf
   emitter:
     num_rays: 10000
     max_bounces: 10
-    radius: auto
     zenith: 0deg .. =90deg / 5deg
     azimuth: 0deg .. =360deg / 30deg
-    shape: !disk
-      #zenith: 10deg
     spectrum: 380 nm .. =780 nm / 300 nm
-  collector:
-    radius: auto
-    scheme: !partitioned
-      partition: !equal_angle
-        zenith: 0 rad .. 90 deg / 5 deg
-        azimuth: 0rad .. 360deg / 30 deg
+  detector:
+    domain: upper_hemisphere
+    precision: 2.0 deg
 surfaces:
   # - usr://surfaces/aluminium65bar100.vgms
   # - usr://surfaces/gaussian_sigma_0.5.vgms

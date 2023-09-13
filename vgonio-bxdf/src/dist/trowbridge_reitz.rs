@@ -128,7 +128,7 @@ impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
             .collect()
     }
 
-    fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
+    fn msf_partial_derivative(&self, _m: Vec3, i: Vec3, o: Vec3) -> f64 {
         let cos_theta_i2 = sqr(i.y as f64);
         let tan_theta_i2 = (1.0 - cos_theta_i2) * rcp_f64(cos_theta_i2);
         let cos_theta_o2 = sqr(o.y as f64);

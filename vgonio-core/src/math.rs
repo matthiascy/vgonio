@@ -159,6 +159,56 @@ impl Display for Sph3 {
     }
 }
 
+/// Spherical coordinate in radians.
+///
+/// This is a version of [`Sph3`] with radius fixed to 1.
+#[derive(Copy, Clone, Serialize, Deserialize)]
+pub struct Sph2 {
+    /// Zenith angle (polar angle) in radians.
+    pub theta: Radians,
+    /// Azimuth angle (azimuthal angle) in radians.
+    pub phi: Radians,
+}
+
+impl Sph2 {
+    /// Creates a new spherical coordinate.
+    pub fn new(zenith: Radians, azimuth: Radians) -> Self {
+        Self {
+            theta: zenith,
+            phi: azimuth,
+        }
+    }
+
+    /// Converts to a cartesian coordinate.
+    pub fn to_cartesian(&self) -> Vec3 { spherical_to_cartesian(1.0, self.theta, self.phi) }
+
+    /// Converts from a cartesian coordinate.
+    pub fn from_cartesian(cartesian: Vec3) -> Self {
+        let (_, zenith, azimuth) = cartesian_to_spherical(cartesian, 1.0);
+        Self {
+            theta: zenith,
+            phi: azimuth,
+        }
+    }
+}
+
+impl Debug for Sph2 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{ θ: {}, φ: {} }}", self.theta, self.phi)
+    }
+}
+
+impl Display for Sph2 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ θ: {}, φ: {} }}",
+            self.theta.in_degrees().prettified(),
+            self.phi.in_degrees().prettified()
+        )
+    }
+}
+
 /// Conversion from spherical coordinate system to cartesian coordinate system.
 ///
 /// # Arguments

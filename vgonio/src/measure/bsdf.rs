@@ -10,11 +10,12 @@ use crate::{
     },
     measure::{
         bsdf::{
-            detector::{BounceAndEnergy, CollectorPatches, PerPatchData},
-            emitter::EmitterSamples,
+            detector::{BounceAndEnergy, Detector, PerPatchData},
+            emitter::Emitter,
             rtc::{RayTrajectory, RtcMethod},
         },
-        params::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
+        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        params::SimulationKind,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -270,8 +271,8 @@ pub fn measure_bsdf_rt(
 ) -> Vec<MeasurementData> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
-    let samples = params.emitter.generate_unit_samples();
-    let patches = params.detector.generate_patches();
+    let emitter = Emitter::new(&params.emitter);
+    let detector = Detector::new(&params.detector);
 
     match sim_kind {
         SimulationKind::GeomOptics(method) => {
@@ -281,15 +282,15 @@ pub fn measure_bsdf_rt(
             );
             match method {
                 #[cfg(feature = "embree")]
-                RtcMethod::Embree => measure_bsdf_embree_rt(
-                    params, handles, &surfaces, &meshes, samples, patches, cache,
-                ),
+                RtcMethod::Embree => {
+                    measure_bsdf_embree_rt(params, &surfaces, &meshes, emitter, detector, cache)
+                }
                 #[cfg(feature = "optix")]
                 RtcMethod::Optix => {
-                    measure_bsdf_optix_rt(params, &surfaces, &meshes, samples, patches, cache)
+                    measure_bsdf_optix_rt(params, &surfaces, &meshes, emitter, detector, cache)
                 }
                 RtcMethod::Grid => {
-                    measure_bsdf_grid_rt(params, &surfaces, &meshes, samples, patches, cache)
+                    measure_bsdf_grid_rt(params, &surfaces, &meshes, emitter, detector, cache)
                 }
             }
         }
@@ -308,18 +309,16 @@ pub fn measure_bsdf_rt(
 #[cfg(feature = "embree")]
 fn measure_bsdf_embree_rt(
     params: BsdfMeasurementParams,
-    handles: &[Handle<MicroSurface>],
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
-    samples: EmitterSamples,
-    patches: CollectorPatches,
+    emitter: Emitter,
+    detector: Detector,
     cache: &Cache,
 ) -> Vec<MeasurementData> {
-    handles
+    surfaces
         .iter()
-        .zip(surfaces.iter())
         .zip(meshes)
-        .filter_map(|((hdl, surf), mesh)| {
+        .filter_map(|(surf, mesh)| {
             if surf.is_none() || mesh.is_none() {
                 log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
                 return None;
@@ -332,9 +331,9 @@ fn measure_bsdf_embree_rt(
             );
             Some(MeasurementData {
                 name: surface.file_stem().unwrap().to_owned(),
-                source: MeasurementDataSource::Measured(*hdl),
+                source: MeasurementDataSource::Measured(Handle::with_id(surface.uuid)),
                 measured: MeasuredData::Bsdf(embr::measure_full_bsdf(
-                    &params, mesh, &samples, &patches, cache,
+                    &params, mesh, &emitter, &detector, cache,
                 )),
             })
         })
@@ -346,8 +345,8 @@ fn measure_bsdf_grid_rt(
     params: BsdfMeasurementParams,
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
-    samples: EmitterSamples,
-    patches: CollectorPatches,
+    emitter: Emitter,
+    detector: Detector,
     cache: &Cache,
 ) -> Vec<MeasurementData> {
     for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
@@ -363,7 +362,7 @@ fn measure_bsdf_grid_rt(
         );
         let t = std::time::Instant::now();
         crate::measure::bsdf::rtc::grid::measure_bsdf(
-            &params, surf, mesh, &samples, &patches, cache,
+            &params, surf, mesh, &emitter, &detector, cache,
         );
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
@@ -379,8 +378,8 @@ fn measure_bsdf_optix_rt(
     _params: BsdfMeasurementParams,
     _surfaces: &[Option<&MicroSurface>],
     _meshes: &[Option<&MicroSurfaceMesh>],
-    _samples: EmitterSamples,
-    _patches: CollectorPatches,
+    _emitter: Emitter,
+    _detector: Detector,
     _cache: &Cache,
 ) -> Vec<MeasurementData> {
     todo!()

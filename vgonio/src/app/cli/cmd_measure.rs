@@ -6,14 +6,10 @@ use crate::{
         Config,
     },
     measure,
-    measure::{
-        bsdf::detector::DetectorScheme,
-        params::{
-            AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
-            MsfMeasurementParams,
-        },
+    measure::params::{
+        AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
+        MsfMeasurementParams,
     },
-    SphericalPartition,
 };
 use std::time::Instant;
 use vgcore::error::VgonioError;
@@ -114,73 +110,30 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         let measurement_start_time = std::time::SystemTime::now();
         let measured_data = match measurement.params {
             MeasurementParams::Bsdf(measurement) => {
-                let collector_info = match measurement.detector.scheme {
-                    DetectorScheme::Partitioned { partition } => match partition {
-                        SphericalPartition::EqualAngle { zenith, azimuth } => {
-                            format!(
-                                "        - partition: {}\n          - polar angle: {}\n          \
-                                 - azimuthal angle: {}",
-                                "equal angle",
-                                zenith.pretty_print(),
-                                azimuth.pretty_print(),
-                            )
-                        }
-                        SphericalPartition::EqualArea { zenith, azimuth } => {
-                            format!(
-                                "        - partition: {}\n          - polar angle: {}\n          \
-                                 - azimuthal angle: {}",
-                                "equal area",
-                                zenith.pretty_print(),
-                                azimuth.pretty_print(),
-                            )
-                        }
-                        SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                            format!(
-                                "        - partition: {}\n          - polar angle: {}\n          \
-                                 - azimuthal angle: {}",
-                                "equal projected area",
-                                zenith.pretty_print(),
-                                azimuth.pretty_print(),
-                            )
-                        }
-                    },
-                    DetectorScheme::SingleRegion {
-                        shape,
-                        zenith,
-                        azimuth,
-                    } => {
-                        format!(
-                            "        - shape: {shape:?}\n- polar angle: {zenith:?}\n- azimuthal \
-                             angle {azimuth:?}\n",
-                        )
-                    }
-                };
-
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
     • parameters:
       + incident medium: {:?}
       + transmitted medium: {:?}
       + emitter:
-        - radius: {}
         - num rays: {}
         - max bounces: {}
         - spectrum: {}
         - polar angle: {}
         - azimuthal angle: {}
       + collector:
-        - radius: {}\n{}",
+        - domain: {}
+        - precision: {}",
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
                     measurement.incident_medium,
                     measurement.transmitted_medium,
-                    measurement.emitter.orbit_radius(),
                     measurement.emitter.num_rays,
                     measurement.emitter.max_bounces,
                     measurement.emitter.spectrum,
                     measurement.emitter.zenith.pretty_print(),
                     measurement.emitter.azimuth.pretty_print(),
-                    measurement.detector.radius,
-                    collector_info
+                    measurement.detector.domain,
+                    measurement.detector.precision
                 );
                 measure::bsdf::measure_bsdf_rt(measurement, &surfaces, measurement.sim_kind, &cache)
             }

@@ -1,6 +1,7 @@
 //! Acquisition related.
 
 pub mod bsdf;
+pub mod data;
 pub mod microfacet;
 pub mod params;
 
@@ -14,9 +15,10 @@ use rayon::{
     prelude::ParallelSliceMut,
 };
 use vgcore::{
-    math::{Mat3, Sph3, Vec3},
+    math::{Mat3, Sph2, Sph3, Vec3},
     units::{rad, Radians},
 };
+use vgsurf::MicroSurfaceMesh;
 
 /// Helper structure dealing with the spherical transform related to the
 /// acquisition.
@@ -39,8 +41,7 @@ impl SphericalTransform {
     /// # Returns
     ///
     /// The transformation matrix.
-    pub fn transform_to(dest: Sph3) -> Mat3 {
-        debug_assert!(dest.rho > 0.0 && dest.rho <= 1.0, "rho must be in [0, 1]");
+    pub fn transform_to(dest: Sph2) -> Mat3 {
         Mat3::from_axis_angle(Vec3::Z, dest.phi.value())
             * Mat3::from_axis_angle(Vec3::Y, dest.theta.value())
     }
@@ -58,7 +59,7 @@ impl SphericalTransform {
     ///   be defined in the unit sphere.
     /// * `orbit_radius` - The radius of the orbit about which the samples are
     ///   rotating around.
-    pub fn transform_cap(dest: Sph3, orbit_radius: f32) -> Mat3 {
+    pub fn transform_cap(dest: Sph2, orbit_radius: f32) -> Mat3 {
         Self::transform_to(dest) * Mat3::from_diagonal(Vec3::splat(orbit_radius))
     }
 
@@ -76,9 +77,9 @@ impl SphericalTransform {
     ///   distributed.
     /// * `orbit_radius` - The radius of the orbit about which the samples are
     ///   rotating around.
-    pub fn transform_disk(dest: Sph3, disk_radius: f32, orbit_radius: f32) -> Mat3 {
+    pub fn transform_disc(dest: Sph2, disc_radius: f32, orbit_radius: f32) -> Mat3 {
         Self::transform_to(dest)
-            * Mat3::from_diagonal(Vec3::new(disk_radius, disk_radius, orbit_radius))
+            * Mat3::from_diagonal(Vec3::new(disc_radius, disc_radius, orbit_radius))
     }
 }
 
@@ -154,3 +155,13 @@ pub fn uniform_sampling_on_unit_sphere(
 
     samples
 }
+
+/// Estimates the radius of the sphere or hemisphere enclosing the specimen.
+#[inline(always)]
+pub fn estimate_orbit_radius(mesh: &MicroSurfaceMesh) -> f32 {
+    mesh.bounds.max_extent() * std::f32::consts::SQRT_2
+}
+
+/// Estimates the radius of the disk with the area covering the specimen.
+#[inline(always)]
+pub fn estimate_disc_radius(mesh: &MicroSurfaceMesh) -> f32 { mesh.bounds.max_extent() * 0.7 }

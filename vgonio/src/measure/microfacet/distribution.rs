@@ -5,7 +5,10 @@ use vgsurf::MicroSurface;
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 use crate::{
     app::cache::{Cache, Handle},
-    measure::params::{AdfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource},
+    measure::{
+        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        params::AdfMeasurementParams,
+    },
 };
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -32,7 +35,7 @@ pub struct MeasuredAdfData {
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    mut params: AdfMeasurementParams,
+    params: AdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &Cache,
 ) -> Vec<MeasurementData> {

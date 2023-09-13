@@ -7,8 +7,8 @@ use crate::{
     },
     measure::{
         bsdf::{
-            detector::{BounceAndEnergy, CollectorPatches},
-            emitter::{Emitter, EmitterSamples},
+            detector::{BounceAndEnergy, Detector},
+            emitter::Emitter,
             rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
             BsdfMeasurementDataPoint, MeasuredBsdfData,
         },
@@ -25,7 +25,7 @@ use rayon::prelude::*;
 use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose_debug"))]
 use std::time::Instant;
-use vgcore::math::{Sph3, Vec3A};
+use vgcore::math::{Sph2, Vec3A};
 use vgsurf::MicroSurfaceMesh;
 
 /// Extra data associated with a ray stream.
@@ -160,20 +160,27 @@ fn intersect_filter_stream<'a>(
 pub fn measure_full_bsdf(
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
-    samples: &EmitterSamples,
-    patches: &CollectorPatches,
+    emitter: &Emitter,
+    detector: &Detector,
     cache: &Cache,
 ) -> MeasuredBsdfData {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
 
-    // Calculate emitter's radius to match the surface's dimensions.
-    let emitter_orbit_radius = params.emitter.estimate_orbit_radius(mesh);
-    let emitter_shape_radius = params.emitter.estimate_disk_radius(mesh);
-    log::debug!("mesh extent: {:?}", mesh.bounds);
-    log::debug!("emitter orbit radius: {}", emitter_orbit_radius);
-    log::debug!("emitter disk radius: {:?}", emitter_shape_radius);
+    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    {
+        log::debug!("mesh extent: {:?}", mesh.bounds);
+        log::debug!(
+            "emitter orbit radius: {}",
+            crate::measure::estimate_orbit_radius(mesh)
+        );
+        log::debug!(
+            "emitter disc radius: {:?}",
+            crate::measure::estimate_disc_radius(mesh)
+        );
+    }
+
     // Upload the surface's mesh to the Embree scene.
     let mut geometry = mesh.as_embree_geometry(&device);
     geometry.set_intersect_filter_function(intersect_filter_stream);
@@ -182,17 +189,15 @@ pub fn measure_full_bsdf(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    let mut data = Vec::with_capacity(params.emitter.samples_count());
+    let mut data = Vec::with_capacity(params.emitter.measurement_points_count());
     // Iterate over every incident direction.
-    for pos in params.emitter.measurement_points() {
-        data.push(measure_bsdf_at_point_inner(
-            pos,
+    for pos in emitter.measpts.iter() {
+        data.push(measure_bsdf_at_point(
+            *pos,
             params,
             mesh,
-            samples,
-            patches,
-            emitter_orbit_radius,
-            emitter_shape_radius,
+            &emitter,
+            detector,
             Arc::new(geometry.clone()),
             &scene,
             cache,
@@ -207,24 +212,31 @@ pub fn measure_full_bsdf(
 
 /// Measures the BSDF of micro-surface mesh at the given position.
 /// The BSDF is measured by emitting rays from the given position.
-pub(crate) fn measure_bsdf_at_point(
+pub fn measure_bsdf_once(
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
-    samples: &EmitterSamples,
-    patches: &CollectorPatches,
+    emitter: &Emitter,
+    detector: &Detector,
+    position: Sph2,
     cache: &Cache,
-    position: Sph3,
 ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
 
-    // Calculate emitter's radius to match the surface's dimensions.
-    let emitter_orbit_radius = params.emitter.estimate_orbit_radius(mesh);
-    let emitter_shape_radius = params.emitter.estimate_disk_radius(mesh);
-    log::debug!("mesh extent: {:?}", mesh.bounds);
-    log::debug!("emitter orbit radius: {}", emitter_orbit_radius);
-    log::debug!("emitter disk radius: {:?}", emitter_shape_radius);
+    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    {
+        log::debug!("mesh extent: {:?}", mesh.bounds);
+        log::debug!(
+            "emitter orbit radius: {}",
+            crate::measure::estimate_orbit_radius(mesh)
+        );
+        log::debug!(
+            "emitter disk radius: {:?}",
+            crate::measure::estimate_disc_radius(mesh)
+        );
+    }
+
     // Upload the surface's mesh to the Embree scene.
     let mut geometry = mesh.as_embree_geometry(&device);
     geometry.set_intersect_filter_function(intersect_filter_stream);
@@ -233,14 +245,12 @@ pub(crate) fn measure_bsdf_at_point(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    measure_bsdf_at_point_inner(
+    measure_bsdf_at_point(
         position,
         params,
         mesh,
-        samples,
-        patches,
-        emitter_orbit_radius,
-        emitter_shape_radius,
+        emitter,
+        detector,
         Arc::new(geometry.clone()),
         &scene,
         cache,
@@ -248,14 +258,12 @@ pub(crate) fn measure_bsdf_at_point(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn measure_bsdf_at_point_inner(
-    pos: Sph3,
+fn measure_bsdf_at_point(
+    pos: Sph2,
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
-    samples: &EmitterSamples,
-    patches: &CollectorPatches,
-    emitter_orbit_radius: f32,
-    emitter_shape_radius: Option<f32>,
+    emitter: &Emitter,
+    detector: &Detector,
     geometry: Arc<Geometry>,
     scene: &Scene,
     cache: &Cache,
@@ -263,11 +271,11 @@ fn measure_bsdf_at_point_inner(
     println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     let t = Instant::now();
-    let emitted_rays = Emitter::emit_rays(samples, pos, emitter_orbit_radius, emitter_shape_radius);
+    let emitted_rays = emitter.emit_rays(pos, mesh);
     let num_emitted_rays = emitted_rays.len();
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     let elapsed = t.elapsed();
-    let max_bounces = params.emitter.max_bounces;
+    let max_bounces = emitter.params.max_bounces;
 
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     log::debug!(
@@ -407,9 +415,7 @@ fn measure_bsdf_at_point_inner(
 
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     {
-        let collected = params
-            .detector
-            .collect(params, mesh, pos, &trajectories, patches, cache);
+        let collected = detector.collect(params, mesh, pos, &trajectories, cache);
         log::debug!("collected stats: {:#?}", collected.stats);
         log::trace!("collected: {:?}", collected.data);
         collected

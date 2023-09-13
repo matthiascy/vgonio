@@ -1,22 +1,19 @@
 use crate::{
     app::gui::{
         event::{EventLoopProxy, MeasureEvent, VgonioEvent},
-        misc,
         widgets::SurfaceSelector,
     },
     measure::{
         bsdf::{
-            detector::{Detector, DetectorScheme},
-            emitter::{Emitter, RegionShape},
+            detector::{DetectorParams, DetectorScheme},
+            emitter::EmitterParams,
             BsdfKind,
         },
-        params::{BsdfMeasurementParams, Radius},
+        params::BsdfMeasurementParams,
     },
-    Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
-    SphericalPartition,
+    Medium, SphericalDomain,
 };
 use std::hash::Hash;
-use vgcore::units::{mm, Radians};
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
@@ -47,103 +44,7 @@ impl Medium {
     }
 }
 
-impl Radius {
-    /// Creates the UI radius input.
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        let is_auto = self.is_auto();
-        ui.horizontal(|ui| {
-            if ui
-                .selectable_label(is_auto, "Auto")
-                .on_hover_text(
-                    "Automatically set the distance according to the dimensions of the surface.",
-                )
-                .clicked()
-            {
-                *self = Radius::Auto(mm!(0.0));
-            }
-
-            let fixed_response = ui.selectable_label(!is_auto, "Fixed");
-
-            if !is_auto {
-                ui.add(
-                    egui::DragValue::new(&mut self.value_mut().value())
-                        .speed(1.0)
-                        .suffix("mm")
-                        .clamp_range(0.0..=f32::INFINITY),
-                );
-            }
-
-            if fixed_response.clicked() {
-                *self = Radius::Fixed(mm!(self.value().value()));
-            }
-        });
-    }
-}
-
-impl RegionShape {
-    /// Creates the UI for parameterizing the region shape.
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.columns(1, |uis| {
-            let ui = &mut uis[0];
-            ui.horizontal(|ui| {
-                if ui
-                    .selectable_label(self.is_spherical_cap(), "Cap")
-                    .on_hover_text("The emitter is a spherical cap.")
-                    .clicked()
-                {
-                    *self = RegionShape::default_spherical_cap();
-                }
-
-                if ui
-                    .selectable_label(self.is_spherical_rect(), "Rect")
-                    .on_hover_text("The emitter is a spherical shell.")
-                    .clicked()
-                {
-                    *self = RegionShape::default_spherical_rect();
-                }
-
-                if ui
-                    .selectable_label(self.is_disk(), "Disk")
-                    .on_hover_text("The emitter is a disk.")
-                    .clicked()
-                {
-                    *self = RegionShape::Disk {
-                        radius: Default::default(),
-                    }
-                }
-            });
-            ui.end_row();
-
-            if self.is_spherical_cap() {
-                let zenith = self.cap_zenith_mut().unwrap();
-                ui.horizontal(|ui| {
-                    ui.label("Zenith range θ: ");
-                    ui.add(misc::drag_angle(zenith, "start: "));
-                });
-            }
-
-            if self.is_spherical_rect() {
-                let zenith = self.rect_zenith_mut().unwrap();
-                ui.horizontal(|ui| {
-                    ui.label("Zenith range θ: ");
-                    ui.add(misc::drag_angle(zenith.0, "start: "));
-                    ui.add(misc::drag_angle(zenith.1, "end: "));
-                });
-                ui.end_row();
-
-                let azimuth = self.rect_azimuth_mut().unwrap();
-                ui.horizontal(|ui| {
-                    ui.label("Azimuth range φ: ");
-                    ui.add(misc::drag_angle(azimuth.0, "start: "));
-                    ui.add(misc::drag_angle(azimuth.1, "end: "));
-                });
-            }
-            ui.end_row();
-        });
-    }
-}
-
-impl Emitter {
+impl EmitterParams {
     /// Creates the UI for parameterizing the emitter.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Emitter")
@@ -168,21 +69,12 @@ impl Emitter {
                         );
                         ui.end_row();
 
-                        ui.label("Distance:")
-                            .on_hover_text("Distance from emitter to the surface.");
-                        self.radius.ui(ui);
-                        ui.end_row();
-
                         ui.label("Azimuthal range φ: ");
                         self.azimuth.ui(ui);
                         ui.end_row();
 
                         ui.label("Zenith range θ: ");
                         self.zenith.ui(ui);
-                        ui.end_row();
-
-                        ui.label("Region shape: ");
-                        self.shape.ui(ui);
                         ui.end_row();
 
                         ui.label("Wavelength range: ");
@@ -224,133 +116,7 @@ impl SphericalDomain {
     }
 }
 
-impl DetectorScheme {
-    /// Creates the UI for parameterizing the collector scheme.
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("Collector Scheme")
-            .default_open(true)
-            .show(ui, |ui| {
-                egui::Grid::new("collector_scheme_grid")
-                    .striped(true)
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Type: ");
-                        ui.horizontal(|ui| {
-                            if ui
-                                .selectable_label(self.is_partitioned(), "Partitioned")
-                                .on_hover_text("Partition the collector into sub-regions.")
-                                .clicked()
-                            {
-                                *self = DetectorScheme::default_partition();
-                            }
-
-                            if ui
-                                .selectable_label(self.is_single_region(), "Single region")
-                                .on_hover_text("Use a single region for the collector.")
-                                .clicked()
-                            {
-                                *self = DetectorScheme::default_single_region();
-                            }
-                        });
-                        ui.end_row();
-
-                        if self.is_partitioned() {
-                            ui.label("Partitioning: ");
-                            let partition = self.partition_mut().unwrap();
-                            ui.horizontal(|ui| {
-                                let is_equal_angle = partition.is_equal_angle();
-                                let is_equal_area = partition.is_equal_area();
-                                let is_equal_projected_area = partition.is_equal_projected_area();
-                                if ui.selectable_label(is_equal_angle, "Equal angle").clicked() {
-                                    *partition = SphericalPartition::EqualAngle {
-                                        zenith: RangeByStepSizeInclusive::zero_to_half_pi(
-                                            Radians::from_degrees(5.0),
-                                        ),
-                                        azimuth: RangeByStepSizeInclusive::zero_to_tau(
-                                            Radians::from_degrees(15.0),
-                                        ),
-                                    };
-                                }
-
-                                if ui.selectable_label(is_equal_area, "Equal area").clicked() {
-                                    *partition = SphericalPartition::EqualArea {
-                                        zenith: RangeByStepCountInclusive::new(
-                                            Radians::from_degrees(0.0),
-                                            Radians::from_degrees(90.0),
-                                            17,
-                                        ),
-                                        azimuth: RangeByStepSizeInclusive::zero_to_tau(
-                                            Radians::from_degrees(15.0),
-                                        ),
-                                    };
-                                }
-
-                                if ui
-                                    .selectable_label(
-                                        is_equal_projected_area,
-                                        "Equal projected area",
-                                    )
-                                    .clicked()
-                                {
-                                    *partition = SphericalPartition::EqualProjectedArea {
-                                        zenith: RangeByStepCountInclusive::new(
-                                            Radians::from_degrees(0.0),
-                                            Radians::from_degrees(90.0),
-                                            17,
-                                        ),
-                                        azimuth: RangeByStepSizeInclusive::zero_to_tau(
-                                            Radians::from_degrees(15.0),
-                                        ),
-                                    };
-                                }
-                            });
-                            ui.end_row();
-
-                            match partition {
-                                SphericalPartition::EqualAngle { zenith, azimuth } => {
-                                    ui.label("Azimuthal range φ: ");
-                                    azimuth.ui(ui);
-                                    ui.end_row();
-
-                                    ui.label("Zenith range θ: ");
-                                    zenith.ui(ui);
-                                }
-                                SphericalPartition::EqualArea { zenith, azimuth } => {
-                                    ui.label("Azimuthal range φ: ");
-                                    azimuth.ui(ui);
-                                    ui.end_row();
-
-                                    ui.label("Zenith range θ: ");
-                                    zenith.ui(ui);
-                                }
-                                SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
-                                    ui.label("Azimuthal range φ: ");
-                                    azimuth.ui(ui);
-                                    ui.end_row();
-
-                                    ui.label("Zenith range θ: ");
-                                    zenith.ui(ui);
-                                }
-                            }
-                        } else {
-                            ui.label("Region Shape: ");
-                            self.shape_mut().unwrap().ui(ui);
-                            ui.end_row();
-
-                            ui.label("Azimuthal range φ: ");
-                            self.azimuth_mut().unwrap().ui(ui);
-                            ui.end_row();
-
-                            ui.label("Zenith range θ: ");
-                            self.zenith_mut().unwrap().ui(ui);
-                        }
-                        ui.end_row();
-                    });
-            });
-    }
-}
-
-impl Detector {
+impl DetectorParams {
     /// Creates the UI for parameterizing the collector.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Collector")
@@ -359,12 +125,12 @@ impl Detector {
                 egui::Grid::new("collector_grid")
                     .num_columns(2)
                     .show(ui, |ui| {
-                        ui.label("Distance:")
-                            .on_hover_text("Distance from collector to the surface.");
-                        self.radius.ui(ui);
+                        ui.label("Scheme:")
+                            .on_hover_text("The scheme used for generating the detector patches.");
+                        ui.selectable_value(&mut self.scheme, DetectorScheme::Beckers, "Beckers");
+                        ui.selectable_value(&mut self.scheme, DetectorScheme::Tregenza, "Tregenza");
                         ui.end_row();
                     });
-                self.scheme.ui(ui);
             });
     }
 }

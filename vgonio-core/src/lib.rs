@@ -12,7 +12,6 @@
 #![feature(const_fn_floating_point_arithmetic)]
 // Enable const mut references
 #![feature(const_mut_refs)]
-#![feature(adt_const_params)]
 #![warn(missing_docs)]
 
 pub mod error;

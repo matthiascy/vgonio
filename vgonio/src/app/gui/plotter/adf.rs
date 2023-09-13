@@ -7,7 +7,6 @@ use crate::{
         },
     },
     fitting::FittedModel,
-    measure::params::MeasurementData,
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};
@@ -17,7 +16,10 @@ use vgcore::units::{rad, Radians};
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
-use crate::fitting::{FittingProblemKind, MicrofacetDistributionFittingMethod};
+use crate::{
+    fitting::{FittingProblemKind, MicrofacetDistributionFittingMethod},
+    measure::data::MeasurementData,
+};
 
 struct ModelSelector {
     model: MicrofacetDistributionModelKind,
