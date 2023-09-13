@@ -121,7 +121,7 @@ if __name__ == "__main__":
     figure = plt.figure()
     # plot_disk_rings(8, 1, figure.add_subplot(1, 3, 1))
 
-    N = 10
+    N = 45
     R = np.sqrt(2.0)
     ks = becker_compute_ks(1, N)
     rs = becker_compute_rs(ks, N, R)

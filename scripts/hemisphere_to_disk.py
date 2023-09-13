@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 
 def points_on_hemisphere():
-    count_phi = 20
-    count_theta = 10
+    count_phi = 64
+    count_theta = 32
     d_phi = math.tau / count_phi
     d_theta = np.pi * 0.5 / count_theta
     points = np.zeros((count_phi * (count_theta + 1), 3))
