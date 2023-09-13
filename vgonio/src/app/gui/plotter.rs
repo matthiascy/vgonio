@@ -16,8 +16,8 @@ use crate::{
     },
     fitting::FittedModel,
     measure::{
-        measurement::{MeasurementData, MeasurementKind},
-        CollectorScheme,
+        bsdf::detector::DetectorScheme,
+        params::{MeasurementData, MeasurementKind},
     },
     RangeByStepSizeInclusive, SphericalPartition,
 };
@@ -28,7 +28,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use vgbxdf::{BeckmannDistribution, MicrofacetDistributionModel, TrowbridgeReitzDistribution};
+use vgbxdf::{
+    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
+    MicrofacetDistributionModel,
+};
 use vgcore::{
     math,
     math::Vec3,
@@ -515,8 +518,8 @@ impl PlottingWidget for PlotInspector {
                         let bsdf_data = measurement.measured.bsdf_data().unwrap();
                         let zenith_i = bsdf_data.params.emitter.zenith;
                         let azimuth_i = bsdf_data.params.emitter.azimuth;
-                        let (zenith_o, azimuth_o) = match bsdf_data.params.collector.scheme {
-                            CollectorScheme::Partitioned { partition } => match partition {
+                        let (zenith_o, azimuth_o) = match bsdf_data.params.detector.scheme {
+                            DetectorScheme::Partitioned { partition } => match partition {
                                 SphericalPartition::EqualAngle { zenith, azimuth } => {
                                     (zenith, azimuth)
                                 }
@@ -527,7 +530,7 @@ impl PlottingWidget for PlotInspector {
                                     (zenith.into(), azimuth)
                                 }
                             },
-                            CollectorScheme::SingleRegion {
+                            DetectorScheme::SingleRegion {
                                 zenith, azimuth, ..
                             } => (zenith, azimuth),
                         };
@@ -621,8 +624,8 @@ impl PlottingWidget for PlotInspector {
 
                         if extra.changed {
                             let (zenith_range, azimuth_range) =
-                                bsdf_data.params.collector.scheme.ranges();
-                            let count = bsdf_data.params.collector.scheme.total_sample_count();
+                                bsdf_data.params.detector.scheme.ranges();
+                            let count = bsdf_data.params.detector.scheme.total_sample_count();
                             debug_assert_eq!(
                                 count,
                                 zenith_range.step_count_wrapped()

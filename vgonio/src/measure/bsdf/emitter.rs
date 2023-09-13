@@ -1,17 +1,12 @@
 use crate::{
-    measure::{measurement::Radius, rtc::Ray, SphericalTransform},
+    measure::{bsdf::rtc::Ray, params::Radius, SphericalTransform},
     RangeByStepSizeInclusive,
 };
-use rand::{
-    distributions::{Distribution, Uniform},
-    SeedableRng,
-};
-use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use vgcore::{
-    math::{Mat3, Sph3, Vec3},
+    math::{Sph3, Vec3},
     units::{radians, steradians, Nanometres, Radians, SolidAngle},
 };
 use vgsurf::MicroSurfaceMesh;

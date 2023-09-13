@@ -8,7 +8,8 @@ use crate::{
         },
     },
     measure::{
-        emitter::RegionShape, measurement::BsdfMeasurementParams, CollectorScheme, RtcMethod,
+        bsdf::{detector::DetectorScheme, emitter::RegionShape, rtc::RtcMethod},
+        params::BsdfMeasurementParams,
     },
 };
 use std::sync::{Arc, RwLock};
@@ -161,11 +162,11 @@ impl BrdfMeasurementDebugging {
                 let mesh = cache
                     .get_micro_surface_mesh_by_surface_id(record.surf)
                     .unwrap();
-                let orbit_radius = self.params.collector.radius.estimate(mesh);
+                let orbit_radius = self.params.detector.radius.estimate(mesh);
 
-                let (radius, disk_radius) = match self.params.collector.scheme {
-                    CollectorScheme::Partitioned { .. } => (orbit_radius, None),
-                    CollectorScheme::SingleRegion { shape, .. } => match shape {
+                let (radius, disk_radius) = match self.params.detector.scheme {
+                    DetectorScheme::Partitioned { .. } => (orbit_radius, None),
+                    DetectorScheme::SingleRegion { shape, .. } => match shape {
                         RegionShape::SphericalCap { .. } | RegionShape::SphericalRect { .. } => {
                             (orbit_radius, None)
                         }
@@ -593,8 +594,8 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                                 .send_event(VgonioEvent::Debugging(
                                     DebuggingEvent::UpdateCollectorDrawing {
                                         status: self.collector_dome_drawing,
-                                        scheme: self.params.collector.scheme,
-                                        patches: self.params.collector.generate_patches(),
+                                        scheme: self.params.detector.scheme,
+                                        patches: self.params.detector.generate_patches(),
                                         orbit_radius,
                                         shape_radius,
                                     },
@@ -606,9 +607,9 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Distance:")
                         .on_hover_text("Distance from collector to the surface.");
-                    self.params.collector.radius.ui(ui);
+                    self.params.detector.radius.ui(ui);
                 });
-                self.params.collector.scheme.ui(ui);
+                self.params.detector.scheme.ui(ui);
             });
         ui.separator();
 

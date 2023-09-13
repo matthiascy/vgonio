@@ -23,7 +23,7 @@ use crate::{
         FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData,
         MicrofacetDistributionFittingMethod, MicrofacetDistributionFittingProblem,
     },
-    measure::measurement::{MeasurementData, MeasurementKind},
+    measure::params::{MeasurementData, MeasurementKind},
 };
 use egui::NumExt;
 use egui_gizmo::GizmoOrientation;

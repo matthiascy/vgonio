@@ -2,6 +2,8 @@ use crate::math::NumericCast;
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
 
+// TODO: refactor this module to use const generics
+
 /// Radian unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct URadian;

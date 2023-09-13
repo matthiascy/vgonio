@@ -6,12 +6,13 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::{BsdfMeasurementDataPoint, MeasuredBsdfData},
-        emitter::EmitterSamples,
-        fetcher::{BounceAndEnergy, CollectorPatches},
-        measurement::BsdfMeasurementParams,
-        rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-        Emitter,
+        bsdf::{
+            detector::{BounceAndEnergy, CollectorPatches},
+            emitter::{Emitter, EmitterSamples},
+            rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
+            BsdfMeasurementDataPoint, MeasuredBsdfData,
+        },
+        params::BsdfMeasurementParams,
     },
     optics::fresnel,
 };
@@ -407,7 +408,7 @@ fn measure_bsdf_at_point_inner(
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     {
         let collected = params
-            .collector
+            .detector
             .collect(params, mesh, pos, &trajectories, patches, cache);
         log::debug!("collected stats: {:#?}", collected.stats);
         log::trace!("collected: {:?}", collected.data);

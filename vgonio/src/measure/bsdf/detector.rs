@@ -1,17 +1,15 @@
-use crate::{
-    measure::{emitter::RegionShape, measurement::Radius},
-    RangeByStepSizeInclusive, SphericalPartition,
-};
+use crate::{measure::params::Radius, RangeByStepSizeInclusive, SphericalPartition};
 use std::ops::{Deref, DerefMut};
 use vgcore::math::{Sph3, Vec3, Vec3A};
 
 use crate::{
     app::cache::Cache,
-    // math::{solve_quadratic, sqr, QuadraticSolution},
     measure::{
-        bsdf::{BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-        measurement::BsdfMeasurementParams,
-        rtc::RayTrajectory,
+        bsdf::{
+            emitter::RegionShape, rtc::RayTrajectory, BsdfMeasurementDataPoint,
+            BsdfMeasurementStatsPoint, PerWavelength,
+        },
+        params::BsdfMeasurementParams,
     },
     optics::fresnel,
 };
@@ -31,12 +29,12 @@ use vgsurf::MicroSurfaceMesh;
 /// The detectors are positioned on the center of each patch; the patches
 /// are partitioned using 1.0 as radius.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Fetcher {
+pub struct Detector {
     /// Distance from the collector's center to the specimen's center.
     pub radius: Radius,
 
     /// Strategy for data collection.
-    pub scheme: CollectorScheme,
+    pub scheme: DetectorScheme,
 }
 
 // TODO: incorporate the domain into the collector
@@ -44,7 +42,7 @@ pub struct Fetcher {
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[repr(u8)]
-pub enum CollectorScheme {
+pub enum DetectorScheme {
     /// The patches are subdivided using a spherical partition.
     Partitioned {
         /// The spherical partition of the collector.
@@ -64,7 +62,7 @@ pub enum CollectorScheme {
     } = 0x01,
 }
 
-impl CollectorScheme {
+impl DetectorScheme {
     /// Returns the shape of the collector only if it is a single region.
     pub fn shape(&self) -> Option<RegionShape> {
         match self {
@@ -128,14 +126,14 @@ impl CollectorScheme {
         RangeByStepSizeInclusive<Radians>,
     ) {
         match self {
-            CollectorScheme::Partitioned { partition } => match partition {
+            DetectorScheme::Partitioned { partition } => match partition {
                 SphericalPartition::EqualAngle { zenith, azimuth } => (*zenith, *azimuth),
                 SphericalPartition::EqualArea { zenith, azimuth }
                 | SphericalPartition::EqualProjectedArea { zenith, azimuth } => {
                     ((*zenith).into(), *azimuth)
                 }
             },
-            CollectorScheme::SingleRegion {
+            DetectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => (*zenith, *azimuth),
         }
@@ -144,7 +142,7 @@ impl CollectorScheme {
     /// Returns the number of samples collected by the collector.
     pub fn total_sample_count(&self) -> usize {
         match self {
-            CollectorScheme::Partitioned { partition } => match partition {
+            DetectorScheme::Partitioned { partition } => match partition {
                 SphericalPartition::EqualAngle { zenith, azimuth } => {
                     zenith.step_count_wrapped() * azimuth.step_count_wrapped()
                 }
@@ -155,20 +153,20 @@ impl CollectorScheme {
                     zenith.step_count * azimuth.step_count_wrapped()
                 }
             },
-            CollectorScheme::SingleRegion {
+            DetectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => zenith.step_count_wrapped() * azimuth.step_count_wrapped(),
         }
     }
 
-    /// Returns the default value of [`CollectorScheme::Partitioned`].
+    /// Returns the default value of [`DetectorScheme::Partitioned`].
     pub fn default_partition() -> Self {
         Self::Partitioned {
             partition: SphericalPartition::default(),
         }
     }
 
-    /// Returns the default value of [`CollectorScheme::SingleRegion`].
+    /// Returns the default value of [`DetectorScheme::SingleRegion`].
     pub fn default_single_region() -> Self {
         Self::SingleRegion {
             shape: RegionShape::default_spherical_cap(),
@@ -199,7 +197,7 @@ impl Energy {
     }
 }
 
-impl Fetcher {
+impl Detector {
     /// Generates the patches of the collector.
     ///
     /// The patches are generated based on the scheme of the collector. They are
@@ -207,11 +205,11 @@ impl Fetcher {
     /// the azimuth angle first, then the zenith angle.
     pub fn generate_patches(&self) -> CollectorPatches {
         match self.scheme {
-            CollectorScheme::Partitioned { partition } => {
+            DetectorScheme::Partitioned { partition } => {
                 log::trace!("[Collector] generating patches of the partitioned collector.");
                 CollectorPatches(partition.generate_patches())
             }
-            CollectorScheme::SingleRegion {
+            DetectorScheme::SingleRegion {
                 zenith, azimuth, ..
             } => {
                 log::trace!("[Collector] generating patches of a single region collector.");
@@ -469,18 +467,18 @@ impl Fetcher {
     }
 }
 
-/// Represents patches on the surface of the spherical [`Fetcher`].
+/// Represents patches on the surface of the spherical [`Detector`].
 ///
-/// The domain of the whole collector is defined by the [`Fetcher`].
+/// The domain of the whole collector is defined by the [`Detector`].
 #[derive(Debug, Clone)]
 pub struct CollectorPatches(Vec<Patch>);
 
 impl CollectorPatches {
     /// Checks if the collector patches match the collector scheme.
-    pub fn matches_scheme(&self, scheme: &CollectorScheme) -> bool {
+    pub fn matches_scheme(&self, scheme: &DetectorScheme) -> bool {
         debug_assert!(!self.0.is_empty(), "Collector patches must not be empty");
         let is_self_partitioned = matches!(self.0[0], Patch::Partitioned(_));
-        let is_scheme_partitioned = matches!(scheme, CollectorScheme::Partitioned { .. });
+        let is_scheme_partitioned = matches!(scheme, DetectorScheme::Partitioned { .. });
         is_self_partitioned == is_scheme_partitioned
     }
 }
@@ -495,7 +493,7 @@ impl DerefMut for CollectorPatches {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-/// Represents a patch on the spherical [`Fetcher`].
+/// Represents a patch on the spherical [`Detector`].
 ///
 /// It could be a single region or a partitioned region.
 #[derive(Debug, Copy, Clone)]
@@ -506,7 +504,7 @@ pub enum Patch {
     SingleRegion(PatchSingleRegion),
 }
 
-/// Represents a patch issued from partitioning the spherical [`Fetcher`].
+/// Represents a patch issued from partitioning the spherical [`Detector`].
 #[derive(Debug, Copy, Clone)]
 pub struct PatchPartitioned {
     /// Polar angle range of the patch (in radians).

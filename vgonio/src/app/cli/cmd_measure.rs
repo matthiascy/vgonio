@@ -7,11 +7,11 @@ use crate::{
     },
     measure,
     measure::{
-        measurement::{
+        bsdf::detector::DetectorScheme,
+        params::{
             AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
             MsfMeasurementParams,
         },
-        CollectorScheme,
     },
     SphericalPartition,
 };
@@ -114,8 +114,8 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         let measurement_start_time = std::time::SystemTime::now();
         let measured_data = match measurement.params {
             MeasurementParams::Bsdf(measurement) => {
-                let collector_info = match measurement.collector.scheme {
-                    CollectorScheme::Partitioned { partition } => match partition {
+                let collector_info = match measurement.detector.scheme {
+                    DetectorScheme::Partitioned { partition } => match partition {
                         SphericalPartition::EqualAngle { zenith, azimuth } => {
                             format!(
                                 "        - partition: {}\n          - polar angle: {}\n          \
@@ -144,7 +144,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                             )
                         }
                     },
-                    CollectorScheme::SingleRegion {
+                    DetectorScheme::SingleRegion {
                         shape,
                         zenith,
                         azimuth,
@@ -179,7 +179,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     measurement.emitter.spectrum,
                     measurement.emitter.zenith.pretty_print(),
                     measurement.emitter.azimuth.pretty_print(),
-                    measurement.collector.radius,
+                    measurement.detector.radius,
                     collector_info
                 );
                 measure::bsdf::measure_bsdf_rt(measurement, &surfaces, measurement.sim_kind, &cache)

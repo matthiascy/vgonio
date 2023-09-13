@@ -1,4 +1,4 @@
-use crate::measure::rtc::{Ray, RayTriIsect};
+use crate::measure::bsdf::rtc::{Ray, RayTriIsect};
 use std::borrow::Cow;
 use vgcore::{
     math,

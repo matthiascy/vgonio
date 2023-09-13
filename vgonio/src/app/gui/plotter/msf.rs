@@ -9,7 +9,7 @@ use crate::{
         },
     },
     fitting::FittedModel,
-    measure::measurement::MeasurementData,
+    measure::params::MeasurementData,
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};

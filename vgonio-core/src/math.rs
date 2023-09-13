@@ -278,7 +278,8 @@ pub fn rcp_f64(x: f64) -> f64 {
 pub fn sqr<F: Float>(x: F) -> F { x * x }
 
 /// Returns the cube of the given value.
-pub fn cube<F: Float>(x: F) -> F { x * x * x }
+#[inline(always)]
+pub fn cbr<F: Float>(x: F) -> F { x * x * x }
 
 /// Returns the accurate reciprocal square root of the given value.
 #[inline(always)]

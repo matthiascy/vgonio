@@ -7,22 +7,23 @@ use vgcore::math;
 
 use crate::measure::{
     bsdf::MeasuredBsdfData,
-    measurement::{MeasuredData, MeasurementData, MeasurementDataSource},
     microfacet::{MeasuredAdfData, MeasuredMsfData},
+    params::{MeasuredData, MeasurementData, MeasurementDataSource},
 };
 
 pub mod vgmo {
     use super::*;
     use crate::{
         measure::{
-            bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            emitter::RegionShape,
-            fetcher::BounceAndEnergy,
-            measurement::{
+            bsdf::{
+                detector::{BounceAndEnergy, Detector, DetectorScheme},
+                emitter::{Emitter, RegionShape},
+                BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength,
+            },
+            params::{
                 AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
                 Radius, SimulationKind,
             },
-            CollectorScheme, Emitter, Fetcher,
         },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalPartition,
     };
@@ -157,7 +158,7 @@ pub mod vgmo {
                     bsdf.emitter.azimuth.step_count_wrapped()
                         * bsdf.emitter.zenith.step_count_wrapped()
                         * bsdf.emitter.spectrum.step_count()
-                        * bsdf.collector.scheme.total_sample_count()
+                        * bsdf.detector.scheme.total_sample_count()
                 }
                 Self::Madf { madf, .. } => {
                     madf.zenith.step_count_wrapped() * madf.azimuth.step_count_wrapped()
@@ -523,7 +524,7 @@ emitter is not implemented"
         }
     }
 
-    impl CollectorScheme {
+    impl DetectorScheme {
         /// The size of the buffer required to write the collector scheme.
         pub const REQUIRED_SIZE: usize = 56;
 
@@ -545,7 +546,7 @@ emitter is not implemented"
                     let partition = SphericalPartition::read_from_buf(
                         &buf[4..4 + SphericalPartition::REQUIRED_SIZE],
                     );
-                    CollectorScheme::Partitioned { partition }
+                    DetectorScheme::Partitioned { partition }
                 }
                 0x01 => {
                     // Single Region
@@ -557,7 +558,7 @@ emitter is not implemented"
                         &buf[4 + RegionShape::REQUIRED_SIZE + 16
                             ..4 + RegionShape::REQUIRED_SIZE + 32],
                     );
-                    CollectorScheme::SingleRegion {
+                    DetectorScheme::SingleRegion {
                         shape,
                         zenith,
                         azimuth,
@@ -574,11 +575,11 @@ emitter is not implemented"
                 "CollectorScheme needs at least 60 bytes of space"
             );
             match self {
-                CollectorScheme::Partitioned { partition } => {
+                DetectorScheme::Partitioned { partition } => {
                     buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
                     partition.write_to_buf(&mut buf[4..4 + SphericalPartition::REQUIRED_SIZE]);
                 }
-                CollectorScheme::SingleRegion {
+                DetectorScheme::SingleRegion {
                     shape,
                     zenith,
                     azimuth,
@@ -592,9 +593,9 @@ emitter is not implemented"
         }
     }
 
-    impl Fetcher {
+    impl Detector {
         /// The size of the buffer required to write the collector.
-        pub const REQUIRED_SIZE: usize = 4 + CollectorScheme::REQUIRED_SIZE;
+        pub const REQUIRED_SIZE: usize = 4 + DetectorScheme::REQUIRED_SIZE;
 
         /// Reads the collector from a buffer.
         pub fn read_from_buf(buf: &[u8]) -> Self {
@@ -610,8 +611,7 @@ emitter is not implemented"
                     Radius::Fixed(mm!(val))
                 }
             };
-            let scheme =
-                CollectorScheme::read_from_buf(&buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
+            let scheme = DetectorScheme::read_from_buf(&buf[4..4 + DetectorScheme::REQUIRED_SIZE]);
             Self { radius, scheme }
         }
 
@@ -632,24 +632,24 @@ emitter is not implemented"
 
             buf[0..4].copy_from_slice(&self.radius.value().value().to_le_bytes());
             self.scheme
-                .write_to_buf(&mut buf[4..4 + CollectorScheme::REQUIRED_SIZE]);
+                .write_to_buf(&mut buf[4..4 + DetectorScheme::REQUIRED_SIZE]);
         }
     }
 
     impl BsdfMeasurementParams {
         /// Reads the BSDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
+            let mut buf = [0u8; Detector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
             reader.read_exact(&mut buf)?;
             let kind = BsdfKind::from(buf[0]);
             let incident_medium = Medium::from(buf[1]);
             let transmitted_medium = Medium::from(buf[2]);
             let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
             let emitter = Emitter::read_from_buf(&buf[4..4 + Emitter::REQUIRED_SIZE]);
-            let collector = Fetcher::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
+            let collector = Detector::read_from_buf(&buf[4 + Emitter::REQUIRED_SIZE..]);
             let samples_count = u32::from_le_bytes(
-                buf[Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
-                    ..Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
+                buf[Detector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4
+                    ..Detector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 4]
                     .try_into()
                     .unwrap(),
             );
@@ -665,7 +665,7 @@ emitter is not implemented"
                 transmitted_medium,
                 sim_kind,
                 emitter,
-                collector,
+                detector: collector,
             })
         }
 
@@ -674,7 +674,7 @@ emitter is not implemented"
             &self,
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
-            let mut buf = [0x20; Fetcher::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
+            let mut buf = [0x20; Detector::REQUIRED_SIZE + Emitter::REQUIRED_SIZE + 4 + 12];
             buf[0] = self.kind as u8;
             buf[1] = self.incident_medium as u8;
             buf[2] = self.transmitted_medium as u8;
@@ -684,13 +684,11 @@ emitter is not implemented"
             };
             self.emitter
                 .write_to_buf(&mut buf[4..4 + Emitter::REQUIRED_SIZE]);
-            self.collector
+            self.detector
                 .write_to_buf(&mut buf[4 + Emitter::REQUIRED_SIZE..]);
-            buf[4 + Emitter::REQUIRED_SIZE + Fetcher::REQUIRED_SIZE
-                ..4 + Emitter::REQUIRED_SIZE + Fetcher::REQUIRED_SIZE + 4]
-                .copy_from_slice(
-                    &(self.collector.scheme.total_sample_count() as u32).to_le_bytes(),
-                );
+            buf[4 + Emitter::REQUIRED_SIZE + Detector::REQUIRED_SIZE
+                ..4 + Emitter::REQUIRED_SIZE + Detector::REQUIRED_SIZE + 4]
+                .copy_from_slice(&(self.detector.scheme.total_sample_count() as u32).to_le_bytes());
             buf[155] = 0x0A;
             writer.write_all(&buf).map_err(|err| err.into())
         }
@@ -973,7 +971,7 @@ emitter is not implemented"
         pub fn read_from_buf(buf: &[u8], params: &BsdfMeasurementParams) -> Self {
             let n_wavelength = params.emitter.spectrum.step_count();
             let bounces = params.emitter.max_bounces as usize;
-            let collector_sample_count = params.collector.scheme.total_sample_count();
+            let collector_sample_count = params.detector.scheme.total_sample_count();
             let size = Self::calc_size_in_bytes(n_wavelength, bounces, collector_sample_count);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
@@ -1063,7 +1061,7 @@ emitter is not implemented"
                 FileEncoding::Binary => {
                     let n_wavelength = params.emitter.spectrum.step_count();
                     let bounces = params.emitter.max_bounces as usize;
-                    let collector_sample_count = params.collector.scheme.total_sample_count();
+                    let collector_sample_count = params.detector.scheme.total_sample_count();
                     let sample_size =
                         BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
                             n_wavelength,
@@ -1117,7 +1115,7 @@ emitter is not implemented"
                         let n_wavelength = self.params.emitter.spectrum.step_count();
                         let bounces = self.params.emitter.max_bounces as usize;
                         let collector_sample_count =
-                            self.params.collector.scheme.total_sample_count();
+                            self.params.detector.scheme.total_sample_count();
                         let sample_size =
                             BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
                                 n_wavelength,
@@ -1330,7 +1328,7 @@ mod tests {
             bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
             emitter::RegionShape,
             fetcher::BounceAndEnergy,
-            measurement::{BsdfMeasurementParams, Radius, SimulationKind},
+            params::{BsdfMeasurementParams, Radius, SimulationKind},
             CollectorScheme, Emitter, Fetcher, RtcMethod,
         },
         Medium, RangeByStepSizeInclusive, SphericalPartition,
@@ -1482,7 +1480,7 @@ mod tests {
                 spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
                 solid_angle: Default::default(),
             },
-            collector: Fetcher {
+            detector: Fetcher {
                 radius: Radius::Auto(mm!(10.0)),
                 scheme: CollectorScheme::Partitioned {
                     partition: SphericalPartition::EqualAngle {

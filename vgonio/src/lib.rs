@@ -21,7 +21,7 @@ mod range;
 
 pub use range::*;
 
-use crate::measure::Patch;
+use crate::measure::bsdf::detector::Patch;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},

@@ -5,9 +5,7 @@ use vgsurf::MicroSurface;
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 use crate::{
     app::cache::{Cache, Handle},
-    measure::measurement::{
-        AdfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource,
-    },
+    measure::params::{AdfMeasurementParams, MeasuredData, MeasurementData, MeasurementDataSource},
 };
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -122,7 +120,7 @@ pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        measure::{measurement::AdfMeasurementParams, microfacet::MeasuredAdfData},
+        measure::{microfacet::MeasuredAdfData, params::AdfMeasurementParams},
         RangeByStepSizeInclusive,
     };
     use vgcore::units::{deg, rad, Radians};

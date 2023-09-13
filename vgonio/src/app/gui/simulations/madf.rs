@@ -3,7 +3,7 @@ use crate::{
         event::{EventLoopProxy, MeasureEvent, VgonioEvent},
         widgets::SurfaceSelector,
     },
-    measure::measurement::AdfMeasurementParams,
+    measure::params::AdfMeasurementParams,
 };
 
 #[derive(Debug)]

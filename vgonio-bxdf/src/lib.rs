@@ -3,11 +3,8 @@
 use std::fmt::Debug;
 use vgcore::Isotropy;
 
-mod beckmann;
-mod trowbridge_reitz;
+pub mod dist;
 
-pub use beckmann::BeckmannDistribution;
-pub use trowbridge_reitz::TrowbridgeReitzDistribution;
 use vgcore::math::Vec3;
 
 /// Family of reflection models.

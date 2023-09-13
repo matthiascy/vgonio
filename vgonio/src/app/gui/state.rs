@@ -17,21 +17,22 @@ use crate::{
         gfx::{remap_depth, GpuContext, RenderPass, Texture, VertexLayout, WindowSurface},
         gui::event::{EventLoopProxy, VgonioEvent},
     },
-    measure::{
-        emitter::{EmitterSamples, RegionShape},
-        fetcher::CollectorPatches,
-        measurement::BsdfMeasurementParams,
-        rtc::Ray,
-        CollectorScheme, Emitter, Patch, RtcMethod,
-    },
+    measure::{bsdf::rtc::Ray, params::BsdfMeasurementParams},
 };
 
 #[cfg(feature = "embree")]
-use crate::measure::rtc::embr;
+use crate::measure::bsdf::rtc::embr;
 
 use crate::{
     app::{gfx::RenderableMesh, gui::notify::NotifyKind},
-    measure::SphericalTransform,
+    measure::{
+        bsdf::{
+            detector::{CollectorPatches, DetectorScheme, Patch},
+            emitter::{Emitter, EmitterSamples, RegionShape},
+            rtc::RtcMethod,
+        },
+        SphericalTransform,
+    },
 };
 use std::{
     default::Default,
@@ -330,7 +331,7 @@ pub struct DebugDrawingState {
     /// Collector shape index buffer.
     pub collector_shape_index_buffer: wgpu::Buffer,
     /// Collector shape/partition scheme.
-    pub collector_scheme: Option<CollectorScheme>,
+    pub collector_scheme: Option<DetectorScheme>,
     /// Collector orbit radius.
     pub collector_orbit_radius: f32,
     /// Collector shape radius.
@@ -871,7 +872,7 @@ impl DebugDrawingState {
         &mut self,
         ctx: &GpuContext,
         status: bool,
-        scheme: Option<CollectorScheme>,
+        scheme: Option<DetectorScheme>,
         patches: CollectorPatches,
         orbit_radius: f32,
         shape_radius: Option<f32>,
@@ -892,7 +893,7 @@ impl DebugDrawingState {
         if let Some(scheme) = scheme {
             // Update the buffer accordingly
             match scheme {
-                CollectorScheme::Partitioned { .. } => {
+                DetectorScheme::Partitioned { .. } => {
                     let mut vertices = vec![Vec3::ZERO; patches.len() * 4];
                     let mut indices = vec![0u32; patches.len() * 8];
                     for (i, patch) in patches.iter().enumerate() {
@@ -939,7 +940,7 @@ impl DebugDrawingState {
                         },
                     ));
                 }
-                CollectorScheme::SingleRegion { shape, .. } => match shape {
+                DetectorScheme::SingleRegion { shape, .. } => match shape {
                     RegionShape::SphericalCap { zenith } => {
                         let steps = (zenith.value() / 2.0f32.to_radians()) as u32;
                         let (vertices, indices) =
@@ -1321,7 +1322,7 @@ impl DebugDrawingState {
                 if let Some(scheme) = self.collector_scheme {
                     render_pass.set_bind_group(0, &self.bind_group, &[]);
                     match scheme {
-                        CollectorScheme::Partitioned { .. } => {
+                        DetectorScheme::Partitioned { .. } => {
                             if self.collector_dome_vertex_buffer.is_some()
                                 && self.collector_dome_index_buffer.is_some()
                             {
@@ -1352,7 +1353,7 @@ impl DebugDrawingState {
                                 );
                             }
                         }
-                        CollectorScheme::SingleRegion {
+                        DetectorScheme::SingleRegion {
                             zenith,
                             azimuth,
                             shape,

@@ -3,7 +3,7 @@ use crate::{
     MicrofacetDistributionModel, MicrofacetDistributionModelKind,
 };
 use std::fmt::Debug;
-use vgcore::math::{cube, rcp_f64, sqr, Vec3};
+use vgcore::math::{cbr, rcp_f64, sqr, Vec3};
 
 /// Trowbridge-Reitz(GGX) microfacet distribution function.
 ///
@@ -89,8 +89,8 @@ impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
         let alpha_x2 = sqr(self.alpha_x);
         let alpha_y2 = sqr(self.alpha_y);
         let alpha_x2_alpha_y2 = alpha_x2 * alpha_y2;
-        let alpha_x2_alpha_y3 = alpha_x2 * cube(self.alpha_y);
-        let alpha_x3_alpha_y2 = cube(self.alpha_x) * alpha_y2;
+        let alpha_x2_alpha_y3 = alpha_x2 * cbr(self.alpha_y);
+        let alpha_x3_alpha_y2 = cbr(self.alpha_x) * alpha_y2;
         cos_thetas
             .iter()
             .zip(cos_phis.iter())
@@ -106,10 +106,8 @@ impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
                 let sin_phi2 = 1.0 - cos_phi2;
                 let rcp_alpha_denom = rcp_f64(
                     std::f64::consts::PI
-                        * cube(
-                            alpha_x2_alpha_y2
-                                + tan_theta2 * (alpha_x2 * sin_phi2 + alpha_y2 * cos_phi2),
-                        ),
+                        * cbr(alpha_x2_alpha_y2
+                            + tan_theta2 * (alpha_x2 * sin_phi2 + alpha_y2 * cos_phi2)),
                 );
                 let d_alpha_x = {
                     let numerator = -alpha_x2_alpha_y3

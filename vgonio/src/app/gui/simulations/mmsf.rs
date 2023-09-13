@@ -3,7 +3,7 @@ use crate::{
         event::{EventLoopProxy, MeasureEvent, VgonioEvent},
         widgets::SurfaceSelector,
     },
-    measure::measurement::MsfMeasurementParams,
+    measure::params::MsfMeasurementParams,
 };
 
 pub struct MmsfSimulation {

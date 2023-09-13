@@ -3,7 +3,7 @@ use crate::{
         args::{PrintInfoKind, PrintInfoOptions},
         Config,
     },
-    measure::measurement::{
+    measure::params::{
         AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
         MsfMeasurementParams,
     },

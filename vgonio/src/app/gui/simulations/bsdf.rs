@@ -5,10 +5,12 @@ use crate::{
         widgets::SurfaceSelector,
     },
     measure::{
-        bsdf::BsdfKind,
-        emitter::RegionShape,
-        measurement::{BsdfMeasurementParams, Radius},
-        CollectorScheme, Emitter, Fetcher,
+        bsdf::{
+            detector::{Detector, DetectorScheme},
+            emitter::{Emitter, RegionShape},
+            BsdfKind,
+        },
+        params::{BsdfMeasurementParams, Radius},
     },
     Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     SphericalPartition,
@@ -222,7 +224,7 @@ impl SphericalDomain {
     }
 }
 
-impl CollectorScheme {
+impl DetectorScheme {
     /// Creates the UI for parameterizing the collector scheme.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Collector Scheme")
@@ -239,7 +241,7 @@ impl CollectorScheme {
                                 .on_hover_text("Partition the collector into sub-regions.")
                                 .clicked()
                             {
-                                *self = CollectorScheme::default_partition();
+                                *self = DetectorScheme::default_partition();
                             }
 
                             if ui
@@ -247,7 +249,7 @@ impl CollectorScheme {
                                 .on_hover_text("Use a single region for the collector.")
                                 .clicked()
                             {
-                                *self = CollectorScheme::default_single_region();
+                                *self = DetectorScheme::default_single_region();
                             }
                         });
                         ui.end_row();
@@ -348,7 +350,7 @@ impl CollectorScheme {
     }
 }
 
-impl Fetcher {
+impl Detector {
     /// Creates the UI for parameterizing the collector.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Collector")
@@ -411,7 +413,7 @@ impl BsdfSimulation {
             });
 
         self.params.emitter.ui(ui);
-        self.params.collector.ui(ui);
+        self.params.detector.ui(ui);
         if ui.button("Simulate").clicked() {
             self.event_loop
                 .send_event(VgonioEvent::Measure(MeasureEvent::Bsdf {

@@ -10,6 +10,8 @@ use std::{
     str::FromStr,
 };
 
+// TODO: refactor the code use const generics.
+
 /// Represents a unit of length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]

@@ -9,8 +9,8 @@ use levenberg_marquardt::{
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::{assert_matches::debug_assert_matches, borrow::Cow, convert::identity, fmt::Display};
 use vgbxdf::{
-    BeckmannDistribution, MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
-    TrowbridgeReitzDistribution,
+    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
+    MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
 };
 use vgcore::{math::Sph3, units::Radians};
 

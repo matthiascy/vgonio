@@ -8,13 +8,14 @@ use crate::{
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
-        bsdf::MeasuredBsdfData,
-        emitter::EmitterSamples,
-        fetcher::CollectorPatches,
-        measurement::BsdfMeasurementParams,
-        rtc,
-        rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-        Emitter,
+        bsdf::{
+            detector::CollectorPatches,
+            emitter::{Emitter, EmitterSamples},
+            rtc,
+            rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
+            MeasuredBsdfData,
+        },
+        params::BsdfMeasurementParams,
     },
     optics::fresnel,
 };
@@ -191,7 +192,7 @@ pub fn measure_bsdf(
             .collect::<Vec<_>>();
         data.push(
             params
-                .collector
+                .detector
                 .collect(params, mesh, pos, &trajectories, patches, cache),
         );
     }

@@ -7,7 +7,7 @@ use crate::{
             event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
         },
     },
-    measure::measurement::MeasurementData,
+    measure::params::MeasurementData,
 };
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};

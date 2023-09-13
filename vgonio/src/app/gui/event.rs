@@ -6,13 +6,15 @@ use crate::{
     },
     fitting::FittingProblemKind,
     measure::{
-        emitter::EmitterSamples,
-        fetcher::CollectorPatches,
-        measurement::{
+        bsdf::{
+            detector::{CollectorPatches, DetectorScheme},
+            emitter::EmitterSamples,
+            rtc::RtcMethod,
+        },
+        params::{
             AdfMeasurementParams, BsdfMeasurementParams, MeasurementData, MeasurementKind,
             MsfMeasurementParams,
         },
-        CollectorScheme, RtcMethod,
     },
 };
 use uuid::Uuid;
@@ -137,7 +139,7 @@ pub enum DebuggingEvent {
     },
     UpdateCollectorDrawing {
         status: bool,
-        scheme: CollectorScheme,
+        scheme: DetectorScheme,
         patches: CollectorPatches,
         orbit_radius: f32,
         shape_radius: Option<f32>,

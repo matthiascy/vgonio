@@ -2,18 +2,19 @@
 //! micro-surfaces.
 
 #[cfg(feature = "embree")]
-use crate::measure::rtc::embr;
+use crate::measure::bsdf::rtc::embr;
 use crate::{
     app::{
         cache::{Cache, Handle},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     measure::{
-        emitter::EmitterSamples,
-        fetcher::{BounceAndEnergy, CollectorPatches, PerPatchData},
-        measurement::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
-        rtc::RayTrajectory,
-        RtcMethod,
+        bsdf::{
+            detector::{BounceAndEnergy, CollectorPatches, PerPatchData},
+            emitter::EmitterSamples,
+            rtc::{RayTrajectory, RtcMethod},
+        },
+        params::{MeasuredData, MeasurementData, MeasurementDataSource, SimulationKind},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,12 @@ use std::{
 use vgcore::math::Vec3;
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
-use super::measurement::BsdfMeasurementParams;
+use super::params::BsdfMeasurementParams;
+
+pub mod detector;
+pub mod emitter;
+pub(crate) mod params;
+pub mod rtc;
 
 /// BSDF measurement data.
 ///
@@ -265,7 +271,7 @@ pub fn measure_bsdf_rt(
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let samples = params.emitter.generate_unit_samples();
-    let patches = params.collector.generate_patches();
+    let patches = params.detector.generate_patches();
 
     match sim_kind {
         SimulationKind::GeomOptics(method) => {
@@ -356,7 +362,9 @@ fn measure_bsdf_grid_rt(
             surf.path.as_ref().unwrap().display()
         );
         let t = std::time::Instant::now();
-        crate::measure::rtc::grid::measure_bsdf(&params, surf, mesh, &samples, &patches, cache);
+        crate::measure::bsdf::rtc::grid::measure_bsdf(
+            &params, surf, mesh, &samples, &patches, cache,
+        );
         println!(
             "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
             t.elapsed().as_secs_f32()
