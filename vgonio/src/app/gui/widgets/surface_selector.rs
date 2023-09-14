@@ -58,6 +58,14 @@ impl SurfaceSelector {
         self.selected.iter().copied()
     }
 
+    /// Returns the first selected surface.
+    pub fn first_selected(&self) -> Option<Handle<MicroSurface>> {
+        self.selected.iter().next().copied()
+    }
+
+    /// Returns the number of selected surfaces.
+    pub fn selected_count(&self) -> usize { self.selected.len() }
+
     /// Returns the single selected surface only if the mode of selection is
     /// single.
     pub fn single_selected(&self) -> Option<Handle<MicroSurface>> {

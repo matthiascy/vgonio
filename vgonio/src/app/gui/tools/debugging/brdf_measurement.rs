@@ -265,7 +265,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                         self.event_loop
                             .send_event(VgonioEvent::Debugging(
                                 DebuggingEvent::UpdateSurfacePrimitiveId {
-                                    mesh: renderable,
+                                    surf: record.as_ref().map(|r| r.surf),
                                     id: self.surface_primitive_id,
                                     status: self.surface_primitive_drawing,
                                 },
@@ -278,7 +278,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                         self.event_loop
                             .send_event(VgonioEvent::Debugging(
                                 DebuggingEvent::UpdateSurfacePrimitiveId {
-                                    mesh: renderable,
+                                    surf: record.as_ref().map(|r| r.surf),
                                     id: self.surface_primitive_id,
                                     status: self.surface_primitive_drawing,
                                 },
@@ -291,7 +291,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                         self.event_loop
                             .send_event(VgonioEvent::Debugging(
                                 DebuggingEvent::UpdateSurfacePrimitiveId {
-                                    mesh: renderable,
+                                    surf: record.as_ref().map(|r| r.surf),
                                     id: self.surface_primitive_id,
                                     status: self.surface_primitive_drawing,
                                 },

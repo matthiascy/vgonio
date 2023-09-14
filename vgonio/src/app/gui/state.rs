@@ -335,7 +335,7 @@ pub struct DebugDrawingState {
     pub ray_trajectories_drawing_missed: bool,
 
     /// Surface of interest.
-    surface_of_interest: Option<Handle<RenderableMesh>>,
+    surface_of_interest: Option<Handle<MicroSurface>>,
     /// The surface primitive to draw.
     surface_primitive_id: u32,
     /// Whether to show surface primitive.
@@ -926,16 +926,16 @@ impl DebugDrawingState {
 
     pub fn update_surface_primitive_id(
         &mut self,
-        mesh: Option<Handle<RenderableMesh>>,
+        surf: Option<Handle<MicroSurface>>,
         id: u32,
         status: bool,
     ) {
         log::trace!(
             "[DebugDrawingState] Updating surface {:?} primitive id to {}",
-            mesh,
+            surf,
             id
         );
-        self.surface_of_interest = mesh;
+        self.surface_of_interest = surf;
         self.surface_primitive_id = id;
         self.surface_primitive_drawing = status;
     }
@@ -1142,9 +1142,16 @@ impl DebugDrawingState {
                     render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
                 }
 
+                log::trace!(
+                    "Primitive drawing: {}, {}",
+                    self.surface_primitive_drawing,
+                    self.surface_of_interest.is_some()
+                );
                 if self.surface_primitive_drawing && self.surface_of_interest.is_some() {
                     let surface = self.surface_of_interest.unwrap();
-                    let mesh = cache.get_micro_surface_renderable_mesh(surface).unwrap();
+                    let mesh = cache
+                        .get_micro_surface_renderable_mesh_by_surface_id(surface)
+                        .unwrap();
                     render_pass.set_pipeline(&self.triangles_pipeline);
                     render_pass.set_bind_group(0, &self.bind_group, &[]);
                     render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));

@@ -36,6 +36,7 @@ pub struct MeasurementDialog {
     tab_adf: AdfMeasurementTab,
     tab_msf: MsfMeasurementTab,
     open: bool,
+    event_loop: EventLoopProxy,
     #[cfg(debug_assertions)]
     debug: MeasurementDialogDebug,
 }
@@ -47,8 +48,9 @@ impl MeasurementDialog {
             selector: SurfaceSelector::multiple(),
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: AdfMeasurementTab::new(event_loop.clone()),
-            tab_msf: MsfMeasurementTab::new(event_loop),
+            tab_msf: MsfMeasurementTab::new(event_loop.clone()),
             open: false,
+            event_loop,
             #[cfg(debug_assertions)]
             debug: MeasurementDialogDebug {
                 enable_debug_draw: false,
@@ -85,7 +87,18 @@ impl MeasurementDialog {
                 {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Debug draw: ");
-                        ui.add(ToggleSwitch::new(&mut self.debug.enable_debug_draw));
+                        if ui
+                            .add(ToggleSwitch::new(&mut self.debug.enable_debug_draw))
+                            .changed()
+                        {
+                            self.event_loop
+                                .send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleDebugDrawing(
+                                        self.debug.enable_debug_draw,
+                                    ),
+                                ))
+                                .unwrap();
+                        }
                     });
                     if self.debug.enable_debug_draw {
                         ui.horizontal_wrapped(|ui| {
@@ -115,6 +128,9 @@ impl MeasurementDialog {
                         });
                     }
                 }
+
+                let first_selected = self.selector.first_selected();
+
                 egui::CollapsingHeader::new("Specimen")
                     .default_open(true)
                     .show(ui, |ui| {
@@ -128,28 +144,36 @@ impl MeasurementDialog {
                                 ui.label("Primitive ID: ");
                                 ui.horizontal_wrapped(|ui| {
                                     ui.add(egui::DragValue::new(&mut self.debug.surf_prim_id));
-                                    if ui.button("\u{25C0}").clicked() {
+                                    let prev_clicked = if ui.button("\u{25C0}").clicked() {
                                         self.debug.surf_prim_id =
-                                            (self.debug.surf_prim_id - 1).max(0);
-                                        // TODO: send event to update
-                                        // surface
-                                        // primitive id
-                                    }
+                                            self.debug.surf_prim_id.max(1) - 1;
+                                        true
+                                    } else {
+                                        false
+                                    };
 
-                                    if ui.button("\u{25B6}").clicked() {
+                                    let next_clicked = if ui.button("\u{25B6}").clicked() {
                                         self.debug.surf_prim_id =
                                             (self.debug.surf_prim_id + 1).min(usize::MAX);
-                                        // TODO: send event to update
-                                        // surface
-                                        // primitive id
-                                    }
+                                        true
+                                    } else {
+                                        false
+                                    };
 
-                                    if ui
+                                    let toggle_changed = ui
                                         .add(ToggleSwitch::new(&mut self.debug.show_surf_prim))
-                                        .changed()
-                                    {
-                                        // TODO: send event to update
-                                        // surface
+                                        .changed();
+
+                                    if prev_clicked || next_clicked || toggle_changed {
+                                        self.event_loop
+                                            .send_event(VgonioEvent::Debugging(
+                                                DebuggingEvent::UpdateSurfacePrimitiveId {
+                                                    surf: first_selected,
+                                                    id: self.debug.surf_prim_id as u32,
+                                                    status: self.debug.show_surf_prim,
+                                                },
+                                            ))
+                                            .unwrap();
                                     }
                                 });
                                 ui.end_row();

@@ -159,7 +159,7 @@ pub enum DebuggingEvent {
         position: Sph2,
     },
     UpdateSurfacePrimitiveId {
-        mesh: Option<Handle<RenderableMesh>>,
+        surf: Option<Handle<MicroSurface>>,
         id: u32,
         status: bool,
     },

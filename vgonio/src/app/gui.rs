@@ -545,9 +545,10 @@ impl VgonioGuiApp {
                             DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
                                 self.dbg_drawing_state.detector_ray_hit_points_drawing = status;
                             }
-                            DebuggingEvent::UpdateSurfacePrimitiveId { mesh, id, status } => {
+                            DebuggingEvent::UpdateSurfacePrimitiveId { surf, id, status } => {
+                                log::debug!("Updating surface {:?}'s primitive id: {:?}", surf, id);
                                 self.dbg_drawing_state
-                                    .update_surface_primitive_id(mesh, id, status);
+                                    .update_surface_primitive_id(surf, id, status);
                             }
                             DebuggingEvent::ToggleSurfaceNormalDrawing => {
                                 self.dbg_drawing_state.toggle_surface_normals();

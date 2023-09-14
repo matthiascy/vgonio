@@ -1,8 +1,5 @@
 use crate::{
-    app::gui::{
-        event::{EventLoopProxy, MeasureEvent, VgonioEvent},
-        widgets::SurfaceSelector,
-    },
+    app::gui::{event::EventLoopProxy, widgets::SurfaceSelector},
     measure::params::MsfMeasurementParams,
 };
 
