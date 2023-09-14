@@ -127,7 +127,7 @@ pub enum DebuggingEvent {
         reflected: bool,
     },
     ToggleCollectedRaysDrawing(bool),
-    MeasureOnePoint {
+    MeasureOnce {
         method: RtcMethod,
         params: BsdfMeasurementParams,
         mesh: Handle<MicroSurfaceMesh>,

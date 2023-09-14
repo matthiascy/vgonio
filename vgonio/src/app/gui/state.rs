@@ -973,77 +973,86 @@ impl DebugDrawingState {
         match method {
             #[cfg(feature = "embree")]
             RtcMethod::Embree => {
-                // #[cfg(debug_assertions)]
-                // {
-                //     let measured = self.cache.read(|cache| {
-                //         let mesh = cache.get_micro_surface_mesh(mesh).unwrap();
-                //         embr::measure_bsdf_once(
-                //             &params,
-                //             mesh,
-                //             self.emitter_samples.as_ref().unwrap(),
-                //             self.collector_patches.as_ref().unwrap(),
-                //             self.emitter_position,
-                //             &self.cache.0,
-                //         )
-                //     });
+                todo!()
+                //     #[cfg(debug_assertions)]
+                //     {
+                //         let measured = self.cache.read(|cache| {
+                //             let mesh =
+                // cache.get_micro_surface_mesh(mesh).unwrap();
+                //             embr::measure_bsdf_once(
+                //                 &params,
+                //                 mesh,
+                //                 self.emitter_samples.as_ref().unwrap(),
+                //                 self.collector_patches.as_ref().unwrap(),
+                //                 self.emitter_position,
+                //                 &self.cache.0,
+                //             )
+                //         });
                 //
-                //     let mut reflected = vec![];
-                //     let mut missed = vec![];
+                //         let mut reflected = vec![];
+                //         let mut missed = vec![];
                 //
-                //     for trajectory in measured.trajectories.iter() {
-                //         let mut iter = trajectory.0.iter().peekable();
-                //         let mut i = 0;
-                //         while let Some(node) = iter.next() {
-                //             let org: Vec3 = node.org.into();
-                //             let dir: Vec3 = node.dir.into();
-                //             match iter.peek() {
-                //                 None => {
-                //                     // Last node
-                //                     if i == 0 {
-                //                         missed.push(org);
-                //                         missed.push(org + dir * self.collector_orbit_radius *
-                // 1.2);                     } else {
+                //         for trajectory in measured.trajectories.iter() {
+                //             let mut iter = trajectory.0.iter().peekable();
+                //             let mut i = 0;
+                //             while let Some(node) = iter.next() {
+                //                 let org: Vec3 = node.org.into();
+                //                 let dir: Vec3 = node.dir.into();
+                //                 match iter.peek() {
+                //                     None => {
+                //                         // Last node
+                //                         if i == 0 {
+                //                             missed.push(org);
+                //                             missed.push(org + dir *
+                // self.collector_orbit_radius * 1.2);
+                //                         } else {
+                //                             reflected.push(org);
+                //                             reflected
+                //                                 .push(org + dir *
+                // self.collector_orbit_radius * 1.2);
+                //                         }
+                //                         i += 1;
+                //                     }
+                //                     Some(next) => {
                 //                         reflected.push(org);
-                //                         reflected
-                //                             .push(org + dir * self.collector_orbit_radius *
-                // 1.2);                     }
-                //                     i += 1;
-                //                 }
-                //                 Some(next) => {
-                //                     reflected.push(org);
-                //                     reflected.push(next.org.into());
-                //                     i += 1;
+                //                         reflected.push(next.org.into());
+                //                         i += 1;
+                //                     }
                 //                 }
                 //             }
                 //         }
+                //         self.ray_trajectories_missed_buffer =
+                // Some(ctx.device.create_buffer_init(
+                //             &wgpu::util::BufferInitDescriptor {
+                //                 label:
+                // Some("debug-collector-ray-trajectories-missed"),
+                //                 contents: bytemuck::cast_slice(&missed),
+                //                 usage: wgpu::BufferUsages::VERTEX |
+                // wgpu::BufferUsages::COPY_DST,             },
+                //         ));
+                //         self.ray_trajectories_reflected_buffer =
+                // Some(ctx.device.create_buffer_init(
+                //             &wgpu::util::BufferInitDescriptor {
+                //                 label:
+                // Some("debug-collector-ray-trajectories-reflected"),
+                //                 contents: bytemuck::cast_slice(&reflected),
+                //                 usage: wgpu::BufferUsages::VERTEX |
+                // wgpu::BufferUsages::COPY_DST,             },
+                //         ));
+                //         self.collector_ray_hit_points_buffer =
+                // Some(ctx.device.create_buffer_init(
+                //             &wgpu::util::BufferInitDescriptor {
+                //                 label:
+                // Some("debug-collector-ray-hit-points"),
+                //                 contents:
+                // bytemuck::cast_slice(&measured.hit_points),
+                //                 usage: wgpu::BufferUsages::VERTEX |
+                // wgpu::BufferUsages::COPY_DST,             },
+                //         ));
                 //     }
-                //     self.ray_trajectories_missed_buffer = Some(ctx.device.create_buffer_init(
-                //         &wgpu::util::BufferInitDescriptor {
-                //             label: Some("debug-collector-ray-trajectories-missed"),
-                //             contents: bytemuck::cast_slice(&missed),
-                //             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                //         },
-                //     ));
-                //     self.ray_trajectories_reflected_buffer =
-                // Some(ctx.device.create_buffer_init(
-                //         &wgpu::util::BufferInitDescriptor {
-                //             label: Some("debug-collector-ray-trajectories-reflected"),
-                //             contents: bytemuck::cast_slice(&reflected),
-                //             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                //         },
-                //     ));
-                //     self.collector_ray_hit_points_buffer =
-                // Some(ctx.device.create_buffer_init(
-                //         &wgpu::util::BufferInitDescriptor {
-                //             label: Some("debug-collector-ray-hit-points"),
-                //             contents: bytemuck::cast_slice(&measured.hit_points),
-                //             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                //         },
-                //     ));
-                // }
-                // #[cfg(not(debug_assertions))]
-                // log::error!("Ray trajectories can only be drawn in debug mode");
-                todo!()
+                //     #[cfg(not(debug_assertions))]
+                //     log::error!("Ray trajectories can only be drawn in debug
+                // mode");
             }
             #[cfg(feature = "optix")]
             RtcMethod::Optix => {

@@ -8,10 +8,10 @@ use crate::{
             file_drop::FileDragDrop,
             gizmo::NavigationGizmo,
             icons,
+            measurement::MeasurementDialog,
             notify::{NotifyKind, NotifySystem},
             outliner::OutlinerItem,
             plotter::{PlotInspector, PlottingWidget},
-            simulations::Simulations,
             state::GuiRenderer,
             theme::ThemeKind,
             tools::{SamplingInspector, Scratch, Tools},
@@ -65,7 +65,9 @@ pub struct VgonioGui {
     /// Tools are small windows that can be opened and closed.
     pub(crate) tools: Tools,
 
-    pub simulations: Simulations,
+    /// New measurement dialog.
+    measurement: MeasurementDialog,
+
     pub properties: Arc<RwLock<PropertyData>>,
 
     /// Docking system for the UI.
@@ -91,7 +93,7 @@ impl VgonioGui {
             cache: cache.clone(),
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            simulations: Simulations::new(event_loop.clone()),
+            measurement: MeasurementDialog::new(event_loop.clone()),
             plotters: vec![],
             dock_space: DockSpace::default_layout(
                 gui.clone(),
@@ -124,6 +126,8 @@ impl VgonioGui {
                     .get_tool_mut::<DebuggingInspector>()
                     .unwrap()
                     .update_surface_viewers(&[*uuid]);
+                #[cfg(debug_assertions)]
+                self.measurement.update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)
             }
             VgonioEvent::Outliner(outliner_event) => match outliner_event {
@@ -255,7 +259,7 @@ impl VgonioGui {
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
         self.navigator.show(ctx);
-        self.simulations.show_all(ctx);
+        self.measurement.show(ctx);
         self.notif.show(ctx);
         for (is_open, plotter) in &mut self.plotters {
             plotter.show(ctx, is_open);
@@ -273,7 +277,7 @@ impl VgonioGui {
             .get_tool_mut::<DebuggingInspector>()
             .unwrap()
             .update_surfaces(&surfaces);
-        self.simulations.update_loaded_surfaces(&surfaces, &cache);
+        self.measurement.update_surface_selector(&surfaces, &cache);
         self.event_loop
             .send_event(VgonioEvent::SurfaceViewer(
                 SurfaceViewerEvent::UpdateSurfaceList { surfaces },
@@ -303,17 +307,9 @@ impl VgonioGui {
             }
 
             ui.menu_button("New", |ui| {
-                ui.menu_button("Measurement", |ui| {
-                    if ui.button("BSDF").clicked() {
-                        self.simulations.open_bsdf_sim();
-                    }
-                    if ui.button("NDF").clicked() {
-                        self.simulations.open_madf_sim();
-                    }
-                    if ui.button("Masking/Shadowing").clicked() {
-                        self.simulations.open_mmsf_sim();
-                    }
-                });
+                if ui.button("Measurement").clicked() {
+                    self.measurement.open();
+                }
                 if ui.button("Micro-surface").clicked() {
                     self.event_loop
                         .send_event(VgonioEvent::Notify {

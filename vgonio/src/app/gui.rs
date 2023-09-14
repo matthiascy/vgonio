@@ -6,12 +6,12 @@ mod event;
 mod file_drop;
 mod gizmo;
 mod icons;
+mod measurement;
 mod misc;
 mod notify;
 pub mod outliner;
 mod plotter;
 mod prop_inspector;
-mod simulations;
 pub mod state;
 mod surf_viewer;
 mod theme;
@@ -527,7 +527,7 @@ impl VgonioGuiApp {
                             DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
                                 self.dbg_drawing_state.emitter_samples_drawing = status;
                             }
-                            DebuggingEvent::MeasureOnePoint {
+                            DebuggingEvent::MeasureOnce {
                                 method,
                                 params,
                                 mesh,

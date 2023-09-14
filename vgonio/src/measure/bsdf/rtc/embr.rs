@@ -422,6 +422,6 @@ fn measure_bsdf_at_point(
     }
     #[cfg(not(all(debug_assertions, feature = "verbose_debug")))]
     params
-        .collector
+        .detector
         .collect(params, mesh, pos, &trajectories, patches, cache)
 }

@@ -25,22 +25,43 @@ use vgcore::math::{IVec2, Sph2};
 use vgsurf::MicroSurface;
 
 impl DetectorParams {
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Domain:");
-            ui.selectable_value(&mut self.domain, SphericalDomain::Upper, "Upper");
-            ui.selectable_value(&mut self.domain, SphericalDomain::Lower, "Lower");
-            ui.selectable_value(&mut self.domain, SphericalDomain::Whole, "Whole");
-        });
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Precision:");
-            drag_angle(&mut self.precision, "").ui(ui)
-        });
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Scheme");
-            ui.selectable_value(&mut self.scheme, DetectorScheme::Beckers, "Beckers");
-            ui.selectable_value(&mut self.scheme, DetectorScheme::Tregenza, "Tregenza");
-        });
+    pub fn ui<R>(&mut self, ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) {
+        egui::CollapsingHeader::new("Detector")
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("detector_grid")
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("Precision:");
+                        drag_angle(&mut self.precision, "").ui(ui);
+                        ui.end_row();
+
+                        ui.label("Domain:");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(&mut self.domain, SphericalDomain::Upper, "Upper");
+                            ui.selectable_value(&mut self.domain, SphericalDomain::Lower, "Lower");
+                            ui.selectable_value(&mut self.domain, SphericalDomain::Whole, "Whole");
+                        });
+                        ui.end_row();
+
+                        ui.label("Scheme");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(
+                                &mut self.scheme,
+                                DetectorScheme::Beckers,
+                                "Beckers",
+                            );
+                            ui.selectable_value(
+                                &mut self.scheme,
+                                DetectorScheme::Tregenza,
+                                "Tregenza",
+                            );
+                        });
+                        ui.end_row();
+
+                        add_contents(ui);
+                    });
+            });
     }
 }
 
@@ -445,7 +466,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                     ui.label("Dome:");
                     ui.add(ToggleSwitch::new(&mut self.collector_dome_drawing));
                 });
-                self.params.detector.ui(ui);
+                self.params.detector.ui(ui, |_| {});
                 if ui.button("Update").clicked() {
                     self.event_loop
                         .send_event(VgonioEvent::Debugging(
@@ -462,7 +483,7 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
         if ui.button("Simulate").clicked() {
             if let Some(record) = record.as_ref() {
                 self.event_loop
-                    .send_event(VgonioEvent::Debugging(DebuggingEvent::MeasureOnePoint {
+                    .send_event(VgonioEvent::Debugging(DebuggingEvent::MeasureOnce {
                         method: self.method,
                         params: self.params,
                         mesh: record.mesh,
