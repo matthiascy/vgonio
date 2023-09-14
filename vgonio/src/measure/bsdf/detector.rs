@@ -1,5 +1,5 @@
 use crate::{
-    app::cache::Cache,
+    app::cache::InnerCache,
     measure::{
         bsdf::{
             rtc::RayTrajectory, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength,
@@ -44,6 +44,19 @@ pub enum DetectorScheme {
     Tregenza = 0x01,
 }
 
+impl DetectorScheme {
+    pub fn patches_count(&self) -> usize {
+        match self {
+            Self::Beckers => {
+                let num_rings = (Radians::HALF_PI / rad!(0.1)).round() as u32;
+                let ks = beckers::compute_ks(1, num_rings);
+                ks[num_rings as usize - 1] as usize
+            }
+            Self::Tregenza => 0,
+        }
+    }
+}
+
 /// Partitioned patches of the collector.
 #[derive(Debug, Clone)]
 pub enum DetectorPatches {
@@ -57,6 +70,16 @@ pub enum DetectorPatches {
     Tregenza,
 }
 
+impl DetectorPatches {
+    pub fn iter(&self) -> impl Iterator<Item = &Patch> {
+        match self {
+            Self::Beckers { patches, .. } => patches.iter(),
+            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
+        }
+    }
+}
+
+/// A patch of the detector.
 #[derive(Debug, Copy, Clone)]
 pub struct Patch {
     /// Minimum zenith (theta) and azimuth (phi) angles of the patch.
@@ -80,11 +103,19 @@ impl Patch {
             (self.min.phi + self.max.phi) / 2.0,
         )
     }
+
+    pub fn contains(&self, dir: Vec3) -> bool {
+        let sph = Sph2::from_cartesian(dir);
+        self.min.theta <= sph.theta
+            && sph.theta <= self.max.theta
+            && self.min.phi <= sph.phi
+            && sph.phi <= self.max.phi
+    }
 }
 
 /// A segment in form of an annulus of the collector.
 #[derive(Debug, Copy, Clone)]
-struct Ring {
+pub struct Ring {
     /// Minimum theta angle of the annulus.
     pub theta_inner: f32,
     /// Maximum theta angle of the annulus.
@@ -115,7 +146,7 @@ mod beckers {
     pub fn compute_rs(ks: &[u32], num_rings: u32, radius: f32) -> Vec<f32> {
         let mut rs = vec![0.0; num_rings as usize];
         rs[0] = radius * f32::sqrt(ks[0] as f32 / ks[num_rings as usize - 1] as f32);
-        for i in 0..num_rings as usize {
+        for i in 1..num_rings as usize {
             rs[i] = (ks[i] as f32 / ks[i - 1] as f32).sqrt() * rs[i - 1]
         }
         rs
@@ -140,9 +171,9 @@ impl DetectorParams {
                 let ks = beckers::compute_ks(1, num_rings);
                 let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
                 let ts = beckers::compute_ts(&rs);
-                log::debug!("ks: {:?}", ks);
-                log::debug!("rs: {:?}", rs);
-                log::debug!("ts: {:?}", ts);
+                log::trace!("ks: {:?}", ks);
+                log::trace!("rs: {:?}", rs);
+                log::trace!("ts: {:?}", ts);
                 let mut patches = Vec::with_capacity(ks[num_rings as usize - 1] as usize);
                 let mut rings = Vec::with_capacity(num_rings as usize);
                 for (i, (t, k)) in ts.iter().zip(ks.iter()).enumerate() {
@@ -210,7 +241,7 @@ impl Detector {
         mesh: &MicroSurfaceMesh,
         pos: Sph2,
         trajectories: &[RayTrajectory],
-        cache: &Cache,
+        cache: &InnerCache,
     ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
         // TODO: use generic type for the data point
         log::debug!(
@@ -348,10 +379,9 @@ impl Detector {
                 outgoing_dirs
                     .iter()
                     .filter_map(|outgoing| {
-                        match patch {
-                            Patch::Partitioned(p) => p.contains(outgoing.dir),
-                        }
-                        .then_some((outgoing.idx, outgoing.bounce))
+                        patch
+                            .contains(outgoing.dir.into())
+                            .then_some((outgoing.idx, outgoing.bounce))
                     })
                     .collect::<Vec<_>>()
             })

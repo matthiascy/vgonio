@@ -33,7 +33,7 @@ pub use ui::VgonioGui;
 
 use crate::{
     app::{
-        cache::Cache,
+        cache::InnerCache,
         gfx::{GpuContext, WgpuConfig},
         gui::{
             bsdf_viewer::BsdfViewer,
@@ -136,7 +136,7 @@ pub struct VgonioGuiApp {
     config: Arc<Config>,
     /// The cache of the application including preloaded datafiles. See
     /// [`VgonioCache`].
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<InnerCache>>,
     /// Input states collected from the window.
     input: InputState,
     /// State of the micro surface rendering.
@@ -181,7 +181,7 @@ impl VgonioGuiApp {
 
         let config = Arc::new(config);
         let cache = {
-            let mut _cache = Cache::new(config.cache_dir());
+            let mut _cache = InnerCache::new(config.cache_dir());
             _cache.load_ior_database(&config);
             Arc::new(RwLock::new(_cache))
         };
@@ -494,81 +494,32 @@ impl VgonioGuiApp {
                                 //         self.canvas.height(),
                                 //     );
                             }
-                            DebuggingEvent::UpdateEmitterSamples {
-                                samples,
-                                orbit_radius,
-                                shape_radius,
-                            } => {
-                                self.dbg_drawing_state.update_emitter_samples(
-                                    &self.ctx.gpu,
-                                    samples,
-                                    orbit_radius,
-                                    shape_radius,
-                                );
+                            DebuggingEvent::UpdateEmitterSamples { samples } => {
+                                self.dbg_drawing_state
+                                    .update_emitter_samples(&self.ctx.gpu, samples);
                             }
-                            DebuggingEvent::UpdateEmitterPoints {
-                                points,
-                                orbit_radius,
-                            } => {
-                                self.dbg_drawing_state.update_emitter_points(
-                                    &self.ctx.gpu,
-                                    points,
-                                    orbit_radius,
-                                );
+                            DebuggingEvent::UpdateEmitterPoints { points } => {
+                                self.dbg_drawing_state
+                                    .update_measurement_points(&self.ctx.gpu, points);
                             }
                             DebuggingEvent::ToggleEmitterPointsDrawing(status) => {
                                 self.dbg_drawing_state.emitter_points_drawing = status;
                             }
-                            DebuggingEvent::UpdateEmitterPosition {
-                                position,
-                                orbit_radius,
-                                shape_radius,
-                            } => {
-                                self.dbg_drawing_state.update_emitter_position(
-                                    &self.ctx.gpu,
-                                    position,
-                                    orbit_radius,
-                                    shape_radius,
-                                );
+                            DebuggingEvent::UpdateEmitterPosition { position } => {
+                                self.dbg_drawing_state
+                                    .update_emitter_position(&self.ctx.gpu, position);
                             }
-                            DebuggingEvent::EmitRays {
-                                orbit_radius,
-                                shape_radius,
-                            } => {
-                                self.dbg_drawing_state.emit_rays(
-                                    &self.ctx.gpu,
-                                    orbit_radius,
-                                    shape_radius,
-                                );
+                            DebuggingEvent::EmitRays => {
+                                self.dbg_drawing_state.emit_rays(&self.ctx.gpu);
                             }
                             DebuggingEvent::ToggleDebugDrawing(status) => {
                                 self.dbg_drawing_state.enabled = status;
                             }
-                            DebuggingEvent::UpdateCollectorDrawing {
-                                status,
-                                scheme,
-                                patches,
-                                orbit_radius,
-                                shape_radius,
-                            } => self.dbg_drawing_state.update_collector_drawing(
-                                &self.ctx.gpu,
-                                status,
-                                Some(scheme),
-                                patches,
-                                orbit_radius,
-                                shape_radius,
-                            ),
-                            DebuggingEvent::UpdateRayParams {
-                                t,
-                                orbit_radius,
-                                shape_radius,
-                            } => {
-                                self.dbg_drawing_state.update_ray_params(
-                                    &self.ctx.gpu,
-                                    t,
-                                    orbit_radius,
-                                    shape_radius,
-                                );
+                            DebuggingEvent::UpdateCollectorDrawing { status, patches } => self
+                                .dbg_drawing_state
+                                .update_detector_drawing(&self.ctx.gpu, status, patches),
+                            DebuggingEvent::UpdateRayParams { t } => {
+                                self.dbg_drawing_state.update_ray_params(&self.ctx.gpu, t);
                             }
                             DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
                                 self.dbg_drawing_state.emitter_rays_drawing = status;
@@ -592,21 +543,22 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
                             }
                             DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
-                                self.dbg_drawing_state.collector_ray_hit_points_drawing = status;
+                                self.dbg_drawing_state.detector_ray_hit_points_drawing = status;
                             }
                             DebuggingEvent::UpdateSurfacePrimitiveId { mesh, id, status } => {
                                 self.dbg_drawing_state
                                     .update_surface_primitive_id(mesh, id, status);
                             }
-                            DebuggingEvent::UpdateSurfaceNormalsDrawing { mesh, status } => {
-                                self.dbg_drawing_state.update_surface_normals(
-                                    &self.ctx.gpu,
-                                    mesh,
-                                    status,
-                                );
+                            DebuggingEvent::ToggleSurfaceNormalDrawing => {
+                                self.dbg_drawing_state.toggle_surface_normals();
                             }
                             DebuggingEvent::UpdateGridCellDrawing { .. } => {
                                 todo!("UpdateGridCellDrawing")
+                            }
+                            DebuggingEvent::UpdateMicroSurface { surf, mesh } => {
+                                self.dbg_drawing_state.microsurface = Some((surf, mesh));
+                                self.dbg_drawing_state
+                                    .prepare_surface_normals_buffer(&self.ctx.gpu);
                             }
                         }
                     }

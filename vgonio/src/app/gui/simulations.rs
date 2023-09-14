@@ -3,7 +3,7 @@ mod madf;
 mod mmsf;
 
 use crate::app::{
-    cache::{Cache, Handle},
+    cache::{Handle, InnerCache},
     gui::{
         event::EventLoopProxy,
         simulations::{bsdf::BsdfSimulation, madf::MadfSimulation, mmsf::MmsfSimulation},
@@ -69,7 +69,7 @@ impl Simulations {
 
     pub fn open_mmsf_sim(&mut self) { self.states[2] = true; }
 
-    pub fn update_loaded_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &Cache) {
+    pub fn update_loaded_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &InnerCache) {
         self.madf_sim.selector.update(surfs, cache);
         self.mmsf_sim.selector.update(surfs, cache);
         self.bsdf_sim.selector.update(surfs, cache);

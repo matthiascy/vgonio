@@ -6,7 +6,7 @@ pub use msf::*;
 
 use crate::{
     app::{
-        cache::{Cache, Handle},
+        cache::{Handle, InnerCache},
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
@@ -78,7 +78,7 @@ pub trait PlottingWidget {
 /// Trait for extra data to be used by the plotting inspector.
 pub trait VariantData {
     /// Initialise the extra data.
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &Cache);
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &InnerCache);
 
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
@@ -101,7 +101,7 @@ pub struct PlotInspector {
     /// The handle to the data to be plotted.
     data_handle: Handle<MeasurementData>,
     /// Cache of the application.
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<InnerCache>>,
     /// Inspector properties data might used by the plot.
     props: Arc<RwLock<PropertyData>>,
     /// The legend to be displayed
@@ -213,7 +213,7 @@ impl Deref for Curve {
 }
 
 impl VariantData for BsdfPlotExtraData {
-    fn pre_process(&mut self, _data: Handle<MeasurementData>, _cache: &Cache) {
+    fn pre_process(&mut self, _data: Handle<MeasurementData>, _cache: &InnerCache) {
         // TODO: pre-process data
     }
 
@@ -235,7 +235,7 @@ impl PlotInspector {
     pub fn new_area_distrib_plot(
         name: String,
         data: Handle<MeasurementData>,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -251,7 +251,7 @@ impl PlotInspector {
     pub fn new_mmsf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -268,7 +268,7 @@ impl PlotInspector {
     pub fn new_bsdf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -280,7 +280,7 @@ impl PlotInspector {
     /// Creates a new inspector with data to be plotted.
     pub fn new<S: Into<String>>(
         name: S,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -307,7 +307,7 @@ impl PlotInspector {
         name: String,
         data: Handle<MeasurementData>,
         extra: Option<Box<dyn VariantData>>,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {

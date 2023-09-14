@@ -4,7 +4,7 @@
 
 use crate::{
     app::{
-        cache::Cache,
+        cache::InnerCache,
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
@@ -45,7 +45,7 @@ pub fn measure_bsdf(
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
     detector: &Detector,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> MeasuredBsdfData {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.

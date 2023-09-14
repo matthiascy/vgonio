@@ -2,7 +2,7 @@
 
 use crate::{
     app::{
-        cache::Cache,
+        cache::InnerCache,
         cli::{BRIGHT_YELLOW, RESET},
     },
     measure::{
@@ -162,7 +162,7 @@ pub fn measure_full_bsdf(
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
     detector: &Detector,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> MeasuredBsdfData {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
@@ -218,7 +218,7 @@ pub fn measure_bsdf_once(
     emitter: &Emitter,
     detector: &Detector,
     position: Sph2,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
@@ -266,7 +266,7 @@ fn measure_bsdf_at_point(
     detector: &Detector,
     geometry: Arc<Geometry>,
     scene: &Scene,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
     println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]

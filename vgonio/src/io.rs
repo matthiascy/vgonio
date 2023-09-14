@@ -154,10 +154,9 @@ pub mod vgmo {
         pub fn sample_count(&self) -> usize {
             match self {
                 Self::Bsdf { bsdf, .. } => {
-                    bsdf.emitter.azimuth.step_count_wrapped()
-                        * bsdf.emitter.zenith.step_count_wrapped()
+                    bsdf.emitter.measurement_points_count()
                         * bsdf.emitter.spectrum.step_count()
-                        * bsdf.detector.scheme.total_sample_count()
+                        * bsdf.detector.scheme.patches_count()
                 }
                 Self::Madf { madf, .. } => {
                     madf.zenith.step_count_wrapped() * madf.azimuth.step_count_wrapped()
@@ -373,10 +372,12 @@ pub mod vgmo {
             buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
             buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
 
-            buf[8..12].copy_from_slice(&self.radius.value().as_f32().to_le_bytes());
+            // TODO: (radius removed) -- write other fields
+            // buf[8..12].copy_from_slice(&self.radius.value().as_f32().to_le_bytes());
             self.zenith.write_to_buf(&mut buf[12..12 + 16]);
             self.azimuth.write_to_buf(&mut buf[28..28 + 16]);
-            self.shape.write_to_buf(&mut buf[44..44 + 20]);
+            // TODO: (region shape removed) -- write other fields
+            // self.shape.write_to_buf(&mut buf[44..44 + 20]);
             self.spectrum.write_to_buf(&mut buf[64..64 + 16]);
         }
     }
@@ -440,16 +441,7 @@ pub mod vgmo {
                 buf.len() >= Self::REQUIRED_SIZE,
                 "Collector needs at least 64 bytes of space"
             );
-            match self.radius {
-                Radius::Auto(_) => {
-                    buf[0..4].copy_from_slice(&f32::INFINITY.to_le_bytes());
-                }
-                Radius::Fixed(r) => {
-                    buf[0..4].copy_from_slice(&r.value().to_le_bytes());
-                }
-            }
-
-            buf[0..4].copy_from_slice(&self.radius.value().value().to_le_bytes());
+            // TODO: (radius removed) -- write other fields
             self.scheme
                 .write_to_buf(&mut buf[4..4 + DetectorScheme::REQUIRED_SIZE]);
         }
@@ -475,7 +467,7 @@ pub mod vgmo {
             );
             assert_eq!(
                 samples_count,
-                collector.scheme.total_sample_count() as u32,
+                collector.scheme.patches_count() as u32,
                 "The number of samples in the VGMO file does not match the number of samples in \
                  the collector scheme"
             );
@@ -509,7 +501,7 @@ pub mod vgmo {
                 .write_to_buf(&mut buf[4 + EmitterParams::REQUIRED_SIZE..]);
             buf[4 + EmitterParams::REQUIRED_SIZE + DetectorParams::REQUIRED_SIZE
                 ..4 + EmitterParams::REQUIRED_SIZE + DetectorParams::REQUIRED_SIZE + 4]
-                .copy_from_slice(&(self.detector.scheme.total_sample_count() as u32).to_le_bytes());
+                .copy_from_slice(&(self.detector.scheme.patches_count() as u32).to_le_bytes());
             buf[155] = 0x0A;
             writer.write_all(&buf).map_err(|err| err.into())
         }
@@ -792,8 +784,8 @@ pub mod vgmo {
         pub fn read_from_buf(buf: &[u8], params: &BsdfMeasurementParams) -> Self {
             let n_wavelength = params.emitter.spectrum.step_count();
             let bounces = params.emitter.max_bounces as usize;
-            let collector_sample_count = params.detector.scheme.total_sample_count();
-            let size = Self::calc_size_in_bytes(n_wavelength, bounces, collector_sample_count);
+            let detector_patches_count = params.detector.scheme.patches_count();
+            let size = Self::calc_size_in_bytes(n_wavelength, bounces, detector_patches_count);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
             let stats_size = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
@@ -804,8 +796,8 @@ pub mod vgmo {
             )
             .unwrap();
             let mut data: Vec<PerWavelength<BounceAndEnergy>> =
-                Vec::with_capacity(collector_sample_count);
-            for i in 0..collector_sample_count {
+                Vec::with_capacity(detector_patches_count);
+            for i in 0..detector_patches_count {
                 let mut per_wavelength: Vec<BounceAndEnergy> = Vec::with_capacity(n_wavelength);
                 for j in 0..n_wavelength {
                     let offset = stats_size
@@ -882,12 +874,12 @@ pub mod vgmo {
                 FileEncoding::Binary => {
                     let n_wavelength = params.emitter.spectrum.step_count();
                     let bounces = params.emitter.max_bounces as usize;
-                    let collector_sample_count = params.detector.scheme.total_sample_count();
+                    let detector_patches_count = params.detector.scheme.patches_count();
                     let sample_size =
                         BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
                             n_wavelength,
                             bounces,
-                            collector_sample_count,
+                            detector_patches_count,
                         );
                     let sample_count = params.emitter.azimuth.step_count_wrapped()
                         * params.emitter.zenith.step_count_wrapped();
@@ -935,13 +927,12 @@ pub mod vgmo {
                     for sample in &self.samples {
                         let n_wavelength = self.params.emitter.spectrum.step_count();
                         let bounces = self.params.emitter.max_bounces as usize;
-                        let collector_sample_count =
-                            self.params.detector.scheme.total_sample_count();
+                        let detector_patches_count = self.params.detector.scheme.patches_count();
                         let sample_size =
                             BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
                                 n_wavelength,
                                 bounces,
-                                collector_sample_count,
+                                detector_patches_count,
                             );
                         let mut buf = vec![0u8; sample_size];
                         sample.write_to_buf(&mut buf, n_wavelength, bounces);
@@ -1067,7 +1058,7 @@ pub mod vgmo {
                 MeasuredData::Bsdf(bsdf) => {
                     assert_eq!(
                         bsdf.samples.len(),
-                        bsdf.params.bsdf_data_samples_count(),
+                        bsdf.params.samples_count(),
                         "Writing a BSDF requires the number of samples to match the number of \
                          bins."
                     );

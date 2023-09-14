@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        cache::{Cache, Handle},
+        cache::{Handle, InnerCache},
         gfx::{
             self,
             camera::{Camera, Projection},
@@ -1360,7 +1360,7 @@ pub struct MeasuredMsfData {
 pub fn measure_masking_shadowing(
     params: MsfMeasurementParams,
     handles: &[Handle<MicroSurface>],
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> Vec<MeasurementData> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {

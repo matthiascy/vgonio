@@ -5,7 +5,7 @@ use crate::app::gui::docking::{Dockable, WidgetKind};
 
 use crate::{
     app::{
-        cache::Cache,
+        cache::InnerCache,
         gui::{
             data::PropertyData,
             event::{EventLoopProxy, VgonioEvent},
@@ -25,7 +25,7 @@ pub struct PropertyInspector {
     /// Property inspector data.
     data: Arc<RwLock<PropertyData>>,
     /// Cache of the application.
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<InnerCache>>,
     /// Event channel.
     event_loop: EventLoopProxy,
 }
@@ -33,7 +33,7 @@ pub struct PropertyInspector {
 impl PropertyInspector {
     pub fn new(
         event_loop: EventLoopProxy,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         data: Arc<RwLock<PropertyData>>,
     ) -> Self {
         Self {

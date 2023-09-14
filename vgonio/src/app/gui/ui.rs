@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        cache::{Cache, Handle},
+        cache::{Handle, InnerCache},
         gfx::GpuContext,
         gui::{
             data::PropertyData,
@@ -47,7 +47,7 @@ pub struct VgonioGui {
 
     gpu_ctx: Arc<GpuContext>,
 
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<InnerCache>>,
 
     // pub simulation_workspace: SimulationWorkspace, // TODO: make private, simplify access
     /// The drag and drop state.
@@ -79,7 +79,7 @@ impl VgonioGui {
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
     ) -> Self {
         log::info!("Initializing UI ...");
         let properties = Arc::new(RwLock::new(PropertyData::new()));

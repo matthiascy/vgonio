@@ -193,7 +193,7 @@ impl MicroSurfaceRecord {
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
 #[derive(Debug)]
-pub struct Cache {
+pub struct InnerCache {
     /// Path to the cache directory.
     pub dir: PathBuf,
 
@@ -223,7 +223,7 @@ pub struct Cache {
     pub last_opened_dir: Option<PathBuf>,
 }
 
-impl Cache {
+impl InnerCache {
     pub fn new(cache_dir: &Path) -> Self {
         Self {
             dir: cache_dir.to_path_buf(),
@@ -756,4 +756,31 @@ fn test_normalise_path() {
     let path = Path::new("/a/b/c/../../d");
     let normalised = normalise_path(path);
     assert_eq!(normalised, Path::new("/a/d"));
+}
+
+// TODO: remove pub(crate)
+/// A thread-safe cache. This is a wrapper around `InnerCache`.
+#[derive(Debug, Clone)]
+pub struct Cache(pub(crate) std::sync::Arc<std::sync::RwLock<InnerCache>>);
+
+impl Cache {
+    pub fn from_inner(inner: InnerCache) -> Self {
+        Self(std::sync::Arc::new(std::sync::RwLock::new(inner)))
+    }
+
+    pub fn new(cache_dir: &Path) -> Self {
+        Self(std::sync::Arc::new(std::sync::RwLock::new(
+            InnerCache::new(cache_dir),
+        )))
+    }
+
+    pub fn read<R>(&self, reader: impl FnOnce(&InnerCache) -> R) -> R {
+        let cache = self.0.read().unwrap();
+        reader(&cache)
+    }
+
+    pub fn write<R>(&self, writer: impl FnOnce(&mut InnerCache) -> R) -> R {
+        let mut cache = self.0.write().unwrap();
+        writer(&mut cache)
+    }
 }

@@ -1,12 +1,16 @@
 use crate::{
     app::{
-        cache::Handle,
+        cache::{Handle, MicroSurfaceRecord},
         gfx::RenderableMesh,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
     fitting::FittingProblemKind,
     measure::{
-        bsdf::{detector::DetectorPatches, rtc::RtcMethod},
+        bsdf::{
+            detector::DetectorPatches,
+            emitter::{EmitterSamples, MeasurementPoints},
+            rtc::RtcMethod,
+        },
         data::MeasurementData,
         params::{
             AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
@@ -15,7 +19,7 @@ use crate::{
 };
 use uuid::Uuid;
 use vgcore::{
-    math::{IVec2, Sph3, Vec3},
+    math::{IVec2, Sph2},
     units::Degrees,
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
@@ -135,43 +139,32 @@ pub enum DebuggingEvent {
     UpdateCollectorDrawing {
         status: bool,
         patches: DetectorPatches,
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
     },
     ToggleSamplingRendering(bool),
     UpdateDepthMap,
     UpdateRayParams {
         t: f32,
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
+    },
+    UpdateMicroSurface {
+        surf: Handle<MicroSurface>,
+        mesh: Handle<MicroSurfaceMesh>,
     },
     UpdateEmitterSamples {
-        samples: Vec<Vec3>,
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
+        samples: EmitterSamples,
     },
     UpdateEmitterPoints {
-        points: Vec<Vec3>,
-        orbit_radius: f32,
+        points: MeasurementPoints,
     },
     UpdateEmitterPosition {
-        position: Sph3,
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
+        position: Sph2,
     },
     UpdateSurfacePrimitiveId {
         mesh: Option<Handle<RenderableMesh>>,
         id: u32,
         status: bool,
     },
-    UpdateSurfaceNormalsDrawing {
-        mesh: Option<Handle<MicroSurfaceMesh>>,
-        status: bool,
-    },
-    EmitRays {
-        orbit_radius: f32,
-        shape_radius: Option<f32>,
-    },
+    ToggleSurfaceNormalDrawing,
+    EmitRays,
 }
 
 #[derive(Debug)]

@@ -11,7 +11,7 @@ mod microfacet;
 mod shadow_map;
 
 use crate::app::{
-    cache::{Cache, Handle},
+    cache::{Handle, InnerCache},
     gui::{tools::Tool, widgets::ToggleSwitch},
 };
 use brdf_measurement::BrdfMeasurementDebugging;
@@ -94,7 +94,7 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(event_loop: EventLoopProxy, cache: Arc<RwLock<Cache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy, cache: Arc<RwLock<InnerCache>>) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: false,

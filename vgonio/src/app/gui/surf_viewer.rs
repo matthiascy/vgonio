@@ -9,7 +9,7 @@ use vgcore::math::{Mat4, Vec4};
 use vgsurf::MicroSurface;
 
 use crate::app::{
-    cache::{Cache, Handle},
+    cache::{Handle, InnerCache},
     gfx::{
         camera::{ProjectionKind, ViewProjUniform},
         GpuContext, Texture,
@@ -274,7 +274,7 @@ impl SurfaceViewerStates {
         input: &InputState,
         dt: std::time::Duration,
         theme: &ThemeState,
-        cache: &Cache,
+        cache: &InnerCache,
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
     ) -> wgpu::CommandEncoder {
         let mut encoder = gpu

@@ -1,7 +1,7 @@
 use crate::{
     app::{
         args::{FastMeasurementKind, MeasureOptions},
-        cache::{resolve_path, Cache},
+        cache::{resolve_path, InnerCache},
         cli::{write_measured_data_to_file, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
         Config,
     },
@@ -29,7 +29,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         rayon::current_num_threads()
     );
 
-    let mut cache = Cache::new(config.cache_dir());
+    let mut cache = InnerCache::new(config.cache_dir());
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
     let measurements = {
         match opts.fast_measurement {

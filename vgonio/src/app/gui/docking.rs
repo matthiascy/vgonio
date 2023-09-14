@@ -1,5 +1,5 @@
 use crate::app::{
-    cache::Cache,
+    cache::InnerCache,
     gui::{data::PropertyData, event::EventLoopProxy},
 };
 use std::{
@@ -21,7 +21,7 @@ use crate::app::gui::{
 /// Docking space for widgets.
 pub struct DockSpace {
     gui: Arc<RwLock<GuiRenderer>>,
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<InnerCache>>,
     data: Arc<RwLock<PropertyData>>,
     /// Event loop proxy.
     event_loop: EventLoopProxy,
@@ -51,7 +51,7 @@ impl DockSpace {
     /// |   | 2 |
     pub fn default_layout(
         gui: Arc<RwLock<GuiRenderer>>,
-        cache: Arc<RwLock<Cache>>,
+        cache: Arc<RwLock<InnerCache>>,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {

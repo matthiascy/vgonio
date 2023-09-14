@@ -5,7 +5,7 @@
 use crate::measure::bsdf::rtc::embr;
 use crate::{
     app::{
-        cache::{Cache, Handle},
+        cache::{Handle, InnerCache},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
     measure::{
@@ -267,7 +267,7 @@ pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> Vec<MeasurementData> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
@@ -313,7 +313,7 @@ fn measure_bsdf_embree_rt(
     meshes: &[Option<&MicroSurfaceMesh>],
     emitter: Emitter,
     detector: Detector,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> Vec<MeasurementData> {
     surfaces
         .iter()
@@ -329,12 +329,11 @@ fn measure_bsdf_embree_rt(
                 "Measuring surface {}",
                 surface.path.as_ref().unwrap().display()
             );
+            let bsdf = embr::measure_full_bsdf(&params, mesh, &emitter, &detector, cache);
             Some(MeasurementData {
                 name: surface.file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(Handle::with_id(surface.uuid)),
-                measured: MeasuredData::Bsdf(embr::measure_full_bsdf(
-                    &params, mesh, &emitter, &detector, cache,
-                )),
+                measured: MeasuredData::Bsdf(bsdf),
             })
         })
         .collect()
@@ -347,7 +346,7 @@ fn measure_bsdf_grid_rt(
     meshes: &[Option<&MicroSurfaceMesh>],
     emitter: Emitter,
     detector: Detector,
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> Vec<MeasurementData> {
     for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
         if surf.is_none() || mesh.is_none() {
@@ -380,7 +379,7 @@ fn measure_bsdf_optix_rt(
     _meshes: &[Option<&MicroSurfaceMesh>],
     _emitter: Emitter,
     _detector: Detector,
-    _cache: &Cache,
+    _cache: &InnerCache,
 ) -> Vec<MeasurementData> {
     todo!()
 }

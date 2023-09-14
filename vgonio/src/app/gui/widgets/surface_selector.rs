@@ -1,5 +1,5 @@
-use crate::app::cache::{Cache, Handle};
-use egui::Color32;
+use crate::app::cache::{Handle, InnerCache};
+use egui::{Color32, Response};
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
@@ -24,6 +24,8 @@ pub(crate) struct SurfaceSelector {
     selected: HashSet<Handle<MicroSurface>>,
     /// The surfaces that can be selected.
     surfaces: HashMap<Handle<MicroSurface>, String>,
+    /// Selection changed.
+    changed: bool,
 }
 
 impl SurfaceSelector {
@@ -33,6 +35,7 @@ impl SurfaceSelector {
             mode: SelectionMode::Single,
             selected: Default::default(),
             surfaces: Default::default(),
+            changed: false,
         }
     }
 
@@ -42,6 +45,7 @@ impl SurfaceSelector {
             mode: SelectionMode::Multiple,
             selected: Default::default(),
             surfaces: Default::default(),
+            changed: false,
         }
     }
 
@@ -64,8 +68,11 @@ impl SurfaceSelector {
         }
     }
 
+    /// Returns whether the selection changed.
+    pub fn selection_changed(&mut self) -> bool { self.changed }
+
     /// Updates the list of surfaces.
-    pub fn update(&mut self, surfs: &[Handle<MicroSurface>], cache: &Cache) {
+    pub fn update(&mut self, surfs: &[Handle<MicroSurface>], cache: &InnerCache) {
         let surfs = surfs
             .iter()
             .filter(|hdl| !self.surfaces.iter().any(|(s, _)| s == *hdl));
@@ -106,7 +113,9 @@ impl SurfaceSelector {
                             if self.selected.len() == 1 && self.mode == SelectionMode::Single {
                                 self.selected.clear();
                             }
-                            self.selected.insert(hdl);
+                            if self.selected.insert(hdl) {
+                                self.changed = true;
+                            }
                         }
                     });
                 if ui.button("Clear").clicked() {

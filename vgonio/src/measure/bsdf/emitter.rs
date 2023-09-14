@@ -53,7 +53,7 @@ impl Default for EmitterParams {
                 Radians::TWO_PI,
                 deg!(5.0).to_radians(),
             ),
-            spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100)),
+            spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
         }
     }
 }
@@ -96,7 +96,7 @@ impl EmitterParams {
 
     /// Transforms the samples from the sampling space to the desired position
     /// in the world coordinate system.
-    pub fn transform_samples(
+    pub(crate) fn transform_samples(
         samples: &EmitterSamples,
         dest: Sph2,
         orbit_radius: f32,
@@ -110,7 +110,7 @@ impl EmitterParams {
     }
 
     /// Emits rays from the samples
-    pub fn emit_rays(
+    pub(crate) fn emit_rays(
         samples: &EmitterSamples,
         dest: Sph2,
         orbit_radius: f32,
@@ -118,7 +118,7 @@ impl EmitterParams {
     ) -> Vec<Ray> {
         let dir = -dest.to_cartesian();
         let transform = SphericalTransform::transform_disc(dest, disc_radius, orbit_radius);
-        samples(dest)
+        samples
             .par_iter()
             .map(move |s| Ray::new(transform * Vec3::new(s.x * dest.theta.cos(), s.y, s.z), dir))
             .collect()

@@ -4,7 +4,7 @@ use vgsurf::MicroSurface;
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 use crate::{
-    app::cache::{Cache, Handle},
+    app::cache::{Handle, InnerCache},
     measure::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::AdfMeasurementParams,
@@ -37,7 +37,7 @@ pub struct MeasuredAdfData {
 pub fn measure_area_distribution(
     params: AdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
-    cache: &Cache,
+    cache: &InnerCache,
 ) -> Vec<MeasurementData> {
     use rayon::prelude::*;
     log::info!("Measuring microfacet area distribution...");

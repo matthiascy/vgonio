@@ -162,7 +162,7 @@ impl Display for Sph3 {
 /// Spherical coordinate in radians.
 ///
 /// This is a version of [`Sph3`] with radius fixed to 1.
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Sph2 {
     /// Zenith angle (polar angle) in radians.
     pub theta: Radians,
@@ -172,10 +172,18 @@ pub struct Sph2 {
 
 impl Sph2 {
     /// Creates a new spherical coordinate.
-    pub fn new(zenith: Radians, azimuth: Radians) -> Self {
+    pub const fn new(zenith: Radians, azimuth: Radians) -> Self {
         Self {
             theta: zenith,
             phi: azimuth,
+        }
+    }
+
+    /// Creates a new coordinate with zenith and azimuth angles set to 0.
+    pub const fn zero() -> Self {
+        Self {
+            theta: Radians::ZERO,
+            phi: Radians::ZERO,
         }
     }
 
@@ -184,6 +192,7 @@ impl Sph2 {
 
     /// Converts from a cartesian coordinate.
     pub fn from_cartesian(cartesian: Vec3) -> Self {
+        assert!(ulp_eq(cartesian.length_squared(), 1.0));
         let (_, zenith, azimuth) = cartesian_to_spherical(cartesian, 1.0);
         Self {
             theta: zenith,

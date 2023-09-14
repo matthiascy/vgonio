@@ -144,4 +144,9 @@ impl BsdfMeasurementParams {
 
         Ok(self)
     }
+
+    /// Returns the total number of samples that will be collected.
+    pub fn samples_count(&self) -> usize {
+        self.emitter.measurement_points_count() * self.detector.scheme.patches_count()
+    }
 }

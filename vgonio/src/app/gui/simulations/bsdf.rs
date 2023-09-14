@@ -116,25 +116,6 @@ impl SphericalDomain {
     }
 }
 
-impl DetectorParams {
-    /// Creates the UI for parameterizing the collector.
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("Collector")
-            .default_open(true)
-            .show(ui, |ui| {
-                egui::Grid::new("collector_grid")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Scheme:")
-                            .on_hover_text("The scheme used for generating the detector patches.");
-                        ui.selectable_value(&mut self.scheme, DetectorScheme::Beckers, "Beckers");
-                        ui.selectable_value(&mut self.scheme, DetectorScheme::Tregenza, "Tregenza");
-                        ui.end_row();
-                    });
-            });
-    }
-}
-
 pub struct BsdfSimulation {
     pub params: BsdfMeasurementParams,
     pub(crate) selector: SurfaceSelector,

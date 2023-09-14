@@ -8,7 +8,7 @@ use vgsurf::MicroSurface;
 use crate::{
     app::{
         args::SubCommand,
-        cache::{resolve_path, Cache, Handle},
+        cache::{resolve_path, Handle, InnerCache},
         Config,
     },
     error::RuntimeError,
@@ -48,7 +48,7 @@ pub fn run(cmd: SubCommand, config: Config) -> Result<(), VgonioError> {
 fn write_measured_data_to_file(
     data: &[MeasurementData],
     surfaces: &[Handle<MicroSurface>],
-    cache: &Cache,
+    cache: &InnerCache,
     config: &Config,
     encoding: FileEncoding,
     compression: CompressionScheme,
