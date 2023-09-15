@@ -34,6 +34,7 @@ pub mod vgmo {
             CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError,
             WriteFileErrorKind,
         },
+        math::Sph2,
         units::{mm, rad, Nanometres, Radians},
     };
 
@@ -814,8 +815,9 @@ pub mod vgmo {
             }
 
             Self {
+                w_i: Sph2::zero(), // TODO:
                 stats,
-                data,
+                per_patch_data: data,
                 #[cfg(debug_assertions)]
                 trajectories: vec![],
                 #[cfg(debug_assertions)]
@@ -830,7 +832,7 @@ pub mod vgmo {
             let mut offset = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             // Write collector's per wavelength patch data.
-            for per_wavelength_patch_data in &self.data {
+            for per_wavelength_patch_data in &self.per_patch_data {
                 for bounce_and_energy in per_wavelength_patch_data.iter() {
                     bounce_and_energy.write_to_buf(&mut buf[offset..], bounces);
                     offset += bounce_and_energy_size;
@@ -891,7 +893,8 @@ pub mod vgmo {
                         samples.push(BsdfMeasurementDataPoint::read_from_buf(&buf, &params));
                     });
 
-                    Ok(Self { params, samples })
+                    // Ok(Self { params, samples })
+                    todo!("Fix this")
                 }
             }
         }
@@ -935,8 +938,9 @@ pub mod vgmo {
                                 detector_patches_count,
                             );
                         let mut buf = vec![0u8; sample_size];
-                        sample.write_to_buf(&mut buf, n_wavelength, bounces);
-                        encoder.write_all(&buf)?;
+                        // sample.write_to_buf(&mut buf, n_wavelength, bounces);
+                        // encoder.write_all(&buf)?;
+                        todo!("Fix this")
                     }
                     Ok(())
                 }
@@ -1137,13 +1141,17 @@ pub mod vgmo {
 mod tests {
     use crate::{
         measure::{
-            bsdf::{BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength},
-            emitter::RegionShape,
-            fetcher::BounceAndEnergy,
-            params::{BsdfMeasurementParams, Radius, SimulationKind},
-            CollectorScheme, Emitter, Fetcher, RtcMethod,
+            bsdf::{
+                detector::{
+                    BounceAndEnergy, Detector, DetectorParams, DetectorPatches, DetectorScheme,
+                },
+                emitter::{Emitter, EmitterParams},
+                rtc::RtcMethod,
+                BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength,
+            },
+            params::{BsdfMeasurementParams, SimulationKind},
         },
-        Medium, RangeByStepSizeInclusive, SphericalPartition,
+        Medium, RangeByStepSizeInclusive,
     };
     use vgcore::units::{mm, nm, rad, Radians};
 
@@ -1214,7 +1222,7 @@ mod tests {
                     vec![11.0, 12.0, 13.0],
                 ]),
             },
-            data: vec![
+            per_patch_data: vec![
                 PerWavelength(vec![
                     BounceAndEnergy {
                         total_rays: 33468,
@@ -1282,24 +1290,17 @@ mod tests {
             sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
             incident_medium: Medium::Air,
             transmitted_medium: Medium::Aluminium,
-            emitter: Emitter {
+            emitter: EmitterParams {
                 num_rays: 0,
                 max_bounces: 3,
-                radius: Radius::Auto(mm!(0.0)),
                 zenith: RangeByStepSizeInclusive::zero_to_half_pi(rad!(0.2)),
                 azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
-                shape: RegionShape::SphericalCap { zenith: rad!(0.2) },
                 spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
-                solid_angle: Default::default(),
             },
-            detector: Fetcher {
-                radius: Radius::Auto(mm!(10.0)),
-                scheme: CollectorScheme::Partitioned {
-                    partition: SphericalPartition::EqualAngle {
-                        zenith: RangeByStepSizeInclusive::zero_to_half_pi(Radians::HALF_PI),
-                        azimuth: RangeByStepSizeInclusive::zero_to_tau(Radians::TAU),
-                    },
-                },
+            detector: DetectorParams {
+                domain: Default::default(),
+                precision: rad!(0.1),
+                scheme: DetectorScheme::Beckers,
             },
         };
         let data2 = BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);

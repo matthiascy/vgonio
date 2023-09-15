@@ -23,7 +23,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
 };
-use vgcore::math::Vec3;
+use vgcore::math::{Sph2, Vec3};
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 use super::params::BsdfMeasurementParams;
@@ -47,7 +47,7 @@ pub struct MeasuredBsdfData {
     /// The BSDF data per emitter's position (incident direction). The first
     /// index is the azimuthal angle, and the second index is the zenith angle.
     /// The order of the data point follows the order of collector's patches.
-    pub samples: Vec<BsdfMeasurementDataPoint<BounceAndEnergy>>,
+    pub samples: Vec<PerWavelength<f32>>,
 }
 
 /// Type of the BSDF to be measured.
@@ -233,6 +233,8 @@ pub struct BsdfMeasurementDataPoint<PatchData>
 where
     PatchData: PerPatchData,
 {
+    /// Incident direction in the unit spherical coordinates.
+    pub w_i: Sph2,
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.
@@ -240,7 +242,7 @@ where
     /// patch in case the collector is partitioned or for the collector's
     /// region at different places in the scene. You need to check the collector
     /// to know which one is the case and how to interpret the data.
-    pub data: Vec<PerWavelength<PatchData>>,
+    pub per_patch_data: Vec<PerWavelength<PatchData>>,
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(debug_assertions)]
     pub trajectories: Vec<RayTrajectory>,
@@ -253,13 +255,32 @@ impl<PatchData: Debug + PerPatchData> Debug for BsdfMeasurementDataPoint<PatchDa
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BsdfMeasurementPoint")
             .field("stats", &self.stats)
-            .field("data", &self.data)
+            .field("data", &self.per_patch_data)
             .finish()
     }
 }
 
 impl<PatchData: PerPatchData + PartialEq> PartialEq for BsdfMeasurementDataPoint<PatchData> {
-    fn eq(&self, other: &Self) -> bool { self.stats == other.stats && self.data == other.data }
+    fn eq(&self, other: &Self) -> bool {
+        self.stats == other.stats && self.per_patch_data == other.per_patch_data
+    }
+}
+
+/// Ray tracing simulation result for a single incident direction of a surface.
+pub struct SimulationResultPoint {
+    /// Incident direction in the unit spherical coordinates.
+    pub w_i: Sph2,
+    /// Trajectories of the rays.
+    pub trajectories: Vec<RayTrajectory>,
+}
+
+/// Ray tracing simulation result for all possible incident directions of a
+/// surface.
+pub struct SimulationResult {
+    /// Surface of the interest.
+    pub surface: Handle<MicroSurface>,
+    /// Simulation results for each incident direction.
+    pub outputs: Vec<SimulationResultPoint>,
 }
 
 /// Measures the BSDF of a surface using geometric ray tracing methods.
@@ -272,9 +293,8 @@ pub fn measure_bsdf_rt(
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
-    let detector = Detector::new(&params.detector);
 
-    match sim_kind {
+    let sim_results = match sim_kind {
         SimulationKind::GeomOptics(method) => {
             println!(
                 "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
@@ -283,15 +303,13 @@ pub fn measure_bsdf_rt(
             match method {
                 #[cfg(feature = "embree")]
                 RtcMethod::Embree => {
-                    measure_bsdf_embree_rt(params, &surfaces, &meshes, emitter, detector, cache)
+                    rtc_simulation_embree(&params, &surfaces, &meshes, emitter, cache)
                 }
                 #[cfg(feature = "optix")]
                 RtcMethod::Optix => {
-                    measure_bsdf_optix_rt(params, &surfaces, &meshes, emitter, detector, cache)
+                    rtc_simulation_optix(&params, &surfaces, &meshes, emitter, cache)
                 }
-                RtcMethod::Grid => {
-                    measure_bsdf_grid_rt(params, &surfaces, &meshes, emitter, detector, cache)
-                }
+                RtcMethod::Grid => rtc_simulation_grid(&params, &surfaces, &meshes, emitter, cache),
             }
         }
         SimulationKind::WaveOptics => {
@@ -301,20 +319,37 @@ pub fn measure_bsdf_rt(
             );
             todo!("Wave optics simulation is not yet implemented")
         }
-    }
+    };
+
+    let detector = Detector::new(&params.detector);
+
+    detector
+        .collect(&params, &sim_results, cache)
+        .into_iter()
+        .map(|collected| {
+            let surface = cache.get_micro_surface(collected.surface).unwrap();
+            MeasurementData {
+                name: surface.file_stem().unwrap().to_owned(),
+                source: MeasurementDataSource::Measured(collected.surface),
+                measured: MeasuredData::Bsdf(MeasuredBsdfData {
+                    params,
+                    samples: collected.compute_bsdf(),
+                }),
+            }
+        })
+        .collect()
 }
 
 /// Measurement of the BSDF (bidirectional scattering distribution function) of
 /// a microfacet surface.
 #[cfg(feature = "embree")]
-fn measure_bsdf_embree_rt(
-    params: BsdfMeasurementParams,
+fn rtc_simulation_embree(
+    params: &BsdfMeasurementParams,
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
     emitter: Emitter,
-    detector: Detector,
     cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Vec<SimulationResult> {
     surfaces
         .iter()
         .zip(meshes)
@@ -329,25 +364,22 @@ fn measure_bsdf_embree_rt(
                 "Measuring surface {}",
                 surface.path.as_ref().unwrap().display()
             );
-            let bsdf = embr::measure_full_bsdf(&params, mesh, &emitter, &detector, cache);
-            Some(MeasurementData {
-                name: surface.file_stem().unwrap().to_owned(),
-                source: MeasurementDataSource::Measured(Handle::with_id(surface.uuid)),
-                measured: MeasuredData::Bsdf(bsdf),
+            Some(SimulationResult {
+                surface: Default::default(),
+                outputs: embr::simulate_bsdf_measurement(params, mesh, &emitter, cache),
             })
         })
         .collect()
 }
 
 /// Brdf measurement of a microfacet surface using the grid ray tracing.
-fn measure_bsdf_grid_rt(
-    params: BsdfMeasurementParams,
+fn rtc_simulation_grid(
+    params: &BsdfMeasurementParams,
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
     emitter: Emitter,
-    detector: Detector,
     cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Vec<SimulationResult> {
     for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
@@ -359,28 +391,27 @@ fn measure_bsdf_grid_rt(
             "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surf.path.as_ref().unwrap().display()
         );
-        let t = std::time::Instant::now();
-        crate::measure::bsdf::rtc::grid::measure_bsdf(
-            &params, surf, mesh, &emitter, &detector, cache,
-        );
-        println!(
-            "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
-            t.elapsed().as_secs_f32()
-        );
+        // let t = std::time::Instant::now();
+        // crate::measure::bsdf::rtc::grid::measure_bsdf(
+        //     &params, surf, mesh, &emitter, cache,
+        // );
+        // println!(
+        //     "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
+        //     t.elapsed().as_secs_f32()
+        // );
     }
     todo!()
 }
 
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.
 #[cfg(feature = "optix")]
-fn measure_bsdf_optix_rt(
-    _params: BsdfMeasurementParams,
+fn rtc_simulation_optix(
+    _params: &BsdfMeasurementParams,
     _surfaces: &[Option<&MicroSurface>],
     _meshes: &[Option<&MicroSurfaceMesh>],
     _emitter: Emitter,
-    _detector: Detector,
     _cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Vec<SimulationResult> {
     todo!()
 }
 

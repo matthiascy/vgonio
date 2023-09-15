@@ -13,7 +13,7 @@ use crate::{
             emitter::Emitter,
             rtc,
             rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-            MeasuredBsdfData,
+            MeasuredBsdfData, SimulationResultPoint,
         },
         params::BsdfMeasurementParams,
     },
@@ -44,14 +44,12 @@ pub fn measure_bsdf(
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-    detector: &Detector,
     cache: &InnerCache,
-) -> MeasuredBsdfData {
+) -> Vec<SimulationResultPoint> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
     let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
-    let mut data = vec![];
 
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     {
@@ -66,145 +64,150 @@ pub fn measure_bsdf(
         );
     }
 
-    for pos in emitter.measpts.iter() {
-        println!(
-            "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
-            pos.theta.in_degrees().value(),
-            pos.phi.in_degrees().value()
-        );
-        let t = Instant::now();
-        let emitted_rays = emitter.emit_rays(*pos, mesh);
-        let num_emitted_rays = emitted_rays.len();
-        let elapsed = t.elapsed();
+    emitter
+        .measpts
+        .iter()
+        .map(|w_i| {
+            println!(
+                "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
+                w_i.theta.in_degrees().value(),
+                w_i.phi.in_degrees().value()
+            );
+            let t = Instant::now();
+            let emitted_rays = emitter.emit_rays(*w_i, mesh);
+            let num_emitted_rays = emitted_rays.len();
+            let elapsed = t.elapsed();
 
-        log::debug!(
-            "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
-            num_emitted_rays,
-            emitted_rays[0].dir,
-            pos.theta.in_degrees().value(),
-            pos.phi.in_degrees().value(),
-            elapsed.as_secs_f64(),
-        );
+            log::debug!(
+                "emitted {} rays with direction {} from position {}° {}° in {:?} secs.",
+                num_emitted_rays,
+                emitted_rays[0].dir,
+                w_i.theta.in_degrees().value(),
+                w_i.phi.in_degrees().value(),
+                elapsed.as_secs_f64(),
+            );
 
-        let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
-        let stream_size = if num_streams == 1 {
-            num_emitted_rays
-        } else {
-            MAX_RAY_STREAM_SIZE
-        };
-
-        let mut stream_data = vec![
-            RayStreamData {
-                last_hit: vec![
-                    LastHit {
-                        geom_id: u32::MAX,
-                        prim_id: u32::MAX,
-                        normal: Vec3A::ZERO,
-                    };
-                    stream_size
-                ],
-                trajectory: vec![
-                    RayTrajectory(Vec::with_capacity(max_bounces as usize));
-                    stream_size
-                ],
+            let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
+            let stream_size = if num_streams == 1 {
+                num_emitted_rays
+            } else {
+                MAX_RAY_STREAM_SIZE
             };
-            num_streams
-        ];
 
-        emitted_rays
-            .chunks(MAX_RAY_STREAM_SIZE)
-            .zip(stream_data.iter_mut())
-            .enumerate()
-            //.par_chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.par_iter_mut())
-            .for_each(|(i, (rays, data))| {
-                let chunk_size = rays.len();
-                let mut validities = vec![true; chunk_size];
-                let mut rays = rays.to_owned();
-                let mut hits = vec![Hit::default(); chunk_size];
-                let mut bounces = 0;
-                let mut num_active_rays = chunk_size;
+            let mut stream_data = vec![
+                RayStreamData {
+                    last_hit: vec![
+                        LastHit {
+                            geom_id: u32::MAX,
+                            prim_id: u32::MAX,
+                            normal: Vec3A::ZERO,
+                        };
+                        stream_size
+                    ],
+                    trajectory: vec![
+                        RayTrajectory(Vec::with_capacity(max_bounces as usize));
+                        stream_size
+                    ],
+                };
+                num_streams
+            ];
 
-                while bounces < max_bounces && num_active_rays > 0 {
+            emitted_rays
+                .chunks(MAX_RAY_STREAM_SIZE)
+                .zip(stream_data.iter_mut())
+                .enumerate()
+                //.par_chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.par_iter_mut())
+                .for_each(|(i, (rays, data))| {
+                    let chunk_size = rays.len();
+                    let mut validities = vec![true; chunk_size];
+                    let mut rays = rays.to_owned();
+                    let mut hits = vec![Hit::default(); chunk_size];
+                    let mut bounces = 0;
+                    let mut num_active_rays = chunk_size;
+
+                    while bounces < max_bounces && num_active_rays > 0 {
+                        log::trace!(
+                            "stream {}, bounces: {}, num_active_rays: {}",
+                            i,
+                            bounces,
+                            num_active_rays
+                        );
+
+                        for (ray, hit) in rays.iter().zip(hits.iter_mut()) {
+                            grid.trace(ray, hit);
+                        }
+
+                        for (i, (ray, (is_valid, hit))) in rays
+                            .iter_mut()
+                            .zip(validities.iter_mut().zip(hits.iter_mut()))
+                            .enumerate()
+                        {
+                            if !*is_valid {
+                                continue;
+                            }
+
+                            if !hit.is_valid() {
+                                *is_valid = false;
+                                num_active_rays -= 1;
+                                continue;
+                            }
+
+                            if hit.prim_id == data.last_hit[i].prim_id {
+                                // Hit the same primitive as the last hit.
+                                log::trace!("self-intersection: nudging the ray origin");
+                                let traj_node = data.trajectory[i].last_mut().unwrap();
+                                traj_node.org += data.last_hit[i].normal * 1e-6;
+                                continue;
+                            } else {
+                                // Hit a different primitive.
+                                // Record the cos of the last hit.
+                                let last_node = data.trajectory[i].last_mut().unwrap();
+                                last_node.cos = Some(hit.normal.dot(ray.dir));
+                                let reflected_dir =
+                                    fresnel::reflect(ray.dir.into(), hit.normal.into());
+                                data.trajectory[i].push(RayTrajectoryNode {
+                                    org: hit.point.into(),
+                                    dir: reflected_dir,
+                                    cos: None,
+                                });
+                                // Update the last hit.
+                                let last_hit = &mut data.last_hit[i];
+                                last_hit.geom_id = hit.geom_id;
+                                last_hit.prim_id = hit.prim_id;
+                                last_hit.normal = hit.normal.into();
+
+                                // Update the ray and hit.
+                                ray.org = hit.point;
+                                ray.dir = reflected_dir.into();
+                                hit.invalidate();
+                            }
+                        }
+
+                        bounces += 1;
+                    }
+
                     log::trace!(
-                        "stream {}, bounces: {}, num_active_rays: {}",
-                        i,
+                        "------------ result {}, active rays {}\n {:?} | {:?}\n{:?}",
                         bounces,
-                        num_active_rays
+                        num_active_rays,
+                        data.trajectory,
+                        data.trajectory.len() - 1,
+                        validities
                     );
+                });
 
-                    for (ray, hit) in rays.iter().zip(hits.iter_mut()) {
-                        grid.trace(ray, hit);
-                    }
+            // Extract the trajectory of each ray.
+            let trajectories = stream_data
+                .into_iter()
+                .flat_map(|data| data.trajectory)
+                .collect::<Vec<_>>();
 
-                    for (i, (ray, (is_valid, hit))) in rays
-                        .iter_mut()
-                        .zip(validities.iter_mut().zip(hits.iter_mut()))
-                        .enumerate()
-                    {
-                        if !*is_valid {
-                            continue;
-                        }
-
-                        if !hit.is_valid() {
-                            *is_valid = false;
-                            num_active_rays -= 1;
-                            continue;
-                        }
-
-                        if hit.prim_id == data.last_hit[i].prim_id {
-                            // Hit the same primitive as the last hit.
-                            log::trace!("self-intersection: nudging the ray origin");
-                            let traj_node = data.trajectory[i].last_mut().unwrap();
-                            traj_node.org += data.last_hit[i].normal * 1e-6;
-                            continue;
-                        } else {
-                            // Hit a different primitive.
-                            // Record the cos of the last hit.
-                            let last_node = data.trajectory[i].last_mut().unwrap();
-                            last_node.cos = Some(hit.normal.dot(ray.dir));
-                            let reflected_dir = fresnel::reflect(ray.dir.into(), hit.normal.into());
-                            data.trajectory[i].push(RayTrajectoryNode {
-                                org: hit.point.into(),
-                                dir: reflected_dir,
-                                cos: None,
-                            });
-                            // Update the last hit.
-                            let last_hit = &mut data.last_hit[i];
-                            last_hit.geom_id = hit.geom_id;
-                            last_hit.prim_id = hit.prim_id;
-                            last_hit.normal = hit.normal.into();
-
-                            // Update the ray and hit.
-                            ray.org = hit.point;
-                            ray.dir = reflected_dir.into();
-                            hit.invalidate();
-                        }
-                    }
-
-                    bounces += 1;
-                }
-
-                log::trace!(
-                    "------------ result {}, active rays {}\n {:?} | {:?}\n{:?}",
-                    bounces,
-                    num_active_rays,
-                    data.trajectory,
-                    data.trajectory.len() - 1,
-                    validities
-                );
-            });
-        // Extract the trajectory of each ray.
-        let trajectories = stream_data
-            .into_iter()
-            .flat_map(|data| data.trajectory)
-            .collect::<Vec<_>>();
-        data.push(detector.collect(params, mesh, *pos, &trajectories, cache));
-    }
-
-    MeasuredBsdfData {
-        params: *params,
-        samples: data,
-    }
+            SimulationResultPoint {
+                w_i: *w_i,
+                trajectories,
+            }
+        })
+        .collect()
 }
 
 /// Base grid cell (the smallest unit of the grid).
@@ -1205,7 +1208,7 @@ impl<'ms> MultilevelGrid<'ms> {
 
 #[cfg(test)]
 mod tests {
-    use crate::measure::rtc::{grid::MultilevelGrid, Hit, Ray};
+    use crate::measure::bsdf::rtc::{grid::MultilevelGrid, Hit, Ray};
     use vgcore::{
         math::{ulp_eq, IVec2, UVec2, Vec3, Vec3Swizzles},
         units::LengthUnit,

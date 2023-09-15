@@ -67,7 +67,10 @@ impl Default for BsdfMeasurementParams {
     fn default() -> Self {
         Self {
             kind: BsdfKind::Brdf,
+            #[cfg(feature = "embree")]
             sim_kind: SimulationKind::GeomOptics(RtcMethod::Embree),
+            #[cfg(not(feature = "embree"))]
+            sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
             incident_medium: Medium::Air,
             transmitted_medium: Medium::Air,
             emitter: EmitterParams {

@@ -7,10 +7,9 @@ use crate::{
     },
     measure::{
         bsdf::{
-            detector::{BounceAndEnergy, Detector},
             emitter::Emitter,
             rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-            BsdfMeasurementDataPoint, MeasuredBsdfData,
+            SimulationResultPoint,
         },
         params::BsdfMeasurementParams,
     },
@@ -157,13 +156,12 @@ fn intersect_filter_stream<'a>(
 /// * `cache` - The cache to use.
 /// * `emitter_samples` - The emitter samples.
 /// * `collector_patches` - The collector patches.
-pub fn measure_full_bsdf(
+pub fn simulate_bsdf_measurement(
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-    detector: &Detector,
     cache: &InnerCache,
-) -> MeasuredBsdfData {
+) -> Vec<SimulationResultPoint> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -189,37 +187,32 @@ pub fn measure_full_bsdf(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    let mut data = Vec::with_capacity(params.emitter.measurement_points_count());
-    // Iterate over every incident direction.
-    for pos in emitter.measpts.iter() {
-        data.push(measure_bsdf_at_point(
-            *pos,
-            params,
-            mesh,
-            &emitter,
-            detector,
-            Arc::new(geometry.clone()),
-            &scene,
-            cache,
-        ))
-    }
-
-    MeasuredBsdfData {
-        params: *params,
-        samples: data,
-    }
+    emitter
+        .measpts
+        .iter()
+        .map(|w_i| {
+            simulate_bsdf_measurement_single_point(
+                *w_i,
+                params,
+                mesh,
+                &emitter,
+                Arc::new(geometry.clone()),
+                &scene,
+                cache,
+            )
+        })
+        .collect()
 }
 
 /// Measures the BSDF of micro-surface mesh at the given position.
 /// The BSDF is measured by emitting rays from the given position.
-pub fn measure_bsdf_once(
+pub fn simulate_bsdf_measurement_once(
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-    detector: &Detector,
-    position: Sph2,
+    w_i: Sph2,
     cache: &InnerCache,
-) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
+) -> SimulationResultPoint {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -245,33 +238,31 @@ pub fn measure_bsdf_once(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    measure_bsdf_at_point(
-        position,
+    simulate_bsdf_measurement_single_point(
+        w_i,
         params,
         mesh,
         emitter,
-        detector,
         Arc::new(geometry.clone()),
         &scene,
         cache,
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn measure_bsdf_at_point(
-    pos: Sph2,
+/// Simulates the BSDF measurement for a single incident direction (point).
+fn simulate_bsdf_measurement_single_point(
+    w_i: Sph2,
     params: &BsdfMeasurementParams,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-    detector: &Detector,
     geometry: Arc<Geometry>,
     scene: &Scene,
     cache: &InnerCache,
-) -> BsdfMeasurementDataPoint<BounceAndEnergy> {
-    println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", pos);
+) -> SimulationResultPoint {
+    println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", w_i);
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     let t = Instant::now();
-    let emitted_rays = emitter.emit_rays(pos, mesh);
+    let emitted_rays = emitter.emit_rays(w_i, mesh);
     let num_emitted_rays = emitted_rays.len();
     #[cfg(all(debug_assertions, feature = "verbose_debug"))]
     let elapsed = t.elapsed();
@@ -282,7 +273,7 @@ fn measure_bsdf_at_point(
         "emitted {} rays with dir: {} from: {} in {} secs.",
         num_emitted_rays,
         emitted_rays[0].dir,
-        pos,
+        w_i,
         elapsed.as_secs_f64(),
     );
     let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
@@ -413,15 +404,17 @@ fn measure_bsdf_at_point(
         .flat_map(|d| d.trajectory)
         .collect::<Vec<_>>();
 
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
-    {
-        let collected = detector.collect(params, mesh, pos, &trajectories, cache);
-        log::debug!("collected stats: {:#?}", collected.stats);
-        log::trace!("collected: {:?}", collected.data);
-        collected
-    }
-    #[cfg(not(all(debug_assertions, feature = "verbose_debug")))]
-    params
-        .detector
-        .collect(params, mesh, pos, &trajectories, patches, cache)
+    SimulationResultPoint { w_i, trajectories }
+
+    // #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    // {
+    //     let collected = detector.collect(params, mesh, pos, &trajectories,
+    // cache);     log::debug!("collected stats: {:#?}", collected.stats);
+    //     log::trace!("collected: {:?}", collected.data);
+    //     collected
+    // }
+    // #[cfg(not(all(debug_assertions, feature = "verbose_debug")))]
+    // params
+    //     .detector
+    //     .collect(params, mesh, pos, &trajectories, patches, cache)
 }

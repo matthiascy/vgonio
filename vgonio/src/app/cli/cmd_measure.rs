@@ -109,7 +109,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     for (measurement, surfaces) in tasks {
         let measurement_start_time = std::time::SystemTime::now();
         let measured_data = match measurement.params {
-            MeasurementParams::Bsdf(measurement) => {
+            MeasurementParams::Bsdf(params) => {
                 println!(
                     "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
     • parameters:
@@ -125,17 +125,17 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - domain: {}
         - precision: {}",
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
-                    measurement.incident_medium,
-                    measurement.transmitted_medium,
-                    measurement.emitter.num_rays,
-                    measurement.emitter.max_bounces,
-                    measurement.emitter.spectrum,
-                    measurement.emitter.zenith.pretty_print(),
-                    measurement.emitter.azimuth.pretty_print(),
-                    measurement.detector.domain,
-                    measurement.detector.precision
+                    params.incident_medium,
+                    params.transmitted_medium,
+                    params.emitter.num_rays,
+                    params.emitter.max_bounces,
+                    params.emitter.spectrum,
+                    params.emitter.zenith.pretty_print(),
+                    params.emitter.azimuth.pretty_print(),
+                    params.detector.domain,
+                    params.detector.precision
                 );
-                measure::bsdf::measure_bsdf_rt(measurement, &surfaces, measurement.sim_kind, &cache)
+                measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, &cache)
             }
             MeasurementParams::Adf(measurement) => {
                 println!(

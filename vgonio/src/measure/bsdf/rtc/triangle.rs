@@ -368,7 +368,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
 #[cfg(test)]
 mod tests {
     use super::ray_tri_intersect_woop;
-    use crate::measure::rtc::{ray_tri_intersect_moller_trumbore, Ray};
+    use crate::measure::bsdf::rtc::{ray_tri_intersect_moller_trumbore, Ray};
     use vgcore::math::Vec3;
 
     #[test]

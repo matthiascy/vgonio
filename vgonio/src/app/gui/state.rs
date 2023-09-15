@@ -24,7 +24,7 @@ use crate::{
 use crate::measure::bsdf::rtc::embr;
 
 use crate::{
-    app::{cache::Cache, gfx::RenderableMesh, gui::notify::NotifyKind},
+    app::{cache::Cache, gui::notify::NotifyKind},
     measure::bsdf::{
         detector::DetectorPatches,
         emitter::{EmitterParams, EmitterSamples, MeasurementPoints},

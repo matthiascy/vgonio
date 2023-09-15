@@ -1,7 +1,6 @@
 use crate::{
     app::{
-        cache::{Handle, MicroSurfaceRecord},
-        gfx::RenderableMesh,
+        cache::Handle,
         gui::{notify::NotifyKind, theme::ThemeKind},
     },
     fitting::FittingProblemKind,

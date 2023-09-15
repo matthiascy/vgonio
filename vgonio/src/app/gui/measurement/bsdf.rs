@@ -1,15 +1,7 @@
 use crate::{
-    app::gui::{
-        event::{EventLoopProxy, MeasureEvent, VgonioEvent},
-        widgets::{SurfaceSelector, ToggleSwitch},
-    },
+    app::gui::{event::EventLoopProxy, widgets::ToggleSwitch},
     measure::{
-        bsdf::{
-            detector::{DetectorParams, DetectorScheme},
-            emitter::EmitterParams,
-            rtc::RtcMethod,
-            BsdfKind,
-        },
+        bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
     },
     Medium, SphericalDomain,
@@ -171,6 +163,7 @@ impl BsdfMeasurementTab {
 
                         ui.label("Simulation kind: ");
                         ui.horizontal_wrapped(|ui| {
+                            #[cfg(feature = "embree")]
                             ui.selectable_value(
                                 &mut self.params.sim_kind,
                                 SimulationKind::GeomOptics(RtcMethod::Embree),
@@ -187,11 +180,13 @@ impl BsdfMeasurementTab {
                         if self.params.sim_kind != SimulationKind::WaveOptics {
                             ui.label("Ray tracing method: ");
                             ui.horizontal_wrapped(|ui| {
+                                #[cfg(feature = "embree")]
                                 ui.selectable_value(
                                     &mut self.params.sim_kind,
                                     SimulationKind::GeomOptics(RtcMethod::Embree),
                                     "Embree",
                                 );
+                                #[cfg(feature = "optix")]
                                 ui.selectable_value(
                                     &mut self.params.sim_kind,
                                     SimulationKind::GeomOptics(RtcMethod::Optix),
