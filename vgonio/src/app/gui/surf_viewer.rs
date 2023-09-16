@@ -1,6 +1,7 @@
-use egui::{Ui, WidgetText};
+use egui::{Ui, Widget, WidgetText};
 use std::{
     collections::{HashMap, HashSet},
+    fmt::format,
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
@@ -628,7 +629,22 @@ pub struct SurfaceViewer {
     // /// Gizmo for navigating the scene.
     // navigator: NavigationGizmo,
     color_attachment_id: egui::TextureId,
+    // shading: ShadingMode,
+    // overlay: OverlayFlags,
     event_loop: EventLoopProxy,
+}
+
+pub enum ShadingMode {
+    Wireframe,
+    Flat,
+    Smooth,
+}
+
+pub struct OverlayFlags {
+    pub normals: bool,
+    pub tangents: bool,
+    pub bitangents: bool,
+    pub uvs: bool,
 }
 
 impl SurfaceViewer {
@@ -689,6 +705,31 @@ impl Dockable for SurfaceViewer {
     fn ui(&mut self, ui: &mut Ui) {
         let rect = ui.available_rect_before_wrap();
         let size = egui::Vec2::new(rect.width(), rect.height());
+
+        let top = ui.clip_rect().top();
+        let right = ui.clip_rect().right();
+        let toolbar_width = ui.clip_rect().width() * 0.1;
+        egui::Area::new(format!("surf_viewer_toolbar_{:?}", self.uuid))
+            .anchor(
+                egui::Align2::LEFT_TOP,
+                egui::Vec2::new(right - toolbar_width, top),
+            )
+            .show(ui.ctx(), |ui| {
+                ui.horizontal(|ui| {
+                    ui.menu_button("Overlay", |ui| {
+                        ui.checkbox(&mut false, "Normals");
+                        ui.checkbox(&mut false, "Tangents (TODO)");
+                        ui.checkbox(&mut false, "Bitangents (TODO)");
+                        ui.checkbox(&mut false, "UVs (TODO)");
+                    });
+                    ui.menu_button("Shading", |ui| {
+                        ui.checkbox(&mut false, "Wireframe");
+                        ui.checkbox(&mut false, "Flat");
+                        ui.checkbox(&mut false, "Smooth");
+                    });
+                });
+            });
+
         self.resize_viewport(size, None);
         ui.image(self.color_attachment_id, self.viewport_size);
     }
