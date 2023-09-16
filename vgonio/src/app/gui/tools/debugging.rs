@@ -108,8 +108,4 @@ impl DebuggingInspector {
     pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>]) {
         self.brdf_debugging.update_surface_selector(surfs);
     }
-
-    pub fn update_surface_viewers(&mut self, viewers: &[Uuid]) {
-        self.brdf_debugging.update_surface_viewers(viewers);
-    }
 }

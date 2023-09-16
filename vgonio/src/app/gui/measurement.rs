@@ -103,6 +103,7 @@ impl MeasurementDialog {
                     if self.debug.enable_debug_draw {
                         ui.horizontal_wrapped(|ui| {
                             ui.label("Target viewer: ");
+                            let prev = self.debug.focused_viewer;
                             egui::ComboBox::new("brdf_measurement_debugging_selector", "")
                                 .selected_text(match self.debug.focused_viewer {
                                     None => "Select a surface viewer".into(),
@@ -125,6 +126,15 @@ impl MeasurementDialog {
                                         );
                                     }
                                 });
+                            if prev != self.debug.focused_viewer {
+                                self.event_loop
+                                    .send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::FocusSurfaceViewer(
+                                            self.debug.focused_viewer,
+                                        ),
+                                    ))
+                                    .unwrap();
+                            }
                         });
                     }
                 }

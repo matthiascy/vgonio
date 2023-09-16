@@ -224,12 +224,14 @@ impl Debug for BsdfMeasurementStatsPoint {
     }
 }
 
-/// Measurement data for a single emitter's position.
+/// A snapshot of the BSDF during the measurement.
+///  
+/// This is the data collected at a single incident direction of the emitter.
 ///
 /// It contains the statistics of the measurement and the data collected
-/// for all the patches of the collector.
+/// for all the patches of the collector at the incident direction.
 #[derive(Clone)]
-pub struct BsdfMeasurementDataPoint<PatchData>
+pub struct BsdfSnapshot<PatchData>
 where
     PatchData: PerPatchData,
 {
@@ -242,7 +244,7 @@ where
     /// patch in case the collector is partitioned or for the collector's
     /// region at different places in the scene. You need to check the collector
     /// to know which one is the case and how to interpret the data.
-    pub per_patch_data: Vec<PerWavelength<PatchData>>,
+    pub records: Vec<PerWavelength<PatchData>>,
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(debug_assertions)]
     pub trajectories: Vec<RayTrajectory>,
@@ -251,18 +253,18 @@ where
     pub hit_points: Vec<Vec3>,
 }
 
-impl<PatchData: Debug + PerPatchData> Debug for BsdfMeasurementDataPoint<PatchData> {
+impl<PatchData: Debug + PerPatchData> Debug for BsdfSnapshot<PatchData> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BsdfMeasurementPoint")
             .field("stats", &self.stats)
-            .field("data", &self.per_patch_data)
+            .field("data", &self.records)
             .finish()
     }
 }
 
-impl<PatchData: PerPatchData + PartialEq> PartialEq for BsdfMeasurementDataPoint<PatchData> {
+impl<PatchData: PerPatchData + PartialEq> PartialEq for BsdfSnapshot<PatchData> {
     fn eq(&self, other: &Self) -> bool {
-        self.stats == other.stats && self.per_patch_data == other.per_patch_data
+        self.stats == other.stats && self.records == other.records
     }
 }
 
@@ -328,13 +330,11 @@ pub fn measure_bsdf_rt(
         .into_iter()
         .map(|collected| {
             let surface = cache.get_micro_surface(collected.surface).unwrap();
+            let samples = collected.compute_bsdf(&params);
             MeasurementData {
                 name: surface.file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(collected.surface),
-                measured: MeasuredData::Bsdf(MeasuredBsdfData {
-                    params,
-                    samples: collected.compute_bsdf(),
-                }),
+                measured: MeasuredData::Bsdf(MeasuredBsdfData { params, samples }),
             }
         })
         .collect()

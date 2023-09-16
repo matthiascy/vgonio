@@ -27,6 +27,7 @@ use std::{
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
+use uuid::Uuid;
 
 pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioGui;
@@ -38,7 +39,7 @@ use crate::{
         gui::{
             bsdf_viewer::BsdfViewer,
             event::{BsdfViewerEvent, DebuggingEvent, EventResponse, MeasureEvent, VgonioEvent},
-            state::{DebugDrawingState, GuiContext, InputState},
+            state::{GuiContext, InputState},
             theme::ThemeState,
         },
     },
@@ -62,7 +63,10 @@ use self::tools::SamplingInspector;
 
 use crate::app::{
     gfx::WindowSurface,
-    gui::{docking::WidgetKind, event::SurfaceViewerEvent, surf_viewer::SurfaceViewerStates},
+    gui::{
+        docking::WidgetKind, event::SurfaceViewerEvent, state::debug::DebugDrawingState,
+        surf_viewer::SurfaceViewerStates,
+    },
     Config,
 };
 
@@ -291,31 +295,30 @@ impl VgonioGuiApp {
         }
     }
 
-    #[rustfmt::skip]
     pub fn render_frame(&mut self, window: &Window, dt: Duration) -> Result<(), RuntimeError> {
-        // Update the uniform buffers for the debug drawing state depending on the selected
-        // viewer.
-        let dbg_tool = self.ui.tools.get_tool::<DebuggingInspector>().unwrap();
-        let (lowest, highest, scale) = match dbg_tool.brdf_debugging.selected_surface() {
-            Some(surface) => {
-                let properties = self.ui.properties.read().unwrap();
-                let prop = properties.surfaces.get(&surface).unwrap();
-                (prop.min, prop.max, prop.scale)
-            }
-            None => (0.0, 1.0, 1.0),
-        };
-        match dbg_tool.brdf_debugging.selected_viewer() {
-            Some(viewer) => {
-                let view_proj = self.surface_viewer_states.viewer_state(viewer).unwrap().camera_view_proj();
-                self.dbg_drawing_state.update_uniform_buffer(
-                    &self.ctx.gpu,
-                    &(view_proj.proj * view_proj.view),
-                    lowest,
-                    highest,
-                    scale,
-                );
-            }
-            None => {}
+        // Update the uniform buffers for the debug drawing state.
+        if self.dbg_drawing_state.enabled && self.dbg_drawing_state.output_viewer.is_some() {
+            let (lowest, highest, scale) = match self.dbg_drawing_state.microsurface {
+                Some((surface, _)) => {
+                    let properties = self.ui.properties.read().unwrap();
+                    let prop = properties.surfaces.get(&surface).unwrap();
+                    (prop.min, prop.max, prop.scale)
+                }
+                None => (0.0, 1.0, 1.0),
+            };
+            let viewer = self.dbg_drawing_state.output_viewer.unwrap();
+            let view_proj = self
+                .surface_viewer_states
+                .viewer_state(viewer)
+                .unwrap()
+                .camera_view_proj();
+            self.dbg_drawing_state.update_uniform_buffer(
+                &self.ctx.gpu,
+                &(view_proj.proj * view_proj.view),
+                lowest,
+                highest,
+                scale,
+            );
         }
 
         // Update GUI context.
@@ -355,38 +358,33 @@ impl VgonioGuiApp {
             let cache = self.cache.read().unwrap();
             let properties = self.ui.properties.read().unwrap();
             let surfaces = properties.visible_surfaces_with_props();
-            let viewer = {
-                let viewers = self.ui.dock_space.surface_viewers();
-                if viewers.len() == 1 {
-                    Some(viewers[0])
-                } else {
-                    self.ui.dock_space.find_active_focused().and_then(|widget| {
-                        match widget.1.dockable.kind() {
-                            WidgetKind::SurfViewer => Some(widget.1.dockable.uuid()),
-                            _ => None,
-                        }
-                    })
-                }
+            let viewer_encoder = {
+                let active_viewer = {
+                    let viewers = self.ui.dock_space.surface_viewers();
+                    if viewers.len() == 1 {
+                        Some(viewers[0])
+                    } else {
+                        self.ui.dock_space.find_active_focused().and_then(|widget| {
+                            match widget.1.dockable.kind() {
+                                WidgetKind::SurfViewer => Some(widget.1.dockable.uuid()),
+                                _ => None,
+                            }
+                        })
+                    }
+                };
+
+                self.surface_viewer_states.record_render_pass(
+                    &self.ctx.gpu,
+                    active_viewer,
+                    &self.input,
+                    dt,
+                    &self.theme,
+                    &cache,
+                    &surfaces,
+                )
             };
 
-            let viewer_encoder = self.surface_viewer_states.record_render_pass(
-                &self.ctx.gpu,
-                viewer,
-                &self.input,
-                dt,
-                &self.theme,
-                &cache,
-                &surfaces,
-            );
-
-            let viewer = self
-                .ui
-                .tools
-                .get_tool::<DebuggingInspector>()
-                .unwrap()
-                .brdf_debugging
-                .selected_viewer();
-            let dbg_drawing_encoder = match viewer {
+            let dbg_drawing_encoder = match self.dbg_drawing_state.output_viewer {
                 Some(viewer) => self.dbg_drawing_state.record_render_pass(
                     &self.ctx.gpu,
                     Some(wgpu::RenderPassColorAttachment {
@@ -494,6 +492,9 @@ impl VgonioGuiApp {
                                 //         self.canvas.height(),
                                 //     );
                             }
+                            DebuggingEvent::FocusSurfaceViewer(viewer) => {
+                                self.dbg_drawing_state.output_viewer = viewer;
+                            }
                             DebuggingEvent::UpdateEmitterSamples { samples } => {
                                 self.dbg_drawing_state
                                     .update_emitter_samples(&self.ctx.gpu, samples);
@@ -513,6 +514,7 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state.emit_rays(&self.ctx.gpu);
                             }
                             DebuggingEvent::ToggleDebugDrawing(status) => {
+                                log::trace!("Toggling debug drawing: {:?}", status);
                                 self.dbg_drawing_state.enabled = status;
                             }
                             DebuggingEvent::UpdateCollectorDrawing { status, patches } => self

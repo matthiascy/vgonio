@@ -5,8 +5,8 @@ use crate::{
     },
     measure::{
         bsdf::{
-            rtc::RayTrajectory, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint,
-            MeasuredBsdfData, PerWavelength, SimulationResult, SimulationResultPoint,
+            rtc::RayTrajectory, BsdfMeasurementStatsPoint, BsdfSnapshot, MeasuredBsdfData,
+            PerWavelength, SimulationResult, SimulationResultPoint,
         },
         params::BsdfMeasurementParams,
     },
@@ -351,7 +351,7 @@ impl Detector {
     /// # Returns
     ///
     /// The collected data for each simulation result which is a vector of
-    /// [`BsdfMeasurementDataPoint`].
+    /// [`BsdfSnapshot`].
     pub fn collect(
         &self,
         params: &BsdfMeasurementParams,
@@ -543,9 +543,9 @@ impl Detector {
                             .map(|w_o| (w_o.dir * orbit_radius).into())
                             .collect::<Vec<_>>();
 
-                        BsdfMeasurementDataPoint {
+                        BsdfSnapshot {
                             w_i: output.w_i,
-                            per_patch_data: data,
+                            records: data,
                             stats,
                             #[cfg(debug_assertions)]
                             trajectories: output.trajectories.to_vec(),
@@ -557,14 +557,17 @@ impl Detector {
                 CollectedData {
                     surface: res.surface,
                     patches: self.patches.clone(),
-                    data,
+                    snapshots: data,
                 }
             })
             .collect()
     }
 }
 
-/// Collected data by the detector for one micro-surface.
+/// Collected data by the detector for a specific micro-surface.
+///
+/// The data are collected for patches of the detector and for each
+/// wavelength of the incident spectrum.
 #[derive(Debug, Clone)]
 pub struct CollectedData {
     /// The micro-surface where the data were collected.
@@ -572,21 +575,34 @@ pub struct CollectedData {
     /// The partitioned patches of the detector.
     pub patches: DetectorPatches,
     /// The collected data.
-    pub data: Vec<BsdfMeasurementDataPoint<BounceAndEnergy>>,
+    pub snapshots: Vec<BsdfSnapshot<BounceAndEnergy>>,
 }
 
 impl CollectedData {
-    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Vec<Vec<PerWavelength<f32>>> {
-        self.data
+    /// Computes the BSDF according to the collected data.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The parameters of the BSDF measurement.
+    ///
+    /// # Returns
+    ///
+    /// The BSDF computed from the collected data for each wavelength of the
+    /// incident spectrum. The output vector is of size equal to the number of
+    /// measurement points of the emitter times the number of patches of the
+    /// detector.
+    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Vec<PerWavelength<f32>> {
+        // For each snapshot, compute the BSDF.
+        self.snapshots
             .iter()
-            .map(|data_point| {
+            .flat_map(|snapshot| {
                 let mut bsdf = vec![
                     PerWavelength(vec![0.0; params.emitter.spectrum.values().len()]);
-                    data_point.per_patch_data.len()
+                    snapshot.records.len()
                 ];
-                let cos_i = data_point.w_i.theta.cos();
-                let incident_irradiance = data_point.stats.n_received as f32 * cos_i;
-                for (i, patch_data) in data_point.per_patch_data.iter().enumerate() {
+                let cos_i = snapshot.w_i.theta.cos();
+                let incident_irradiance = snapshot.stats.n_received as f32 * cos_i;
+                for (i, patch_data) in snapshot.records.iter().enumerate() {
                     for (j, stats) in patch_data.0.iter().enumerate() {
                         let patch = self.patches.patches_iter().skip(i).next().unwrap();
                         let cos_o = patch.center().theta.cos();

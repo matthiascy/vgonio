@@ -49,7 +49,6 @@ pub enum VgonioEvent {
         text: String,
         time: f32,
     },
-    /// Update the theme.
     UpdateThemeKind(ThemeKind),
     SurfaceViewer(SurfaceViewerEvent),
     Outliner(OutlinerEvent),
@@ -126,6 +125,7 @@ pub enum DebuggingEvent {
         reflected: bool,
     },
     ToggleCollectedRaysDrawing(bool),
+    FocusSurfaceViewer(Option<Uuid>),
     MeasureOnce {
         method: RtcMethod,
         params: BsdfMeasurementParams,

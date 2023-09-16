@@ -122,10 +122,6 @@ impl VgonioGui {
                 EventResponse::Handled
             }
             VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create { uuid, .. }) => {
-                self.tools
-                    .get_tool_mut::<DebuggingInspector>()
-                    .unwrap()
-                    .update_surface_viewers(&[*uuid]);
                 #[cfg(debug_assertions)]
                 self.measurement.update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)

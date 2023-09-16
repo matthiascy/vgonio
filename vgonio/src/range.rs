@@ -107,7 +107,7 @@ where
     T: ~const NumericCast<f32> + Copy + Clone + From<f32>,
 {
     /// Returns all possible values of the range.
-    pub fn values(&self) -> impl Iterator<Item = T> {
+    pub fn values(&self) -> impl ExactSizeIterator<Item = T> {
         let step_size = self.step_size.cast();
         let start = self.start.cast();
         let stop = self.stop.cast();

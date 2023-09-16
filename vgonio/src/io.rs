@@ -17,7 +17,7 @@ pub mod vgmo {
             bsdf::{
                 detector::{BounceAndEnergy, DetectorParams, DetectorScheme},
                 emitter::EmitterParams,
-                BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength,
+                BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, PerWavelength,
             },
             data::{MeasuredData, MeasurementData, MeasurementDataSource},
             params::{
@@ -768,7 +768,7 @@ pub mod vgmo {
         }
     }
 
-    impl BsdfMeasurementDataPoint<BounceAndEnergy> {
+    impl BsdfSnapshot<BounceAndEnergy> {
         /// Calculates the size of a single data point in bytes.
         pub fn calc_size_in_bytes(
             n_wavelength: usize,
@@ -817,7 +817,7 @@ pub mod vgmo {
             Self {
                 w_i: Sph2::zero(), // TODO:
                 stats,
-                per_patch_data: data,
+                records: data,
                 #[cfg(debug_assertions)]
                 trajectories: vec![],
                 #[cfg(debug_assertions)]
@@ -832,7 +832,7 @@ pub mod vgmo {
             let mut offset = BsdfMeasurementStatsPoint::calc_size_in_bytes(n_wavelength, bounces);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             // Write collector's per wavelength patch data.
-            for per_wavelength_patch_data in &self.per_patch_data {
+            for per_wavelength_patch_data in &self.records {
                 for bounce_and_energy in per_wavelength_patch_data.iter() {
                     bounce_and_energy.write_to_buf(&mut buf[offset..], bounces);
                     offset += bounce_and_energy_size;
@@ -877,12 +877,11 @@ pub mod vgmo {
                     let n_wavelength = params.emitter.spectrum.step_count();
                     let bounces = params.emitter.max_bounces as usize;
                     let detector_patches_count = params.detector.scheme.patches_count();
-                    let sample_size =
-                        BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
-                            n_wavelength,
-                            bounces,
-                            detector_patches_count,
-                        );
+                    let sample_size = BsdfSnapshot::<BounceAndEnergy>::calc_size_in_bytes(
+                        n_wavelength,
+                        bounces,
+                        detector_patches_count,
+                    );
                     let sample_count = params.emitter.azimuth.step_count_wrapped()
                         * params.emitter.zenith.step_count_wrapped();
                     let mut buf = vec![0u8; sample_size];
@@ -890,7 +889,7 @@ pub mod vgmo {
                     (0..sample_count).for_each(|_| {
                         decoder.read_exact(&mut buf).unwrap();
 
-                        samples.push(BsdfMeasurementDataPoint::read_from_buf(&buf, &params));
+                        samples.push(BsdfSnapshot::read_from_buf(&buf, &params));
                     });
 
                     // Ok(Self { params, samples })
@@ -931,12 +930,11 @@ pub mod vgmo {
                         let n_wavelength = self.params.emitter.spectrum.step_count();
                         let bounces = self.params.emitter.max_bounces as usize;
                         let detector_patches_count = self.params.detector.scheme.patches_count();
-                        let sample_size =
-                            BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(
-                                n_wavelength,
-                                bounces,
-                                detector_patches_count,
-                            );
+                        let sample_size = BsdfSnapshot::<BounceAndEnergy>::calc_size_in_bytes(
+                            n_wavelength,
+                            bounces,
+                            detector_patches_count,
+                        );
                         let mut buf = vec![0u8; sample_size];
                         // sample.write_to_buf(&mut buf, n_wavelength, bounces);
                         // encoder.write_all(&buf)?;
@@ -1147,7 +1145,7 @@ mod tests {
                 },
                 emitter::{Emitter, EmitterParams},
                 rtc::RtcMethod,
-                BsdfKind, BsdfMeasurementDataPoint, BsdfMeasurementStatsPoint, PerWavelength,
+                BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, PerWavelength,
             },
             params::{BsdfMeasurementParams, SimulationKind},
         },
@@ -1202,7 +1200,7 @@ mod tests {
 
     #[test]
     fn test_bsdf_measurement_data_point() {
-        let data = BsdfMeasurementDataPoint::<BounceAndEnergy> {
+        let data = BsdfSnapshot::<BounceAndEnergy> {
             stats: BsdfMeasurementStatsPoint {
                 n_received: 0,
                 n_absorbed: PerWavelength(vec![1, 2, 3, 4]),
@@ -1222,7 +1220,7 @@ mod tests {
                     vec![11.0, 12.0, 13.0],
                 ]),
             },
-            per_patch_data: vec![
+            records: vec![
                 PerWavelength(vec![
                     BounceAndEnergy {
                         total_rays: 33468,
@@ -1282,7 +1280,7 @@ mod tests {
             hit_points: vec![],
         };
 
-        let size = BsdfMeasurementDataPoint::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
+        let size = BsdfSnapshot::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
         let mut buf = vec![0; size];
         data.write_to_buf(&mut buf, 4, 3);
         let params = BsdfMeasurementParams {
@@ -1303,7 +1301,7 @@ mod tests {
                 scheme: DetectorScheme::Beckers,
             },
         };
-        let data2 = BsdfMeasurementDataPoint::<BounceAndEnergy>::read_from_buf(&buf, &params);
+        let data2 = BsdfSnapshot::<BounceAndEnergy>::read_from_buf(&buf, &params);
         assert_eq!(data, data2);
     }
 }
