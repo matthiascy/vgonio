@@ -83,7 +83,6 @@ pub(crate) struct BrdfMeasurementDebugging {
     method: RtcMethod,
     surface_primitive_id: u32,
     surface_primitive_drawing: bool,
-    surface_normals_drawing: bool,
     grid_cell_position: IVec2,
     grid_cell_drawing: bool,
 }
@@ -99,7 +98,6 @@ impl BrdfMeasurementDebugging {
             method: RtcMethod::Grid,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
-            surface_normals_drawing: false,
             grid_cell_position: Default::default(),
             ray_params_t: 1.0,
             emitter_position_index: 0,
@@ -271,19 +269,6 @@ impl egui::Widget for &mut BrdfMeasurementDebugging {
                             .unwrap()
                     }
                 });
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Surface Normals: ");
-                    if ui
-                        .add(ToggleSwitch::new(&mut self.surface_normals_drawing))
-                        .changed()
-                    {
-                        self.event_loop
-                            .send_event(VgonioEvent::Debugging(
-                                DebuggingEvent::ToggleSurfaceNormalDrawing,
-                            ))
-                            .unwrap();
-                    }
-                })
             });
 
         egui::CollapsingHeader::new("Emitter")

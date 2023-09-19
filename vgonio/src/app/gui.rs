@@ -552,16 +552,11 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state
                                     .update_surface_primitive_id(surf, id, status);
                             }
-                            DebuggingEvent::ToggleSurfaceNormalDrawing => {
-                                self.dbg_drawing_state.toggle_surface_normals();
-                            }
                             DebuggingEvent::UpdateGridCellDrawing { .. } => {
                                 todo!("UpdateGridCellDrawing")
                             }
                             DebuggingEvent::UpdateMicroSurface { surf, mesh } => {
                                 self.dbg_drawing_state.microsurface = Some((surf, mesh));
-                                self.dbg_drawing_state
-                                    .prepare_surface_normals_buffer(&self.ctx.gpu);
                             }
                         }
                     }

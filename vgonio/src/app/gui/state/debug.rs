@@ -128,10 +128,6 @@ pub struct DebugDrawingState {
     surface_primitive_id: u32,
     /// Whether to show surface primitive.
     surface_primitive_drawing: bool,
-    /// Surface normals buffer.
-    surface_normals_buffer: Option<wgpu::Buffer>,
-    /// Surface normals drawing.
-    surface_normals_drawing: bool,
     event_loop: EventLoopProxy,
     cache: Cache,
 
@@ -427,9 +423,7 @@ impl DebugDrawingState {
             output_viewer: None,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
-            surface_normals_buffer: None,
             microsurface: None,
-            surface_normals_drawing: false,
         }
     }
 
@@ -660,38 +654,6 @@ impl DebugDrawingState {
             DetectorPatches::Tregenza => {}
         }
         self.detector_patches = Some(patches);
-    }
-
-    pub fn prepare_surface_normals_buffer(&mut self, ctx: &GpuContext) {
-        match self.microsurface {
-            None => {}
-            Some((_, mesh_hdl)) => {
-                let normals = self.cache.read(|cache| {
-                    let mesh = cache.get_micro_surface_mesh(mesh_hdl).unwrap();
-                    mesh.facet_normals
-                        .iter()
-                        .zip(mesh.facets.chunks(3))
-                        .flat_map(|(n, f)| {
-                            let center = f
-                                .iter()
-                                .fold(Vec3::ZERO, |acc, v| acc + mesh.verts[*v as usize] / 3.0);
-                            [center, center + *n * 0.5]
-                        })
-                        .collect::<Vec<_>>()
-                });
-                self.surface_normals_buffer = Some(ctx.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("debug-surface-normals"),
-                        contents: bytemuck::cast_slice(&normals),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    },
-                ));
-            }
-        };
-    }
-
-    pub fn toggle_surface_normals(&mut self) {
-        self.surface_normals_drawing = !self.surface_normals_drawing;
     }
 
     pub fn update_surface_primitive_id(
@@ -944,24 +906,6 @@ impl DebugDrawingState {
                         0,
                         0..1,
                     );
-                }
-
-                if self.surface_normals_buffer.is_some() && self.surface_normals_drawing {
-                    let buffer = self.surface_normals_buffer.as_ref().unwrap();
-                    render_pass.set_pipeline(&self.lines_pipeline);
-                    render_pass.set_bind_group(0, &self.bind_group, &[]);
-                    render_pass.set_vertex_buffer(
-                        0,
-                        self.surface_normals_buffer.as_ref().unwrap().slice(..),
-                    );
-                    constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
-                    constants[16..20].copy_from_slice(&Self::SURFACE_NORMAL_COLOR);
-                    render_pass.set_push_constants(
-                        wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&constants),
-                    );
-                    render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
                 }
 
                 if self.ray_trajectories_drawing_reflected || self.ray_trajectories_drawing_missed {

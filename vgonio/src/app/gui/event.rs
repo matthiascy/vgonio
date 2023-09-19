@@ -181,7 +181,6 @@ pub enum DebuggingEvent {
         id: u32,
         status: bool,
     },
-    ToggleSurfaceNormalDrawing,
     EmitRays,
 }
 
