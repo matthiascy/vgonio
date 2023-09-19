@@ -3018,6 +3018,7 @@ dependencies = [
 name = "vgonio-core"
 version = "0.3.0"
 dependencies = [
+ "approx",
  "cfg-if",
  "clap",
  "glam",
@@ -3027,6 +3028,10 @@ dependencies = [
  "serde",
  "serde_yaml",
 ]
+
+[[package]]
+name = "vgonio-jabr"
+version = "0.3.0"
 
 [[package]]
 name = "vgonio-surf"

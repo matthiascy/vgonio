@@ -84,8 +84,7 @@ impl egui::Widget for &mut DepthMapPane {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         if ui.button("Update").clicked() {
             self.event_loop
-                .send_event(VgonioEvent::Debugging(DebuggingEvent::UpdateDepthMap))
-                .unwrap();
+                .send_event(VgonioEvent::Debugging(DebuggingEvent::UpdateDepthMap));
         }
 
         if let Some(handle) = &self.depth_map_handle {

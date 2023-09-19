@@ -1,11 +1,9 @@
-use egui::{Ui, Widget, WidgetText};
+use egui::{Ui, WidgetText};
 use std::{
     collections::{HashMap, HashSet},
-    fmt::format,
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use wgpu::VertexBufferLayout;
 
 use vgcore::math::{Mat4, Vec4};
 use vgsurf::MicroSurface;
@@ -20,12 +18,11 @@ use crate::app::{
         data::MicroSurfaceProp,
         docking::{Dockable, WidgetKind},
         event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
-        state::{camera::CameraState, InputState},
+        state::{camera::CameraState, debug::DebugDrawingState, InputState},
         theme::ThemeState,
         visual_grid::{VisualGridPipeline, VisualGridState},
     },
 };
-use crate::app::gui::state::debug::DebugDrawingState;
 
 use super::state::{DepthMap, GuiRenderer};
 
@@ -395,8 +392,11 @@ impl SurfaceViewerStates {
                         let mut constants = [0.0; 16 + 4];
                         constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
                         constants[16..20].copy_from_slice(&DebugDrawingState::SURFACE_NORMAL_COLOR);
-                        render_pass.set_push_constants(wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        0, bytemuck::cast_slice(&constants));
+                        render_pass.set_push_constants(
+                            wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            0,
+                            bytemuck::cast_slice(&constants),
+                        );
                         render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
                     }
                 }
@@ -534,12 +534,15 @@ impl MicroSurfaceState {
                 }),
                 multiview: None,
             });
-        let normals_pipeline= {
+        let normals_pipeline = {
             let pipeline_layout =
                 ctx.device
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some("surface-normals-drawing-pipeline-layout"),
-                        bind_group_layouts: &[&globals_bind_group_layout, &locals_bind_group_layout],
+                        bind_group_layouts: &[
+                            &globals_bind_group_layout,
+                            &locals_bind_group_layout,
+                        ],
                         push_constant_ranges: &[wgpu::PushConstantRange {
                             stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
                             range: 0..80,
@@ -548,13 +551,11 @@ impl MicroSurfaceState {
             let vert_state = wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_normals_main",
-                buffers: &[
-                    wgpu::VertexBufferLayout {
-                        array_stride: 3 * std::mem::size_of::<f32>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
-                    }
-                ],
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 3 * std::mem::size_of::<f32>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                }],
             };
             let frag_state = wgpu::FragmentState {
                 module: &shader_module,
@@ -572,7 +573,7 @@ impl MicroSurfaceState {
                 stencil: Default::default(),
                 bias: Default::default(),
             };
-                ctx.device
+            ctx.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("surface-normals-drawing-pipeline"),
                     layout: Some(&pipeline_layout),
@@ -777,8 +778,7 @@ impl SurfaceViewer {
             .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Resize {
                 uuid: self.uuid,
                 size: (width, height),
-            }))
-            .unwrap();
+            }));
         self.viewport_size = new_size;
     }
 }
@@ -816,14 +816,12 @@ impl Dockable for SurfaceViewer {
                             .changed();
                         let d = ui.checkbox(&mut self.overlay.uvs, "UVs").changed();
                         if a || b || c || d {
-                            self.event_loop
-                                .send_event(VgonioEvent::SurfaceViewer(
-                                    SurfaceViewerEvent::UpdateOverlay {
-                                        uuid: self.uuid,
-                                        overlay: self.overlay,
-                                    },
-                                ))
-                                .unwrap();
+                            self.event_loop.send_event(VgonioEvent::SurfaceViewer(
+                                SurfaceViewerEvent::UpdateOverlay {
+                                    uuid: self.uuid,
+                                    overlay: self.overlay,
+                                },
+                            ));
                         }
                     });
                     let shading = self.shading;
@@ -833,14 +831,12 @@ impl Dockable for SurfaceViewer {
                         ui.selectable_value(&mut self.shading, ShadingMode::Smooth, "Smooth");
                     });
                     if shading != self.shading {
-                        self.event_loop
-                            .send_event(VgonioEvent::SurfaceViewer(
-                                SurfaceViewerEvent::UpdateShading {
-                                    uuid: self.uuid,
-                                    shading: self.shading,
-                                },
-                            ))
-                            .unwrap();
+                        self.event_loop.send_event(VgonioEvent::SurfaceViewer(
+                            SurfaceViewerEvent::UpdateShading {
+                                uuid: self.uuid,
+                                shading: self.shading,
+                            },
+                        ));
                     }
                 });
             });

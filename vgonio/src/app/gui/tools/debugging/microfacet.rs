@@ -48,17 +48,12 @@ impl egui::Widget for &mut MicrofacetDebugging {
         });
 
         ui.horizontal_wrapped(|ui| {
-            if ui.button("check").clicked()
-                && self
-                    .event_loop
-                    .send_event(VgonioEvent::CheckVisibleFacets {
-                        m_azimuth: self.m_azimuth,
-                        m_zenith: self.m_zenith,
-                        opening_angle: self.opening_angle,
-                    })
-                    .is_err()
-            {
-                log::warn!("Failed to send event VgonioEvent::UpdateCellPos");
+            if ui.button("check").clicked() {
+                self.event_loop.send_event(VgonioEvent::CheckVisibleFacets {
+                    m_azimuth: self.m_azimuth,
+                    m_zenith: self.m_zenith,
+                    opening_angle: self.opening_angle,
+                });
             }
         })
         .response

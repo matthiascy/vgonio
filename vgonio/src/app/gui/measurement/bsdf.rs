@@ -1,5 +1,8 @@
 use crate::{
-    app::gui::{event::EventLoopProxy, widgets::ToggleSwitch},
+    app::gui::{
+        event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
+        widgets::ToggleSwitch,
+    },
     measure::{
         bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
@@ -7,6 +10,7 @@ use crate::{
     Medium, SphericalDomain,
 };
 use std::hash::Hash;
+use vgcore::math::Sph2;
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
@@ -39,7 +43,11 @@ impl Medium {
 
 impl EmitterParams {
     /// Creates the UI for parameterizing the emitter.
-    pub fn ui<R>(&mut self, ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) {
+    pub fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        add_contents: impl FnOnce(&mut EmitterParams, &mut egui::Ui) -> R,
+    ) {
         egui::CollapsingHeader::new("Emitter")
             .default_open(true)
             .show(ui, |ui| {
@@ -74,7 +82,7 @@ impl EmitterParams {
                         self.spectrum.ui(ui);
                         ui.end_row();
 
-                        add_contents(ui);
+                        add_contents(self, ui);
                     });
             });
     }
@@ -130,6 +138,7 @@ impl BsdfMeasurementTab {
                 emitter_ray_param_t: 0.0,
                 emitter_rays_drawing: false,
                 measurement_points_drawing: false,
+                measurement_point_index: 0,
                 ray_trajectories_drawing_reflected: false,
                 ray_trajectories_drawing_missed: false,
                 ray_hit_points_drawing: false,
@@ -137,8 +146,22 @@ impl BsdfMeasurementTab {
         }
     }
 
+    pub fn measurement_point(&self) -> Sph2 {
+        let zenith_count = self.params.emitter.zenith.step_count_wrapped();
+        let azimuth_idx = self.debug.measurement_point_index / zenith_count as i32;
+        let zenith_idx = self.debug.measurement_point_index % zenith_count as i32;
+        let zenith = self.params.emitter.zenith.step(zenith_idx as usize);
+        let azimuth = self.params.emitter.azimuth.step(azimuth_idx as usize);
+        Sph2::new(zenith, azimuth)
+    }
+
     /// UI for BSDF simulation parameters.
-    pub fn ui(&mut self, ui: &mut egui::Ui, #[cfg(debug_assertions)] debug_draw: bool) {
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        #[cfg(debug_assertions)] debug_draw: bool,
+        #[cfg(debug_assertions)] orbit_radius: f32,
+    ) {
         egui::CollapsingHeader::new("Parameters")
             .default_open(true)
             .show(ui, |ui| {
@@ -201,7 +224,7 @@ impl BsdfMeasurementTab {
                             ui.end_row();
                         }
                     });
-                self.params.emitter.ui(ui, |ui| {
+                self.params.emitter.ui(ui, |params, ui| {
                     #[cfg(debug_assertions)]
                     {
                         if debug_draw {
@@ -212,13 +235,21 @@ impl BsdfMeasurementTab {
                                     .on_hover_text("Generate samples")
                                     .clicked()
                                 {
-                                    // TODO: Generate samples.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateEmitterSamples(
+                                            params.generate_unit_samples(),
+                                        ),
+                                    ));
                                 }
                                 if ui
                                     .add(ToggleSwitch::new(&mut self.debug.emitter_samples_drawing))
                                     .changed()
                                 {
-                                    // TODO: Draw samples.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleEmitterSamplesDrawing(
+                                            self.debug.emitter_samples_drawing,
+                                        ),
+                                    ));
                                 }
                             });
                             ui.end_row();
@@ -229,60 +260,116 @@ impl BsdfMeasurementTab {
                                     .add(ToggleSwitch::new(&mut self.debug.emitter_rays_drawing))
                                     .changed()
                                 {
-                                    // TODO: Draw sample rays.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleEmitterRaysDrawing(
+                                            self.debug.emitter_rays_drawing,
+                                        ),
+                                    ));
+
+                                    if self.debug.emitter_rays_drawing {
+                                        self.event_loop.send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::EmitRays,
+                                        ));
+                                    }
                                 }
 
-                                // TODO: calc max t
                                 if ui
                                     .add(
                                         egui::Slider::new(
                                             &mut self.debug.emitter_ray_param_t,
-                                            1.0..=10.0,
+                                            1.0..=orbit_radius * 2.0,
                                         )
                                         .text("t"),
                                     )
                                     .changed()
                                 {
-                                    // TODO: Draw sample rays.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateRayParams {
+                                            t: self.debug.emitter_ray_param_t,
+                                        },
+                                    ));
                                 }
                             });
                             ui.end_row();
 
                             ui.label("Measurement Points:");
                             ui.horizontal_wrapped(|ui| {
+                                let zenith_count = params.zenith.step_count_wrapped();
+                                let count = zenith_count * params.azimuth.step_count_wrapped();
+
+                                let old_index = self.debug.measurement_point_index;
+
                                 if ui.button("\u{25C0}").clicked() {
-                                    // TODO: Decrement measurement point index.
+                                    self.debug.measurement_point_index =
+                                        (self.debug.measurement_point_index - 1).max(0)
+                                            % count as i32;
                                 }
+
                                 if ui.button("\u{25B6}").clicked() {
-                                    // TODO: Increment measurement point index.
+                                    self.debug.measurement_point_index =
+                                        (self.debug.measurement_point_index + 1).max(0)
+                                            % count as i32;
                                 }
+
+                                if old_index != self.debug.measurement_point_index {
+                                    let azimuth_idx =
+                                        self.debug.measurement_point_index / zenith_count as i32;
+                                    let zenith_idx =
+                                        self.debug.measurement_point_index % zenith_count as i32;
+                                    let zenith = params.zenith.step(zenith_idx as usize);
+                                    let azimuth = params.azimuth.step(azimuth_idx as usize);
+
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateEmitterPosition {
+                                            position: Sph2::new(zenith, azimuth),
+                                        },
+                                    ));
+                                }
+
                                 if ui
                                     .add(ToggleSwitch::new(
                                         &mut self.debug.measurement_points_drawing,
                                     ))
                                     .changed()
                                 {
-                                    // TODO: Draw measurement points.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleMeasurementPointsDrawing(
+                                            self.debug.measurement_points_drawing,
+                                        ),
+                                    ));
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateMeasurementPoints(
+                                            params.generate_measurement_points(),
+                                        ),
+                                    ));
                                 }
                             });
                             ui.end_row();
                         }
                     }
                 });
-                self.params.detector.ui(ui, |ui| {
+                self.params.detector.ui(ui, |params, ui| {
                     #[cfg(debug_assertions)]
                     {
                         if debug_draw {
                             ui.label("Dome:");
                             ui.horizontal_wrapped(|ui| {
                                 if ui.button("update").clicked() {
-                                    // TODO: Update dome.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateDetectorPatches(
+                                            params.generate_patches(),
+                                        ),
+                                    ));
                                 }
                                 if ui
                                     .add(ToggleSwitch::new(&mut self.debug.detector_dome_drawing))
                                     .changed()
                                 {
-                                    // TODO: Draw dome.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleDetectorDomeDrawing(
+                                            self.debug.detector_dome_drawing,
+                                        ),
+                                    ));
                                 }
                             });
                             ui.end_row();
@@ -302,17 +389,28 @@ impl BsdfMeasurementTab {
                                     ))
                                     .changed();
                                 if changed0 || changed1 {
-                                    // TODO: Draw trajectories.
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleRayTrajectoriesDrawing {
+                                            missed: self.debug.ray_trajectories_drawing_missed,
+                                            reflected: self
+                                                .debug
+                                                .ray_trajectories_drawing_reflected,
+                                        },
+                                    ));
                                 }
                             });
                             ui.end_row();
 
-                            ui.label("Collected data:");
+                            ui.label("Collected rays:");
                             if ui
                                 .add(ToggleSwitch::new(&mut self.debug.ray_hit_points_drawing))
                                 .changed()
                             {
-                                // TODO: Draw collected data.
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleCollectedRaysDrawing(
+                                        self.debug.ray_hit_points_drawing,
+                                    ),
+                                ));
                             }
                         }
                     }
@@ -327,6 +425,7 @@ pub struct BsdfMeasurementDebug {
     pub emitter_ray_param_t: f32,
     pub emitter_rays_drawing: bool,
     pub measurement_points_drawing: bool,
+    pub measurement_point_index: i32,
     pub ray_trajectories_drawing_reflected: bool,
     pub ray_trajectories_drawing_missed: bool,
     pub ray_hit_points_drawing: bool,

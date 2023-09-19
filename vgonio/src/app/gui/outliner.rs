@@ -80,11 +80,9 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                     let state = data.surfaces.get(&self.item).unwrap();
                     if ui.selectable_label(selected, &state.name).clicked() && !selected {
                         data.selected = Some(OutlinerItem::MicroSurface(self.item));
-                        event_loop
-                            .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                OutlinerItem::MicroSurface(self.item),
-                            )))
-                            .unwrap();
+                        event_loop.send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                            OutlinerItem::MicroSurface(self.item),
+                        )));
                     }
                 })
             });
@@ -93,11 +91,9 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                 let state = prop.surfaces.get_mut(&self.item).unwrap();
                 ui.checkbox(&mut state.visible, "");
                 if ui.button("X").clicked() {
-                    event_loop
-                        .send_event(VgonioEvent::Outliner(OutlinerEvent::RemoveItem(
-                            OutlinerItem::MicroSurface(self.item),
-                        )))
-                        .unwrap();
+                    event_loop.send_event(VgonioEvent::Outliner(OutlinerEvent::RemoveItem(
+                        OutlinerItem::MicroSurface(self.item),
+                    )));
                 }
             })
         })
@@ -152,11 +148,9 @@ impl CollapsableHeader<Handle<MeasurementData>> {
                     let state = data.measured.get(&self.item).unwrap();
                     if ui.selectable_label(selected, &state.name).clicked() && !selected {
                         data.selected = Some(OutlinerItem::MeasurementData(self.item));
-                        event_loop
-                            .send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
-                                OutlinerItem::MeasurementData(self.item),
-                            )))
-                            .unwrap();
+                        event_loop.send_event(VgonioEvent::Outliner(OutlinerEvent::SelectItem(
+                            OutlinerItem::MeasurementData(self.item),
+                        )));
                     }
                 })
             });

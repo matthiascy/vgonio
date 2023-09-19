@@ -63,14 +63,7 @@ impl FileDragDrop {
                 })
                 .collect::<Vec<_>>();
 
-            if self
-                .event_loop
-                .clone()
-                .send_event(VgonioEvent::OpenFiles(files))
-                .is_err()
-            {
-                log::warn!("[EVENT] Failed to send OpenFiles event");
-            }
+            self.event_loop.send_event(VgonioEvent::OpenFiles(files));
         }
     }
 }

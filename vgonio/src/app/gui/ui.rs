@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        cache::{Handle, InnerCache},
+        cache::{Cache, Handle, InnerCache},
         gfx::GpuContext,
         gui::{
             data::PropertyData,
@@ -47,7 +47,7 @@ pub struct VgonioGui {
 
     gpu_ctx: Arc<GpuContext>,
 
-    cache: Arc<RwLock<InnerCache>>,
+    cache: Cache,
 
     // pub simulation_workspace: SimulationWorkspace, // TODO: make private, simplify access
     /// The drag and drop state.
@@ -81,7 +81,7 @@ impl VgonioGui {
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
     ) -> Self {
         log::info!("Initializing UI ...");
         let properties = Arc::new(RwLock::new(PropertyData::new()));
@@ -93,7 +93,11 @@ impl VgonioGui {
             cache: cache.clone(),
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
-            measurement: MeasurementDialog::new(event_loop.clone()),
+            measurement: MeasurementDialog::new(
+                event_loop.clone(),
+                #[cfg(debug_assertions)]
+                cache.clone(),
+            ),
             plotters: vec![],
             dock_space: DockSpace::default_layout(
                 gui.clone(),
@@ -134,8 +138,7 @@ impl VgonioGui {
                 }
                 OutlinerEvent::RemoveItem(item) => {
                     let mut properties = self.properties.write().unwrap();
-                    let mut cache = self.cache.write().unwrap();
-                    match item {
+                    self.cache.write(|cache| match item {
                         OutlinerItem::MicroSurface(handle) => {
                             properties.surfaces.remove(handle);
                             cache.unload_micro_surface(*handle).unwrap();
@@ -143,7 +146,7 @@ impl VgonioGui {
                         _ => {
                             todo!("Remove measured data from cache")
                         }
-                    }
+                    });
                     EventResponse::Handled
                 }
             },
@@ -205,29 +208,30 @@ impl VgonioGui {
                             log::debug!("Already fitted, skipping");
                             return EventResponse::Handled;
                         }
-                        let cache = self.cache.read().unwrap();
-                        let measurement = cache.get_measurement_data(*data).unwrap();
-                        let data = match method {
-                            MicrofacetDistributionFittingMethod::Adf => {
-                                MeasuredMdfData::Adf(Cow::Borrowed(
-                                    measurement
-                                        .measured
-                                        .adf_data()
-                                        .expect("Measurement has no ADF data."),
-                                ))
-                            }
-                            MicrofacetDistributionFittingMethod::Msf => {
-                                MeasuredMdfData::Msf(Cow::Borrowed(
-                                    measurement
-                                        .measured
-                                        .msf_data()
-                                        .expect("Measurement has no MSF data."),
-                                ))
-                            }
-                        };
-                        let problem =
-                            MicrofacetDistributionFittingProblem::new(data, *method, *model);
-                        let report = problem.lsq_lm_fit();
+                        let report = self.cache.read(|cache| {
+                            let measurement = cache.get_measurement_data(*data).unwrap();
+                            let data = match method {
+                                MicrofacetDistributionFittingMethod::Adf => {
+                                    MeasuredMdfData::Adf(Cow::Borrowed(
+                                        measurement
+                                            .measured
+                                            .adf_data()
+                                            .expect("Measurement has no ADF data."),
+                                    ))
+                                }
+                                MicrofacetDistributionFittingMethod::Msf => {
+                                    MeasuredMdfData::Msf(Cow::Borrowed(
+                                        measurement
+                                            .measured
+                                            .msf_data()
+                                            .expect("Measurement has no MSF data."),
+                                    ))
+                                }
+                            };
+                            let problem =
+                                MicrofacetDistributionFittingProblem::new(data, *method, *model);
+                            problem.lsq_lm_fit()
+                        });
                         report.log_fitting_report();
                         fitted.push(FittedModel::Adf(report.best_model().clone_box()));
                     }
@@ -265,20 +269,15 @@ impl VgonioGui {
     pub fn on_open_files(&mut self, files: &[rfd::FileHandle]) {
         log::info!("Process UI opening files: {:?}", files);
         let (surfaces, measurements) = self.open_files(files);
-        let cache = self.cache.read().unwrap();
-        let mut properties = self.properties.write().unwrap();
-        properties.update_surfaces(&surfaces, &cache);
-        properties.update_measurement_data(&measurements, &cache);
-        self.tools
-            .get_tool_mut::<DebuggingInspector>()
-            .unwrap()
-            .update_surfaces(&surfaces);
-        self.measurement.update_surface_selector(&surfaces, &cache);
-        self.event_loop
-            .send_event(VgonioEvent::SurfaceViewer(
-                SurfaceViewerEvent::UpdateSurfaceList { surfaces },
-            ))
-            .unwrap();
+        self.cache.read(|cache| {
+            let mut properties = self.properties.write().unwrap();
+            properties.update_surfaces(&surfaces, &cache);
+            properties.update_measurement_data(&measurements, &cache);
+            self.measurement.update_surface_selector(&surfaces, &cache);
+        });
+        self.event_loop.send_event(VgonioEvent::SurfaceViewer(
+            SurfaceViewerEvent::UpdateSurfaceList { surfaces },
+        ));
     }
 
     fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind) {
@@ -293,13 +292,11 @@ impl VgonioGui {
 
         ui.menu_image_button(texture_id, image_size, |ui| {
             if ui.button("About").clicked() {
-                self.event_loop
-                    .send_event(VgonioEvent::Notify {
-                        kind: NotifyKind::Info,
-                        text: "TODO: about".to_string(),
-                        time: 0.0,
-                    })
-                    .unwrap();
+                self.event_loop.send_event(VgonioEvent::Notify {
+                    kind: NotifyKind::Info,
+                    text: "TODO: about".to_string(),
+                    time: 0.0,
+                });
             }
 
             ui.menu_button("New", |ui| {
@@ -307,13 +304,11 @@ impl VgonioGui {
                     self.measurement.open();
                 }
                 if ui.button("Micro-surface").clicked() {
-                    self.event_loop
-                        .send_event(VgonioEvent::Notify {
-                            kind: NotifyKind::Info,
-                            text: "TODO: new height field".to_string(),
-                            time: 3.0,
-                        })
-                        .unwrap();
+                    self.event_loop.send_event(VgonioEvent::Notify {
+                        kind: NotifyKind::Info,
+                        text: "TODO: new height field".to_string(),
+                        time: 3.0,
+                    });
                 }
             });
             if ui.button("Open...").clicked() {
@@ -323,17 +318,12 @@ impl VgonioGui {
                     .user_data_dir()
                     .unwrap_or_else(|| self.config.sys_data_dir());
                 let task = AsyncFileDialog::new().set_directory(dir).pick_files();
-                let event_loop_proxy = self.event_loop.clone();
+                let event_loop = self.event_loop.clone();
                 std::thread::spawn(move || {
                     pollster::block_on(async {
                         let file_handles = task.await;
                         if let Some(hds) = file_handles {
-                            if event_loop_proxy
-                                .send_event(VgonioEvent::OpenFiles(hds))
-                                .is_err()
-                            {
-                                log::warn!("[EVENT] Failed to send OpenFiles event");
-                            }
+                            event_loop.send_event(VgonioEvent::OpenFiles(hds));
                         }
                     })
                 });
@@ -341,13 +331,11 @@ impl VgonioGui {
             ui.menu_button("Recent...", |ui| {
                 for i in 0..10 {
                     if ui.button(format!("item {i}")).clicked() {
-                        self.event_loop
-                            .send_event(VgonioEvent::Notify {
-                                kind: NotifyKind::Info,
-                                text: format!("TODO: open recent item {i}"),
-                                time: 3.0,
-                            })
-                            .unwrap();
+                        self.event_loop.send_event(VgonioEvent::Notify {
+                            kind: NotifyKind::Info,
+                            text: format!("TODO: open recent item {i}"),
+                            time: 3.0,
+                        });
                     }
                 }
             });
@@ -356,35 +344,29 @@ impl VgonioGui {
 
             {
                 if ui.button("Save...").clicked() {
-                    self.event_loop
-                        .send_event(VgonioEvent::Notify {
-                            kind: NotifyKind::Info,
-                            text: "TODO: save".into(),
-                            time: 3.0,
-                        })
-                        .unwrap();
+                    self.event_loop.send_event(VgonioEvent::Notify {
+                        kind: NotifyKind::Info,
+                        text: "TODO: save".into(),
+                        time: 3.0,
+                    });
                 }
             }
 
             ui.menu_button("Edit", |ui| {
                 {
                     if ui.button("     Undo").clicked() {
-                        self.event_loop
-                            .send_event(VgonioEvent::Notify {
-                                kind: NotifyKind::Info,
-                                text: "TODO: undo".into(),
-                                time: 3.0,
-                            })
-                            .unwrap();
+                        self.event_loop.send_event(VgonioEvent::Notify {
+                            kind: NotifyKind::Info,
+                            text: "TODO: undo".into(),
+                            time: 3.0,
+                        });
                     }
                     if ui.button("     Redo").clicked() {
-                        self.event_loop
-                            .send_event(VgonioEvent::Notify {
-                                kind: NotifyKind::Info,
-                                text: "TODO: redo".into(),
-                                time: 3.0,
-                            })
-                            .unwrap();
+                        self.event_loop.send_event(VgonioEvent::Notify {
+                            kind: NotifyKind::Info,
+                            text: "TODO: redo".into(),
+                            time: 3.0,
+                        });
                     }
                 }
 
@@ -407,13 +389,11 @@ impl VgonioGui {
                 ui.separator();
 
                 if ui.button("\u{2699} Preferences").clicked() {
-                    self.event_loop
-                        .send_event(VgonioEvent::Notify {
-                            kind: NotifyKind::Info,
-                            text: "TODO: open preferences window".into(),
-                            time: 3.0,
-                        })
-                        .unwrap();
+                    self.event_loop.send_event(VgonioEvent::Notify {
+                        kind: NotifyKind::Info,
+                        text: "TODO: open preferences window".into(),
+                        time: 3.0,
+                    });
                 }
             });
             ui.menu_button("Tools", |ui| {
@@ -433,13 +413,11 @@ impl VgonioGui {
             ui.menu_button("Theme", |ui| {
                 if ui.button("☀ Light").clicked() {
                     self.event_loop
-                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Light))
-                        .unwrap();
+                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Light));
                 }
                 if ui.button("🌙 Dark").clicked() {
                     self.event_loop
-                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Dark))
-                        .unwrap();
+                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Dark));
                 }
             });
 
@@ -448,10 +426,8 @@ impl VgonioGui {
             ui.add_space(6.0);
             #[cfg(not(target_arch = "wasm32"))]
             {
-                if ui.button("Quit").clicked()
-                    && self.event_loop.send_event(VgonioEvent::Quit).is_err()
-                {
-                    log::warn!("[EVENT] Failed to send Quit event.");
+                if ui.button("Quit").clicked() {
+                    self.event_loop.send_event(VgonioEvent::Quit);
                 }
             }
         });
@@ -476,38 +452,39 @@ impl VgonioGui {
                     "vgmo" => {
                         // Micro-surface measurement data
                         log::debug!("Opening micro-surface measurement output: {:?}", path);
-                        match self
-                            .cache
-                            .write()
-                            .unwrap()
-                            .load_micro_surface_measurement(&self.config, &path)
-                        {
-                            Ok(hdl) => {
-                                measurements.push(hdl);
+                        self.cache.write(|cache| {
+                            match cache.load_micro_surface_measurement(&self.config, &path) {
+                                Ok(hdl) => {
+                                    measurements.push(hdl);
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to load micro surface measurement: {:?}",
+                                        e
+                                    );
+                                }
                             }
-                            Err(e) => {
-                                log::error!("Failed to load micro surface measurement: {:?}", e);
-                            }
-                        }
+                        })
                     }
                     "vgms" | "txt" | "os3d" => {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", path);
-                        let mut locked_cache = self.cache.write().unwrap();
-                        match locked_cache.load_micro_surface(&self.config, &path) {
-                            Ok((surf, _)) => {
-                                let _ = locked_cache
-                                    .create_micro_surface_renderable_mesh(
-                                        &self.gpu_ctx.device,
-                                        surf,
-                                    )
-                                    .unwrap();
-                                surfaces.push(surf)
+                        self.cache.write(|cache| {
+                            match cache.load_micro_surface(&self.config, &path) {
+                                Ok((surf, _)) => {
+                                    let _ = cache
+                                        .create_micro_surface_renderable_mesh(
+                                            &self.gpu_ctx.device,
+                                            surf,
+                                        )
+                                        .unwrap();
+                                    surfaces.push(surf)
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to load micro surface: {:?}", e);
+                                }
                             }
-                            Err(e) => {
-                                log::error!("Failed to load micro surface: {:?}", e);
-                            }
-                        }
+                        })
                     }
                     "spd" => {
                         todo!()

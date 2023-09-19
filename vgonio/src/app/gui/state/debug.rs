@@ -1,22 +1,19 @@
 use crate::{
     app::{
-        cache::{Cache, Handle, InnerCache},
+        cache::{Cache, Handle},
         gfx::{GpuContext, RenderPass, VertexLayout},
         gui::{
             event::{EventLoopProxy, VgonioEvent},
             notify::NotifyKind,
         },
     },
-    measure::{
-        bsdf::{
-            detector::DetectorPatches,
-            emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
-            rtc::{Ray, RtcMethod},
-        },
-        params::BsdfMeasurementParams,
+    measure::bsdf::{
+        detector::DetectorPatches,
+        emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
+        rtc::{Ray, RayTrajectory},
     },
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use uuid::Uuid;
 use vgcore::math::{Mat4, Sph2, Vec3};
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
@@ -154,7 +151,7 @@ impl DebugDrawingState {
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
         event_loop: EventLoopProxy,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
     ) -> Self {
         let vert_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
         let vert_buffer_layout = vert_layout.buffer_layout(wgpu::VertexStepMode::Vertex);
@@ -416,7 +413,7 @@ impl DebugDrawingState {
             detector_ray_hit_points_buffer: None,
             detector_ray_hit_points_drawing: false,
             ray_trajectories_missed_buffer: None,
-            cache: Cache(cache),
+            cache,
             ray_trajectories_drawing_reflected: false,
             ray_trajectories_reflected_buffer: None,
             ray_trajectories_drawing_missed: false,
@@ -484,6 +481,7 @@ impl DebugDrawingState {
         position: Option<Sph2>,
     ) {
         if self.microsurface.is_none() {
+            log::debug!("No microsurface to draw emitter");
             return;
         }
 
@@ -549,16 +547,14 @@ impl DebugDrawingState {
     pub fn emit_rays(&mut self, ctx: &GpuContext) {
         if self.emitter_samples.is_none() {
             log::trace!("No emitter samples to emit rays from");
-            self.event_loop
-                .send_event(VgonioEvent::Notify {
-                    kind: NotifyKind::Warning,
-                    text: "Generate samples before generate rays".to_string(),
-                    time: 4.0,
-                })
-                .unwrap();
+            self.event_loop.send_event(VgonioEvent::Notify {
+                kind: NotifyKind::Warning,
+                text: "Generate samples before generate rays".to_string(),
+                time: 4.0,
+            });
             return;
         }
-        log::trace!("Emitting rays at {}", self.emitter_position);
+        log::trace!("[DbgDrawing] Emitting rays at {}", self.emitter_position);
         let (orbit_radius, disc_radius) = self.estimate_radii().unwrap();
         self.emitter_rays = Some(EmitterParams::emit_rays(
             self.emitter_samples.as_ref().unwrap(),
@@ -582,16 +578,8 @@ impl DebugDrawingState {
         ));
     }
 
-    pub fn update_detector_drawing(
-        &mut self,
-        ctx: &GpuContext,
-        status: bool,
-        patches: DetectorPatches,
-    ) {
-        log::trace!("[DebugDrawingState] Updating collector drawing");
-        self.detector_dome_drawing = status;
+    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, patches: DetectorPatches) {
         if self.microsurface.is_none() {
-            log::debug!("No microsurface to draw collector");
             return;
         }
         match &patches {
@@ -656,154 +644,81 @@ impl DebugDrawingState {
         self.detector_patches = Some(patches);
     }
 
-    pub fn update_surface_primitive_id(
-        &mut self,
-        surf: Option<Handle<MicroSurface>>,
-        id: u32,
-        status: bool,
-    ) {
-        log::trace!(
-            "[DebugDrawingState] Updating surface {:?} primitive id to {}",
-            surf,
-            id
-        );
-        match surf {
-            None => {
-                self.microsurface = None;
-            }
-            Some(surf) => {
-                self.cache.read(|cache| {
-                    self.microsurface =
-                        Some((surf, cache.get_micro_surface_record(surf).unwrap().mesh));
-                    self.surface_primitive_id = id;
-                    self.surface_primitive_drawing = status;
-                });
-            }
+    pub fn update_focused_surface(&mut self, surf: Option<Handle<MicroSurface>>) {
+        if let Some(surf) = surf {
+            self.cache.read(|cache| {
+                self.microsurface = Some((surf, cache.get_micro_surface_record(surf).unwrap().mesh))
+            });
+        } else {
+            self.microsurface = None;
         }
     }
 
+    pub fn update_surface_primitive_id(&mut self, id: u32, status: bool) {
+        if self.microsurface.is_none() {
+            return;
+        }
+        self.cache.read(|cache| {
+            self.surface_primitive_id = id;
+            self.surface_primitive_drawing = status;
+        });
+    }
+
+    pub fn update_ray_hit_points(&mut self, ctx: &GpuContext, hit_points: &[Vec3]) {
+        self.detector_ray_hit_points_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("debug-detector-ray-hit-points"),
+                contents: bytemuck::cast_slice(hit_points),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            },
+        ));
+    }
+
     /// Updates the ray trajectories for the debugging draw calls.
-    pub fn update_ray_trajectories(
-        &mut self,
-        ctx: &GpuContext,
-        method: RtcMethod,
-        params: BsdfMeasurementParams,
-        mesh: Handle<MicroSurfaceMesh>,
-    ) {
-        if self.emitter_samples.is_none() {
-            self.event_loop
-                .send_event(VgonioEvent::Notify {
-                    kind: NotifyKind::Warning,
-                    text: "Please generate samples before tracing".to_string(),
-                    time: 4.0,
-                })
-                .unwrap();
-            return;
-        }
-
-        if self.detector_patches.is_none() {
-            self.event_loop
-                .send_event(VgonioEvent::Notify {
-                    kind: NotifyKind::Warning,
-                    text: "Please generate patches before tracing".to_string(),
-                    time: 4.0,
-                })
-                .unwrap();
-            return;
-        }
-
-        match method {
-            #[cfg(feature = "embree")]
-            RtcMethod::Embree => {
-                todo!()
-                //     #[cfg(debug_assertions)]
-                //     {
-                //         let measured = self.cache.read(|cache| {
-                //             let mesh =
-                // cache.get_micro_surface_mesh(mesh).unwrap();
-                //             embr::measure_bsdf_once(
-                //                 &params,
-                //                 mesh,
-                //                 self.emitter_samples.as_ref().unwrap(),
-                //                 self.collector_patches.as_ref().unwrap(),
-                //                 self.emitter_position,
-                //                 &self.cache.0,
-                //             )
-                //         });
-                //
-                //         let mut reflected = vec![];
-                //         let mut missed = vec![];
-                //
-                //         for trajectory in measured.trajectories.iter() {
-                //             let mut iter = trajectory.0.iter().peekable();
-                //             let mut i = 0;
-                //             while let Some(node) = iter.next() {
-                //                 let org: Vec3 = node.org.into();
-                //                 let dir: Vec3 = node.dir.into();
-                //                 match iter.peek() {
-                //                     None => {
-                //                         // Last node
-                //                         if i == 0 {
-                //                             missed.push(org);
-                //                             missed.push(org + dir *
-                // self.collector_orbit_radius * 1.2);
-                //                         } else {
-                //                             reflected.push(org);
-                //                             reflected
-                //                                 .push(org + dir *
-                // self.collector_orbit_radius * 1.2);
-                //                         }
-                //                         i += 1;
-                //                     }
-                //                     Some(next) => {
-                //                         reflected.push(org);
-                //                         reflected.push(next.org.into());
-                //                         i += 1;
-                //                     }
-                //                 }
-                //             }
-                //         }
-                //         self.ray_trajectories_missed_buffer =
-                // Some(ctx.device.create_buffer_init(
-                //             &wgpu::util::BufferInitDescriptor {
-                //                 label:
-                // Some("debug-collector-ray-trajectories-missed"),
-                //                 contents: bytemuck::cast_slice(&missed),
-                //                 usage: wgpu::BufferUsages::VERTEX |
-                // wgpu::BufferUsages::COPY_DST,             },
-                //         ));
-                //         self.ray_trajectories_reflected_buffer =
-                // Some(ctx.device.create_buffer_init(
-                //             &wgpu::util::BufferInitDescriptor {
-                //                 label:
-                // Some("debug-collector-ray-trajectories-reflected"),
-                //                 contents: bytemuck::cast_slice(&reflected),
-                //                 usage: wgpu::BufferUsages::VERTEX |
-                // wgpu::BufferUsages::COPY_DST,             },
-                //         ));
-                //         self.collector_ray_hit_points_buffer =
-                // Some(ctx.device.create_buffer_init(
-                //             &wgpu::util::BufferInitDescriptor {
-                //                 label:
-                // Some("debug-collector-ray-hit-points"),
-                //                 contents:
-                // bytemuck::cast_slice(&measured.hit_points),
-                //                 usage: wgpu::BufferUsages::VERTEX |
-                // wgpu::BufferUsages::COPY_DST,             },
-                //         ));
-                //     }
-                //     #[cfg(not(debug_assertions))]
-                //     log::error!("Ray trajectories can only be drawn in debug
-                // mode");
-            }
-            #[cfg(feature = "optix")]
-            RtcMethod::Optix => {
-                log::info!("OptiX is not supported for ray trajectory drawing");
-            }
-            RtcMethod::Grid => {
-                log::info!("Grid is not supported for ray trajectory drawing");
+    pub fn update_ray_trajectories(&mut self, ctx: &GpuContext, trajectories: &[RayTrajectory]) {
+        let (orbit_radius, _) = self.estimate_radii().unwrap();
+        let mut reflected = vec![];
+        let mut missed = vec![];
+        for trajectory in trajectories.iter() {
+            let mut iter = trajectory.0.iter().peekable();
+            let mut i = 0;
+            while let Some(node) = iter.next() {
+                let org: Vec3 = node.org.into();
+                let dir: Vec3 = node.dir.into();
+                match iter.peek() {
+                    None => {
+                        // Last node
+                        if i == 0 {
+                            missed.push(org);
+                            missed.push(org + dir * orbit_radius * 1.2);
+                        } else {
+                            reflected.push(org);
+                            reflected.push(org + dir * orbit_radius * 1.2);
+                        }
+                        i += 1;
+                    }
+                    Some(next) => {
+                        reflected.push(org);
+                        reflected.push(next.org.into());
+                        i += 1;
+                    }
+                }
             }
         }
+        self.ray_trajectories_missed_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("debug-collector-ray-trajectories-missed"),
+                contents: bytemuck::cast_slice(&missed),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            },
+        ));
+        self.ray_trajectories_reflected_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("debug-collector-ray-trajectories-reflected"),
+                contents: bytemuck::cast_slice(&reflected),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            },
+        ));
     }
 
     /// Records the render process for the debugging draw calls.
@@ -832,7 +747,6 @@ impl DebugDrawingState {
                 });
 
                 let mut constants = [0.0f32; 20];
-                // Draw emitter samples.
                 if let Some(samples) = &self.emitter_samples_buffer {
                     if self.emitter_samples_drawing {
                         // Convert range in bytes to range in vertices.

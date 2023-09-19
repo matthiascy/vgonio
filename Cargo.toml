@@ -1,5 +1,5 @@
 [workspace]
-members = ["vgonio", "vgonio-core", "vgonio-bxdf", "vgonio-surf"]
+members = ["vgonio", "vgonio-core", "vgonio-bxdf", "vgonio-jabr", "vgonio-surf"]
 resolver = "2"
 
 [workspace.package]
@@ -9,6 +9,7 @@ version = "0.3.0"
 
 [workspace.dependencies]
 ahash = "0.8"
+approx = "0.5"
 byteorder = "1.4"
 cfg-if = "1.0"
 clap = { version = "4", features = ["derive"] }

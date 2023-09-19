@@ -7,6 +7,7 @@ pub(crate) use debugging::DebuggingInspector;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
 use std::sync::{Arc, RwLock};
+use crate::app::cache::Cache;
 
 use super::state::GuiRenderer;
 
@@ -32,7 +33,7 @@ impl Tools {
         event_loop: EventLoopProxy,
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
     ) -> Self {
         log::info!("Initializing tools...");
         Self {

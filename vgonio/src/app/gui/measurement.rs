@@ -4,21 +4,75 @@ mod mmsf;
 
 use crate::{
     app::{
-        cache::{Handle, InnerCache},
+        cache::{Cache, Handle, InnerCache},
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
                 bsdf::BsdfMeasurementTab, madf::AdfMeasurementTab, mmsf::MsfMeasurementTab,
             },
+            misc,
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
-    measure::params::MeasurementKind,
+    measure,
+    measure::{
+        bsdf::detector::{DetectorParams, DetectorScheme},
+        params::{MeasurementKind, MeasurementParams},
+    },
+    SphericalDomain,
 };
 use egui::Widget;
+use vgcore::math::Sph2;
 use vgsurf::MicroSurface;
 
+impl DetectorParams {
+    /// UI for detector parameters.
+    pub fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        add_contents: impl FnOnce(&mut DetectorParams, &mut egui::Ui) -> R,
+    ) {
+        egui::CollapsingHeader::new("Detector")
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("detector_grid")
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("Precision:");
+                        misc::drag_angle(&mut self.precision, "").ui(ui);
+                        ui.end_row();
+
+                        ui.label("Domain:");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(&mut self.domain, SphericalDomain::Upper, "Upper");
+                            ui.selectable_value(&mut self.domain, SphericalDomain::Lower, "Lower");
+                            ui.selectable_value(&mut self.domain, SphericalDomain::Whole, "Whole");
+                        });
+                        ui.end_row();
+
+                        ui.label("Scheme");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(
+                                &mut self.scheme,
+                                DetectorScheme::Beckers,
+                                "Beckers",
+                            );
+                            ui.selectable_value(
+                                &mut self.scheme,
+                                DetectorScheme::Tregenza,
+                                "Tregenza",
+                            );
+                        });
+                        ui.end_row();
+
+                        add_contents(self, ui);
+                    });
+            });
+    }
+}
+
 impl MeasurementKind {
+    /// UI for measurement kind.
     pub fn selectable_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.label("Measurement kind: ");
@@ -35,21 +89,27 @@ pub struct MeasurementDialog {
     tab_bsdf: BsdfMeasurementTab,
     tab_adf: AdfMeasurementTab,
     tab_msf: MsfMeasurementTab,
-    open: bool,
+    /// Whether the measurement is a single point measurement.
+    single_point: bool,
+    /// Whether the dialog is open.
+    is_open: bool,
     event_loop: EventLoopProxy,
     #[cfg(debug_assertions)]
     debug: MeasurementDialogDebug,
+    #[cfg(debug_assertions)]
+    cache: Cache,
 }
 
 impl MeasurementDialog {
-    pub fn new(event_loop: EventLoopProxy) -> Self {
+    pub fn new(event_loop: EventLoopProxy, cache: Cache) -> Self {
         MeasurementDialog {
             kind: MeasurementKind::Bsdf,
             selector: SurfaceSelector::multiple(),
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: AdfMeasurementTab::new(event_loop.clone()),
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
-            open: false,
+            single_point: false,
+            is_open: false,
             event_loop,
             #[cfg(debug_assertions)]
             debug: MeasurementDialogDebug {
@@ -59,6 +119,7 @@ impl MeasurementDialog {
                 surface_viewers: vec![],
                 focused_viewer: None,
             },
+            cache,
         }
     }
 
@@ -75,11 +136,11 @@ impl MeasurementDialog {
         }
     }
 
-    pub fn open(&mut self) { self.open = true; }
+    pub fn open(&mut self) { self.is_open = true; }
 
     pub fn show(&mut self, ctx: &egui::Context) {
         egui::Window::new("New Measurement")
-            .open(&mut self.open)
+            .open(&mut self.is_open)
             .fixed_size((400.0, 600.0))
             .show(ctx, |ui| {
                 self.kind.selectable_ui(ui);
@@ -91,13 +152,9 @@ impl MeasurementDialog {
                             .add(ToggleSwitch::new(&mut self.debug.enable_debug_draw))
                             .changed()
                         {
-                            self.event_loop
-                                .send_event(VgonioEvent::Debugging(
-                                    DebuggingEvent::ToggleDebugDrawing(
-                                        self.debug.enable_debug_draw,
-                                    ),
-                                ))
-                                .unwrap();
+                            self.event_loop.send_event(VgonioEvent::Debugging(
+                                DebuggingEvent::ToggleDebugDrawing(self.debug.enable_debug_draw),
+                            ));
                         }
                     });
                     if self.debug.enable_debug_draw {
@@ -127,27 +184,27 @@ impl MeasurementDialog {
                                     }
                                 });
                             if prev != self.debug.focused_viewer {
-                                self.event_loop
-                                    .send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::FocusSurfaceViewer(
-                                            self.debug.focused_viewer,
-                                        ),
-                                    ))
-                                    .unwrap();
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::FocusSurfaceViewer(self.debug.focused_viewer),
+                                ));
                             }
                         });
                     }
                 }
-
-                let first_selected = self.selector.first_selected();
-
                 egui::CollapsingHeader::new("Specimen")
                     .default_open(true)
                     .show(ui, |ui| {
                         egui::Grid::new("specimen_grid").show(ui, |ui| {
+                            let old_surf = self.selector.first_selected();
                             ui.label("MicroSurfaces: ");
                             self.selector.ui("micro_surface_selector", ui);
                             ui.end_row();
+                            let new_surf = self.selector.first_selected();
+                            if old_surf != new_surf {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateFocusedSurface(new_surf),
+                                ));
+                            }
 
                             #[cfg(debug_assertions)]
                             if self.debug.enable_debug_draw {
@@ -175,15 +232,12 @@ impl MeasurementDialog {
                                         .changed();
 
                                     if prev_clicked || next_clicked || toggle_changed {
-                                        self.event_loop
-                                            .send_event(VgonioEvent::Debugging(
-                                                DebuggingEvent::UpdateSurfacePrimitiveId {
-                                                    surf: first_selected,
-                                                    id: self.debug.surf_prim_id as u32,
-                                                    status: self.debug.show_surf_prim,
-                                                },
-                                            ))
-                                            .unwrap();
+                                        self.event_loop.send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::UpdateSurfacePrimitiveId {
+                                                id: self.debug.surf_prim_id as u32,
+                                                status: self.debug.show_surf_prim,
+                                            },
+                                        ));
                                     }
                                 });
                                 ui.end_row();
@@ -192,46 +246,72 @@ impl MeasurementDialog {
                     });
 
                 match self.kind {
-                    MeasurementKind::Bsdf => self.tab_bsdf.ui(
-                        ui,
+                    MeasurementKind::Bsdf => {
                         #[cfg(debug_assertions)]
-                        self.debug.enable_debug_draw,
-                    ),
+                        let orbit_radius = match self.selector.first_selected() {
+                            None => 0.0,
+                            Some(surf) => self.cache.read(|cache| {
+                                measure::estimate_orbit_radius(
+                                    cache.get_micro_surface_mesh_by_surface_id(surf).unwrap(),
+                                )
+                            }),
+                        };
+                        self.tab_bsdf.ui(
+                            ui,
+                            #[cfg(debug_assertions)]
+                            self.debug.enable_debug_draw,
+                            #[cfg(debug_assertions)]
+                            orbit_radius,
+                        )
+                    }
                     MeasurementKind::Adf => self.tab_adf.ui(ui),
                     MeasurementKind::Msf => self.tab_msf.ui(ui),
                 }
                 ui.separator();
 
-                if ui
-                    .button("Simulate")
-                    .on_hover_text("Starts the measurement")
-                    .clicked()
-                {
-                    // TODO: launch simulation on a separate thread and show progress bar
-                    log::info!("Starting measurement");
+                if self.kind == MeasurementKind::Bsdf {
+                    ui.checkbox(&mut self.single_point, "Single Point");
                 }
+
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .button("Simulate")
+                        .on_hover_text("Starts the measurement")
+                        .clicked()
+                    {
+                        match self.kind {
+                            MeasurementKind::Bsdf => {
+                                let single_point = if self.single_point {
+                                    Some(self.tab_bsdf.measurement_point())
+                                } else {
+                                    None
+                                };
+                                self.event_loop.send_event(VgonioEvent::Measure {
+                                    single_point,
+                                    params: MeasurementParams::Bsdf(self.tab_bsdf.params),
+                                    surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                });
+                            }
+                            MeasurementKind::Adf => {
+                                self.event_loop.send_event(VgonioEvent::Measure {
+                                    single_point: None,
+                                    params: MeasurementParams::Adf(self.tab_adf.params),
+                                    surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                });
+                            }
+                            MeasurementKind::Msf => {
+                                self.event_loop.send_event(VgonioEvent::Measure {
+                                    single_point: None,
+                                    params: MeasurementParams::Msf(self.tab_msf.params),
+                                    surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                });
+                            }
+                        }
+                    }
+                });
             });
     }
 }
-
-// if ui.button("Simulate").clicked() {
-// // TODO: launch simulation on a separate thread and show progress bar
-// self.event_loop
-// .send_event(VgonioEvent::Measure(MeasureEvent::Madf {
-// params: self.params,
-// surfaces: self.selector.selected().collect(),
-// }))
-// .unwrap();
-// }
-
-// if ui.button("Simulate").clicked() {
-// self.event_loop
-// .send_event(VgonioEvent::Measure(MeasureEvent::Mmsf {
-// params: self.params,
-// surfaces: self.selector.selected().collect(),
-// }))
-// .unwrap();
-// }
 
 #[cfg(debug_assertions)]
 pub struct MeasurementDialogDebug {

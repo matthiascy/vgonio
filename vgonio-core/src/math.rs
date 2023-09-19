@@ -192,7 +192,11 @@ impl Sph2 {
 
     /// Converts from a cartesian coordinate.
     pub fn from_cartesian(cartesian: Vec3) -> Self {
-        assert!(ulp_eq(cartesian.length_squared(), 1.0));
+        debug_assert!(approx::ulps_eq!(
+            cartesian.length_squared(),
+            1.0,
+            epsilon = f32::EPSILON
+        ));
         let (_, zenith, azimuth) = cartesian_to_spherical(cartesian, 1.0);
         Self {
             theta: zenith,

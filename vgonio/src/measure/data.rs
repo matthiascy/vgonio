@@ -1,3 +1,5 @@
+//! Measurement data description.
+
 use crate::{
     app::cache::{Asset, Handle},
     fitting::MeasuredMdfData,

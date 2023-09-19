@@ -1,12 +1,8 @@
 use crate::{
-    app::{
-        cache,
-        cache::{Handle, InnerCache},
-    },
+    app::cache::{Handle, InnerCache},
     measure::{
         bsdf::{
-            rtc::RayTrajectory, BsdfMeasurementStatsPoint, BsdfSnapshot, MeasuredBsdfData,
-            PerWavelength, SimulationResult, SimulationResultPoint,
+            BsdfMeasurementStatsPoint, BsdfSnapshot, PerWavelength, RayTrajectory, SimulationResult,
         },
         params::BsdfMeasurementParams,
     },
@@ -15,11 +11,12 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use vgcore::{
+    error::VgonioError,
     math,
-    math::{rcp_f32, Sph2, UVec2, Vec2, Vec3, Vec3A},
-    units::{deg, rad, Radians, SolidAngle},
+    math::{rcp_f32, Sph2, Vec2, Vec3, Vec3A},
+    units::{rad, Radians, SolidAngle},
 };
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
+use vgsurf::MicroSurface;
 
 /// Description of a detector collecting the data.
 ///
@@ -78,6 +75,14 @@ pub enum DetectorPatches {
 }
 
 impl DetectorPatches {
+    /// Returns the number of patches.
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Beckers { patches, .. } => patches.len(),
+            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
+        }
+    }
+
     /// Returns the iterator over the patches.
     pub fn patches_iter(&self) -> impl Iterator<Item = &Patch> {
         match self {
@@ -273,11 +278,9 @@ impl DetectorParams {
                 let ks = beckers::compute_ks(1, num_rings);
                 let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
                 let ts = beckers::compute_ts(&rs);
-                log::trace!("ks: {:?}", ks);
-                log::trace!("rs: {:?}", rs);
-                log::trace!("ts: {:?}", ts);
                 let mut patches = Vec::with_capacity(ks[num_rings as usize - 1] as usize);
                 let mut rings = Vec::with_capacity(num_rings as usize);
+                // Patches are generated in the order of rings.
                 for (i, (t, k)) in ts.iter().zip(ks.iter()).enumerate() {
                     log::trace!("Ring {}: t = {}, k = {}", i, t.to_degrees(), k);
                     let k_prev = if i == 0 { 0 } else { ks[i - 1] };

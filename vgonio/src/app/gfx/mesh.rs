@@ -1,10 +1,7 @@
 use crate::app::{cache::Asset, gfx::VertexLayout};
-use bytemuck::{Pod, Zeroable};
-use std::ops::Index;
 use uuid::Uuid;
 use vgcore::math::{Aabb, Vec3};
 use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
-use wgpu::util::DeviceExt;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]

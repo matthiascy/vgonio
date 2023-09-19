@@ -249,15 +249,13 @@ impl VariantData for AreaDistributionExtra {
                         )
                         .clicked()
                     {
-                        event_loop
-                            .send_event(VgonioEvent::Fitting {
-                                kind: FittingProblemKind::Mdf {
-                                    model: self.selected.model,
-                                    method: MicrofacetDistributionFittingMethod::Adf,
-                                },
-                                data,
-                            })
-                            .unwrap();
+                        event_loop.send_event(VgonioEvent::Fitting {
+                            kind: FittingProblemKind::Mdf {
+                                model: self.selected.model,
+                                method: MicrofacetDistributionFittingMethod::Adf,
+                            },
+                            data,
+                        });
                     }
                 });
 

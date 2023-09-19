@@ -6,15 +6,13 @@ use std::{
 };
 use uuid::Uuid;
 
-mod brdf_measurement;
 mod microfacet;
 mod shadow_map;
 
 use crate::app::{
-    cache::{Handle, InnerCache},
+    cache::{Cache, Handle, InnerCache},
     gui::{tools::Tool, widgets::ToggleSwitch},
 };
-use brdf_measurement::BrdfMeasurementDebugging;
 use microfacet::MicrofacetDebugging;
 use shadow_map::DepthMapPane;
 use vgsurf::MicroSurface;
@@ -37,7 +35,6 @@ pub(crate) struct DebuggingInspector {
     pub debug_drawing_enabled: bool,
     event_loop: EventLoopProxy,
     pub(crate) depth_map_pane: DepthMapPane,
-    pub(crate) brdf_debugging: BrdfMeasurementDebugging,
     pub(crate) microfacet_debugging: MicrofacetDebugging,
 }
 
@@ -60,11 +57,9 @@ impl Tool for DebuggingInspector {
                 .add(ToggleSwitch::new(&mut self.debug_drawing_enabled))
                 .changed()
             {
-                self.event_loop
-                    .send_event(VgonioEvent::Debugging(DebuggingEvent::ToggleDebugDrawing(
-                        self.debug_drawing_enabled,
-                    )))
-                    .unwrap();
+                self.event_loop.send_event(VgonioEvent::Debugging(
+                    DebuggingEvent::ToggleDebugDrawing(self.debug_drawing_enabled),
+                ));
             }
         });
 
@@ -80,7 +75,7 @@ impl Tool for DebuggingInspector {
                 ui.add(&mut self.depth_map_pane);
             }
             PaneKind::Brdf => {
-                ui.add(&mut self.brdf_debugging);
+                // TODO: remove this
             }
             PaneKind::Microfacet => {
                 ui.add(&mut self.microfacet_debugging);
@@ -94,18 +89,13 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(event_loop: EventLoopProxy, cache: Arc<RwLock<InnerCache>>) -> Self {
+    pub fn new(event_loop: EventLoopProxy, cache: Cache) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: false,
             event_loop: event_loop.clone(),
             depth_map_pane: DepthMapPane::new(event_loop.clone()),
-            brdf_debugging: BrdfMeasurementDebugging::new(event_loop.clone(), cache),
             microfacet_debugging: MicrofacetDebugging::new(event_loop),
         }
-    }
-
-    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>]) {
-        self.brdf_debugging.update_surface_selector(surfs);
     }
 }

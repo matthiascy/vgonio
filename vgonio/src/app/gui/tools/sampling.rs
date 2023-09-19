@@ -56,11 +56,9 @@ impl Tool for SamplingInspector {
     fn name(&self) -> &'static str { "Sampling" }
 
     fn show(&mut self, ctx: &egui::Context, open: &mut bool) {
-        self.event_loop
-            .send_event(VgonioEvent::Debugging(
-                DebuggingEvent::ToggleSamplingRendering(*open),
-            ))
-            .unwrap();
+        self.event_loop.send_event(VgonioEvent::Debugging(
+            DebuggingEvent::ToggleSamplingRendering(*open),
+        ));
         egui::Window::new(self.name()).open(open).show(ctx, |ui| {
             self.ui(ui);
         });

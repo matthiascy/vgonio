@@ -1,3 +1,6 @@
+//! Fitting of microfacet distribution functions and bidirectional
+//! scattering distribution functions.
+
 mod mdf;
 
 pub use mdf::*;

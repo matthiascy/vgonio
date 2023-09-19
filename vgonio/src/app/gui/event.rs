@@ -12,12 +12,9 @@ use crate::{
         bsdf::{
             detector::DetectorPatches,
             emitter::{EmitterSamples, MeasurementPoints},
-            rtc::RtcMethod,
         },
         data::MeasurementData,
-        params::{
-            AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
-        },
+        params::{MeasurementKind, MeasurementParams},
     },
 };
 use uuid::Uuid;
@@ -30,7 +27,23 @@ use vgsurf::{MicroSurface, MicroSurfaceMesh};
 use super::outliner::OutlinerItem;
 
 /// Event loop proxy with Vgonio events.
-pub type EventLoopProxy = winit::event_loop::EventLoopProxy<VgonioEvent>;
+#[derive(Clone, Debug)]
+pub struct EventLoopProxy(winit::event_loop::EventLoopProxy<VgonioEvent>);
+
+impl EventLoopProxy {
+    pub fn send_event(&self, event: VgonioEvent) {
+        match self.0.send_event(event) {
+            Ok(_) => {}
+            Err(err) => {
+                log::error!("Failed to send event: {}", err);
+            }
+        }
+    }
+
+    pub fn new(event_loop: &winit::event_loop::EventLoop<VgonioEvent>) -> Self {
+        Self(event_loop.create_proxy())
+    }
+}
 
 /// Events used by Vgonio application.
 #[derive(Debug)]
@@ -47,7 +60,14 @@ pub enum VgonioEvent {
     },
     BsdfViewer(BsdfViewerEvent),
     Debugging(DebuggingEvent),
-    Measure(MeasureEvent),
+    Measure {
+        /// Whether to measure at one measurement point.
+        single_point: Option<Sph2>,
+        /// Parameters of the measurement.
+        params: MeasurementParams,
+        /// Surfaces to be measured.
+        surfaces: Vec<Handle<MicroSurface>>,
+    },
     Notify {
         kind: NotifyKind,
         text: String,
@@ -136,28 +156,22 @@ pub enum BsdfViewerEvent {
 #[derive(Debug)]
 pub enum DebuggingEvent {
     ToggleDebugDrawing(bool),
-    ToggleEmitterPointsDrawing(bool),
+    ToggleMeasurementPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
     ToggleEmitterSamplesDrawing(bool),
     ToggleRayTrajectoriesDrawing {
         missed: bool,
         reflected: bool,
     },
-    ToggleCollectedRaysDrawing(bool),
     FocusSurfaceViewer(Option<Uuid>),
-    MeasureOnce {
-        method: RtcMethod,
-        params: BsdfMeasurementParams,
-        mesh: Handle<MicroSurfaceMesh>,
-    },
     UpdateGridCellDrawing {
         pos: IVec2,
         status: bool,
     },
-    UpdateCollectorDrawing {
-        status: bool,
-        patches: DetectorPatches,
-    },
+
+    ToggleCollectedRaysDrawing(bool),
+    ToggleDetectorDomeDrawing(bool),
+    UpdateDetectorPatches(DetectorPatches),
     ToggleSamplingRendering(bool),
     UpdateDepthMap,
     UpdateRayParams {
@@ -167,17 +181,13 @@ pub enum DebuggingEvent {
         surf: Handle<MicroSurface>,
         mesh: Handle<MicroSurfaceMesh>,
     },
-    UpdateEmitterSamples {
-        samples: EmitterSamples,
-    },
-    UpdateEmitterPoints {
-        points: MeasurementPoints,
-    },
+    UpdateEmitterSamples(EmitterSamples),
+    UpdateMeasurementPoints(MeasurementPoints),
     UpdateEmitterPosition {
         position: Sph2,
     },
+    UpdateFocusedSurface(Option<Handle<MicroSurface>>),
     UpdateSurfacePrimitiveId {
-        surf: Option<Handle<MicroSurface>>,
         id: u32,
         status: bool,
     },
@@ -189,22 +199,6 @@ pub enum DebuggingEvent {
 pub enum OutlinerEvent {
     SelectItem(OutlinerItem),
     RemoveItem(OutlinerItem),
-}
-
-#[derive(Debug)]
-pub enum MeasureEvent {
-    Madf {
-        params: AdfMeasurementParams,
-        surfaces: Vec<Handle<MicroSurface>>,
-    },
-    Mmsf {
-        params: MsfMeasurementParams,
-        surfaces: Vec<Handle<MicroSurface>>,
-    },
-    Bsdf {
-        params: BsdfMeasurementParams,
-        surfaces: Vec<Handle<MicroSurface>>,
-    },
 }
 
 /// Response to an event.

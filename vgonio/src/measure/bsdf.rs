@@ -18,6 +18,7 @@ use crate::{
         params::SimulationKind,
     },
 };
+use image::{ImageBuffer, Luma};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -48,6 +49,32 @@ pub struct MeasuredBsdfData {
     /// index is the azimuthal angle, and the second index is the zenith angle.
     /// The order of the data point follows the order of collector's patches.
     pub samples: Vec<PerWavelength<f32>>,
+    #[cfg(debug_assertions)]
+    /// Trajectories of the rays for each emitter's position.
+    pub trajectories: Vec<Vec<RayTrajectory>>,
+    #[cfg(debug_assertions)]
+    /// Hit points on the collector for each emitter's position.
+    pub hit_points: Vec<Vec<Vec3>>,
+}
+
+impl MeasuredBsdfData {
+    pub fn write_to_images(&self, path: &std::path::Path) {
+        const WIDTH: usize = 512;
+        const HEIGHT: usize = 512;
+        let mut img: ImageBuffer<Luma<f32>, Vec<f32>> =
+            image::ImageBuffer::new(WIDTH as u32, HEIGHT as u32);
+
+        // Save the image for each measurement point.
+        for w_i in self.params.emitter.generate_measurement_points().iter() {
+            for i in 0..WIDTH {
+                for j in 0..HEIGHT {
+                    let x = i - WIDTH / 2;
+                    let y = j - HEIGHT / 2;
+                }
+            }
+        }
+        todo!();
+    }
 }
 
 /// Type of the BSDF to be measured.
@@ -240,10 +267,6 @@ where
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.
-    /// Per patch data. This is used to either store the measured data for each
-    /// patch in case the collector is partitioned or for the collector's
-    /// region at different places in the scene. You need to check the collector
-    /// to know which one is the case and how to interpret the data.
     pub records: Vec<PerWavelength<PatchData>>,
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(debug_assertions)]
@@ -291,6 +314,7 @@ pub fn measure_bsdf_rt(
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
     cache: &InnerCache,
+    single_point: Option<Sph2>,
 ) -> Vec<MeasurementData> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
@@ -304,9 +328,12 @@ pub fn measure_bsdf_rt(
             );
             match method {
                 #[cfg(feature = "embree")]
-                RtcMethod::Embree => {
-                    rtc_simulation_embree(&params, &surfaces, &meshes, emitter, cache)
-                }
+                RtcMethod::Embree => match single_point {
+                    None => rtc_simulation_embree(&params, &surfaces, &meshes, emitter, cache),
+                    Some(w_i) => {
+                        rtc_simulation_embree_once(&params, &surfaces, &meshes, emitter, cache, w_i)
+                    }
+                },
                 #[cfg(feature = "optix")]
                 RtcMethod::Optix => {
                     rtc_simulation_optix(&params, &surfaces, &meshes, emitter, cache)
@@ -331,10 +358,29 @@ pub fn measure_bsdf_rt(
         .map(|collected| {
             let surface = cache.get_micro_surface(collected.surface).unwrap();
             let samples = collected.compute_bsdf(&params);
+            #[cfg(debug_assertions)]
+            let trajectories = collected
+                .snapshots
+                .iter()
+                .map(|t| t.trajectories.clone())
+                .collect::<Vec<_>>();
+            #[cfg(debug_assertions)]
+            let hit_points = collected
+                .snapshots
+                .iter()
+                .map(|t| t.hit_points.clone())
+                .collect::<Vec<_>>();
             MeasurementData {
                 name: surface.file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(collected.surface),
-                measured: MeasuredData::Bsdf(MeasuredBsdfData { params, samples }),
+                measured: MeasuredData::Bsdf(MeasuredBsdfData {
+                    params,
+                    samples,
+                    #[cfg(debug_assertions)]
+                    trajectories,
+                    #[cfg(debug_assertions)]
+                    hit_points,
+                }),
             }
         })
         .collect()
@@ -365,8 +411,40 @@ fn rtc_simulation_embree(
                 surface.path.as_ref().unwrap().display()
             );
             Some(SimulationResult {
-                surface: Default::default(),
+                surface: Handle::with_id(surface.uuid),
                 outputs: embr::simulate_bsdf_measurement(params, mesh, &emitter, cache),
+            })
+        })
+        .collect()
+}
+
+fn rtc_simulation_embree_once(
+    params: &BsdfMeasurementParams,
+    surfaces: &[Option<&MicroSurface>],
+    meshes: &[Option<&MicroSurfaceMesh>],
+    emitter: Emitter,
+    cache: &InnerCache,
+    w_i: Sph2,
+) -> Vec<SimulationResult> {
+    surfaces
+        .iter()
+        .zip(meshes)
+        .filter_map(|(surf, mesh)| {
+            if surf.is_none() || mesh.is_none() {
+                log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
+                return None;
+            }
+            let surface = surf.unwrap();
+            let mesh = mesh.unwrap();
+            log::info!(
+                "Measuring surface {}",
+                surface.path.as_ref().unwrap().display()
+            );
+            Some(SimulationResult {
+                surface: Handle::with_id(surface.uuid),
+                outputs: vec![embr::simulate_bsdf_measurement_once(
+                    params, mesh, &emitter, w_i, cache,
+                )],
             })
         })
         .collect()

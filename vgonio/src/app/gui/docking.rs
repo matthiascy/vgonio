@@ -1,5 +1,5 @@
 use crate::app::{
-    cache::InnerCache,
+    cache::Cache,
     gui::{data::PropertyData, event::EventLoopProxy},
 };
 use std::{
@@ -21,7 +21,7 @@ use crate::app::gui::{
 /// Docking space for widgets.
 pub struct DockSpace {
     gui: Arc<RwLock<GuiRenderer>>,
-    cache: Arc<RwLock<InnerCache>>,
+    cache: Cache,
     data: Arc<RwLock<PropertyData>>,
     /// Event loop proxy.
     event_loop: EventLoopProxy,
@@ -51,19 +51,17 @@ impl DockSpace {
     /// |   | 2 |
     pub fn default_layout(
         gui: Arc<RwLock<GuiRenderer>>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         log::info!("Creating default dock space layout");
         let surf_viewer = Box::new(SurfaceViewer::new(gui.clone(), event_loop.clone()));
         log::info!("Created surface viewer");
-        event_loop
-            .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {
-                uuid: surf_viewer.uuid(),
-                tex_id: surf_viewer.color_attachment_id(),
-            }))
-            .unwrap();
+        event_loop.send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {
+            uuid: surf_viewer.uuid(),
+            tex_id: surf_viewer.color_attachment_id(),
+        }));
         let mut inner = egui_dock::Tree::new(vec![DockingWidget {
             index: 0,
             dockable: surf_viewer,
@@ -134,12 +132,12 @@ impl DockSpace {
                         self.gui.clone(),
                         self.event_loop.clone(),
                     ));
-                    self.event_loop
-                        .send_event(VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create {
+                    self.event_loop.send_event(VgonioEvent::SurfaceViewer(
+                        SurfaceViewerEvent::Create {
                             uuid: widget.uuid(),
                             tex_id: widget.color_attachment_id(),
-                        }))
-                        .unwrap();
+                        },
+                    ));
                     widget
                 }
                 WidgetKind::Properties => Box::new(PropertyInspector::new(

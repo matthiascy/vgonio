@@ -135,7 +135,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.detector.domain,
                     params.detector.precision
                 );
-                measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, &cache)
+                measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, &cache, None)
             }
             MeasurementParams::Adf(measurement) => {
                 println!(

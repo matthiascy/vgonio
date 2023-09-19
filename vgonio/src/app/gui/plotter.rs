@@ -30,6 +30,7 @@ use vgbxdf::{
     MicrofacetDistributionModel,
 };
 use vgcore::units::{deg, rad, Radians};
+use crate::app::cache::Cache;
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),
@@ -101,7 +102,7 @@ pub struct PlotInspector {
     /// The handle to the data to be plotted.
     data_handle: Handle<MeasurementData>,
     /// Cache of the application.
-    cache: Arc<RwLock<InnerCache>>,
+    cache: Cache,
     /// Inspector properties data might used by the plot.
     props: Arc<RwLock<PropertyData>>,
     /// The legend to be displayed
@@ -235,15 +236,14 @@ impl PlotInspector {
     pub fn new_area_distrib_plot(
         name: String,
         data: Handle<MeasurementData>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = AreaDistributionExtra::default();
-        {
-            let cache = cache.read().unwrap();
+        cache.read(|cache| {
             extra.pre_process(data, &cache);
-        }
+        });
         Self::new_inner(name, data, Some(Box::new(extra)), cache, props, event_loop)
     }
 
@@ -251,16 +251,15 @@ impl PlotInspector {
     pub fn new_mmsf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = MaskingShadowingExtra::default();
-        {
-            let cache = cache.read().unwrap();
-            extra.pre_process(data, &cache);
-        }
-        Self::new_inner(name, data, Some(Box::new(extra)), cache, props, event_loop)
+            cache.read(|cache| {
+                extra.pre_process(data, &cache);
+            });
+        Self::new_inner(name, data, Some(Box::new(extra)), cache.clone(), props, event_loop)
     }
 
     /// Creates a new inspector for a bidirectional scattering distribution
@@ -268,7 +267,7 @@ impl PlotInspector {
     pub fn new_bsdf(
         name: String,
         data: Handle<MeasurementData>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -280,7 +279,7 @@ impl PlotInspector {
     /// Creates a new inspector with data to be plotted.
     pub fn new<S: Into<String>>(
         name: S,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -307,7 +306,7 @@ impl PlotInspector {
         name: String,
         data: Handle<MeasurementData>,
         extra: Option<Box<dyn VariantData>>,
-        cache: Arc<RwLock<InnerCache>>,
+        cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
     ) -> Self {
@@ -1046,9 +1045,10 @@ impl PlottingWidget for PlotInspector {
                 }
                 MeasurementKind::Adf => {
                     if let Some(variant) = &mut self.variant {
-                        let cache = self.cache.read().unwrap();
-                        let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                        let zenith = measurement.measured.adf_or_msf_zenith().unwrap();
+                        let zenith = self.cache.read(|cache| {
+                            let measurement = cache.get_measurement_data(self.data_handle).unwrap();
+                            measurement.measured.adf_or_msf_zenith().unwrap()
+                        });
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
@@ -1148,9 +1148,10 @@ impl PlottingWidget for PlotInspector {
                             .as_any_mut()
                             .downcast_mut::<MaskingShadowingExtra>()
                             .unwrap();
-                        let cache = self.cache.read().unwrap();
-                        let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                        let zenith = measurement.measured.adf_or_msf_zenith().unwrap();
+                        let zenith = self.cache.read(|cache| {
+                            let measurement = cache.get_measurement_data(self.data_handle).unwrap();
+                            measurement.measured.adf_or_msf_zenith().unwrap()
+                        });
                         let zenith_bin_width_rad = zenith.step_size.value();
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {

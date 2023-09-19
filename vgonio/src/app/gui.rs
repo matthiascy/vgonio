@@ -27,7 +27,6 @@ use std::{
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
-use uuid::Uuid;
 
 pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioGui;
@@ -38,7 +37,7 @@ use crate::{
         gfx::{GpuContext, WgpuConfig},
         gui::{
             bsdf_viewer::BsdfViewer,
-            event::{BsdfViewerEvent, DebuggingEvent, EventResponse, MeasureEvent, VgonioEvent},
+            event::{BsdfViewerEvent, DebuggingEvent, EventResponse, VgonioEvent},
             state::{GuiContext, InputState},
             theme::ThemeState,
         },
@@ -61,13 +60,19 @@ const WIN_INITIAL_HEIGHT: u32 = 900;
 
 use self::tools::SamplingInspector;
 
-use crate::app::{
-    gfx::WindowSurface,
-    gui::{
-        docking::WidgetKind, event::SurfaceViewerEvent, state::debug::DebugDrawingState,
-        surf_viewer::SurfaceViewerStates,
+use crate::{
+    app::{
+        cache::Cache,
+        gfx::WindowSurface,
+        gui::{
+            docking::WidgetKind,
+            event::{EventLoopProxy, SurfaceViewerEvent},
+            state::debug::DebugDrawingState,
+            surf_viewer::SurfaceViewerStates,
+        },
+        Config,
     },
-    Config,
+    measure::params::MeasurementParams,
 };
 
 /// Launches Vgonio GUI application.
@@ -139,8 +144,8 @@ pub struct VgonioGuiApp {
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
     /// The cache of the application including preloaded datafiles. See
-    /// [`VgonioCache`].
-    cache: Arc<RwLock<InnerCache>>,
+    /// [`Cache`].
+    cache: Cache,
     /// Input states collected from the window.
     input: InputState,
     /// State of the micro surface rendering.
@@ -185,19 +190,19 @@ impl VgonioGuiApp {
 
         let config = Arc::new(config);
         let cache = {
-            let mut _cache = InnerCache::new(config.cache_dir());
-            _cache.load_ior_database(&config);
-            Arc::new(RwLock::new(_cache))
+            let mut inner = InnerCache::new(config.cache_dir());
+            inner.load_ior_database(&config);
+            Cache(Arc::new(RwLock::new(inner)))
         };
 
         let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
-            event_loop.create_proxy(),
+            EventLoopProxy::new(&event_loop),
         )));
 
         let ui = VgonioGui::new(
-            event_loop.create_proxy(),
+            EventLoopProxy::new(&event_loop),
             config.clone(),
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
@@ -216,7 +221,7 @@ impl VgonioGuiApp {
         let dbg_drawing_state = DebugDrawingState::new(
             &gpu_ctx,
             canvas.format(),
-            event_loop.create_proxy(),
+            EventLoopProxy::new(&event_loop),
             cache.clone(),
         );
 
@@ -355,7 +360,6 @@ impl VgonioGuiApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let (viewer_encoder, dbg_encoder) = {
             // Render first viewports for the surface viewers.
-            let cache = self.cache.read().unwrap();
             let properties = self.ui.properties.read().unwrap();
             let surfaces = properties.visible_surfaces_with_props();
             let viewer_encoder = {
@@ -373,15 +377,17 @@ impl VgonioGuiApp {
                     }
                 };
 
-                self.surface_viewer_states.record_render_pass(
-                    &self.ctx.gpu,
-                    active_viewer,
-                    &self.input,
-                    dt,
-                    &self.theme,
-                    &cache,
-                    &surfaces,
-                )
+                self.cache.read(|cache| {
+                    self.surface_viewer_states.record_render_pass(
+                        &self.ctx.gpu,
+                        active_viewer,
+                        &self.input,
+                        dt,
+                        &self.theme,
+                        cache,
+                        &surfaces,
+                    )
+                })
             };
 
             let dbg_drawing_encoder = match self.dbg_drawing_state.output_viewer {
@@ -495,51 +501,60 @@ impl VgonioGuiApp {
                             DebuggingEvent::FocusSurfaceViewer(viewer) => {
                                 self.dbg_drawing_state.output_viewer = viewer;
                             }
-                            DebuggingEvent::UpdateEmitterSamples { samples } => {
+                            DebuggingEvent::UpdateEmitterSamples(samples) => {
+                                log::trace!("Updating emitter samples: {:?}", samples.len());
                                 self.dbg_drawing_state
                                     .update_emitter_samples(&self.ctx.gpu, samples);
                             }
-                            DebuggingEvent::UpdateEmitterPoints { points } => {
+                            DebuggingEvent::UpdateMeasurementPoints(points) => {
+                                log::trace!("Updating measurement points: {:?}", points.len());
                                 self.dbg_drawing_state
                                     .update_measurement_points(&self.ctx.gpu, points);
                             }
-                            DebuggingEvent::ToggleEmitterPointsDrawing(status) => {
+                            DebuggingEvent::ToggleMeasurementPointsDrawing(status) => {
+                                log::trace!("Toggling measurement points drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_points_drawing = status;
                             }
                             DebuggingEvent::UpdateEmitterPosition { position } => {
+                                log::trace!("Updating emitter position: {:?}", position);
                                 self.dbg_drawing_state
                                     .update_emitter_position(&self.ctx.gpu, position);
                             }
                             DebuggingEvent::EmitRays => {
+                                log::trace!("Emitting rays");
                                 self.dbg_drawing_state.emit_rays(&self.ctx.gpu);
                             }
                             DebuggingEvent::ToggleDebugDrawing(status) => {
                                 log::trace!("Toggling debug drawing: {:?}", status);
                                 self.dbg_drawing_state.enabled = status;
                             }
-                            DebuggingEvent::UpdateCollectorDrawing { status, patches } => self
-                                .dbg_drawing_state
-                                .update_detector_drawing(&self.ctx.gpu, status, patches),
+                            DebuggingEvent::ToggleDetectorDomeDrawing(status) => {
+                                log::trace!("Toggling detector dome drawing: {:?}", status);
+                                self.dbg_drawing_state.detector_dome_drawing = status;
+                            }
+                            DebuggingEvent::UpdateDetectorPatches(patches) => {
+                                log::trace!("Updating detector patches: {:?}", patches.len());
+                                self.dbg_drawing_state
+                                    .update_detector_drawing(&self.ctx.gpu, patches);
+                            }
                             DebuggingEvent::UpdateRayParams { t } => {
+                                log::trace!("Updating ray params: {t}");
                                 self.dbg_drawing_state.update_ray_params(&self.ctx.gpu, t);
                             }
                             DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
+                                log::trace!("Toggling emitter rays drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_rays_drawing = status;
                             }
                             DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
+                                log::trace!("Toggling emitter samples drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_samples_drawing = status;
                             }
-                            DebuggingEvent::MeasureOnce {
-                                method,
-                                params,
-                                mesh,
-                            } => self.dbg_drawing_state.update_ray_trajectories(
-                                &self.ctx.gpu,
-                                method,
-                                params,
-                                mesh,
-                            ),
                             DebuggingEvent::ToggleRayTrajectoriesDrawing { missed, reflected } => {
+                                log::trace!(
+                                    "Toggling ray trajectories drawing: {:?} {:?}",
+                                    missed,
+                                    reflected
+                                );
                                 self.dbg_drawing_state.ray_trajectories_drawing_reflected =
                                     reflected;
                                 self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
@@ -547,10 +562,14 @@ impl VgonioGuiApp {
                             DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
                                 self.dbg_drawing_state.detector_ray_hit_points_drawing = status;
                             }
-                            DebuggingEvent::UpdateSurfacePrimitiveId { surf, id, status } => {
-                                log::debug!("Updating surface {:?}'s primitive id: {:?}", surf, id);
+                            DebuggingEvent::UpdateSurfacePrimitiveId { id, status } => {
+                                log::trace!("Updating surface primitive id: {:?}", id);
                                 self.dbg_drawing_state
-                                    .update_surface_primitive_id(surf, id, status);
+                                    .update_surface_primitive_id(id, status);
+                            }
+                            DebuggingEvent::UpdateFocusedSurface(surf) => {
+                                log::trace!("Updating focused surface: {:?}", surf);
+                                self.dbg_drawing_state.update_focused_surface(surf);
                             }
                             DebuggingEvent::UpdateGridCellDrawing { .. } => {
                                 todo!("UpdateGridCellDrawing")
@@ -576,40 +595,67 @@ impl VgonioGuiApp {
                             self.bsdf_viewer.write().unwrap().rotate(id, angle);
                         }
                     },
-                    Measure(event) => match event {
-                        MeasureEvent::Madf { params, surfaces } => {
+                    Measure {
+                        single_point,
+                        params,
+                        surfaces,
+                    } => match params {
+                        MeasurementParams::Adf(params) => {
                             println!("Measuring area distribution");
-                            let measured = measure::microfacet::measure_area_distribution(
-                                params,
-                                &surfaces,
-                                &self.cache.read().unwrap(),
-                            );
-                            {
-                                let mut cache = self.cache.write().unwrap();
+                            let measured = self.cache.read(|cache| {
+                                measure::microfacet::measure_area_distribution(
+                                    params, &surfaces, &cache,
+                                )
+                            });
+                            self.cache.write(|cache| {
                                 for meas in measured {
                                     cache.add_micro_surface_measurement(meas).unwrap();
                                 }
                                 todo!("Show the measurement in the outliner");
-                            }
+                            });
                         }
-                        MeasureEvent::Mmsf { params, surfaces } => {
+                        MeasurementParams::Msf(params) => {
                             println!("Measuring masking/shadowing");
-                            measure::microfacet::measure_masking_shadowing(
-                                params,
-                                &surfaces,
-                                &self.cache.read().unwrap(),
-                            );
+                            self.cache.read(|cache| {
+                                measure::microfacet::measure_masking_shadowing(
+                                    params, &surfaces, &cache,
+                                )
+                            });
                             todo!("Save area distribution to file or display it in a window");
                         }
-                        MeasureEvent::Bsdf { params, surfaces } => {
-                            println!("Measuring BSDF");
-                            measure::bsdf::measure_bsdf_rt(
-                                params,
-                                &surfaces,
-                                params.sim_kind,
-                                &self.cache.read().unwrap(),
-                            );
-                            todo!("Save area distribution to file or display it in a window");
+                        MeasurementParams::Bsdf(params) => {
+                            let measured = self.cache.read(|cache| {
+                                measure::bsdf::measure_bsdf_rt(
+                                    params,
+                                    &surfaces,
+                                    params.sim_kind,
+                                    &cache,
+                                    single_point,
+                                )
+                            });
+                            #[cfg(debug_assertions)]
+                            {
+                                self.dbg_drawing_state.update_ray_trajectories(
+                                    &self.ctx.gpu,
+                                    &measured[0]
+                                        .measured
+                                        .bsdf_data()
+                                        .as_ref()
+                                        .unwrap()
+                                        .trajectories[0],
+                                );
+                                self.dbg_drawing_state.update_ray_hit_points(
+                                    &self.ctx.gpu,
+                                    &measured[0]
+                                        .measured
+                                        .bsdf_data()
+                                        .as_ref()
+                                        .unwrap()
+                                        .hit_points[0],
+                                );
+                            }
+                            // TODO: save BSDF to file or display it in a window
+                            log::warn!("Save BSDF to file or display it in a window");
                         }
                     },
                     SurfaceViewer(event) => match event {
