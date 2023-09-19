@@ -1,7 +1,11 @@
 use crate::{
     app::{
         cache::Handle,
-        gui::{notify::NotifyKind, theme::ThemeKind},
+        gui::{
+            notify::NotifyKind,
+            surf_viewer::{OverlayFlags, ShadingMode},
+            theme::ThemeKind,
+        },
     },
     fitting::FittingProblemKind,
     measure::{
@@ -88,6 +92,21 @@ pub enum SurfaceViewerEvent {
     UpdateSurfaceList {
         /// List of surfaces to display.
         surfaces: Vec<Handle<MicroSurface>>,
+    },
+    /// Notify the GUI backend that a surface viewer's overlay has been updated.
+    UpdateOverlay {
+        /// ID of the surface viewer.
+        uuid: Uuid,
+        /// New overlay flags.
+        overlay: OverlayFlags,
+    },
+    /// Notify the GUI backend that a surface viewer's shading mode has been
+    /// updated.
+    UpdateShading {
+        /// ID of the surface viewer.
+        uuid: Uuid,
+        /// New shading mode.
+        shading: ShadingMode,
     },
 }
 

@@ -49,11 +49,18 @@ pub struct VisualGridState {
     pub(crate) visible: bool,
 }
 
+pub(crate) struct VisualGridPipeline {
+    /// Render pipeline for rendering the visual grid.
+    pub pipeline: wgpu::RenderPipeline,
+    /// Bind group layout for visual grid rendering.
+    pub bind_group_layout: wgpu::BindGroupLayout,
+}
+
 impl VisualGridState {
     pub fn create_pipeline(
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
-    ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
+    ) -> VisualGridPipeline {
         let vert_shader = ctx
             .device
             .create_shader_module(wgpu::include_spirv!(concat!(
@@ -118,7 +125,10 @@ impl VisualGridState {
                 }),
                 multiview: None,
             });
-        (pipeline, bind_group_layout)
+        VisualGridPipeline {
+            pipeline,
+            bind_group_layout,
+        }
     }
 }
 

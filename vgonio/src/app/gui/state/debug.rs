@@ -425,7 +425,6 @@ impl DebugDrawingState {
             ray_trajectories_reflected_buffer: None,
             ray_trajectories_drawing_missed: false,
             output_viewer: None,
-            // surface_of_interest: None,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
             surface_normals_buffer: None,

@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
+use wgpu::VertexBufferLayout;
 
 use vgcore::math::{Mat4, Vec4};
 use vgsurf::MicroSurface;
@@ -21,11 +22,28 @@ use crate::app::{
         event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
         state::{camera::CameraState, InputState},
         theme::ThemeState,
-        visual_grid::VisualGridState,
+        visual_grid::{VisualGridPipeline, VisualGridState},
     },
 };
+use crate::app::gui::state::debug::DebugDrawingState;
 
 use super::state::{DepthMap, GuiRenderer};
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ShadingMode {
+    #[default]
+    Wireframe,
+    Flat,
+    Smooth,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct OverlayFlags {
+    pub normals: bool,
+    pub tangents: bool,
+    pub bitangents: bool,
+    pub uvs: bool,
+}
 
 /// State of a single surface viewer.
 pub struct SurfaceViewerState {
@@ -41,6 +59,10 @@ pub struct SurfaceViewerState {
     surface: MicroSurfaceState,
     /// State of the visual grid rendering.
     visual_grid: VisualGridState,
+    /// Overlay flags.
+    overlay: OverlayFlags,
+    /// Shading mode.
+    shading: ShadingMode,
 }
 
 impl SurfaceViewerState {
@@ -99,6 +121,8 @@ impl SurfaceViewerState {
             ),
             surface: MicroSurfaceState::new(gpu, surf_globals_layout, surf_locals_layout),
             visual_grid: VisualGridState::new(gpu, grid_bind_group_layout),
+            overlay: Default::default(),
+            shading: Default::default(),
         }
     }
 
@@ -178,20 +202,22 @@ impl SurfaceViewerState {
     }
 }
 
+/// Pipeline for rendering micro surfaces.
+pub(crate) struct SurfacePipeline {
+    pub pipeline: wgpu::RenderPipeline,
+    pub globals_bind_group_layout: wgpu::BindGroupLayout,
+    pub locals_bind_group_layout: wgpu::BindGroupLayout,
+    pub normals_pipeline: wgpu::RenderPipeline,
+}
+
 /// State of multiple surface viewers.
 pub struct SurfaceViewerStates {
     /// Output format of the surface viewer.
     format: wgpu::TextureFormat,
     /// Render pipeline for rendering micro surfaces.
-    surf_pipeline: wgpu::RenderPipeline,
-    /// Bind group layout for surface rendering global uniform buffer.
-    surf_globals_layout: wgpu::BindGroupLayout,
-    /// Bind group layout for surface rendering local uniform buffer.
-    surf_locals_layout: wgpu::BindGroupLayout,
+    surf_pipeline: SurfacePipeline,
     /// Render pipeline for rendering the visual grid.
-    grid_pipeline: wgpu::RenderPipeline,
-    /// Bind group layout for visual grid rendering.
-    grid_bind_group_layout: wgpu::BindGroupLayout,
+    grid_pipeline: VisualGridPipeline,
     /// States of the micro surface rendering for each surface viewer.
     states: HashMap<Uuid, SurfaceViewerState>,
     /// List of surfaces ready to be rendered.
@@ -200,17 +226,12 @@ pub struct SurfaceViewerStates {
 
 impl SurfaceViewerStates {
     pub fn new(ctx: &GpuContext, target_format: wgpu::TextureFormat) -> Self {
-        let (surf_pipeline, surf_globals_layout, surf_locals_layout) =
-            MicroSurfaceState::create_pipeline(ctx, target_format);
-        let (grid_pipeline, grid_bind_group_layout) =
-            VisualGridState::create_pipeline(ctx, target_format);
+        let surf_pipeline = MicroSurfaceState::create_pipeline(ctx, target_format);
+        let grid_pipeline = VisualGridState::create_pipeline(ctx, target_format);
         Self {
             format: target_format,
             surf_pipeline,
-            surf_globals_layout,
-            surf_locals_layout,
             grid_pipeline,
-            grid_bind_group_layout,
             states: Default::default(),
             surfaces: Default::default(),
         }
@@ -226,6 +247,20 @@ impl SurfaceViewerStates {
         }
         for (_, state) in self.states.iter_mut() {
             state.surface.update_surfaces_list(surfaces.iter());
+        }
+    }
+
+    /// Updates the overlay flags of a surface viewer.
+    pub fn update_overlay(&mut self, viewer: Uuid, overlay: OverlayFlags) {
+        if let Some(state) = self.states.get_mut(&viewer) {
+            state.overlay = overlay;
+        }
+    }
+
+    /// Updates the shading mode of a surface viewer.
+    pub fn update_shading(&mut self, viewer: Uuid, shading: ShadingMode) {
+        if let Some(state) = self.states.get_mut(&viewer) {
+            state.shading = shading;
         }
     }
 
@@ -246,9 +281,9 @@ impl SurfaceViewerStates {
             gui,
             self.format,
             tex_id,
-            &self.surf_globals_layout,
-            &self.surf_locals_layout,
-            &self.grid_bind_group_layout,
+            &self.surf_pipeline.globals_bind_group_layout,
+            &self.surf_pipeline.locals_bind_group_layout,
+            &self.grid_pipeline.bind_group_layout,
         );
         state.surface.update_surfaces_list(self.surfaces.iter());
         self.states.insert(viewer, state);
@@ -322,7 +357,7 @@ impl SurfaceViewerStates {
                 MicroSurfaceUniforms::aligned_size(&gpu.device);
 
             if !surfaces.is_empty() {
-                render_pass.set_pipeline(&self.surf_pipeline);
+                render_pass.set_pipeline(&self.surf_pipeline.pipeline);
                 render_pass.set_bind_group(0, &state.surface.globals_bind_group, &[]);
 
                 for (hdl, _) in surfaces.iter() {
@@ -352,13 +387,25 @@ impl SurfaceViewerStates {
                         renderable.index_format,
                     );
                     render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
+
+                    if state.overlay.normals {
+                        let buffer = renderable.normal_buffer.as_ref().unwrap();
+                        render_pass.set_pipeline(&self.surf_pipeline.normals_pipeline);
+                        render_pass.set_vertex_buffer(0, buffer.slice(..));
+                        let mut constants = [0.0; 16 + 4];
+                        constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                        constants[16..20].copy_from_slice(&DebugDrawingState::SURFACE_NORMAL_COLOR);
+                        render_pass.set_push_constants(wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        0, bytemuck::cast_slice(&constants));
+                        render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+                    }
                 }
             }
 
             {
                 state
                     .visual_grid
-                    .record_render_pass(&self.grid_pipeline, &mut render_pass);
+                    .record_render_pass(&self.grid_pipeline.pipeline, &mut render_pass);
             }
         }
         encoder
@@ -386,11 +433,7 @@ impl MicroSurfaceState {
     pub fn create_pipeline(
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
-    ) -> (
-        wgpu::RenderPipeline,
-        wgpu::BindGroupLayout,
-        wgpu::BindGroupLayout,
-    ) {
+    ) -> SurfacePipeline {
         let aligned_locals_size = MicroSurfaceUniforms::aligned_size(&ctx.device);
         let shader_module = ctx
             .device
@@ -491,11 +534,67 @@ impl MicroSurfaceState {
                 }),
                 multiview: None,
             });
-        (
+        let normals_pipeline= {
+            let pipeline_layout =
+                ctx.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("surface-normals-drawing-pipeline-layout"),
+                        bind_group_layouts: &[&globals_bind_group_layout, &locals_bind_group_layout],
+                        push_constant_ranges: &[wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            range: 0..80,
+                        }],
+                    });
+            let vert_state = wgpu::VertexState {
+                module: &shader_module,
+                entry_point: "vs_normals_main",
+                buffers: &[
+                    wgpu::VertexBufferLayout {
+                        array_stride: 3 * std::mem::size_of::<f32>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                    }
+                ],
+            };
+            let frag_state = wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: "fs_normals_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            };
+            let depth_state = wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: Default::default(),
+            };
+                ctx.device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("surface-normals-drawing-pipeline"),
+                    layout: Some(&pipeline_layout),
+                    vertex: vert_state.clone(),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::LineList,
+                        front_face: wgpu::FrontFace::Ccw,
+                        ..Default::default()
+                    },
+                    depth_stencil: Some(depth_state.clone()),
+                    multisample: Default::default(),
+                    fragment: Some(frag_state.clone()),
+                    multiview: None,
+                })
+        };
+
+        SurfacePipeline {
             pipeline,
             globals_bind_group_layout,
             locals_bind_group_layout,
-        )
+            normals_pipeline,
+        }
     }
 
     pub fn new(
@@ -629,22 +728,11 @@ pub struct SurfaceViewer {
     // /// Gizmo for navigating the scene.
     // navigator: NavigationGizmo,
     color_attachment_id: egui::TextureId,
-    // shading: ShadingMode,
-    // overlay: OverlayFlags,
+    /// Shading mode.
+    shading: ShadingMode,
+    /// Overlay flags.
+    overlay: OverlayFlags,
     event_loop: EventLoopProxy,
-}
-
-pub enum ShadingMode {
-    Wireframe,
-    Flat,
-    Smooth,
-}
-
-pub struct OverlayFlags {
-    pub normals: bool,
-    pub tangents: bool,
-    pub bitangents: bool,
-    pub uvs: bool,
 }
 
 impl SurfaceViewer {
@@ -667,8 +755,10 @@ impl SurfaceViewer {
             ),
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             color_attachment_id,
+            shading: Default::default(),
             uuid: Uuid::new_v4(),
             event_loop,
+            overlay: OverlayFlags::default(),
         }
     }
 
@@ -717,16 +807,41 @@ impl Dockable for SurfaceViewer {
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     ui.menu_button("Overlay", |ui| {
-                        ui.checkbox(&mut false, "Normals");
-                        ui.checkbox(&mut false, "Tangents (TODO)");
-                        ui.checkbox(&mut false, "Bitangents (TODO)");
-                        ui.checkbox(&mut false, "UVs (TODO)");
+                        let a = ui.checkbox(&mut self.overlay.normals, "Normals").changed();
+                        let b = ui
+                            .checkbox(&mut self.overlay.tangents, "Tangents")
+                            .changed();
+                        let c = ui
+                            .checkbox(&mut self.overlay.bitangents, "Bitangents")
+                            .changed();
+                        let d = ui.checkbox(&mut self.overlay.uvs, "UVs").changed();
+                        if a || b || c || d {
+                            self.event_loop
+                                .send_event(VgonioEvent::SurfaceViewer(
+                                    SurfaceViewerEvent::UpdateOverlay {
+                                        uuid: self.uuid,
+                                        overlay: self.overlay,
+                                    },
+                                ))
+                                .unwrap();
+                        }
                     });
+                    let shading = self.shading;
                     ui.menu_button("Shading", |ui| {
-                        ui.checkbox(&mut false, "Wireframe");
-                        ui.checkbox(&mut false, "Flat");
-                        ui.checkbox(&mut false, "Smooth");
+                        ui.selectable_value(&mut self.shading, ShadingMode::Wireframe, "Wireframe");
+                        ui.selectable_value(&mut self.shading, ShadingMode::Flat, "Flat");
+                        ui.selectable_value(&mut self.shading, ShadingMode::Smooth, "Smooth");
                     });
+                    if shading != self.shading {
+                        self.event_loop
+                            .send_event(VgonioEvent::SurfaceViewer(
+                                SurfaceViewerEvent::UpdateShading {
+                                    uuid: self.uuid,
+                                    shading: self.shading,
+                                },
+                            ))
+                            .unwrap();
+                    }
                 });
             });
 

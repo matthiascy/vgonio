@@ -644,6 +644,12 @@ impl VgonioGuiApp {
                         SurfaceViewerEvent::UpdateSurfaceList { surfaces } => {
                             self.surface_viewer_states.update_surfaces_list(&surfaces)
                         }
+                        SurfaceViewerEvent::UpdateOverlay { uuid, overlay } => {
+                            self.surface_viewer_states.update_overlay(uuid, overlay)
+                        }
+                        SurfaceViewerEvent::UpdateShading { uuid, shading } => {
+                            self.surface_viewer_states.update_shading(uuid, shading)
+                        }
                     },
                     UpdateThemeKind(kind) => {
                         self.theme.set_theme_kind(kind);

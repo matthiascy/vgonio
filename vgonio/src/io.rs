@@ -1137,6 +1137,7 @@ pub mod vgmo {
 
 #[cfg(test)]
 mod tests {
+    use vgcore::math::Sph2;
     use crate::{
         measure::{
             bsdf::{
@@ -1201,6 +1202,7 @@ mod tests {
     #[test]
     fn test_bsdf_measurement_data_point() {
         let data = BsdfSnapshot::<BounceAndEnergy> {
+            w_i: Sph2::zero(),
             stats: BsdfMeasurementStatsPoint {
                 n_received: 0,
                 n_absorbed: PerWavelength(vec![1, 2, 3, 4]),

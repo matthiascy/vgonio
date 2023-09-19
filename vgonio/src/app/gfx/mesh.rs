@@ -2,8 +2,9 @@ use crate::app::{cache::Asset, gfx::VertexLayout};
 use bytemuck::{Pod, Zeroable};
 use std::ops::Index;
 use uuid::Uuid;
-use vgcore::math::Aabb;
+use vgcore::math::{Aabb, Vec3};
 use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
+use wgpu::util::DeviceExt;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
@@ -16,6 +17,7 @@ pub struct RenderableMesh {
     pub vertex_layout: VertexLayout,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
+    pub normal_buffer: Option<wgpu::Buffer>,
     pub index_format: wgpu::IndexFormat,
     pub topology: wgpu::PrimitiveTopology,
 }
@@ -31,47 +33,8 @@ impl RenderableMesh {
         offset: HeightOffset,
         pattern: TriangulationPattern,
     ) -> Self {
-        use wgpu::util::DeviceExt;
-        // Number of triangles = 2 * rows * cols
-        let (cols, rows) = (surf.cols, surf.rows);
-        let (positions, extent) = surf.generate_vertices(offset.eval(surf.min, surf.max));
-        let vertices_count = positions.len();
-        let indices_count = 2 * (rows - 1) * (cols - 1) * 3;
-        let indices: Vec<u32> = vgsurf::regular_grid_triangulation(rows, cols, pattern);
-        debug_assert_eq!(indices.len(), indices_count);
-        log::debug!(
-            "Heightfield--> MeshView, num verts: {}, num faces: {}, num indices: {}",
-            vertices_count,
-            indices_count / 3,
-            indices.len()
-        );
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_vertex_buffer"),
-            contents: bytemuck::cast_slice(&positions),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_index_buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
-
-        Self {
-            uuid: id,
-            msurf: Some(surf.uuid),
-            vertices_count: vertices_count as u32,
-            indices_count: indices_count as u32,
-            extent,
-            vertex_layout,
-            vertex_buffer,
-            index_buffer,
-            index_format: wgpu::IndexFormat::Uint32,
-            topology: wgpu::PrimitiveTopology::TriangleList,
-        }
+        let mesh = surf.as_micro_surface_mesh(offset, pattern);
+        Self::from_micro_surface_mesh_with_id(device, &mesh, id)
     }
 
     /// Creates a new [`RenderableMesh`] directly from a [`MicroSurface`].
@@ -104,6 +67,26 @@ impl RenderableMesh {
 
         let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
+        let normals = mesh
+            .facet_normals
+            .iter()
+            .zip(mesh.facets.chunks(3))
+            .flat_map(|(n, f)| {
+                let center = f
+                    .iter()
+                    .fold(Vec3::ZERO, |acc, v| acc + mesh.verts[*v as usize] / 3.0);
+                [center, center + *n * 0.35]
+            })
+            .collect::<Vec<_>>();
+
+        let normal_buffer = Some(
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("mesh_view_normal_buffer"),
+                contents: bytemuck::cast_slice(&normals),
+                usage: wgpu::BufferUsages::VERTEX,
+            }),
+        );
+
         log::debug!(
             "TriangleMesh --> MeshView, num verts: {}, num faces: {}, num indices: {}",
             mesh.num_verts,
@@ -120,6 +103,7 @@ impl RenderableMesh {
             vertex_layout,
             vertex_buffer,
             index_buffer,
+            normal_buffer,
             index_format: wgpu::IndexFormat::Uint32,
             topology: wgpu::PrimitiveTopology::TriangleList,
         }
@@ -127,53 +111,5 @@ impl RenderableMesh {
 
     pub fn from_micro_surface_mesh(device: &wgpu::Device, mesh: &MicroSurfaceMesh) -> Self {
         Self::from_micro_surface_mesh_with_id(device, mesh, Uuid::new_v4())
-    }
-}
-
-impl RenderableMesh {
-    pub fn new<V: Pod + Zeroable + Index<usize, Output = f32>, I: Pod + Zeroable>(
-        device: &wgpu::Device,
-        layout: VertexLayout,
-        vertices: &[V],
-        indices: &[I],
-        topology: wgpu::PrimitiveTopology,
-        index_format: wgpu::IndexFormat,
-    ) -> Self {
-        use wgpu::util::DeviceExt;
-        let mut extent = Aabb::default();
-        for v in vertices.iter() {
-            for k in 0..3 {
-                if v[k] > extent.max[k] {
-                    extent.max[k] = v[k];
-                }
-                if v[k] < extent.min[k] {
-                    extent.min[k] = v[k];
-                }
-            }
-        }
-        let vb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_index_buffer"),
-            contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let ib = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_index_buffer"),
-            contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        Self {
-            uuid: Uuid::new_v4(),
-            msurf: None,
-            vertices_count: vertices.len() as _,
-            indices_count: indices.len() as _,
-            extent,
-            vertex_layout: layout,
-            vertex_buffer: vb,
-            index_buffer: ib,
-            index_format,
-            topology,
-        }
     }
 }

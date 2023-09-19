@@ -37,3 +37,35 @@ fn vs_main(@location(0) position: vec3<f32>) ->  VOut {
 fn fs_main(vin: VOut) -> @location(0) vec4<f32> {
     return vec4<f32>(vin.color, 0.7);
 }
+
+// Normals pass-through
+struct VNormalsOut {
+    @builtin(position) position: vec4<f32>,
+}
+
+// Push constants stores the color
+struct PushConstants {
+    model: mat4x4<f32>,
+    color: vec4<f32>,
+}
+
+var<push_constant> pcs: PushConstants;
+
+@vertex
+fn vs_normals_main(@location(0) position: vec3<f32>) -> VNormalsOut {
+    var vout: VNormalsOut;
+    let scale = mat4x4<f32>(
+        vec4<f32>(locals.scale, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, locals.scale, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, locals.scale, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0),
+    );
+    vout.position = globals.proj * globals.view * scale * pcs.model * vec4<f32>(position, 1.0);
+
+    return vout;
+}
+
+@fragment
+fn fs_normals_main(vin: VNormalsOut) -> @location(0) vec4<f32> {
+    return pcs.color;
+}
