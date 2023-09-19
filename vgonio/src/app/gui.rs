@@ -654,7 +654,11 @@ impl VgonioGuiApp {
                                         .hit_points[0],
                                 );
                             }
-                            // TODO: save BSDF to file or display it in a window
+                            measured[0]
+                                .measured
+                                .bsdf_data()
+                                .unwrap()
+                                .write_to_images(self.config.output_dir());
                             log::warn!("Save BSDF to file or display it in a window");
                         }
                     },

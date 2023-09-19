@@ -24,7 +24,10 @@ use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
 };
-use vgcore::math::{Sph2, Vec3};
+use vgcore::{
+    math::{Sph2, Vec3},
+    units::rad,
+};
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 use super::params::BsdfMeasurementParams;
@@ -58,22 +61,51 @@ pub struct MeasuredBsdfData {
 }
 
 impl MeasuredBsdfData {
-    pub fn write_to_images(&self, path: &std::path::Path) {
+    pub fn write_to_images(&self, dir: &std::path::Path) {
+        log::info!("Saving BSDF images to {}", dir.display());
+        // TODO: add surface name to the filename
+        // TODO: save float images
+        // TODO: debug
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;
-        let mut img: ImageBuffer<Luma<f32>, Vec<f32>> =
-            image::ImageBuffer::new(WIDTH as u32, HEIGHT as u32);
-
+        let mut img = image::GrayImage::new(WIDTH as u32, HEIGHT as u32);
+        let patches = self.params.detector.generate_patches();
         // Save the image for each measurement point.
         for w_i in self.params.emitter.generate_measurement_points().iter() {
             for i in 0..WIDTH {
                 for j in 0..HEIGHT {
-                    let x = i - WIDTH / 2;
-                    let y = j - HEIGHT / 2;
+                    let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * 2.0f32.sqrt();
+                    // Flip the y-axis to match the BSDF coordinate system.
+                    let y = -1.0 * ((2 * j) as f32 / HEIGHT as f32 - 1.0) * 2.0f32.sqrt();
+                    let r_disc = (x * x + y * y).sqrt();
+                    let theta = 2.0 * (r_disc / 2.0).asin();
+                    let phi = (y).atan2(x);
+                    log::debug!(
+                        "x = {}, y = {}, r_disc = {}, theta = {}, phi = {}",
+                        x,
+                        y,
+                        r_disc,
+                        theta,
+                        phi
+                    );
+                    match patches.patch_index_of(Sph2::new(rad!(theta), rad!(phi))) {
+                        None => {
+                            log::warn!("No patch found for theta = {}, phi = {}", theta, phi);
+                        }
+                        Some(idx) => {
+                            let value = self.samples[idx][0] * 255.0;
+                            img.put_pixel(i as u32, j as u32, Luma([value as u8]));
+                        }
+                    }
                 }
             }
+            let filename = format!(
+                "bsdf_{}_{}.pfm",
+                w_i.theta.to_degrees(),
+                w_i.phi.to_degrees(),
+            );
+            img.save(dir.join(filename)).unwrap();
         }
-        todo!();
     }
 }
 

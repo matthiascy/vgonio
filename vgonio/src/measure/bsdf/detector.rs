@@ -99,6 +99,27 @@ impl DetectorPatches {
         }
     }
 
+    /// Returns the index of the patch containing the direction.
+    pub fn patch_index_of(&self, sph: Sph2) -> Option<usize> {
+        match self {
+            Self::Beckers { rings, patches } => {
+                for ring in rings.iter() {
+                    if ring.theta_inner <= sph.theta.as_f32()
+                        && sph.theta.as_f32() <= ring.theta_outer
+                    {
+                        for (i, patch) in patches.iter().skip(ring.base_index).enumerate() {
+                            if patch.min.phi <= sph.phi && sph.phi <= patch.max.phi {
+                                return Some(ring.base_index + i);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
+        }
+    }
+
     pub fn write_to_image(&self) {
         const WIDTH: usize = 1024;
         const HEIGHT: usize = 1024;
