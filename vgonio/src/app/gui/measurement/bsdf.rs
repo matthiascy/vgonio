@@ -122,7 +122,7 @@ impl SphericalDomain {
 pub struct BsdfMeasurementTab {
     pub params: BsdfMeasurementParams,
     event_loop: EventLoopProxy,
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "visu-dbg")]
     debug: BsdfMeasurementDebug,
 }
 
@@ -132,6 +132,7 @@ impl BsdfMeasurementTab {
         Self {
             params: BsdfMeasurementParams::default(),
             event_loop,
+            #[cfg(feature = "visu-dbg")]
             debug: BsdfMeasurementDebug {
                 detector_dome_drawing: false,
                 emitter_samples_drawing: false,
@@ -139,6 +140,7 @@ impl BsdfMeasurementTab {
                 emitter_rays_drawing: false,
                 measurement_points_drawing: false,
                 measurement_point_index: 0,
+                ray_trajectory_index: 0,
                 ray_trajectories_drawing_reflected: false,
                 ray_trajectories_drawing_missed: false,
                 ray_hit_points_drawing: false,
@@ -146,6 +148,7 @@ impl BsdfMeasurementTab {
         }
     }
 
+    #[cfg(feature = "visu-dbg")]
     pub fn measurement_point(&self) -> Sph2 {
         let zenith_count = self.params.emitter.zenith.step_count_wrapped();
         let azimuth_idx = self.debug.measurement_point_index / zenith_count as i32;
@@ -159,8 +162,8 @@ impl BsdfMeasurementTab {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        #[cfg(debug_assertions)] debug_draw: bool,
-        #[cfg(debug_assertions)] orbit_radius: f32,
+        #[cfg(feature = "visu-dbg")] debug_draw: bool,
+        #[cfg(feature = "visu-dbg")] orbit_radius: f32,
     ) {
         egui::CollapsingHeader::new("Parameters")
             .default_open(true)
@@ -225,7 +228,7 @@ impl BsdfMeasurementTab {
                         }
                     });
                 self.params.emitter.ui(ui, |params, ui| {
-                    #[cfg(debug_assertions)]
+                    #[cfg(feature = "visu-dbg")]
                     {
                         if debug_draw {
                             ui.label("Samples");
@@ -349,7 +352,7 @@ impl BsdfMeasurementTab {
                     }
                 });
                 self.params.detector.ui(ui, |params, ui| {
-                    #[cfg(debug_assertions)]
+                    #[cfg(feature = "visu-dbg")]
                     {
                         if debug_draw {
                             ui.label("Dome:");
@@ -376,6 +379,17 @@ impl BsdfMeasurementTab {
 
                             ui.label("Trajectories:");
                             ui.horizontal_wrapped(|ui| {
+                                let mut ray_trajectory_index_changed = false;
+                                if ui.button("\u{25C0}").clicked() {
+                                    self.debug.ray_trajectory_index =
+                                        (self.debug.ray_trajectory_index - 1).max(0);
+                                    ray_trajectory_index_changed = true;
+                                }
+                                if ui.button("\u{25B6}").clicked() {
+                                    self.debug.ray_trajectory_index =
+                                        (self.debug.ray_trajectory_index + 1).max(0);
+                                    ray_trajectory_index_changed = true;
+                                }
                                 ui.label("reflected");
                                 let changed0 = ui
                                     .add(ToggleSwitch::new(
@@ -388,9 +402,10 @@ impl BsdfMeasurementTab {
                                         &mut self.debug.ray_trajectories_drawing_missed,
                                     ))
                                     .changed();
-                                if changed0 || changed1 {
+                                if changed0 || changed1 || ray_trajectory_index_changed {
                                     self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleRayTrajectoriesDrawing {
+                                        DebuggingEvent::UpdateRayTrajectoriesDrawing {
+                                            index: self.debug.ray_trajectory_index as usize,
                                             missed: self.debug.ray_trajectories_drawing_missed,
                                             reflected: self
                                                 .debug
@@ -426,6 +441,7 @@ pub struct BsdfMeasurementDebug {
     pub emitter_rays_drawing: bool,
     pub measurement_points_drawing: bool,
     pub measurement_point_index: i32,
+    pub ray_trajectory_index: i32,
     pub ray_trajectories_drawing_reflected: bool,
     pub ray_trajectories_drawing_missed: bool,
     pub ray_hit_points_drawing: bool,

@@ -430,7 +430,7 @@ pub struct MicroSurfaceState {
 impl MicroSurfaceState {
     pub const INITIAL_MICRO_SURFACE_COUNT: usize = 64;
 
-    pub fn create_pipeline(
+    pub(crate) fn create_pipeline(
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
     ) -> SurfacePipeline {

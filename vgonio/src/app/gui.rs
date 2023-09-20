@@ -549,9 +549,17 @@ impl VgonioGuiApp {
                                 log::trace!("Toggling emitter samples drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_samples_drawing = status;
                             }
-                            DebuggingEvent::ToggleRayTrajectoriesDrawing { missed, reflected } => {
-                                log::trace!(
-                                    "Toggling ray trajectories drawing: {:?} {:?}",
+                            DebuggingEvent::UpdateRayTrajectoriesDrawing {
+                                index,
+                                missed,
+                                reflected,
+                            } => {
+                                self.dbg_drawing_state.measurement_point_index =
+                                    index % self.dbg_drawing_state.measurement_point_index_max;
+                                log::debug!(
+                                    "Updating ray trajectories drawing: {} - missed {:?}, \
+                                     reflected {:?}",
+                                    self.dbg_drawing_state.measurement_point_index,
                                     missed,
                                     reflected
                                 );
@@ -629,11 +637,11 @@ impl VgonioGuiApp {
                                     params,
                                     &surfaces,
                                     params.sim_kind,
-                                    &cache,
+                                    cache,
                                     single_point,
                                 )
                             });
-                            #[cfg(debug_assertions)]
+                            #[cfg(feature = "visu-dbg")]
                             {
                                 self.dbg_drawing_state.update_ray_trajectories(
                                     &self.ctx.gpu,
@@ -642,7 +650,7 @@ impl VgonioGuiApp {
                                         .bsdf_data()
                                         .as_ref()
                                         .unwrap()
-                                        .trajectories[0],
+                                        .trajectories(),
                                 );
                                 self.dbg_drawing_state.update_ray_hit_points(
                                     &self.ctx.gpu,
@@ -651,14 +659,14 @@ impl VgonioGuiApp {
                                         .bsdf_data()
                                         .as_ref()
                                         .unwrap()
-                                        .hit_points[0],
+                                        .hit_points(),
                                 );
                             }
                             measured[0]
                                 .measured
                                 .bsdf_data()
                                 .unwrap()
-                                .write_to_images(self.config.output_dir());
+                                .write_to_images(self.config.output_dir(), single_point);
                             log::warn!("Save BSDF to file or display it in a window");
                         }
                     },

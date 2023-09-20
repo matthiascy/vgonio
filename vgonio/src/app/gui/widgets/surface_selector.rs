@@ -1,5 +1,5 @@
 use crate::app::cache::{Handle, InnerCache};
-use egui::{Color32, Response};
+use egui::Color32;
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,

@@ -2,7 +2,8 @@ use crate::{
     app::cache::{Handle, InnerCache},
     measure::{
         bsdf::{
-            BsdfMeasurementStatsPoint, BsdfSnapshot, PerWavelength, RayTrajectory, SimulationResult,
+            BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, PerWavelength,
+            SimulationResult,
         },
         params::BsdfMeasurementParams,
     },
@@ -11,7 +12,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use vgcore::{
-    error::VgonioError,
     math,
     math::{rcp_f32, Sph2, Vec2, Vec3, Vec3A},
     units::{rad, Radians, SolidAngle},
@@ -44,19 +44,6 @@ pub enum DetectorScheme {
     /// Partition scheme based on "Subdivision of the sky hemisphere for
     /// luminance measurements" by P.R. Tregenza.
     Tregenza = 0x01,
-}
-
-impl DetectorScheme {
-    pub fn patches_count(&self) -> usize {
-        match self {
-            Self::Beckers => {
-                let num_rings = (Radians::HALF_PI / rad!(0.1)).round() as u32;
-                let ks = beckers::compute_ks(1, num_rings);
-                ks[num_rings as usize - 1] as usize
-            }
-            Self::Tregenza => 0,
-        }
-    }
 }
 
 /// Partitioned patches of the collector.
@@ -287,6 +274,18 @@ mod beckers {
 }
 
 impl DetectorParams {
+    /// Returns the number of patches of the collector.
+    pub fn patches_count(&self) -> usize {
+        match self.scheme {
+            DetectorScheme::Beckers => {
+                let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
+                let ks = beckers::compute_ks(1, num_rings);
+                ks[num_rings as usize - 1] as usize
+            }
+            DetectorScheme::Tregenza => 0,
+        }
+    }
+
     /// Generates the patches of the collector.
     ///
     /// The patches are generated based on the scheme of the collector. They are
@@ -375,7 +374,7 @@ impl Detector {
     /// # Returns
     ///
     /// The collected data for each simulation result which is a vector of
-    /// [`BsdfSnapshot`].
+    /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
         params: &BsdfMeasurementParams,
@@ -520,6 +519,8 @@ impl Detector {
                                     .collect::<Vec<_>>()
                             })
                             .collect::<Vec<_>>();
+                        // TODO: fix this
+                        println!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
 
                         let data = outgoing_dirs_per_patch
                             .iter()
@@ -561,19 +562,19 @@ impl Detector {
                             .collect::<Vec<_>>();
 
                         // Compute the vertex positions of the outgoing rays.
-                        #[cfg(debug_assertions)]
+                        #[cfg(any(feature = "visu-dbg", debug_assertions))]
                         let outgoing_vertex_positions: Vec<Vec3> = dirs
                             .iter()
                             .map(|w_o| (w_o.dir * orbit_radius).into())
                             .collect::<Vec<_>>();
 
-                        BsdfSnapshot {
+                        BsdfSnapshotRaw {
                             w_i: output.w_i,
                             records: data,
                             stats,
-                            #[cfg(debug_assertions)]
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
                             trajectories: output.trajectories.to_vec(),
-                            #[cfg(debug_assertions)]
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
                             hit_points: outgoing_vertex_positions,
                         }
                     })
@@ -599,7 +600,7 @@ pub struct CollectedData {
     /// The partitioned patches of the detector.
     pub patches: DetectorPatches,
     /// The collected data.
-    pub snapshots: Vec<BsdfSnapshot<BounceAndEnergy>>,
+    pub snapshots: Vec<BsdfSnapshotRaw<BounceAndEnergy>>,
 }
 
 impl CollectedData {
@@ -615,20 +616,26 @@ impl CollectedData {
     /// incident spectrum. The output vector is of size equal to the number of
     /// measurement points of the emitter times the number of patches of the
     /// detector.
-    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Vec<PerWavelength<f32>> {
-        // For each snapshot, compute the BSDF.
+    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Vec<BsdfSnapshot> {
+        // For each snapshot (w_i), compute the BSDF.
+        log::info!(
+            "Computing BSDF... with {} patches",
+            params.detector.patches_count()
+        );
         self.snapshots
             .iter()
-            .flat_map(|snapshot| {
+            .map(|snapshot| {
                 let mut bsdf = vec![
                     PerWavelength(vec![0.0; params.emitter.spectrum.values().len()]);
                     snapshot.records.len()
                 ];
                 let cos_i = snapshot.w_i.theta.cos();
                 let incident_irradiance = snapshot.stats.n_received as f32 * cos_i;
+                log::info!("incident_irradiance: {}", incident_irradiance);
                 for (i, patch_data) in snapshot.records.iter().enumerate() {
-                    for (j, stats) in patch_data.0.iter().enumerate() {
-                        let patch = self.patches.patches_iter().skip(i).next().unwrap();
+                    // Per wavelength
+                    for (j, stats) in patch_data.iter().enumerate() {
+                        let patch = self.patches.patches_iter().nth(i).unwrap();
                         let cos_o = patch.center().theta.cos();
                         if cos_o == 0.0 {
                             bsdf[i][j] = 0.0;
@@ -636,11 +643,23 @@ impl CollectedData {
                             let d_omega = patch.solid_angle();
                             let outgoing_radiance =
                                 stats.total_energy * rcp_f32(cos_o * d_omega.as_f32());
+                            log::info!(
+                                "total_energy: {}, outgoing_radiance[{i}], lambda[{j}]: {}",
+                                stats.total_energy,
+                                outgoing_radiance
+                            );
                             bsdf[i][j] = outgoing_radiance * rcp_f32(incident_irradiance);
                         }
                     }
                 }
-                bsdf
+                BsdfSnapshot {
+                    w_i: snapshot.w_i,
+                    samples: bsdf,
+                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                    trajectories: snapshot.trajectories.clone(),
+                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                    hit_points: snapshot.hit_points.clone(),
+                }
             })
             .collect::<Vec<_>>()
     }

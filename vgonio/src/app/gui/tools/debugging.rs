@@ -1,27 +1,20 @@
 use crate::app::gui::event::{DebuggingEvent, EventLoopProxy, VgonioEvent};
-use std::{
-    any::Any,
-    default::Default,
-    sync::{Arc, RwLock},
-};
-use uuid::Uuid;
+use std::{any::Any, default::Default};
 
 mod microfacet;
 mod shadow_map;
 
 use crate::app::{
-    cache::{Cache, Handle, InnerCache},
+    cache::Cache,
     gui::{tools::Tool, widgets::ToggleSwitch},
 };
 use microfacet::MicrofacetDebugging;
 use shadow_map::DepthMapPane;
-use vgsurf::MicroSurface;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]
 enum PaneKind {
     ShadowMap,
-    Brdf,
     Microfacet,
 }
 
@@ -65,7 +58,6 @@ impl Tool for DebuggingInspector {
 
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.opened_pane, PaneKind::ShadowMap, "Shadow Map");
-            ui.selectable_value(&mut self.opened_pane, PaneKind::Brdf, "BRDF Measurement");
             ui.selectable_value(&mut self.opened_pane, PaneKind::Microfacet, "Microfacet");
         });
         ui.separator();
@@ -73,9 +65,6 @@ impl Tool for DebuggingInspector {
         match self.opened_pane {
             PaneKind::ShadowMap => {
                 ui.add(&mut self.depth_map_pane);
-            }
-            PaneKind::Brdf => {
-                // TODO: remove this
             }
             PaneKind::Microfacet => {
                 ui.add(&mut self.microfacet_debugging);

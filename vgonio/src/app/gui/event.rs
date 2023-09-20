@@ -159,7 +159,8 @@ pub enum DebuggingEvent {
     ToggleMeasurementPointsDrawing(bool),
     ToggleEmitterRaysDrawing(bool),
     ToggleEmitterSamplesDrawing(bool),
-    ToggleRayTrajectoriesDrawing {
+    UpdateRayTrajectoriesDrawing {
+        index: usize,
         missed: bool,
         reflected: bool,
     },

@@ -86,7 +86,6 @@ use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math::Axis,
-    units::LengthUnit,
 };
 use vgsurf::MicroSurface;
 

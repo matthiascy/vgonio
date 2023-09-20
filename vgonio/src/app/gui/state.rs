@@ -17,9 +17,6 @@ use crate::app::{
     gui::event::VgonioEvent,
 };
 
-#[cfg(feature = "embree")]
-use crate::measure::bsdf::rtc::embr;
-
 use std::{
     default::Default,
     ops::Deref,

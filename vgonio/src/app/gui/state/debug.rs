@@ -109,12 +109,23 @@ pub struct DebugDrawingState {
     /// Points on the collector's surface. (Rays hitting the collector's
     /// surface)
     pub detector_ray_hit_points_buffer: Option<wgpu::Buffer>,
+    /// Sizes and offsets of the points on the collector's surface for each
+    /// measurement point.
+    pub detector_ray_hit_points_size_offsets: Vec<(u32, u32)>,
     /// Whether to show ray hit points on the collector's surface.
     pub detector_ray_hit_points_drawing: bool,
     /// Ray trajectories not hitting the surface.
     pub ray_trajectories_missed_buffer: Option<wgpu::Buffer>,
+    /// Sizes of ray trajectories not hitting the surface.
+    pub ray_trajectories_missed_size_offsets: Vec<(u32, u32)>,
     /// Ray trajectories hitting the surface.
     pub ray_trajectories_reflected_buffer: Option<wgpu::Buffer>,
+    /// Sizes of ray trajectories hitting the surface.
+    pub ray_trajectories_reflected_size_offsets: Vec<(u32, u32)>,
+    /// Index of the ray trajectory to show.
+    pub measurement_point_index: usize,
+    /// Maximum index of the ray trajectory.
+    pub measurement_point_index_max: usize,
     /// Whether to show traced ray trajectories.
     pub ray_trajectories_drawing_reflected: bool,
     /// Whether to show missed ray trajectories.
@@ -411,16 +422,21 @@ impl DebugDrawingState {
             event_loop,
             detector_patches: None,
             detector_ray_hit_points_buffer: None,
+            detector_ray_hit_points_size_offsets: vec![],
             detector_ray_hit_points_drawing: false,
             ray_trajectories_missed_buffer: None,
             cache,
             ray_trajectories_drawing_reflected: false,
             ray_trajectories_reflected_buffer: None,
+            ray_trajectories_reflected_size_offsets: vec![],
             ray_trajectories_drawing_missed: false,
             output_viewer: None,
             surface_primitive_id: 0,
             surface_primitive_drawing: false,
             microsurface: None,
+            ray_trajectories_missed_size_offsets: vec![],
+            measurement_point_index: 0,
+            measurement_point_index_max: 1,
         }
     }
 
@@ -583,7 +599,7 @@ impl DebugDrawingState {
             return;
         }
         match &patches {
-            DetectorPatches::Beckers { rings, patches } => {
+            DetectorPatches::Beckers { rings, .. } => {
                 let mut vertices = vec![];
                 // Generate from rings.
                 let (disc_xs, disc_ys): (Vec<_>, Vec<_>) = (0..360)
@@ -664,46 +680,76 @@ impl DebugDrawingState {
         });
     }
 
-    pub fn update_ray_hit_points(&mut self, ctx: &GpuContext, hit_points: &[Vec3]) {
+    pub fn update_ray_hit_points(&mut self, ctx: &GpuContext, hit_points: &[Vec<Vec3>]) {
+        let sizes_offsets = hit_points.iter().enumerate().map(|(i, pnts)| {
+            (
+                hit_points
+                    .iter()
+                    .take(i)
+                    .map(|p| p.len() as u32)
+                    .sum::<u32>(),
+                pnts.len() as u32,
+            )
+        });
+        let points = hit_points.iter().flatten().copied().collect::<Vec<_>>();
         self.detector_ray_hit_points_buffer = Some(ctx.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("debug-detector-ray-hit-points"),
-                contents: bytemuck::cast_slice(hit_points),
+                contents: bytemuck::cast_slice(&points),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             },
         ));
+        self.detector_ray_hit_points_size_offsets = sizes_offsets.collect::<Vec<_>>();
     }
 
     /// Updates the ray trajectories for the debugging draw calls.
-    pub fn update_ray_trajectories(&mut self, ctx: &GpuContext, trajectories: &[RayTrajectory]) {
+    pub fn update_ray_trajectories(
+        &mut self,
+        ctx: &GpuContext,
+        trajectories: &[Vec<RayTrajectory>],
+    ) {
+        log::debug!("Updating ray trajectories, {} sets", trajectories.len());
+        self.measurement_point_index_max = trajectories.len();
         let (orbit_radius, _) = self.estimate_radii().unwrap();
         let mut reflected = vec![];
         let mut missed = vec![];
-        for trajectory in trajectories.iter() {
-            let mut iter = trajectory.0.iter().peekable();
-            let mut i = 0;
-            while let Some(node) = iter.next() {
-                let org: Vec3 = node.org.into();
-                let dir: Vec3 = node.dir.into();
-                match iter.peek() {
-                    None => {
-                        // Last node
-                        if i == 0 {
-                            missed.push(org);
-                            missed.push(org + dir * orbit_radius * 1.2);
-                        } else {
-                            reflected.push(org);
-                            reflected.push(org + dir * orbit_radius * 1.2);
+
+        let mut reflected_sizes = vec![];
+        let mut missed_sizes = vec![];
+        for (i, trajectories_per_w_i) in trajectories.iter().enumerate() {
+            let mut reflected_count = 0u32;
+            let mut missed_count = 0;
+            for each_ray_trajectory in trajectories_per_w_i {
+                let mut iter = each_ray_trajectory.0.iter().peekable();
+                let mut j = 0;
+                while let Some(node) = iter.next() {
+                    let org: Vec3 = node.org.into();
+                    let dir: Vec3 = node.dir.into();
+                    match iter.peek() {
+                        None => {
+                            // Last node
+                            if j == 0 {
+                                missed.push(org);
+                                missed.push(org + dir * orbit_radius * 1.2);
+                                missed_count += 2;
+                            } else {
+                                reflected.push(org);
+                                reflected.push(org + dir * orbit_radius * 1.2);
+                                reflected_count += 2;
+                            }
+                            j += 1;
                         }
-                        i += 1;
-                    }
-                    Some(next) => {
-                        reflected.push(org);
-                        reflected.push(next.org.into());
-                        i += 1;
+                        Some(next) => {
+                            reflected.push(org);
+                            reflected.push(next.org.into());
+                            reflected_count += 2;
+                            j += 1;
+                        }
                     }
                 }
             }
+            reflected_sizes.push(reflected_count);
+            missed_sizes.push(missed_count);
         }
         self.ray_trajectories_missed_buffer = Some(ctx.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -719,6 +765,16 @@ impl DebugDrawingState {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             },
         ));
+        self.ray_trajectories_missed_size_offsets = missed_sizes
+            .iter()
+            .enumerate()
+            .map(|(i, size)| (missed_sizes.iter().take(i).sum::<u32>(), *size))
+            .collect();
+        self.ray_trajectories_reflected_size_offsets = reflected_sizes
+            .iter()
+            .enumerate()
+            .map(|(i, size)| (reflected_sizes.iter().take(i).sum::<u32>(), *size))
+            .collect();
     }
 
     /// Records the render process for the debugging draw calls.
@@ -836,7 +892,9 @@ impl DebugDrawingState {
                                 0,
                                 bytemuck::cast_slice(&constants),
                             );
-                            render_pass.draw(0..missed_buffer.size() as u32 / 12, 0..1);
+                            let (offset, count) = self.ray_trajectories_missed_size_offsets
+                                [self.measurement_point_index];
+                            render_pass.draw(offset..offset + count, 0..1);
                         }
                     }
 
@@ -850,7 +908,9 @@ impl DebugDrawingState {
                                 0,
                                 bytemuck::cast_slice(&constants),
                             );
-                            render_pass.draw(0..reflected_buffer.size() as u32 / 12, 0..1);
+                            let (offset, count) = self.ray_trajectories_reflected_size_offsets
+                                [self.measurement_point_index];
+                            render_pass.draw(offset..offset + count, 0..1);
                         }
                     }
                 }
@@ -869,26 +929,29 @@ impl DebugDrawingState {
                         0,
                         bytemuck::cast_slice(&constants),
                     );
-                    render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+                    let (offset, count) =
+                        self.detector_ray_hit_points_size_offsets[self.measurement_point_index];
+                    render_pass.draw(offset..offset + count, 0..1);
                 }
 
                 if self.detector_dome_drawing {
-                    let (orbit_radius, _) = self.estimate_radii().unwrap();
-                    render_pass.set_bind_group(0, &self.bind_group, &[]);
-                    if self.detector_dome_vertex_buffer.is_some() {
-                        let vertex_buffer = self.detector_dome_vertex_buffer.as_ref().unwrap();
-                        render_pass.set_pipeline(&self.lines_pipeline);
-                        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                        constants[0..16].copy_from_slice(
-                            &Mat4::from_scale(Vec3::splat(orbit_radius)).to_cols_array(),
-                        );
-                        constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
-                        render_pass.set_push_constants(
-                            wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            0,
-                            bytemuck::cast_slice(&constants),
-                        );
-                        render_pass.draw(0..vertex_buffer.size() as u32 / 12, 0..1);
+                    if let Some((orbit_radius, _)) = self.estimate_radii() {
+                        render_pass.set_bind_group(0, &self.bind_group, &[]);
+                        if self.detector_dome_vertex_buffer.is_some() {
+                            let vertex_buffer = self.detector_dome_vertex_buffer.as_ref().unwrap();
+                            render_pass.set_pipeline(&self.lines_pipeline);
+                            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                            constants[0..16].copy_from_slice(
+                                &Mat4::from_scale(Vec3::splat(orbit_radius)).to_cols_array(),
+                            );
+                            constants[16..20].copy_from_slice(&Self::COLLECTOR_COLOR);
+                            render_pass.set_push_constants(
+                                wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                0,
+                                bytemuck::cast_slice(&constants),
+                            );
+                            render_pass.draw(0..vertex_buffer.size() as u32 / 12, 0..1);
+                        }
                     }
                 }
             }

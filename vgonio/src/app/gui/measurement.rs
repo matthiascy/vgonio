@@ -11,6 +11,7 @@ use crate::{
                 bsdf::BsdfMeasurementTab, madf::AdfMeasurementTab, mmsf::MsfMeasurementTab,
             },
             misc,
+            notify::NotifyKind,
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
@@ -22,7 +23,6 @@ use crate::{
     SphericalDomain,
 };
 use egui::Widget;
-use vgcore::math::Sph2;
 use vgsurf::MicroSurface;
 
 impl DetectorParams {
@@ -94,14 +94,17 @@ pub struct MeasurementDialog {
     /// Whether the dialog is open.
     is_open: bool,
     event_loop: EventLoopProxy,
-    #[cfg(debug_assertions)]
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
     debug: MeasurementDialogDebug,
-    #[cfg(debug_assertions)]
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
     cache: Cache,
 }
 
 impl MeasurementDialog {
-    pub fn new(event_loop: EventLoopProxy, cache: Cache) -> Self {
+    pub fn new(
+        event_loop: EventLoopProxy,
+        #[cfg(any(feature = "visu-dbg", debug_assertions))] cache: Cache,
+    ) -> Self {
         MeasurementDialog {
             kind: MeasurementKind::Bsdf,
             selector: SurfaceSelector::multiple(),
@@ -111,7 +114,7 @@ impl MeasurementDialog {
             single_point: false,
             is_open: false,
             event_loop,
-            #[cfg(debug_assertions)]
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
             debug: MeasurementDialogDebug {
                 enable_debug_draw: false,
                 surf_prim_id: 0,
@@ -119,6 +122,7 @@ impl MeasurementDialog {
                 surface_viewers: vec![],
                 focused_viewer: None,
             },
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
             cache,
         }
     }
@@ -127,7 +131,7 @@ impl MeasurementDialog {
         self.selector.update(surfs, cache);
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub fn update_surface_viewers(&mut self, viewers: &[uuid::Uuid]) {
         for viewer in viewers {
             if !self.debug.surface_viewers.contains(viewer) {
@@ -144,7 +148,7 @@ impl MeasurementDialog {
             .fixed_size((400.0, 600.0))
             .show(ctx, |ui| {
                 self.kind.selectable_ui(ui);
-                #[cfg(debug_assertions)]
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Debug draw: ");
@@ -206,7 +210,7 @@ impl MeasurementDialog {
                                 ));
                             }
 
-                            #[cfg(debug_assertions)]
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
                             if self.debug.enable_debug_draw {
                                 ui.label("Primitive ID: ");
                                 ui.horizontal_wrapped(|ui| {
@@ -247,7 +251,7 @@ impl MeasurementDialog {
 
                 match self.kind {
                     MeasurementKind::Bsdf => {
-                        #[cfg(debug_assertions)]
+                        #[cfg(any(feature = "visu-dbg", debug_assertions))]
                         let orbit_radius = match self.selector.first_selected() {
                             None => 0.0,
                             Some(surf) => self.cache.read(|cache| {
@@ -258,9 +262,9 @@ impl MeasurementDialog {
                         };
                         self.tab_bsdf.ui(
                             ui,
-                            #[cfg(debug_assertions)]
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
                             self.debug.enable_debug_draw,
-                            #[cfg(debug_assertions)]
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
                             orbit_radius,
                         )
                     }
@@ -269,6 +273,7 @@ impl MeasurementDialog {
                 }
                 ui.separator();
 
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 if self.kind == MeasurementKind::Bsdf {
                     ui.checkbox(&mut self.single_point, "Single Point");
                 }
@@ -279,32 +284,45 @@ impl MeasurementDialog {
                         .on_hover_text("Starts the measurement")
                         .clicked()
                     {
-                        match self.kind {
-                            MeasurementKind::Bsdf => {
-                                let single_point = if self.single_point {
-                                    Some(self.tab_bsdf.measurement_point())
-                                } else {
-                                    None
-                                };
-                                self.event_loop.send_event(VgonioEvent::Measure {
-                                    single_point,
-                                    params: MeasurementParams::Bsdf(self.tab_bsdf.params),
-                                    surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                });
-                            }
-                            MeasurementKind::Adf => {
-                                self.event_loop.send_event(VgonioEvent::Measure {
-                                    single_point: None,
-                                    params: MeasurementParams::Adf(self.tab_adf.params),
-                                    surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                });
-                            }
-                            MeasurementKind::Msf => {
-                                self.event_loop.send_event(VgonioEvent::Measure {
-                                    single_point: None,
-                                    params: MeasurementParams::Msf(self.tab_msf.params),
-                                    surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                });
+                        if !self.selector.any_selected() {
+                            self.event_loop.send_event(VgonioEvent::Notify {
+                                kind: NotifyKind::Error,
+                                text: "No surfaces selected!".to_string(),
+                                time: 3.0,
+                            });
+                        } else {
+                            match self.kind {
+                                MeasurementKind::Bsdf => {
+                                    #[cfg(feature = "visu-dbg")]
+                                    let single_point = if self.single_point {
+                                        Some(self.tab_bsdf.measurement_point())
+                                    } else {
+                                        None
+                                    };
+
+                                    #[cfg(not(feature = "visu-dbg"))]
+                                    let single_point = None;
+
+                                    self.event_loop.send_event(VgonioEvent::Measure {
+                                        single_point,
+                                        params: MeasurementParams::Bsdf(self.tab_bsdf.params),
+                                        surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                    });
+                                }
+                                MeasurementKind::Adf => {
+                                    self.event_loop.send_event(VgonioEvent::Measure {
+                                        single_point: None,
+                                        params: MeasurementParams::Adf(self.tab_adf.params),
+                                        surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                    });
+                                }
+                                MeasurementKind::Msf => {
+                                    self.event_loop.send_event(VgonioEvent::Measure {
+                                        single_point: None,
+                                        params: MeasurementParams::Msf(self.tab_msf.params),
+                                        surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                    });
+                                }
                             }
                         }
                     }
@@ -313,7 +331,7 @@ impl MeasurementDialog {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(any(feature = "visu-dbg", debug_assertions))]
 pub struct MeasurementDialogDebug {
     enable_debug_draw: bool,
     surf_prim_id: usize,

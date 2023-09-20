@@ -57,7 +57,7 @@ pub(crate) struct VisualGridPipeline {
 }
 
 impl VisualGridState {
-    pub fn create_pipeline(
+    pub(crate) fn create_pipeline(
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
     ) -> VisualGridPipeline {

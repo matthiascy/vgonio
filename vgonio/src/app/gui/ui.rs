@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        cache::{Cache, Handle, InnerCache},
+        cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
             data::PropertyData,
@@ -95,7 +95,7 @@ impl VgonioGui {
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
             measurement: MeasurementDialog::new(
                 event_loop.clone(),
-                #[cfg(debug_assertions)]
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 cache.clone(),
             ),
             plotters: vec![],
@@ -126,7 +126,7 @@ impl VgonioGui {
                 EventResponse::Handled
             }
             VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create { uuid, .. }) => {
-                #[cfg(debug_assertions)]
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 self.measurement.update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)
             }

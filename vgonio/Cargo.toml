@@ -13,6 +13,7 @@ embree = ["dep:embree", "vgsurf/embree"]
 optix = []
 surf-obj = ["vgsurf/surf-obj"]
 surf-gen = ["vgsurf/surf-gen"]
+visu-dbg = []
 verbose_debug = []
 
 [dependencies]

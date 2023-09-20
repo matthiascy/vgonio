@@ -22,7 +22,7 @@ use image::{ImageBuffer, Luma};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Index, IndexMut},
 };
 use vgcore::{
     math::{Sph2, Vec3},
@@ -48,64 +48,67 @@ pub mod rtc;
 pub struct MeasuredBsdfData {
     /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
-    /// The BSDF data per emitter's position (incident direction). The first
-    /// index is the azimuthal angle, and the second index is the zenith angle.
-    /// The order of the data point follows the order of collector's patches.
-    pub samples: Vec<PerWavelength<f32>>,
-    #[cfg(debug_assertions)]
-    /// Trajectories of the rays for each emitter's position.
-    pub trajectories: Vec<Vec<RayTrajectory>>,
-    #[cfg(debug_assertions)]
-    /// Hit points on the collector for each emitter's position.
-    pub hit_points: Vec<Vec<Vec3>>,
+    /// Snapshot of the BSDF at each incident direction of the emitter.
+    /// See [`BsdfSnapshot`] for more details.
+    pub snapshots: Vec<BsdfSnapshot>,
 }
 
 impl MeasuredBsdfData {
-    pub fn write_to_images(&self, dir: &std::path::Path) {
+    pub fn write_to_images(
+        &self,
+        dir: &std::path::Path,
+        #[cfg(feature = "visu-dbg")] single_point: Option<Sph2>,
+    ) {
         log::info!("Saving BSDF images to {}", dir.display());
         // TODO: add surface name to the filename
         // TODO: save float images
         // TODO: debug
-        const WIDTH: usize = 512;
-        const HEIGHT: usize = 512;
+        const WIDTH: usize = 256;
+        const HEIGHT: usize = 256;
         let mut img = image::GrayImage::new(WIDTH as u32, HEIGHT as u32);
         let patches = self.params.detector.generate_patches();
-        // Save the image for each measurement point.
-        for w_i in self.params.emitter.generate_measurement_points().iter() {
+        // For each BSDF snapshot, generate an image.
+        for snapshot in &self.snapshots {
             for i in 0..WIDTH {
                 for j in 0..HEIGHT {
-                    let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * 2.0f32.sqrt();
+                    let x = (2 * i) as f32 / WIDTH as f32 - 1.0;
                     // Flip the y-axis to match the BSDF coordinate system.
-                    let y = -1.0 * ((2 * j) as f32 / HEIGHT as f32 - 1.0) * 2.0f32.sqrt();
+                    let y = (2 * j) as f32 / HEIGHT as f32 - 1.0;
                     let r_disc = (x * x + y * y).sqrt();
                     let theta = 2.0 * (r_disc / 2.0).asin();
-                    let phi = (y).atan2(x);
-                    log::debug!(
-                        "x = {}, y = {}, r_disc = {}, theta = {}, phi = {}",
-                        x,
-                        y,
-                        r_disc,
-                        theta,
-                        phi
-                    );
-                    match patches.patch_index_of(Sph2::new(rad!(theta), rad!(phi))) {
-                        None => {
-                            log::warn!("No patch found for theta = {}, phi = {}", theta, phi);
-                        }
-                        Some(idx) => {
-                            let value = self.samples[idx][0] * 255.0;
-                            img.put_pixel(i as u32, j as u32, Luma([value as u8]));
-                        }
+                    let phi = (y).atan2(x) + std::f32::consts::PI;
+                    if let Some(idx) = patches.patch_index_of(Sph2::new(rad!(theta), rad!(phi))) {
+                        // TODO: save full wavelength range instead of just the first one
+                        let value = snapshot.samples[idx][0];
+                        img.put_pixel(i as u32, j as u32, Luma([value as u8]));
                     }
                 }
             }
             let filename = format!(
-                "bsdf_{}_{}.pfm",
-                w_i.theta.to_degrees(),
-                w_i.phi.to_degrees(),
+                "bsdf_{}_{}.png",
+                snapshot.w_i.theta.to_degrees(),
+                snapshot.w_i.phi.to_degrees(),
             );
             img.save(dir.join(filename)).unwrap();
         }
+    }
+
+    #[cfg(feature = "visu-dbg")]
+    /// Returns the trajectories of the rays for each BSDF snapshot.
+    pub fn trajectories(&self) -> Vec<Vec<RayTrajectory>> {
+        self.snapshots
+            .iter()
+            .map(|snapshot| snapshot.trajectories.clone())
+            .collect()
+    }
+
+    #[cfg(feature = "visu-dbg")]
+    /// Returns the hit points on the collector for each BSDF snapshot.
+    pub fn hit_points(&self) -> Vec<Vec<Vec3>> {
+        self.snapshots
+            .iter()
+            .map(|snapshot| snapshot.hit_points.clone())
+            .collect()
     }
 }
 
@@ -167,7 +170,7 @@ impl From<u8> for BsdfKind {
 
 /// Stores the data per wavelength for a spectrum.
 #[derive(Debug)]
-pub struct PerWavelength<T>(pub Vec<T>);
+pub struct PerWavelength<T>(pub(crate) Vec<T>);
 
 impl<T> Clone for PerWavelength<T>
 where
@@ -189,6 +192,16 @@ impl<T> Deref for PerWavelength<T> {
 
 impl<T> DerefMut for PerWavelength<T> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+
+impl<T> Index<usize> for PerWavelength<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output { &self.0[index] }
+}
+
+impl<T> IndexMut<usize> for PerWavelength<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output { &mut self.0[index] }
 }
 
 impl<T: PartialEq> PartialEq for PerWavelength<T> {
@@ -290,25 +303,25 @@ impl Debug for BsdfMeasurementStatsPoint {
 /// It contains the statistics of the measurement and the data collected
 /// for all the patches of the collector at the incident direction.
 #[derive(Clone)]
-pub struct BsdfSnapshot<PatchData>
+pub struct BsdfSnapshotRaw<D>
 where
-    PatchData: PerPatchData,
+    D: PerPatchData,
 {
     /// Incident direction in the unit spherical coordinates.
     pub w_i: Sph2,
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.
-    pub records: Vec<PerWavelength<PatchData>>,
+    pub records: Vec<PerWavelength<D>>,
     /// Extra ray trajectory data for debugging purposes.
-    #[cfg(debug_assertions)]
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub trajectories: Vec<RayTrajectory>,
     /// Hit points on the collector.
-    #[cfg(debug_assertions)]
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub hit_points: Vec<Vec3>,
 }
 
-impl<PatchData: Debug + PerPatchData> Debug for BsdfSnapshot<PatchData> {
+impl<D: Debug + PerPatchData> Debug for BsdfSnapshotRaw<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BsdfMeasurementPoint")
             .field("stats", &self.stats)
@@ -317,10 +330,25 @@ impl<PatchData: Debug + PerPatchData> Debug for BsdfSnapshot<PatchData> {
     }
 }
 
-impl<PatchData: PerPatchData + PartialEq> PartialEq for BsdfSnapshot<PatchData> {
+impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
     fn eq(&self, other: &Self) -> bool {
         self.stats == other.stats && self.records == other.records
     }
+}
+
+/// A snapshot of the measured BSDF.
+#[derive(Debug, Clone)]
+pub struct BsdfSnapshot {
+    /// Incident direction in the unit spherical coordinates.
+    pub w_i: Sph2,
+    /// BSDF values for each patch of the collector.
+    pub samples: Vec<PerWavelength<f32>>,
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    /// Extra ray trajectory data for debugging purposes.
+    pub trajectories: Vec<RayTrajectory>,
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    /// Hit points on the collector for debugging purposes.
+    pub hit_points: Vec<Vec3>,
 }
 
 /// Ray tracing simulation result for a single incident direction of a surface.
@@ -389,30 +417,11 @@ pub fn measure_bsdf_rt(
         .into_iter()
         .map(|collected| {
             let surface = cache.get_micro_surface(collected.surface).unwrap();
-            let samples = collected.compute_bsdf(&params);
-            #[cfg(debug_assertions)]
-            let trajectories = collected
-                .snapshots
-                .iter()
-                .map(|t| t.trajectories.clone())
-                .collect::<Vec<_>>();
-            #[cfg(debug_assertions)]
-            let hit_points = collected
-                .snapshots
-                .iter()
-                .map(|t| t.hit_points.clone())
-                .collect::<Vec<_>>();
+            let snapshots = collected.compute_bsdf(&params);
             MeasurementData {
                 name: surface.file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(collected.surface),
-                measured: MeasuredData::Bsdf(MeasuredBsdfData {
-                    params,
-                    samples,
-                    #[cfg(debug_assertions)]
-                    trajectories,
-                    #[cfg(debug_assertions)]
-                    hit_points,
-                }),
+                measured: MeasuredData::Bsdf(MeasuredBsdfData { params, snapshots }),
             }
         })
         .collect()

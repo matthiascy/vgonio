@@ -9,11 +9,10 @@ use crate::{
     },
     measure::{
         bsdf::{
-            detector::Detector,
             emitter::Emitter,
             rtc,
             rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-            MeasuredBsdfData, SimulationResultPoint,
+            SimulationResultPoint,
         },
         params::BsdfMeasurementParams,
     },
