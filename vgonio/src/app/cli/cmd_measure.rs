@@ -136,6 +136,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.detector.precision
                 );
                 measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, &cache, None)
+                // TODO: save measured data to file.
             }
             MeasurementParams::Adf(measurement) => {
                 println!(

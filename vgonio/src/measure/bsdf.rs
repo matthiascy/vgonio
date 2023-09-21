@@ -54,33 +54,40 @@ pub struct MeasuredBsdfData {
 }
 
 impl MeasuredBsdfData {
-    pub fn write_to_images(
-        &self,
-        dir: &std::path::Path,
-        #[cfg(feature = "visu-dbg")] single_point: Option<Sph2>,
-    ) {
+    pub fn write_to_images(&self, dir: &std::path::Path) {
         log::info!("Saving BSDF images to {}", dir.display());
         // TODO: add surface name to the filename
         // TODO: save float images
         // TODO: debug
-        const WIDTH: usize = 256;
-        const HEIGHT: usize = 256;
+        const WIDTH: usize = 512;
+        const HEIGHT: usize = 512;
         let mut img = image::GrayImage::new(WIDTH as u32, HEIGHT as u32);
         let patches = self.params.detector.generate_patches();
         // For each BSDF snapshot, generate an image.
         for snapshot in &self.snapshots {
+            log::debug!("bsdf snapshot: {:?}", snapshot.samples);
             for i in 0..WIDTH {
                 for j in 0..HEIGHT {
-                    let x = (2 * i) as f32 / WIDTH as f32 - 1.0;
+                    let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * std::f32::consts::SQRT_2;
                     // Flip the y-axis to match the BSDF coordinate system.
-                    let y = (2 * j) as f32 / HEIGHT as f32 - 1.0;
+                    let y = -((2 * j) as f32 / HEIGHT as f32 - 1.0) * std::f32::consts::SQRT_2;
                     let r_disc = (x * x + y * y).sqrt();
                     let theta = 2.0 * (r_disc / 2.0).asin();
-                    let phi = (y).atan2(x) + std::f32::consts::PI;
-                    if let Some(idx) = patches.patch_index_of(Sph2::new(rad!(theta), rad!(phi))) {
+                    let phi = {
+                        let phi = (y).atan2(x);
+                        if phi < 0.0 {
+                            phi + std::f32::consts::TAU
+                        } else {
+                            phi
+                        }
+                    };
+                    if let Some(idx) = patches.contains(Sph2::new(rad!(theta), rad!(phi))) {
                         // TODO: save full wavelength range instead of just the first one
-                        let value = snapshot.samples[idx][0];
-                        img.put_pixel(i as u32, j as u32, Luma([value as u8]));
+                        img.put_pixel(
+                            i as u32,
+                            j as u32,
+                            Luma([(snapshot.samples[idx][0] * 255.0).min(255.0) as u8]),
+                        );
                     }
                 }
             }
@@ -170,7 +177,20 @@ impl From<u8> for BsdfKind {
 
 /// Stores the data per wavelength for a spectrum.
 #[derive(Debug)]
-pub struct PerWavelength<T>(pub(crate) Vec<T>);
+pub struct PerWavelength<T>(Vec<T>);
+
+impl<T> PerWavelength<T> {
+    pub fn new() -> Self { Self(Vec::new()) }
+
+    pub fn splat(val: T, len: usize) -> Self
+    where
+        T: Copy,
+    {
+        Self(vec![val; len])
+    }
+
+    pub fn from_vec(vec: Vec<T>) -> Self { Self(vec) }
+}
 
 impl<T> Clone for PerWavelength<T>
 where

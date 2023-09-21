@@ -608,7 +608,7 @@ pub mod vgmo {
                         for i in 0..len {
                             data[i] = <$t>::from_le_bytes(buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].try_into().unwrap());
                         }
-                        Self(data)
+                        Self::from_vec(data)
                     }
                 }
             )*
@@ -716,8 +716,8 @@ pub mod vgmo {
                 n_reflected,
                 n_captured,
                 e_captured: captured_energy,
-                num_rays_per_bounce: PerWavelength(num_rays_per_bounce),
-                energy_per_bounce: PerWavelength(energy_per_bounce),
+                num_rays_per_bounce: PerWavelength::from_vec(num_rays_per_bounce),
+                energy_per_bounce: PerWavelength::from_vec(energy_per_bounce),
             })
         }
     }
@@ -811,7 +811,7 @@ pub mod vgmo {
                     .unwrap();
                     per_wavelength.push(bounce_and_energy);
                 }
-                data.push(PerWavelength(per_wavelength));
+                data.push(PerWavelength::from_vec(per_wavelength));
             }
 
             Self {

@@ -87,7 +87,7 @@ impl DetectorPatches {
     }
 
     /// Returns the index of the patch containing the direction.
-    pub fn patch_index_of(&self, sph: Sph2) -> Option<usize> {
+    pub fn contains(&self, sph: Sph2) -> Option<usize> {
         match self {
             Self::Beckers { rings, patches } => {
                 for ring in rings.iter() {
@@ -389,13 +389,11 @@ impl Detector {
             .iors
             .ior_of_spectrum(params.incident_medium, &spectrum)
             .expect("incident medium IOR not found");
-        log::debug!("[Collector] incident medium IORs: {:?}", iors_i);
         // Retrieve the transmitted medium's refractive indices for each wavelength.
         let iors_t = cache
             .iors
             .ior_of_spectrum(params.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
-        log::debug!("[Collector] transmitted medium IORs: {:?}", iors_t);
         let max_bounces = params.emitter.max_bounces as usize;
 
         sim_res
@@ -449,8 +447,7 @@ impl Detector {
                                             }
                                         };
                                         // Returns the index of the ray, the unit vector pointing to
-                                        // the collector's
-                                        // surface, and the number of bounces.
+                                        // the collector's surface, and the number of bounces.
                                         Some(OutgoingRayDir {
                                             idx: i,
                                             dir: p.normalize(),
@@ -461,19 +458,28 @@ impl Detector {
                             })
                             .collect::<Vec<_>>();
 
-                        // Calculate the energy of the rays (with wavelength) that intersected the
-                        // collector's surface.
-                        // Outer index: ray index, inner index: wavelength index.
+                        // Calculate the energy of each rays per wavelength.
                         let ray_energy_per_wavelength = dirs
                             .iter()
                             .map(|w_o| {
                                 let trajectory = &output.trajectories[w_o.idx];
                                 let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
+                                log::debug!("initial energy: {:?}", energy);
                                 for node in trajectory.iter().take(trajectory.len() - 1) {
-                                    for i in 0..spectrum.len() {
+                                    for i in 0..spectrum_len {
                                         match energy[i] {
                                             Energy::Absorbed => continue,
                                             Energy::Reflected(ref mut e) => {
+                                                let reflectance = fresnel::reflectance(
+                                                    node.cos.unwrap_or(1.0),
+                                                    iors_i[i],
+                                                    iors_t[i],
+                                                );
+                                                log::debug!(
+                                                    "reflectance: {}, cos {:?}",
+                                                    reflectance,
+                                                    node.cos
+                                                );
                                                 *e *= fresnel::reflectance(
                                                     node.cos.unwrap_or(1.0),
                                                     iors_i[i],
@@ -489,6 +495,7 @@ impl Detector {
                                 (w_o.idx, energy)
                             })
                             .collect::<Vec<_>>();
+                        log::debug!("ray_energy_per_wavelength: {:?}", ray_energy_per_wavelength);
 
                         // Calculate the number of absorbed and reflected rays per wavelength.
                         for (_, energies) in &ray_energy_per_wavelength {
@@ -501,9 +508,10 @@ impl Detector {
                                 }
                             }
                         }
+                        log::debug!("stats.n_absorbed: {:?}", stats.n_absorbed);
+                        log::debug!("stats.n_reflected: {:?}", stats.n_reflected);
 
-                        // For each patch, collect the rays that intersect it using the
-                        // outgoing_dirs vector.
+                        // Collect the outgoing rays per patch.
                         let outgoing_dirs_per_patch = self
                             .patches
                             .patches_iter()
@@ -519,8 +527,7 @@ impl Detector {
                                     .collect::<Vec<_>>()
                             })
                             .collect::<Vec<_>>();
-                        // TODO: fix this
-                        println!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
+                        log::debug!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
 
                         let data = outgoing_dirs_per_patch
                             .iter()
@@ -529,7 +536,7 @@ impl Detector {
                                     BounceAndEnergy::empty(
                                         params.emitter.max_bounces as usize
                                     );
-                                    spectrum.len()
+                                    spectrum_len
                                 ]);
                                 for (i, bounce) in dirs.iter() {
                                     let ray_energy = &ray_energy_per_wavelength
@@ -560,6 +567,8 @@ impl Detector {
                                 data_per_patch
                             })
                             .collect::<Vec<_>>();
+                        log::debug!("data per patch: {:?}", data);
+                        log::debug!("stats: {:?}", stats);
 
                         // Compute the vertex positions of the outgoing rays.
                         #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -625,36 +634,38 @@ impl CollectedData {
         self.snapshots
             .iter()
             .map(|snapshot| {
-                let mut bsdf = vec![
-                    PerWavelength(vec![0.0; params.emitter.spectrum.values().len()]);
-                    snapshot.records.len()
-                ];
+                let mut samples =
+                    vec![
+                        PerWavelength::splat(0.0, params.emitter.spectrum.values().len());
+                        snapshot.records.len()
+                    ];
                 let cos_i = snapshot.w_i.theta.cos();
-                let incident_irradiance = snapshot.stats.n_received as f32 * cos_i;
-                log::info!("incident_irradiance: {}", incident_irradiance);
+                let l_i = snapshot.stats.n_received as f32 * cos_i;
                 for (i, patch_data) in snapshot.records.iter().enumerate() {
                     // Per wavelength
                     for (j, stats) in patch_data.iter().enumerate() {
                         let patch = self.patches.patches_iter().nth(i).unwrap();
                         let cos_o = patch.center().theta.cos();
                         if cos_o == 0.0 {
-                            bsdf[i][j] = 0.0;
+                            samples[i][j] = 0.0;
                         } else {
                             let d_omega = patch.solid_angle();
-                            let outgoing_radiance =
-                                stats.total_energy * rcp_f32(cos_o * d_omega.as_f32());
-                            log::info!(
-                                "total_energy: {}, outgoing_radiance[{i}], lambda[{j}]: {}",
+                            let l_o = stats.total_energy * rcp_f32(cos_o * d_omega.as_f32());
+                            samples[i][j] = l_o * rcp_f32(l_i);
+                            log::debug!(
+                                "energy of patch: {}, λ[{j}] --  L_i: {}, L_o[{i}]: {} -- brdf: {}",
                                 stats.total_energy,
-                                outgoing_radiance
+                                l_i,
+                                l_o,
+                                samples[i][j],
                             );
-                            bsdf[i][j] = outgoing_radiance * rcp_f32(incident_irradiance);
                         }
                     }
                 }
+                log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
                 BsdfSnapshot {
                     w_i: snapshot.w_i,
-                    samples: bsdf,
+                    samples,
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     trajectories: snapshot.trajectories.clone(),
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]

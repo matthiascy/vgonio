@@ -666,7 +666,7 @@ impl VgonioGuiApp {
                                 .measured
                                 .bsdf_data()
                                 .unwrap()
-                                .write_to_images(self.config.output_dir(), single_point);
+                                .write_to_images(self.config.output_dir());
                             log::warn!("Save BSDF to file or display it in a window");
                         }
                     },

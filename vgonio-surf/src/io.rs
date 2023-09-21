@@ -12,6 +12,7 @@ use vgcore::{
         CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
         ReadFileErrorKind,
     },
+    math::Axis,
 };
 
 /// Write the data samples to the given writer.
