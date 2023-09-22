@@ -14,7 +14,7 @@ use std::{
     borrow::Cow,
     path::{Path, PathBuf},
 };
-use vgcore::units::Radians;
+use vgcore::{error::VgonioError, units::Radians};
 use vgsurf::MicroSurface;
 
 /// Measurement data source.
@@ -262,5 +262,19 @@ impl MeasurementData {
             + zenith_m_idx * azimuth_bin_count * zenith_bin_count
             + azimuth_i_idx * zenith_bin_count;
         &self.measured.samples()[offset..offset + zenith_bin_count]
+    }
+
+    /// Writes the measured BSDF data to images.
+    pub fn write_bsdf_to_images(&self, path: &Path) -> Result<(), VgonioError> {
+        match &self.measured {
+            MeasuredData::Bsdf(measured) => {
+                measured.write_to_images(&self.name, path);
+                Ok(())
+            }
+            _ => Err(VgonioError::new(
+                "Trying to write non-BSDF data as BSDF",
+                None,
+            )),
+        }
     }
 }

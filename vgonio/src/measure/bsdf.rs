@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut, Index, IndexMut},
+    path::Path,
 };
 use vgcore::{
     math::{Sph2, Vec3},
@@ -54,8 +55,9 @@ pub struct MeasuredBsdfData {
 }
 
 impl MeasuredBsdfData {
-    pub fn write_to_images(&self, dir: &std::path::Path) {
-        log::info!("Saving BSDF images to {}", dir.display());
+    /// Writes the BSDF data to images. TODO: error handling
+    pub fn write_to_images(&self, name: &str, path: &Path) {
+        log::info!("Saving BSDF images to {}", path.display());
         // TODO: add surface name to the filename
         // TODO: save float images
         // TODO: debug
@@ -91,11 +93,11 @@ impl MeasuredBsdfData {
                 }
             }
             let filename = format!(
-                "bsdf_{}_{}.png",
-                snapshot.w_i.theta.to_degrees(),
-                snapshot.w_i.phi.to_degrees(),
+                "bsdf_{name}_θ{}_φ{}.png",
+                snapshot.w_i.theta.prettified(),
+                snapshot.w_i.phi.prettified(),
             );
-            img.save(dir.join(filename)).unwrap();
+            img.save(path.join(filename)).unwrap();
         }
     }
 
@@ -183,7 +185,7 @@ impl<T> PerWavelength<T> {
 
     pub fn splat(val: T, len: usize) -> Self
     where
-        T: Copy,
+        T: Clone,
     {
         Self(vec![val; len])
     }

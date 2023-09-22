@@ -663,10 +663,8 @@ impl VgonioGuiApp {
                                 );
                             }
                             measured[0]
-                                .measured
-                                .bsdf_data()
-                                .unwrap()
-                                .write_to_images(self.config.output_dir());
+                                .write_bsdf_to_images(self.config.output_dir())
+                                .unwrap();
                             log::warn!("Save BSDF to file or display it in a window");
                         }
                     },
