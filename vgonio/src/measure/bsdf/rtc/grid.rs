@@ -50,7 +50,7 @@ pub fn measure_bsdf(
     let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
 
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     {
         log::debug!("mesh extent: {:?}", mesh.bounds);
         log::debug!(

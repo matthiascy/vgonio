@@ -11,10 +11,11 @@ publish = false
 default = []
 embree = ["dep:embree", "vgsurf/embree"]
 optix = []
+bench = []
 surf-obj = ["vgsurf/surf-obj"]
 surf-gen = ["vgsurf/surf-gen"]
 visu-dbg = []
-verbose_debug = []
+verbose-dbg = []
 
 [dependencies]
 clap = { workspace = true }

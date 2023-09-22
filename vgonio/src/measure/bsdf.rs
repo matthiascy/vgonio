@@ -65,7 +65,6 @@ impl MeasuredBsdfData {
         let patches = self.params.detector.generate_patches();
         // For each BSDF snapshot, generate an image.
         for snapshot in &self.snapshots {
-            log::debug!("bsdf snapshot: {:?}", snapshot.samples);
             for i in 0..WIDTH {
                 for j in 0..HEIGHT {
                     let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * std::f32::consts::SQRT_2;
@@ -400,6 +399,9 @@ pub fn measure_bsdf_rt(
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
 
+    #[cfg(feature = "bench")]
+    let start = std::time::Instant::now();
+
     let sim_results = match sim_kind {
         SimulationKind::GeomOptics(method) => {
             println!(
@@ -430,9 +432,10 @@ pub fn measure_bsdf_rt(
         }
     };
 
-    let detector = Detector::new(&params.detector);
+    #[cfg(feature = "bench")]
+    let sim_time = start.elapsed().as_secs_f32();
 
-    detector
+    let measured = Detector::new(&params.detector)
         .collect(&params, &sim_results, cache)
         .into_iter()
         .map(|collected| {
@@ -444,7 +447,20 @@ pub fn measure_bsdf_rt(
                 measured: MeasuredData::Bsdf(MeasuredBsdfData { params, snapshots }),
             }
         })
-        .collect()
+        .collect();
+
+    #[cfg(feature = "bench")]
+    {
+        let total_time = start.elapsed().as_secs_f32();
+        println!(
+            "[BENCH] BSDF measurement in {:?} s (simulation: {:?} s, collection: {:?} s)",
+            total_time,
+            sim_time,
+            total_time - sim_time
+        );
+    }
+
+    measured
 }
 
 /// Measurement of the BSDF (bidirectional scattering distribution function) of

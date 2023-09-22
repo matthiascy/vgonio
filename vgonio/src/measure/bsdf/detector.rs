@@ -10,6 +10,7 @@ use crate::{
     optics::fresnel,
     SphericalDomain,
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use vgcore::{
     math,
@@ -354,6 +355,11 @@ struct OutgoingRayDir {
 }
 
 impl Detector {
+    /// Creates a new detector.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The parameters of the detector.
     pub fn new(params: &DetectorParams) -> Self {
         Self {
             params: *params,
@@ -405,13 +411,19 @@ impl Detector {
                         .get_micro_surface_mesh_by_surface_id(res.surface)
                         .unwrap(),
                 );
-                log::trace!("[Collector] Estimated orbit radius: {}", orbit_radius,);
+                log::trace!("[Collector] Estimated orbit radius: {}", orbit_radius);
+
+                let n_received = std::sync::atomic::AtomicU32::new(0);
 
                 let data = res
                     .outputs
                     .iter()
                     .map(|output| {
                         log::debug!("[Collector] collecting data at {}", output.w_i);
+
+                        #[cfg(feature = "bench")]
+                        let start = std::time::Instant::now();
+
                         let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounces);
                         // Convert the last rays of the trajectories into a vector located
                         // at the collector's center and pointing to the intersection point
@@ -420,13 +432,14 @@ impl Detector {
                         // trajectory, the intersection point and the number of bounces.
                         let dirs = output
                             .trajectories
-                            .iter()
+                            .par_iter()
                             .enumerate()
                             .filter_map(|(i, trajectory)| {
                                 match trajectory.last() {
                                     None => None,
                                     Some(last) => {
-                                        stats.n_received += 1;
+                                        n_received
+                                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                         // 1. Calculate the intersection point of the last ray with
                                         // the collector's surface. Ray-Sphere intersection.
                                         // Collect's center is at (0, 0, 0).
@@ -457,6 +470,12 @@ impl Detector {
                                 }
                             })
                             .collect::<Vec<_>>();
+                        stats.n_received = n_received.load(std::sync::atomic::Ordering::Relaxed);
+
+                        #[cfg(feature = "bench")]
+                        let dirs_time = start.elapsed().as_millis();
+                        #[cfg(feature = "bench")]
+                        log::info!("Collector::collect: dirs: {} ms", dirs_time);
 
                         // Calculate the energy of each rays per wavelength.
                         let ray_energy_per_wavelength = dirs
@@ -464,22 +483,11 @@ impl Detector {
                             .map(|w_o| {
                                 let trajectory = &output.trajectories[w_o.idx];
                                 let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
-                                log::debug!("initial energy: {:?}", energy);
                                 for node in trajectory.iter().take(trajectory.len() - 1) {
                                     for i in 0..spectrum_len {
                                         match energy[i] {
                                             Energy::Absorbed => continue,
                                             Energy::Reflected(ref mut e) => {
-                                                let reflectance = fresnel::reflectance(
-                                                    node.cos.unwrap_or(1.0),
-                                                    iors_i[i],
-                                                    iors_t[i],
-                                                );
-                                                log::debug!(
-                                                    "reflectance: {}, cos {:?}",
-                                                    reflectance,
-                                                    node.cos
-                                                );
                                                 *e *= fresnel::reflectance(
                                                     node.cos.unwrap_or(1.0),
                                                     iors_i[i],
@@ -495,7 +503,16 @@ impl Detector {
                                 (w_o.idx, energy)
                             })
                             .collect::<Vec<_>>();
+                        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                         log::debug!("ray_energy_per_wavelength: {:?}", ray_energy_per_wavelength);
+
+                        #[cfg(feature = "bench")]
+                        let ray_energy_time = start.elapsed().as_millis();
+                        #[cfg(feature = "bench")]
+                        log::info!(
+                            "Collector::collect: ray_energy_per_wavelength: {} ms",
+                            ray_energy_time - dirs_time
+                        );
 
                         // Calculate the number of absorbed and reflected rays per wavelength.
                         for (_, energies) in &ray_energy_per_wavelength {
@@ -510,6 +527,7 @@ impl Detector {
                         }
                         log::debug!("stats.n_absorbed: {:?}", stats.n_absorbed);
                         log::debug!("stats.n_reflected: {:?}", stats.n_reflected);
+                        log::debug!("stats.n_received: {:?}", stats.n_received);
 
                         // Collect the outgoing rays per patch.
                         let outgoing_dirs_per_patch = self
@@ -527,7 +545,16 @@ impl Detector {
                                     .collect::<Vec<_>>()
                             })
                             .collect::<Vec<_>>();
+                        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                         log::debug!("outgoing_dirs_per_patch: {:?}", outgoing_dirs_per_patch);
+
+                        #[cfg(feature = "bench")]
+                        let outgoing_dirs_time = start.elapsed().as_millis();
+                        #[cfg(feature = "bench")]
+                        log::info!(
+                            "Collector::collect: outgoing_dirs_per_patch: {} ms",
+                            outgoing_dirs_time - ray_energy_time
+                        );
 
                         let data = outgoing_dirs_per_patch
                             .iter()
@@ -567,8 +594,18 @@ impl Detector {
                                 data_per_patch
                             })
                             .collect::<Vec<_>>();
+                        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                         log::debug!("data per patch: {:?}", data);
+                        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                         log::debug!("stats: {:?}", stats);
+
+                        #[cfg(feature = "bench")]
+                        let data_time = start.elapsed().as_millis();
+                        #[cfg(feature = "bench")]
+                        log::info!(
+                            "Collector::collect: data: {} ms",
+                            data_time - outgoing_dirs_time
+                        );
 
                         // Compute the vertex positions of the outgoing rays.
                         #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -652,8 +689,10 @@ impl CollectedData {
                             let d_omega = patch.solid_angle();
                             let l_o = stats.total_energy * rcp_f32(cos_o * d_omega.as_f32());
                             samples[i][j] = l_o * rcp_f32(l_i);
+                            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
-                                "energy of patch: {}, λ[{j}] --  L_i: {}, L_o[{i}]: {} -- brdf: {}",
+                                "energy of patch {i}: {}, λ[{j}] --  L_i: {}, L_o[{i}]: {} -- \
+                                 brdf: {}",
                                 stats.total_energy,
                                 l_i,
                                 l_o,
@@ -662,6 +701,7 @@ impl CollectedData {
                         }
                     }
                 }
+                #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
                 BsdfSnapshot {
                     w_i: snapshot.w_i,

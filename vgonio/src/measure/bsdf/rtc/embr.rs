@@ -22,7 +22,7 @@ use embree::{
 };
 use rayon::prelude::*;
 use std::sync::Arc;
-#[cfg(all(debug_assertions, feature = "verbose_debug"))]
+#[cfg(all(debug_assertions, feature = "verbose-dbg"))]
 use std::time::Instant;
 use vgcore::math::{Sph2, Vec3A};
 use vgsurf::MicroSurfaceMesh;
@@ -67,12 +67,12 @@ fn intersect_filter_stream<'a>(
         if hits.is_valid(i) {
             let prim_id = hits.prim_id(i);
             let ray_id = rays.id(i);
-            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
             log::trace!("ray {} -- hit: {}", ray_id, prim_id);
             let last_hit = ctx.ext.last_hit[ray_id as usize];
 
             if prim_id != INVALID_ID && prim_id == last_hit.prim_id {
-                #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+                #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 log::trace!("nudging ray origin");
                 // if the ray hit the same primitive as the previous bounce,
                 // nudging the ray origin slightly along normal direction of
@@ -116,7 +116,7 @@ fn intersect_filter_stream<'a>(
                 let ray_dir: Vec3A = rays.unit_dir(i).into();
 
                 if ray_dir.dot(normal) > 0.0 {
-                    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+                    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                     log::trace!("ray {} hit backface", ray_id);
                     valid[i] = ValidMask::Invalid as i32;
                     continue;
@@ -137,7 +137,7 @@ fn intersect_filter_stream<'a>(
             }
         } else {
             // if the ray didn't hit anything, mark it as invalid
-            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
             log::trace!("ray {} missed", rays.id(i));
             valid[i] = ValidMask::Invalid as i32;
         }
@@ -166,7 +166,7 @@ pub fn simulate_bsdf_measurement(
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
 
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     {
         log::debug!("mesh extent: {:?}", mesh.bounds);
         log::debug!(
@@ -217,7 +217,7 @@ pub fn simulate_bsdf_measurement_once(
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
 
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     {
         log::debug!("mesh extent: {:?}", mesh.bounds);
         log::debug!(
@@ -260,15 +260,15 @@ fn simulate_bsdf_measurement_single_point(
     cache: &InnerCache,
 ) -> SimulationResultPoint {
     println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", w_i);
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     let t = Instant::now();
     let emitted_rays = emitter.emit_rays(w_i, mesh);
     let num_emitted_rays = emitted_rays.len();
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     let elapsed = t.elapsed();
     let max_bounces = emitter.params.max_bounces;
 
-    #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     log::debug!(
         "emitted {} rays with dir: {} from: {} in {} secs.",
         num_emitted_rays,
@@ -313,7 +313,7 @@ fn simulate_bsdf_measurement_single_point(
         // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
         .enumerate()
         .for_each(|(_i, (rays, data))| {
-            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
             log::trace!("stream {} of {}", _i, num_streams);
             // Populate embree ray stream with generated rays.
             let chunk_size = rays.len();
@@ -348,7 +348,7 @@ fn simulate_bsdf_measurement_single_point(
                     ctx.ctx.flags = IntersectContextFlags::INCOHERENT;
                 }
 
-                #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+                #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 {
                     log::trace!(
                         "------------ bounce {}, active rays {}\n {:?} | {}",
@@ -388,7 +388,7 @@ fn simulate_bsdf_measurement_single_point(
                 bounces += 1;
             }
 
-            #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
             log::trace!(
                 "------------ result {}, active rays: {}, valid rays: {:?}\ntrajectory: {:?} | {}",
                 bounces,
@@ -406,14 +406,14 @@ fn simulate_bsdf_measurement_single_point(
 
     SimulationResultPoint { w_i, trajectories }
 
-    // #[cfg(all(debug_assertions, feature = "verbose_debug"))]
+    // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     // {
     //     let collected = detector.collect(params, mesh, pos, &trajectories,
     // cache);     log::debug!("collected stats: {:#?}", collected.stats);
     //     log::trace!("collected: {:?}", collected.data);
     //     collected
     // }
-    // #[cfg(not(all(debug_assertions, feature = "verbose_debug")))]
+    // #[cfg(not(all(debug_assertions, feature = "verbose-dbg")))]
     // params
     //     .detector
     //     .collect(params, mesh, pos, &trajectories, patches, cache)
