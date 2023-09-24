@@ -502,8 +502,9 @@ pub fn reflectance_insulator_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
 /// * `k` - absorption coefficient of the transmitted medium.
 pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
     assert!(
-        (0.0..=1.0).contains(&cos_i_abs),
-        "the cosine of the incident angle should always be positive"
+        (-f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i_abs),
+        "the cosine of the incident angle should always be positive {}",
+        cos_i_abs
     );
     // Computes relative index of refraction.
     let eta = eta_t / eta_i;

@@ -430,6 +430,8 @@ impl Detector {
 
                         let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounces);
 
+                        let mut n_escaped = std::sync::atomic::AtomicU32::new(0);
+
                         // Convert the last rays of the trajectories into a vector located
                         // at the collector's center and pointing to the intersection point
                         // of the last ray with the collector's surface.
@@ -494,7 +496,10 @@ impl Detector {
                                         {
                                             Some(idx) => idx,
                                             None => {
-                                                log::warn!("ray escaped the detector");
+                                                n_escaped.fetch_add(
+                                                    1,
+                                                    std::sync::atomic::Ordering::Relaxed,
+                                                );
                                                 return None;
                                             }
                                         };
@@ -512,6 +517,11 @@ impl Detector {
                                 }
                             })
                             .collect::<Vec<_>>();
+
+                        log::info!(
+                            "n_escaped: {}",
+                            n_escaped.load(std::sync::atomic::Ordering::Relaxed)
+                        );
 
                         stats.n_received = n_received.load(std::sync::atomic::Ordering::Relaxed);
                         #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
