@@ -1,8 +1,7 @@
+#[cfg(feature = "visu-dbg")]
+use crate::app::gui::{widgets::ToggleSwitch, DebuggingEvent, VgonioEvent};
 use crate::{
-    app::gui::{
-        event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
-        widgets::ToggleSwitch,
-    },
+    app::gui::event::EventLoopProxy,
     measure::{
         bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
@@ -10,6 +9,7 @@ use crate::{
     Medium, SphericalDomain,
 };
 use std::hash::Hash;
+#[cfg(feature = "visu-dbg")]
 use vgcore::math::Sph2;
 
 impl BsdfKind {

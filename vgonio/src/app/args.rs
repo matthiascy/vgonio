@@ -2,7 +2,11 @@ use crate::app::cli::ConvertOptions;
 #[cfg(feature = "surf-gen")]
 use crate::app::cli::GenerateOptions;
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    fmt::{Display, Formatter},
+    path::PathBuf,
+    str::FromStr,
+};
 use vgcore::io::{CompressionScheme, FileEncoding};
 
 /// Vgonio command line interface arguments.
@@ -153,55 +157,80 @@ pub enum FastMeasurementKind {
     MaskingShadowingFunction,
 }
 
+#[derive(Debug, Copy, Clone, Default, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputFormat {
+    /// Vgonio internal file format.
+    #[default]
+    Vgms,
+    /// Portable float map.
+    Pfm,
+    /// Portable network graphics.
+    Png,
+    /// OpenEXR.
+    Exr,
+}
+
+impl Display for OutputFormat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Vgms => write!(f, "vgms"),
+            Self::Pfm => write!(f, "pfm"),
+            Self::Png => write!(f, "png"),
+            Self::Exr => write!(f, "exr"),
+        }
+    }
+}
+
 /// Options for the `measure` command.
 #[derive(clap::Args, Debug)]
 #[clap(about = "Measure different aspects of the micro-surface.")]
 pub struct MeasureOptions {
-    #[clap(
+    #[arg(
         short,
         long,
         num_args(1..),
-        help = "The measurement description files. If option '-f, --fast-measurement' is\n\
-                specified, inputs will be interpreted as micro-surface profiles instead of\n\
-                measurement description file."
+        help = "The measurement description files or directories."
     )]
     pub inputs: Vec<PathBuf>,
 
-    #[clap(
+    #[arg(
         short,
         long,
-        help = "The path where stores the simulation data. Use // at the start of the path\nto \
-                set the output path relative to the input file location. Output path can\nalso be \
+        help = "The path where stores the simulation data. Use // at the start of the\npath to \
+                set the output path relative to the input file location.\nOutput path can also be \
                 specified in configuration file."
     )]
     pub output: Option<PathBuf>,
 
-    #[clap(
+    #[arg(
+        short = 'f',
+        long,
+        default_value_t = OutputFormat::Vgms,
+        help = "The format of the measurement output. If not specified, the format\nwill be the \
+                vgonio internal file format.",
+    )]
+    pub output_format: OutputFormat,
+
+    #[arg(
         short,
         long,
+        required_if_eq("output_format", "vgms"),
         default_value_t = FileEncoding::Binary,
-        help = "Data format for the measurement output."
+        help = "Data format for the measurement output.\nOnly used when output format is vgms."
     )]
     pub encoding: FileEncoding,
 
-    #[clap(
+    #[arg(
         short,
         long,
+        required_if_eq("output_format", "vgms"),
         default_value_t = CompressionScheme::None,
         help = "Data compression for the measurement output."
     )]
     pub compression: CompressionScheme,
 
-    #[clap(
-        short,
-        long,
-        num_args(1..),
-        help = "Quickly measure the micro-surface with default parameters.\n\
-                Check with 'info' command."
-    )]
-    pub fast_measurement: Option<Vec<FastMeasurementKind>>,
-
-    #[clap(
+    #[arg(
         short,
         long = "num-threads",
         help = "The number of threads in the thread pool"

@@ -27,6 +27,7 @@ pub enum FittingProblemKind {
 /// A model after fitting.
 #[derive(Debug, Clone)]
 pub enum FittedModel {
+    /// Bidirectional scattering distribution function.
     Bsdf(),
     /// Microfacet area distribution function.
     Adf(Box<dyn MicrofacetDistributionModel>),
@@ -35,6 +36,7 @@ pub enum FittedModel {
 }
 
 impl FittedModel {
+    /// Returns the isotropy of the model.
     pub fn isotropy(&self) -> Isotropy {
         match self {
             FittedModel::Bsdf() => Isotropy::Isotropic, // TODO: implement
@@ -42,6 +44,7 @@ impl FittedModel {
         }
     }
 
+    /// Returns the kind of fitting problem.
     pub fn kind(&self) -> FittingProblemKind {
         match self {
             FittedModel::Bsdf() => FittingProblemKind::Bsdf(), // TODO: implement
@@ -58,18 +61,17 @@ impl FittedModel {
 }
 
 /// A collection of fitted models without repetition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FittedModels(Vec<FittedModel>);
 
 impl FittedModels {
-    pub fn new() -> Self { Self(Vec::new()) }
-
     /// Checks if the collection already contains a model with the same kind and
     /// isotropy.
     pub fn contains(&self, kind: &FittingProblemKind) -> bool {
         self.0.iter().any(|f| f.kind() == *kind)
     }
 
+    /// Push a new model to the collection.
     pub fn push(&mut self, model: FittedModel) { self.0.push(model); }
 }
 
@@ -87,8 +89,10 @@ pub struct FittingReport<M> {
 }
 
 impl<M> FittingReport<M> {
+    /// Returns the best model found.
     pub fn best_model(&self) -> &M { &self.reports[self.best].0 }
 
+    /// Returns the report of the best model found.
     pub fn best_model_report(&self) -> &(M, MinimizationReport<f64>) { &self.reports[self.best] }
 
     /// Log the fitting report.
@@ -111,6 +115,7 @@ impl<M> FittingReport<M> {
 
 /// A fitting problem.
 pub trait FittingProblem {
+    /// The model to fit.
     type Model;
 
     /// Non linear least squares fitting using Levenberg-Marquardt algorithm.

@@ -52,7 +52,7 @@ pub struct BsdfMeasurementParams {
 
     /// Incident medium of the measurement.
     pub incident_medium: Medium,
-
+    
     /// Transmitted medium of the measurement (medium of the surface).
     pub transmitted_medium: Medium,
 
@@ -151,5 +151,90 @@ impl BsdfMeasurementParams {
     /// Returns the total number of samples that will be collected.
     pub fn samples_count(&self) -> usize {
         self.emitter.measurement_points_count() * self.detector.patches_count()
+    }
+
+    /// Returns the parameters as a HashMap.
+    pub fn to_exr_extra_info(
+        &self,
+    ) -> std::collections::HashMap<exr::meta::attribute::Text, exr::meta::attribute::AttributeValue>
+    {
+        use exr::meta::attribute::{AttributeValue, Text};
+        let mut hash_map = std::collections::HashMap::new();
+        hash_map.insert(
+            Text::new_or_panic("kind"),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.kind))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("sim_kind"),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.sim_kind))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("incident_medium"),
+            AttributeValue::Text(Text::new_or_panic(&format!("{:?}", self.incident_medium))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("transmitted_medium"),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.transmitted_medium))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.num_rays".to_string()),
+            AttributeValue::I32(self.emitter.num_rays as i32),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.max_bounces".to_string()),
+            AttributeValue::I32(self.emitter.max_bounces as i32),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.zenith.start"),
+            AttributeValue::F32(self.emitter.zenith.start.in_degrees().as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.zenith.stop"),
+            AttributeValue::F32(self.emitter.zenith.stop.in_degrees().as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.zenith.step_size"),
+            AttributeValue::F32(self.emitter.zenith.step_size.in_degrees().as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.azimuth.start"),
+            AttributeValue::F32(self.emitter.azimuth.start.in_degrees().as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.azimuth.stop"),
+            AttributeValue::F32(self.emitter.azimuth.stop.in_degrees().as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.azimuth.step_size"),
+            AttributeValue::Text(Text::new_or_panic(format!(
+                "{}",
+                self.emitter.azimuth.step_size.in_degrees().as_f32()
+            ))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.spectrum.start"),
+            AttributeValue::F32(self.emitter.spectrum.start.as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.spectrum.stop"),
+            AttributeValue::F32(self.emitter.spectrum.stop.as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("emitter.spectrum.step_size"),
+            AttributeValue::F32(self.emitter.spectrum.step_size.as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("detector.domain"),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.detector.domain))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("detector.precision"),
+            AttributeValue::F32(self.detector.precision.in_degrees().as_f32()),
+        );
+        hash_map.insert(
+            Text::new_or_panic("detector.scheme"),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.detector.scheme))),
+        );
+        hash_map
     }
 }

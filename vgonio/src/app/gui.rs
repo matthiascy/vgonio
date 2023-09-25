@@ -192,7 +192,7 @@ impl VgonioGuiApp {
         let cache = {
             let mut inner = InnerCache::new(config.cache_dir());
             inner.load_ior_database(&config);
-            Cache(Arc::new(RwLock::new(inner)))
+            Cache::from_inner(inner)
         };
 
         let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
@@ -612,7 +612,7 @@ impl VgonioGuiApp {
                             println!("Measuring area distribution");
                             let measured = self.cache.read(|cache| {
                                 measure::microfacet::measure_area_distribution(
-                                    params, &surfaces, &cache,
+                                    params, &surfaces, cache,
                                 )
                             });
                             self.cache.write(|cache| {
@@ -626,7 +626,7 @@ impl VgonioGuiApp {
                             println!("Measuring masking/shadowing");
                             self.cache.read(|cache| {
                                 measure::microfacet::measure_masking_shadowing(
-                                    params, &surfaces, &cache,
+                                    params, &surfaces, cache,
                                 )
                             });
                             todo!("Save area distribution to file or display it in a window");

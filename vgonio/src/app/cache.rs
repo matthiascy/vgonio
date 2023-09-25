@@ -758,10 +758,9 @@ fn test_normalise_path() {
     assert_eq!(normalised, Path::new("/a/d"));
 }
 
-// TODO: remove pub(crate)
 /// A thread-safe cache. This is a wrapper around `InnerCache`.
 #[derive(Debug, Clone)]
-pub struct Cache(pub(crate) std::sync::Arc<std::sync::RwLock<InnerCache>>);
+pub struct Cache(std::sync::Arc<std::sync::RwLock<InnerCache>>);
 
 impl Cache {
     pub fn from_inner(inner: InnerCache) -> Self {

@@ -1,17 +1,10 @@
 //! Embree ray tracing.
 
 use crate::{
-    app::{
-        cache::InnerCache,
-        cli::{BRIGHT_YELLOW, RESET},
-    },
-    measure::{
-        bsdf::{
-            emitter::Emitter,
-            rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-            SimulationResultPoint,
-        },
-        params::BsdfMeasurementParams,
+    measure::bsdf::{
+        emitter::Emitter,
+        rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
+        SimulationResultPoint,
     },
     optics::fresnel,
 };
@@ -157,10 +150,8 @@ fn intersect_filter_stream<'a>(
 /// * `emitter_samples` - The emitter samples.
 /// * `collector_patches` - The collector patches.
 pub fn simulate_bsdf_measurement(
-    params: &BsdfMeasurementParams,
-    mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-    cache: &InnerCache,
+    mesh: &MicroSurfaceMesh,
 ) -> Vec<SimulationResultPoint> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
@@ -193,12 +184,10 @@ pub fn simulate_bsdf_measurement(
         .map(|w_i| {
             simulate_bsdf_measurement_single_point(
                 *w_i,
-                params,
+                emitter,
                 mesh,
-                &emitter,
                 Arc::new(geometry.clone()),
                 &scene,
-                cache,
             )
         })
         .collect()
@@ -207,11 +196,9 @@ pub fn simulate_bsdf_measurement(
 /// Measures the BSDF of micro-surface mesh at the given position.
 /// The BSDF is measured by emitting rays from the given position.
 pub fn simulate_bsdf_measurement_once(
-    params: &BsdfMeasurementParams,
-    mesh: &MicroSurfaceMesh,
-    emitter: &Emitter,
     w_i: Sph2,
-    cache: &InnerCache,
+    emitter: &Emitter,
+    mesh: &MicroSurfaceMesh,
 ) -> SimulationResultPoint {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
@@ -238,28 +225,19 @@ pub fn simulate_bsdf_measurement_once(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    simulate_bsdf_measurement_single_point(
-        w_i,
-        params,
-        mesh,
-        emitter,
-        Arc::new(geometry.clone()),
-        &scene,
-        cache,
-    )
+    simulate_bsdf_measurement_single_point(w_i, emitter, mesh, Arc::new(geometry.clone()), &scene)
 }
 
 /// Simulates the BSDF measurement for a single incident direction (point).
 fn simulate_bsdf_measurement_single_point(
     w_i: Sph2,
-    params: &BsdfMeasurementParams,
-    mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
+    mesh: &MicroSurfaceMesh,
     geometry: Arc<Geometry>,
     scene: &Scene,
-    cache: &InnerCache,
 ) -> SimulationResultPoint {
-    println!("      {BRIGHT_YELLOW}>{RESET} Emit rays from {}", w_i);
+    use crate::app::cli::{BRIGHT_YELLOW, RESET};
+    println!("      {}>{} Emit rays from {}", BRIGHT_YELLOW, RESET, w_i);
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     let t = Instant::now();
     let emitted_rays = emitter.emit_rays(w_i, mesh);

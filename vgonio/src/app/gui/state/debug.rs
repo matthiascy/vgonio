@@ -674,10 +674,8 @@ impl DebugDrawingState {
         if self.microsurface.is_none() {
             return;
         }
-        self.cache.read(|cache| {
-            self.surface_primitive_id = id;
-            self.surface_primitive_drawing = status;
-        });
+        self.surface_primitive_id = id;
+        self.surface_primitive_drawing = status;
     }
 
     pub fn update_ray_hit_points(&mut self, ctx: &GpuContext, hit_points: &[Vec<Vec3>]) {
@@ -716,7 +714,7 @@ impl DebugDrawingState {
 
         let mut reflected_sizes = vec![];
         let mut missed_sizes = vec![];
-        for (i, trajectories_per_w_i) in trajectories.iter().enumerate() {
+        for trajectories_per_w_i in trajectories.iter() {
             let mut reflected_count = 0u32;
             let mut missed_count = 0;
             for each_ray_trajectory in trajectories_per_w_i {

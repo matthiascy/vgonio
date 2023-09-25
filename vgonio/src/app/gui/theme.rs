@@ -134,10 +134,4 @@ impl ThemeState {
 
     /// Returns the current theme visuals.
     pub fn visuals(&self) -> &Theme { &self.visuals[self.kind as usize] }
-
-    /// Returns true if the current theme is dark mode.
-    pub fn is_dark(&self) -> bool { self.kind == ThemeKind::Dark }
-
-    /// Returns true if the current theme is light mode.
-    pub fn is_light(&self) -> bool { self.kind == ThemeKind::Light }
 }

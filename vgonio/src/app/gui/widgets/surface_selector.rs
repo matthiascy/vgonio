@@ -17,7 +17,7 @@ pub enum SelectionMode {
 
 /// A helper struct used in GUI to select surfaces.
 #[derive(Debug, Clone)]
-pub(crate) struct SurfaceSelector {
+pub struct SurfaceSelector {
     /// The selection mode.
     mode: SelectionMode,
     /// The selected surfaces.

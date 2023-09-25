@@ -8,9 +8,10 @@ use crate::{
         cache::{Handle, InnerCache},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
+    error::RuntimeError::Image,
     measure::{
         bsdf::{
-            detector::{BounceAndEnergy, Detector, PerPatchData},
+            detector::{Detector, PerPatchData},
             emitter::Emitter,
             rtc::{RayTrajectory, RtcMethod},
         },
@@ -18,7 +19,6 @@ use crate::{
         params::SimulationKind,
     },
 };
-use image::{ImageBuffer, Luma};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -55,50 +55,99 @@ pub struct MeasuredBsdfData {
 }
 
 impl MeasuredBsdfData {
-    /// Writes the BSDF data to images. TODO: error handling
+    /// Writes the BSDF data to images in exr format. TODO: error handling
     pub fn write_to_images(&self, name: &str, path: &Path) {
+        use exr::prelude::*;
         log::info!("Saving BSDF images to {}", path.display());
-        // TODO: add surface name to the filename
-        // TODO: save float images
-        // TODO: debug
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;
-        let mut img = image::GrayImage::new(WIDTH as u32, HEIGHT as u32);
+
+        let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
+        let mut bsdf_samples_per_wavelength = vec![vec![0.0; WIDTH * HEIGHT]; wavelengths.len()];
         let patches = self.params.detector.generate_patches();
-        // For each BSDF snapshot, generate an image.
-        for snapshot in &self.snapshots {
-            for i in 0..WIDTH {
-                for j in 0..HEIGHT {
-                    let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * std::f32::consts::SQRT_2;
-                    // Flip the y-axis to match the BSDF coordinate system.
-                    let y = -((2 * j) as f32 / HEIGHT as f32 - 1.0) * std::f32::consts::SQRT_2;
-                    let r_disc = (x * x + y * y).sqrt();
-                    let theta = 2.0 * (r_disc / 2.0).asin();
-                    let phi = {
-                        let phi = (y).atan2(x);
-                        if phi < 0.0 {
-                            phi + std::f32::consts::TAU
-                        } else {
-                            phi
+        // Pre-compute the patch index for each pixel.
+        let mut patch_indices = vec![0i32; WIDTH * HEIGHT];
+        for i in 0..WIDTH {
+            for j in 0..HEIGHT {
+                let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * std::f32::consts::SQRT_2;
+                // Flip the y-axis to match the BSDF coordinate system.
+                let y = -((2 * j) as f32 / HEIGHT as f32 - 1.0) * std::f32::consts::SQRT_2;
+                let r_disc = (x * x + y * y).sqrt();
+                let theta = 2.0 * (r_disc / 2.0).asin();
+                let phi = {
+                    let phi = (y).atan2(x);
+                    if phi < 0.0 {
+                        phi + std::f32::consts::TAU
+                    } else {
+                        phi
+                    }
+                };
+                patch_indices[i + j * WIDTH] =
+                    match patches.contains(Sph2::new(rad!(theta), rad!(phi))) {
+                        None => -1,
+                        Some(idx) => idx as i32,
+                    }
+            }
+        }
+
+        let date_string = chrono::Local::now().format("%Y%m%dT%H%M%S").to_string();
+        let mut layer_attrib = LayerAttributes {
+            owner: Text::new_or_none("vgonio"),
+            capture_date: Text::new_or_none(&date_string),
+            software_name: Text::new_or_none("vgonio"),
+            other: self.params.to_exr_extra_info(),
+            ..LayerAttributes::default()
+        };
+
+        // Each snapshot is saved as a separate layer of the image.
+        let layers = self
+            .snapshots
+            .iter()
+            .map(|snapshot| {
+                layer_attrib.layer_name = Text::new_or_none(format!(
+                    "th{:4.2}_ph{:4.2}",
+                    snapshot.w_i.theta.in_degrees().as_f32(),
+                    snapshot.w_i.phi.in_degrees().as_f32()
+                ));
+                for i in 0..WIDTH {
+                    for j in 0..HEIGHT {
+                        let idx = patch_indices[i + j * WIDTH];
+                        if idx < 0 {
+                            continue;
                         }
-                    };
-                    if let Some(idx) = patches.contains(Sph2::new(rad!(theta), rad!(phi))) {
-                        // TODO: save full wavelength range instead of just the first one
-                        img.put_pixel(
-                            i as u32,
-                            j as u32,
-                            Luma([(snapshot.samples[idx][0] * 255.0).min(255.0) as u8]),
-                        );
+                        for (wavelength_idx, bsdf) in
+                            bsdf_samples_per_wavelength.iter_mut().enumerate()
+                        {
+                            bsdf[i + j * WIDTH] = snapshot.samples[idx as usize][wavelength_idx];
+                        }
                     }
                 }
-            }
-            let filename = format!(
-                "bsdf_{name}_θ{}_φ{}.png",
-                snapshot.w_i.theta.prettified(),
-                snapshot.w_i.phi.prettified(),
-            );
-            img.save(path.join(filename)).unwrap();
-        }
+                let channels = wavelengths
+                    .iter()
+                    .enumerate()
+                    .map(|(i, wavelength)| {
+                        let name = Text::new_or_panic(format!("{}", wavelength));
+                        AnyChannel::new(
+                            name,
+                            FlatSamples::F32(bsdf_samples_per_wavelength[i].clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                Layer::new(
+                    (WIDTH, HEIGHT),
+                    layer_attrib.clone(),
+                    Encoding::FAST_LOSSLESS,
+                    AnyChannels {
+                        list: SmallVec::from(channels),
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (WIDTH, HEIGHT)));
+        let image = Image::from_layers(img_attrib, layers);
+        let filename = format!("bsdf_{}_{name}.exr", date_string,);
+        image.write().to_file(path.join(filename)).unwrap();
     }
 
     #[cfg(feature = "visu-dbg")]
@@ -177,12 +226,14 @@ impl From<u8> for BsdfKind {
 }
 
 /// Stores the data per wavelength for a spectrum.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PerWavelength<T>(Vec<T>);
 
 impl<T> PerWavelength<T> {
+    /// Creates a new empty `PerWavelength`.
     pub fn new() -> Self { Self(Vec::new()) }
 
+    /// Creates a new `PerWavelength` with the given value for each wavelength.
     pub fn splat(val: T, len: usize) -> Self
     where
         T: Clone,
@@ -190,6 +241,7 @@ impl<T> PerWavelength<T> {
         Self(vec![val; len])
     }
 
+    /// Creates a new `PerWavelength` from the given vector.
     pub fn from_vec(vec: Vec<T>) -> Self { Self(vec) }
 }
 
@@ -413,10 +465,8 @@ pub fn measure_bsdf_rt(
             match method {
                 #[cfg(feature = "embree")]
                 RtcMethod::Embree => match single_point {
-                    None => rtc_simulation_embree(&params, &surfaces, &meshes, emitter, cache),
-                    Some(w_i) => {
-                        rtc_simulation_embree_once(&params, &surfaces, &meshes, emitter, cache, w_i)
-                    }
+                    None => rtc_simulation_embree(emitter, &surfaces, &meshes),
+                    Some(w_i) => rtc_simulation_embree_once(w_i, emitter, &surfaces, &meshes),
                 },
                 #[cfg(feature = "optix")]
                 RtcMethod::Optix => {
@@ -469,11 +519,9 @@ pub fn measure_bsdf_rt(
 /// a microfacet surface.
 #[cfg(feature = "embree")]
 fn rtc_simulation_embree(
-    params: &BsdfMeasurementParams,
+    emitter: Emitter,
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
-    emitter: Emitter,
-    cache: &InnerCache,
 ) -> Vec<SimulationResult> {
     surfaces
         .iter()
@@ -491,19 +539,17 @@ fn rtc_simulation_embree(
             );
             Some(SimulationResult {
                 surface: Handle::with_id(surface.uuid),
-                outputs: embr::simulate_bsdf_measurement(params, mesh, &emitter, cache),
+                outputs: embr::simulate_bsdf_measurement(&emitter, mesh),
             })
         })
         .collect()
 }
 
 fn rtc_simulation_embree_once(
-    params: &BsdfMeasurementParams,
+    w_i: Sph2,
+    emitter: Emitter,
     surfaces: &[Option<&MicroSurface>],
     meshes: &[Option<&MicroSurfaceMesh>],
-    emitter: Emitter,
-    cache: &InnerCache,
-    w_i: Sph2,
 ) -> Vec<SimulationResult> {
     surfaces
         .iter()
@@ -521,9 +567,7 @@ fn rtc_simulation_embree_once(
             );
             Some(SimulationResult {
                 surface: Handle::with_id(surface.uuid),
-                outputs: vec![embr::simulate_bsdf_measurement_once(
-                    params, mesh, &emitter, w_i, cache,
-                )],
+                outputs: vec![embr::simulate_bsdf_measurement_once(w_i, &emitter, mesh)],
             })
         })
         .collect()
@@ -543,7 +587,7 @@ fn rtc_simulation_grid(
             continue;
         }
         let surf = surf.unwrap();
-        let mesh = mesh.unwrap();
+        let _mesh = mesh.unwrap();
         println!(
             "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
             surf.path.as_ref().unwrap().display()

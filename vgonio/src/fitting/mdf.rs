@@ -91,6 +91,7 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
         }
     }
 
+    /// Creates a new fitting problem.
     pub fn new(
         measured: MeasuredMdfData<'a>,
         method: MicrofacetDistributionFittingMethod,

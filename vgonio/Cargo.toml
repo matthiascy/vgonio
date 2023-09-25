@@ -20,6 +20,7 @@ verbose-dbg = []
 [dependencies]
 clap = { workspace = true }
 embree = { workspace = true, optional = true }
+exr = { workspace = true }
 flate2 = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }

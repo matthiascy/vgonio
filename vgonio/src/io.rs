@@ -10,6 +10,8 @@ use crate::measure::{
     microfacet::{MeasuredAdfData, MeasuredMsfData},
 };
 
+// TODO: revision and bsdf save/load
+
 pub mod vgmo {
     use super::*;
     use crate::{

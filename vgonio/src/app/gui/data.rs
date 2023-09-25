@@ -145,7 +145,7 @@ impl PropertyData {
                     kind: data.kind(),
                     source: data.source.clone(),
                     name: data.name.clone(),
-                    fitted: FittedModels::new(),
+                    fitted: FittedModels::default(),
                 });
             }
         }

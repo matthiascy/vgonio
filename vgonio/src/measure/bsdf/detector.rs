@@ -13,8 +13,7 @@ use crate::{
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use vgcore::{
-    math,
-    math::{rcp_f32, Sph2, Vec2, Vec3, Vec3A},
+    math::{rcp_f32, Sph2, Vec3, Vec3A},
     units::{rad, Radians, SolidAngle},
 };
 use vgsurf::MicroSurface;
@@ -107,83 +106,6 @@ impl DetectorPatches {
             Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
         }
     }
-
-    pub fn write_to_image(&self) {
-        const WIDTH: usize = 1024;
-        const HEIGHT: usize = 1024;
-        let mut pixels = vec![0; WIDTH * HEIGHT];
-        let mut vertices = Vec::new();
-        match self {
-            DetectorPatches::Beckers { rings, .. } => {
-                // Generate from rings.
-                let (disc_xs, disc_ys): (Vec<_>, Vec<_>) = (0..360)
-                    .map(|i| {
-                        let a = i as f32 * std::f32::consts::PI / 180.0;
-                        (a.cos(), a.sin())
-                    })
-                    .unzip();
-                let mut max_x = f32::MIN;
-                for ring in rings.iter() {
-                    let inner_radius = (ring.theta_inner * 0.5).sin();
-                    let outer_radius = (ring.theta_outer * 0.5).sin();
-                    // Generate the outer border of the ring
-                    for (j, (x, y)) in disc_xs.iter().zip(disc_ys.iter()).enumerate() {
-                        vertices.push(Vec2::new(*x * outer_radius, *y * outer_radius));
-                        vertices.push(Vec2::new(
-                            disc_xs[(j + 1) % 360] * outer_radius,
-                            disc_ys[(j + 1) % 360] * outer_radius,
-                        ));
-                    }
-                    let step = std::f32::consts::TAU / ring.patch_count as f32;
-                    // Generate the cells
-                    if ring.patch_count == 1 {
-                        continue;
-                    } else {
-                        for k in 0..ring.patch_count {
-                            let x = (step * k as f32).cos();
-                            let y = (step * k as f32).sin();
-                            let inner_pnt = Vec2::new(x * inner_radius, y * inner_radius);
-                            let outer_pnt = Vec2::new(x * outer_radius, y * outer_radius);
-                            let dx = outer_pnt.x - inner_pnt.x;
-                            let dy = outer_pnt.y - inner_pnt.y;
-                            for l in 0..10 {
-                                let pnt = Vec2::new(
-                                    inner_pnt.x + dx * l as f32 / 10.0,
-                                    inner_pnt.y + dy * l as f32 / 10.0,
-                                );
-                                vertices.push(pnt);
-                                vertices.push(Vec2::new(pnt.x + dx / 10.0, pnt.y + dy / 10.0));
-                            }
-                        }
-                    }
-                }
-                let half_w = WIDTH as f32 / 2.0;
-                let half_h = HEIGHT as f32 / 2.0;
-                for vtx in vertices {
-                    let x = (vtx.x * f32::sqrt(2.0) * half_w + half_w).min(WIDTH as f32 - 1.0);
-                    let y = (vtx.y * f32::sqrt(2.0) * half_h + half_h).min(HEIGHT as f32 - 1.0);
-                    println!("x: {}, y: {}", x, y);
-                    pixels[y as usize * WIDTH + x as usize] = 255;
-                }
-                println!("max_x: {}", max_x);
-                let image =
-                    image::GrayImage::from_raw(WIDTH as u32, HEIGHT as u32, pixels).unwrap();
-                image.save("test.png").unwrap();
-            }
-            DetectorPatches::Tregenza => {}
-        }
-    }
-}
-
-#[test]
-fn write_patches_to_image() {
-    let params = DetectorParams {
-        domain: SphericalDomain::Upper,
-        precision: deg!(5.0).to_radians(),
-        scheme: DetectorScheme::Beckers,
-    };
-    let patches = params.generate_patches();
-    patches.write_to_image();
 }
 
 /// A patch of the detector.
@@ -335,9 +257,12 @@ impl DetectorParams {
     }
 }
 
+/// Sensor of the virtual gonio-reflectometer.
 #[derive(Debug, Clone)]
 pub struct Detector {
+    /// The parameters of the detector.
     params: DetectorParams,
+    /// The partitioned patches of the detector.
     patches: DetectorPatches,
 }
 
@@ -391,6 +316,7 @@ impl Detector {
         sim_res: &[SimulationResult],
         cache: &InnerCache,
     ) -> Vec<CollectedData> {
+        // TODO: deal with the domain of the detector
         let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
         let spectrum_len = spectrum.len();
         log::debug!("[Collector] spectrum samples: {:?}", spectrum);
@@ -430,13 +356,10 @@ impl Detector {
 
                         let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounces);
 
-                        let mut n_escaped = std::sync::atomic::AtomicU32::new(0);
+                        let n_escaped = std::sync::atomic::AtomicU32::new(0);
 
                         // Convert the last rays of the trajectories into a vector located
-                        // at the collector's center and pointing to the intersection point
-                        // of the last ray with the collector's surface.
-                        // Each element of the vector is a tuple containing the index of the
-                        // trajectory, the intersection point and the number of bounces.
+                        // at the center of the collector.
                         let dirs = output
                             .trajectories
                             .par_iter()
@@ -447,25 +370,9 @@ impl Detector {
                                     Some(last) => {
                                         n_received
                                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        // 1. Compute the intersection point of the last ray with
-                                        //    detector. Ray-Sphere intersection.
-                                        let a = last.dir.dot(last.dir);
-                                        let b = 2.0 * last.dir.dot(last.org);
-                                        let c = last.org.dot(last.org) - math::sqr(orbit_radius);
-                                        let p = match math::solve_quadratic(a, b, c) {
-                                            math::QuadraticSolution::None
-                                            | math::QuadraticSolution::One(_) => {
-                                                unreachable!(
-                                                    "Ray starting inside the collector's surface, \
-                                                     it should have more than one intersection \
-                                                     point."
-                                                )
-                                            }
-                                            math::QuadraticSolution::Two(_, t) => {
-                                                last.org + last.dir * t
-                                            }
-                                        };
-
+                                        // 1. Get the outgoing ray direction it's the last ray of
+                                        //    the trajectory.
+                                        let ray_dir = last.dir.normalize();
                                         // 2. Calculate the energy of the ray per wavelength.
                                         let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
                                         for node in trajectory.iter().take(trajectory.len() - 1) {
@@ -485,8 +392,6 @@ impl Detector {
                                                 }
                                             }
                                         }
-
-                                        let ray_dir = p.normalize();
 
                                         // 3. Compute the index of the patch where the ray is
                                         //    collected.
@@ -662,8 +567,7 @@ impl CollectedData {
                         if cos_o == 0.0 {
                             samples[i][j] = 0.0;
                         } else {
-                            let d_omega = patch.solid_angle();
-                            let l_o = stats.total_energy * rcp_f32(cos_o * d_omega.as_f32());
+                            let l_o = stats.total_energy * rcp_f32(cos_o);
                             samples[i][j] = l_o * rcp_f32(l_i);
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(

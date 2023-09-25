@@ -262,9 +262,9 @@ impl MeasurementDialog {
                         };
                         self.tab_bsdf.ui(
                             ui,
-                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                            #[cfg(feature = "visu-dbg")]
                             self.debug.enable_debug_draw,
-                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                            #[cfg(feature = "visu-dbg")]
                             orbit_radius,
                         )
                     }

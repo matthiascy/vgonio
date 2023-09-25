@@ -6,13 +6,14 @@ use std::{
     io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
+#[cfg(feature = "surf-obj")]
+use vgcore::math::Axis;
 use vgcore::{
     error::VgonioError,
     io::{
         CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
         ReadFileErrorKind,
     },
-    math::Axis,
 };
 
 /// Write the data samples to the given writer.

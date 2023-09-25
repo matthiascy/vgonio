@@ -1,15 +1,12 @@
 use crate::{
     app::{
-        args::{FastMeasurementKind, MeasureOptions},
+        args::MeasureOptions,
         cache::{resolve_path, InnerCache},
         cli::{write_measured_data_to_file, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
         Config,
     },
     measure,
-    measure::params::{
-        AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
-        MsfMeasurementParams,
-    },
+    measure::params::{Measurement, MeasurementParams},
 };
 use std::time::Instant;
 use vgcore::error::VgonioError;
@@ -31,42 +28,21 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
 
     let mut cache = InnerCache::new(config.cache_dir());
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
-    let measurements = {
-        match opts.fast_measurement {
-            None => opts
-                .inputs
-                .iter()
-                .filter_map(|meas_path| {
-                    let resolved = resolve_path(&config.cwd, Some(meas_path));
-                    match Measurement::load(&resolved) {
-                        Ok(meas) => Some(meas),
-                        Err(err) => {
-                            log::warn!("Failed to load measurement description file: {}", err);
-                            None
-                        }
-                    }
-                })
-                .flatten()
-                .collect::<Vec<_>>(),
-            Some(kinds) => kinds
-                .iter()
-                .map(|kind| match kind {
-                    FastMeasurementKind::Bsdf => Measurement {
-                        params: MeasurementParams::Bsdf(BsdfMeasurementParams::default()),
-                        surfaces: opts.inputs.clone(),
-                    },
-                    FastMeasurementKind::AreaDistributionFunction => Measurement {
-                        params: MeasurementParams::Adf(AdfMeasurementParams::default()),
-                        surfaces: opts.inputs.clone(),
-                    },
-                    FastMeasurementKind::MaskingShadowingFunction => Measurement {
-                        params: MeasurementParams::Msf(MsfMeasurementParams::default()),
-                        surfaces: opts.inputs.clone(),
-                    },
-                })
-                .collect::<Vec<_>>(),
-        }
-    };
+    let measurements = opts
+        .inputs
+        .iter()
+        .filter_map(|meas_path| {
+            let resolved = resolve_path(&config.cwd, Some(meas_path));
+            match Measurement::load(&resolved) {
+                Ok(meas) => Some(meas),
+                Err(err) => {
+                    log::warn!("Failed to load measurement description file: {}", err);
+                    None
+                }
+            }
+        })
+        .flatten()
+        .collect::<Vec<_>>();
     println!(
         "    {BRIGHT_CYAN}✓{RESET} {} measurement(s)",
         measurements.len()

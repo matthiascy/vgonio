@@ -2,6 +2,8 @@
 //! Heightfield
 #![warn(missing_docs)]
 
+#[cfg(feature = "surf-obj")]
+use vgcore::math::Axis;
 #[cfg(feature = "surf-gen")]
 mod gen;
 #[cfg(feature = "surf-gen")]
@@ -20,7 +22,7 @@ use std::{
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
-    math::{rcp_f32, Aabb, Axis, Vec3},
+    math::{rcp_f32, Aabb, Vec3},
     units::LengthUnit,
 };
 

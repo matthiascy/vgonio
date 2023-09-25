@@ -14,6 +14,7 @@ byteorder = "1.4"
 cfg-if = "1.0"
 clap = { version = "4", features = ["derive"] }
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
+exr = "1.71"
 flate2 = "1.0"
 glam = { version = "0.23", features = ["serde", "bytemuck"] }
 libm = "0.2"
