@@ -8,6 +8,7 @@
 #![feature(decl_macro)]
 #![feature(vec_push_within_capacity)]
 #![feature(assert_matches)]
+#![feature(stmt_expr_attributes)]
 #![warn(missing_docs)]
 
 extern crate core;

@@ -429,8 +429,8 @@ impl Detector {
                         );
 
                         stats.n_received = n_received.load(std::sync::atomic::Ordering::Relaxed);
-                        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-                        log::debug!("process dirs: {:?}", dirs);
+                        // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                        // log::debug!("process dirs: {:?}", dirs);
 
                         #[cfg(feature = "bench")]
                         let dirs_proc_time = start.elapsed().as_millis();
@@ -463,7 +463,11 @@ impl Detector {
                         let mut outgoing_intersection_points = vec![Vec3::ZERO; dirs.len()];
 
                         for (j, dir) in dirs.iter().enumerate() {
-                            outgoing_intersection_points[j] = (dir.ray_dir * orbit_radius).into();
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                            {
+                                outgoing_intersection_points[j] =
+                                    (dir.ray_dir * orbit_radius).into();
+                            }
                             let patch = &mut data[dir.patch_idx];
                             let bounce = dir.bounce as usize;
                             for (i, energy) in dir.energy.iter().enumerate() {
@@ -581,8 +585,8 @@ impl CollectedData {
                         }
                     }
                 }
-                #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-                log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
+                // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                // log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
                 BsdfSnapshot {
                     w_i: snapshot.w_i,
                     samples,
@@ -637,10 +641,11 @@ pub struct BounceAndEnergy {
 }
 
 impl BounceAndEnergy {
+    /// Creates a new bounce and energy.
     pub fn empty(bounces: usize) -> Self {
         Self {
-            num_rays_per_bounce: vec![0; bounces],
-            energy_per_bounce: vec![0.0; bounces],
+            num_rays_per_bounce: vec![0; bounces + 1],
+            energy_per_bounce: vec![0.0; bounces + 1],
             total_energy: 0.0,
             total_rays: 0,
         }

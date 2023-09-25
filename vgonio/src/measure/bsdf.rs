@@ -329,8 +329,8 @@ impl BsdfMeasurementStatsPoint {
             n_reflected: PerWavelength(vec![0; n_wavelengths]),
             n_captured: PerWavelength(vec![0; n_wavelengths]),
             e_captured: PerWavelength(vec![0.0; n_wavelengths]),
-            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
-            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
+            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces + 1]; n_wavelengths]),
+            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces + 1]; n_wavelengths]),
         }
     }
 

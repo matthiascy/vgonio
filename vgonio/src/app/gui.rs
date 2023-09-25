@@ -195,6 +195,7 @@ impl VgonioGuiApp {
             Cache::from_inner(inner)
         };
 
+        // TODO: remove this
         let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
@@ -665,7 +666,6 @@ impl VgonioGuiApp {
                             measured[0]
                                 .write_bsdf_to_images(self.config.output_dir())
                                 .unwrap();
-                            log::warn!("Save BSDF to file or display it in a window");
                         }
                     },
                     SurfaceViewer(event) => match event {
