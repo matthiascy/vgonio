@@ -141,7 +141,11 @@ impl<A: AngleUnit> Angle<A> {
     /// Prints the angle in human readable format in degrees.
     #[inline]
     pub fn prettified(&self) -> String {
-        format!("{}{}", self.value * A::FACTOR_TO_DEG, UDegree::SYMBOLS[1])
+        format!(
+            "{:.2}{}",
+            self.value * A::FACTOR_TO_DEG,
+            UDegree::SYMBOLS[1]
+        )
     }
 
     /// Converts the angle to radians.

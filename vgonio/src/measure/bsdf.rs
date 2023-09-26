@@ -452,9 +452,66 @@ pub fn measure_bsdf_rt(
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
+    let detector = Detector::new(&params.detector, &params, cache);
 
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
+
+    for (surf, mesh) in surfaces.iter().zip(meshes) {
+        if surf.is_none() || mesh.is_none() {
+            log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
+            continue;
+        }
+
+        let surf = surf.unwrap();
+        let mesh = mesh.unwrap();
+
+        log::info!(
+            "Measuring surface {}",
+            surf.path.as_ref().unwrap().display()
+        );
+
+        let sim_result_points = match sim_kind {
+            SimulationKind::GeomOptics(method) => {
+                println!(
+                    "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
+                    params.kind
+                );
+                match method {
+                    #[cfg(feature = "embree")]
+                    RtcMethod::Embree => {
+                        rtc_simulation_embree(&emitter, mesh, single_point)
+                    },
+                    #[cfg(feature = "optix")]
+                    RtcMethod::Optix => {
+                        rtc_simulation_optix(&params, mesh, &emitter, cache)
+                    }
+                    RtcMethod::Grid => {
+                        rtc_simulation_grid(&params, surf, mesh, &emitter, cache)
+                    }
+                }
+            }
+            SimulationKind::WaveOptics => {
+                println!(
+                    "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
+                    params.kind
+                );
+                todo!("Wave optics simulation is not yet implemented")
+            }
+        };
+
+        let mut stats = BsdfMeasurementStatsPoint::new(detector.spectrum.len(), params.emitter.max_bounces as usize);
+        let n_escaped = std::sync::atomic::AtomicU32::new(0);
+        let n_received = std::sync::atomic::AtomicU32::new(0);
+        for sim_result_point in sim_result_points {
+            detector.collect(params, &sim_result_point, &mut stats)
+        }
+
+        Some(SimulationResult {
+            surface: Handle::with_id(surface.uuid),
+            outputs: embr::simulate_bsdf_measurement(&emitter, mesh),
+        })
+    }
 
     let sim_results = match sim_kind {
         SimulationKind::GeomOptics(method) => {
@@ -464,8 +521,9 @@ pub fn measure_bsdf_rt(
             );
             match method {
                 #[cfg(feature = "embree")]
-                RtcMethod::Embree => match single_point {
-                    None => rtc_simulation_embree(emitter, &surfaces, &meshes),
+                RtcMethod::Embree => rtc_simulation_embree(emitter, &surfaces, &meshes)
+                match single_point {
+                    None => ,
                     Some(w_i) => rtc_simulation_embree_once(w_i, emitter, &surfaces, &meshes),
                 },
                 #[cfg(feature = "optix")]
@@ -519,88 +577,44 @@ pub fn measure_bsdf_rt(
 /// a microfacet surface.
 #[cfg(feature = "embree")]
 fn rtc_simulation_embree(
-    emitter: Emitter,
-    surfaces: &[Option<&MicroSurface>],
-    meshes: &[Option<&MicroSurfaceMesh>],
-) -> Vec<SimulationResult> {
-    surfaces
-        .iter()
-        .zip(meshes)
-        .filter_map(|(surf, mesh)| {
-            if surf.is_none() || mesh.is_none() {
-                log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
-                return None;
-            }
-            let surface = surf.unwrap();
-            let mesh = mesh.unwrap();
-            log::info!(
-                "Measuring surface {}",
-                surface.path.as_ref().unwrap().display()
-            );
-            Some(SimulationResult {
-                surface: Handle::with_id(surface.uuid),
-                outputs: embr::simulate_bsdf_measurement(&emitter, mesh),
-            })
-        })
-        .collect()
-}
-
-fn rtc_simulation_embree_once(
-    w_i: Sph2,
-    emitter: Emitter,
-    surfaces: &[Option<&MicroSurface>],
-    meshes: &[Option<&MicroSurfaceMesh>],
-) -> Vec<SimulationResult> {
-    surfaces
-        .iter()
-        .zip(meshes)
-        .filter_map(|(surf, mesh)| {
-            if surf.is_none() || mesh.is_none() {
-                log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
-                return None;
-            }
-            let surface = surf.unwrap();
-            let mesh = mesh.unwrap();
-            log::info!(
-                "Measuring surface {}",
-                surface.path.as_ref().unwrap().display()
-            );
-            Some(SimulationResult {
-                surface: Handle::with_id(surface.uuid),
-                outputs: vec![embr::simulate_bsdf_measurement_once(w_i, &emitter, mesh)],
-            })
-        })
-        .collect()
+    emitter: &Emitter,
+    mesh: &MicroSurfaceMesh,
+    w_i: Option<Sph2>,
+) -> impl Iterator<Item = SimulationResultPoint> {
+    match w_i {
+        None => embr::simulate_bsdf_measurement(emitter, mesh),
+        Some(w_i) => std::iter::once(embr::simulate_bsdf_measurement_once(w_i, &emitter, mesh)),
+    }
 }
 
 /// Brdf measurement of a microfacet surface using the grid ray tracing.
 fn rtc_simulation_grid(
-    params: &BsdfMeasurementParams,
-    surfaces: &[Option<&MicroSurface>],
-    meshes: &[Option<&MicroSurfaceMesh>],
-    emitter: Emitter,
-    cache: &InnerCache,
-) -> Vec<SimulationResult> {
-    for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
-        if surf.is_none() || mesh.is_none() {
-            log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
-            continue;
-        }
-        let surf = surf.unwrap();
-        let _mesh = mesh.unwrap();
-        println!(
-            "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
-            surf.path.as_ref().unwrap().display()
-        );
-        // let t = std::time::Instant::now();
-        // crate::measure::bsdf::rtc::grid::measure_bsdf(
-        //     &params, surf, mesh, &emitter, cache,
-        // );
-        // println!(
-        //     "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
-        //     t.elapsed().as_secs_f32()
-        // );
-    }
+    _params: &BsdfMeasurementParams,
+    _surf: &MicroSurface,
+    _mesh: &MicroSurfaceMesh,
+    _emitter: &Emitter,
+    _cache: &InnerCache,
+) -> impl Iterator<Item = SimulationResultPoint> {
+    // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
+    //     if surf.is_none() || mesh.is_none() {
+    //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
+    //         continue;
+    //     }
+    //     let surf = surf.unwrap();
+    //     let _mesh = mesh.unwrap();
+    //     println!(
+    //         "      {BRIGHT_YELLOW}>{RESET} Measure surface {}",
+    //         surf.path.as_ref().unwrap().display()
+    //     );
+    //     // let t = std::time::Instant::now();
+    //     // crate::measure::bsdf::rtc::grid::measure_bsdf(
+    //     //     &params, surf, mesh, &emitter, cache,
+    //     // );
+    //     // println!(
+    //     //     "        {BRIGHT_CYAN}✓{RESET} Done in {:?} s",
+    //     //     t.elapsed().as_secs_f32()
+    //     // );
+    // }
     todo!()
 }
 
@@ -608,11 +622,10 @@ fn rtc_simulation_grid(
 #[cfg(feature = "optix")]
 fn rtc_simulation_optix(
     _params: &BsdfMeasurementParams,
-    _surfaces: &[Option<&MicroSurface>],
-    _meshes: &[Option<&MicroSurfaceMesh>],
-    _emitter: Emitter,
+    _surf: &MicroSurfaceMesh,
+    _emitter: &Emitter,
     _cache: &InnerCache,
-) -> Vec<SimulationResult> {
+) -> impl Iterator<Item = SimulationResultPoint> {
     todo!()
 }
 

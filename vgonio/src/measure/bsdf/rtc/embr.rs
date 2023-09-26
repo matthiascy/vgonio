@@ -152,7 +152,7 @@ fn intersect_filter_stream<'a>(
 pub fn simulate_bsdf_measurement(
     emitter: &Emitter,
     mesh: &MicroSurfaceMesh,
-) -> Vec<SimulationResultPoint> {
+) -> impl Iterator<Item = SimulationResultPoint> {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -178,19 +178,15 @@ pub fn simulate_bsdf_measurement(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    emitter
-        .measpts
-        .iter()
-        .map(|w_i| {
-            simulate_bsdf_measurement_single_point(
-                *w_i,
-                emitter,
-                mesh,
-                Arc::new(geometry.clone()),
-                &scene,
-            )
-        })
-        .collect()
+    emitter.measpts.iter().map(|w_i| {
+        simulate_bsdf_measurement_single_point(
+            *w_i,
+            emitter,
+            mesh,
+            Arc::new(geometry.clone()),
+            &scene,
+        )
+    })
 }
 
 /// Measures the BSDF of micro-surface mesh at the given position.
@@ -288,7 +284,6 @@ fn simulate_bsdf_measurement_single_point(
     emitted_rays
         .par_chunks(MAX_RAY_STREAM_SIZE)
         .zip(stream_data.par_iter_mut())
-        // .chunks(MAX_RAY_STREAM_SIZE).zip(stream_data.iter_mut())
         .enumerate()
         .for_each(|(_i, (rays, data))| {
             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
@@ -379,7 +374,11 @@ fn simulate_bsdf_measurement_single_point(
     // Extract the trajectory of each ray.
     let trajectories = stream_data
         .into_iter()
-        .flat_map(|d| d.trajectory)
+        .flat_map(|d| {
+            let max = d.trajectory.iter().map(|t| t.len()).max().unwrap();
+            log::info!("max trajectory len: {}", max);
+            d.trajectory
+        })
         .collect::<Vec<_>>();
 
     SimulationResultPoint { w_i, trajectories }

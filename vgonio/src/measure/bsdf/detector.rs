@@ -1,5 +1,5 @@
 use crate::{
-    app::cache::{Handle, InnerCache},
+    app::cache::{Cache, Handle, InnerCache},
     measure::{
         bsdf::{
             BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, PerWavelength,
@@ -7,14 +7,15 @@ use crate::{
         },
         params::BsdfMeasurementParams,
     },
-    optics::fresnel,
+    optics::{fresnel, ior::RefractiveIndex},
     SphericalDomain,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::AtomicU32;
 use vgcore::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
-    units::{rad, Radians, SolidAngle},
+    units::{rad, Nanometres, Radians, SolidAngle},
 };
 use vgsurf::MicroSurface;
 
@@ -262,6 +263,12 @@ impl DetectorParams {
 pub struct Detector {
     /// The parameters of the detector.
     params: DetectorParams,
+    /// Wavelengths of the measurement.
+    pub spectrum: Vec<Nanometres>,
+    /// Incident medium's refractive indices.
+    pub iors_i: Vec<RefractiveIndex>,
+    /// Transmitted medium's refractive indices.
+    pub iors_t: Vec<RefractiveIndex>,
     /// The partitioned patches of the detector.
     patches: DetectorPatches,
 }
@@ -289,14 +296,32 @@ impl Detector {
     /// # Arguments
     ///
     /// * `params` - The parameters of the detector.
-    pub fn new(params: &DetectorParams) -> Self {
+    pub fn new(
+        detector_params: &DetectorParams,
+        meas_params: &BsdfMeasurementParams,
+        cache: &InnerCache,
+    ) -> Self {
+        let spectrum = meas_params.emitter.spectrum.values().collect::<Vec<_>>();
+        // Retrieve the incident medium's refractive indices for each wavelength.
+        let iors_i = cache
+            .iors
+            .ior_of_spectrum(meas_params.incident_medium, &spectrum)
+            .expect("incident medium IOR not found");
+        // Retrieve the transmitted medium's refractive indices for each wavelength.
+        let iors_t = cache
+            .iors
+            .ior_of_spectrum(meas_params.transmitted_medium, &spectrum)
+            .expect("transmitted medium IOR not found");
         Self {
-            params: *params,
-            patches: params.generate_patches(),
+            params: *detector_params,
+            spectrum,
+            iors_i,
+            iors_t,
+            patches: detector_params.generate_patches(),
         }
     }
 
-    /// Collects the ray-tracing data.
+    /// Collects the ray-tracing data of one measurement point.
     ///
     /// Returns the collected data and the statistics of the BSDF.
     ///
@@ -314,22 +339,12 @@ impl Detector {
         &self,
         params: &BsdfMeasurementParams,
         sim_res: &[SimulationResult],
+        stats: &mut BsdfMeasurementStatsPoint,
+        n_received: AtomicU32,
         cache: &InnerCache,
     ) -> Vec<CollectedData> {
         // TODO: deal with the domain of the detector
-        let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
-        let spectrum_len = spectrum.len();
-        log::debug!("[Collector] spectrum samples: {:?}", spectrum);
-        // Retrieve the incident medium's refractive indices for each wavelength.
-        let iors_i = cache
-            .iors
-            .ior_of_spectrum(params.incident_medium, &spectrum)
-            .expect("incident medium IOR not found");
-        // Retrieve the transmitted medium's refractive indices for each wavelength.
-        let iors_t = cache
-            .iors
-            .ior_of_spectrum(params.transmitted_medium, &spectrum)
-            .expect("transmitted medium IOR not found");
+
         let max_bounces = params.emitter.max_bounces as usize;
 
         sim_res
@@ -354,10 +369,7 @@ impl Detector {
                         #[cfg(feature = "bench")]
                         let start = std::time::Instant::now();
 
-                        let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounces);
-
                         let n_escaped = std::sync::atomic::AtomicU32::new(0);
-
                         // Convert the last rays of the trajectories into a vector located
                         // at the center of the collector.
                         let dirs = output
@@ -554,7 +566,7 @@ impl CollectedData {
             params.detector.patches_count()
         );
         self.snapshots
-            .iter()
+            .par_iter()
             .map(|snapshot| {
                 let mut samples =
                     vec![
