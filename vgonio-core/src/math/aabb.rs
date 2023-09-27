@@ -335,9 +335,9 @@ impl Aabb {
     }
 
     /// Unions two boxes.
-    pub fn union(lhs: &Aabb, rhs: &Aabb) -> Aabb {
-        let mut aabb = *lhs;
-        aabb.extend(rhs);
+    pub fn union(lhs: Aabb, rhs: Aabb) -> Aabb {
+        let mut aabb = lhs;
+        aabb.extend(&rhs);
         aabb
     }
 }

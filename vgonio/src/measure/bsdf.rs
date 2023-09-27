@@ -499,7 +499,20 @@ pub fn measure_bsdf_rt(
         let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &detector.patches);
         for sim_result_point in sim_result_points {
             log::debug!("Collecting BSDF snapshot at {}", sim_result_point.w_i);
+
+            #[cfg(feature = "bench")]
+            let t = std::time::Instant::now();
+
             detector.collect(&sim_result_point, &mut collected, orbit_radius);
+
+            #[cfg(feature = "bench")]
+            {
+                let elapsed = t.elapsed();
+                log::debug!(
+                    "bsdf measurement data collection (one snapshot) took {} secs.",
+                    elapsed.as_secs_f64()
+                );
+            }
         }
 
         let snapshots = collected.compute_bsdf(&params);

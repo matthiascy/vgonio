@@ -13,6 +13,7 @@ pub mod io;
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -561,26 +562,47 @@ impl MicroSurface {
             self.du,
             self.dv,
         );
-        let mut positions: Vec<Vec3> = Vec::with_capacity(rows * cols);
-        let mut extent = Aabb::default();
-        for r in 0..rows {
-            for c in 0..cols {
-                let p = Vec3::new(
-                    (c as f32 - half_cols as f32) * du,
-                    (half_rows as f32 - r as f32) * dv,
-                    self.samples[r * cols + c] + height_offset,
-                );
-                for k in 0..3 {
-                    if p[k] > extent.max[k] {
-                        extent.max[k] = p[k];
+        let mut positions: Vec<Vec3> = vec![Vec3::ZERO; rows * cols];
+
+        #[cfg(feature = "bench")]
+        let t = std::time::Instant::now();
+
+        let extent = positions
+            .par_chunks_mut(1024)
+            .enumerate()
+            .map(|(chunk_idx, chunk)| {
+                let mut extent = Aabb::default();
+                for (i, pos) in chunk.iter_mut().enumerate() {
+                    let idx = chunk_idx * 1024 + i;
+                    let c = idx % cols;
+                    let r = idx / cols;
+
+                    let p = Vec3::new(
+                        (c as f32 - half_cols as f32) * du,
+                        (half_rows as f32 - r as f32) * dv,
+                        self.samples[idx] + height_offset,
+                    );
+
+                    for k in 0..3 {
+                        if p[k] > extent.max[k] {
+                            extent.max[k] = p[k];
+                        }
+                        if p[k] < extent.min[k] {
+                            extent.min[k] = p[k];
+                        }
                     }
-                    if p[k] < extent.min[k] {
-                        extent.min[k] = p[k];
-                    }
+
+                    *pos = p;
                 }
-                positions.push(p);
-            }
-        }
+                extent
+            })
+            .reduce(Aabb::empty, Aabb::union);
+
+        #[cfg(feature = "bench")]
+        log::info!(
+            "Height field vertices generated in {:?} ms",
+            t.elapsed().as_millis()
+        );
 
         (positions, extent)
     }

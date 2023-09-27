@@ -153,6 +153,9 @@ pub fn simulate_bsdf_measurement<'a>(
     mesh: &'a MicroSurfaceMesh,
     w_i: Option<Sph2>,
 ) -> Box<dyn Iterator<Item = SimulationResultPoint> + 'a> {
+    #[cfg(feature = "bench")]
+    let t = std::time::Instant::now();
+
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -165,7 +168,13 @@ pub fn simulate_bsdf_measurement<'a>(
     scene.attach_geometry(&geometry);
     scene.commit();
 
-    match w_i {
+    #[cfg(feature = "bench")]
+    {
+        let elapsed = t.elapsed();
+        log::debug!("embree scene creation took {} secs.", elapsed.as_secs_f64());
+    }
+
+    let results: Box<dyn Iterator<Item = SimulationResultPoint>> = match w_i {
         None => Box::new(emitter.measpts.iter().map(move |w_i| {
             simulate_bsdf_measurement_single_point(
                 *w_i,
@@ -182,7 +191,18 @@ pub fn simulate_bsdf_measurement<'a>(
             Arc::new(geometry.clone()),
             &scene,
         ))),
+    };
+
+    #[cfg(feature = "bench")]
+    {
+        let elapsed = t.elapsed();
+        log::debug!(
+            "bsdf measurement simulation (one snapshot) took {} secs.",
+            elapsed.as_secs_f64()
+        );
     }
+
+    results
 }
 
 /// Simulates the BSDF measurement for a single incident direction (point).
