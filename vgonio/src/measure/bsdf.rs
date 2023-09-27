@@ -11,7 +11,7 @@ use crate::{
     error::RuntimeError::Image,
     measure::{
         bsdf::{
-            detector::{Detector, PerPatchData},
+            detector::{CollectedData, Detector, PerPatchData},
             emitter::Emitter,
             rtc::{RayTrajectory, RtcMethod},
         },
@@ -329,8 +329,8 @@ impl BsdfMeasurementStatsPoint {
             n_reflected: PerWavelength(vec![0; n_wavelengths]),
             n_captured: PerWavelength(vec![0; n_wavelengths]),
             e_captured: PerWavelength(vec![0.0; n_wavelengths]),
-            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces + 1]; n_wavelengths]),
-            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces + 1]; n_wavelengths]),
+            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
+            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
         }
     }
 
@@ -457,6 +457,8 @@ pub fn measure_bsdf_rt(
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
 
+    let mut measurements = Vec::new();
+
     for (surf, mesh) in surfaces.iter().zip(meshes) {
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
@@ -480,15 +482,11 @@ pub fn measure_bsdf_rt(
                 match method {
                     #[cfg(feature = "embree")]
                     RtcMethod::Embree => {
-                        rtc_simulation_embree(&emitter, mesh, single_point)
-                    },
+                        embr::simulate_bsdf_measurement(&emitter, mesh, single_point)
+                    }
                     #[cfg(feature = "optix")]
-                    RtcMethod::Optix => {
-                        rtc_simulation_optix(&params, mesh, &emitter, cache)
-                    }
-                    RtcMethod::Grid => {
-                        rtc_simulation_grid(&params, surf, mesh, &emitter, cache)
-                    }
+                    RtcMethod::Optix => rtc_simulation_optix(&params, mesh, &emitter, cache),
+                    RtcMethod::Grid => rtc_simulation_grid(&params, surf, mesh, &emitter, cache),
                 }
             }
             SimulationKind::WaveOptics => {
@@ -500,91 +498,27 @@ pub fn measure_bsdf_rt(
             }
         };
 
-        let mut stats = BsdfMeasurementStatsPoint::new(detector.spectrum.len(), params.emitter.max_bounces as usize);
-        let n_escaped = std::sync::atomic::AtomicU32::new(0);
-        let n_received = std::sync::atomic::AtomicU32::new(0);
-        for sim_result_point in sim_result_points {
-            detector.collect(params, &sim_result_point, &mut stats)
-        }
-
-        Some(SimulationResult {
-            surface: Handle::with_id(surface.uuid),
-            outputs: embr::simulate_bsdf_measurement(&emitter, mesh),
-        })
-    }
-
-    let sim_results = match sim_kind {
-        SimulationKind::GeomOptics(method) => {
-            println!(
-                "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
-                params.kind
-            );
-            match method {
-                #[cfg(feature = "embree")]
-                RtcMethod::Embree => rtc_simulation_embree(emitter, &surfaces, &meshes)
-                match single_point {
-                    None => ,
-                    Some(w_i) => rtc_simulation_embree_once(w_i, emitter, &surfaces, &meshes),
-                },
-                #[cfg(feature = "optix")]
-                RtcMethod::Optix => {
-                    rtc_simulation_optix(&params, &surfaces, &meshes, emitter, cache)
-                }
-                RtcMethod::Grid => rtc_simulation_grid(&params, &surfaces, &meshes, emitter, cache),
-            }
-        }
-        SimulationKind::WaveOptics => {
-            println!(
-                "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
-                params.kind
-            );
-            todo!("Wave optics simulation is not yet implemented")
-        }
-    };
-
-    #[cfg(feature = "bench")]
-    let sim_time = start.elapsed().as_secs_f32();
-
-    let measured = Detector::new(&params.detector)
-        .collect(&params, &sim_results, cache)
-        .into_iter()
-        .map(|collected| {
-            let surface = cache.get_micro_surface(collected.surface).unwrap();
-            let snapshots = collected.compute_bsdf(&params);
-            MeasurementData {
-                name: surface.file_stem().unwrap().to_owned(),
-                source: MeasurementDataSource::Measured(collected.surface),
-                measured: MeasuredData::Bsdf(MeasuredBsdfData { params, snapshots }),
-            }
-        })
-        .collect();
-
-    #[cfg(feature = "bench")]
-    {
-        let total_time = start.elapsed().as_secs_f32();
-        println!(
-            "[BENCH] BSDF measurement in {:?} s (simulation: {:?} s, collection: {:?} s)",
-            total_time,
-            sim_time,
-            total_time - sim_time
+        let mut stats = BsdfMeasurementStatsPoint::new(
+            detector.spectrum.len(),
+            params.emitter.max_bounces as usize,
         );
+        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        log::trace!("Estimated orbit radius: {}", orbit_radius);
+        let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &detector.patches);
+        for sim_result_point in sim_result_points {
+            log::debug!("Collecting BSDF snapshot at {}", sim_result_point.w_i);
+            detector.collect(&sim_result_point, &mut collected, orbit_radius);
+        }
+
+        let snapshots = collected.compute_bsdf(&params);
+        measurements.push(MeasurementData {
+            name: surf.file_stem().unwrap().to_owned(),
+            source: MeasurementDataSource::Measured(collected.surface),
+            measured: MeasuredData::Bsdf(MeasuredBsdfData { params, snapshots }),
+        })
     }
 
-    measured
-}
-
-/// Measurement of the BSDF (bidirectional scattering distribution function) of
-/// a microfacet surface.
-#[cfg(feature = "embree")]
-fn rtc_simulation_embree(
-    emitter: &Emitter,
-    mesh: &MicroSurfaceMesh,
-    w_i: Option<Sph2>,
-) -> impl Iterator<Item = SimulationResultPoint> {
-    match w_i {
-        None => embr::simulate_bsdf_measurement(emitter, mesh),
-        Some(w_i) => std::iter::once(embr::simulate_bsdf_measurement_once(w_i, &emitter, mesh)),
-    }
+    measurements
 }
 
 /// Brdf measurement of a microfacet surface using the grid ray tracing.
@@ -594,11 +528,11 @@ fn rtc_simulation_grid(
     _mesh: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &InnerCache,
-) -> impl Iterator<Item = SimulationResultPoint> {
+) -> Box<dyn Iterator<Item = SimulationResultPoint>> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
-    //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
-    //         continue;
+    //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,
+    // mesh);         continue;
     //     }
     //     let surf = surf.unwrap();
     //     let _mesh = mesh.unwrap();
@@ -615,7 +549,7 @@ fn rtc_simulation_grid(
     //     //     t.elapsed().as_secs_f32()
     //     // );
     // }
-    todo!()
+    todo!("Grid ray tracing is not yet implemented");
 }
 
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.
@@ -625,7 +559,7 @@ fn rtc_simulation_optix(
     _surf: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &InnerCache,
-) -> impl Iterator<Item = SimulationResultPoint> {
+) -> Box<dyn Iterator<Item = SimulationResultPoint>> {
     todo!()
 }
 

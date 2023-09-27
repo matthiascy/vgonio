@@ -163,6 +163,11 @@ impl MeasurementPoints {
 
     /// Returns an consuming iterator over the measurement points.
     pub fn into_iter(self) -> impl Iterator<Item = Sph2> { self.0.into_iter() }
+
+    /// Returns the number of measurement points.
+    pub fn len(&self) -> usize { self.0.len() }
+
+    pub fn inner(&self) -> &Vec<Sph2> { &self.0 }
 }
 
 /// Emitter constructed from the parameters.
