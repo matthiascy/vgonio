@@ -162,7 +162,7 @@ pub enum FastMeasurementKind {
 pub enum OutputFormat {
     /// Vgonio internal file format.
     #[default]
-    Vgms,
+    Vgmo,
     /// Portable float map.
     Pfm,
     /// Portable network graphics.
@@ -174,7 +174,7 @@ pub enum OutputFormat {
 impl Display for OutputFormat {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Vgms => write!(f, "vgms"),
+            Self::Vgmo => write!(f, "vgmo"),
             Self::Pfm => write!(f, "pfm"),
             Self::Png => write!(f, "png"),
             Self::Exr => write!(f, "exr"),
@@ -206,7 +206,7 @@ pub struct MeasureOptions {
     #[arg(
         short = 'f',
         long,
-        default_value_t = OutputFormat::Vgms,
+        default_value_t = OutputFormat::Vgmo,
         help = "The format of the measurement output. If not specified, the format\nwill be the \
                 vgonio internal file format.",
     )]

@@ -1,3 +1,5 @@
+//! Light source of the measurement system.
+
 use crate::{
     measure::{bsdf::rtc::Ray, SphericalTransform},
     RangeByStepSizeInclusive,
@@ -166,8 +168,6 @@ impl MeasurementPoints {
 
     /// Returns the number of measurement points.
     pub fn len(&self) -> usize { self.0.len() }
-
-    pub fn inner(&self) -> &Vec<Sph2> { &self.0 }
 }
 
 /// Emitter constructed from the parameters.

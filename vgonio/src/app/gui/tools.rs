@@ -38,7 +38,7 @@ impl Tools {
         Self {
             windows: vec![
                 Box::<Scratch>::default(),
-                Box::new(DebuggingInspector::new(event_loop.clone(), cache)),
+                Box::new(DebuggingInspector::new(event_loop.clone())),
                 Box::new(SamplingInspector::new(
                     gpu,
                     gui,

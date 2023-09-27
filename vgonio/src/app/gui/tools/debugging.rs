@@ -4,10 +4,7 @@ use std::{any::Any, default::Default};
 mod microfacet;
 mod shadow_map;
 
-use crate::app::{
-    cache::Cache,
-    gui::{tools::Tool, widgets::ToggleSwitch},
-};
+use crate::app::gui::{tools::Tool, widgets::ToggleSwitch};
 use microfacet::MicrofacetDebugging;
 use shadow_map::DepthMapPane;
 
@@ -78,7 +75,7 @@ impl Tool for DebuggingInspector {
 }
 
 impl DebuggingInspector {
-    pub fn new(event_loop: EventLoopProxy, cache: Cache) -> Self {
+    pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             opened_pane: Default::default(),
             debug_drawing_enabled: false,

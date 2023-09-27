@@ -82,12 +82,14 @@ use crate::app::{
     Config,
 };
 use std::path::PathBuf;
+#[cfg(feature = "surf-obj")]
+use vgcore::units::LengthUnit;
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math::Axis,
-    units::LengthUnit,
 };
+
 use vgsurf::MicroSurface;
 
 pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {

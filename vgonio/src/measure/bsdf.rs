@@ -8,7 +8,6 @@ use crate::{
         cache::{Handle, InnerCache},
         cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     },
-    error::RuntimeError::Image,
     measure::{
         bsdf::{
             detector::{CollectedData, Detector, PerPatchData},
@@ -90,7 +89,7 @@ impl MeasuredBsdfData {
             }
         }
 
-        let date_string = chrono::Local::now().format("%Y%m%dT%H%M%S").to_string();
+        let date_string = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
             capture_date: Text::new_or_none(&date_string),
@@ -146,7 +145,7 @@ impl MeasuredBsdfData {
 
         let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (WIDTH, HEIGHT)));
         let image = Image::from_layers(img_attrib, layers);
-        let filename = format!("bsdf_{}_{name}.exr", date_string,);
+        let filename = format!("bsdf_{name}_{}.exr", date_string,);
         image.write().to_file(path.join(filename)).unwrap();
     }
 
@@ -430,15 +429,6 @@ pub struct SimulationResultPoint {
     pub w_i: Sph2,
     /// Trajectories of the rays.
     pub trajectories: Vec<RayTrajectory>,
-}
-
-/// Ray tracing simulation result for all possible incident directions of a
-/// surface.
-pub struct SimulationResult {
-    /// Surface of the interest.
-    pub surface: Handle<MicroSurface>,
-    /// Simulation results for each incident direction.
-    pub outputs: Vec<SimulationResultPoint>,
 }
 
 /// Measures the BSDF of a surface using geometric ray tracing methods.

@@ -15,7 +15,6 @@ use crate::{
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
-    measure,
     measure::{
         bsdf::detector::{DetectorParams, DetectorScheme},
         params::{MeasurementKind, MeasurementParams},
@@ -99,7 +98,7 @@ pub struct MeasurementDialog {
     event_loop: EventLoopProxy,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     debug: MeasurementDialogDebug,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    #[cfg(feature = "visu-dbg")]
     cache: Cache,
 }
 
@@ -126,7 +125,7 @@ impl MeasurementDialog {
                 surface_viewers: vec![],
                 focused_viewer: None,
             },
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(feature = "visu-dbg")]
             cache,
         }
     }
@@ -255,11 +254,11 @@ impl MeasurementDialog {
 
                 match self.kind {
                     MeasurementKind::Bsdf => {
-                        #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                        #[cfg(feature = "visu-dbg")]
                         let orbit_radius = match self.selector.first_selected() {
                             None => 0.0,
                             Some(surf) => self.cache.read(|cache| {
-                                measure::estimate_orbit_radius(
+                                crate::measure::estimate_orbit_radius(
                                     cache.get_micro_surface_mesh_by_surface_id(surf).unwrap(),
                                 )
                             }),

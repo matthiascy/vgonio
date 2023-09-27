@@ -1,9 +1,11 @@
+//! Sensor of the virtual gonio-reflectometer.
+
 use crate::{
-    app::cache::{Cache, Handle, InnerCache},
+    app::cache::{Handle, InnerCache},
     measure::{
         bsdf::{
             BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, PerWavelength,
-            SimulationResult, SimulationResultPoint,
+            SimulationResultPoint,
         },
         params::BsdfMeasurementParams,
     },
@@ -135,6 +137,7 @@ impl Patch {
         )
     }
 
+    /// Returns the solid angle of the patch.
     pub fn solid_angle(&self) -> SolidAngle {
         let d_theta = self.max.theta - self.min.theta;
         let d_phi = self.max.phi - self.min.phi;
@@ -341,6 +344,7 @@ impl Detector {
         collected: &mut CollectedData<'a>,
         orbit_radius: f32,
     ) {
+        const CHUNK_SIZE: usize = 1024;
         // TODO: deal with the domain of the detector
         let spectrum_len = self.spectrum.len();
 
@@ -353,64 +357,75 @@ impl Detector {
         // at the center of the collector.
         let dirs = result
             .trajectories
-            .par_iter()
+            .par_chunks(CHUNK_SIZE)
             .enumerate()
-            .filter_map(|(i, trajectory)| {
-                match trajectory.last() {
-                    None => None,
-                    Some(last) => {
-                        // 1. Get the outgoing ray direction it's the last ray of the trajectory.
-                        let ray_dir = last.dir.normalize();
-                        // 2. Calculate the energy of the ray per wavelength.
-                        let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
-                        for node in trajectory.iter().take(trajectory.len() - 1) {
-                            for i in 0..spectrum_len {
-                                match energy[i] {
-                                    Energy::Absorbed => continue,
-                                    Energy::Reflected(ref mut e) => {
-                                        *e *= fresnel::reflectance(
-                                            node.cos.unwrap_or(1.0),
-                                            self.iors_i[i],
-                                            self.iors_t[i],
-                                        );
-                                        if *e <= 0.0 {
-                                            energy[i] = Energy::Absorbed;
+            .flat_map(|(chunk_idx, trajectories)| {
+                trajectories
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, trajectory)| {
+                        let ray_idx = chunk_idx * CHUNK_SIZE + i;
+                        match trajectory.last() {
+                            None => None,
+                            Some(last) => {
+                                // 1. Get the outgoing ray direction it's the last ray of the
+                                //    trajectory.
+                                let ray_dir = last.dir.normalize();
+                                // 2. Calculate the energy of the ray per wavelength.
+                                let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
+                                for node in trajectory.iter().take(trajectory.len() - 1) {
+                                    for i in 0..spectrum_len {
+                                        match energy[i] {
+                                            Energy::Absorbed => continue,
+                                            Energy::Reflected(ref mut e) => {
+                                                *e *= fresnel::reflectance(
+                                                    node.cos.unwrap_or(1.0),
+                                                    self.iors_i[i],
+                                                    self.iors_t[i],
+                                                );
+                                                if *e <= 0.0 {
+                                                    energy[i] = Energy::Absorbed;
+                                                }
+                                            }
                                         }
                                     }
                                 }
+
+                                // 3. Compute the index of the patch where the ray is collected.
+                                let patch_idx = match self
+                                    .patches
+                                    .contains(Sph2::from_cartesian(ray_dir.into()))
+                                {
+                                    Some(idx) => idx,
+                                    None => {
+                                        n_escaped.fetch_add(1, atomic::Ordering::Relaxed);
+                                        return None;
+                                    }
+                                };
+
+                                // 4. Update the maximum number of bounces.
+                                let bounce = (trajectory.len() - 1) as u32;
+                                n_bounce.fetch_max(bounce as u32, atomic::Ordering::Relaxed);
+
+                                // 5. Update the number of received rays.
+                                n_received.fetch_add(1, atomic::Ordering::Relaxed);
+
+                                // Returns the index of the ray, the unit vector pointing to
+                                // the collector's surface, and the number of bounces.
+                                Some(OutgoingRay {
+                                    ray_idx: ray_idx as u32,
+                                    ray_dir,
+                                    bounce,
+                                    energy,
+                                    patch_idx,
+                                })
                             }
                         }
-
-                        // 3. Compute the index of the patch where the ray is collected.
-                        let patch_idx =
-                            match self.patches.contains(Sph2::from_cartesian(ray_dir.into())) {
-                                Some(idx) => idx,
-                                None => {
-                                    n_escaped.fetch_add(1, atomic::Ordering::Relaxed);
-                                    return None;
-                                }
-                            };
-
-                        // 4. Update the maximum number of bounces.
-                        let bounce = (trajectory.len() - 1) as u32;
-                        n_bounce.fetch_max(bounce as u32, atomic::Ordering::Relaxed);
-
-                        // 5. Update the number of received rays.
-                        n_received.fetch_add(1, atomic::Ordering::Relaxed);
-
-                        // Returns the index of the ray, the unit vector pointing to
-                        // the collector's surface, and the number of bounces.
-                        Some(OutgoingRay {
-                            ray_idx: i as u32,
-                            ray_dir,
-                            bounce,
-                            energy,
-                            patch_idx,
-                        })
-                    }
-                }
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
+
         log::debug!("n_escaped: {}", n_escaped.load(atomic::Ordering::Relaxed));
 
         let max_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
@@ -636,6 +651,11 @@ impl BounceAndEnergy {
         }
     }
 
+    /// Returns the size of the bounce and energy in bytes when serialized.
+    #[deprecated(
+        since = "0.3.0",
+        note = "Should be removed because of the file format change."
+    )]
     pub const fn calc_size_in_bytes(bounces: usize) -> usize { 8 * bounces + 8 }
 }
 

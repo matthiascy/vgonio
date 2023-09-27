@@ -27,6 +27,7 @@ mod cmd_generate;
 mod cmd_info;
 mod cmd_measure;
 
+use crate::app::args::OutputFormat;
 pub use cmd_convert::{ConvertKind, ConvertOptions};
 #[cfg(feature = "surf-gen")]
 pub use cmd_generate::GenerateOptions;
@@ -50,17 +51,20 @@ fn write_measured_data_to_file(
     surfaces: &[Handle<MicroSurface>],
     cache: &InnerCache,
     config: &Config,
+    _format: OutputFormat,
     encoding: FileEncoding,
     compression: CompressionScheme,
     output: &Option<PathBuf>,
 ) -> Result<(), VgonioError> {
     let output_dir = resolve_output_dir(config, output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+    // TODO: Add support for other formats.
     for (measurement, surface) in data.iter().zip(surfaces.iter()) {
+        let date_string = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
         let filename = match measurement.kind() {
             MeasurementKind::Adf => {
                 format!(
-                    "microfacet-area-distribution-{}.vgmo",
+                    "ndf_{}_{}.vgmo",
                     cache
                         .get_micro_surface_filepath(*surface)
                         .unwrap()
@@ -69,6 +73,7 @@ fn write_measured_data_to_file(
                         .to_ascii_lowercase()
                         .to_str()
                         .unwrap(),
+                    date_string
                 )
             }
             MeasurementKind::Msf => {

@@ -434,6 +434,7 @@ impl BsdfMeasurementTab {
     }
 }
 
+#[cfg(feature = "visu-dbg")]
 pub struct BsdfMeasurementDebug {
     pub detector_dome_drawing: bool,
     pub emitter_samples_drawing: bool,
