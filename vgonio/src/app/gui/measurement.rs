@@ -23,6 +23,7 @@ use crate::{
     SphericalDomain,
 };
 use egui::Widget;
+use vgcore::math::Sph2;
 use vgsurf::MicroSurface;
 
 impl DetectorParams {
@@ -90,7 +91,9 @@ pub struct MeasurementDialog {
     tab_adf: AdfMeasurementTab,
     tab_msf: MsfMeasurementTab,
     /// Whether the measurement is a single point measurement.
-    single_point: bool,
+    single: bool,
+    /// The measurement point.
+    point: Sph2,
     /// Whether the dialog is open.
     is_open: bool,
     event_loop: EventLoopProxy,
@@ -111,7 +114,8 @@ impl MeasurementDialog {
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: AdfMeasurementTab::new(event_loop.clone()),
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
-            single_point: false,
+            single: false,
+            point: Sph2::zero(),
             is_open: false,
             event_loop,
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -148,7 +152,7 @@ impl MeasurementDialog {
             .fixed_size((400.0, 600.0))
             .show(ctx, |ui| {
                 self.kind.selectable_ui(ui);
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(feature = "visu-dbg")]
                 {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Debug draw: ");
@@ -275,7 +279,15 @@ impl MeasurementDialog {
 
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 if self.kind == MeasurementKind::Bsdf {
-                    ui.checkbox(&mut self.single_point, "Single Point");
+                    ui.horizontal_wrapped(|ui| {
+                        ui.checkbox(&mut self.single, "Single Point");
+                        if self.single {
+                            ui.label("θ");
+                            misc::drag_angle(&mut self.point.theta, "").ui(ui);
+                            ui.label("φ");
+                            misc::drag_angle(&mut self.point.phi, "").ui(ui);
+                        }
+                    });
                 }
 
                 ui.horizontal_wrapped(|ui| {
@@ -293,15 +305,8 @@ impl MeasurementDialog {
                         } else {
                             match self.kind {
                                 MeasurementKind::Bsdf => {
-                                    #[cfg(feature = "visu-dbg")]
-                                    let single_point = if self.single_point {
-                                        Some(self.tab_bsdf.measurement_point())
-                                    } else {
-                                        None
-                                    };
-
-                                    #[cfg(not(feature = "visu-dbg"))]
-                                    let single_point = None;
+                                    let single_point =
+                                        if self.single { Some(self.point) } else { None };
 
                                     self.event_loop.send_event(VgonioEvent::Measure {
                                         single_point,

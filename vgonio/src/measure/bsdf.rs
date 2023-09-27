@@ -454,11 +454,7 @@ pub fn measure_bsdf_rt(
     let emitter = Emitter::new(&params.emitter);
     let detector = Detector::new(&params.detector, &params, cache);
 
-    #[cfg(feature = "bench")]
-    let start = std::time::Instant::now();
-
     let mut measurements = Vec::new();
-
     for (surf, mesh) in surfaces.iter().zip(meshes) {
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
@@ -498,10 +494,6 @@ pub fn measure_bsdf_rt(
             }
         };
 
-        let mut stats = BsdfMeasurementStatsPoint::new(
-            detector.spectrum.len(),
-            params.emitter.max_bounces as usize,
-        );
         let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
         log::trace!("Estimated orbit radius: {}", orbit_radius);
         let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &detector.patches);

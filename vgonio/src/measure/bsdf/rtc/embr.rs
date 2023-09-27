@@ -144,11 +144,10 @@ fn intersect_filter_stream<'a>(
 ///
 /// # Arguments
 ///
-/// * `desc` - The BSDF measurement description.
-/// * `mesh` - The micro-surface's mesh.
-/// * `cache` - The cache to use.
-/// * `emitter_samples` - The emitter samples.
-/// * `collector_patches` - The collector patches.
+/// `emitter` - The emitter.
+/// `mesh` - The micro-surface mesh to measure.
+/// `w_i` - The incident direction. If `None`, the BSDF is measured for all
+///        the emitter positions.
 pub fn simulate_bsdf_measurement<'a>(
     emitter: &'a Emitter,
     mesh: &'a MicroSurfaceMesh,
@@ -157,19 +156,6 @@ pub fn simulate_bsdf_measurement<'a>(
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
-
-    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-    {
-        log::debug!("mesh extent: {:?}", mesh.bounds);
-        log::debug!(
-            "emitter orbit radius: {}",
-            crate::measure::estimate_orbit_radius(mesh)
-        );
-        log::debug!(
-            "emitter disc radius: {:?}",
-            crate::measure::estimate_disc_radius(mesh)
-        );
-    }
 
     // Upload the surface's mesh to the Embree scene.
     let mut geometry = mesh.as_embree_geometry(&device);
@@ -197,41 +183,6 @@ pub fn simulate_bsdf_measurement<'a>(
             &scene,
         ))),
     }
-}
-
-/// Measures the BSDF of micro-surface mesh at the given position.
-/// The BSDF is measured by emitting rays from the given position.
-pub fn simulate_bsdf_measurement_once(
-    w_i: Sph2,
-    emitter: &Emitter,
-    mesh: &MicroSurfaceMesh,
-) -> SimulationResultPoint {
-    let device = Device::with_config(Config::default()).unwrap();
-    let mut scene = device.create_scene().unwrap();
-    scene.set_flags(SceneFlags::ROBUST);
-
-    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-    {
-        log::debug!("mesh extent: {:?}", mesh.bounds);
-        log::debug!(
-            "emitter orbit radius: {}",
-            crate::measure::estimate_orbit_radius(mesh)
-        );
-        log::debug!(
-            "emitter disk radius: {:?}",
-            crate::measure::estimate_disc_radius(mesh)
-        );
-    }
-
-    // Upload the surface's mesh to the Embree scene.
-    let mut geometry = mesh.as_embree_geometry(&device);
-    geometry.set_intersect_filter_function(intersect_filter_stream);
-    geometry.commit();
-
-    scene.attach_geometry(&geometry);
-    scene.commit();
-
-    simulate_bsdf_measurement_single_point(w_i, emitter, mesh, Arc::new(geometry.clone()), &scene)
 }
 
 /// Simulates the BSDF measurement for a single incident direction (point).
@@ -384,11 +335,7 @@ fn simulate_bsdf_measurement_single_point(
     // Extract the trajectory of each ray.
     let trajectories = stream_data
         .into_iter()
-        .flat_map(|d| {
-            let max = d.trajectory.iter().map(|t| t.len()).max().unwrap();
-            log::info!("max trajectory len: {}", max);
-            d.trajectory
-        })
+        .flat_map(|d| d.trajectory)
         .collect::<Vec<_>>();
 
     SimulationResultPoint { w_i, trajectories }

@@ -347,9 +347,10 @@ impl Detector {
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
         let n_escaped = atomic::AtomicU32::new(0);
+        let n_bounce = atomic::AtomicU32::new(0);
+        let n_received = atomic::AtomicU32::new(0);
         // Convert the last rays of the trajectories into a vector located
         // at the center of the collector.
-        let n_bounce = atomic::AtomicU32::new(0);
         let dirs = result
             .trajectories
             .par_iter()
@@ -358,8 +359,7 @@ impl Detector {
                 match trajectory.last() {
                     None => None,
                     Some(last) => {
-                        // 1. Get the outgoing ray direction it's the last ray of
-                        //    the trajectory.
+                        // 1. Get the outgoing ray direction it's the last ray of the trajectory.
                         let ray_dir = last.dir.normalize();
                         // 2. Calculate the energy of the ray per wavelength.
                         let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
@@ -381,8 +381,7 @@ impl Detector {
                             }
                         }
 
-                        // 3. Compute the index of the patch where the ray is
-                        //    collected.
+                        // 3. Compute the index of the patch where the ray is collected.
                         let patch_idx =
                             match self.patches.contains(Sph2::from_cartesian(ray_dir.into())) {
                                 Some(idx) => idx,
@@ -395,6 +394,9 @@ impl Detector {
                         // 4. Update the maximum number of bounces.
                         let bounce = (trajectory.len() - 1) as u32;
                         n_bounce.fetch_max(bounce as u32, atomic::Ordering::Relaxed);
+
+                        // 5. Update the number of received rays.
+                        n_received.fetch_add(1, atomic::Ordering::Relaxed);
 
                         // Returns the index of the ray, the unit vector pointing to
                         // the collector's surface, and the number of bounces.
@@ -409,11 +411,12 @@ impl Detector {
                 }
             })
             .collect::<Vec<_>>();
-        log::info!("n_escaped: {}", n_escaped.load(atomic::Ordering::Relaxed));
+        log::debug!("n_escaped: {}", n_escaped.load(atomic::Ordering::Relaxed));
 
         let max_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
 
         let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounce);
+        stats.n_received = n_received.load(atomic::Ordering::Relaxed);
 
         // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
         // log::debug!("process dirs: {:?}", dirs);
@@ -451,7 +454,7 @@ impl Detector {
                 outgoing_intersection_points[j] = (dir.ray_dir * orbit_radius).into();
             }
             let patch = &mut data[dir.patch_idx];
-            let bounce = dir.bounce as usize;
+            let bounce_idx = dir.bounce as usize - 1;
             for (i, energy) in dir.energy.iter().enumerate() {
                 stats.e_captured[i] += energy.energy();
                 match energy {
@@ -460,10 +463,10 @@ impl Detector {
                         stats.n_captured[i] += 1;
                         patch[i].total_energy += e;
                         patch[i].total_rays += 1;
-                        patch[i].energy_per_bounce[bounce] += e;
-                        patch[i].num_rays_per_bounce[bounce] += 1;
-                        stats.num_rays_per_bounce[i][bounce] += 1;
-                        stats.energy_per_bounce[i][bounce] += e;
+                        patch[i].energy_per_bounce[bounce_idx] += e;
+                        patch[i].num_rays_per_bounce[bounce_idx] += 1;
+                        stats.num_rays_per_bounce[i][bounce_idx] += 1;
+                        stats.energy_per_bounce[i][bounce_idx] += e;
                     }
                 }
             }

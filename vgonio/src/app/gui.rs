@@ -663,9 +663,11 @@ impl VgonioGuiApp {
                                         .hit_points(),
                                 );
                             }
-                            measured[0]
-                                .write_bsdf_to_images(self.config.output_dir())
-                                .unwrap();
+                            for measurement in measured {
+                                measurement
+                                    .write_bsdf_to_images(self.config.output_dir())
+                                    .unwrap();
+                            }
                         }
                     },
                     SurfaceViewer(event) => match event {
