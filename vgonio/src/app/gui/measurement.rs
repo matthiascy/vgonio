@@ -277,7 +277,6 @@ impl MeasurementDialog {
                 }
                 ui.separator();
 
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 if self.kind == MeasurementKind::Bsdf {
                     ui.horizontal_wrapped(|ui| {
                         ui.checkbox(&mut self.single, "Single Point");
