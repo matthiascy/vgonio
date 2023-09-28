@@ -134,10 +134,10 @@ impl RefractiveIndex {
     }
 
     /// Whether the refractive index represents insulator material.
-    pub fn is_insulator(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
+    pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
 
     /// Whether the refractive index represents conductor material.
-    pub fn is_conductor(&self) -> bool { !self.is_insulator() }
+    pub fn is_conductor(&self) -> bool { !self.is_dielectric() }
 
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"

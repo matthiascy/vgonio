@@ -107,7 +107,7 @@
 //! and $\eta + ik = \eta_t / \eta_i$ is the relative index of refraction
 //! computed using a complex division operation. Generally $\eta_i$ will be a
 //! dielectric so that a normal real division can be used instead.
-//! See [`reflectance_insulator_conductor`] for details.
+//! See [`reflectance_dielectric_conductor`] for details.
 //!
 //! For both polarisations: $\eta_i\sin\theta_i = \eta_t\sin\theta_t$.
 //!
@@ -401,7 +401,7 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 /// between 0 and 1, the ray is on the inside (opposite to the normal).
 ///
 /// If you are sure that the incident ray is always on the outside of the
-/// interface, use [`reflectance_insulator2`] instead.
+/// interface, use [`reflectance_dielectric2`] instead.
 ///
 /// # Arguments
 ///
@@ -417,15 +417,15 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 /// the incident ray lines. If the cosine is between -1 and 0, the ray is on
 /// the outside (same as the normal), and if the cosine is between 0 and 1, the
 /// ray is on the inside (opposite to the normal).
-pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
+pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
     debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
     let cos_i = cos_i.clamp(-1.0, 1.0);
     if cos_i < 0.0 {
         // The incident ray is on the outside of the interface entering the medium.
-        reflectance_insulator2(-cos_i, eta_i, eta_t)
+        reflectance_dielectric2(-cos_i, eta_i, eta_t)
     } else {
         // The incident ray is on the inside of the interface leaving the medium.
-        reflectance_insulator2(cos_i, eta_t, eta_i)
+        reflectance_dielectric2(cos_i, eta_t, eta_i)
     }
 }
 
@@ -434,7 +434,7 @@ pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// This function assumes that the incident ray is located on the outside of
 /// the interface (same side as the normal). If you are not sure about the
-/// location of the incident ray, use [`reflectance_insulator`] instead.
+/// location of the incident ray, use [`reflectance_dielectric`] instead.
 ///
 /// # Arguments
 ///
@@ -443,7 +443,7 @@ pub fn reflectance_insulator(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///   of the cosine of the angle between `wi` and `n`.
 /// * `eta_i` - refractive index of the incident medium (outside).
 /// * `eta_t` - refractive index of the transmitted medium (inside).
-pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
+pub fn reflectance_dielectric2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
     debug_assert!(
         (0.0..=1.0).contains(&cos_i_abs),
         "cos_i_abs must be in [0, 1]"
@@ -472,23 +472,23 @@ pub fn reflectance_insulator2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
 /// interface between two dielectric materials for rays with different
 /// wavelengths.
 ///
-/// See [`reflectance_insulator`] for details.
+/// See [`reflectance_dielectric`] for details.
 ///
 /// # Arguments
 ///
 /// * `cos_i` - cosine of the angle between the normal and the incident
 ///   direction (originated from the ray's origin).
 /// * `eta_i` - slice of refractive index of incident medium.
-pub fn reflectance_insulator_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
+pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
     debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
     let mut output = vec![1.0; eta.len()];
     for (i, r) in output.iter_mut().enumerate() {
-        *r = reflectance_insulator(cos_i, eta[i], eta[i]);
+        *r = reflectance_dielectric(cos_i, eta[i], eta[i]);
     }
     output
 }
 
-// TODO: from conductor to insulator
+// TODO: from conductor to dielectric
 
 /// Fresnel reflectance of unpolarised light between dielectric and conductor.
 ///
@@ -500,7 +500,7 @@ pub fn reflectance_insulator_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
 /// * `eta_i` - refractive index of the incident medium.
 /// * `eta_t` - refractive index of the transmitted medium.
 /// * `k` - absorption coefficient of the transmitted medium.
-pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
+pub fn reflectance_dielectric_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
     assert!(
         (-f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i_abs),
         "the cosine of the incident angle should always be positive {}",
@@ -530,8 +530,8 @@ pub fn reflectance_insulator_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k
 /// Computes the unpolarised Fresnel reflection coefficient at a planar
 /// interface between two unknown media.
 ///
-/// This function is a wrapper around [`reflectance_insulator`] and
-/// [`reflectance_insulator_conductor`].
+/// This function is a wrapper around [`reflectance_dielectric`] and
+/// [`reflectance_dielectric_conductor`].
 ///
 /// # Arguments
 ///
@@ -549,12 +549,12 @@ pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -
         (-1.0 - f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i),
         "cos_i must be in [-1, 1]"
     );
-    match (ior_i.is_insulator(), ior_t.is_insulator()) {
+    match (ior_i.is_dielectric(), ior_t.is_dielectric()) {
         // Both are dielectrics.
-        (true, true) => reflectance_insulator(cos_i, ior_i.eta, ior_t.eta),
+        (true, true) => reflectance_dielectric(cos_i, ior_i.eta, ior_t.eta),
         // One is a dielectric and the other is a conductor (entering the conductor).
         (true, false) => {
-            reflectance_insulator_conductor(cos_i.abs(), ior_i.eta, ior_t.eta, ior_t.k)
+            reflectance_dielectric_conductor(cos_i.abs(), ior_i.eta, ior_t.eta, ior_t.k)
         }
         // One is a conductor and the other is a dielectric.
         (false, true) => {
@@ -568,12 +568,12 @@ pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -
 /// Computes the unpolarised Fresnel reflectance of unpolarised light between
 /// dielectric and conductor medium for rays with different wavelengths.
 ///
-/// See [`reflectance_insulator_conductor`] for details.
+/// See [`reflectance_dielectric_conductor`] for details.
 ///
 /// # Arguments
 ///
 /// * `cos` - cosine of the incident angle (should always be positive).
-pub fn reflectance_insulator_conductor_spectrum(
+pub fn reflectance_dielectric_conductor_spectrum(
     cos: f32,
     eta_i: f32,
     ior_t: &[RefractiveIndex],
@@ -584,7 +584,7 @@ pub fn reflectance_insulator_conductor_spectrum(
     );
     let mut output = vec![1.0; ior_t.len()];
     for (i, r) in output.iter_mut().enumerate() {
-        *r = reflectance_insulator_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
+        *r = reflectance_dielectric_conductor(cos, eta_i, ior_t[i].eta, ior_t[i].k);
     }
     output
 }
@@ -596,7 +596,7 @@ mod tests {
     use vgcore::units::nm;
 
     #[test]
-    fn reflectance_insulator_test() {
+    fn reflectance_dielectric_test() {
         {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -610,7 +610,7 @@ mod tests {
                 let angle = cos_i.acos();
                 let eta_i = 1.0; // air
                 let eta_t = 1.5; // glass
-                let r = super::reflectance_insulator2(cos_i, eta_i, eta_t);
+                let r = super::reflectance_dielectric2(cos_i, eta_i, eta_t);
                 file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                     .unwrap();
             }
@@ -628,7 +628,7 @@ mod tests {
                 let angle = cos_i.acos();
                 let eta_i = 1.0; // air
                 let eta_t = 1.5; // glass
-                let r = super::reflectance_insulator(cos_i, eta_i, eta_t);
+                let r = super::reflectance_dielectric(cos_i, eta_i, eta_t);
                 file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                     .unwrap();
             }
@@ -646,7 +646,7 @@ mod tests {
                 let angle = cos_i.acos();
                 let eta_t = 1.0; // air
                 let eta_i = 1.5; // glass
-                let r = super::reflectance_insulator2(cos_i, eta_i, eta_t);
+                let r = super::reflectance_dielectric2(cos_i, eta_i, eta_t);
                 file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                     .unwrap();
             }
@@ -664,7 +664,7 @@ mod tests {
                 let angle = cos_i.acos();
                 let eta_t = 1.0; // air
                 let eta_i = 1.5; // glass
-                let r = super::reflectance_insulator(cos_i, eta_i, eta_t);
+                let r = super::reflectance_dielectric(cos_i, eta_i, eta_t);
                 file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                     .unwrap();
             }
@@ -672,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn reflectance_insulator_conductor_test() {
+    fn reflectance_dielectric_conductor_test() {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -685,7 +685,7 @@ mod tests {
             let eta_i = 1.0; // air
             let eta_t = 1.1893; // al, 600nm
             let k_t = 6.9762; // al, 600nm
-            let r = super::reflectance_insulator_conductor(cos_i, eta_i, eta_t, k_t);
+            let r = super::reflectance_dielectric_conductor(cos_i, eta_i, eta_t, k_t);
             file.write_all(format!("{},{}\n", angle.to_degrees(), r).as_bytes())
                 .unwrap();
         }
@@ -699,8 +699,12 @@ mod tests {
         for i in 0..1000 {
             let cos_i = (1000 - i) as f32 / 1000.0;
             let angle = cos_i.acos();
-            let r0 =
-                super::reflectance_insulator_conductor(cos_i, ior_vacuum.eta, ior_al.eta, ior_al.k);
+            let r0 = super::reflectance_dielectric_conductor(
+                cos_i,
+                ior_vacuum.eta,
+                ior_al.eta,
+                ior_al.k,
+            );
             let r1 = super::reflectance(cos_i, ior_vacuum, ior_al);
             assert!(
                 (r0 - r1).abs() < 0.0001,
@@ -711,7 +715,7 @@ mod tests {
             );
 
             let r2 = super::reflectance(cos_i, ior_vacuum, ior_glass);
-            let r3 = super::reflectance_insulator(cos_i, ior_vacuum.eta, ior_glass.eta);
+            let r3 = super::reflectance_dielectric(cos_i, ior_vacuum.eta, ior_glass.eta);
             assert!(
                 (r2 - r3).abs() < 0.0001,
                 "angle: {}, r2: {}, r3: {}",

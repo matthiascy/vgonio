@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use vgcore::Isotropy;
 
+mod brdf;
 pub mod dist;
 
 use vgcore::math::Vec3;
