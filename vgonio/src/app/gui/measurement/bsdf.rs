@@ -351,7 +351,7 @@ impl BsdfMeasurementTab {
                         }
                     }
                 });
-                self.params.detector.ui(ui, |params, ui| {
+                self.params.receiver.ui(ui, |params, ui| {
                     #[cfg(feature = "visu-dbg")]
                     {
                         if debug_draw {

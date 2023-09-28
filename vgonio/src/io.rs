@@ -17,8 +17,8 @@ pub mod vgmo {
     use crate::{
         measure::{
             bsdf::{
-                detector::{BounceAndEnergy, DetectorParams, DetectorScheme},
                 emitter::EmitterParams,
+                receiver::{BounceAndEnergy, ReceiverParams, ReceiverScheme},
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshotRaw, PerWavelength,
             },
             data::{MeasuredData, MeasurementData, MeasurementDataSource},
@@ -159,7 +159,7 @@ pub mod vgmo {
                 Self::Bsdf { bsdf, .. } => {
                     bsdf.emitter.measurement_points_count()
                         * bsdf.emitter.spectrum.step_count()
-                        * bsdf.detector.patches_count()
+                        * bsdf.receiver.patches_count()
                 }
                 Self::Madf { madf, .. } => {
                     madf.zenith.step_count_wrapped() * madf.azimuth.step_count_wrapped()
@@ -385,7 +385,7 @@ pub mod vgmo {
         }
     }
 
-    impl DetectorScheme {
+    impl ReceiverScheme {
         /// The size of the buffer required to write the collector scheme.
         pub const REQUIRED_SIZE: usize = 56; // TODO: shrink this
 
@@ -396,8 +396,8 @@ pub mod vgmo {
                 "CollectorScheme needs at least 60 bytes of space"
             );
             match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
-                0x00 => DetectorScheme::Beckers,
-                0x01 => DetectorScheme::Tregenza,
+                0x00 => ReceiverScheme::Beckers,
+                0x01 => ReceiverScheme::Tregenza,
                 _ => panic!("Invalid collector scheme type"),
             }
         }
@@ -409,19 +409,19 @@ pub mod vgmo {
                 "CollectorScheme needs at least 60 bytes of space"
             );
             match self {
-                DetectorScheme::Beckers => {
+                ReceiverScheme::Beckers => {
                     buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
                 }
-                DetectorScheme::Tregenza => {
+                ReceiverScheme::Tregenza => {
                     buf[0..4].copy_from_slice(&(0x01u32).to_le_bytes());
                 }
             }
         }
     }
 
-    impl DetectorParams {
+    impl ReceiverParams {
         /// The size of the buffer required to write the collector.
-        pub const REQUIRED_SIZE: usize = 4 + DetectorScheme::REQUIRED_SIZE;
+        pub const REQUIRED_SIZE: usize = 4 + ReceiverScheme::REQUIRED_SIZE;
 
         /// Reads the collector from a buffer.
         pub fn read_from_buf(buf: &[u8]) -> Self {
@@ -430,7 +430,7 @@ pub mod vgmo {
                 "Collector needs at least 64 bytes of space"
             );
             let precision = rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
-            let scheme = DetectorScheme::read_from_buf(&buf[4..4 + DetectorScheme::REQUIRED_SIZE]);
+            let scheme = ReceiverScheme::read_from_buf(&buf[4..4 + ReceiverScheme::REQUIRED_SIZE]);
             Self {
                 domain: Default::default(),
                 scheme,
@@ -446,7 +446,7 @@ pub mod vgmo {
             );
             // TODO: (radius removed) -- write other fields
             self.scheme
-                .write_to_buf(&mut buf[4..4 + DetectorScheme::REQUIRED_SIZE]);
+                .write_to_buf(&mut buf[4..4 + ReceiverScheme::REQUIRED_SIZE]);
         }
     }
 
@@ -454,17 +454,17 @@ pub mod vgmo {
         /// Reads the BSDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
             let mut buf =
-                [0u8; DetectorParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
+                [0u8; ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
             reader.read_exact(&mut buf)?;
             let kind = BsdfKind::from(buf[0]);
             let incident_medium = Medium::from(buf[1]);
             let transmitted_medium = Medium::from(buf[2]);
             let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
             let emitter = EmitterParams::read_from_buf(&buf[4..4 + EmitterParams::REQUIRED_SIZE]);
-            let collector = DetectorParams::read_from_buf(&buf[4 + EmitterParams::REQUIRED_SIZE..]);
+            let collector = ReceiverParams::read_from_buf(&buf[4 + EmitterParams::REQUIRED_SIZE..]);
             let samples_count = u32::from_le_bytes(
-                buf[DetectorParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4
-                    ..DetectorParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 4]
+                buf[ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4
+                    ..ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 4]
                     .try_into()
                     .unwrap(),
             );
@@ -480,7 +480,7 @@ pub mod vgmo {
                 transmitted_medium,
                 sim_kind,
                 emitter,
-                detector: collector,
+                receiver: collector,
             })
         }
 
@@ -490,7 +490,7 @@ pub mod vgmo {
             writer: &mut BufWriter<W>,
         ) -> Result<(), WriteFileErrorKind> {
             let mut buf =
-                [0x20; DetectorParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
+                [0x20; ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
             buf[0] = self.kind as u8;
             buf[1] = self.incident_medium as u8;
             buf[2] = self.transmitted_medium as u8;
@@ -500,11 +500,11 @@ pub mod vgmo {
             };
             self.emitter
                 .write_to_buf(&mut buf[4..4 + EmitterParams::REQUIRED_SIZE]);
-            self.detector
+            self.receiver
                 .write_to_buf(&mut buf[4 + EmitterParams::REQUIRED_SIZE..]);
-            buf[4 + EmitterParams::REQUIRED_SIZE + DetectorParams::REQUIRED_SIZE
-                ..4 + EmitterParams::REQUIRED_SIZE + DetectorParams::REQUIRED_SIZE + 4]
-                .copy_from_slice(&(self.detector.patches_count() as u32).to_le_bytes());
+            buf[4 + EmitterParams::REQUIRED_SIZE + ReceiverParams::REQUIRED_SIZE
+                ..4 + EmitterParams::REQUIRED_SIZE + ReceiverParams::REQUIRED_SIZE + 4]
+                .copy_from_slice(&(self.receiver.patches_count() as u32).to_le_bytes());
             buf[155] = 0x0A;
             writer.write_all(&buf).map_err(|err| err.into())
         }
@@ -787,7 +787,7 @@ pub mod vgmo {
         pub fn read_from_buf(buf: &[u8], params: &BsdfMeasurementParams) -> Self {
             let n_wavelength = params.emitter.spectrum.step_count();
             let bounces = params.emitter.max_bounces as usize;
-            let detector_patches_count = params.detector.patches_count();
+            let detector_patches_count = params.receiver.patches_count();
             let size = Self::calc_size_in_bytes(n_wavelength, bounces, detector_patches_count);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
@@ -878,7 +878,7 @@ pub mod vgmo {
                 FileEncoding::Binary => {
                     let n_wavelength = params.emitter.spectrum.step_count();
                     let bounces = params.emitter.max_bounces as usize;
-                    let detector_patches_count = params.detector.patches_count();
+                    let detector_patches_count = params.receiver.patches_count();
                     let sample_size = BsdfSnapshotRaw::<BounceAndEnergy>::calc_size_in_bytes(
                         n_wavelength,
                         bounces,
@@ -931,7 +931,7 @@ pub mod vgmo {
                     for sample in &self.snapshots {
                         let n_wavelength = self.params.emitter.spectrum.step_count();
                         let bounces = self.params.emitter.max_bounces as usize;
-                        let detector_patches_count = self.params.detector.patches_count();
+                        let detector_patches_count = self.params.receiver.patches_count();
                         let sample_size = BsdfSnapshotRaw::<BounceAndEnergy>::calc_size_in_bytes(
                             n_wavelength,
                             bounces,
@@ -1142,10 +1142,10 @@ mod tests {
     use crate::{
         measure::{
             bsdf::{
-                detector::{
-                    BounceAndEnergy, Detector, DetectorParams, DetectorPatches, DetectorScheme,
-                },
                 emitter::{Emitter, EmitterParams},
+                receiver::{
+                    BounceAndEnergy, Receiver, ReceiverParams, ReceiverPatches, ReceiverScheme,
+                },
                 rtc::RtcMethod,
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshotRaw, PerWavelength,
             },
@@ -1301,10 +1301,10 @@ mod tests {
                 azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
                 spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
             },
-            detector: DetectorParams {
+            receiver: ReceiverParams {
                 domain: Default::default(),
                 precision: rad!(0.1),
-                scheme: DetectorScheme::Beckers,
+                scheme: ReceiverScheme::Beckers,
             },
         };
         let data2 = BsdfSnapshotRaw::<BounceAndEnergy>::read_from_buf(&buf, &params);

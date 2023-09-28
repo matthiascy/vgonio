@@ -21,26 +21,26 @@ use vgcore::{
 };
 use vgsurf::MicroSurface;
 
-/// Description of a detector collecting the data.
+/// Description of a receiver collecting the data.
 ///
 /// The virtual goniophotometer's sensors are represented by the patches
 /// of a sphere (or an hemisphere) positioned around the specimen.
 ///
-/// A detector is defined by its domain, the precision of the
+/// A receiver is defined by its domain, the precision of the
 /// measurements and the partitioning scheme.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DetectorParams {
+pub struct ReceiverParams {
     /// Domain of the collector.
     pub domain: SphericalDomain,
     /// Zenith angle step size (in radians).
     pub precision: Radians,
     /// Partitioning scheme of the collector.
-    pub scheme: DetectorScheme,
+    pub scheme: ReceiverScheme,
 }
 
-/// Scheme of the partitioning of the detector.
+/// Scheme of the partitioning of the receiver.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub enum DetectorScheme {
+pub enum ReceiverScheme {
     /// Partition scheme based on "A general rule for disk and hemisphere
     /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.
     Beckers = 0x00,
@@ -51,7 +51,7 @@ pub enum DetectorScheme {
 
 /// Partitioned patches of the collector.
 #[derive(Debug, Clone)]
-pub enum DetectorPatches {
+pub enum ReceiverPatches {
     /// Beckers partitioning scheme.
     Beckers {
         /// The annuli of the collector.
@@ -64,7 +64,7 @@ pub enum DetectorPatches {
     Tregenza,
 }
 
-impl DetectorPatches {
+impl ReceiverPatches {
     /// Returns the number of patches.
     pub fn len(&self) -> usize {
         match self {
@@ -111,7 +111,7 @@ impl DetectorPatches {
     }
 }
 
-/// A patch of the detector.
+/// A patch of the receiver.
 #[derive(Debug, Copy, Clone)]
 pub struct Patch {
     /// Minimum zenith (theta) and azimuth (phi) angles of the patch.
@@ -200,16 +200,16 @@ mod beckers {
     }
 }
 
-impl DetectorParams {
+impl ReceiverParams {
     /// Returns the number of patches of the collector.
     pub fn patches_count(&self) -> usize {
         match self.scheme {
-            DetectorScheme::Beckers => {
+            ReceiverScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             }
-            DetectorScheme::Tregenza => 0,
+            ReceiverScheme::Tregenza => 0,
         }
     }
 
@@ -218,9 +218,9 @@ impl DetectorParams {
     /// The patches are generated based on the scheme of the collector. They are
     /// used to collect the data. The patches are generated in the order of
     /// the azimuth angle first, then the zenith angle.
-    pub fn generate_patches(&self) -> DetectorPatches {
+    pub fn generate_patches(&self) -> ReceiverPatches {
         match self.scheme {
-            DetectorScheme::Beckers => {
+            ReceiverScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
@@ -252,9 +252,9 @@ impl DetectorParams {
                         ));
                     }
                 }
-                DetectorPatches::Beckers { rings, patches }
+                ReceiverPatches::Beckers { rings, patches }
             }
-            DetectorScheme::Tregenza => {
+            ReceiverScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
         }
@@ -263,17 +263,17 @@ impl DetectorParams {
 
 /// Sensor of the virtual gonio-reflectometer.
 #[derive(Debug, Clone)]
-pub struct Detector {
-    /// The parameters of the detector.
-    params: DetectorParams,
+pub struct Receiver {
+    /// The parameters of the receiver.
+    params: ReceiverParams,
     /// Wavelengths of the measurement.
     pub spectrum: Vec<Nanometres>,
     /// Incident medium's refractive indices.
     pub iors_i: Vec<RefractiveIndex>,
     /// Transmitted medium's refractive indices.
     pub iors_t: Vec<RefractiveIndex>,
-    /// The partitioned patches of the detector.
-    pub patches: DetectorPatches,
+    /// The partitioned patches of the receiver.
+    pub patches: ReceiverPatches,
 }
 
 /// Outgoing ray of a trajectory [`RayTrajectory`].
@@ -293,14 +293,14 @@ struct OutgoingRay {
     pub patch_idx: usize,
 }
 
-impl Detector {
-    /// Creates a new detector.
+impl Receiver {
+    /// Creates a new receiver.
     ///
     /// # Arguments
     ///
-    /// * `params` - The parameters of the detector.
+    /// * `params` - The parameters of the receiver.
     pub fn new(
-        detector_params: &DetectorParams,
+        receiver_params: &ReceiverParams,
         meas_params: &BsdfMeasurementParams,
         cache: &InnerCache,
     ) -> Self {
@@ -316,11 +316,11 @@ impl Detector {
             .ior_of_spectrum(meas_params.transmitted_medium, &spectrum)
             .expect("transmitted medium IOR not found");
         Self {
-            params: *detector_params,
+            params: *receiver_params,
             spectrum,
             iors_i,
             iors_t,
-            patches: detector_params.generate_patches(),
+            patches: receiver_params.generate_patches(),
         }
     }
 
@@ -345,7 +345,7 @@ impl Detector {
         orbit_radius: f32,
     ) {
         const CHUNK_SIZE: usize = 1024;
-        // TODO: deal with the domain of the detector
+        // TODO: deal with the domain of the receiver
         let spectrum_len = self.spectrum.len();
 
         #[cfg(feature = "bench")]
@@ -511,23 +511,23 @@ impl Detector {
     }
 }
 
-/// Collected data by the detector for a specific micro-surface.
+/// Collected data by the receiver for a specific micro-surface.
 ///
-/// The data are collected for patches of the detector and for each
+/// The data are collected for patches of the receiver and for each
 /// wavelength of the incident spectrum.
 #[derive(Debug, Clone)]
 pub struct CollectedData<'a> {
     /// The micro-surface where the data were collected.
     pub surface: Handle<MicroSurface>,
-    /// The partitioned patches of the detector.
-    pub patches: &'a DetectorPatches,
+    /// The partitioned patches of the receiver.
+    pub patches: &'a ReceiverPatches,
     /// The collected data.
     pub snapshots: Vec<BsdfSnapshotRaw<BounceAndEnergy>>,
 }
 
 impl<'a> CollectedData<'a> {
     /// Creates an empty collected data.
-    pub fn empty(surf: Handle<MicroSurface>, patches: &'a DetectorPatches) -> Self {
+    pub fn empty(surf: Handle<MicroSurface>, patches: &'a ReceiverPatches) -> Self {
         Self {
             surface: surf,
             patches,
@@ -546,12 +546,12 @@ impl<'a> CollectedData<'a> {
     /// The BSDF computed from the collected data for each wavelength of the
     /// incident spectrum. The output vector is of size equal to the number of
     /// measurement points of the emitter times the number of patches of the
-    /// detector.
+    /// receiver.
     pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Vec<BsdfSnapshot> {
         // For each snapshot (w_i), compute the BSDF.
         log::info!(
             "Computing BSDF... with {} patches",
-            params.detector.patches_count()
+            params.receiver.patches_count()
         );
         self.snapshots
             .par_iter()

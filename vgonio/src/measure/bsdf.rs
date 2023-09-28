@@ -10,8 +10,8 @@ use crate::{
     },
     measure::{
         bsdf::{
-            detector::{CollectedData, Detector, PerPatchData},
             emitter::Emitter,
+            receiver::{CollectedData, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
@@ -32,9 +32,9 @@ use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 use super::params::BsdfMeasurementParams;
 
-pub mod detector;
 pub mod emitter;
 pub(crate) mod params;
+pub mod receiver;
 pub mod rtc;
 
 /// BSDF measurement data.
@@ -63,7 +63,7 @@ impl MeasuredBsdfData {
 
         let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
         let mut bsdf_samples_per_wavelength = vec![vec![0.0; WIDTH * HEIGHT]; wavelengths.len()];
-        let patches = self.params.detector.generate_patches();
+        let patches = self.params.receiver.generate_patches();
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; WIDTH * HEIGHT];
         for i in 0..WIDTH {
@@ -442,7 +442,7 @@ pub fn measure_bsdf_rt(
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
-    let detector = Detector::new(&params.detector, &params, cache);
+    let detector = Receiver::new(&params.receiver, &params, cache);
 
     let mut measurements = Vec::new();
     for (surf, mesh) in surfaces.iter().zip(meshes) {

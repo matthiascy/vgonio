@@ -8,8 +8,8 @@ use crate::{
         },
     },
     measure::bsdf::{
-        detector::DetectorPatches,
         emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
+        receiver::ReceiverPatches,
         rtc::{Ray, RayTrajectory},
     },
 };
@@ -105,7 +105,7 @@ pub struct DebugDrawingState {
     /// Vertex buffer for the collector dome.
     pub detector_dome_vertex_buffer: Option<wgpu::Buffer>,
     /// Collector's patches.
-    pub detector_patches: Option<DetectorPatches>,
+    pub detector_patches: Option<ReceiverPatches>,
     /// Points on the collector's surface. (Rays hitting the collector's
     /// surface)
     pub detector_ray_hit_points_buffer: Option<wgpu::Buffer>,
@@ -594,12 +594,12 @@ impl DebugDrawingState {
         ));
     }
 
-    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, patches: DetectorPatches) {
+    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, patches: ReceiverPatches) {
         if self.microsurface.is_none() {
             return;
         }
         match &patches {
-            DetectorPatches::Beckers { rings, .. } => {
+            ReceiverPatches::Beckers { rings, .. } => {
                 let mut vertices = vec![];
                 // Generate from rings.
                 let (disc_xs, disc_ys): (Vec<_>, Vec<_>) = (0..360)
@@ -655,7 +655,7 @@ impl DebugDrawingState {
                     },
                 ));
             }
-            DetectorPatches::Tregenza => {}
+            ReceiverPatches::Tregenza => {}
         }
         self.detector_patches = Some(patches);
     }

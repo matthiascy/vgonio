@@ -97,7 +97,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - spectrum: {}
         - polar angle: {}
         - azimuthal angle: {}
-      + collector:
+      + receiver:
         - domain: {}
         - precision: {}",
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
@@ -108,8 +108,8 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.emitter.spectrum,
                     params.emitter.zenith.pretty_print(),
                     params.emitter.azimuth.pretty_print(),
-                    params.detector.domain,
-                    params.detector.precision
+                    params.receiver.domain,
+                    params.receiver.precision
                 );
                 measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, &cache, None)
             }

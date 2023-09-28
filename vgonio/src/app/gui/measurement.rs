@@ -16,7 +16,7 @@ use crate::{
         },
     },
     measure::{
-        bsdf::detector::{DetectorParams, DetectorScheme},
+        bsdf::receiver::{ReceiverParams, ReceiverScheme},
         params::{MeasurementKind, MeasurementParams},
     },
     SphericalDomain,
@@ -25,12 +25,12 @@ use egui::Widget;
 use vgcore::math::Sph2;
 use vgsurf::MicroSurface;
 
-impl DetectorParams {
+impl ReceiverParams {
     /// UI for detector parameters.
     pub fn ui<R>(
         &mut self,
         ui: &mut egui::Ui,
-        add_contents: impl FnOnce(&mut DetectorParams, &mut egui::Ui) -> R,
+        add_contents: impl FnOnce(&mut ReceiverParams, &mut egui::Ui) -> R,
     ) {
         egui::CollapsingHeader::new("Detector")
             .default_open(true)
@@ -54,12 +54,12 @@ impl DetectorParams {
                         ui.horizontal_wrapped(|ui| {
                             ui.selectable_value(
                                 &mut self.scheme,
-                                DetectorScheme::Beckers,
+                                ReceiverScheme::Beckers,
                                 "Beckers",
                             );
                             ui.selectable_value(
                                 &mut self.scheme,
-                                DetectorScheme::Tregenza,
+                                ReceiverScheme::Tregenza,
                                 "Tregenza",
                             );
                         });

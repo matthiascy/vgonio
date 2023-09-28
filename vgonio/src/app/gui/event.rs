@@ -10,8 +10,8 @@ use crate::{
     fitting::FittingProblemKind,
     measure::{
         bsdf::{
-            detector::DetectorPatches,
             emitter::{EmitterSamples, MeasurementPoints},
+            receiver::ReceiverPatches,
         },
         data::MeasurementData,
         params::{MeasurementKind, MeasurementParams},
@@ -172,7 +172,7 @@ pub enum DebuggingEvent {
 
     ToggleCollectedRaysDrawing(bool),
     ToggleDetectorDomeDrawing(bool),
-    UpdateDetectorPatches(DetectorPatches),
+    UpdateDetectorPatches(ReceiverPatches),
     ToggleSamplingRendering(bool),
     UpdateDepthMap,
     UpdateRayParams {

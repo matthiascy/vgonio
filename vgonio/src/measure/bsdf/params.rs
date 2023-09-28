@@ -1,8 +1,8 @@
 use crate::{
     error::RuntimeError,
     measure::bsdf::{
-        detector::{DetectorParams, DetectorScheme},
         emitter::EmitterParams,
+        receiver::{ReceiverParams, ReceiverScheme},
         rtc::RtcMethod,
         BsdfKind,
     },
@@ -52,7 +52,7 @@ pub struct BsdfMeasurementParams {
 
     /// Incident medium of the measurement.
     pub incident_medium: Medium,
-    
+
     /// Transmitted medium of the measurement (medium of the surface).
     pub transmitted_medium: Medium,
 
@@ -60,7 +60,7 @@ pub struct BsdfMeasurementParams {
     pub emitter: EmitterParams,
 
     /// Description of the detector.
-    pub detector: DetectorParams,
+    pub receiver: ReceiverParams,
 }
 
 impl Default for BsdfMeasurementParams {
@@ -88,10 +88,10 @@ impl Default for BsdfMeasurementParams {
                 ),
                 spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
             },
-            detector: DetectorParams {
+            receiver: ReceiverParams {
                 domain: SphericalDomain::Upper,
                 precision: deg!(2.0).to_radians(),
-                scheme: DetectorScheme::Beckers,
+                scheme: ReceiverScheme::Beckers,
             },
         }
     }
@@ -137,7 +137,7 @@ impl BsdfMeasurementParams {
             ));
         }
 
-        let collector = &self.detector;
+        let collector = &self.receiver;
         if !collector.precision.is_positive() {
             return Err(VgonioError::new(
                 "Detector's precision must be positive",
@@ -150,7 +150,7 @@ impl BsdfMeasurementParams {
 
     /// Returns the total number of samples that will be collected.
     pub fn samples_count(&self) -> usize {
-        self.emitter.measurement_points_count() * self.detector.patches_count()
+        self.emitter.measurement_points_count() * self.receiver.patches_count()
     }
 
     /// Returns the parameters as a HashMap.
@@ -225,15 +225,15 @@ impl BsdfMeasurementParams {
         );
         hash_map.insert(
             Text::new_or_panic("detector.domain"),
-            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.detector.domain))),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.receiver.domain))),
         );
         hash_map.insert(
             Text::new_or_panic("detector.precision"),
-            AttributeValue::F32(self.detector.precision.in_degrees().as_f32()),
+            AttributeValue::F32(self.receiver.precision.in_degrees().as_f32()),
         );
         hash_map.insert(
             Text::new_or_panic("detector.scheme"),
-            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.detector.scheme))),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.receiver.scheme))),
         );
         hash_map
     }
