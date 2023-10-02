@@ -116,6 +116,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     type Model = Box<dyn MicrofacetDistributionModel>;
 
     fn lsq_lm_fit(self) -> FittingReport<Self::Model> {
+        use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let result: Vec<(
             Box<dyn MicrofacetDistributionModel>,
@@ -124,7 +125,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
             match self.measured {
                 MeasuredMdfData::Adf(measured) => {
                     initialise_microfacet_mdf_models(0.001, 2.0, 32, self.target)
-                        .into_iter()
+                        .into_par_iter()
                         .filter_map(|model| {
                             log::debug!(
                                 "Fitting with αx = {} αy = {}",

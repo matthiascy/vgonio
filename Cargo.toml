@@ -1,5 +1,5 @@
 [workspace]
-members = ["vgonio", "vgonio-core", "vgonio-bxdf", "vgonio-jabr", "vgonio-surf"]
+members = ["vgonio", "vgonio-core", "vgonio-bxdf", "vgonio-jabr", "vgonio-surf", "vgonio-visu"]
 resolver = "2"
 
 [workspace.package]

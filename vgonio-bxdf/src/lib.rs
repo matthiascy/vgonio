@@ -32,7 +32,7 @@ impl MicrofacetDistributionModelKind {
     }
 }
 
-pub trait MicrofacetDistributionModel: Debug {
+pub trait MicrofacetDistributionModel: Debug + Send {
     /// Returns the kind of the distribution.
     fn kind(&self) -> MicrofacetDistributionModelKind;
 
