@@ -15,6 +15,7 @@ surf-obj = ["dep:tobj", "dep:ahash"]
 [dependencies]
 ahash = { workspace = true, optional = true }
 byteorder.workspace = true
+chrono.workspace = true
 clap.workspace = true
 flate2.workspace = true
 glam.workspace = true

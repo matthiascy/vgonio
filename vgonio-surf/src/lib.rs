@@ -22,7 +22,7 @@ use std::{
 };
 use vgcore::{
     error::VgonioError,
-    io::{CompressionScheme, FileEncoding, ReadFileError, WriteFileError},
+    io::{CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError},
     math::{rcp_f32, Aabb, Vec3},
     units::LengthUnit,
 };
@@ -942,11 +942,11 @@ impl MicroSurface {
                             kind: err,
                         }, "Failed to read VGMS file."))?;
                     Ok(MicroSurface::from_samples(
-                        header.rows as usize,
-                        header.cols as usize,
-                        header.du,
-                        header.dv,
-                        header.unit,
+                        header.extra.rows as usize,
+                        header.extra.cols as usize,
+                        header.extra.du,
+                        header.extra.dv,
+                        header.extra.unit,
                         samples,
                         filepath
                             .file_stem()
@@ -1011,15 +1011,30 @@ impl MicroSurface {
                 ),
             )
         })?;
-        let header = io::vgms::Header {
-            rows: self.rows as u32,
-            cols: self.cols as u32,
-            du: self.du,
-            dv: self.dv,
-            unit: self.unit,
-            sample_data_size: 4,
-            encoding,
-            compression,
+        use io::vgms::VgmsHeaderExt;
+
+        let timestamp = {
+            let mut timestamp = [0_u8; 32];
+            let dt = chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false);
+            timestamp.copy_from_slice(dt.as_bytes());
+            timestamp
+        };
+        let header = Header {
+            meta: HeaderMeta {
+                version: 0,
+                timestamp,
+                length: 0,
+                sample_size: 4,
+                encoding,
+                compression,
+            },
+            extra: VgmsHeaderExt {
+                unit: self.unit,
+                cols: self.cols as u32,
+                rows: self.rows as u32,
+                du: self.du,
+                dv: self.dv,
+            },
         };
         let mut writer = BufWriter::new(&mut file);
         io::vgms::write(&mut writer, header, &self.samples).map_err(|err| {

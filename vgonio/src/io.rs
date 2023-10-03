@@ -3,14 +3,17 @@ use std::{
     io::{BufReader, Read, Write},
     path::Path,
 };
-use vgcore::math;
+use vgcore::{
+    io::{CompressionScheme, FileEncoding},
+    math,
+};
 
 use crate::measure::{
     bsdf::MeasuredBsdfData,
     microfacet::{MeasuredAdfData, MeasuredMsfData},
 };
 
-// TODO: revision and bsdf save/load
+pub struct MeasurementOutputHeader {}
 
 pub mod vgmo {
     use super::*;
@@ -538,14 +541,15 @@ pub mod vgmo {
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<(), WriteFileErrorKind> {
-            vgsurf::io::write_f32_data_samples(
-                writer,
-                encoding,
-                compression,
-                &self.samples,
-                self.params.zenith.step_count_wrapped() as u32,
-            )
-            .map_err(|err| err.into())
+            // vgsurf::io::write_f32_data_samples(
+            //     writer,
+            //     encoding,
+            //     compression,
+            //     &self.samples,
+            //     self.params.zenith.step_count_wrapped() as u32,
+            // )
+            // .map_err(|err| err.into())
+            todo!("write MADF data")
         }
     }
 
@@ -577,14 +581,15 @@ pub mod vgmo {
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<(), WriteFileErrorKind> {
-            vgsurf::io::write_f32_data_samples(
-                writer,
-                encoding,
-                compression,
-                &self.samples,
-                self.params.zenith.step_count_wrapped() as u32,
-            )
-            .map_err(|err| err.into())
+            // vgsurf::io::write_f32_data_samples(
+            //     writer,
+            //     encoding,
+            //     compression,
+            //     &self.samples,
+            //     self.params.zenith.step_count_wrapped() as u32,
+            // )
+            // .map_err(|err| err.into())
+            todo!("write MMSF data")
         }
     }
 

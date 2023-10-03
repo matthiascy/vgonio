@@ -9,6 +9,7 @@
 #![feature(vec_push_within_capacity)]
 #![feature(assert_matches)]
 #![feature(stmt_expr_attributes)]
+#![feature(adt_const_params)]
 #![warn(missing_docs)]
 
 extern crate core;

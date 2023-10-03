@@ -11,7 +11,7 @@ use std::{
 #[derive(Debug)]
 pub struct VgonioError {
     message: String,
-    source: Option<Box<dyn Error>>,
+    source: Option<Box<dyn Error + Send + Sync>>,
 }
 
 impl Display for VgonioError {
@@ -28,7 +28,7 @@ impl Error for VgonioError {}
 
 impl VgonioError {
     /// Create a new VgonioError.
-    pub fn new<S>(message: S, source: Option<Box<dyn Error>>) -> Self
+    pub fn new<S>(message: S, source: Option<Box<dyn Error + Send + Sync>>) -> Self
     where
         S: Into<String>,
     {

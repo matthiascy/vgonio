@@ -18,6 +18,7 @@ visu-dbg = []
 verbose-dbg = []
 
 [dependencies]
+chrono = { workspace = true }
 clap = { workspace = true }
 embree = { workspace = true, optional = true }
 exr = { workspace = true }
@@ -33,7 +34,6 @@ uuid = { workspace = true }
 approx = "0.5"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
-chrono = "0.4"
 csv = "1"
 dirs = "5.0"
 egui = { version = "0.22", features = ["bytemuck"] }

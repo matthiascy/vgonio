@@ -2,7 +2,12 @@
 
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
-use std::{fmt, fmt::Display, path::Path};
+use std::{
+    fmt,
+    fmt::Display,
+    io::{BufReader, BufWriter, Read, Write},
+    path::Path,
+};
 
 /// Error type when reading a file.
 #[derive(Debug)]
@@ -267,4 +272,136 @@ impl CompressionScheme {
 
     /// Returns true if the data is compressed with gzip.
     pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VgonioFileVariant {
+    /// A Measurement Output file.
+    Vgmo,
+    /// A Micro-surface profile file.
+    Vgms,
+}
+
+/// Meta information of a VG file.
+pub struct HeaderMeta {
+    /// Version of the file.
+    pub version: u32,
+    /// Timestamp in RFC3339 and ISO 8601 format.
+    pub timestamp: [u8; 32],
+    /// Length of the whole file in bytes.
+    pub length: u32,
+    /// Size of a single sample in bytes.
+    pub sample_size: u8,
+    /// The file encoding.
+    pub encoding: FileEncoding,
+    /// The compression scheme.
+    pub compression: CompressionScheme,
+}
+
+/// Trait for extra information of a file variant.
+pub trait HeaderExt: Sized {
+    /// The magic number of the file variant.
+    const MAGIC: &'static [u8; 4];
+
+    /// The size of the extra information in bytes in the memory.
+    fn size() -> usize;
+
+    fn variant() -> VgonioFileVariant;
+
+    fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()>;
+
+    fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self>;
+}
+
+/// Header of a VG file.
+pub struct Header<E: HeaderExt> {
+    pub meta: HeaderMeta,
+    /// The file variant.
+    pub extra: E,
+}
+
+impl<E: HeaderExt> Header<E> {
+    /// Writes the header to a writer.
+    ///
+    /// Note: the length of the whole file is not known at this point. Therefore
+    /// the length field is set to 0. The length field is updated after the
+    /// whole file is written.
+    pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
+        writer.write_all(E::MAGIC)?;
+        writer.write_all(&self.meta.version.to_le_bytes())?;
+        writer.write_all(&self.meta.length.to_le_bytes())?;
+        writer.write_all(&self.meta.timestamp)?;
+        writer.write_all(&[self.meta.sample_size])?;
+        writer.write_all(&[self.meta.encoding as u8])?;
+        writer.write_all(&[self.meta.compression as u8])?;
+        writer.write_all(&[0u8; 1])?; // padding
+        self.extra.write(writer)?;
+        Ok(())
+    }
+
+    /// Returns the position of the length field in the serialized header.
+    pub const fn length_pos() -> usize { E::MAGIC.len() + std::mem::size_of::<u32>() }
+
+    /// Reads the header from the given reader.
+    /// The reader must be positioned at the start of the header.
+    pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+        let mut magic = [0u8; 4];
+        reader.read_exact(&mut magic)?;
+        if magic != *E::MAGIC {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid magic number",
+            ));
+        } else {
+            let mut buf = [0u8; 4];
+            let version = {
+                reader.read_exact(&mut buf)?;
+                u32::from_le_bytes(buf)
+            };
+            let length = {
+                reader.read_exact(&mut buf)?;
+                u32::from_le_bytes(buf)
+            };
+            let timestamp = {
+                let mut buf = [0u8; 32];
+                reader.read_exact(&mut buf)?;
+                buf
+            };
+            reader.read_exact(&mut buf)?;
+            let sample_size = buf[0];
+            let encoding = FileEncoding::from(buf[1]);
+            let compression = CompressionScheme::from(buf[2]);
+            let extra = E::read(reader)?;
+            Ok(Self {
+                meta: HeaderMeta {
+                    version,
+                    timestamp,
+                    length,
+                    sample_size,
+                    encoding,
+                    compression,
+                },
+                extra,
+            })
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        if self.meta.version == 0 {
+            E::MAGIC.len()
+                + std::mem::size_of::<u32>()
+                + std::mem::size_of::<u32>()
+                + 32
+                + 1
+                + 1
+                + 1
+                + 1
+                + E::size()
+        } else {
+            panic!(
+                "Header size is not known for version == {}",
+                self.meta.version
+            );
+        }
+    }
 }

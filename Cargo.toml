@@ -12,6 +12,7 @@ ahash = "0.8"
 approx = "0.5"
 byteorder = "1.4"
 cfg-if = "1.0"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 exr = "1.71"

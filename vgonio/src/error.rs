@@ -57,6 +57,9 @@ impl Display for RuntimeError {
 
 impl std::error::Error for RuntimeError {}
 
+unsafe impl Send for RuntimeError {}
+unsafe impl Sync for RuntimeError {}
+
 #[derive(Debug)]
 pub struct WgpuError {
     source: Box<dyn std::error::Error + Send + 'static>,

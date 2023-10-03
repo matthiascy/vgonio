@@ -81,6 +81,7 @@ use crate::app::{
     cli::{resolve_output_dir, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
     Config,
 };
+use image::load;
 use std::path::PathBuf;
 #[cfg(feature = "surf-obj")]
 use vgcore::units::LengthUnit;
@@ -93,73 +94,130 @@ use vgcore::{
 use vgsurf::MicroSurface;
 
 pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
-    log::info!("Converting files...");
     let output_dir = resolve_output_dir(&config, &opts.output)?;
     for input in opts.inputs {
         let resolved = resolve_path(&config.cwd, Some(&input));
-        log::info!("Converting {:?}", resolved);
+        let files = if resolved.is_dir() {
+            let mut files = Vec::new();
+            let dir_entry = std::fs::read_dir(&resolved);
+            if let Err(err) = dir_entry {
+                eprintln!(
+                    "  {BRIGHT_RED}!{RESET} Failed to read directory \"{}\": {}",
+                    resolved.display(),
+                    err
+                );
+                continue;
+            }
+            for entry in dir_entry.unwrap() {
+                if let Err(err) = entry {
+                    eprintln!(
+                        "  {BRIGHT_RED}!{RESET} Failed to read directory \"{}\": {}",
+                        resolved.display(),
+                        err
+                    );
+                    continue;
+                }
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_file() {
+                    files.push(path);
+                } else {
+                    continue;
+                }
+            }
+            files
+        } else {
+            vec![resolved.clone()]
+        };
         match opts.kind {
             ConvertKind::MicroSurfaceProfile => {
-                let (profile, filename) = {
-                    #[cfg(feature = "surf-obj")]
-                    let loaded = match resolved.extension() {
-                        None => MicroSurface::read_from_file(&resolved, None)?,
-                        Some(ext) => {
-                            if ext == "obj" {
-                                MicroSurface::read_from_wavefront(
-                                    &resolved,
-                                    opts.axis.unwrap_or(Axis::Z),
-                                    LengthUnit::UM,
-                                )?
+                use rayon::prelude::*;
+                let errors = files
+                    .par_iter()
+                    .filter_map(|file| {
+                        log::info!("Converting {:?}", file);
+                        let result: Result<(MicroSurface, String), VgonioError> = {
+                            #[cfg(feature = "surf-obj")]
+                            let loaded = match resolved.extension() {
+                                None => MicroSurface::read_from_file(&file, None),
+                                Some(ext) => {
+                                    if ext == "obj" {
+                                        MicroSurface::read_from_wavefront(
+                                            &resolved,
+                                            opts.axis.unwrap_or(Axis::Z),
+                                            LengthUnit::UM,
+                                        )
+                                    } else {
+                                        MicroSurface::read_from_file(&file, None)
+                                    }
+                                }
+                            };
+                            #[cfg(not(feature = "surf-obj"))]
+                            let loaded = MicroSurface::read_from_file(&resolved, None);
+
+                            if let Ok(loaded) = loaded {
+                                let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
+                                    let (w, h) = (new_size[0] as usize, new_size[1] as usize);
+                                    println!(
+                                        "  {BRIGHT_YELLOW}>{RESET} Resizing to {}x{}...",
+                                        w, h
+                                    );
+                                    (w, h)
+                                } else {
+                                    (loaded.cols, loaded.rows)
+                                };
+
+                                let (w, h) = if opts.squaring {
+                                    let s = w.min(h);
+                                    println!(
+                                        "  {BRIGHT_YELLOW}>{RESET} Squaring to {}x{}...",
+                                        s, s
+                                    );
+                                    (s, s)
+                                } else {
+                                    (w, h)
+                                };
+
+                                let filename = format!(
+                                    "{}_converted.vgms",
+                                    loaded.file_stem().unwrap().to_ascii_lowercase().as_str()
+                                );
+                                Ok((loaded.resize(h, w), filename))
                             } else {
-                                MicroSurface::read_from_file(&resolved, None)?
+                                Err(loaded.err().unwrap())
                             }
+                        };
+
+                        if let Ok((ref profile, ref filename)) = result {
+                            println!(
+                                "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",
+                                file, output_dir
+                            );
+
+                            profile
+                                .write_to_file(
+                                    &output_dir.join(filename),
+                                    opts.encoding,
+                                    opts.compression,
+                                )
+                                .unwrap_or_else(|err| {
+                                    eprintln!(
+                                        "  {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                                        resolved.display(),
+                                        err
+                                    );
+                                });
                         }
-                    };
-                    #[cfg(not(feature = "surf-obj"))]
-                    let loaded = MicroSurface::read_from_file(&resolved, None)?;
-
-                    let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
-                        let (w, h) = (new_size[0] as usize, new_size[1] as usize);
-                        println!("  {BRIGHT_YELLOW}>{RESET} Resizing to {}x{}...", w, h);
-                        (w, h)
-                    } else {
-                        (loaded.cols, loaded.rows)
-                    };
-
-                    let (w, h) = if opts.squaring {
-                        let s = w.min(h);
-                        println!("  {BRIGHT_YELLOW}>{RESET} Squaring to {}x{}...", s, s);
-                        (s, s)
-                    } else {
-                        (w, h)
-                    };
-
-                    let filename = format!(
-                        "{}_converted.vgms",
-                        resolved
-                            .file_stem()
-                            .unwrap()
-                            .to_ascii_lowercase()
-                            .to_str()
-                            .unwrap()
-                    );
-                    (loaded.resize(h, w), filename)
-                };
-                println!(
-                    "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",
-                    resolved, output_dir
-                );
-
-                profile
-                    .write_to_file(&output_dir.join(filename), opts.encoding, opts.compression)
-                    .unwrap_or_else(|err| {
-                        eprintln!(
-                            "  {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
-                            resolved.display(),
-                            err
-                        );
-                    });
+                        result.err()
+                    })
+                    .collect::<Vec<_>>();
+                for err in errors {
+                    eprintln!(
+                        "  {BRIGHT_RED}!{RESET} Failed to convert \"{}\": {}",
+                        resolved.display(),
+                        err
+                    )
+                }
                 println!("{BRIGHT_CYAN}✓{RESET} Done!",);
             }
         }

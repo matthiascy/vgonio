@@ -11,23 +11,22 @@ use vgcore::math::Axis;
 use vgcore::{
     error::VgonioError,
     io::{
-        CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
-        ReadFileErrorKind,
+        CompressionScheme, FileEncoding, Header, HeaderExt, ParseError, ParseErrorKind,
+        ReadFileError, ReadFileErrorKind,
     },
 };
 
 /// Write the data samples to the given writer.
-pub fn write_f32_data_samples<W: Write>(
+pub fn write_f32_data_samples<W: Write, E: HeaderExt>(
     writer: &mut BufWriter<W>,
-    encoding: FileEncoding,
-    compression: CompressionScheme,
+    header: &Header<E>,
     samples: &[f32],
     cols: u32,
-) -> Result<(), std::io::Error> {
+) -> Result<usize, std::io::Error> {
     let mut zlib_encoder;
     let mut gzip_encoder;
 
-    let mut encoder: Box<&mut dyn Write> = match compression {
+    let mut encoder: Box<&mut dyn Write> = match header.meta.compression {
         CompressionScheme::None => Box::new(writer),
         CompressionScheme::Zlib => {
             zlib_encoder = flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
@@ -40,7 +39,9 @@ pub fn write_f32_data_samples<W: Write>(
         _ => Box::new(writer),
     };
 
-    match encoding {
+    let mut num_bytes = 0;
+
+    match header.meta.encoding {
         FileEncoding::Ascii => {
             for (i, s) in samples.iter().enumerate() {
                 let val = if i as u32 % cols == cols - 1 {
@@ -48,17 +49,19 @@ pub fn write_f32_data_samples<W: Write>(
                 } else {
                     format!("{s} ")
                 };
-                encoder.write_all(val.as_bytes())?;
+                num_bytes += encoder.write(val.as_bytes())?;
             }
         }
         FileEncoding::Binary => {
-            for s in samples.iter() {
-                encoder.write_all(&s.to_le_bytes())?;
-            }
+            let to_write = samples
+                .iter()
+                .flat_map(|s| s.to_le_bytes())
+                .collect::<Vec<_>>();
+            num_bytes = encoder.write(&to_write)?;
         }
     }
-
-    Ok(())
+    // FIXME: num_bytes for compression is not correct
+    Ok(num_bytes)
 }
 
 /// Read the data samples from the given reader.
@@ -190,15 +193,19 @@ use vgcore::units::LengthUnit;
 /// Micro-surface file format.
 pub mod vgms {
     use super::*;
-    use std::io::{BufWriter, Read, Write};
+    use byteorder::WriteBytesExt;
+    use serde::Serializer;
+    use std::io::{BufWriter, Read, Seek, Write};
     use vgcore::{
-        io::{ReadFileErrorKind, WriteFileErrorKind},
+        io::{Header, HeaderExt, ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind},
         units::LengthUnit,
     };
 
     /// Header of the VGMS file.
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub struct Header {
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct VgmsHeaderExt {
+        /// The unit used for the micro-surface.
+        pub unit: LengthUnit,
         /// Number of rows of the micro-surface.
         pub rows: u32,
         /// Number of columns of the micro-surface.
@@ -207,103 +214,98 @@ pub mod vgms {
         pub du: f32,
         /// The vertical spacing between samples.
         pub dv: f32,
-        /// The unit used for the micro-surface.
-        pub unit: LengthUnit,
-        /// Size of one sample in bytes.
-        pub sample_data_size: u8,
-        /// The encoding of the file.
-        pub encoding: FileEncoding,
-        /// The compression scheme used for the file.
-        pub compression: CompressionScheme,
     }
 
-    impl Header {
-        /// The magic number of a VGMS file.
-        pub const MAGIC: &'static [u8] = b"VGMS";
+    impl HeaderExt for VgmsHeaderExt {
+        const MAGIC: &'static [u8; 4] = b"VGMS";
 
-        /// Returns the number of samples in the file.
-        pub const fn sample_count(&self) -> u32 { self.rows * self.cols }
+        fn size() -> usize { 4 + 4 + 4 + 4 + 4 }
 
-        /// Writes the header to the given writer.
-        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
-            let mut header = [0x20u8; 32];
-            header[0..4].copy_from_slice(Self::MAGIC);
-            header[4..8].copy_from_slice(&self.rows.to_le_bytes());
-            header[8..12].copy_from_slice(&self.cols.to_le_bytes());
-            header[12..16].copy_from_slice(&self.du.to_le_bytes());
-            header[16..20].copy_from_slice(&self.dv.to_le_bytes());
-            header[20] = self.unit as u8;
-            header[21] = self.sample_data_size;
-            header[22] = self.encoding as u8;
-            header[23] = self.compression as u8;
-            header[31] = 0x0A; // LF
-            writer.write_all(&header)
+        fn variant() -> VgonioFileVariant { VgonioFileVariant::Vgms }
+
+        fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
+            writer.write_all(&(self.unit as u32).to_le_bytes())?;
+            writer.write_all(&self.cols.to_le_bytes())?;
+            writer.write_all(&self.rows.to_le_bytes())?;
+            writer.write_all(&self.du.to_le_bytes())?;
+            writer.write_all(&self.dv.to_le_bytes())?;
+            Ok(())
         }
 
-        /// Reads the header from the given reader.
-        ///
-        /// The reader must be positioned at the start of the header.
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; 32];
-            reader.read_exact(&mut buf)?;
+        fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self> {
+            let mut buf = [0u8; 4];
+            let unit = {
+                reader.read_exact(&mut buf)?;
+                LengthUnit::from(u32::from_le_bytes(buf) as u8)
+            };
 
-            if &buf[0..4] != Self::MAGIC {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid VGMS header {:?}", &buf[0..4]),
-                ));
-            }
+            let cols = {
+                reader.read_exact(&mut buf)?;
+                u32::from_le_bytes(buf)
+            };
 
-            let rows = u32::from_le_bytes(buf[4..8].try_into().unwrap());
-            let cols = u32::from_le_bytes(buf[8..12].try_into().unwrap());
-            let du = f32::from_le_bytes(buf[12..16].try_into().unwrap());
-            let dv = f32::from_le_bytes(buf[16..20].try_into().unwrap());
-            let unit = LengthUnit::from(buf[20]);
-            let sample_data_size = buf[21];
-            let encoding = FileEncoding::from(buf[22]);
-            let compression = CompressionScheme::from(buf[23]);
+            let rows = {
+                reader.read_exact(&mut buf)?;
+                u32::from_le_bytes(buf)
+            };
+
+            let du = {
+                reader.read_exact(&mut buf)?;
+                f32::from_le_bytes(buf)
+            };
+
+            let dv = {
+                reader.read_exact(&mut buf)?;
+                f32::from_le_bytes(buf)
+            };
             Ok(Self {
                 rows,
                 cols,
                 du,
                 dv,
                 unit,
-                sample_data_size,
-                encoding,
-                compression,
             })
         }
+    }
+
+    impl VgmsHeaderExt {
+        /// Returns the number of samples in the file.
+        pub const fn sample_count(&self) -> u32 { self.rows * self.cols }
     }
 
     /// Reads the VGMS file from the given reader.
     pub fn read<R: Read>(
         reader: &mut BufReader<R>,
-    ) -> Result<(Header, Vec<f32>), ReadFileErrorKind> {
-        let header = Header::read(reader)?;
+    ) -> Result<(Header<VgmsHeaderExt>, Vec<f32>), ReadFileErrorKind> {
+        let header = Header::<VgmsHeaderExt>::read(reader)?;
+        // TODO: match header.meta.sample_size
         let samples = read_f32_data_samples(
             reader,
-            header.sample_count() as usize,
-            header.encoding,
-            header.compression,
+            header.extra.sample_count() as usize,
+            header.meta.encoding,
+            header.meta.compression,
         )?;
         Ok((header, samples))
     }
 
     /// Writes the VGMS file to the given writer.
-    pub fn write<W: Write>(
+    pub fn write<W: Write + Seek>(
         writer: &mut BufWriter<W>,
-        header: Header,
+        header: Header<VgmsHeaderExt>,
         samples: &[f32],
     ) -> Result<(), WriteFileErrorKind> {
         header.write(writer)?;
-        write_f32_data_samples(
-            writer,
-            header.encoding,
-            header.compression,
-            samples,
-            header.cols,
-        )
-        .map_err(|err| err.into())
+        // TODO: match header.meta.sample_size
+        let data_size = write_f32_data_samples(writer, &header, samples, header.extra.cols)
+            .map_err(|err| WriteFileErrorKind::Write(err))?;
+        // TODO: fix length calculation
+        let length = data_size + header.size();
+        log::debug!("Writing VGMS file with length: {}", length);
+        writer.seek(std::io::SeekFrom::Start(
+            Header::<VgmsHeaderExt>::length_pos() as u64,
+        ))?;
+        writer.write_all(&(length as u32).to_le_bytes())?;
+        Ok(())
     }
 }
 
