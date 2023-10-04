@@ -1,4 +1,5 @@
 #![feature(byte_slice_trim_ascii)]
+#![feature(seek_stream_len)]
 //! Heightfield
 #![warn(missing_docs)]
 
@@ -17,12 +18,15 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Read, Seek},
+    io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
 };
 use vgcore::{
     error::VgonioError,
-    io::{CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError},
+    io::{
+        CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError,
+        WriteFileErrorKind,
+    },
     math::{rcp_f32, Aabb, Vec3},
     units::LengthUnit,
 };
@@ -1044,6 +1048,15 @@ impl MicroSurface {
                     kind: err,
                 },
                 "Failed to write VGMS file.",
+            )
+        })?;
+        writer.flush().map_err(|err| {
+            VgonioError::from_write_file_error(
+                WriteFileError {
+                    path: filepath.to_owned().into_boxed_path(),
+                    kind: WriteFileErrorKind::Write(err),
+                },
+                "Failed to flush VGMS file.",
             )
         })
     }

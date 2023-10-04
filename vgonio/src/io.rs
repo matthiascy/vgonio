@@ -3,10 +3,7 @@ use std::{
     io::{BufReader, Read, Write},
     path::Path,
 };
-use vgcore::{
-    io::{CompressionScheme, FileEncoding},
-    math,
-};
+use vgcore::math;
 
 use crate::measure::{
     bsdf::MeasuredBsdfData,

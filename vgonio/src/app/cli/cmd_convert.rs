@@ -77,11 +77,9 @@ pub enum ConvertKind {
 }
 
 use crate::app::{
-    cache::resolve_path,
-    cli::{resolve_output_dir, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
+    cli::{BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
     Config,
 };
-use image::load;
 use std::path::PathBuf;
 #[cfg(feature = "surf-obj")]
 use vgcore::units::LengthUnit;
@@ -94,9 +92,17 @@ use vgcore::{
 use vgsurf::MicroSurface;
 
 pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
-    let output_dir = resolve_output_dir(&config, &opts.output)?;
+    let output_dir = config.resolve_output_dir(&opts.output)?;
     for input in opts.inputs {
-        let resolved = resolve_path(&config.cwd, Some(&input));
+        let resolved = {
+            let path = config.resolve_path(&input);
+            if path.is_none() {
+                continue;
+            } else {
+                path.unwrap()
+            }
+        };
+        log::debug!("Resolved path: {:?}", resolved);
         let files = if resolved.is_dir() {
             let mut files = Vec::new();
             let dir_entry = std::fs::read_dir(&resolved);
@@ -134,26 +140,26 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                 use rayon::prelude::*;
                 let errors = files
                     .par_iter()
-                    .filter_map(|file| {
-                        log::info!("Converting {:?}", file);
+                    .filter_map(|filepath| {
+                        log::info!("Converting {:?}", filepath);
                         let result: Result<(MicroSurface, String), VgonioError> = {
                             #[cfg(feature = "surf-obj")]
-                            let loaded = match resolved.extension() {
-                                None => MicroSurface::read_from_file(&file, None),
+                            let loaded = match filepath.extension() {
+                                None => MicroSurface::read_from_file(&filepath, None),
                                 Some(ext) => {
                                     if ext == "obj" {
                                         MicroSurface::read_from_wavefront(
-                                            &resolved,
+                                            &filepath,
                                             opts.axis.unwrap_or(Axis::Z),
                                             LengthUnit::UM,
                                         )
                                     } else {
-                                        MicroSurface::read_from_file(&file, None)
+                                        MicroSurface::read_from_file(&filepath, None)
                                     }
                                 }
                             };
                             #[cfg(not(feature = "surf-obj"))]
-                            let loaded = MicroSurface::read_from_file(&resolved, None);
+                            let loaded = MicroSurface::read_from_file(&filepath, None);
 
                             if let Ok(loaded) = loaded {
                                 let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
@@ -191,7 +197,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                         if let Ok((ref profile, ref filename)) = result {
                             println!(
                                 "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",
-                                file, output_dir
+                                filepath, output_dir
                             );
 
                             profile

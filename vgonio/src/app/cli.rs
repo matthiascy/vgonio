@@ -8,10 +8,9 @@ use vgsurf::MicroSurface;
 use crate::{
     app::{
         args::SubCommand,
-        cache::{resolve_path, Handle, InnerCache},
+        cache::{Handle, InnerCache},
         Config,
     },
-    error::RuntimeError,
     measure::{data::MeasurementData, params::MeasurementKind},
 };
 
@@ -56,7 +55,7 @@ fn write_measured_data_to_file(
     compression: CompressionScheme,
     output: &Option<PathBuf>,
 ) -> Result<(), VgonioError> {
-    let output_dir = resolve_output_dir(config, output)?;
+    let output_dir = config.resolve_output_dir(output)?;
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     // TODO: Add support for other formats.
     for (measurement, surface) in data.iter().zip(surfaces.iter()) {
@@ -123,30 +122,4 @@ fn write_measured_data_to_file(
         );
     }
     Ok(())
-}
-
-/// Returns the output directory in canonical form.
-/// If the output directory is not specified, returns config's output directory.
-///
-/// # Arguments
-///
-/// * `config` - The configuration of the current Vgonio session.
-/// * `output` - The output directory specified by the user.
-fn resolve_output_dir(
-    config: &Config,
-    output_dir: &Option<PathBuf>,
-) -> Result<PathBuf, VgonioError> {
-    match output_dir {
-        Some(dir) => {
-            let path = resolve_path(config.cwd(), Some(dir));
-            if !path.is_dir() {
-                return Err(VgonioError::new(
-                    format!("{} is not a directory", path.display()),
-                    Some(Box::new(RuntimeError::InvalidOutputDir)),
-                ));
-            }
-            Ok(path)
-        }
-        None => Ok(config.output_dir().to_path_buf()),
-    }
 }

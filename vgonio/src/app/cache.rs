@@ -415,7 +415,7 @@ impl InnerCache {
         config: &Config,
         path: &Path,
     ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), VgonioError> {
-        match self.resolve_path(path, config) {
+        match config.resolve_path(path) {
             None => Err(VgonioError::new(
                 format!(
                     "Failed to resolve micro-surface file path: \"{}\"",
@@ -490,7 +490,7 @@ impl InnerCache {
         config: &Config,
         path: &Path,
     ) -> Result<Handle<MeasurementData>, VgonioError> {
-        match self.resolve_path(path, config) {
+        match config.resolve_path(path) {
             None => Err(VgonioError::new(
                 "Failed to resolve measurement file.",
                 None,
@@ -511,26 +511,6 @@ impl InnerCache {
                     Ok(handle)
                 }
             }
-        }
-    }
-
-    /// Resolves a path to a file.
-    fn resolve_path(&self, path: &Path, config: &Config) -> Option<PathBuf> {
-        if let Ok(stripped) = path.strip_prefix("usr://") {
-            if config.user_data_dir().is_some() {
-                config.user_data_dir().map(|p| p.join(stripped))
-            } else {
-                log::warn!(
-                    "The file path begins with `usr://`: {}, but the user data directory is not \
-                     configured.",
-                    path.display()
-                );
-                None
-            }
-        } else if let Ok(stripped) = path.strip_prefix("sys://") {
-            Some(config.sys_data_dir().join(stripped))
-        } else {
-            Some(resolve_path(&config.cwd, Some(path)))
         }
     }
 
@@ -556,7 +536,7 @@ impl InnerCache {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
             .iter()
-            .filter_map(|s| self.resolve_path(s, config))
+            .filter_map(|s| config.resolve_path(s))
             .collect::<Vec<_>>();
         log::debug!("-- canonical paths: {:?}", canonical_paths);
         let mut loaded = vec![];
@@ -675,87 +655,6 @@ impl InnerCache {
 
         n_files
     }
-}
-
-/// Resolves the path to canonical form.
-///
-/// # Note
-///
-/// Resolved path is not guaranteed to exist.
-///
-/// # Arguments
-///
-/// * `base` - Base path to resolve relative paths.
-///
-/// * `path` - Path to be resolved.
-///
-/// # Returns
-///
-/// A `PathBuf` indicating the resolved path. It differs according to the
-/// base path and patterns inside of `path`.
-///
-///   1. `path` is `None`
-///
-///      Returns the `base` path.
-///
-///   2. `path` is relative
-///
-///      Returns the a path which is relative to `base` path, with
-///      the remaining of the `path` appended.
-///
-///   3. `path` is absolute
-///
-///      Returns the `path` as is.
-pub(crate) fn resolve_path(base: &Path, path: Option<&Path>) -> PathBuf {
-    path.map_or(base.to_path_buf(), |path| {
-        let path = if path.is_relative() {
-            base.join(path)
-        } else {
-            path.to_path_buf()
-        };
-
-        if !path.exists() {
-            normalise_path(&path)
-        } else {
-            path.canonicalize().unwrap()
-        }
-    })
-}
-
-/// Resolves the path to canonical form even if the path does not exist.
-pub(crate) fn normalise_path(path: &Path) -> PathBuf {
-    use std::path::Component;
-    let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
-
-    for component in components {
-        match component {
-            Component::Prefix(..) => unreachable!(),
-            Component::RootDir => {
-                ret.push(component.as_os_str());
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                ret.pop();
-            }
-            Component::Normal(c) => {
-                ret.push(c);
-            }
-        }
-    }
-    ret
-}
-
-#[test]
-fn test_normalise_path() {
-    let path = Path::new("/a/b/c/../../d");
-    let normalised = normalise_path(path);
-    assert_eq!(normalised, Path::new("/a/d"));
 }
 
 /// A thread-safe cache. This is a wrapper around `InnerCache`.

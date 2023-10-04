@@ -274,6 +274,7 @@ impl CompressionScheme {
     pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
 }
 
+/// Enum for different file variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VgonioFileVariant {
     /// A Measurement Output file.
@@ -306,17 +307,21 @@ pub trait HeaderExt: Sized {
     /// The size of the extra information in bytes in the memory.
     fn size() -> usize;
 
+    /// The file variant.
     fn variant() -> VgonioFileVariant;
 
+    /// Writes the extra information to a writer.
     fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()>;
 
+    /// Reads the extra information from a reader.
     fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self>;
 }
 
 /// Header of a VG file.
 pub struct Header<E: HeaderExt> {
+    /// The meta information.
     pub meta: HeaderMeta,
-    /// The file variant.
+    /// The file variant specific extra information.
     pub extra: E,
 }
 
@@ -383,25 +388,6 @@ impl<E: HeaderExt> Header<E> {
                 },
                 extra,
             })
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        if self.meta.version == 0 {
-            E::MAGIC.len()
-                + std::mem::size_of::<u32>()
-                + std::mem::size_of::<u32>()
-                + 32
-                + 1
-                + 1
-                + 1
-                + 1
-                + E::size()
-        } else {
-            panic!(
-                "Header size is not known for version == {}",
-                self.meta.version
-            );
         }
     }
 }

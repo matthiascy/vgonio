@@ -1,7 +1,6 @@
 //! Reading and writing of surface files.
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use serde::{Deserialize, Serialize};
 use std::{
     io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
@@ -11,57 +10,61 @@ use vgcore::math::Axis;
 use vgcore::{
     error::VgonioError,
     io::{
-        CompressionScheme, FileEncoding, Header, HeaderExt, ParseError, ParseErrorKind,
-        ReadFileError, ReadFileErrorKind,
+        CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
+        ReadFileErrorKind,
     },
 };
 
-/// Write the data samples to the given writer.
-pub fn write_f32_data_samples<W: Write, E: HeaderExt>(
+/// Writes the samples to the given writer in ascii format.
+pub fn write_f32_data_samples_ascii<W: Write>(
     writer: &mut BufWriter<W>,
-    header: &Header<E>,
     samples: &[f32],
     cols: u32,
-) -> Result<usize, std::io::Error> {
-    let mut zlib_encoder;
-    let mut gzip_encoder;
+) -> Result<(), std::io::Error> {
+    for (i, s) in samples.iter().enumerate() {
+        let val = if i as u32 % cols == cols - 1 {
+            format!("{s}\n")
+        } else {
+            format!("{s} ")
+        };
+        writer.write_all(val.as_bytes())?;
+    }
+    Ok(())
+}
 
-    let mut encoder: Box<&mut dyn Write> = match header.meta.compression {
-        CompressionScheme::None => Box::new(writer),
-        CompressionScheme::Zlib => {
-            zlib_encoder = flate2::write::ZlibEncoder::new(writer, flate2::Compression::default());
-            Box::new(&mut zlib_encoder)
-        }
-        CompressionScheme::Gzip => {
-            gzip_encoder = flate2::write::GzEncoder::new(writer, flate2::Compression::default());
-            Box::new(&mut gzip_encoder)
-        }
-        _ => Box::new(writer),
-    };
-
-    let mut num_bytes = 0;
-
-    match header.meta.encoding {
-        FileEncoding::Ascii => {
-            for (i, s) in samples.iter().enumerate() {
-                let val = if i as u32 % cols == cols - 1 {
-                    format!("{s}\n")
-                } else {
-                    format!("{s} ")
-                };
-                num_bytes += encoder.write(val.as_bytes())?;
+/// Write the data samples to the given writer.
+pub fn write_f32_data_samples_binary<W: Write>(
+    writer: &mut BufWriter<W>,
+    comp: CompressionScheme,
+    samples: &[f32],
+) -> Result<(), std::io::Error> {
+    match comp {
+        CompressionScheme::None => {
+            for s in samples {
+                writer.write_all(&s.to_le_bytes())?;
             }
         }
-        FileEncoding::Binary => {
-            let to_write = samples
-                .iter()
-                .flat_map(|s| s.to_le_bytes())
-                .collect::<Vec<_>>();
-            num_bytes = encoder.write(&to_write)?;
+        CompressionScheme::Zlib => {
+            let buf = vec![];
+            let mut zlib_encoder =
+                flate2::write::ZlibEncoder::new(buf, flate2::Compression::default());
+            for s in samples {
+                zlib_encoder.write_all(&s.to_le_bytes())?;
+            }
+            writer.write_all(&zlib_encoder.flush_finish()?)?;
         }
+        CompressionScheme::Gzip => {
+            let buf = vec![];
+            let mut gzip_encoder =
+                flate2::write::GzEncoder::new(buf, flate2::Compression::default());
+            for s in samples {
+                gzip_encoder.write_all(&s.to_le_bytes())?;
+            }
+            writer.write_all(&gzip_encoder.finish()?)?;
+        }
+        _ => {}
     }
-    // FIXME: num_bytes for compression is not correct
-    Ok(num_bytes)
+    Ok(())
 }
 
 /// Read the data samples from the given reader.
@@ -193,8 +196,6 @@ use vgcore::units::LengthUnit;
 /// Micro-surface file format.
 pub mod vgms {
     use super::*;
-    use byteorder::WriteBytesExt;
-    use serde::Serializer;
     use std::io::{BufWriter, Read, Seek, Write};
     use vgcore::{
         io::{Header, HeaderExt, ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind},
@@ -278,6 +279,8 @@ pub mod vgms {
         reader: &mut BufReader<R>,
     ) -> Result<(Header<VgmsHeaderExt>, Vec<f32>), ReadFileErrorKind> {
         let header = Header::<VgmsHeaderExt>::read(reader)?;
+        log::debug!("Reading VGMS file of length: {}", header.meta.length);
+        // TODO: file length
         // TODO: match header.meta.sample_size
         let samples = read_f32_data_samples(
             reader,
@@ -294,17 +297,25 @@ pub mod vgms {
         header: Header<VgmsHeaderExt>,
         samples: &[f32],
     ) -> Result<(), WriteFileErrorKind> {
+        let init_size = writer.stream_len().unwrap();
         header.write(writer)?;
+
         // TODO: match header.meta.sample_size
-        let data_size = write_f32_data_samples(writer, &header, samples, header.extra.cols)
-            .map_err(|err| WriteFileErrorKind::Write(err))?;
-        // TODO: fix length calculation
-        let length = data_size + header.size();
-        log::debug!("Writing VGMS file with length: {}", length);
+        match header.meta.encoding {
+            FileEncoding::Ascii => write_f32_data_samples_ascii(writer, samples, header.extra.cols),
+            FileEncoding::Binary => {
+                write_f32_data_samples_binary(writer, header.meta.compression, samples)
+            }
+        }
+        .map_err(|err| WriteFileErrorKind::Write(err))?;
+
+        let length = writer.stream_len().unwrap() - init_size;
         writer.seek(std::io::SeekFrom::Start(
             Header::<VgmsHeaderExt>::length_pos() as u64,
         ))?;
         writer.write_all(&(length as u32).to_le_bytes())?;
+
+        log::debug!("Writing VGMS file with length: {}", length);
         Ok(())
     }
 }

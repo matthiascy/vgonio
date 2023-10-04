@@ -1,7 +1,7 @@
 use crate::{
     app::{
         args::MeasureOptions,
-        cache::{resolve_path, InnerCache},
+        cache::InnerCache,
         cli::{write_measured_data_to_file, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
         Config,
     },
@@ -31,16 +31,18 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     let measurements = opts
         .inputs
         .iter()
-        .filter_map(|meas_path| {
-            let resolved = resolve_path(&config.cwd, Some(meas_path));
-            match Measurement::load(&resolved) {
-                Ok(meas) => Some(meas),
-                Err(err) => {
-                    log::warn!("Failed to load measurement description file: {}", err);
-                    None
-                }
-            }
+        .flat_map(|meas_path| {
+            config
+                .resolve_path(meas_path)
+                .map(|resolved| match Measurement::load(&resolved) {
+                    Ok(meas) => Some(meas),
+                    Err(err) => {
+                        log::warn!("Failed to load measurement description file: {}", err);
+                        None
+                    }
+                })
         })
+        .filter_map(|meas| meas)
         .flatten()
         .collect::<Vec<_>>();
     println!(

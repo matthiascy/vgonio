@@ -1,6 +1,10 @@
 use crate::error::RuntimeError;
 use serde::{Deserialize, Serialize};
-use std::{fmt, io::Write, path::Path};
+use std::{
+    fmt,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 pub(crate) mod args;
 
@@ -9,7 +13,6 @@ pub mod cli;
 pub mod gfx;
 pub(crate) mod gui;
 
-use crate::app::cache::resolve_path;
 use args::CliArgs;
 use vgcore::error::VgonioError;
 use vgsurf::TriangulationPattern;
@@ -73,13 +76,13 @@ impl UserConfig {
             )
         })?;
         if let Some(cache_dir) = config.cache_dir {
-            config.cache_dir = Some(resolve_path(base, Some(&cache_dir)));
+            config.cache_dir = Some(canonicalize_path(base, Some(&cache_dir)));
         }
         if let Some(output_dir) = config.output_dir {
-            config.output_dir = Some(resolve_path(base, Some(&output_dir)));
+            config.output_dir = Some(canonicalize_path(base, Some(&output_dir)));
         }
         if let Some(data_dir) = config.data_dir {
-            config.data_dir = Some(resolve_path(base, Some(&data_dir)));
+            config.data_dir = Some(canonicalize_path(base, Some(&data_dir)));
         }
         log::trace!("  - User cache directory: {:?}", config.cache_dir);
         log::trace!("  - User output directory: {:?}", config.output_dir);
@@ -303,6 +306,140 @@ impl Config {
 
     /// Returns the default cache directory.
     pub fn sys_cache_dir(&self) -> &Path { &self.sys_cache_dir }
+
+    /// Resolves the given path to an absolute path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to resolve. If the path is relative, it will be
+    ///   resolved against the current working directory. If the path starts
+    ///   with `usr://`, it will be resolved against the user data files
+    ///   directory. If the path starts with `sys://`, it will be resolved
+    ///   against the system data files directory. The user data files directory
+    ///   and the system data files directory can be set in the configuration
+    ///   file.
+    pub fn resolve_path(&self, path: &Path) -> Option<PathBuf> {
+        if let Ok(stripped) = path.strip_prefix("usr://") {
+            if self.user_data_dir().is_some() {
+                self.user_data_dir().map(|p| p.join(stripped))
+            } else {
+                log::error!(
+                    "The file path begins with `usr://`: {}, but the user data directory is not \
+                     configured.",
+                    path.display()
+                );
+                None
+            }
+        } else if let Ok(stripped) = path.strip_prefix("sys://") {
+            Some(self.sys_data_dir().join(stripped))
+        } else {
+            Some(canonicalize_path(&self.cwd, Some(path)))
+        }
+    }
+
+    /// Returns the output directory in canonical form.
+    /// If the output directory is not specified, returns config's output
+    /// directory.
+    /// # Arguments
+    ///
+    /// * `output` - The output directory specified by the user.
+    pub fn resolve_output_dir(&self, output_dir: &Option<PathBuf>) -> Result<PathBuf, VgonioError> {
+        match output_dir {
+            Some(dir) => {
+                let resolved = self.resolve_path(dir);
+                if resolved.is_none() {
+                    Err(VgonioError::new(
+                        format!("failed to resolve the output directory: {}", dir.display()),
+                        Some(Box::new(RuntimeError::InvalidOutputDir)),
+                    ))
+                } else if !resolved.as_ref().unwrap().is_dir() {
+                    Err(VgonioError::new(
+                        format!("{} is not a directory", dir.display()),
+                        Some(Box::new(RuntimeError::InvalidOutputDir)),
+                    ))
+                } else {
+                    Ok(resolved.unwrap())
+                }
+            }
+            None => Ok(self.output_dir().to_path_buf()),
+        }
+    }
+}
+
+/// Resolves the path to canonical form even if the path doesn't exist.
+///
+/// # Arguments
+///
+/// * `base` - The base path to resolve against.
+/// * `path` - The path to resolve.
+///
+/// # Returns
+///
+/// A `PathBuf` indicating the resolved path. It differs according to the
+/// base path and patterns inside of `path`.
+///
+///   1. `path` is `None`
+///
+///      Returns the `base` path.
+///
+///   2. `path` is relative
+///
+///      Returns the a path which is relative to `base` path, with
+///      the remaining of the `path` appended.
+///
+///   3. `path` is absolute
+///
+///      Returns the `path` as is.
+pub(crate) fn canonicalize_path(base: &Path, path: Option<&Path>) -> PathBuf {
+    path.map_or(base.to_path_buf(), |path| {
+        let resolved = if base.is_relative() {
+            base.join(path)
+        } else {
+            path.to_path_buf()
+        };
+
+        if !resolved.exists() {
+            normalise_path(&resolved)
+        } else {
+            resolved.canonicalize().unwrap()
+        }
+    })
+}
+
+/// Resolves the path to canonical form even if the path does not exist.
+pub(crate) fn normalise_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
+#[test]
+fn test_normalise_path() {
+    let path = Path::new("/a/b/c/../../d");
+    let normalised = normalise_path(path);
+    assert_eq!(normalised, Path::new("/a/d"));
 }
 
 impl fmt::Display for Config {
