@@ -108,7 +108,7 @@ impl Display for MeasurementKind {
                 write!(f, "BSDF")
             }
             MeasurementKind::Adf => {
-                write!(f, "MDF")
+                write!(f, "ADF")
             }
             MeasurementKind::Msf => {
                 write!(f, "MSF")
@@ -124,6 +124,18 @@ impl From<u8> for MeasurementKind {
             0x01 => Self::Adf,
             0x02 => Self::Msf,
             _ => panic!("Invalid measurement kind! {}", value),
+        }
+    }
+}
+
+impl MeasurementKind {
+    /// Returns the measurement kind in the form of a string slice in
+    /// lowercase ASCII characters.
+    pub fn ascii_str(&self) -> &'static str {
+        match self {
+            MeasurementKind::Bsdf => "bsdf",
+            MeasurementKind::Adf => "adf",
+            MeasurementKind::Msf => "msf",
         }
     }
 }

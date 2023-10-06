@@ -45,7 +45,10 @@ use crate::{
     error::RuntimeError,
     measure,
 };
-use vgcore::error::VgonioError;
+use vgcore::{
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
+};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
@@ -608,6 +611,7 @@ impl VgonioGuiApp {
                         single_point,
                         params,
                         surfaces,
+                        format,
                     } => match params {
                         MeasurementParams::Adf(params) => {
                             println!("Measuring area distribution");
@@ -663,11 +667,20 @@ impl VgonioGuiApp {
                                         .hit_points(),
                                 );
                             }
-                            for measurement in measured {
-                                measurement
-                                    .write_bsdf_to_images(self.config.output_dir())
-                                    .unwrap();
-                            }
+                            crate::app::cli::write_measured_data_to_file(
+                                &measured,
+                                &surfaces,
+                                &self.cache,
+                                &self.config,
+                                format,
+                                FileEncoding::Binary,
+                                CompressionScheme::None,
+                                &None,
+                            )
+                            .map_err(|err| {
+                                log::error!("Failed to write measured data to file: {}", err);
+                            })
+                            .unwrap();
                         }
                     },
                     SurfaceViewer(event) => match event {

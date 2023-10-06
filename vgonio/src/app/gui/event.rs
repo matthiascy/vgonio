@@ -1,5 +1,6 @@
 use crate::{
     app::{
+        args::OutputFormat,
         cache::Handle,
         gui::{
             notify::NotifyKind,
@@ -61,12 +62,16 @@ pub enum VgonioEvent {
     BsdfViewer(BsdfViewerEvent),
     Debugging(DebuggingEvent),
     Measure {
+        // TODO: remove this. Use `params` to specify
         /// Whether to measure at one measurement point.
+        #[deprecated]
         single_point: Option<Sph2>,
         /// Parameters of the measurement.
         params: MeasurementParams,
         /// Surfaces to be measured.
         surfaces: Vec<Handle<MicroSurface>>,
+        /// Output file format.
+        format: OutputFormat,
     },
     Notify {
         kind: NotifyKind,

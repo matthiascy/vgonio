@@ -1,11 +1,12 @@
 //! IO related types and functions.
 
+use byteorder::{LittleEndian, ReadBytesExt};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::Display,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -304,9 +305,6 @@ pub trait HeaderExt: Sized {
     /// The magic number of the file variant.
     const MAGIC: &'static [u8; 4];
 
-    /// The size of the extra information in bytes in the memory.
-    fn size() -> usize;
-
     /// The file variant.
     fn variant() -> VgonioFileVariant;
 
@@ -390,4 +388,177 @@ impl<E: HeaderExt> Header<E> {
             })
         }
     }
+}
+
+/// Writes the samples to the given writer in ascii format.
+pub fn write_f32_data_samples_ascii<W: Write>(
+    writer: &mut BufWriter<W>,
+    samples: &[f32],
+    cols: u32,
+) -> Result<(), std::io::Error> {
+    for (i, s) in samples.iter().enumerate() {
+        let val = if i as u32 % cols == cols - 1 {
+            format!("{s}\n")
+        } else {
+            format!("{s} ")
+        };
+        writer.write_all(val.as_bytes())?;
+    }
+    Ok(())
+}
+
+/// Write the data samples to the given writer.
+pub fn write_f32_data_samples_binary<W: Write>(
+    writer: &mut BufWriter<W>,
+    comp: CompressionScheme,
+    samples: &[f32],
+) -> Result<(), std::io::Error> {
+    match comp {
+        CompressionScheme::None => {
+            for s in samples {
+                writer.write_all(&s.to_le_bytes())?;
+            }
+        }
+        CompressionScheme::Zlib => {
+            let buf = vec![];
+            let mut zlib_encoder =
+                flate2::write::ZlibEncoder::new(buf, flate2::Compression::default());
+            for s in samples {
+                zlib_encoder.write_all(&s.to_le_bytes())?;
+            }
+            writer.write_all(&zlib_encoder.flush_finish()?)?;
+        }
+        CompressionScheme::Gzip => {
+            let buf = vec![];
+            let mut gzip_encoder =
+                flate2::write::GzEncoder::new(buf, flate2::Compression::default());
+            for s in samples {
+                gzip_encoder.write_all(&s.to_le_bytes())?;
+            }
+            writer.write_all(&gzip_encoder.finish()?)?;
+        }
+    }
+    Ok(())
+}
+
+/// Read the data samples from the given reader.
+pub fn read_f32_data_samples<R: Read>(
+    reader: &mut BufReader<R>,
+    count: usize,
+    encoding: FileEncoding,
+    compression: CompressionScheme,
+) -> Result<Vec<f32>, ParseError> {
+    let mut zlib_decoder;
+    let mut gzip_decoder;
+
+    let decoder: Box<&mut dyn Read> = match compression {
+        CompressionScheme::None => Box::new(reader),
+        CompressionScheme::Zlib => {
+            zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
+            Box::new(&mut zlib_decoder)
+        }
+        CompressionScheme::Gzip => {
+            gzip_decoder = flate2::bufread::GzDecoder::new(reader);
+            Box::new(&mut gzip_decoder)
+        }
+    };
+
+    let mut samples = vec![0.0; count];
+    match encoding {
+        FileEncoding::Ascii => read_ascii_samples(decoder, count, &mut samples)?,
+        FileEncoding::Binary => read_binary_samples(decoder, count, &mut samples)?,
+    }
+
+    Ok(samples)
+}
+
+/// Reads sample values separated by whitespace line by line.
+pub fn read_ascii_samples<R>(reader: R, count: usize, samples: &mut [f32]) -> Result<(), ParseError>
+where
+    R: Read,
+{
+    debug_assert!(
+        samples.len() >= count,
+        "Samples' container must be large enough to hold all samples"
+    );
+    let reader = BufReader::new(reader);
+
+    let mut loaded = 0;
+    for (n, line) in reader.lines().enumerate() {
+        let line = line.map_err(|_| ParseError {
+            line: n as u32,
+            position: 0,
+            kind: ParseErrorKind::InvalidLine,
+            encoding: FileEncoding::Ascii,
+        })?;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        for (i, x) in line.split_ascii_whitespace().enumerate() {
+            let x = x.parse().map_err(|_| ParseError {
+                line: n as u32,
+                position: i as u32,
+                kind: ParseErrorKind::ParseFloat,
+                encoding: FileEncoding::Ascii,
+            })?;
+            samples[loaded] = x;
+            loaded += 1;
+        }
+    }
+    (count == loaded).then_some(()).ok_or(ParseError {
+        line: u32::MAX,
+        position: u32::MAX,
+        kind: ParseErrorKind::NotEnoughData,
+        encoding: FileEncoding::Ascii,
+    })
+}
+
+/// Reads sample values as binary data.
+pub fn read_binary_samples<R>(
+    mut reader: R,
+    count: usize,
+    samples: &mut [f32],
+) -> Result<(), ParseError>
+where
+    R: Read,
+{
+    debug_assert!(
+        samples.len() >= count,
+        "Samples' container must be large enough to hold all samples"
+    );
+
+    let results = samples
+        .iter_mut()
+        .enumerate()
+        .map(|(i, sample)| {
+            let parsed = reader.read_f32::<LittleEndian>().map_err(|e| {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    ParseError {
+                        line: u32::MAX,
+                        position: i as u32 * 4,
+                        kind: ParseErrorKind::NotEnoughData,
+                        encoding: FileEncoding::Binary,
+                    }
+                } else {
+                    ParseError {
+                        line: u32::MAX,
+                        position: i as u32 * 4,
+                        kind: ParseErrorKind::ParseFloat,
+                        encoding: FileEncoding::Binary,
+                    }
+                }
+            });
+            match parsed {
+                Ok(parsed) => {
+                    *sample = parsed;
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
+        })
+        .collect::<Result<Vec<_>, ParseError>>();
+
+    results?;
+    Ok(())
 }

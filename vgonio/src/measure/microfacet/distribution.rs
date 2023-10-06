@@ -1,4 +1,5 @@
-use vgcore::{math, units, units::Radians};
+use std::path::Path;
+use vgcore::{error::VgonioError, math, units, units::Radians};
 use vgsurf::MicroSurface;
 // NOTE(yang): The number of bins is determined by the bin size and the range of
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
@@ -31,6 +32,17 @@ pub struct MeasuredAdfData {
     /// microfacet normal, and the inner index is the zenith angle of the
     /// microfacet normal.
     pub samples: Vec<f32>,
+}
+
+impl MeasuredAdfData {
+    /// Writes the measured data as an EXR file.
+    pub fn write_as_exr(
+        &self,
+        filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+    ) -> Result<(), VgonioError> {
+        todo!("write_as_exr")
+    }
 }
 
 /// Measure the microfacet distribution of a list of micro surfaces.
@@ -107,6 +119,7 @@ pub fn measure_area_distribution(
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
+                timestamp: chrono::Local::now(),
                 measured: MeasuredData::Adf(MeasuredAdfData { params, samples }),
             })
         })

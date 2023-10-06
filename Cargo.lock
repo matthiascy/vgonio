@@ -3038,8 +3038,11 @@ name = "vgonio-core"
 version = "0.3.0"
 dependencies = [
  "approx",
+ "byteorder",
  "cfg-if",
+ "chrono",
  "clap",
+ "flate2",
  "glam",
  "log",
  "num-traits",

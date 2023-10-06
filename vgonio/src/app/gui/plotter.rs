@@ -6,7 +6,7 @@ pub use msf::*;
 
 use crate::{
     app::{
-        cache::{Handle, InnerCache},
+        cache::{Cache, Handle, InnerCache},
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
@@ -30,7 +30,6 @@ use vgbxdf::{
     MicrofacetDistributionModel,
 };
 use vgcore::units::{deg, rad, Radians};
-use crate::app::cache::Cache;
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),
@@ -256,10 +255,17 @@ impl PlotInspector {
         event_loop: EventLoopProxy,
     ) -> Self {
         let mut extra = MaskingShadowingExtra::default();
-            cache.read(|cache| {
-                extra.pre_process(data, &cache);
-            });
-        Self::new_inner(name, data, Some(Box::new(extra)), cache.clone(), props, event_loop)
+        cache.read(|cache| {
+            extra.pre_process(data, &cache);
+        });
+        Self::new_inner(
+            name,
+            data,
+            Some(Box::new(extra)),
+            cache.clone(),
+            props,
+            event_loop,
+        )
     }
 
     /// Creates a new inspector for a bidirectional scattering distribution
@@ -1047,7 +1053,9 @@ impl PlottingWidget for PlotInspector {
                     if let Some(variant) = &mut self.variant {
                         let zenith = self.cache.read(|cache| {
                             let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                            measurement.measured.adf_or_msf_zenith().unwrap()
+                            let (_, zenith) =
+                                measurement.measured.adf_or_msf_angle_ranges().unwrap();
+                            zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
                         variant.ui(ui, &mut self.event_loop, self.data_handle);
@@ -1150,7 +1158,9 @@ impl PlottingWidget for PlotInspector {
                             .unwrap();
                         let zenith = self.cache.read(|cache| {
                             let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                            measurement.measured.adf_or_msf_zenith().unwrap()
+                            let (_, zenith) =
+                                measurement.measured.adf_or_msf_angle_ranges().unwrap();
+                            zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.value();
                         variant.ui(ui, &mut self.event_loop, self.data_handle);

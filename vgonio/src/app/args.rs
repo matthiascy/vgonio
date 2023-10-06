@@ -163,10 +163,10 @@ pub enum OutputFormat {
     /// Vgonio internal file format.
     #[default]
     Vgmo,
-    /// Portable float map.
-    Pfm,
-    /// Portable network graphics.
-    Png,
+    // /// Portable float map.
+    // Pfm,
+    // /// Portable network graphics.
+    // Png,
     /// OpenEXR.
     Exr,
 }
@@ -175,8 +175,6 @@ impl Display for OutputFormat {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Vgmo => write!(f, "vgmo"),
-            Self::Pfm => write!(f, "pfm"),
-            Self::Png => write!(f, "png"),
             Self::Exr => write!(f, "exr"),
         }
     }

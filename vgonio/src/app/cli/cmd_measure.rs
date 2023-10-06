@@ -1,7 +1,7 @@
 use crate::{
     app::{
         args::MeasureOptions,
-        cache::InnerCache,
+        cache::Cache,
         cli::{write_measured_data_to_file, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
         Config,
     },
@@ -26,7 +26,6 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         rayon::current_num_threads()
     );
 
-    let mut cache = InnerCache::new(config.cache_dir());
     println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
     let measurements = opts
         .inputs
@@ -50,38 +49,47 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         measurements.len()
     );
 
-    // Load data files: refractive indices, spd etc. if needed.
-    if measurements.iter().any(|meas| meas.params.is_bsdf()) {
-        println!("  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)...");
-        cache.load_ior_database(&config);
-        println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
-    }
+    let cache = Cache::new(config.cache_dir());
 
-    println!("  {BRIGHT_YELLOW}>{RESET} Resolving and loading micro-surfaces...");
-    let tasks = measurements
-        .into_iter()
-        .filter_map(|meas| {
-            cache
-                .load_micro_surfaces(&config, &meas.surfaces, config.user.triangulation)
-                .ok()
-                .map(|surfaces| (meas, surfaces))
-        })
-        .collect::<Vec<_>>();
-    println!(
-        "    {BRIGHT_CYAN}✓{RESET} {} micro-surface(s) loaded",
-        cache.num_micro_surfaces()
-    );
+    let (tasks, num_surfs) = cache.write(|cache| {
+        // Load data files: refractive indices, spd etc. if needed.
+        if measurements.iter().any(|meas| meas.params.is_bsdf()) {
+            println!(
+                "  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)..."
+            );
+            cache.load_ior_database(&config);
+            println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
+        }
 
-    if cache.num_micro_surfaces() == 0 {
+        println!("  {BRIGHT_YELLOW}>{RESET} Resolving and loading micro-surfaces...");
+        let tasks = measurements
+            .into_iter()
+            .filter_map(|meas| {
+                cache
+                    .load_micro_surfaces(&config, &meas.surfaces, config.user.triangulation)
+                    .ok()
+                    .map(|surfaces| (meas, surfaces))
+            })
+            .collect::<Vec<_>>();
+        println!(
+            "    {BRIGHT_CYAN}✓{RESET} {} micro-surface(s) loaded",
+            cache.num_micro_surfaces()
+        );
+
+        #[cfg(debug_assertions)]
+        cache
+            .loaded_micro_surface_paths()
+            .unwrap()
+            .iter()
+            .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
+
+        (tasks, cache.num_micro_surfaces())
+    });
+
+    if num_surfs == 0 {
         println!("  {BRIGHT_RED}✗{RESET} No micro-surface to measure. Exiting...");
         return Ok(());
     }
-
-    cache
-        .loaded_micro_surface_paths()
-        .unwrap()
-        .iter()
-        .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
 
     let start_time = Instant::now();
     for (measurement, surfaces) in tasks {
@@ -101,6 +109,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - azimuthal angle: {}
       + receiver:
         - domain: {}
+        - scheme: {:?}
         - precision: {}",
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
                     params.incident_medium,
@@ -111,9 +120,13 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.emitter.zenith.pretty_print(),
                     params.emitter.azimuth.pretty_print(),
                     params.receiver.domain,
+                    params.receiver.scheme,
                     params.receiver.precision
                 );
-                measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, &cache, None)
+                // TODO: if emmitter single position
+                cache.read(|cache| {
+                    measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, cache, None)
+                })
             }
             MeasurementParams::Adf(measurement) => {
                 println!(
@@ -124,7 +137,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     measurement.azimuth.pretty_print(),
                     measurement.zenith.pretty_print(),
                 );
-                measure::microfacet::measure_area_distribution(measurement, &surfaces, &cache)
+                cache.read(|cache| {
+                    measure::microfacet::measure_area_distribution(measurement, &surfaces, cache)
+                })
             }
             MeasurementParams::Msf(measurement) => {
                 println!(
@@ -143,8 +158,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 log::warn!(
                     "Debug mode is enabled. Measuring MMSF in debug mode is not recommended."
                 );
-
-                measure::microfacet::measure_masking_shadowing(measurement, &surfaces, &cache)
+                cache.read(|cache| {
+                    measure::microfacet::measure_masking_shadowing(measurement, &surfaces, cache)
+                })
             }
         };
 

@@ -1,8 +1,12 @@
 //! Measurement data description.
 
 use crate::{
-    app::cache::{Asset, Handle},
+    app::{
+        args::OutputFormat,
+        cache::{Asset, Handle},
+    },
     fitting::MeasuredMdfData,
+    io::vgmo::VgmoHeaderExt,
     measure::{
         bsdf::MeasuredBsdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData},
@@ -10,11 +14,21 @@ use crate::{
     },
     RangeByStepSizeInclusive,
 };
+use chrono::{DateTime, Local};
 use std::{
     borrow::Cow,
+    fs::File,
+    io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
 };
-use vgcore::{error::VgonioError, units::Radians};
+use vgcore::{
+    error::VgonioError,
+    io::{
+        CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, ReadFileErrorKind,
+        WriteFileError, WriteFileErrorKind,
+    },
+    units::Radians,
+};
 use vgsurf::MicroSurface;
 
 /// Measurement data source.
@@ -48,75 +62,86 @@ pub enum MeasuredData {
 }
 
 impl MeasuredData {
-    /// Returns the measurement kind.
+    /// Returns the kind of the measured data.
     pub fn kind(&self) -> MeasurementKind {
         match self {
+            MeasuredData::Bsdf(_) => MeasurementKind::Bsdf,
             MeasuredData::Adf(_) => MeasurementKind::Adf,
             MeasuredData::Msf(_) => MeasurementKind::Msf,
-            MeasuredData::Bsdf(_) => MeasurementKind::Bsdf,
         }
     }
 
-    /// Returns the BSDF data if it is a BSDF.
-    pub fn bsdf_data(&self) -> Option<&MeasuredBsdfData> {
+    /// Returns the BSDF data.
+    pub fn bsdf(&self) -> Option<&MeasuredBsdfData> {
         match self {
             MeasuredData::Bsdf(bsdf) => Some(bsdf),
             _ => None,
         }
     }
 
-    /// Returns the MADF data if it is a MADF.
-    pub fn adf_data(&self) -> Option<&MeasuredAdfData> {
+    /// Returns the ADF data.
+    pub fn adf(&self) -> Option<&MeasuredAdfData> {
         match self {
-            MeasuredData::Adf(madf) => Some(madf),
+            MeasuredData::Adf(adf) => Some(adf),
             _ => None,
         }
     }
 
-    /// Returns the MMSF data if it is a MMSF.
-    pub fn msf_data(&self) -> Option<&MeasuredMsfData> {
+    /// Returns the MSF data.
+    pub fn msf(&self) -> Option<&MeasuredMsfData> {
         match self {
-            MeasuredData::Msf(mmsf) => Some(mmsf),
+            MeasuredData::Msf(msf) => Some(msf),
             _ => None,
         }
     }
 
-    /// Returns the [`MeasuredMdfData`] if it is a ADF or MSF.
-    pub fn mdf_data(&self) -> Option<MeasuredMdfData> {
+    /// Returns the samples of the measurement data only if it is a
+    /// ADF or MSF.
+    pub fn adf_or_msf_samples(&self) -> Option<&[f32]> {
         match self {
-            MeasuredData::Bsdf(_) => None,
+            MeasuredData::Adf(adf) => Some(&adf.samples),
+            MeasuredData::Msf(msf) => Some(&msf.samples),
+            _ => None,
+        }
+    }
+
+    /// Returns the MDF data.
+    pub fn mdf(&self) -> Option<MeasuredMdfData> {
+        match self {
             MeasuredData::Adf(adf) => Some(MeasuredMdfData::Adf(Cow::Borrowed(adf))),
             MeasuredData::Msf(msf) => Some(MeasuredMdfData::Msf(Cow::Borrowed(msf))),
+            _ => None,
         }
     }
 
-    /// Returns the zenith range of the measurement data if it is a MADF or
-    /// MMSF.
+    pub fn adf_or_msf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
+        match self {
+            MeasuredData::Adf(adf) => Some(adf.params.azimuth),
+            MeasuredData::Msf(msf) => Some(msf.params.azimuth),
+            _ => None,
+        }
+    }
+
     pub fn adf_or_msf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Adf(madf) => Some(madf.params.zenith),
-            MeasuredData::Msf(mmsf) => Some(mmsf.params.zenith),
-            MeasuredData::Bsdf(_) => None,
+            MeasuredData::Adf(adf) => Some(adf.params.zenith),
+            MeasuredData::Msf(msf) => Some(msf.params.zenith),
+            _ => None,
         }
     }
 
-    /// Returns the azimuth range of the measurement data if it is a MADF or
-    /// MMSF.
-    pub fn madf_or_mmsf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
+    /// Returns the measurement range of the azimuth and zenith angles only if
+    /// it is a ADF or MSF measurement.
+    pub fn adf_or_msf_angle_ranges(
+        &self,
+    ) -> Option<(
+        RangeByStepSizeInclusive<Radians>,
+        RangeByStepSizeInclusive<Radians>,
+    )> {
         match self {
-            MeasuredData::Adf(madf) => Some(madf.params.azimuth),
-            MeasuredData::Msf(mmsf) => Some(mmsf.params.azimuth),
-            MeasuredData::Bsdf(_) => None,
-        }
-    }
-
-    // TODO: to be removed
-    /// Returns the samples of the measurement data.
-    pub fn samples(&self) -> &[f32] {
-        match self {
-            MeasuredData::Adf(madf) => &madf.samples,
-            MeasuredData::Msf(mmsf) => &mmsf.samples,
-            MeasuredData::Bsdf(_bsdf) => todo!("implement this"),
+            MeasuredData::Adf(adf) => Some((adf.params.azimuth, adf.params.zenith)),
+            MeasuredData::Msf(msf) => Some((msf.params.azimuth, msf.params.zenith)),
+            _ => None,
         }
     }
 }
@@ -131,6 +156,8 @@ pub struct MeasurementData {
     pub name: String,
     /// Origin of the measurement data.
     pub source: MeasurementDataSource,
+    /// Timestamp of the measurement.
+    pub timestamp: DateTime<Local>,
     /// Measurement data.
     pub measured: MeasuredData,
 }
@@ -162,35 +189,22 @@ impl MeasurementData {
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn ndf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind() == MeasurementKind::Adf);
-        let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
+        let (az, zn) = self.measured.adf_or_msf_angle_ranges().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
-        let azimuth_m_idx = self_azimuth.index_of(azimuth_m);
+        let azimuth_m_idx = az.index_of(azimuth_m);
         let opposite_azimuth_m = azimuth_m.opposite();
-        let opposite_index = if self_azimuth.start <= opposite_azimuth_m
-            && opposite_azimuth_m <= self_azimuth.stop
-        {
-            Some(self_azimuth.index_of(opposite_azimuth_m))
+        let opposite_index = if az.start <= opposite_azimuth_m && opposite_azimuth_m <= az.stop {
+            Some(az.index_of(opposite_azimuth_m))
         } else {
             None
         };
+        let zn_step_count = zn.step_count_wrapped();
+        let samples = self.measured.adf_or_msf_samples().unwrap();
         (
-            self.ndf_data_slice_inner(azimuth_m_idx),
-            opposite_index.map(|index| self.ndf_data_slice_inner(index)),
+            &samples[azimuth_m_idx * zn_step_count..(azimuth_m_idx + 1) * zn_step_count],
+            opposite_index
+                .map(|index| &samples[index * zn_step_count..(index + 1) * zn_step_count]),
         )
-    }
-
-    /// Returns a data slice of the Area Distribution Function for the given
-    /// azimuthal angle index.
-    fn ndf_data_slice_inner(&self, azimuth_idx: usize) -> &[f32] {
-        let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        debug_assert!(self.kind() == MeasurementKind::Adf);
-        debug_assert!(
-            azimuth_idx < self_azimuth.step_count_wrapped(),
-            "index out of range"
-        );
-        let self_zenith = self.measured.adf_or_msf_zenith().unwrap();
-        &self.measured.samples()[azimuth_idx * self_zenith.step_count_wrapped()
-            ..(azimuth_idx + 1) * self_zenith.step_count_wrapped()]
     }
 
     /// Returns the Masking Shadowing Function data slice for the given
@@ -210,8 +224,7 @@ impl MeasurementData {
             self.kind() == MeasurementKind::Msf,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
-        let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        let self_zenith = self.measured.adf_or_msf_zenith().unwrap();
+        let (self_azimuth, self_zenith) = self.measured.adf_or_msf_angle_ranges().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
         let azimuth_i = azimuth_i.wrap_to_tau();
         let zenith_m = zenith_m.clamp(self_zenith.start, self_zenith.stop);
@@ -241,8 +254,7 @@ impl MeasurementData {
         zenith_m_idx: usize,
         azimuth_i_idx: usize,
     ) -> &[f32] {
-        let self_azimuth = self.measured.madf_or_mmsf_azimuth().unwrap();
-        let self_zenith = self.measured.adf_or_msf_zenith().unwrap();
+        let (self_azimuth, self_zenith) = self.measured.adf_or_msf_angle_ranges().unwrap();
         debug_assert!(self.kind() == MeasurementKind::Msf);
         debug_assert!(
             azimuth_m_idx < self_azimuth.step_count_wrapped(),
@@ -261,20 +273,136 @@ impl MeasurementData {
         let offset = azimuth_m_idx * zenith_bin_count * azimuth_bin_count * zenith_bin_count
             + zenith_m_idx * azimuth_bin_count * zenith_bin_count
             + azimuth_i_idx * zenith_bin_count;
-        &self.measured.samples()[offset..offset + zenith_bin_count]
+        &self.measured.adf_or_msf_samples().unwrap()[offset..offset + zenith_bin_count]
     }
 
-    /// Writes the measured BSDF data to images.
-    pub fn write_bsdf_to_images(&self, path: &Path) -> Result<(), VgonioError> {
-        match &self.measured {
-            MeasuredData::Bsdf(measured) => {
-                measured.write_to_images(&self.name, path);
-                Ok(())
+    /// Writes the measurement data to a file in VGMO format.
+    pub fn write_to_file(
+        &self,
+        filepath: &PathBuf,
+        format: OutputFormat,
+        encoding: FileEncoding,
+        compression: CompressionScheme,
+    ) -> Result<(), VgonioError> {
+        match format {
+            OutputFormat::Vgmo => {
+                let timestamp = {
+                    let mut timestamp = [0_u8; 32];
+                    timestamp.copy_from_slice(
+                        vgcore::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
+                    );
+                    timestamp
+                };
+                let header = Header {
+                    meta: HeaderMeta {
+                        version: 0,
+                        timestamp,
+                        length: 0,
+                        sample_size: 4,
+                        encoding,
+                        compression,
+                    },
+                    extra: self.measured.as_vgmo_header_ext(),
+                };
+                let filepath = filepath.with_extension("vgmo");
+                let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&filepath)
+                    .map_err(|err| {
+                        VgonioError::from_io_error(err, "Failed to open measurement file.")
+                    })?;
+                let mut writer = BufWriter::new(file);
+                crate::io::vgmo::write(&mut writer, header, &self.measured).map_err(|err| {
+                    VgonioError::from_write_file_error(
+                        WriteFileError {
+                            path: filepath.to_owned().into_boxed_path(),
+                            kind: err,
+                        },
+                        "Failed to write VGMO file.",
+                    )
+                })?;
+                writer.flush().map_err(|err| {
+                    VgonioError::from_write_file_error(
+                        WriteFileError {
+                            path: filepath.to_owned().into_boxed_path(),
+                            kind: WriteFileErrorKind::Write(err),
+                        },
+                        "Failed to flush VGMO file.",
+                    )
+                })?;
             }
-            _ => Err(VgonioError::new(
-                "Trying to write non-BSDF data as BSDF",
-                None,
-            )),
+            OutputFormat::Exr => {
+                let filepath = filepath.with_extension("exr");
+                match &self.measured {
+                    MeasuredData::Bsdf(bsdf) => bsdf.write_as_exr(&filepath, &self.timestamp)?,
+                    MeasuredData::Adf(adf) => adf.write_as_exr(&filepath, &self.timestamp)?,
+                    MeasuredData::Msf(msf) => {
+                        eprintln!("Writing MSF to EXR is not supported yet.");
+                    }
+                }
+            }
         }
+        Ok(())
+    }
+
+    /// Loads the measurement data from a file.
+    pub fn read_from_file(filepath: &Path) -> Result<Self, VgonioError> {
+        let file = File::open(filepath).map_err(|err| {
+            VgonioError::from_io_error(
+                err,
+                format!("Failed to open measurement file: {}", filepath.display()),
+            )
+        })?;
+        let mut reader = BufReader::new(file);
+        let header = Header::<VgmoHeaderExt>::read(&mut reader).map_err(|err| {
+            VgonioError::from_read_file_error(
+                ReadFileError {
+                    path: filepath.to_owned().into_boxed_path(),
+                    kind: ReadFileErrorKind::Read(err),
+                },
+                "Failed to read VGMO file.",
+            )
+        })?;
+        log::debug!("Read VGMO file of length: {}", header.meta.length);
+
+        let path = filepath.to_path_buf();
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("invalid file stem")
+            .to_string();
+
+        let measured = crate::io::vgmo::read(&mut reader, &header).map_err(|err| {
+            VgonioError::from_read_file_error(
+                ReadFileError {
+                    path: filepath.to_owned().into_boxed_path(),
+                    kind: ReadFileErrorKind::Parse(err),
+                },
+                "Failed to read VGMO file.",
+            )
+        })?;
+        let timestamp = DateTime::from(
+            DateTime::parse_from_rfc3339(std::str::from_utf8(&header.meta.timestamp).map_err(
+                |err| VgonioError::from_utf8_error(err, "Failed to parse timestamp from file."),
+            )?)
+            .map_err(|err| {
+                VgonioError::new(
+                    format!(
+                        "Failed to parse timestamp from file: {}",
+                        filepath.display()
+                    ),
+                    Some(Box::new(err)),
+                )
+            })?,
+        );
+
+        Ok(MeasurementData {
+            name,
+            source: MeasurementDataSource::Loaded(path),
+            timestamp,
+            measured,
+        })
     }
 }

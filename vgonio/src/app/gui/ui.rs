@@ -89,7 +89,7 @@ impl VgonioGui {
         Self {
             config,
             event_loop: event_loop.clone(),
-            tools: Tools::new(event_loop.clone(), gpu.clone(), gui.clone(), cache.clone()),
+            tools: Tools::new(event_loop.clone(), gpu.clone(), gui.clone()),
             cache: cache.clone(),
             drag_drop: FileDragDrop::new(event_loop.clone()),
             navigator: NavigationGizmo::new(GizmoOrientation::Global),
@@ -215,7 +215,7 @@ impl VgonioGui {
                                     MeasuredMdfData::Adf(Cow::Borrowed(
                                         measurement
                                             .measured
-                                            .adf_data()
+                                            .adf()
                                             .expect("Measurement has no ADF data."),
                                     ))
                                 }
@@ -223,7 +223,7 @@ impl VgonioGui {
                                     MeasuredMdfData::Msf(Cow::Borrowed(
                                         measurement
                                             .measured
-                                            .msf_data()
+                                            .msf()
                                             .expect("Measurement has no MSF data."),
                                     ))
                                 }

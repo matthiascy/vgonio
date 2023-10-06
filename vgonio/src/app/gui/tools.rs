@@ -32,7 +32,6 @@ impl Tools {
         event_loop: EventLoopProxy,
         gpu: Arc<GpuContext>,
         gui: Arc<RwLock<GuiRenderer>>,
-        cache: Cache,
     ) -> Self {
         log::info!("Initializing tools...");
         Self {

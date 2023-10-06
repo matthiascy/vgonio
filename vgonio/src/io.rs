@@ -10,8 +10,6 @@ use crate::measure::{
     microfacet::{MeasuredAdfData, MeasuredMsfData},
 };
 
-pub struct MeasurementOutputHeader {}
-
 pub mod vgmo {
     use super::*;
     use crate::{
@@ -21,7 +19,7 @@ pub mod vgmo {
                 receiver::{BounceAndEnergy, ReceiverParams, ReceiverScheme},
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshotRaw, PerWavelength,
             },
-            data::{MeasuredData, MeasurementData, MeasurementDataSource},
+            data::MeasuredData,
             params::{
                 AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
                 SimulationKind,
@@ -29,16 +27,16 @@ pub mod vgmo {
         },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive,
     };
-    use std::io::BufWriter;
+    use std::io::{BufWriter, Seek};
     use vgcore::{
-        error::VgonioError,
         io::{
-            CompressionScheme, FileEncoding, ReadFileError, ReadFileErrorKind, WriteFileError,
-            WriteFileErrorKind,
+            CompressionScheme, FileEncoding, Header, HeaderExt, ParseError, ReadFileErrorKind,
+            VgonioFileVariant, WriteFileErrorKind,
         },
         math::Sph2,
         units::{mm, rad, Nanometres, Radians},
     };
+    use vgsurf::io::vgms::VgmsHeaderExt;
 
     macro_rules! impl_range_by_step_size_inclusive_read_write {
         ($($T:ty, $step_count:ident);*) => {
@@ -118,126 +116,171 @@ pub mod vgmo {
         }
     }
 
-    /// First 8 bytes of the header.
-    ///
-    /// It contains the magic number, file encoding, compression scheme, and
-    /// measurement kind.
     #[derive(Debug, Clone, Copy, PartialEq)]
-    pub struct HeaderMeta {
-        pub kind: MeasurementKind,
-        pub encoding: FileEncoding,
-        pub compression: CompressionScheme,
+    pub enum VgmoHeaderExt {
+        Bsdf { params: BsdfMeasurementParams },
+        Adf { params: AdfMeasurementParams },
+        Msf { params: MsfMeasurementParams },
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq)]
-    pub enum Header {
-        Bsdf {
-            meta: HeaderMeta,
-            bsdf: BsdfMeasurementParams,
-        },
-        Madf {
-            meta: HeaderMeta,
-            madf: AdfMeasurementParams,
-        },
-        Mmsf {
-            meta: HeaderMeta,
-            mmsf: MsfMeasurementParams,
-        },
-    }
-
-    impl Header {
-        pub fn meta(&self) -> &HeaderMeta {
+    impl MeasuredData {
+        pub fn as_vgmo_header_ext(&self) -> VgmoHeaderExt {
             match self {
-                Self::Bsdf { meta, .. } => meta,
-                Self::Madf { meta, .. } => meta,
-                Self::Mmsf { meta, .. } => meta,
-            }
-        }
-
-        pub fn sample_count(&self) -> usize {
-            match self {
-                Self::Bsdf { bsdf, .. } => {
-                    bsdf.emitter.measurement_points_count()
-                        * bsdf.emitter.spectrum.step_count()
-                        * bsdf.receiver.patches_count()
-                }
-                Self::Madf { madf, .. } => {
-                    madf.zenith.step_count_wrapped() * madf.azimuth.step_count_wrapped()
-                }
-                Self::Mmsf { mmsf, .. } => {
-                    mmsf.zenith.step_count_wrapped()
-                        * mmsf.azimuth.step_count_wrapped()
-                        * mmsf.zenith.step_count_wrapped()
-                        * mmsf.azimuth.step_count_wrapped()
-                }
-            }
-        }
-
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let meta = HeaderMeta::read(reader)?;
-            match meta.kind {
-                MeasurementKind::Bsdf => Ok(Self::Bsdf {
-                    meta,
-                    bsdf: BsdfMeasurementParams::read_from_vgmo(reader)?,
-                }),
-                MeasurementKind::Adf => Ok(Self::Madf {
-                    meta,
-                    madf: AdfMeasurementParams::read_from_vgmo(reader)?,
-                }),
-                MeasurementKind::Msf => Ok(Self::Mmsf {
-                    meta,
-                    mmsf: MsfMeasurementParams::read_from_vgmo(reader)?,
-                }),
-            }
-        }
-
-        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            match self {
-                Self::Bsdf { meta, bsdf } => {
-                    meta.write(writer).and_then(|_| bsdf.write_to_vgmo(writer))
-                }
-                Self::Madf { meta, madf } => {
-                    meta.write(writer).and_then(|_| madf.write_to_vgmo(writer))
-                }
-                Self::Mmsf { meta, mmsf } => {
-                    meta.write(writer).and_then(|_| mmsf.write_to_vgmo(writer))
-                }
+                Self::Bsdf(bsdf) => VgmoHeaderExt::Bsdf {
+                    params: bsdf.params.clone(),
+                },
+                Self::Adf(adf) => VgmoHeaderExt::Adf {
+                    params: adf.params.clone(),
+                },
+                Self::Msf(msf) => VgmoHeaderExt::Msf {
+                    params: msf.params.clone(),
+                },
             }
         }
     }
 
-    impl HeaderMeta {
-        pub const MAGIC: &'static [u8] = b"VGMO";
+    impl HeaderExt for VgmoHeaderExt {
+        const MAGIC: &'static [u8; 4] = &b"VGMO";
 
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; 8];
-            reader.read_exact(&mut buf)?;
+        fn variant() -> VgonioFileVariant { VgonioFileVariant::Vgmo }
 
-            if &buf[0..4] != Self::MAGIC {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid VGMO header {:?}", &buf[0..4]),
-                ));
+        /// Writes the VGMO header extension to the given writer.
+        fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
+            match self {
+                Self::Adf { params } => {
+                    writer.write_all(&[MeasurementKind::Adf as u8])?;
+                    write_adf_or_msf_params_to_vgmo(&params.azimuth, &params.zenith, writer, true)?;
+                }
+                Self::Msf { params } => {
+                    // TODO:
+                    writer.write_all(&[MeasurementKind::Msf as u8])?;
+                    write_adf_or_msf_params_to_vgmo(
+                        &params.azimuth,
+                        &params.zenith,
+                        writer,
+                        false,
+                    )?;
+                }
+                Self::Bsdf { params } => {
+                    // TODO:
+                    writer.write_all(&[MeasurementKind::Bsdf as u8])?;
+                    params.write_to_vgmo(writer)?;
+                }
             }
-
-            let kind = MeasurementKind::from(buf[4]);
-            let encoding = FileEncoding::from(buf[5]);
-            let compression = CompressionScheme::from(buf[6]);
-            Ok(Self {
-                kind,
-                encoding,
-                compression,
-            })
+            Ok(())
         }
 
-        pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
-            let mut meta = [0x20; 8];
-            meta[0..4].copy_from_slice(Self::MAGIC);
-            meta[4] = self.kind as u8;
-            meta[5] = self.encoding as u8;
-            meta[6] = self.compression as u8;
-            writer.write_all(&meta).map_err(|err| err.into())
+        /// Reads the VGMO header extension from the given reader.
+        /// The reader must be positioned at the start of the header extension.
+        fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self> {
+            let mut kind = [0u8; 1];
+            reader.read_exact(&mut kind)?;
+            match MeasurementKind::from(kind[0]) {
+                MeasurementKind::Bsdf => {
+                    let params = BsdfMeasurementParams::read_from_vgmo(reader)?;
+                    Ok(Self::Bsdf { params })
+                }
+                MeasurementKind::Adf => {
+                    let (azimuth, zenith) = read_adf_or_msf_params_from_vgmo(reader, true)?;
+                    Ok(Self::Adf {
+                        params: AdfMeasurementParams { azimuth, zenith },
+                    })
+                }
+                MeasurementKind::Msf => {
+                    let (azimuth, zenith) = read_adf_or_msf_params_from_vgmo(reader, false)?;
+                    Ok(Self::Msf {
+                        params: MsfMeasurementParams {
+                            azimuth,
+                            zenith,
+                            resolution: 512,
+                            strict: true,
+                        },
+                    })
+                }
+            }
         }
+    }
+
+    /// Reads the VGMO file from the given reader.
+    pub fn read<R: Read>(
+        reader: &mut BufReader<R>,
+        header: &Header<VgmoHeaderExt>,
+    ) -> Result<MeasuredData, ParseError> {
+        match header.extra {
+            VgmoHeaderExt::Bsdf { .. } => {
+                todo!("BSDF data reading not implemented yet")
+            }
+            VgmoHeaderExt::Adf { params } => {
+                log::debug!(
+                    "Reading ADF data of {} samples from VGMO file",
+                    params.samples_count()
+                );
+                let samples = vgcore::io::read_f32_data_samples(
+                    reader,
+                    params.samples_count(),
+                    header.meta.encoding,
+                    header.meta.compression,
+                )?;
+                Ok(MeasuredData::Adf(MeasuredAdfData { params, samples }))
+            }
+            VgmoHeaderExt::Msf { params } => {
+                log::debug!(
+                    "Reading MSF data of {} samples from VGMO file",
+                    params.samples_count()
+                );
+                let samples = vgcore::io::read_f32_data_samples(
+                    reader,
+                    params.samples_count(),
+                    header.meta.encoding,
+                    header.meta.compression,
+                )?;
+                Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
+            }
+        }
+    }
+
+    /// Writes the given measurement data to the given writer.
+    pub fn write<W: Write + Seek>(
+        writer: &mut BufWriter<W>,
+        header: Header<VgmoHeaderExt>,
+        measured: &MeasuredData,
+    ) -> Result<(), WriteFileErrorKind> {
+        let init_size = writer.stream_len().unwrap();
+        header.write(writer)?;
+
+        match measured {
+            MeasuredData::Adf(_) | MeasuredData::Msf(_) => {
+                let samples = measured.adf_or_msf_samples().unwrap();
+                log::debug!("Writing {} samples to VGMO file", samples.len());
+                match header.meta.encoding {
+                    FileEncoding::Ascii => {
+                        let cols = if let MeasuredData::Adf(adf) = &measured {
+                            adf.params.zenith.step_count_wrapped()
+                        } else {
+                            measured.msf().unwrap().params.zenith.step_count_wrapped()
+                        };
+                        vgcore::io::write_f32_data_samples_ascii(writer, samples, cols as u32)
+                    }
+                    FileEncoding::Binary => vgcore::io::write_f32_data_samples_binary(
+                        writer,
+                        header.meta.compression,
+                        &samples,
+                    ),
+                }
+                .map_err(|err| WriteFileErrorKind::Write(err))?;
+            }
+            MeasuredData::Bsdf(bsdf) => {
+                bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
+            }
+        }
+
+        let length = writer.stream_len().unwrap() - init_size;
+        writer.seek(std::io::SeekFrom::Start(
+            Header::<VgmoHeaderExt>::length_pos() as u64,
+        ))?;
+        writer.write_all(&(length as u32).to_le_bytes())?;
+        log::debug!("Wrote {} bytes of data to VGMO file", length);
+        Ok(())
     }
 
     fn madf_or_mmsf_samples_count(
@@ -254,9 +297,9 @@ pub mod vgmo {
         }
     }
 
-    fn read_madf_mmsf_params_from_vgmo<R: Read>(
+    fn read_adf_or_msf_params_from_vgmo<R: Read>(
         reader: &mut BufReader<R>,
-        #[cfg(debug_assertions)] is_madf: bool,
+        is_adf: bool,
     ) -> Result<
         (
             RangeByStepSizeInclusive<Radians>,
@@ -264,79 +307,32 @@ pub mod vgmo {
         ),
         std::io::Error,
     > {
-        let mut buf = [0u8; 40];
+        let mut buf = [0u8; 36];
         reader.read_exact(&mut buf)?;
         let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
         let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
         let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
-        #[cfg(debug_assertions)]
         debug_assert_eq!(
             sample_count as usize,
-            madf_or_mmsf_samples_count(&azimuth, &zenith, is_madf)
+            madf_or_mmsf_samples_count(&azimuth, &zenith, is_adf)
         );
         Ok((azimuth, zenith))
     }
 
-    pub fn write_madf_mmsf_params_to_vgmo<W: Write>(
+    /// Writes the ADF and MSF measurement parameters to the VGMO file.
+    fn write_adf_or_msf_params_to_vgmo<W: Write>(
         azimuth: &RangeByStepSizeInclusive<Radians>,
         zenith: &RangeByStepSizeInclusive<Radians>,
         writer: &mut BufWriter<W>,
         is_madf: bool,
-    ) -> Result<(), WriteFileErrorKind> {
-        let mut header = [0x20; 40];
+    ) -> Result<(), std::io::Error> {
+        let mut header = [0u8; 36];
         azimuth.write_to_buf(&mut header[0..16]);
         zenith.write_to_buf(&mut header[16..32]);
         header[32..36].copy_from_slice(
             &(madf_or_mmsf_samples_count(zenith, azimuth, is_madf) as u32).to_le_bytes(),
         );
-        header[39] = 0x0A; // LF
-        writer.write_all(&header).map_err(|err| err.into())
-    }
-
-    impl AdfMeasurementParams {
-        /// Reads the measurement parameters from the VGMO file.
-        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
-                reader,
-                #[cfg(debug_assertions)]
-                true,
-            )?;
-            Ok(Self { azimuth, zenith })
-        }
-
-        /// Writes the measurement parameters to the VGMO file.
-        pub fn write_to_vgmo<W: Write>(
-            &self,
-            writer: &mut BufWriter<W>,
-        ) -> Result<(), WriteFileErrorKind> {
-            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, true)
-        }
-    }
-
-    impl MsfMeasurementParams {
-        /// Reads the measurement parameters from the VGMO file.
-        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let (azimuth, zenith) = read_madf_mmsf_params_from_vgmo(
-                reader,
-                #[cfg(debug_assertions)]
-                false,
-            )?;
-            Ok(Self {
-                azimuth,
-                zenith,
-                resolution: 512,
-                strict: true,
-            })
-        }
-
-        /// Writes the measurement parameters to the VGMO file.
-        pub fn write_to_vgmo<W: Write>(
-            &self,
-            writer: &mut BufWriter<W>,
-        ) -> Result<(), WriteFileErrorKind> {
-            // TODO: write resolution for MMSF
-            write_madf_mmsf_params_to_vgmo(&self.azimuth, &self.zenith, writer, false)
-        }
+        writer.write_all(&header)
     }
 
     impl EmitterParams {
@@ -488,7 +484,7 @@ pub mod vgmo {
         pub fn write_to_vgmo<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-        ) -> Result<(), WriteFileErrorKind> {
+        ) -> Result<(), std::io::Error> {
             let mut buf =
                 [0x20; ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
             buf[0] = self.kind as u8;
@@ -506,87 +502,7 @@ pub mod vgmo {
                 ..4 + EmitterParams::REQUIRED_SIZE + ReceiverParams::REQUIRED_SIZE + 4]
                 .copy_from_slice(&(self.receiver.patches_count() as u32).to_le_bytes());
             buf[155] = 0x0A;
-            writer.write_all(&buf).map_err(|err| err.into())
-        }
-    }
-
-    impl MeasuredAdfData {
-        /// Reads the measured MADF data from the given reader.
-        pub fn read<R: Read>(
-            reader: &mut BufReader<R>,
-            meta: HeaderMeta,
-            params: AdfMeasurementParams,
-        ) -> Result<Self, ReadFileErrorKind> {
-            debug_assert!(
-                meta.kind == MeasurementKind::Adf,
-                "Measurement kind
-          mismatch"
-            );
-            let samples = vgsurf::io::read_f32_data_samples(
-                reader,
-                params.samples_count(),
-                meta.encoding,
-                meta.compression,
-            )?;
-            Ok(MeasuredAdfData { params, samples })
-        }
-
-        /// Writes the measured MADF data to the given writer.
-        pub fn write<W: Write>(
-            &self,
-            writer: &mut BufWriter<W>,
-            encoding: FileEncoding,
-            compression: CompressionScheme,
-        ) -> Result<(), WriteFileErrorKind> {
-            // vgsurf::io::write_f32_data_samples(
-            //     writer,
-            //     encoding,
-            //     compression,
-            //     &self.samples,
-            //     self.params.zenith.step_count_wrapped() as u32,
-            // )
-            // .map_err(|err| err.into())
-            todo!("write MADF data")
-        }
-    }
-
-    impl MeasuredMsfData {
-        /// Reads the measured MMSF data from the given reader.
-        pub fn read<R: Read>(
-            reader: &mut BufReader<R>,
-            meta: HeaderMeta,
-            params: MsfMeasurementParams,
-        ) -> Result<Self, ReadFileErrorKind> {
-            debug_assert!(
-                meta.kind == MeasurementKind::Msf,
-                "Measurement kind
-          mismatch"
-            );
-            let samples = vgsurf::io::read_f32_data_samples(
-                reader,
-                params.samples_count(),
-                meta.encoding,
-                meta.compression,
-            )?;
-            Ok(MeasuredMsfData { params, samples })
-        }
-
-        /// Writes the measured MMSF data to the given writer.
-        pub fn write<W: Write>(
-            &self,
-            writer: &mut BufWriter<W>,
-            encoding: FileEncoding,
-            compression: CompressionScheme,
-        ) -> Result<(), WriteFileErrorKind> {
-            // vgsurf::io::write_f32_data_samples(
-            //     writer,
-            //     encoding,
-            //     compression,
-            //     &self.samples,
-            //     self.params.zenith.step_count_wrapped() as u32,
-            // )
-            // .map_err(|err| err.into())
-            todo!("write MMSF data")
+            writer.write_all(&buf)
         }
     }
 
@@ -847,20 +763,17 @@ pub mod vgmo {
 
     impl MeasuredBsdfData {
         /// Reads the measured BSDF data from the given reader.
-        pub fn read<R: Read>(
+        pub fn read_from_vgmo<R: Read>(
             reader: &mut BufReader<R>,
-            meta: HeaderMeta,
             params: BsdfMeasurementParams,
+            encoding: FileEncoding,
+            compression: CompressionScheme,
         ) -> Result<Self, ReadFileErrorKind> {
-            debug_assert!(
-                meta.kind == MeasurementKind::Bsdf,
-                "Measurement kind mismatch"
-            );
-
+            // TODO: check if the meta is correct
             let mut zlib_decoder;
             let mut gzip_decoder;
 
-            let mut decoder: Box<&mut dyn Read> = match meta.compression {
+            let mut decoder: Box<&mut dyn Read> = match compression {
                 CompressionScheme::None => Box::new(reader),
                 CompressionScheme::Zlib => {
                     zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
@@ -873,7 +786,7 @@ pub mod vgmo {
                 _ => Box::new(reader),
             };
 
-            match meta.encoding {
+            match encoding {
                 FileEncoding::Ascii => {
                     todo!("Ascii encoding is not supported yet")
                 }
@@ -903,7 +816,7 @@ pub mod vgmo {
         }
 
         /// Writes the measured BSDF data to the given writer.
-        pub fn write<W: Write>(
+        pub fn write_to_vgmo<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
             encoding: FileEncoding,
@@ -945,194 +858,6 @@ pub mod vgmo {
                         todo!("Fix this")
                     }
                     Ok(())
-                }
-            }
-        }
-    }
-
-    impl MeasurementData {
-        /// Loads the measurement data from a file.
-        pub fn read_from_file(filepath: &Path) -> Result<Self, VgonioError> {
-            let file = File::open(filepath).map_err(|err| {
-                VgonioError::from_io_error(err, "Failed to open measurement file.")
-            })?;
-            let mut reader = BufReader::new(file);
-            let header = Header::read(&mut reader).map_err(|err| {
-                VgonioError::from_io_error(err, "Failed to read header from file.")
-            })?;
-            let path = filepath.to_path_buf();
-            let name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("invalid file stem")
-                .to_string();
-            match header {
-                Header::Bsdf { meta, bsdf } => {
-                    let measured =
-                        MeasuredBsdfData::read(&mut reader, meta, bsdf).map_err(|err| {
-                            VgonioError::from_read_file_error(
-                                ReadFileError {
-                                    path: filepath.to_owned().into_boxed_path(),
-                                    kind: err,
-                                },
-                                "Failed to read measured data from file.",
-                            )
-                        })?;
-                    Ok(MeasurementData {
-                        name,
-                        source: MeasurementDataSource::Loaded(path),
-                        measured: MeasuredData::Bsdf(measured),
-                    })
-                }
-                Header::Madf { meta, madf } => {
-                    let measured =
-                        MeasuredAdfData::read(&mut reader, meta, madf).map_err(|err| {
-                            VgonioError::from_read_file_error(
-                                ReadFileError {
-                                    path: filepath.to_owned().into_boxed_path(),
-                                    kind: err,
-                                },
-                                "Failed to read measured area distribution data from file.",
-                            )
-                        })?;
-                    Ok(MeasurementData {
-                        name,
-                        source: MeasurementDataSource::Loaded(path),
-                        measured: MeasuredData::Adf(measured),
-                    })
-                }
-                Header::Mmsf { meta, mmsf } => {
-                    let measured =
-                        MeasuredMsfData::read(&mut reader, meta, mmsf).map_err(|err| {
-                            VgonioError::from_read_file_error(
-                                ReadFileError {
-                                    path: filepath.to_owned().into_boxed_path(),
-                                    kind: err,
-                                },
-                                "Failed to read measured masking/shadowing data from file.",
-                            )
-                        })?;
-                    Ok(MeasurementData {
-                        name,
-                        source: MeasurementDataSource::Loaded(path),
-                        measured: MeasuredData::Msf(measured),
-                    })
-                }
-            }
-        }
-
-        /// Writes the measurement data to a file in VGMO format.
-        pub fn write_to_file(
-            &self,
-            filepath: &Path,
-            encoding: FileEncoding,
-            compression: CompressionScheme,
-        ) -> Result<(), VgonioError> {
-            let header = match &self.measured {
-                MeasuredData::Adf(adf) => {
-                    assert_eq!(
-                        adf.samples.len(),
-                        adf.params.samples_count(),
-                        "Writing a ADF requires the number of
-          samples to match the number of bins."
-                    );
-                    Header::Madf {
-                        meta: HeaderMeta {
-                            kind: MeasurementKind::Adf,
-                            encoding,
-                            compression,
-                        },
-                        madf: adf.params,
-                    }
-                }
-                MeasuredData::Msf(msf) => {
-                    assert_eq!(
-                        msf.samples.len(),
-                        msf.params.samples_count(),
-                        "Writing a MSF requires the number of
-          samples to match the number of bins."
-                    );
-                    Header::Mmsf {
-                        meta: HeaderMeta {
-                            kind: MeasurementKind::Msf,
-                            encoding,
-                            compression,
-                        },
-                        mmsf: msf.params,
-                    }
-                }
-                MeasuredData::Bsdf(bsdf) => {
-                    assert_eq!(
-                        bsdf.snapshots.len(),
-                        bsdf.params.samples_count(),
-                        "Writing a BSDF requires the number of samples to match the number of \
-                         bins."
-                    );
-                    Header::Bsdf {
-                        meta: HeaderMeta {
-                            kind: MeasurementKind::Bsdf,
-                            encoding,
-                            compression,
-                        },
-                        bsdf: bsdf.params,
-                    }
-                }
-            };
-            let file = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(filepath)
-                .map_err(|err| {
-                    VgonioError::from_io_error(err, "Failed to open measurement file.")
-                })?;
-            let mut writer = BufWriter::new(file);
-            header.write(&mut writer).map_err(|err| {
-                VgonioError::from_write_file_error(
-                    WriteFileError {
-                        path: filepath.to_owned().into_boxed_path(),
-                        kind: err,
-                    },
-                    "Failed to write measurement data header to file.",
-                )
-            })?;
-
-            match &self.measured {
-                MeasuredData::Adf(madf) => {
-                    madf.write(&mut writer, encoding, compression)
-                        .map_err(|err| {
-                            VgonioError::from_write_file_error(
-                                WriteFileError {
-                                    path: filepath.to_owned().into_boxed_path(),
-                                    kind: err,
-                                },
-                                "Failed to write measured area distribution data to file.",
-                            )
-                        })
-                }
-                MeasuredData::Msf(mmsf) => {
-                    mmsf.write(&mut writer, encoding, compression)
-                        .map_err(|err| {
-                            VgonioError::from_write_file_error(
-                                WriteFileError {
-                                    path: filepath.to_owned().into_boxed_path(),
-                                    kind: err,
-                                },
-                                "Failed to write measured masking/shadowing data to file.",
-                            )
-                        })
-                }
-                MeasuredData::Bsdf(bsdf) => {
-                    bsdf.write(&mut writer, encoding, compression)
-                        .map_err(|err| {
-                            VgonioError::from_write_file_error(
-                                WriteFileError {
-                                    path: filepath.to_owned().into_boxed_path(),
-                                    kind: err,
-                                },
-                                "Failed to write measured BSDF data to file.",
-                            )
-                        })
                 }
             }
         }

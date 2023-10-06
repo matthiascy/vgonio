@@ -27,3 +27,22 @@ pub enum Isotropy {
     /// Non-uniformity in some directions.
     Anisotropic,
 }
+
+/// Utility functions.
+pub mod utils {
+    /// Returns the current time as an ISO 8601 (RFC 3339) timestamp.
+    pub fn iso_timestamp() -> String {
+        chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
+    }
+
+    /// Returns the current time as an ISO 8601 (RFC 3339) timestamp without the
+    /// timezone and the colon in the time field.
+    pub fn iso_timestamp_short() -> String {
+        chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string()
+    }
+
+    /// Converts a date time to an ISO 8601 (RFC 3339) timestamp.
+    pub fn iso_timestamp_from_datetime(dt: &chrono::DateTime<chrono::Local>) -> String {
+        dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
+    }
+}

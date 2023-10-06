@@ -1019,8 +1019,7 @@ impl MicroSurface {
 
         let timestamp = {
             let mut timestamp = [0_u8; 32];
-            let dt = chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false);
-            timestamp.copy_from_slice(dt.as_bytes());
+            timestamp.copy_from_slice(vgcore::utils::iso_timestamp().as_bytes());
             timestamp
         };
         let header = Header {

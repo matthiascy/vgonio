@@ -10,6 +10,7 @@
 #![feature(assert_matches)]
 #![feature(stmt_expr_attributes)]
 #![feature(adt_const_params)]
+#![feature(seek_stream_len)]
 #![warn(missing_docs)]
 
 extern crate core;
@@ -49,12 +50,15 @@ pub fn run() -> Result<(), VgonioError> {
 #[serde(rename_all = "lowercase")]
 pub enum Medium {
     /// Vacuum.
+    #[serde(rename = "vac")]
     Vacuum = 0x00,
     /// Air.
     Air = 0x01,
     /// Aluminium.
+    #[serde(rename = "al")]
     Aluminium = 0x02,
     /// Copper.
+    #[serde(rename = "cu")]
     Copper = 0x03,
 }
 

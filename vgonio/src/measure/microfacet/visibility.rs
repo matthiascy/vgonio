@@ -1545,6 +1545,7 @@ pub fn measure_masking_shadowing(
         results.push(MeasurementData {
             name: surface.unwrap().file_stem().unwrap().to_owned(),
             source: MeasurementDataSource::Measured(*hdl),
+            timestamp: chrono::Local::now(),
             measured: MeasuredData::Msf(MeasuredMsfData {
                 params,
                 samples: measurement,

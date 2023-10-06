@@ -98,8 +98,9 @@ impl AreaDistributionExtra {
 impl VariantData for AreaDistributionExtra {
     fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &InnerCache) {
         let measurement = cache.get_measurement_data(data).unwrap();
-        self.azimuth_range = measurement.measured.madf_or_mmsf_azimuth().unwrap();
-        self.zenith_range = measurement.measured.adf_or_msf_zenith().unwrap();
+        let (azimuth, zenith) = measurement.measured.adf_or_msf_angle_ranges().unwrap();
+        self.azimuth_range = azimuth;
+        self.zenith_range = zenith;
         for phi in self.azimuth_range.values_wrapped() {
             let (starting, opposite) = measurement.ndf_data_slice(phi);
             let first_part_points = starting

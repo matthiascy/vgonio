@@ -6,7 +6,6 @@ use crate::{
 #[derive(Debug)]
 pub struct AdfMeasurementTab {
     pub params: AdfMeasurementParams,
-    pub(crate) selector: SurfaceSelector,
     event_loop: EventLoopProxy,
 }
 
@@ -15,7 +14,6 @@ impl AdfMeasurementTab {
         Self {
             params: AdfMeasurementParams::default(),
             event_loop,
-            selector: SurfaceSelector::multiple(),
         }
     }
 
@@ -29,9 +27,6 @@ impl AdfMeasurementTab {
                 ui.end_row();
                 ui.label("Azimuthal angle φ:");
                 self.params.azimuth.ui(ui);
-                ui.end_row();
-                ui.label("Micro-surfaces:");
-                self.selector.ui("micro_surface_selector", ui);
                 ui.end_row();
             });
     }

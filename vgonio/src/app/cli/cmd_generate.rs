@@ -141,7 +141,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
     };
 
     let path = {
-        let base = resolve_output_dir(&config, &opts.output)?;
+        let base = config.resolve_output_dir(&opts.output)?;
         let p = if let Some(path) = opts.output {
             path
         } else {

@@ -4,6 +4,7 @@ mod mmsf;
 
 use crate::{
     app::{
+        args::OutputFormat,
         cache::{Cache, Handle, InnerCache},
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
@@ -95,6 +96,8 @@ pub struct MeasurementDialog {
     point: Sph2,
     /// Whether the dialog is open.
     is_open: bool,
+    /// Output format of the measurement.
+    format: OutputFormat,
     event_loop: EventLoopProxy,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     debug: MeasurementDialogDebug,
@@ -116,6 +119,7 @@ impl MeasurementDialog {
             single: false,
             point: Sph2::zero(),
             is_open: false,
+            format: OutputFormat::Vgmo,
             event_loop,
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             debug: MeasurementDialogDebug {
@@ -278,6 +282,11 @@ impl MeasurementDialog {
 
                 if self.kind == MeasurementKind::Bsdf {
                     ui.horizontal_wrapped(|ui| {
+                        ui.label("Output format: ");
+                        ui.selectable_value(&mut self.format, OutputFormat::Vgmo, "vgmo");
+                        ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
+                    });
+                    ui.horizontal_wrapped(|ui| {
                         ui.checkbox(&mut self.single, "Single Point");
                         if self.single {
                             ui.label("θ");
@@ -310,6 +319,7 @@ impl MeasurementDialog {
                                         single_point,
                                         params: MeasurementParams::Bsdf(self.tab_bsdf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                        format: self.format,
                                     });
                                 }
                                 MeasurementKind::Adf => {
@@ -317,6 +327,7 @@ impl MeasurementDialog {
                                         single_point: None,
                                         params: MeasurementParams::Adf(self.tab_adf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                        format: self.format,
                                     });
                                 }
                                 MeasurementKind::Msf => {
@@ -324,6 +335,7 @@ impl MeasurementDialog {
                                         single_point: None,
                                         params: MeasurementParams::Msf(self.tab_msf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                        format: self.format,
                                     });
                                 }
                             }

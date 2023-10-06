@@ -14,6 +14,7 @@ use vgbxdf::{
 };
 use vgcore::units::Radians;
 
+// TODO: Would MDF = ADF + MSF be more appropriate?
 /// The measured microfacet distribution data (MDF).
 ///
 /// The measured data can be either the area distribution function (ADF) or the

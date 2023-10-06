@@ -2,193 +2,15 @@
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::{
-    io::{BufRead, BufReader, BufWriter, Read, Write},
+    io::{BufRead, BufReader},
     path::Path,
 };
 #[cfg(feature = "surf-obj")]
 use vgcore::math::Axis;
 use vgcore::{
     error::VgonioError,
-    io::{
-        CompressionScheme, FileEncoding, ParseError, ParseErrorKind, ReadFileError,
-        ReadFileErrorKind,
-    },
+    io::{FileEncoding, ReadFileError, ReadFileErrorKind},
 };
-
-/// Writes the samples to the given writer in ascii format.
-pub fn write_f32_data_samples_ascii<W: Write>(
-    writer: &mut BufWriter<W>,
-    samples: &[f32],
-    cols: u32,
-) -> Result<(), std::io::Error> {
-    for (i, s) in samples.iter().enumerate() {
-        let val = if i as u32 % cols == cols - 1 {
-            format!("{s}\n")
-        } else {
-            format!("{s} ")
-        };
-        writer.write_all(val.as_bytes())?;
-    }
-    Ok(())
-}
-
-/// Write the data samples to the given writer.
-pub fn write_f32_data_samples_binary<W: Write>(
-    writer: &mut BufWriter<W>,
-    comp: CompressionScheme,
-    samples: &[f32],
-) -> Result<(), std::io::Error> {
-    match comp {
-        CompressionScheme::None => {
-            for s in samples {
-                writer.write_all(&s.to_le_bytes())?;
-            }
-        }
-        CompressionScheme::Zlib => {
-            let buf = vec![];
-            let mut zlib_encoder =
-                flate2::write::ZlibEncoder::new(buf, flate2::Compression::default());
-            for s in samples {
-                zlib_encoder.write_all(&s.to_le_bytes())?;
-            }
-            writer.write_all(&zlib_encoder.flush_finish()?)?;
-        }
-        CompressionScheme::Gzip => {
-            let buf = vec![];
-            let mut gzip_encoder =
-                flate2::write::GzEncoder::new(buf, flate2::Compression::default());
-            for s in samples {
-                gzip_encoder.write_all(&s.to_le_bytes())?;
-            }
-            writer.write_all(&gzip_encoder.finish()?)?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-/// Read the data samples from the given reader.
-pub fn read_f32_data_samples<R: Read>(
-    reader: &mut BufReader<R>,
-    count: usize,
-    encoding: FileEncoding,
-    compression: CompressionScheme,
-) -> Result<Vec<f32>, ParseError> {
-    let mut zlib_decoder;
-    let mut gzip_decoder;
-
-    let decoder: Box<&mut dyn Read> = match compression {
-        CompressionScheme::None => Box::new(reader),
-        CompressionScheme::Zlib => {
-            zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
-            Box::new(&mut zlib_decoder)
-        }
-        CompressionScheme::Gzip => {
-            gzip_decoder = flate2::bufread::GzDecoder::new(reader);
-            Box::new(&mut gzip_decoder)
-        }
-        _ => Box::new(reader),
-    };
-
-    let mut samples = vec![0.0; count];
-    match encoding {
-        FileEncoding::Ascii => read_ascii_samples(decoder, count, &mut samples)?,
-        FileEncoding::Binary => read_binary_samples(decoder, count, &mut samples)?,
-    }
-
-    Ok(samples)
-}
-
-/// Reads sample values separated by whitespace line by line.
-fn read_ascii_samples<R>(reader: R, count: usize, samples: &mut [f32]) -> Result<(), ParseError>
-where
-    R: Read,
-{
-    debug_assert!(
-        samples.len() >= count,
-        "Samples' container must be large enough to hold all samples"
-    );
-    let reader = BufReader::new(reader);
-
-    let mut loaded = 0;
-    for (n, line) in reader.lines().enumerate() {
-        let line = line.map_err(|_| ParseError {
-            line: n as u32,
-            position: 0,
-            kind: ParseErrorKind::InvalidLine,
-            encoding: FileEncoding::Ascii,
-        })?;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        for (i, x) in line.split_ascii_whitespace().enumerate() {
-            let x = x.parse().map_err(|_| ParseError {
-                line: n as u32,
-                position: i as u32,
-                kind: ParseErrorKind::ParseFloat,
-                encoding: FileEncoding::Ascii,
-            })?;
-            samples[loaded] = x;
-            loaded += 1;
-        }
-    }
-    (count == loaded).then_some(()).ok_or(ParseError {
-        line: u32::MAX,
-        position: u32::MAX,
-        kind: ParseErrorKind::NotEnoughData,
-        encoding: FileEncoding::Ascii,
-    })
-}
-
-/// Reads sample values as binary data.
-fn read_binary_samples<R>(
-    mut reader: R,
-    count: usize,
-    samples: &mut [f32],
-) -> Result<(), ParseError>
-where
-    R: Read,
-{
-    debug_assert!(
-        samples.len() >= count,
-        "Samples' container must be large enough to hold all samples"
-    );
-
-    let results = samples
-        .iter_mut()
-        .enumerate()
-        .map(|(i, sample)| {
-            let parsed = reader.read_f32::<LittleEndian>().map_err(|e| {
-                if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                    ParseError {
-                        line: u32::MAX,
-                        position: i as u32 * 4,
-                        kind: ParseErrorKind::NotEnoughData,
-                        encoding: FileEncoding::Binary,
-                    }
-                } else {
-                    ParseError {
-                        line: u32::MAX,
-                        position: i as u32 * 4,
-                        kind: ParseErrorKind::ParseFloat,
-                        encoding: FileEncoding::Binary,
-                    }
-                }
-            });
-            match parsed {
-                Ok(parsed) => {
-                    *sample = parsed;
-                    Ok(())
-                }
-                Err(err) => Err(err),
-            }
-        })
-        .collect::<Result<Vec<_>, ParseError>>();
-
-    results?;
-    Ok(())
-}
 
 use crate::MicroSurface;
 use vgcore::units::LengthUnit;
@@ -220,7 +42,7 @@ pub mod vgms {
     impl HeaderExt for VgmsHeaderExt {
         const MAGIC: &'static [u8; 4] = b"VGMS";
 
-        fn size() -> usize { 4 + 4 + 4 + 4 + 4 }
+        // fn size() -> usize { 4 + 4 + 4 + 4 + 4 }
 
         fn variant() -> VgonioFileVariant { VgonioFileVariant::Vgms }
 
@@ -282,7 +104,7 @@ pub mod vgms {
         log::debug!("Reading VGMS file of length: {}", header.meta.length);
         // TODO: file length
         // TODO: match header.meta.sample_size
-        let samples = read_f32_data_samples(
+        let samples = vgcore::io::read_f32_data_samples(
             reader,
             header.extra.sample_count() as usize,
             header.meta.encoding,
@@ -302,9 +124,11 @@ pub mod vgms {
 
         // TODO: match header.meta.sample_size
         match header.meta.encoding {
-            FileEncoding::Ascii => write_f32_data_samples_ascii(writer, samples, header.extra.cols),
+            FileEncoding::Ascii => {
+                vgcore::io::write_f32_data_samples_ascii(writer, samples, header.extra.cols)
+            }
             FileEncoding::Binary => {
-                write_f32_data_samples_binary(writer, header.meta.compression, samples)
+                vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
             }
         }
         .map_err(|err| WriteFileErrorKind::Write(err))?;
@@ -315,7 +139,7 @@ pub mod vgms {
         ))?;
         writer.write_all(&(length as u32).to_le_bytes())?;
 
-        log::debug!("Writing VGMS file with length: {}", length);
+        log::debug!("Wrote {} bytes of data to VGMS file", length);
         Ok(())
     }
 }
@@ -388,7 +212,7 @@ pub fn read_ascii_dong2015<R: BufRead>(
 
     let mut samples = vec![0.0; rows * cols];
 
-    read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
+    vgcore::io::read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
         VgonioError::new(
             format!("Failed to read samples from file {}", filepath.display()),
             Some(Box::new(ReadFileError::from_parse_error(filepath, err))),
@@ -681,15 +505,17 @@ pub fn read_omni_surf_3d<R: BufRead>(
     // Read the surface heights
     let mut samples = vec![0.0; (rows * cols) as usize];
 
-    read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(|err| {
-        VgonioError::from_read_file_error(
-            ReadFileError {
-                path: filepath.to_owned().into_boxed_path(),
-                kind: ReadFileErrorKind::Parse(err),
-            },
-            "Failed to read OmniSurf3D file.",
-        )
-    })?;
+    vgcore::io::read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(
+        |err| {
+            VgonioError::from_read_file_error(
+                ReadFileError {
+                    path: filepath.to_owned().into_boxed_path(),
+                    kind: ReadFileErrorKind::Parse(err),
+                },
+                "Failed to read OmniSurf3D file.",
+            )
+        },
+    )?;
 
     // Ignore the rest of the file
 

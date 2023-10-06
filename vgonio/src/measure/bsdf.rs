@@ -25,6 +25,7 @@ use std::{
     path::Path,
 };
 use vgcore::{
+    error::VgonioError,
     math::{Sph2, Vec3},
     units::rad,
 };
@@ -54,13 +55,15 @@ pub struct MeasuredBsdfData {
 }
 
 impl MeasuredBsdfData {
-    /// Writes the BSDF data to images in exr format. TODO: error handling
-    pub fn write_to_images(&self, name: &str, path: &Path) {
+    /// Writes the BSDF data to images in exr format.
+    pub fn write_as_exr(
+        &self,
+        filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+    ) -> Result<(), VgonioError> {
         use exr::prelude::*;
-        log::info!("Saving BSDF images to {}", path.display());
         const WIDTH: usize = 512;
         const HEIGHT: usize = 512;
-
         let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
         let mut bsdf_samples_per_wavelength = vec![vec![0.0; WIDTH * HEIGHT]; wavelengths.len()];
         let patches = self.params.receiver.generate_patches();
@@ -89,10 +92,11 @@ impl MeasuredBsdfData {
             }
         }
 
-        let date_string = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
-            capture_date: Text::new_or_none(&date_string),
+            capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(
+                &timestamp,
+            )),
             software_name: Text::new_or_none("vgonio"),
             other: self.params.to_exr_extra_info(),
             ..LayerAttributes::default()
@@ -145,8 +149,15 @@ impl MeasuredBsdfData {
 
         let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (WIDTH, HEIGHT)));
         let image = Image::from_layers(img_attrib, layers);
-        let filename = format!("bsdf_{name}_{}.exr", date_string,);
-        image.write().to_file(path.join(filename)).unwrap();
+        image.write().to_file(filepath).map_err(|err| {
+            VgonioError::new(
+                format!(
+                    "Failed to write BSDF measurement data to image file: {}",
+                    err
+                ),
+                Some(Box::new(err)),
+            )
+        })
     }
 
     #[cfg(feature = "visu-dbg")]
@@ -509,6 +520,7 @@ pub fn measure_bsdf_rt(
         measurements.push(MeasurementData {
             name: surf.file_stem().unwrap().to_owned(),
             source: MeasurementDataSource::Measured(collected.surface),
+            timestamp: chrono::Local::now(),
             measured: MeasuredData::Bsdf(MeasuredBsdfData { params, snapshots }),
         })
     }

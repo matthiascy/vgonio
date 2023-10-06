@@ -11,6 +11,6 @@ surfaces:
 #  - usr://surfaces/aluminium2bar100.vgms
 #  - usr://surfaces/aluminium3bar100.vgms
 #  - usr://surfaces/aluminium4bar100.vgms
-#  - usr://surfaces/aluminium65bar100.vgms
+  - usr://surfaces/olaf/aluminium65bar100.vgms
   # - usr://surfaces/olaf/aluminiummirror.vgms
-  - usr://surfaces/megamesh_varied_densityonehalf.txt
+  # - usr://surfaces/megamesh_varied_densityonehalf.txt
