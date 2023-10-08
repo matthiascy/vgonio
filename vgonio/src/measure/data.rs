@@ -28,6 +28,7 @@ use vgcore::{
         WriteFileError, WriteFileErrorKind,
     },
     units::Radians,
+    Version,
 };
 use vgsurf::MicroSurface;
 
@@ -295,7 +296,7 @@ impl MeasurementData {
                 };
                 let header = Header {
                     meta: HeaderMeta {
-                        version: 0,
+                        version: Version::new(0, 1, 0),
                         timestamp,
                         length: 0,
                         sample_size: 4,

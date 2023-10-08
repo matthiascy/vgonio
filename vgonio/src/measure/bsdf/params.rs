@@ -92,6 +92,7 @@ impl Default for BsdfMeasurementParams {
                 domain: SphericalDomain::Upper,
                 precision: deg!(2.0).to_radians(),
                 scheme: ReceiverScheme::Beckers,
+                bsdf_only: true,
             },
         }
     }
@@ -150,7 +151,7 @@ impl BsdfMeasurementParams {
 
     /// Returns the total number of samples that will be collected.
     pub fn samples_count(&self) -> usize {
-        self.emitter.measurement_points_count() * self.receiver.patches_count()
+        self.emitter.measurement_points_count() * self.receiver.num_patches()
     }
 
     /// Returns the parameters as a HashMap.

@@ -36,6 +36,9 @@ pub struct ReceiverParams {
     pub precision: Radians,
     /// Partitioning scheme of the collector.
     pub scheme: ReceiverScheme,
+    /// Indicates if the final result contains only the BSDF values or the
+    /// full measurement data.
+    pub bsdf_only: bool,
 }
 
 /// Scheme of the partitioning of the receiver.
@@ -49,65 +52,37 @@ pub enum ReceiverScheme {
     Tregenza = 0x01,
 }
 
+// TODO: implement Tregenza partitioning scheme
 /// Partitioned patches of the collector.
 #[derive(Debug, Clone)]
-pub enum ReceiverPatches {
-    /// Beckers partitioning scheme.
-    Beckers {
-        /// The annuli of the collector.
-        rings: Vec<Ring>,
-        /// The patches of the collector.
-        patches: Vec<Patch>,
-    },
-    // TODO: implement Tregenza
-    /// Tregenza partitioning scheme.
-    Tregenza,
+pub struct ReceiverPartition {
+    /// The partitioning scheme of the collector.
+    pub scheme: ReceiverScheme,
+    /// The annuli of the collector.
+    pub rings: Vec<Ring>,
+    /// The patches of the collector.
+    pub patches: Vec<Patch>,
 }
 
-impl ReceiverPatches {
+impl ReceiverPartition {
     /// Returns the number of patches.
-    pub fn len(&self) -> usize {
-        match self {
-            Self::Beckers { patches, .. } => patches.len(),
-            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
-        }
-    }
+    pub fn num_patches(&self) -> usize { self.patches.len() }
 
-    /// Returns the iterator over the patches.
-    pub fn patches_iter(&self) -> impl Iterator<Item = &Patch> {
-        match self {
-            Self::Beckers { patches, .. } => patches.iter(),
-            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
-        }
-    }
-
-    /// Returns the iterator over the rings.
-    pub fn rings_iter(&self) -> impl Iterator<Item = &Ring> {
-        match self {
-            Self::Beckers { rings, .. } => rings.iter(),
-            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
-        }
-    }
+    /// Returns the number of rings.
+    pub fn num_rings(&self) -> usize { self.rings.len() }
 
     /// Returns the index of the patch containing the direction.
     pub fn contains(&self, sph: Sph2) -> Option<usize> {
-        match self {
-            Self::Beckers { rings, patches } => {
-                for ring in rings.iter() {
-                    if ring.theta_inner <= sph.theta.as_f32()
-                        && sph.theta.as_f32() <= ring.theta_outer
-                    {
-                        for (i, patch) in patches.iter().skip(ring.base_index).enumerate() {
-                            if patch.min.phi <= sph.phi && sph.phi <= patch.max.phi {
-                                return Some(ring.base_index + i);
-                            }
-                        }
+        for ring in self.rings.iter() {
+            if ring.theta_inner <= sph.theta.as_f32() && sph.theta.as_f32() <= ring.theta_outer {
+                for (i, patch) in self.patches.iter().skip(ring.base_index).enumerate() {
+                    if patch.min.phi <= sph.phi && sph.phi <= patch.max.phi {
+                        return Some(ring.base_index + i);
                     }
                 }
-                None
             }
-            Self::Tregenza => todo!("Tregenza partitioning scheme is not implemented yet"),
         }
+        None
     }
 }
 
@@ -202,15 +177,23 @@ mod beckers {
 
 impl ReceiverParams {
     /// Returns the number of patches of the collector.
-    pub fn patches_count(&self) -> usize {
+    pub fn num_patches(&self) -> usize {
         match self.scheme {
             ReceiverScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             }
-            ReceiverScheme::Tregenza => 0,
+            ReceiverScheme::Tregenza => {
+                todo!("Tregenza partitioning scheme is not implemented yet")
+            }
         }
+    }
+
+    // TODO: constify this
+    /// Returns the number rings of the collector.
+    pub fn num_rings(&self) -> usize {
+        (self.domain.zenith_angle_diff() / self.precision).round() as usize
     }
 
     /// Generates the patches of the collector.
@@ -218,7 +201,7 @@ impl ReceiverParams {
     /// The patches are generated based on the scheme of the collector. They are
     /// used to collect the data. The patches are generated in the order of
     /// the azimuth angle first, then the zenith angle.
-    pub fn generate_patches(&self) -> ReceiverPatches {
+    pub fn generate_patches(&self) -> ReceiverPartition {
         match self.scheme {
             ReceiverScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
@@ -252,7 +235,11 @@ impl ReceiverParams {
                         ));
                     }
                 }
-                ReceiverPatches::Beckers { rings, patches }
+                ReceiverPartition {
+                    scheme: ReceiverScheme::Beckers,
+                    rings,
+                    patches,
+                }
             }
             ReceiverScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
@@ -273,7 +260,7 @@ pub struct Receiver {
     /// Transmitted medium's refractive indices.
     pub iors_t: Vec<RefractiveIndex>,
     /// The partitioned patches of the receiver.
-    pub patches: ReceiverPatches,
+    pub patches: ReceiverPartition,
 }
 
 /// Outgoing ray of a trajectory [`RayTrajectory`].
@@ -456,7 +443,7 @@ impl Receiver {
 
         let mut data = vec![
             PerWavelength::splat(BounceAndEnergy::empty(max_bounce), spectrum_len);
-            self.patches.len()
+            self.patches.num_patches()
         ];
 
         // Compute the vertex positions of the outgoing rays.
@@ -520,17 +507,17 @@ pub struct CollectedData<'a> {
     /// The micro-surface where the data were collected.
     pub surface: Handle<MicroSurface>,
     /// The partitioned patches of the receiver.
-    pub patches: &'a ReceiverPatches,
+    pub partition: &'a ReceiverPartition,
     /// The collected data.
     pub snapshots: Vec<BsdfSnapshotRaw<BounceAndEnergy>>,
 }
 
 impl<'a> CollectedData<'a> {
     /// Creates an empty collected data.
-    pub fn empty(surf: Handle<MicroSurface>, patches: &'a ReceiverPatches) -> Self {
+    pub fn empty(surf: Handle<MicroSurface>, partition: &'a ReceiverPartition) -> Self {
         Self {
             surface: surf,
-            patches,
+            partition,
             snapshots: vec![],
         }
     }
@@ -551,7 +538,7 @@ impl<'a> CollectedData<'a> {
         // For each snapshot (w_i), compute the BSDF.
         log::info!(
             "Computing BSDF... with {} patches",
-            params.receiver.patches_count()
+            params.receiver.num_patches()
         );
         self.snapshots
             .par_iter()
@@ -566,7 +553,7 @@ impl<'a> CollectedData<'a> {
                 for (i, patch_data) in snapshot.records.iter().enumerate() {
                     // Per wavelength
                     for (j, stats) in patch_data.iter().enumerate() {
-                        let patch = self.patches.patches_iter().nth(i).unwrap();
+                        let patch = self.partition.patches.iter().nth(i).unwrap();
                         let cos_o = patch.center().theta.cos();
                         if cos_o == 0.0 {
                             samples[i][j] = 0.0;

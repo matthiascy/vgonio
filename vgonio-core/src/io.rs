@@ -1,12 +1,17 @@
 //! IO related types and functions.
 
+// TODO: replace Float trait by a custom trait to avoid the dependency to
+// num_traits as Float trait of num_traits don't have a `to_le_bytes` method.
+
+use crate::Version;
 use byteorder::{LittleEndian, ReadBytesExt};
 use clap::ValueEnum;
+use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::Display,
-    io::{BufRead, BufReader, BufWriter, Read, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Seek, Write},
     path::Path,
 };
 
@@ -287,7 +292,7 @@ pub enum VgonioFileVariant {
 /// Meta information of a VG file.
 pub struct HeaderMeta {
     /// Version of the file.
-    pub version: u32,
+    pub version: Version,
     /// Timestamp in RFC3339 and ISO 8601 format.
     pub timestamp: [u8; 32],
     /// Length of the whole file in bytes.
@@ -309,13 +314,13 @@ pub trait HeaderExt: Sized {
     fn variant() -> VgonioFileVariant;
 
     /// Writes the extra information to a writer.
-    fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()>;
+    fn write<W: Write>(&self, ver: Version, writer: &mut BufWriter<W>) -> std::io::Result<()>;
 
     /// Reads the extra information from a reader.
-    fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self>;
+    fn read<R: Read + Seek>(ver: Version, reader: &mut BufReader<R>) -> std::io::Result<Self>;
 }
 
-/// Header of a VG file.
+/// Header of a Vgonio file.
 pub struct Header<E: HeaderExt> {
     /// The meta information.
     pub meta: HeaderMeta,
@@ -324,6 +329,9 @@ pub struct Header<E: HeaderExt> {
 }
 
 impl<E: HeaderExt> Header<E> {
+    /// Current possible versions of the file.
+    pub const VERSIONS: &'static [Version] = &[Version::new(0, 1, 0)];
+
     /// Writes the header to a writer.
     ///
     /// Note: the length of the whole file is not known at this point. Therefore
@@ -331,14 +339,14 @@ impl<E: HeaderExt> Header<E> {
     /// whole file is written.
     pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
         writer.write_all(E::MAGIC)?;
-        writer.write_all(&self.meta.version.to_le_bytes())?;
+        writer.write_all(&self.meta.version.as_u32().to_le_bytes())?;
         writer.write_all(&self.meta.length.to_le_bytes())?;
         writer.write_all(&self.meta.timestamp)?;
         writer.write_all(&[self.meta.sample_size])?;
         writer.write_all(&[self.meta.encoding as u8])?;
         writer.write_all(&[self.meta.compression as u8])?;
         writer.write_all(&[0u8; 1])?; // padding
-        self.extra.write(writer)?;
+        self.extra.write(self.meta.version, writer)?;
         Ok(())
     }
 
@@ -347,7 +355,7 @@ impl<E: HeaderExt> Header<E> {
 
     /// Reads the header from the given reader.
     /// The reader must be positioned at the start of the header.
-    pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+    pub fn read<R: Read + Seek>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
         if magic != *E::MAGIC {
@@ -359,8 +367,16 @@ impl<E: HeaderExt> Header<E> {
             let mut buf = [0u8; 4];
             let version = {
                 reader.read_exact(&mut buf)?;
-                u32::from_le_bytes(buf)
+                Version::from_u32(u32::from_le_bytes(buf))
             };
+
+            if !Self::VERSIONS.contains(&version) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid version number {}", version),
+                ));
+            }
+
             let length = {
                 reader.read_exact(&mut buf)?;
                 u32::from_le_bytes(buf)
@@ -374,7 +390,7 @@ impl<E: HeaderExt> Header<E> {
             let sample_size = buf[0];
             let encoding = FileEncoding::from(buf[1]);
             let compression = CompressionScheme::from(buf[2]);
-            let extra = E::read(reader)?;
+            let extra = E::read(version, reader)?;
             Ok(Self {
                 meta: HeaderMeta {
                     version,
@@ -391,9 +407,9 @@ impl<E: HeaderExt> Header<E> {
 }
 
 /// Writes the samples to the given writer in ascii format.
-pub fn write_f32_data_samples_ascii<W: Write>(
+pub fn write_data_samples_ascii<W: Write, F: Float + Display>(
     writer: &mut BufWriter<W>,
-    samples: &[f32],
+    samples: &[F],
     cols: u32,
 ) -> Result<(), std::io::Error> {
     for (i, s) in samples.iter().enumerate() {

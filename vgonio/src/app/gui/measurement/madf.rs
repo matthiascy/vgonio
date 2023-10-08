@@ -1,7 +1,4 @@
-use crate::{
-    app::gui::{event::EventLoopProxy, widgets::SurfaceSelector},
-    measure::params::AdfMeasurementParams,
-};
+use crate::{app::gui::event::EventLoopProxy, measure::params::AdfMeasurementParams};
 
 #[derive(Debug)]
 pub struct AdfMeasurementTab {

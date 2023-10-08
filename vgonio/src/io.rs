@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::{BufReader, Read, Write},
-    path::Path,
-};
+use std::io::{BufReader, Read, Write};
 use vgcore::math;
 
 use crate::measure::{
@@ -16,7 +12,7 @@ pub mod vgmo {
         measure::{
             bsdf::{
                 emitter::EmitterParams,
-                receiver::{BounceAndEnergy, ReceiverParams, ReceiverScheme},
+                receiver::{BounceAndEnergy, ReceiverParams, ReceiverScheme, Ring},
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshotRaw, PerWavelength,
             },
             data::MeasuredData,
@@ -25,7 +21,7 @@ pub mod vgmo {
                 SimulationKind,
             },
         },
-        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive,
+        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     };
     use std::io::{BufWriter, Seek};
     use vgcore::{
@@ -34,9 +30,9 @@ pub mod vgmo {
             VgonioFileVariant, WriteFileErrorKind,
         },
         math::Sph2,
-        units::{mm, rad, Nanometres, Radians},
+        units::{rad, Nanometres, Radians},
+        Version,
     };
-    use vgsurf::io::vgms::VgmsHeaderExt;
 
     macro_rules! impl_range_by_step_size_inclusive_read_write {
         ($($T:ty, $step_count:ident);*) => {
@@ -145,26 +141,42 @@ pub mod vgmo {
         fn variant() -> VgonioFileVariant { VgonioFileVariant::Vgmo }
 
         /// Writes the VGMO header extension to the given writer.
-        fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
-            match self {
-                Self::Adf { params } => {
-                    writer.write_all(&[MeasurementKind::Adf as u8])?;
-                    write_adf_or_msf_params_to_vgmo(&params.azimuth, &params.zenith, writer, true)?;
-                }
-                Self::Msf { params } => {
-                    // TODO:
-                    writer.write_all(&[MeasurementKind::Msf as u8])?;
-                    write_adf_or_msf_params_to_vgmo(
-                        &params.azimuth,
-                        &params.zenith,
-                        writer,
-                        false,
-                    )?;
-                }
-                Self::Bsdf { params } => {
-                    // TODO:
-                    writer.write_all(&[MeasurementKind::Bsdf as u8])?;
-                    params.write_to_vgmo(writer)?;
+        fn write<W: Write>(
+            &self,
+            version: Version,
+            writer: &mut BufWriter<W>,
+        ) -> std::io::Result<()> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => match self {
+                    Self::Adf { params } => {
+                        writer.write_all(&[MeasurementKind::Adf as u8])?;
+                        write_adf_or_msf_params_to_vgmo(
+                            &params.azimuth,
+                            &params.zenith,
+                            writer,
+                            true,
+                        )?;
+                    }
+                    Self::Msf { params } => {
+                        writer.write_all(&[MeasurementKind::Msf as u8])?;
+                        write_adf_or_msf_params_to_vgmo(
+                            &params.azimuth,
+                            &params.zenith,
+                            writer,
+                            false,
+                        )?;
+                    }
+                    Self::Bsdf { params } => {
+                        writer.write_all(&[MeasurementKind::Bsdf as u8])?;
+                        params.write_to_vgmo(version, writer)?;
+                    }
+                },
+                _ => {
+                    log::error!("Unsupported VGMO version: {}", version.as_string());
                 }
             }
             Ok(())
@@ -172,12 +184,15 @@ pub mod vgmo {
 
         /// Reads the VGMO header extension from the given reader.
         /// The reader must be positioned at the start of the header extension.
-        fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self> {
+        fn read<R: Read + Seek>(
+            version: Version,
+            reader: &mut BufReader<R>,
+        ) -> std::io::Result<Self> {
             let mut kind = [0u8; 1];
             reader.read_exact(&mut kind)?;
             match MeasurementKind::from(kind[0]) {
                 MeasurementKind::Bsdf => {
-                    let params = BsdfMeasurementParams::read_from_vgmo(reader)?;
+                    let params = BsdfMeasurementParams::read_from_vgmo(version, reader)?;
                     Ok(Self::Bsdf { params })
                 }
                 MeasurementKind::Adf => {
@@ -259,7 +274,7 @@ pub mod vgmo {
                         } else {
                             measured.msf().unwrap().params.zenith.step_count_wrapped()
                         };
-                        vgcore::io::write_f32_data_samples_ascii(writer, samples, cols as u32)
+                        vgcore::io::write_data_samples_ascii(writer, samples, cols as u32)
                     }
                     FileEncoding::Binary => vgcore::io::write_f32_data_samples_binary(
                         writer,
@@ -336,172 +351,321 @@ pub mod vgmo {
     }
 
     impl EmitterParams {
-        /// The required size of the buffer to read or write an emitter.
-        pub const REQUIRED_SIZE: usize = 80;
-
-        /// Reads an emitter from the given buffer.
-        pub fn read_from_buf(buf: &[u8]) -> Self {
-            debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "Emitter needs at least 80 bytes of space"
-            );
-            let num_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-            let max_bounces = u32::from_le_bytes(buf[4..8].try_into().unwrap());
-            let radius = mm!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
-            let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[12..12 + 16]);
-            let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[28..28 + 16]);
-            // NOTE: because of removal of RegionShape which takes 20 bytes, the offset is
-            // 64 instead of 44
-            let spectrum = RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[64..64 + 16]);
-            Self {
-                num_rays,
-                max_bounces,
-                zenith,
-                azimuth,
-                spectrum,
+        /// The size of the buffer required to read or write the parameters.
+        pub const fn required_size(version: Version) -> Option<usize> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => Some(56),
+                _ => None,
             }
         }
 
-        /// Writes the emitter to the given buffer.
-        pub fn write_to_buf(&self, buf: &mut [u8]) {
+        /// Reads an emitter from the given buffer.
+        pub fn read_from_buf(version: Version, buf: &[u8]) -> Self {
+            let required_size = Self::required_size(version).unwrap();
             debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "Emitter needs at least 80 bytes of space"
+                buf.len() >= required_size,
+                "Emitter {} needs at least {} bytes of space",
+                version,
+                required_size
             );
-            buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
-            buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let num_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+                    let max_bounces = u32::from_le_bytes(buf[4..8].try_into().unwrap());
+                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[8..24]);
+                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[24..40]);
+                    let spectrum =
+                        RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[40..56]);
+                    Self {
+                        num_rays,
+                        max_bounces,
+                        zenith,
+                        azimuth,
+                        spectrum,
+                    }
+                }
+                _ => {
+                    panic!("Unsupported VGMO[EmitterPrams] version: {}", version);
+                }
+            }
+        }
 
-            // TODO: (radius removed) -- write other fields
-            // buf[8..12].copy_from_slice(&self.radius.value().as_f32().to_le_bytes());
-            self.zenith.write_to_buf(&mut buf[12..12 + 16]);
-            self.azimuth.write_to_buf(&mut buf[28..28 + 16]);
-            // TODO: (region shape removed) -- write other fields
-            // self.shape.write_to_buf(&mut buf[44..44 + 20]);
-            self.spectrum.write_to_buf(&mut buf[64..64 + 16]);
+        /// Writes the emitter to the given buffer and returns the number of
+        /// bytes written.
+        pub fn write_to_buf(&self, version: Version, buf: &mut [u8]) -> usize {
+            let required_size = Self::required_size(version).unwrap();
+            debug_assert!(
+                buf.len() >= required_size,
+                "Emitter {} needs at least {} bytes of space",
+                version,
+                required_size
+            );
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
+                    buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
+                    self.azimuth.write_to_buf(&mut buf[8..24]);
+                    self.zenith.write_to_buf(&mut buf[24..40]);
+                    self.spectrum.write_to_buf(&mut buf[40..56]);
+                    required_size
+                }
+                _ => {
+                    panic!("Unsupported VGMO[EmitterParams] version: {}", version);
+                }
+            }
         }
     }
 
-    impl ReceiverScheme {
-        /// The size of the buffer required to write the collector scheme.
-        pub const REQUIRED_SIZE: usize = 56; // TODO: shrink this
+    impl Ring {
+        /// The size of the buffer required to read or write the parameters.
+        const REQUIRED_SIZE: usize = 20;
 
-        /// Reads the collector scheme from a buffer.
-        pub fn read_from_buf(buf: &[u8]) -> Self {
-            debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "CollectorScheme needs at least 60 bytes of space"
-            );
-            match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
-                0x00 => ReceiverScheme::Beckers,
-                0x01 => ReceiverScheme::Tregenza,
-                _ => panic!("Invalid collector scheme type"),
-            }
-        }
-
-        /// Writes the collector scheme to a buffer.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
-                "CollectorScheme needs at least 60 bytes of space"
+                "Ring needs at least 20 bytes of space"
             );
-            match self {
-                ReceiverScheme::Beckers => {
-                    buf[0..4].copy_from_slice(&(0x00u32).to_le_bytes());
-                }
-                ReceiverScheme::Tregenza => {
-                    buf[0..4].copy_from_slice(&(0x01u32).to_le_bytes());
-                }
+            buf[0..4].copy_from_slice(&(self.theta_inner).to_le_bytes());
+            buf[4..8].copy_from_slice(&(self.theta_outer).to_le_bytes());
+            buf[8..12].copy_from_slice(&(self.phi_step).to_le_bytes());
+            buf[12..16].copy_from_slice(&(self.patch_count as u32).to_le_bytes());
+            buf[16..20].copy_from_slice(&(self.base_index as u32).to_le_bytes());
+        }
+
+        pub fn read_from_buf(buf: &[u8]) -> Self {
+            debug_assert!(
+                buf.len() >= Self::REQUIRED_SIZE,
+                "Ring needs at least 20 bytes of space"
+            );
+            let theta_inner = f32::from_le_bytes(buf[0..4].try_into().unwrap());
+            let theta_outer = f32::from_le_bytes(buf[4..8].try_into().unwrap());
+            let phi_step = f32::from_le_bytes(buf[8..12].try_into().unwrap());
+            let patch_count = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
+            let base_index = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
+            Self {
+                theta_inner,
+                theta_outer,
+                phi_step,
+                patch_count,
+                base_index,
             }
         }
+    }
+
+    fn receiver_num_rings(domain: SphericalDomain, precision: Radians) -> usize {
+        (domain.zenith_angle_diff() / precision).round() as usize
     }
 
     impl ReceiverParams {
-        /// The size of the buffer required to write the collector.
-        pub const REQUIRED_SIZE: usize = 4 + ReceiverScheme::REQUIRED_SIZE;
+        /// The size of the buffer required to read or write the parameters.
+        pub const fn required_size(version: Version, num_rings: usize) -> Option<usize> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => Some(num_rings * Ring::REQUIRED_SIZE + 24),
+                _ => None,
+            }
+        }
 
-        /// Reads the collector from a buffer.
-        pub fn read_from_buf(buf: &[u8]) -> Self {
-            debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "Collector needs at least 64 bytes of space"
-            );
-            let precision = rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
-            let scheme = ReceiverScheme::read_from_buf(&buf[4..4 + ReceiverScheme::REQUIRED_SIZE]);
-            Self {
-                domain: Default::default(),
-                scheme,
-                precision,
+        /// Reads the receiver.
+        ///
+        /// Because the receiver's partition is dependent on the precision, the
+        /// we need to know read the precision to know the actual size of the
+        /// receiver.
+        pub fn read<R: Read + Seek>(version: Version, reader: &mut BufReader<R>) -> Self {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let mut buf = [0u8; 24];
+                    reader.read_exact(&mut buf).unwrap();
+                    let domain = match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
+                        0 => SphericalDomain::Whole,
+                        1 => SphericalDomain::Upper,
+                        2 => SphericalDomain::Lower,
+                        _ => panic!("Invalid domain kind"),
+                    };
+                    let scheme = match u32::from_le_bytes(buf[4..8].try_into().unwrap()) {
+                        0 => ReceiverScheme::Beckers,
+                        1 => ReceiverScheme::Tregenza,
+                        _ => panic!("Invalid scheme kind"),
+                    };
+                    let precision = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                    let bsdf_only = u32::from_le_bytes(buf[20..24].try_into().unwrap()) != 0;
+                    let params = ReceiverParams {
+                        domain,
+                        precision,
+                        scheme,
+                        bsdf_only,
+                    };
+                    let expected_num_rings = params.num_rings();
+                    let num_rings = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
+                    debug_assert!(
+                        num_rings == expected_num_rings,
+                        "Receiver's partition ring count does not match the precision",
+                    );
+                    let expected_num_patches = params.num_patches();
+                    let num_patches = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
+                    debug_assert!(
+                        num_patches == expected_num_patches,
+                        "Receiver's partition patch count does not match the precision",
+                    );
+                    // Skip reading the rings
+                    reader
+                        .seek_relative((num_rings * Ring::REQUIRED_SIZE) as i64)
+                        .unwrap();
+                    params
+                }
+                _ => {
+                    panic!("Unsupported VGMO version: {}", version);
+                }
             }
         }
 
         /// Writes the collector to a buffer.
-        pub fn write_to_buf(&self, buf: &mut [u8]) {
+        pub fn write_to_buf(&self, version: Version, buf: &mut [u8]) {
+            let required_size = Self::required_size(version, self.num_rings()).unwrap();
             debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "Collector needs at least 64 bytes of space"
+                buf.len() >= required_size,
+                "Receiver {} needs at least {} bytes of space",
+                version,
+                required_size
             );
-            // TODO: (radius removed) -- write other fields
-            self.scheme
-                .write_to_buf(&mut buf[4..4 + ReceiverScheme::REQUIRED_SIZE]);
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let partition = self.generate_patches();
+                    buf[0..4].copy_from_slice(&(self.domain as u32).to_le_bytes());
+                    buf[4..8].copy_from_slice(&(self.scheme as u32).to_le_bytes());
+                    buf[8..12].copy_from_slice(&self.precision.value().to_le_bytes());
+                    buf[12..16].copy_from_slice(&(partition.num_rings() as u32).to_le_bytes());
+                    buf[16..20].copy_from_slice(&(partition.num_patches() as u32).to_le_bytes());
+                    buf[20..24].copy_from_slice(&(self.bsdf_only as u32).to_le_bytes());
+                    let offset = 24;
+                    for (i, ring) in partition.rings.iter().enumerate() {
+                        ring.write_to_buf(&mut buf[offset + i * Ring::REQUIRED_SIZE..]);
+                    }
+                }
+                _ => {
+                    log::error!("Unsupported VGMO[ReceiverParams] version: {version}");
+                }
+            }
+        }
+    }
+
+    impl Medium {
+        fn write_to_buf(&self, buf: &mut [u8]) {
+            debug_assert!(buf.len() >= 3, "Medium needs at least 3 bytes of space");
+            match self {
+                Self::Vacuum => buf[0..3].copy_from_slice(b"vac"),
+                Self::Air => buf[0..3].copy_from_slice(b"air"),
+                Self::Aluminium => buf[0..3].copy_from_slice(b"al\0"),
+                Self::Copper => buf[0..3].copy_from_slice(b"cu\0"),
+            }
+        }
+
+        fn read_from_buf(buf: &[u8]) -> Self {
+            debug_assert!(buf.len() >= 3, "Medium needs at least 3 bytes of space");
+            match &buf[0..3] {
+                b"vac" => Self::Vacuum,
+                b"air" => Self::Air,
+                b"al" => Self::Aluminium,
+                b"cu" => Self::Copper,
+                _ => panic!("Invalid medium kind"),
+            }
         }
     }
 
     impl BsdfMeasurementParams {
         /// Reads the BSDF measurement parameters from the given reader.
-        pub fn read_from_vgmo<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
-            let mut buf =
-                [0u8; ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
-            reader.read_exact(&mut buf)?;
-            let kind = BsdfKind::from(buf[0]);
-            let incident_medium = Medium::from(buf[1]);
-            let transmitted_medium = Medium::from(buf[2]);
-            let sim_kind = SimulationKind::try_from(buf[3]).unwrap();
-            let emitter = EmitterParams::read_from_buf(&buf[4..4 + EmitterParams::REQUIRED_SIZE]);
-            let collector = ReceiverParams::read_from_buf(&buf[4 + EmitterParams::REQUIRED_SIZE..]);
-            let samples_count = u32::from_le_bytes(
-                buf[ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4
-                    ..ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 4]
-                    .try_into()
-                    .unwrap(),
-            );
-            assert_eq!(
-                samples_count,
-                collector.patches_count() as u32,
-                "The number of samples in the VGMO file does not match the number of samples in \
-                 the collector scheme"
-            );
-            Ok(Self {
-                kind,
-                incident_medium,
-                transmitted_medium,
-                sim_kind,
-                emitter,
-                receiver: collector,
-            })
+        pub fn read_from_vgmo<R: Read + Seek>(
+            version: Version,
+            reader: &mut BufReader<R>,
+        ) -> Result<Self, std::io::Error> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let mut buf = vec![0u8; 8 + EmitterParams::required_size(version).unwrap()]
+                        .into_boxed_slice();
+                    reader.read_exact(&mut buf)?;
+                    let kind = BsdfKind::from(buf[0]);
+                    let incident_medium = Medium::read_from_buf(&buf[1..4]);
+                    let transmitted_medium = Medium::read_from_buf(&buf[4..7]);
+                    let sim_kind = SimulationKind::try_from(buf[7]).unwrap();
+                    let emitter = EmitterParams::read_from_buf(version, &buf[8..]);
+                    let receiver = ReceiverParams::read(version, reader);
+                    Ok(Self {
+                        kind,
+                        incident_medium,
+                        transmitted_medium,
+                        sim_kind,
+                        emitter,
+                        receiver,
+                    })
+                }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Unsupported VGMO[BsdfMeasurementParams] version {}",
+                        version
+                    ),
+                )),
+            }
         }
 
         /// Writes the BSDF measurement parameters to the given writer.
         pub fn write_to_vgmo<W: Write>(
             &self,
+            version: Version,
             writer: &mut BufWriter<W>,
         ) -> Result<(), std::io::Error> {
-            let mut buf =
-                [0x20; ReceiverParams::REQUIRED_SIZE + EmitterParams::REQUIRED_SIZE + 4 + 12];
+            let buf_size = match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    8 + EmitterParams::required_size(version).unwrap()
+                        + ReceiverParams::required_size(version, self.receiver.num_rings()).unwrap()
+                }
+                _ => {
+                    log::error!("Unsupported VGMO version: {}", version.as_string());
+                    return Ok(());
+                }
+            };
+            let mut buf = vec![0u8; buf_size].into_boxed_slice();
             buf[0] = self.kind as u8;
-            buf[1] = self.incident_medium as u8;
-            buf[2] = self.transmitted_medium as u8;
-            buf[3] = match self.sim_kind {
+            self.incident_medium.write_to_buf(&mut buf[1..4]);
+            self.transmitted_medium.write_to_buf(&mut buf[4..7]);
+            buf[7] = match self.sim_kind {
                 SimulationKind::GeomOptics(method) => method as u8,
                 SimulationKind::WaveOptics => 0x03,
             };
-            self.emitter
-                .write_to_buf(&mut buf[4..4 + EmitterParams::REQUIRED_SIZE]);
+            let n_written = self.emitter.write_to_buf(version, &mut buf[8..]);
             self.receiver
-                .write_to_buf(&mut buf[4 + EmitterParams::REQUIRED_SIZE..]);
-            buf[4 + EmitterParams::REQUIRED_SIZE + ReceiverParams::REQUIRED_SIZE
-                ..4 + EmitterParams::REQUIRED_SIZE + ReceiverParams::REQUIRED_SIZE + 4]
-                .copy_from_slice(&(self.receiver.patches_count() as u32).to_le_bytes());
-            buf[155] = 0x0A;
+                .write_to_buf(version, &mut buf[n_written + 8..]);
             writer.write_all(&buf)
         }
     }
@@ -705,7 +869,7 @@ pub mod vgmo {
         pub fn read_from_buf(buf: &[u8], params: &BsdfMeasurementParams) -> Self {
             let n_wavelength = params.emitter.spectrum.step_count();
             let bounces = params.emitter.max_bounces as usize;
-            let detector_patches_count = params.receiver.patches_count();
+            let detector_patches_count = params.receiver.num_patches();
             let size = Self::calc_size_in_bytes(n_wavelength, bounces, detector_patches_count);
             let bounce_and_energy_size = BounceAndEnergy::calc_size_in_bytes(bounces);
             debug_assert_eq!(buf.len(), size, "Buffer size mismatch");
@@ -793,7 +957,7 @@ pub mod vgmo {
                 FileEncoding::Binary => {
                     let n_wavelength = params.emitter.spectrum.step_count();
                     let bounces = params.emitter.max_bounces as usize;
-                    let detector_patches_count = params.receiver.patches_count();
+                    let detector_patches_count = params.receiver.num_patches();
                     let sample_size = BsdfSnapshotRaw::<BounceAndEnergy>::calc_size_in_bytes(
                         n_wavelength,
                         bounces,
@@ -822,6 +986,20 @@ pub mod vgmo {
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<(), WriteFileErrorKind> {
+            match compression {
+                CompressionScheme::None => {
+                    for snapshot in self.snapshots {
+                        for samples in snapshot.samples {
+                            for s in &samples {
+                                writer.write_all(&s.to_le_bytes())?;
+                            }
+                        }
+                    }
+                }
+                CompressionScheme::Zlib => {}
+                CompressionScheme::Gzip => {}
+            }
+
             let mut zlib;
             let mut gzip;
 
@@ -846,7 +1024,7 @@ pub mod vgmo {
                     for sample in &self.snapshots {
                         let n_wavelength = self.params.emitter.spectrum.step_count();
                         let bounces = self.params.emitter.max_bounces as usize;
-                        let detector_patches_count = self.params.receiver.patches_count();
+                        let detector_patches_count = self.params.receiver.num_patches();
                         let sample_size = BsdfSnapshotRaw::<BounceAndEnergy>::calc_size_in_bytes(
                             n_wavelength,
                             bounces,
@@ -871,7 +1049,7 @@ mod tests {
             bsdf::{
                 emitter::{Emitter, EmitterParams},
                 receiver::{
-                    BounceAndEnergy, Receiver, ReceiverParams, ReceiverPatches, ReceiverScheme,
+                    BounceAndEnergy, Receiver, ReceiverParams, ReceiverPartition, ReceiverScheme,
                 },
                 rtc::RtcMethod,
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshotRaw, PerWavelength,

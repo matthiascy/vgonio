@@ -293,6 +293,18 @@ impl<T: PartialEq> PartialEq for PerWavelength<T> {
     }
 }
 
+impl<'a, T> Iterator for &'a PerWavelength<T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> { self.0.iter().next() }
+}
+
+// impl<'a, T> Iterator for &'a PerWavelength<T> {
+//     type Item = &'a T;
+//
+//     fn next(&mut self) -> Option<Self::Item> { self.0.iter().next() }
+// }
+
 /// BSDF measurement statistics for a single emitter's position.
 #[derive(Clone)]
 pub struct BsdfMeasurementStatsPoint {

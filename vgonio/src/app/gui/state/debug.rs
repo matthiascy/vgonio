@@ -9,7 +9,7 @@ use crate::{
     },
     measure::bsdf::{
         emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
-        receiver::ReceiverPatches,
+        receiver::ReceiverPartition,
         rtc::{Ray, RayTrajectory},
     },
 };
@@ -105,7 +105,7 @@ pub struct DebugDrawingState {
     /// Vertex buffer for the collector dome.
     pub detector_dome_vertex_buffer: Option<wgpu::Buffer>,
     /// Collector's patches.
-    pub detector_patches: Option<ReceiverPatches>,
+    pub detector_partition: Option<ReceiverPartition>,
     /// Points on the collector's surface. (Rays hitting the collector's
     /// surface)
     pub detector_ray_hit_points_buffer: Option<wgpu::Buffer>,
@@ -420,7 +420,7 @@ impl DebugDrawingState {
             drawing_msurf_prims: false,
             detector_dome_drawing: false,
             event_loop,
-            detector_patches: None,
+            detector_partition: None,
             detector_ray_hit_points_buffer: None,
             detector_ray_hit_points_size_offsets: vec![],
             detector_ray_hit_points_drawing: false,
@@ -594,70 +594,57 @@ impl DebugDrawingState {
         ));
     }
 
-    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, patches: ReceiverPatches) {
+    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, partition: ReceiverPartition) {
         if self.microsurface.is_none() {
             return;
         }
-        match &patches {
-            ReceiverPatches::Beckers { rings, .. } => {
-                let mut vertices = vec![];
-                // Generate from rings.
-                let (disc_xs, disc_ys): (Vec<_>, Vec<_>) = (0..360)
-                    .map(|i| {
-                        let a = i as f32 * std::f32::consts::PI / 180.0;
-                        (a.cos(), a.sin())
-                    })
-                    .unzip();
-                for ring in rings.iter() {
-                    let inner_radius = ring.theta_inner.sin();
-                    let outer_radius = ring.theta_outer.sin();
-                    let inner_height = ring.theta_inner.cos();
-                    let outer_height = ring.theta_outer.cos();
-                    // Generate the outer border of the ring
-                    for (j, (x, y)) in disc_xs.iter().zip(disc_ys.iter()).enumerate() {
-                        vertices.push(Vec3::new(
-                            *x * outer_radius,
-                            *y * outer_radius,
-                            outer_height,
-                        ));
-                        vertices.push(Vec3::new(
-                            disc_xs[(j + 1) % 360] * outer_radius,
-                            disc_ys[(j + 1) % 360] * outer_radius,
-                            outer_height,
-                        ));
-                    }
-                    let step = std::f32::consts::TAU / ring.patch_count as f32;
-                    // Generate the cells
-                    if ring.patch_count == 1 {
-                        continue;
-                    } else {
-                        for k in 0..ring.patch_count {
-                            let x = (step * k as f32).cos();
-                            let y = (step * k as f32).sin();
-                            vertices.push(Vec3::new(
-                                x * inner_radius,
-                                y * inner_radius,
-                                inner_height,
-                            ));
-                            vertices.push(Vec3::new(
-                                x * outer_radius,
-                                y * outer_radius,
-                                outer_height,
-                            ));
-                        }
-                    }
-                }
-                self.detector_dome_vertex_buffer = Some(ctx.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("debug-collector-dome"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    },
+        let mut vertices = vec![];
+        // Generate from rings.
+        let (disc_xs, disc_ys): (Vec<_>, Vec<_>) = (0..360)
+            .map(|i| {
+                let a = i as f32 * std::f32::consts::PI / 180.0;
+                (a.cos(), a.sin())
+            })
+            .unzip();
+        for ring in partition.rings.iter() {
+            let inner_radius = ring.theta_inner.sin();
+            let outer_radius = ring.theta_outer.sin();
+            let inner_height = ring.theta_inner.cos();
+            let outer_height = ring.theta_outer.cos();
+            // Generate the outer border of the ring
+            for (j, (x, y)) in disc_xs.iter().zip(disc_ys.iter()).enumerate() {
+                vertices.push(Vec3::new(
+                    *x * outer_radius,
+                    *y * outer_radius,
+                    outer_height,
+                ));
+                vertices.push(Vec3::new(
+                    disc_xs[(j + 1) % 360] * outer_radius,
+                    disc_ys[(j + 1) % 360] * outer_radius,
+                    outer_height,
                 ));
             }
-            ReceiverPatches::Tregenza => {}
+            let step = std::f32::consts::TAU / ring.patch_count as f32;
+            // Generate the cells
+            if ring.patch_count == 1 {
+                continue;
+            } else {
+                for k in 0..ring.patch_count {
+                    let x = (step * k as f32).cos();
+                    let y = (step * k as f32).sin();
+                    vertices.push(Vec3::new(x * inner_radius, y * inner_radius, inner_height));
+                    vertices.push(Vec3::new(x * outer_radius, y * outer_radius, outer_height));
+                }
+            }
         }
-        self.detector_patches = Some(patches);
+        self.detector_dome_vertex_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("debug-collector-dome"),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            },
+        ));
+        self.detector_partition = Some(partition);
     }
 
     pub fn update_focused_surface(&mut self, surf: Option<Handle<MicroSurface>>) {

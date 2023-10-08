@@ -35,6 +35,7 @@ pub struct MeasuredAdfData {
 }
 
 impl MeasuredAdfData {
+    // TODO
     /// Writes the measured data as an EXR file.
     pub fn write_as_exr(
         &self,

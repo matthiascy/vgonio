@@ -29,6 +29,7 @@ use vgcore::{
     },
     math::{rcp_f32, Aabb, Vec3},
     units::LengthUnit,
+    Version,
 };
 
 /// Static variable used to generate height field name.
@@ -1024,7 +1025,7 @@ impl MicroSurface {
         };
         let header = Header {
             meta: HeaderMeta {
-                version: 0,
+                version: Version::new(0, 1, 0),
                 timestamp,
                 length: 0,
                 sample_size: 4,

@@ -53,6 +53,7 @@ pub enum Medium {
     #[serde(rename = "vac")]
     Vacuum = 0x00,
     /// Air.
+    #[serde(rename = "air")]
     Air = 0x01,
     /// Aluminium.
     #[serde(rename = "al")]
@@ -70,6 +71,18 @@ impl From<u8> for Medium {
             0x02 => Self::Aluminium,
             0x03 => Self::Copper,
             _ => panic!("Invalid medium kind: {}", value),
+        }
+    }
+}
+
+impl From<[u8; 3]> for Medium {
+    fn from(value: [u8; 3]) -> Self {
+        match &value[0..3] {
+            [b'v', b'a', b'c'] => Self::Vacuum,
+            [b'a', b'i', b'r'] => Self::Air,
+            [b'a', b'l', 0] => Self::Aluminium,
+            [b'c', b'u', 0] => Self::Copper,
+            _ => panic!("Invalid medium kind: {:?}", value),
         }
     }
 }
@@ -109,7 +122,6 @@ impl FromStr for Medium {
 /// The domain of the spherical coordinate.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[repr(u8)]
 pub enum SphericalDomain {
     /// Simulation happens only on upper part of the sphere.
     #[default]
@@ -135,19 +147,6 @@ impl Display for SphericalDomain {
     }
 }
 
-impl TryFrom<u8> for SphericalDomain {
-    type Error = String;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x01 => Ok(Self::Upper),
-            0x02 => Ok(Self::Lower),
-            0x00 => Ok(Self::Whole),
-            _ => Err(format!("unknown spherical domain: {}", value)),
-        }
-    }
-}
-
 impl SphericalDomain {
     /// Range of zenith angle in radians of the upper hemisphere.
     pub const ZENITH_RANGE_UPPER_DOMAIN: (Radians, Radians) = (Radians::ZERO, Radians::HALF_PI);
@@ -155,6 +154,27 @@ impl SphericalDomain {
     pub const ZENITH_RANGE_LOWER_DOMAIN: (Radians, Radians) = (Radians::HALF_PI, Radians::PI);
     /// Range of zenith angle in radians of the whole sphere.
     pub const ZENITH_RANGE_WHOLE_DOMAIN: (Radians, Radians) = (Radians::ZERO, Radians::TWO_PI);
+
+    /// Returns the zenith range of the domain.
+    pub const fn zenith_range(&self) -> (Radians, Radians) {
+        match self {
+            Self::Upper => Self::ZENITH_RANGE_UPPER_DOMAIN,
+            Self::Lower => Self::ZENITH_RANGE_LOWER_DOMAIN,
+            Self::Whole => Self::ZENITH_RANGE_WHOLE_DOMAIN,
+        }
+    }
+
+    /// Returns the azimuth range of the domain.
+    pub const fn azimuth_range(&self) -> (Radians, Radians) { (Radians::ZERO, Radians::TWO_PI) }
+
+    /// Returns the zenith angle difference between the maximum and minimum
+    /// zenith angle.
+    pub const fn zenith_angle_diff(&self) -> Radians {
+        match self {
+            SphericalDomain::Upper | SphericalDomain::Lower => Radians::HALF_PI,
+            SphericalDomain::Whole => Radians::PI,
+        }
+    }
 
     /// Clamps the given azimuthal and zenith angle to shape's boundaries.
     ///
@@ -174,12 +194,7 @@ impl SphericalDomain {
     /// Clamps the given zenith angle to shape's boundaries.
     #[inline]
     pub fn clamp_zenith(&self, zenith: Radians) -> Radians {
-        let (zenith_min, zenith_max) = match self {
-            SphericalDomain::Upper => Self::ZENITH_RANGE_UPPER_DOMAIN,
-            SphericalDomain::Lower => Self::ZENITH_RANGE_LOWER_DOMAIN,
-            SphericalDomain::Whole => Self::ZENITH_RANGE_WHOLE_DOMAIN,
-        };
-
+        let (zenith_min, zenith_max) = self.zenith_range();
         zenith.clamp(zenith_min, zenith_max)
     }
 

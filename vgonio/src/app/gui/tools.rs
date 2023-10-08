@@ -2,7 +2,7 @@ mod debugging;
 mod sampling;
 mod scratch;
 
-use crate::app::{cache::Cache, gfx::GpuContext, gui::event::EventLoopProxy};
+use crate::app::{gfx::GpuContext, gui::event::EventLoopProxy};
 pub(crate) use debugging::DebuggingInspector;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
@@ -65,6 +65,7 @@ impl Tools {
         }
     }
 
+    #[deprecated]
     pub fn get_tool<T: 'static>(&self) -> Option<&T> {
         self.windows
             .iter()

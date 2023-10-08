@@ -12,7 +12,10 @@
 #![feature(const_fn_floating_point_arithmetic)]
 // Enable const mut references
 #![feature(const_mut_refs)]
+#![feature(const_format_args)]
 #![warn(missing_docs)]
+
+use std::fmt::Display;
 
 pub mod error;
 pub mod io;
@@ -26,6 +29,51 @@ pub enum Isotropy {
     Isotropic,
     /// Non-uniformity in some directions.
     Anisotropic,
+}
+
+/// Version of anything in vgonio.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Version {
+    /// Major version.
+    pub major: u8,
+    /// Minor version.
+    pub minor: u8,
+    /// Patch version.
+    pub patch: u8,
+}
+
+impl Version {
+    /// Creates a new version.
+    pub const fn new(major: u8, minor: u8, patch: u8) -> Self {
+        Self {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    /// Returns the version as a string.
+    pub fn as_string(&self) -> String { format!("v{}.{}.{}", self.major, self.minor, self.patch) }
+
+    /// Returns the version as a u32.
+    pub const fn as_u32(&self) -> u32 {
+        (self.major as u32) << 16 | (self.minor as u32) << 8 | (self.patch as u32)
+    }
+
+    /// Converts a version from a u32.
+    pub const fn from_u32(v: u32) -> Self {
+        Self {
+            major: ((v >> 16) & 0xFF) as u8,
+            minor: ((v >> 8) & 0xFF) as u8,
+            patch: (v & 0xFF) as u8,
+        }
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_string())
+    }
 }
 
 /// Utility functions.

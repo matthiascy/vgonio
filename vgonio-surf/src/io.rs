@@ -22,6 +22,7 @@ pub mod vgms {
     use vgcore::{
         io::{Header, HeaderExt, ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind},
         units::LengthUnit,
+        Version,
     };
 
     /// Header of the VGMS file.
@@ -42,52 +43,80 @@ pub mod vgms {
     impl HeaderExt for VgmsHeaderExt {
         const MAGIC: &'static [u8; 4] = b"VGMS";
 
-        // fn size() -> usize { 4 + 4 + 4 + 4 + 4 }
-
         fn variant() -> VgonioFileVariant { VgonioFileVariant::Vgms }
 
-        fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> std::io::Result<()> {
-            writer.write_all(&(self.unit as u32).to_le_bytes())?;
-            writer.write_all(&self.cols.to_le_bytes())?;
-            writer.write_all(&self.rows.to_le_bytes())?;
-            writer.write_all(&self.du.to_le_bytes())?;
-            writer.write_all(&self.dv.to_le_bytes())?;
+        fn write<W: Write>(
+            &self,
+            version: Version,
+            writer: &mut BufWriter<W>,
+        ) -> std::io::Result<()> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    writer.write_all(&(self.unit as u32).to_le_bytes())?;
+                    writer.write_all(&self.cols.to_le_bytes())?;
+                    writer.write_all(&self.rows.to_le_bytes())?;
+                    writer.write_all(&self.du.to_le_bytes())?;
+                    writer.write_all(&self.dv.to_le_bytes())?;
+                }
+                _ => {
+                    log::error!("Unsupported VGMS version: {}", version.as_string());
+                }
+            }
             Ok(())
         }
 
-        fn read<R: Read>(reader: &mut BufReader<R>) -> std::io::Result<Self> {
-            let mut buf = [0u8; 4];
-            let unit = {
-                reader.read_exact(&mut buf)?;
-                LengthUnit::from(u32::from_le_bytes(buf) as u8)
-            };
+        fn read<R: Read>(version: Version, reader: &mut BufReader<R>) -> std::io::Result<Self> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let mut buf = [0u8; 4];
+                    let unit = {
+                        reader.read_exact(&mut buf)?;
+                        LengthUnit::from(u32::from_le_bytes(buf) as u8)
+                    };
 
-            let cols = {
-                reader.read_exact(&mut buf)?;
-                u32::from_le_bytes(buf)
-            };
+                    let cols = {
+                        reader.read_exact(&mut buf)?;
+                        u32::from_le_bytes(buf)
+                    };
 
-            let rows = {
-                reader.read_exact(&mut buf)?;
-                u32::from_le_bytes(buf)
-            };
+                    let rows = {
+                        reader.read_exact(&mut buf)?;
+                        u32::from_le_bytes(buf)
+                    };
 
-            let du = {
-                reader.read_exact(&mut buf)?;
-                f32::from_le_bytes(buf)
-            };
+                    let du = {
+                        reader.read_exact(&mut buf)?;
+                        f32::from_le_bytes(buf)
+                    };
 
-            let dv = {
-                reader.read_exact(&mut buf)?;
-                f32::from_le_bytes(buf)
-            };
-            Ok(Self {
-                rows,
-                cols,
-                du,
-                dv,
-                unit,
-            })
+                    let dv = {
+                        reader.read_exact(&mut buf)?;
+                        f32::from_le_bytes(buf)
+                    };
+                    Ok(Self {
+                        rows,
+                        cols,
+                        du,
+                        dv,
+                        unit,
+                    })
+                }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Unsupported VGMS[VgmsHeaderExt] version: {}",
+                        version.as_string()
+                    ),
+                )),
+            }
         }
     }
 
@@ -97,7 +126,7 @@ pub mod vgms {
     }
 
     /// Reads the VGMS file from the given reader.
-    pub fn read<R: Read>(
+    pub fn read<R: Read + Seek>(
         reader: &mut BufReader<R>,
     ) -> Result<(Header<VgmsHeaderExt>, Vec<f32>), ReadFileErrorKind> {
         let header = Header::<VgmsHeaderExt>::read(reader)?;
@@ -125,7 +154,7 @@ pub mod vgms {
         // TODO: match header.meta.sample_size
         match header.meta.encoding {
             FileEncoding::Ascii => {
-                vgcore::io::write_f32_data_samples_ascii(writer, samples, header.extra.cols)
+                vgcore::io::write_data_samples_ascii(writer, samples, header.extra.cols)
             }
             FileEncoding::Binary => {
                 vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
