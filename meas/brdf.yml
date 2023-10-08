@@ -1,7 +1,7 @@
 ---
 type: !bsdf
   kind: brdf
-  sim_kind: !geom-optics grid # embree/grid/optix # !wave_optics
+  sim_kind: !geom-optics embree # embree/grid/optix # !wave_optics
   incident_medium: air
   transmitted_medium: aluminium
   emitter:
@@ -10,9 +10,11 @@ type: !bsdf
     zenith: 0deg .. =90deg / 5deg
     azimuth: 0deg .. =360deg / 30deg
     spectrum: 380 nm .. =780 nm / 300 nm
-  detector:
+  receiver:
     domain: upper_hemisphere
     precision: 2.0 deg
+    scheme: beckers
+    retrieval_mode: full-data # full-data / bsdf-only
 surfaces:
   # - usr://surfaces/aluminium65bar100.vgms
   # - usr://surfaces/gaussian_sigma_0.5.vgms

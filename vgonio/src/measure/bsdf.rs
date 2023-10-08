@@ -11,7 +11,7 @@ use crate::{
     measure::{
         bsdf::{
             emitter::Emitter,
-            receiver::{CollectedData, PerPatchData, Receiver},
+            receiver::{BounceAndEnergy, CollectedData, DataRetrievalMode, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
@@ -52,10 +52,19 @@ pub struct MeasuredBsdfData {
     /// Snapshot of the BSDF at each incident direction of the emitter.
     /// See [`BsdfSnapshot`] for more details.
     pub snapshots: Vec<BsdfSnapshot>,
+    /// Raw snapshots of the BSDF containing the full measurement data.
+    /// This field is only available when the
+    /// [`crate::measure::bsdf::params::DataRetrievalMode`] is set to
+    /// `FullData`.
+    /// See [`BsdfSnapshotRaw`] for more details.
+    pub raw_snapshots: Option<Vec<BsdfSnapshotRaw<BounceAndEnergy>>>,
 }
 
 impl MeasuredBsdfData {
     /// Writes the BSDF data to images in exr format.
+    ///
+    /// Only BSDF data are written to the images. The full measurement data
+    /// are not written.
     pub fn write_as_exr(
         &self,
         filepath: &Path,
@@ -235,12 +244,12 @@ impl From<u8> for BsdfKind {
     }
 }
 
-/// Stores the data per wavelength for a spectrum.
+/// Stores the sample data per wavelength for a spectrum.
 #[derive(Debug, Default)]
-pub struct PerWavelength<T>(Vec<T>);
+pub struct SpectralSamples<T>(Vec<T>);
 
-impl<T> PerWavelength<T> {
-    /// Creates a new empty `PerWavelength`.
+impl<T> SpectralSamples<T> {
+    /// Creates a new empty `SpectralSamples`.
     pub fn new() -> Self { Self(Vec::new()) }
 
     /// Creates a new `PerWavelength` with the given value for each wavelength.
@@ -255,75 +264,72 @@ impl<T> PerWavelength<T> {
     pub fn from_vec(vec: Vec<T>) -> Self { Self(vec) }
 }
 
-impl<T> Clone for PerWavelength<T>
+impl<T> Clone for SpectralSamples<T>
 where
     T: Clone,
 {
     fn clone(&self) -> Self { Self(self.0.clone()) }
 }
 
-impl<T> PerWavelength<T> {
+impl<T> SpectralSamples<T> {
     /// Creates a new empty `PerWavelength`.
     pub fn empty() -> Self { Self(Vec::new()) }
 }
 
-impl<T> Deref for PerWavelength<T> {
+impl<T> Deref for SpectralSamples<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-impl<T> DerefMut for PerWavelength<T> {
+impl<T> DerefMut for SpectralSamples<T> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-impl<T> Index<usize> for PerWavelength<T> {
+impl<T> Index<usize> for SpectralSamples<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output { &self.0[index] }
 }
 
-impl<T> IndexMut<usize> for PerWavelength<T> {
+impl<T> IndexMut<usize> for SpectralSamples<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output { &mut self.0[index] }
 }
 
-impl<T: PartialEq> PartialEq for PerWavelength<T> {
+impl<T: PartialEq> PartialEq for SpectralSamples<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.len() == other.0.len() && self.0.iter().zip(other.0.iter()).all(|(a, b)| a == b)
     }
 }
 
-impl<'a, T> Iterator for &'a PerWavelength<T> {
+impl<'a, T> Iterator for &'a SpectralSamples<T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> { self.0.iter().next() }
 }
 
-// impl<'a, T> Iterator for &'a PerWavelength<T> {
-//     type Item = &'a T;
-//
-//     fn next(&mut self) -> Option<Self::Item> { self.0.iter().next() }
-// }
-
 /// BSDF measurement statistics for a single emitter's position.
 #[derive(Clone)]
 pub struct BsdfMeasurementStatsPoint {
+    /// Number of bounces (actual bounce, not always equals to the maximum
+    /// bounce limit).
+    pub n_bounces: u32,
     /// Number of emitted rays that hit the surface; invariant over wavelength.
     pub n_received: u32,
     /// Number of emitted rays that hit the surface and were absorbed;
-    pub n_absorbed: PerWavelength<u32>,
+    pub n_absorbed: SpectralSamples<u32>,
     /// Number of emitted rays that hit the surface and were reflected.
-    pub n_reflected: PerWavelength<u32>,
+    pub n_reflected: SpectralSamples<u32>,
     /// Number of emitted rays captured by the collector.
-    pub n_captured: PerWavelength<u32>,
+    pub n_captured: SpectralSamples<u32>,
     /// Energy captured by the collector; variant over wavelength.
-    pub e_captured: PerWavelength<f32>,
+    pub e_captured: SpectralSamples<f32>,
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength.
-    pub num_rays_per_bounce: PerWavelength<Vec<u32>>,
+    pub num_rays_per_bounce: SpectralSamples<Vec<u32>>,
     /// Histogram of energy of reflected rays by number of bounces, variant
     /// over wavelength.
-    pub energy_per_bounce: PerWavelength<Vec<f32>>,
+    pub energy_per_bounce: SpectralSamples<Vec<f32>>,
 }
 
 impl PartialEq for BsdfMeasurementStatsPoint {
@@ -343,23 +349,19 @@ impl BsdfMeasurementStatsPoint {
     ///
     /// # Arguments
     /// * `n_wavelengths`: Number of wavelengths.
-    /// * `max_bounces`: Maximum number of bounces.
+    /// * `max_bounces`: Maximum number of bounces. This is used to pre-allocate
+    ///   the memory for the histograms.
     pub fn new(n_wavelengths: usize, max_bounces: usize) -> Self {
         Self {
+            n_bounces: max_bounces as u32,
             n_received: 0,
-            n_absorbed: PerWavelength(vec![0; n_wavelengths]),
-            n_reflected: PerWavelength(vec![0; n_wavelengths]),
-            n_captured: PerWavelength(vec![0; n_wavelengths]),
-            e_captured: PerWavelength(vec![0.0; n_wavelengths]),
-            num_rays_per_bounce: PerWavelength(vec![vec![0; max_bounces]; n_wavelengths]),
-            energy_per_bounce: PerWavelength(vec![vec![0.0; max_bounces]; n_wavelengths]),
+            n_absorbed: SpectralSamples(vec![0; n_wavelengths]),
+            n_reflected: SpectralSamples(vec![0; n_wavelengths]),
+            n_captured: SpectralSamples(vec![0; n_wavelengths]),
+            e_captured: SpectralSamples(vec![0.0; n_wavelengths]),
+            num_rays_per_bounce: SpectralSamples(vec![vec![0; max_bounces]; n_wavelengths]),
+            energy_per_bounce: SpectralSamples(vec![vec![0.0; max_bounces]; n_wavelengths]),
         }
-    }
-
-    /// Calculates the size in bytes of the `BsdfMeasurementStatsPoint` for the
-    /// given number of wavelengths and maximum number of bounces.
-    pub fn calc_size_in_bytes(n_wavelength: usize, bounces: usize) -> usize {
-        4 + (n_wavelength * 4) * 4 + (n_wavelength * bounces * 4) * 2
     }
 }
 
@@ -407,7 +409,7 @@ where
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.
-    pub records: Vec<PerWavelength<D>>,
+    pub records: Vec<SpectralSamples<D>>,
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub trajectories: Vec<RayTrajectory>,
@@ -437,7 +439,7 @@ pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.
     pub w_i: Sph2,
     /// BSDF values for each patch of the collector.
-    pub samples: Vec<PerWavelength<f32>>,
+    pub samples: Vec<SpectralSamples<f32>>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Extra ray trajectory data for debugging purposes.
     pub trajectories: Vec<RayTrajectory>,
@@ -529,11 +531,19 @@ pub fn measure_bsdf_rt(
         }
 
         let snapshots = collected.compute_bsdf(&params);
+        let raw_snapshots = match params.receiver.retrieval_mode {
+            DataRetrievalMode::FullData => Some(collected.snapshots),
+            DataRetrievalMode::BsdfOnly => None,
+        };
         measurements.push(MeasurementData {
             name: surf.file_stem().unwrap().to_owned(),
             source: MeasurementDataSource::Measured(collected.surface),
             timestamp: chrono::Local::now(),
-            measured: MeasuredData::Bsdf(MeasuredBsdfData { params, snapshots }),
+            measured: MeasuredData::Bsdf(MeasuredBsdfData {
+                params,
+                snapshots,
+                raw_snapshots,
+            }),
         })
     }
 
@@ -698,17 +708,3 @@ fn rtc_simulation_optix(
 //         record
 //     }
 // }
-
-#[test]
-fn test_bsdf_measurement_stats_point() {
-    assert_eq!(
-        BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 10),
-        388,
-        "Size of stats point is incorrect."
-    );
-    assert_eq!(
-        BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 100),
-        3268,
-        "Size of stats point is incorrect."
-    );
-}

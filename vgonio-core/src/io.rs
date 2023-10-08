@@ -67,6 +67,8 @@ pub enum ReadFileErrorKind {
     Parse(ParseError),
     /// Error caused by an invalid file format.
     InvalidFileFormat,
+    /// The file encoding is not supported.
+    UnsupportedEncoding,
 }
 
 impl From<std::io::Error> for ReadFileErrorKind {
@@ -163,6 +165,12 @@ impl std::error::Error for WriteFileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self.kind {
             WriteFileErrorKind::Write(err) => Some(err),
+            WriteFileErrorKind::UnsupportedEncoding => Some(&ParseError {
+                line: u32::MAX,
+                position: u32::MAX,
+                kind: ParseErrorKind::InvalidEncoding,
+                encoding: FileEncoding::Ascii,
+            }),
         }
     }
 }
@@ -182,6 +190,8 @@ impl WriteFileError {
 pub enum WriteFileErrorKind {
     /// The error is a `std::io::Error`.
     Write(std::io::Error),
+    /// The file encoding is not supported.
+    UnsupportedEncoding,
 }
 
 impl From<std::io::Error> for WriteFileErrorKind {

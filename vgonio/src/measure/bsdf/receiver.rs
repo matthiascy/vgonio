@@ -4,8 +4,8 @@ use crate::{
     app::cache::{Handle, InnerCache},
     measure::{
         bsdf::{
-            BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, PerWavelength,
-            SimulationResultPoint,
+            BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SimulationResultPoint,
+            SpectralSamples,
         },
         params::BsdfMeasurementParams,
     },
@@ -20,6 +20,28 @@ use vgcore::{
     units::{rad, Nanometres, Radians, SolidAngle},
 };
 use vgsurf::MicroSurface;
+
+/// Data collected by the receiver.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
+pub enum DataRetrievalMode {
+    /// The full data are collected.
+    #[serde(rename = "full-data")]
+    FullData = 0x00,
+    /// Only the BSDF values are collected.
+    #[serde(rename = "bsdf-only")]
+    #[default]
+    BsdfOnly = 0x01,
+}
+
+impl From<u8> for DataRetrievalMode {
+    fn from(v: u8) -> Self {
+        match v {
+            0x00 => Self::FullData,
+            0x01 => Self::BsdfOnly,
+            _ => panic!("invalid data retrieval mode"),
+        }
+    }
+}
 
 /// Description of a receiver collecting the data.
 ///
@@ -36,9 +58,8 @@ pub struct ReceiverParams {
     pub precision: Radians,
     /// Partitioning scheme of the collector.
     pub scheme: ReceiverScheme,
-    /// Indicates if the final result contains only the BSDF values or the
-    /// full measurement data.
-    pub bsdf_only: bool,
+    /// Data retrieval mode.
+    pub retrieval_mode: DataRetrievalMode,
 }
 
 /// Scheme of the partitioning of the receiver.
@@ -442,7 +463,7 @@ impl Receiver {
         log::debug!("stats.n_received: {:?}", stats.n_received);
 
         let mut data = vec![
-            PerWavelength::splat(BounceAndEnergy::empty(max_bounce), spectrum_len);
+            SpectralSamples::splat(BounceAndEnergy::empty(max_bounce), spectrum_len);
             self.patches.num_patches()
         ];
 
@@ -545,7 +566,7 @@ impl<'a> CollectedData<'a> {
             .map(|snapshot| {
                 let mut samples =
                     vec![
-                        PerWavelength::splat(0.0, params.emitter.spectrum.values().len());
+                        SpectralSamples::splat(0.0, params.emitter.spectrum.values().len());
                         snapshot.records.len()
                     ];
                 let cos_i = snapshot.w_i.theta.cos();
@@ -612,11 +633,10 @@ impl Energy {
 pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
 
 /// Bounce and energy of a patch.
-///
-/// Length of `num_rays_per_bounce` and `energy_per_bounce` is equal to the
-/// maximum number of bounces.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BounceAndEnergy {
+    /// Maximum number of bounces of rays hitting the patch.
+    pub n_bounces: u32,
     /// Total number of rays that hit the patch.
     pub total_rays: u32,
     /// Total energy of rays that hit the patch.
@@ -631,19 +651,13 @@ impl BounceAndEnergy {
     /// Creates a new bounce and energy.
     pub fn empty(bounces: usize) -> Self {
         Self {
+            n_bounces: bounces as u32,
             num_rays_per_bounce: vec![0; bounces],
             energy_per_bounce: vec![0.0; bounces],
             total_energy: 0.0,
             total_rays: 0,
         }
     }
-
-    /// Returns the size of the bounce and energy in bytes when serialized.
-    #[deprecated(
-        since = "0.3.0",
-        note = "Should be removed because of the file format change."
-    )]
-    pub const fn calc_size_in_bytes(bounces: usize) -> usize { 8 * bounces + 8 }
 }
 
 impl PartialEq for BounceAndEnergy {
