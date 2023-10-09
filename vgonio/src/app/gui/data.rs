@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
 use vgcore::units::LengthUnit;
@@ -52,6 +53,8 @@ pub struct MeasurementDataProp {
     pub kind: MeasurementKind,
     /// The name of the measured data.
     pub name: String,
+    /// Timestamp of the measured data.
+    pub timestamp: DateTime<Local>,
     /// Source of the measured data.
     pub source: MeasurementDataSource,
     /// Fitted model.
@@ -144,6 +147,7 @@ impl PropertyData {
                 e.insert(MeasurementDataProp {
                     kind: data.kind(),
                     source: data.source.clone(),
+                    timestamp: data.timestamp,
                     name: data.name.clone(),
                     fitted: FittedModels::default(),
                 });

@@ -677,10 +677,7 @@ pub mod vgmo {
             buf[0] = self.kind as u8;
             self.incident_medium.write_to_buf(&mut buf[1..4]);
             self.transmitted_medium.write_to_buf(&mut buf[4..7]);
-            buf[7] = match self.sim_kind {
-                SimulationKind::GeomOptics(method) => method as u8,
-                SimulationKind::WaveOptics => 0x03,
-            };
+            buf[7] = self.sim_kind.as_u8();
             let n_written = self.emitter.write_to_buf(version, &mut buf[8..]);
             self.receiver
                 .write_to_buf(version, &mut buf[n_written + 8..]);

@@ -371,6 +371,7 @@ impl MeasurementData {
             )
         })?;
         log::debug!("Read VGMO file of length: {}", header.meta.length);
+        log::debug!("Header: {:?}", header);
 
         let path = filepath.to_path_buf();
         let name = path

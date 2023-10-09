@@ -677,9 +677,14 @@ impl VgonioGuiApp {
                         })
                         .unwrap();
                         self.cache.write(|cache| {
-                            for meas in data {
-                                cache.add_micro_surface_measurement(meas).unwrap();
-                            }
+                            let meas = data
+                                .into_iter()
+                                .map(|measured| {
+                                    cache.add_micro_surface_measurement(measured).unwrap()
+                                })
+                                .collect::<Vec<_>>();
+                            let mut properties = self.ui.properties.write().unwrap();
+                            properties.update_measurement_data(&meas, cache);
                         });
                     }
                     SurfaceViewer(event) => match event {

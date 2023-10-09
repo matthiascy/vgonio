@@ -10,7 +10,7 @@ use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    fmt::Display,
+    fmt::{Debug, Display, Formatter},
     io::{BufRead, BufReader, BufWriter, Read, Seek, Write},
     path::Path,
 };
@@ -301,6 +301,7 @@ pub enum VgonioFileVariant {
 }
 
 /// Meta information of a VG file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeaderMeta {
     /// Version of the file.
     pub version: Version,
@@ -414,6 +415,15 @@ impl<E: HeaderExt> Header<E> {
                 extra,
             })
         }
+    }
+}
+
+impl<E: HeaderExt + Debug> Debug for Header<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Header")
+            .field("meta", &self.meta)
+            .field("extra", &self.extra)
+            .finish()
     }
 }
 

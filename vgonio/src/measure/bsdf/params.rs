@@ -41,6 +41,19 @@ impl TryFrom<u8> for SimulationKind {
     }
 }
 
+impl SimulationKind {
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            Self::GeomOptics(RtcMethod::Grid) => 0x00,
+            #[cfg(feature = "embree")]
+            Self::GeomOptics(RtcMethod::Embree) => 0x01,
+            #[cfg(feature = "optix")]
+            Self::GeomOptics(RtcMethod::Optix) => 0x02,
+            Self::WaveOptics => 0x03,
+        }
+    }
+}
+
 /// Parameters for BSDF measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BsdfMeasurementParams {
