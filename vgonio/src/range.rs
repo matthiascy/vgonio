@@ -136,7 +136,9 @@ where
         let step_size = self.step_size.cast();
         let start = self.start.cast();
         let stop = self.stop.cast();
-        if math::ulp_eq(step_size, stop - start) {
+        if math::ulp_eq(stop, start) {
+            1
+        } else if math::ulp_eq(step_size, stop - start) {
             2
         } else {
             (((stop - start) / step_size).round() as usize).max(2) + 1
@@ -430,6 +432,9 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// If the range's stop value is the same as the start value after wrapping
     /// it to the range [0, 2π), the range is considered to be a full circle.
     pub fn step_count_wrapped(&self) -> usize {
+        if self.start.as_f32().abs_diff_eq(&self.stop.as_f32(), 1e-6) {
+            return 1;
+        }
         if self
             .start
             .wrap_to_tau()
@@ -1257,5 +1262,29 @@ mod range_by_step_size_tests {
 
         let range = RangeByStepSizeInclusive::new(0.0, 10.0, 10.0);
         assert_eq!(range.step_count(), 2);
+
+        let range = RangeByStepSizeInclusive::new(10.0, 10.0, 0.0);
+        assert_eq!(range.step_count(), 1);
+
+        let range = RangeByStepSizeInclusive::new(10.0, 10.0, 1.0);
+        assert_eq!(range.step_count(), 1);
+    }
+
+    #[test]
+    fn values() {
+        let range = RangeByStepSizeInclusive::new(0.0, 10.0, 1.0f32);
+        let values: Vec<f32> = range.values().collect();
+        assert_eq!(
+            values,
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+        );
+
+        let range = RangeByStepSizeInclusive::new(10.0, 10.0, 2.0f32);
+        let values: Vec<f32> = range.values().collect();
+        assert_eq!(values, vec![10.0]);
+
+        let range = RangeByStepSizeInclusive::new(Radians::TAU, Radians::TAU, Radians::ZERO);
+        let values = range.values_wrapped().collect::<Vec<Radians>>();
+        assert_eq!(values, vec![Radians::TAU]);
     }
 }

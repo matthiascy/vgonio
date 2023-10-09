@@ -73,19 +73,22 @@ pub fn write_measured_data_to_file(
             "      {BRIGHT_CYAN}-{RESET} Saving to \"{}\"",
             filepath.display()
         );
-        measurement
-            .write_to_file(&filepath, format, encoding, compression)
-            .unwrap_or_else(|err| {
+
+        match measurement.write_to_file(&filepath, format, encoding, compression) {
+            Ok(_) => {
+                println!(
+                    "      {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
+                    output_dir.display()
+                );
+            }
+            Err(err) => {
                 eprintln!(
                     "        {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
                     filepath.display(),
                     err
                 );
-            });
-        println!(
-            "      {BRIGHT_CYAN}✓{RESET} Successfully saved to \"{}\"",
-            output_dir.display()
-        );
+            }
+        }
     }
     Ok(())
 }

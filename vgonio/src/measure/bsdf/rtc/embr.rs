@@ -151,7 +151,6 @@ fn intersect_filter_stream<'a>(
 pub fn simulate_bsdf_measurement<'a>(
     emitter: &'a Emitter,
     mesh: &'a MicroSurfaceMesh,
-    w_i: Option<Sph2>,
 ) -> Box<dyn Iterator<Item = SimulationResultPoint> + 'a> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
@@ -174,24 +173,15 @@ pub fn simulate_bsdf_measurement<'a>(
         log::debug!("embree scene creation took {} secs.", elapsed.as_secs_f64());
     }
 
-    let results: Box<dyn Iterator<Item = SimulationResultPoint>> = match w_i {
-        None => Box::new(emitter.measpts.iter().map(move |w_i| {
-            simulate_bsdf_measurement_single_point(
-                *w_i,
-                emitter,
-                mesh,
-                Arc::new(geometry.clone()),
-                &scene,
-            )
-        })),
-        Some(w_i) => Box::new(std::iter::once(simulate_bsdf_measurement_single_point(
-            w_i,
-            &emitter,
+    let results = Box::new(emitter.measpts.iter().map(move |w_i| {
+        simulate_bsdf_measurement_single_point(
+            *w_i,
+            emitter,
             mesh,
             Arc::new(geometry.clone()),
             &scene,
-        ))),
-    };
+        )
+    }));
 
     #[cfg(feature = "bench")]
     {

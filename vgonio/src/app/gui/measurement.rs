@@ -17,7 +17,7 @@ use crate::{
         },
     },
     measure::{
-        bsdf::receiver::{ReceiverParams, ReceiverScheme},
+        bsdf::receiver::{DataRetrievalMode, ReceiverParams, ReceiverScheme},
         params::{MeasurementKind, MeasurementParams},
     },
     SphericalDomain,
@@ -54,7 +54,7 @@ impl ReceiverParams {
                         });
                         ui.end_row();
 
-                        ui.label("Scheme");
+                        ui.label("Scheme:");
                         ui.horizontal_wrapped(|ui| {
                             ui.selectable_value(
                                 &mut self.scheme,
@@ -68,6 +68,20 @@ impl ReceiverParams {
                             );
                         });
                         ui.end_row();
+
+                        ui.label("Data Retrieval:");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(
+                                &mut self.retrieval_mode,
+                                DataRetrievalMode::BsdfOnly,
+                                "BSDF Only",
+                            );
+                            ui.selectable_value(
+                                &mut self.retrieval_mode,
+                                DataRetrievalMode::FullData,
+                                "Full Data",
+                            );
+                        });
 
                         add_contents(self, ui);
                     });
@@ -93,10 +107,6 @@ pub struct MeasurementDialog {
     tab_bsdf: BsdfMeasurementTab,
     tab_adf: AdfMeasurementTab,
     tab_msf: MsfMeasurementTab,
-    /// Whether the measurement is a single point measurement.
-    single: bool,
-    /// The measurement point.
-    point: Sph2,
     /// Whether the dialog is open.
     is_open: bool,
     /// Output format of the measurement.
@@ -123,8 +133,6 @@ impl MeasurementDialog {
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: AdfMeasurementTab::new(event_loop.clone()),
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
-            single: false,
-            point: Sph2::zero(),
             is_open: false,
             format: OutputFormat::Vgmo,
             encoding: FileEncoding::Binary,
@@ -313,18 +321,6 @@ impl MeasurementDialog {
                     });
                 }
 
-                if self.kind == MeasurementKind::Bsdf {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.checkbox(&mut self.single, "Single Point");
-                        if self.single {
-                            ui.label("θ");
-                            misc::drag_angle(&mut self.point.theta, "").ui(ui);
-                            ui.label("φ");
-                            misc::drag_angle(&mut self.point.phi, "").ui(ui);
-                        }
-                    });
-                }
-
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .button("Simulate")
@@ -340,11 +336,7 @@ impl MeasurementDialog {
                         } else {
                             match self.kind {
                                 MeasurementKind::Bsdf => {
-                                    let single_point =
-                                        if self.single { Some(self.point) } else { None };
-
                                     self.event_loop.send_event(VgonioEvent::Measure {
-                                        single_point,
                                         params: MeasurementParams::Bsdf(self.tab_bsdf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
                                         format: self.format,
@@ -354,7 +346,6 @@ impl MeasurementDialog {
                                 }
                                 MeasurementKind::Adf => {
                                     self.event_loop.send_event(VgonioEvent::Measure {
-                                        single_point: None,
                                         params: MeasurementParams::Adf(self.tab_adf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
                                         format: self.format,
@@ -364,7 +355,6 @@ impl MeasurementDialog {
                                 }
                                 MeasurementKind::Msf => {
                                     self.event_loop.send_event(VgonioEvent::Measure {
-                                        single_point: None,
                                         params: MeasurementParams::Msf(self.tab_msf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
                                         format: self.format,

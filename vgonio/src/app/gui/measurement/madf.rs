@@ -16,7 +16,6 @@ impl AdfMeasurementTab {
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("madf_sim_grid")
-            .striped(true)
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Zenith angle θ:");

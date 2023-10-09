@@ -123,9 +123,8 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.receiver.scheme,
                     params.receiver.precision
                 );
-                // TODO: if emmitter single position
                 cache.read(|cache| {
-                    measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, cache, None)
+                    measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, cache)
                 })
             }
             MeasurementParams::Adf(measurement) => {

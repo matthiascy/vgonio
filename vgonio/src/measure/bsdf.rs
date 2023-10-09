@@ -262,6 +262,16 @@ impl<T> SpectralSamples<T> {
 
     /// Creates a new `PerWavelength` from the given vector.
     pub fn from_vec(vec: Vec<T>) -> Self { Self(vec) }
+
+    /// Returns the iterator over the samples.
+    pub fn iter(&self) -> impl Iterator<Item = &T> { self.0.iter() }
+
+    /// Returns the mutable iterator over the samples.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> { self.0.iter_mut() }
+
+    /// Consumes the `SpectralSamples` and returns the iterator over the
+    /// samples.
+    pub fn into_iter(self) -> impl Iterator<Item = T> { self.0.into_iter() }
 }
 
 impl<T> Clone for SpectralSamples<T>
@@ -302,12 +312,6 @@ impl<T: PartialEq> PartialEq for SpectralSamples<T> {
     }
 }
 
-impl<'a, T> Iterator for &'a SpectralSamples<T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> { self.0.iter().next() }
-}
-
 /// BSDF measurement statistics for a single emitter's position.
 #[derive(Clone)]
 pub struct BsdfMeasurementStatsPoint {
@@ -334,7 +338,8 @@ pub struct BsdfMeasurementStatsPoint {
 
 impl PartialEq for BsdfMeasurementStatsPoint {
     fn eq(&self, other: &Self) -> bool {
-        self.n_received == other.n_received
+        self.n_bounces == other.n_bounces
+            && self.n_received == other.n_received
             && self.n_absorbed == other.n_absorbed
             && self.n_reflected == other.n_reflected
             && self.n_captured == other.n_captured
@@ -374,6 +379,7 @@ impl Debug for BsdfMeasurementStatsPoint {
         write!(
             f,
             r#"BsdfMeasurementPointStats:
+    - n_bounces: {},
     - n_received: {},
     - n_absorbed: {:?},
     - n_reflected: {:?},
@@ -382,6 +388,7 @@ impl Debug for BsdfMeasurementStatsPoint {
     - num_rays_per_bounce: {:?},
     - energy_per_bounce: {:?},
 "#,
+            self.n_bounces,
             self.n_received,
             self.n_absorbed,
             self.n_reflected,
@@ -434,7 +441,7 @@ impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
 }
 
 /// A snapshot of the measured BSDF.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.
     pub w_i: Sph2,
@@ -462,12 +469,17 @@ pub fn measure_bsdf_rt(
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
     cache: &InnerCache,
-    single_point: Option<Sph2>,
 ) -> Vec<MeasurementData> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
-    let detector = Receiver::new(&params.receiver, &params, cache);
+    let receiver = Receiver::new(&params.receiver, &params, cache);
+
+    log::debug!(
+        "Measuring BSDF of {} surfaces from {} measurement points.",
+        surfaces.len(),
+        emitter.measpts.len()
+    );
 
     let mut measurements = Vec::new();
     for (surf, mesh) in surfaces.iter().zip(meshes) {
@@ -492,9 +504,7 @@ pub fn measure_bsdf_rt(
                 );
                 match method {
                     #[cfg(feature = "embree")]
-                    RtcMethod::Embree => {
-                        embr::simulate_bsdf_measurement(&emitter, mesh, single_point)
-                    }
+                    RtcMethod::Embree => embr::simulate_bsdf_measurement(&emitter, mesh),
                     #[cfg(feature = "optix")]
                     RtcMethod::Optix => rtc_simulation_optix(&params, mesh, &emitter, cache),
                     RtcMethod::Grid => rtc_simulation_grid(&params, surf, mesh, &emitter, cache),
@@ -511,14 +521,14 @@ pub fn measure_bsdf_rt(
 
         let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
         log::trace!("Estimated orbit radius: {}", orbit_radius);
-        let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &detector.patches);
+        let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &receiver.patches);
         for sim_result_point in sim_result_points {
             log::debug!("Collecting BSDF snapshot at {}", sim_result_point.w_i);
 
             #[cfg(feature = "bench")]
             let t = std::time::Instant::now();
 
-            detector.collect(&sim_result_point, &mut collected, orbit_radius);
+            receiver.collect(&sim_result_point, &mut collected, orbit_radius);
 
             #[cfg(feature = "bench")]
             {

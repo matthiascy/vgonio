@@ -161,7 +161,7 @@ struct LastHit {
 }
 
 /// Records the status of a traced ray.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct RayTrajectoryNode {
     /// The origin of the ray.
     pub org: Vec3A,
@@ -185,7 +185,7 @@ impl Debug for RayTrajectoryNode {
 /// Records the trajectory of a ray from the moment it is spawned.
 ///
 /// The trajectory always starts with the ray that is spawned.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RayTrajectory(pub(crate) Vec<RayTrajectoryNode>);
 
 impl Deref for RayTrajectory {

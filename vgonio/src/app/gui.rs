@@ -611,7 +611,6 @@ impl VgonioGuiApp {
                         }
                     },
                     Measure {
-                        single_point,
                         params,
                         surfaces,
                         format,
@@ -636,7 +635,6 @@ impl VgonioGuiApp {
                                         &surfaces,
                                         params.sim_kind,
                                         cache,
-                                        single_point,
                                     )
                                 });
                                 #[cfg(feature = "visu-dbg")]
