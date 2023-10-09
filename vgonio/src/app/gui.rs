@@ -615,77 +615,75 @@ impl VgonioGuiApp {
                         params,
                         surfaces,
                         format,
-                    } => match params {
-                        MeasurementParams::Adf(params) => {
-                            println!("Measuring area distribution");
-                            let measured = self.cache.read(|cache| {
+                        encoding,
+                        compression,
+                    } => {
+                        let data = match params {
+                            MeasurementParams::Adf(params) => self.cache.read(|cache| {
                                 measure::microfacet::measure_area_distribution(
                                     params, &surfaces, cache,
                                 )
-                            });
-                            self.cache.write(|cache| {
-                                for meas in measured {
-                                    cache.add_micro_surface_measurement(meas).unwrap();
-                                }
-                                todo!("Show the measurement in the outliner");
-                            });
-                        }
-                        MeasurementParams::Msf(params) => {
-                            println!("Measuring masking/shadowing");
-                            self.cache.read(|cache| {
+                            }),
+                            MeasurementParams::Msf(params) => self.cache.read(|cache| {
                                 measure::microfacet::measure_masking_shadowing(
                                     params, &surfaces, cache,
                                 )
-                            });
-                            todo!("Save area distribution to file or display it in a window");
-                        }
-                        MeasurementParams::Bsdf(params) => {
-                            let measured = self.cache.read(|cache| {
-                                measure::bsdf::measure_bsdf_rt(
-                                    params,
-                                    &surfaces,
-                                    params.sim_kind,
-                                    cache,
-                                    single_point,
-                                )
-                            });
-                            #[cfg(feature = "visu-dbg")]
-                            {
-                                self.dbg_drawing_state.update_ray_trajectories(
-                                    &self.ctx.gpu,
-                                    &measured[0]
-                                        .measured
-                                        .bsdf_data()
-                                        .as_ref()
-                                        .unwrap()
-                                        .trajectories(),
-                                );
-                                self.dbg_drawing_state.update_ray_hit_points(
-                                    &self.ctx.gpu,
-                                    &measured[0]
-                                        .measured
-                                        .bsdf_data()
-                                        .as_ref()
-                                        .unwrap()
-                                        .hit_points(),
-                                );
+                            }),
+                            MeasurementParams::Bsdf(params) => {
+                                let measured = self.cache.read(|cache| {
+                                    measure::bsdf::measure_bsdf_rt(
+                                        params,
+                                        &surfaces,
+                                        params.sim_kind,
+                                        cache,
+                                        single_point,
+                                    )
+                                });
+                                #[cfg(feature = "visu-dbg")]
+                                {
+                                    self.dbg_drawing_state.update_ray_trajectories(
+                                        &self.ctx.gpu,
+                                        &measured[0]
+                                            .measured
+                                            .bsdf_data()
+                                            .as_ref()
+                                            .unwrap()
+                                            .trajectories(),
+                                    );
+                                    self.dbg_drawing_state.update_ray_hit_points(
+                                        &self.ctx.gpu,
+                                        &measured[0]
+                                            .measured
+                                            .bsdf_data()
+                                            .as_ref()
+                                            .unwrap()
+                                            .hit_points(),
+                                    );
+                                }
+
+                                measured
                             }
-                            crate::app::cli::write_measured_data_to_file(
-                                &measured,
-                                &surfaces,
-                                &self.cache,
-                                &self.config,
-                                format,
-                                FileEncoding::Binary,
-                                CompressionScheme::None,
-                                &None,
-                            )
-                            .map_err(|err| {
-                                log::error!("Failed to write measured data to file: {}", err);
-                            })
-                            .unwrap();
-                        }
-                    },
+                        };
+                        crate::app::cli::write_measured_data_to_file(
+                            &data,
+                            &surfaces,
+                            &self.cache,
+                            &self.config,
+                            format,
+                            encoding,
+                            compression,
+                            &None,
+                        )
+                        .map_err(|err| {
+                            log::error!("Failed to write measured data to file: {}", err);
+                        })
+                        .unwrap();
+                        self.cache.write(|cache| {
+                            for meas in data {
+                                cache.add_micro_surface_measurement(meas).unwrap();
+                            }
+                        });
+                    }
                     SurfaceViewer(event) => match event {
                         SurfaceViewerEvent::Create {
                             uuid,

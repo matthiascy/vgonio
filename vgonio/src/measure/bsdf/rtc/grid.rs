@@ -43,7 +43,6 @@ pub fn measure_bsdf(
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-    cache: &InnerCache,
 ) -> Vec<SimulationResultPoint> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.

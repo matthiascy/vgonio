@@ -23,7 +23,10 @@ use crate::{
     SphericalDomain,
 };
 use egui::Widget;
-use vgcore::math::Sph2;
+use vgcore::{
+    io::{CompressionScheme, FileEncoding},
+    math::Sph2,
+};
 use vgsurf::MicroSurface;
 
 impl ReceiverParams {
@@ -98,6 +101,10 @@ pub struct MeasurementDialog {
     is_open: bool,
     /// Output format of the measurement.
     format: OutputFormat,
+    /// File encoding of the measurement.
+    encoding: FileEncoding,
+    /// Compression scheme of the file.
+    compression: CompressionScheme,
     event_loop: EventLoopProxy,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     debug: MeasurementDialogDebug,
@@ -120,6 +127,8 @@ impl MeasurementDialog {
             point: Sph2::zero(),
             is_open: false,
             format: OutputFormat::Vgmo,
+            encoding: FileEncoding::Binary,
+            compression: CompressionScheme::None,
             event_loop,
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             debug: MeasurementDialogDebug {
@@ -280,12 +289,31 @@ impl MeasurementDialog {
                 }
                 ui.separator();
 
-                if self.kind == MeasurementKind::Bsdf {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Output format: ");
-                        ui.selectable_value(&mut self.format, OutputFormat::Vgmo, "vgmo");
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Output format: ");
+                    ui.selectable_value(&mut self.format, OutputFormat::Vgmo, "vgmo");
+                    if self.kind != MeasurementKind::Msf {
                         ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
+                    }
+                });
+
+                if self.format == OutputFormat::Vgmo {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("File encoding: ");
+                        ui.selectable_value(&mut self.encoding, FileEncoding::Binary, "binary");
+                        if self.kind == MeasurementKind::Adf {
+                            ui.selectable_value(&mut self.encoding, FileEncoding::Ascii, "ascii");
+                        }
                     });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Compression scheme: ");
+                        ui.selectable_value(&mut self.compression, CompressionScheme::None, "none");
+                        ui.selectable_value(&mut self.compression, CompressionScheme::Zlib, "zlib");
+                        ui.selectable_value(&mut self.compression, CompressionScheme::Gzip, "gzip");
+                    });
+                }
+
+                if self.kind == MeasurementKind::Bsdf {
                     ui.horizontal_wrapped(|ui| {
                         ui.checkbox(&mut self.single, "Single Point");
                         if self.single {
@@ -320,6 +348,8 @@ impl MeasurementDialog {
                                         params: MeasurementParams::Bsdf(self.tab_bsdf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
                                         format: self.format,
+                                        encoding: self.encoding,
+                                        compression: self.compression,
                                     });
                                 }
                                 MeasurementKind::Adf => {
@@ -328,6 +358,8 @@ impl MeasurementDialog {
                                         params: MeasurementParams::Adf(self.tab_adf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
                                         format: self.format,
+                                        encoding: self.encoding,
+                                        compression: self.compression,
                                     });
                                 }
                                 MeasurementKind::Msf => {
@@ -336,6 +368,8 @@ impl MeasurementDialog {
                                         params: MeasurementParams::Msf(self.tab_msf.params),
                                         surfaces: self.selector.selected().collect::<Vec<_>>(),
                                         format: self.format,
+                                        encoding: self.encoding,
+                                        compression: self.compression,
                                     });
                                 }
                             }

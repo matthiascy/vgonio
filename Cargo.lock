@@ -2976,7 +2976,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vgonio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "approx",
  "bincode",
@@ -3026,7 +3026,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-bxdf"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "libm",
  "num-traits",
@@ -3035,7 +3035,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "approx",
  "byteorder",
@@ -3054,11 +3054,11 @@ dependencies = [
 
 [[package]]
 name = "vgonio-jabr"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "vgonio-surf"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash 0.8.3",
  "byteorder",
@@ -3078,7 +3078,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-visu"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "wait-timeout"

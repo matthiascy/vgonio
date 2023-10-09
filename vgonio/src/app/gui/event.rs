@@ -20,6 +20,7 @@ use crate::{
 };
 use uuid::Uuid;
 use vgcore::{
+    io::{CompressionScheme, FileEncoding},
     math::{IVec2, Sph2},
     units::Degrees,
 };
@@ -72,6 +73,10 @@ pub enum VgonioEvent {
         surfaces: Vec<Handle<MicroSurface>>,
         /// Output file format.
         format: OutputFormat,
+        /// Output file encoding.
+        encoding: FileEncoding,
+        /// Output file compression.
+        compression: CompressionScheme,
     },
     Notify {
         kind: NotifyKind,

@@ -36,6 +36,7 @@ impl std::error::Error for ReadFileError {
             ReadFileErrorKind::Read(err) => Some(err),
             ReadFileErrorKind::Parse(err) => Some(err),
             ReadFileErrorKind::InvalidFileFormat => None,
+            ReadFileErrorKind::UnsupportedEncoding => None,
         }
     }
 }

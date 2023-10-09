@@ -1,11 +1,7 @@
-use crate::{
-    app::gui::{event::EventLoopProxy, widgets::SurfaceSelector},
-    measure::params::MsfMeasurementParams,
-};
+use crate::{app::gui::event::EventLoopProxy, measure::params::MsfMeasurementParams};
 
 pub struct MsfMeasurementTab {
     pub params: MsfMeasurementParams,
-    pub(crate) selector: SurfaceSelector,
     event_loop: EventLoopProxy,
 }
 
@@ -14,7 +10,6 @@ impl MsfMeasurementTab {
         Self {
             params: MsfMeasurementParams::default(),
             event_loop,
-            selector: SurfaceSelector::multiple(),
         }
     }
 
@@ -35,9 +30,6 @@ impl MsfMeasurementTab {
                         .speed(1.0)
                         .clamp_range(256.0..=2048.0),
                 );
-                ui.end_row();
-                ui.label("Micro-surfaces:");
-                self.selector.ui("micro_surface_selector", ui);
                 ui.end_row();
             });
     }

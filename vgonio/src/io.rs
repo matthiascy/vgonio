@@ -26,11 +26,11 @@ pub mod vgmo {
         },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     };
-    use std::io::{BufRead, BufWriter, Seek};
+    use std::io::{BufWriter, Seek};
     use vgcore::{
         io::{
-            CompressionScheme, FileEncoding, Header, HeaderExt, ParseError, ReadFileErrorKind,
-            VgonioFileVariant, WriteFileErrorKind,
+            CompressionScheme, FileEncoding, Header, HeaderExt, ParseError, ReadFileError,
+            ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind,
         },
         math::Sph2,
         units::{rad, Nanometres, Radians},
@@ -115,6 +115,7 @@ pub mod vgmo {
         }
     }
 
+    /// The VGMO header extension.
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum VgmoHeaderExt {
         Bsdf { params: BsdfMeasurementParams },
@@ -123,6 +124,8 @@ pub mod vgmo {
     }
 
     impl MeasuredData {
+        /// Returns the [`VgmoHeaderExt`] variant corresponding to the
+        /// measurement data.
         pub fn as_vgmo_header_ext(&self) -> VgmoHeaderExt {
             match self {
                 Self::Bsdf(bsdf) => VgmoHeaderExt::Bsdf {
@@ -223,10 +226,20 @@ pub mod vgmo {
     pub fn read<R: Read>(
         reader: &mut BufReader<R>,
         header: &Header<VgmoHeaderExt>,
-    ) -> Result<MeasuredData, ParseError> {
+    ) -> Result<MeasuredData, ReadFileErrorKind> {
         match header.extra {
-            VgmoHeaderExt::Bsdf { .. } => {
-                todo!("BSDF data reading not implemented yet")
+            VgmoHeaderExt::Bsdf { params } => {
+                log::debug!(
+                    "Reading BSDF data of {} measurement points {} samples from VGMO file",
+                    params.emitter.measurement_points_count(),
+                    params.samples_count()
+                );
+                Ok(MeasuredData::Bsdf(MeasuredBsdfData::read_from_vgmo(
+                    reader,
+                    &params,
+                    header.meta.encoding,
+                    header.meta.compression,
+                )?))
             }
             VgmoHeaderExt::Adf { params } => {
                 log::debug!(
@@ -238,7 +251,8 @@ pub mod vgmo {
                     params.samples_count(),
                     header.meta.encoding,
                     header.meta.compression,
-                )?;
+                )
+                .map_err(|err| ReadFileErrorKind::Parse(err))?;
                 Ok(MeasuredData::Adf(MeasuredAdfData { params, samples }))
             }
             VgmoHeaderExt::Msf { params } => {
@@ -251,7 +265,8 @@ pub mod vgmo {
                     params.samples_count(),
                     header.meta.encoding,
                     header.meta.compression,
-                )?;
+                )
+                .map_err(|err| ReadFileErrorKind::Parse(err))?;
                 Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
             }
         }
@@ -435,6 +450,7 @@ pub mod vgmo {
         /// The size of the buffer required to read or write the parameters.
         const REQUIRED_SIZE: usize = 20;
 
+        /// Writes the ring to the given buffer.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
@@ -447,6 +463,7 @@ pub mod vgmo {
             buf[16..20].copy_from_slice(&(self.base_index as u32).to_le_bytes());
         }
 
+        /// Reads the ring from the given buffer.
         pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= Self::REQUIRED_SIZE,
@@ -465,10 +482,6 @@ pub mod vgmo {
                 base_index,
             }
         }
-    }
-
-    fn receiver_num_rings(domain: SphericalDomain, precision: Radians) -> usize {
-        (domain.zenith_angle_diff() / precision).round() as usize
     }
 
     impl ReceiverParams {
@@ -593,9 +606,9 @@ pub mod vgmo {
             match &buf[0..3] {
                 b"vac" => Self::Vacuum,
                 b"air" => Self::Air,
-                b"al" => Self::Aluminium,
-                b"cu" => Self::Copper,
-                _ => panic!("Invalid medium kind"),
+                b"al\0" => Self::Aluminium,
+                b"cu\0" => Self::Copper,
+                _ => panic!("Invalid medium kind {:?}", &buf[0..3]),
             }
         }
     }
@@ -684,7 +697,7 @@ pub mod vgmo {
 
                     /// Writes the data to the given buffer.
                     pub fn write_to_buf(&self, buf: &mut [u8]) {
-                        debug_assert!(buf.len() >= self.len() * Self::ELEM_SIZE, "Buffer too small");
+                        debug_assert!(buf.len() >= self.len() * Self::ELEM_SIZE, "Buffer too small desired {}, got {}", self.len() * Self::ELEM_SIZE, buf.len());
                         for i in 0..self.len() {
                             buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].copy_from_slice(&self[i].to_le_bytes());
                         }
@@ -709,8 +722,8 @@ pub mod vgmo {
     impl BsdfMeasurementStatsPoint {
         /// The size of the buffer required to read/write the BSDF measurement
         /// stats point.
-        pub fn size(n_wavelength: usize, n_bounces: usize) -> usize {
-            4 * 2 + n_wavelength * 4 * 4 + n_wavelength * n_bounces * 4 * 2
+        pub fn size_in_bytes(n_wavelengths: usize, n_bounces: usize) -> usize {
+            4 * 2 + n_wavelengths * 4 * 4 + n_wavelengths * n_bounces * 4 * 2
         }
 
         /// Writes the BSDF measurement statistics at a single point to the
@@ -718,9 +731,9 @@ pub mod vgmo {
         pub fn write<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-            n_wavelength: usize,
+            n_wavelengths: usize,
         ) -> Result<(), std::io::Error> {
-            let size = Self::size(n_wavelength, self.n_bounces as usize);
+            let size = Self::size_in_bytes(n_wavelengths, self.n_bounces as usize);
             let mut buf = vec![0u8; size].into_boxed_slice();
             let mut offset = 0;
             buf[offset..offset + 4].copy_from_slice(&self.n_bounces.to_le_bytes());
@@ -729,29 +742,29 @@ pub mod vgmo {
             offset += 4;
 
             self.n_absorbed
-                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelengths]);
+            offset += 4 * n_wavelengths;
 
             self.n_reflected
-                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelengths]);
+            offset += 4 * n_wavelengths;
 
             self.n_captured
-                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelengths]);
+            offset += 4 * n_wavelengths;
 
             self.e_captured
-                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelengths]);
+            offset += 4 * n_wavelengths;
 
-            for i in 0..n_wavelength {
+            for i in 0..n_wavelengths {
                 for j in 0..self.n_bounces as usize {
                     buf[offset..offset + 4]
                         .copy_from_slice(&self.num_rays_per_bounce[i][j].to_le_bytes());
                     offset += 4;
                 }
             }
-            for i in 0..n_wavelength {
+            for i in 0..n_wavelengths {
                 for j in 0..self.n_bounces as usize {
                     buf[offset..offset + 4]
                         .copy_from_slice(&self.energy_per_bounce[i][j].to_le_bytes());
@@ -763,10 +776,7 @@ pub mod vgmo {
 
         /// Reads the BSDF measurement statistics at a single point from the
         /// buffer.
-        pub fn read<R: Read>(
-            reader: &mut BufReader<R>,
-            n_wavelength: usize,
-        ) -> Result<Self, std::io::Error> {
+        pub fn read<R: Read>(reader: &mut R, n_wavelengths: usize) -> Result<Self, std::io::Error> {
             let mut buf = [0u8; 4];
             reader.read_exact(&mut buf)?;
             let n_bounces = u32::from_le_bytes(buf);
@@ -774,34 +784,34 @@ pub mod vgmo {
             let n_received = u32::from_le_bytes(buf);
 
             let mut buf =
-                vec![0u8; 4 * n_wavelength * 4 + 4 * n_wavelength * n_bounces as usize * 2];
+                vec![0u8; 4 * n_wavelengths * 4 + 4 * n_wavelengths * n_bounces as usize * 2];
             reader.read_exact(&mut buf)?;
 
             let mut offset = 0;
             let n_absorbed = SpectralSamples::<u32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
+                &buf[offset..offset + 4 * n_wavelengths],
+                n_wavelengths,
             );
-            offset += 4 * n_wavelength;
+            offset += 4 * n_wavelengths;
             let n_reflected = SpectralSamples::<u32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
+                &buf[offset..offset + 4 * n_wavelengths],
+                n_wavelengths,
             );
-            offset += 4 * n_wavelength;
+            offset += 4 * n_wavelengths;
             let n_captured = SpectralSamples::<u32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
+                &buf[offset..offset + 4 * n_wavelengths],
+                n_wavelengths,
             );
-            offset += 4 * n_wavelength;
+            offset += 4 * n_wavelengths;
 
             let e_captured = SpectralSamples::<f32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
+                &buf[offset..offset + 4 * n_wavelengths],
+                n_wavelengths,
             );
-            offset += 4 * n_wavelength;
+            offset += 4 * n_wavelengths;
 
-            let mut num_rays_per_bounce = vec![vec![0u32; n_bounces as usize]; n_wavelength];
-            for i in 0..n_wavelength {
+            let mut num_rays_per_bounce = vec![vec![0u32; n_bounces as usize]; n_wavelengths];
+            for i in 0..n_wavelengths {
                 for j in 0..n_bounces as usize {
                     num_rays_per_bounce[i][j] =
                         u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
@@ -809,8 +819,8 @@ pub mod vgmo {
                 }
             }
 
-            let mut energy_per_bounce = vec![vec![0f32; n_bounces as usize]; n_wavelength];
-            for i in 0..n_wavelength {
+            let mut energy_per_bounce = vec![vec![0f32; n_bounces as usize]; n_wavelengths];
+            for i in 0..n_wavelengths {
                 for j in 0..n_bounces as usize {
                     energy_per_bounce[i][j] =
                         f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
@@ -833,10 +843,10 @@ pub mod vgmo {
 
     impl BounceAndEnergy {
         /// Calculates the size of a single data point in bytes.
-        pub fn size(&self) -> usize { 4 * 3 + 4 * self.n_bounces as usize * 4 * 2 }
+        pub fn size_in_bytes(n_bounces: usize) -> usize { 4 * 3 + 4 * n_bounces * 4 * 2 }
 
         /// Reads the data for one single patch.
-        pub fn read<R: Read>(reader: &mut BufReader<R>) -> Result<Self, std::io::Error> {
+        pub fn read<R: Read>(reader: &mut R) -> Result<Self, std::io::Error> {
             let n_bounces = {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
@@ -871,7 +881,8 @@ pub mod vgmo {
 
         /// Writes the data for one single patch.
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), std::io::Error> {
-            let mut buf = vec![0u8; self.size()].into_boxed_slice();
+            let mut buf =
+                vec![0u8; Self::size_in_bytes(self.n_bounces as usize)].into_boxed_slice();
             buf[0..4].copy_from_slice(&self.n_bounces.to_le_bytes());
             buf[4..8].copy_from_slice(&self.total_rays.to_le_bytes());
             buf[8..12].copy_from_slice(&self.total_energy.to_le_bytes());
@@ -888,26 +899,32 @@ pub mod vgmo {
         }
     }
 
+    fn read_sph2_from_buf(buf: &[u8]) -> Sph2 {
+        let theta = rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+        let phi = rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+        Sph2::new(theta, phi)
+    }
+
+    fn write_sph2_to_buf(sph2: Sph2, buf: &mut [u8]) {
+        buf[0..4].copy_from_slice(&sph2.theta.as_f32().to_le_bytes());
+        buf[4..8].copy_from_slice(&sph2.phi.as_f32().to_le_bytes());
+    }
+
     impl BsdfSnapshotRaw<BounceAndEnergy> {
         /// Reads a single data point from the reader.
         pub fn read<R: Read>(
-            reader: &mut BufReader<R>,
-            params: &BsdfMeasurementParams,
+            reader: &mut R,
+            n_wavelengths: usize,
+            n_patches: usize,
         ) -> Result<Self, std::io::Error> {
-            let n_wavelength = params.emitter.spectrum.step_count();
-            let detector_patches_count = params.receiver.num_patches();
             let mut buf = [0u8; 8];
             reader.read_exact(&mut buf)?;
-            let w_i = Sph2::new(
-                rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap())),
-                rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap())),
-            );
-            let stats = BsdfMeasurementStatsPoint::read(reader, n_wavelength).unwrap();
-
-            let mut records = Vec::with_capacity(detector_patches_count);
-            let mut samples = vec![BounceAndEnergy::default(); n_wavelength];
-            for _ in 0..detector_patches_count {
-                for j in 0..n_wavelength {
+            let w_i = read_sph2_from_buf(&buf);
+            let stats = BsdfMeasurementStatsPoint::read(reader, n_wavelengths).unwrap();
+            let mut records = Vec::with_capacity(n_patches);
+            let mut samples = vec![BounceAndEnergy::default(); n_wavelengths];
+            for _ in 0..n_patches {
+                for j in 0..n_wavelengths {
                     samples[j] = BounceAndEnergy::read(reader)?;
                 }
                 records.push(SpectralSamples::from_vec(samples.clone()));
@@ -928,18 +945,17 @@ pub mod vgmo {
         pub fn write<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-            n_wavelength: usize,
+            n_wavelengths: usize,
         ) -> Result<(), std::io::Error> {
             let mut buf = [0u8; 8];
-            buf[0..4].copy_from_slice(&self.w_i.theta.as_f32().to_le_bytes());
-            buf[4..8].copy_from_slice(&self.w_i.phi.as_f32().to_le_bytes());
+            write_sph2_to_buf(self.w_i, &mut buf);
             writer.write_all(&buf)?;
-            /// Writes the stats for the current measurement point.
-            self.stats.write(writer, n_wavelength)?;
-            /// Writes the collected data for each patch.
-            for samples in self.records {
-                /// Writes the data for each wavelength.
-                for s in &samples {
+            // Writes the stats for the current measurement point.
+            self.stats.write(writer, n_wavelengths)?;
+            // Writes the collected data for each patch.
+            for samples in &self.records {
+                // Writes the data for each wavelength.
+                for s in samples {
                     s.write(writer)?;
                 }
             }
@@ -948,26 +964,25 @@ pub mod vgmo {
     }
 
     impl BsdfSnapshot {
+        /// Reads a BSDF snapshot from the given reader.
+        ///
+        /// The `samples_buf` is a buffer that is used to read the spectral
+        /// samples for each patch. It must be at least `n_wavelengths * 4`
         pub fn read<R: Read>(
-            reader: &mut BufReader<R>,
-            params: &BsdfMeasurementParams,
+            reader: &mut R,
+            n_wavelengths: usize,
+            n_patches: usize,
+            samples_buf: &mut [u8],
         ) -> Result<Self, std::io::Error> {
-            let n_wavelength = params.emitter.spectrum.step_count();
-            let detector_patches_count = params.receiver.num_patches();
+            assert_eq!(samples_buf.len(), n_wavelengths * 4, "Buffer too small");
             let mut buf = [0u8; 8];
             reader.read_exact(&mut buf)?;
-            let w_i = Sph2::new(
-                rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap())),
-                rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap())),
-            );
-            let mut samples =
-                vec![SpectralSamples::splat(0.0, n_wavelength); detector_patches_count];
-            for _ in 0..detector_patches_count {
-                for j in 0..n_wavelength {
-                    samples[j] = SpectralSamples::<f32>::read_from_buf(reader, n_wavelength);
-                }
+            let w_i = read_sph2_from_buf(&buf);
+            let mut samples = vec![SpectralSamples::<f32>::new(); n_patches];
+            for i in 0..n_patches {
+                reader.read_exact(samples_buf)?;
+                samples[i] = SpectralSamples::<f32>::read_from_buf(samples_buf, n_wavelengths);
             }
-
             Ok(Self {
                 w_i,
                 samples,
@@ -978,63 +993,34 @@ pub mod vgmo {
             })
         }
 
+        /// Writes a BSDF snapshot to the given writer.
         pub fn write<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-            n_wavelength: usize,
+            n_wavelengths: usize,
         ) -> Result<(), std::io::Error> {
             let mut buf = [0u8; 8];
             buf[0..4].copy_from_slice(&self.w_i.theta.as_f32().to_le_bytes());
             buf[4..8].copy_from_slice(&self.w_i.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
-            let mut buf = vec![0u8; 8 + 4 * n_wavelength].into_boxed_slice();
+            let mut buf = vec![0u8; 8 + 4 * n_wavelengths].into_boxed_slice();
             for samples in &self.samples {
-                samples.write_to_buf(&mut buf)?;
+                samples.write_to_buf(&mut buf);
             }
             Ok(())
         }
     }
 
     impl MeasuredBsdfData {
-        // TODO
-        /// Reads the measured BSDF data from the given reader.
-        pub fn read_from_vgmo<R: Read>(
-            reader: &mut BufReader<R>,
-            params: BsdfMeasurementParams,
-            encoding: FileEncoding,
-            compression: CompressionScheme,
-        ) -> Result<Self, ReadFileErrorKind> {
-            // TODO: check if the meta is correct
-            let mut zlib_decoder;
-            let mut gzip_decoder;
-
-            let mut decoder: Box<&mut dyn Read> = match compression {
-                CompressionScheme::None => Box::new(reader),
-                CompressionScheme::Zlib => {
-                    zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
-                    Box::new(&mut zlib_decoder)
-                }
-                CompressionScheme::Gzip => {
-                    gzip_decoder = flate2::bufread::GzDecoder::new(reader);
-                    Box::new(&mut gzip_decoder)
-                }
-                _ => Box::new(reader),
-            };
-
-            match encoding {
-                FileEncoding::Ascii => Err(ReadFileErrorKind::UnsupportedEncoding),
-                FileEncoding::Binary => {}
-            }
-        }
-
+        /// Writes the BSDF data to the given writer.
         fn write_bsdf_snapshots<W: Write>(
-            writer: &mut BufWriter<W>,
+            writer: &mut W,
             snapshots: &[BsdfSnapshot],
-            n_wavelength: usize,
+            n_wavelengths: usize,
         ) -> Result<(), std::io::Error> {
-            let mut buf = vec![0u8; n_wavelength].into_boxed_slice();
+            let mut buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for snapshot in snapshots {
-                for samples in snapshot.samples {
+                for samples in &snapshot.samples {
                     samples.write_to_buf(&mut buf);
                     writer.write_all(&buf)?;
                 }
@@ -1042,20 +1028,75 @@ pub mod vgmo {
             Ok(())
         }
 
-        // TODO:
         fn read_bsdf_snapshots<R: Read>(
-            reader: &mut BufReader<R>,
-            n_wavelength: usize,
+            reader: &mut R,
+            n_wavelengths: usize,
             n_patches: usize,
         ) -> Result<Vec<BsdfSnapshot>, std::io::Error> {
-            let mut spectral_samples_buf = vec![0u8; n_wavelength].into_boxed_slice();
-            let mut snapshots = vec![];
+            let mut snapshots = Vec::with_capacity(n_patches);
+            let mut spectral_samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for _ in 0..n_patches {
-                reader.read_exact(&mut spectral_samples_buf)?;
-                let mut samples = vec![];
-                snapshots.push(BsdfSnapshot { samples });
+                snapshots.push(BsdfSnapshot::read(
+                    reader,
+                    n_wavelengths,
+                    n_patches,
+                    &mut spectral_samples_buf,
+                )?);
             }
             Ok(snapshots)
+        }
+
+        /// Reads the measured BSDF data from the given reader.
+        pub fn read_from_vgmo<R: Read>(
+            reader: &mut BufReader<R>,
+            params: &BsdfMeasurementParams,
+            encoding: FileEncoding,
+            compression: CompressionScheme,
+        ) -> Result<Self, ReadFileErrorKind> {
+            match encoding {
+                FileEncoding::Ascii => Err(ReadFileErrorKind::UnsupportedEncoding),
+                FileEncoding::Binary => {
+                    let mut zlib_decoder;
+                    let mut gzip_decoder;
+                    let mut decoder: Box<&mut dyn Read> = match compression {
+                        CompressionScheme::Zlib => {
+                            zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
+                            Box::new(&mut zlib_decoder)
+                        }
+                        CompressionScheme::Gzip => {
+                            gzip_decoder = flate2::bufread::GzDecoder::new(reader);
+                            Box::new(&mut gzip_decoder)
+                        }
+                        _ => Box::new(reader),
+                    };
+
+                    let snapshots = Self::read_bsdf_snapshots(
+                        &mut decoder,
+                        params.emitter.spectrum.step_count(),
+                        params.receiver.num_patches(),
+                    )?;
+                    let mut raw_snapshots = None;
+                    if params.receiver.retrieval_mode == DataRetrievalMode::FullData {
+                        let n_patches = params.receiver.num_patches();
+                        let mut snapshots = Vec::with_capacity(n_patches);
+                        for _ in 0..n_patches {
+                            let snapshot = BsdfSnapshotRaw::<BounceAndEnergy>::read(
+                                &mut decoder,
+                                params.emitter.spectrum.step_count(),
+                                params.receiver.num_patches(),
+                            )?;
+                            snapshots.push(snapshot);
+                        }
+                        raw_snapshots = Some(snapshots);
+                    };
+
+                    Ok(Self {
+                        params: *params,
+                        snapshots,
+                        raw_snapshots,
+                    })
+                }
+            }
         }
 
         /// Writes the measured BSDF data to the given writer.
@@ -1068,34 +1109,27 @@ pub mod vgmo {
             if encoding == FileEncoding::Ascii {
                 return Err(WriteFileErrorKind::UnsupportedEncoding);
             }
-            let n_wavelength = self.params.emitter.spectrum.step_count();
+            let n_wavelengths = self.params.emitter.spectrum.step_count();
             match compression {
                 CompressionScheme::None => {
-                    // for snapshot in self.snapshots {
-                    //     for samples in snapshot.samples {
-                    //         for s in &samples {
-                    //             writer.write_all(&s.to_le_bytes())?;
-                    //         }
-                    //     }
-                    // }
-                    Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelength)?;
+                    Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelengths)?;
                     if self.params.receiver.retrieval_mode == DataRetrievalMode::FullData {
-                        for snapshot in &self.raw_snapshots.unwrap() {
-                            snapshot.write(writer, n_wavelength)?;
+                        for snapshot in self.raw_snapshots.as_ref().unwrap() {
+                            snapshot.write(writer, n_wavelengths)?;
                         }
                     }
                 }
                 CompressionScheme::Zlib => {
                     let mut zlib_encoder =
                         flate2::write::ZlibEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_bsdf_snapshots(&mut zlib_encoder, &self.snapshots)?;
+                    Self::write_bsdf_snapshots(&mut zlib_encoder, &self.snapshots, n_wavelengths)?;
                     writer.write_all(&zlib_encoder.flush_finish()?)?
                 }
                 CompressionScheme::Gzip => {
                     let mut gzip_encoder =
                         flate2::write::GzEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_bsdf_snapshots(&mut gzip_encoder, &self.snapshots)?;
-                    writer.write_all(&gzip_encoder.flush_finish()?)?
+                    Self::write_bsdf_snapshots(&mut gzip_encoder, &self.snapshots, n_wavelengths)?;
+                    writer.write_all(&gzip_encoder.finish()?)?
                 }
                 _ => {}
             }
@@ -1111,7 +1145,7 @@ mod tests {
         measure::{
             bsdf::{
                 emitter::EmitterParams,
-                receiver::{BounceAndEnergy, ReceiverParams, ReceiverScheme},
+                receiver::{BounceAndEnergy, DataRetrievalMode, ReceiverParams, ReceiverScheme},
                 rtc::RtcMethod,
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshotRaw, SpectralSamples,
             },
@@ -1119,6 +1153,7 @@ mod tests {
         },
         Medium, RangeByStepSizeInclusive,
     };
+    use std::io::{BufReader, BufWriter};
     use vgcore::{
         math::Sph2,
         units::{mm, nm, rad, Radians},
@@ -1127,6 +1162,7 @@ mod tests {
     #[test]
     fn test_bsdf_measurement_stats_point_read_write() {
         let data = BsdfMeasurementStatsPoint {
+            n_bounces: 3,
             n_received: 1234567,
             n_absorbed: SpectralSamples(vec![1, 2, 3, 4]),
             n_reflected: SpectralSamples(vec![5, 6, 7, 8]),
@@ -1145,16 +1181,18 @@ mod tests {
                 vec![11.0, 12.0, 13.0],
             ]),
         };
-        let size = BsdfMeasurementStatsPoint::calc_size_in_bytes(4, 3);
+        let size = BsdfMeasurementStatsPoint::size_in_bytes(4, 3);
         let mut buf = vec![0; size];
-        data.write(&mut buf, 4, 3);
-        let data2 = BsdfMeasurementStatsPoint::read(&buf, 4, 3).unwrap();
+        data.write(&mut buf, 4).unwrap();
+        let mut reader = BufReader::new(buf);
+        let data2 = BsdfMeasurementStatsPoint::read(&mut buf, 4).unwrap();
         assert_eq!(data, data2);
     }
 
     #[test]
     fn test_bounce_and_energy_read_write() {
         let data = BounceAndEnergy {
+            n_bounces: 11,
             total_rays: 33468,
             total_energy: 1349534.0,
             num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0],
@@ -1162,7 +1200,7 @@ mod tests {
                 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
             ],
         };
-        let size = BounceAndEnergy::calc_size_in_bytes(11);
+        let size = BounceAndEnergy::size_in_bytes(data.n_bounces as usize);
         let mut buf = vec![0; size];
         data.write_to_buf(&mut buf, 11);
         let data2 = BounceAndEnergy::read_from_buf(&buf, 11).unwrap();
@@ -1195,54 +1233,62 @@ mod tests {
             records: vec![
                 SpectralSamples(vec![
                     BounceAndEnergy {
+                        n_bounces: 3,
                         total_rays: 33468,
                         total_energy: 1349534.0,
                         num_rays_per_bounce: vec![210, 40, 60],
                         energy_per_bounce: vec![20.0, 30.0, 40.0],
                     },
                     BounceAndEnergy {
+                        n_bounces: 2,
                         total_rays: 33,
                         total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                        num_rays_per_bounce: vec![10, 4],
+                        energy_per_bounce: vec![0.0, 3.0],
                     },
                     BounceAndEnergy {
+                        n_bounces: 3,
                         total_rays: 33468,
                         total_energy: 1349534.0,
                         num_rays_per_bounce: vec![210, 40, 60],
                         energy_per_bounce: vec![20.0, 30.0, 40.0],
                     },
                     BounceAndEnergy {
+                        n_bounces: 1,
                         total_rays: 33,
                         total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                        num_rays_per_bounce: vec![10],
+                        energy_per_bounce: vec![0.0],
                     },
                 ]),
                 SpectralSamples(vec![
                     BounceAndEnergy {
+                        n_bounces: 3,
                         total_rays: 33468,
                         total_energy: 1349534.0,
                         num_rays_per_bounce: vec![210, 40, 60],
                         energy_per_bounce: vec![20.0, 30.0, 40.0],
                     },
                     BounceAndEnergy {
+                        n_bounces: 3,
                         total_rays: 33,
                         total_energy: 14.0,
                         num_rays_per_bounce: vec![10, 4, 0],
                         energy_per_bounce: vec![0.0, 3.0, 4.0],
                     },
                     BounceAndEnergy {
+                        n_bounces: 2,
                         total_rays: 33468,
                         total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
+                        num_rays_per_bounce: vec![210, 40],
+                        energy_per_bounce: vec![20.0, 30.0],
                     },
                     BounceAndEnergy {
+                        n_bounces: 2,
                         total_rays: 33,
                         total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
+                        num_rays_per_bounce: vec![10, 4],
+                        energy_per_bounce: vec![0.0, 3.0],
                     },
                 ]),
             ],
@@ -1252,9 +1298,8 @@ mod tests {
             hit_points: vec![],
         };
 
-        let size = BsdfSnapshotRaw::<BounceAndEnergy>::calc_size_in_bytes(4, 3, 2);
-        let mut buf = vec![0; size];
-        data.write_to_buf(&mut buf, 4, 3);
+        let mut writer = BufWriter::new(vec![]);
+        data.write(&mut writer, 4).unwrap();
         let params = BsdfMeasurementParams {
             kind: BsdfKind::Brdf,
             sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
@@ -1262,18 +1307,19 @@ mod tests {
             transmitted_medium: Medium::Aluminium,
             emitter: EmitterParams {
                 num_rays: 0,
-                max_bounces: 3,
+                max_bounces: 4,
                 zenith: RangeByStepSizeInclusive::zero_to_half_pi(rad!(0.2)),
                 azimuth: RangeByStepSizeInclusive::zero_to_tau(rad!(0.4)),
                 spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
             },
             receiver: ReceiverParams {
                 domain: Default::default(),
-                precision: rad!(0.1),
+                precision: rad!(5.0),
                 scheme: ReceiverScheme::Beckers,
+                retrieval_mode: DataRetrievalMode::FullData,
             },
         };
-        let data2 = BsdfSnapshotRaw::<BounceAndEnergy>::read_from_buf(&buf, &params);
+        let data2 = BsdfSnapshotRaw::<BounceAndEnergy>::read(&mut writer, &params).unwrap();
         assert_eq!(data, data2);
     }
 }

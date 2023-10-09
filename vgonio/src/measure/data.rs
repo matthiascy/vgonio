@@ -115,6 +115,8 @@ impl MeasuredData {
         }
     }
 
+    /// Returns the azimuthal angle range of the measurement data only if
+    /// it is a ADF or MSF measurement.
     pub fn adf_or_msf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
             MeasuredData::Adf(adf) => Some(adf.params.azimuth),
@@ -123,6 +125,8 @@ impl MeasuredData {
         }
     }
 
+    /// Returns the zenith angle range of the measurement data only if
+    /// it is a ADF or MSF measurement.
     pub fn adf_or_msf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
             MeasuredData::Adf(adf) => Some(adf.params.zenith),
@@ -379,7 +383,7 @@ impl MeasurementData {
             VgonioError::from_read_file_error(
                 ReadFileError {
                     path: filepath.to_owned().into_boxed_path(),
-                    kind: ReadFileErrorKind::Parse(err),
+                    kind: err,
                 },
                 "Failed to read VGMO file.",
             )
