@@ -343,7 +343,7 @@ impl Config {
     /// # Arguments
     ///
     /// * `output` - The output directory specified by the user.
-    pub fn resolve_output_dir(&self, output_dir: &Option<PathBuf>) -> Result<PathBuf, VgonioError> {
+    pub fn resolve_output_dir(&self, output_dir: Option<&Path>) -> Result<PathBuf, VgonioError> {
         match output_dir {
             Some(dir) => {
                 let resolved = self.resolve_path(dir);

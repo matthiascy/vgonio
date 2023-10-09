@@ -73,7 +73,10 @@ pub enum VgonioEvent {
         encoding: FileEncoding,
         /// Output file compression.
         compression: CompressionScheme,
+        /// Save the measurement data to a file.
+        write_to_file: bool,
     },
+    ExportMeasurement(Handle<MeasurementData>),
     Notify {
         kind: NotifyKind,
         text: String,

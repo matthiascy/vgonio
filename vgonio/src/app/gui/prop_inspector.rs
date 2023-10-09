@@ -130,9 +130,7 @@ impl PropertyInspector {
                                 ui.add(egui::Label::new("Timestamp:"));
                                 ui.add(egui::Label::new(format!(
                                     "{}",
-                                    vgcore::utils::iso_timestamp_from_datetime_short(
-                                        &state.timestamp
-                                    )
+                                    vgcore::utils::iso_timestamp_display(&state.timestamp)
                                 )));
                                 ui.end_row();
 
@@ -253,6 +251,10 @@ impl PropertyInspector {
                                         data: meas,
                                         independent: false,
                                     });
+                                }
+                                if ui.button("Export").clicked() {
+                                    self.event_loop
+                                        .send_event(VgonioEvent::ExportMeasurement(meas));
                                 }
                             });
                         }

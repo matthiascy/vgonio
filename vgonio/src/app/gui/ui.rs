@@ -1,5 +1,6 @@
 use crate::{
     app::{
+        args::OutputFormat,
         cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
@@ -32,7 +33,10 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use vgcore::math::Mat4;
+use vgcore::{
+    io::{CompressionScheme, FileEncoding},
+    math::Mat4,
+};
 use vgsurf::MicroSurface;
 
 use super::{docking::DockSpace, event::EventResponse};
@@ -150,6 +154,35 @@ impl VgonioGui {
                     EventResponse::Handled
                 }
             },
+            VgonioEvent::ExportMeasurement(meas) => {
+                use rfd::AsyncFileDialog;
+                let dir = std::env::current_dir().unwrap();
+                let task = AsyncFileDialog::new().set_directory(dir).save_file();
+                let event_loop = self.event_loop.clone();
+                let hdl =
+                    std::thread::spawn(move || pollster::block_on(async { task.await })).join();
+                if let Ok(Some(hdl)) = hdl {
+                    self.cache.read(|cache| {
+                        let measured = cache.get_measurement_data(*meas).unwrap();
+                        crate::app::cli::write_single_measured_data_to_file(
+                            measured,
+                            FileEncoding::Binary,
+                            CompressionScheme::Zlib,
+                            hdl.inner(),
+                        )
+                        .map_err(|err| {
+                            log::error!("Failed to write measured data to file: {}", err);
+                        })
+                        .unwrap_or_default();
+                        event_loop.send_event(VgonioEvent::Notify {
+                            kind: NotifyKind::Info,
+                            text: format!("Export measurement to {:?}", hdl.path()),
+                            time: 3.0,
+                        });
+                    });
+                }
+                EventResponse::Handled
+            }
             VgonioEvent::Graphing {
                 kind,
                 data,

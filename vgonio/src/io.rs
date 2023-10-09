@@ -29,8 +29,8 @@ pub mod vgmo {
     use std::io::{BufWriter, Seek};
     use vgcore::{
         io::{
-            CompressionScheme, FileEncoding, Header, HeaderExt, ParseError, ReadFileError,
-            ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind,
+            CompressionScheme, FileEncoding, Header, HeaderExt, ReadFileErrorKind,
+            VgonioFileVariant, WriteFileErrorKind,
         },
         math::Sph2,
         units::{rad, Nanometres, Radians},
@@ -694,7 +694,7 @@ pub mod vgmo {
 
                     /// Writes the data to the given buffer.
                     pub fn write_to_buf(&self, buf: &mut [u8]) {
-                        debug_assert!(buf.len() >= self.len() * Self::ELEM_SIZE, "Buffer too small desired {}, got {}", self.len() * Self::ELEM_SIZE, buf.len());
+                        debug_assert!(buf.len() >= self.len() * Self::ELEM_SIZE, "Write SpectralSamples to buffer: desired size {}, got {}", self.len() * Self::ELEM_SIZE, buf.len());
                         for i in 0..self.len() {
                             buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].copy_from_slice(&self[i].to_le_bytes());
                         }
@@ -997,19 +997,28 @@ pub mod vgmo {
         }
 
         /// Writes a BSDF snapshot to the given writer.
+        ///
+        /// The `samples_buf` is a buffer that is used to write the spectral
+        /// samples for each patch. It must be at least `n_wavelengths * 4`
+        /// bytes.
         pub fn write<W: Write>(
             &self,
-            writer: &mut BufWriter<W>,
+            writer: &mut W,
             n_wavelengths: usize,
+            samples_buf: &mut [u8],
         ) -> Result<(), std::io::Error> {
+            debug_assert_eq!(
+                samples_buf.len(),
+                n_wavelengths * 4,
+                "Writing BSDF snapshot: samples buffer too small!"
+            );
             let mut buf = [0u8; 8];
             buf[0..4].copy_from_slice(&self.w_i.theta.as_f32().to_le_bytes());
             buf[4..8].copy_from_slice(&self.w_i.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
-            let mut buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for samples in &self.samples {
-                samples.write_to_buf(&mut buf);
-                writer.write_all(&buf)?;
+                samples.write_to_buf(samples_buf);
+                writer.write_all(samples_buf)?;
             }
             Ok(())
         }
@@ -1017,35 +1026,32 @@ pub mod vgmo {
 
     impl MeasuredBsdfData {
         /// Writes the BSDF data to the given writer.
-        fn write_bsdf_snapshots<W: Write>(
+        pub(crate) fn write_bsdf_snapshots<W: Write>(
             writer: &mut W,
             snapshots: &[BsdfSnapshot],
             n_wavelengths: usize,
         ) -> Result<(), std::io::Error> {
-            let mut buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
+            let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for snapshot in snapshots {
-                for samples in &snapshot.samples {
-                    samples.write_to_buf(&mut buf);
-                    writer.write_all(&buf)?;
-                }
+                snapshot.write(writer, n_wavelengths, &mut samples_buf)?;
             }
             Ok(())
         }
 
-        fn read_bsdf_snapshots<R: Read>(
+        pub(crate) fn read_bsdf_snapshots<R: Read>(
             reader: &mut R,
             n_wavelengths: usize,
             n_patches: usize,
             n_snapshots: usize,
         ) -> Result<Vec<BsdfSnapshot>, std::io::Error> {
             let mut snapshots = Vec::with_capacity(n_snapshots);
-            let mut spectral_samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
+            let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for _ in 0..n_snapshots {
                 snapshots.push(BsdfSnapshot::read(
                     reader,
                     n_wavelengths,
                     n_patches,
-                    &mut spectral_samples_buf,
+                    &mut samples_buf,
                 )?);
             }
             Ok(snapshots)
@@ -1075,6 +1081,12 @@ pub mod vgmo {
                         _ => Box::new(reader),
                     };
 
+                    log::debug!(
+                        "Reading {} BSDF snapshots, n_wavelengths: {}, n_patches: {}",
+                        params.emitter.measurement_points_count(),
+                        params.emitter.spectrum.step_count(),
+                        params.receiver.num_patches(),
+                    );
                     let snapshots = Self::read_bsdf_snapshots(
                         &mut decoder,
                         params.emitter.spectrum.step_count(),
@@ -1149,7 +1161,7 @@ pub mod vgmo {
 mod tests {
     use crate::measure::bsdf::{
         receiver::BounceAndEnergy, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
-        SpectralSamples,
+        MeasuredBsdfData, SpectralSamples,
     };
     use std::io::{BufReader, BufWriter, Cursor, Write};
     use vgcore::math::Sph2;
@@ -1322,13 +1334,31 @@ mod tests {
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             hit_points: vec![],
         };
+        let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
         let mut writer = BufWriter::new(vec![]);
-        snapshot.write(&mut writer, n_wavelengths).unwrap();
+        snapshot
+            .write(&mut writer, n_wavelengths, &mut samples_buf)
+            .unwrap();
 
         let mut reader = BufReader::new(Cursor::new(writer.into_inner().unwrap()));
         let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
         let snapshot2 =
             BsdfSnapshot::read(&mut reader, n_wavelengths, n_patches, &mut samples_buf).unwrap();
         assert_eq!(snapshot, snapshot2);
+
+        let snapshots = vec![snapshot; 4];
+        let mut writer = BufWriter::new(vec![]);
+        MeasuredBsdfData::write_bsdf_snapshots(&mut writer, &snapshots, n_wavelengths).unwrap();
+
+        let buf = writer.into_inner().unwrap();
+        let mut reader = BufReader::new(Cursor::new(buf));
+        let snapshots2 = MeasuredBsdfData::read_bsdf_snapshots(
+            &mut reader,
+            n_wavelengths,
+            n_patches,
+            snapshots.len(),
+        )
+        .unwrap();
+        assert_eq!(snapshots, snapshots2);
     }
 }

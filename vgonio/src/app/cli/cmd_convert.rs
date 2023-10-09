@@ -92,7 +92,7 @@ use vgcore::{
 use vgsurf::MicroSurface;
 
 pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
-    let output_dir = config.resolve_output_dir(&opts.output)?;
+    let output_dir = config.resolve_output_dir(opts.output.as_deref())?;
     for input in opts.inputs {
         let resolved = {
             let path = config.resolve_path(&input);

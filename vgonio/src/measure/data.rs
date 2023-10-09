@@ -49,6 +49,13 @@ impl MeasurementDataSource {
             MeasurementDataSource::Measured(_) => None,
         }
     }
+
+    pub fn micro_surface(&self) -> Option<Handle<MicroSurface>> {
+        match self {
+            MeasurementDataSource::Loaded(_) => None,
+            MeasurementDataSource::Measured(ms) => Some(*ms),
+        }
+    }
 }
 
 /// Different kinds of measurement data.
@@ -284,7 +291,7 @@ impl MeasurementData {
     /// Writes the measurement data to a file in VGMO format.
     pub fn write_to_file(
         &self,
-        filepath: &PathBuf,
+        filepath: &Path,
         format: OutputFormat,
         encoding: FileEncoding,
         compression: CompressionScheme,

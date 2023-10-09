@@ -616,6 +616,7 @@ impl VgonioGuiApp {
                         format,
                         encoding,
                         compression,
+                        write_to_file,
                     } => {
                         let data = match params {
                             MeasurementParams::Adf(params) => self.cache.read(|cache| {
@@ -662,20 +663,22 @@ impl VgonioGuiApp {
                                 measured
                             }
                         };
-                        crate::app::cli::write_measured_data_to_file(
-                            &data,
-                            &surfaces,
-                            &self.cache,
-                            &self.config,
-                            format,
-                            encoding,
-                            compression,
-                            &None,
-                        )
-                        .map_err(|err| {
-                            log::error!("Failed to write measured data to file: {}", err);
-                        })
-                        .unwrap();
+                        if write_to_file {
+                            crate::app::cli::write_measured_data_to_file(
+                                &data,
+                                &surfaces,
+                                &self.cache,
+                                &self.config,
+                                format,
+                                encoding,
+                                compression,
+                                None,
+                            )
+                            .map_err(|err| {
+                                log::error!("Failed to write measured data to file: {}", err);
+                            })
+                            .unwrap();
+                        }
                         self.cache.write(|cache| {
                             let meas = data
                                 .into_iter()

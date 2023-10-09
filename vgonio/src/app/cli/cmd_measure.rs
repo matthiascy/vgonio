@@ -176,7 +176,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             opts.output_format,
             opts.encoding,
             opts.compression,
-            &opts.output,
+            opts.output.as_deref(),
         )?;
 
         println!("    {BRIGHT_CYAN}✓{RESET} Done!");

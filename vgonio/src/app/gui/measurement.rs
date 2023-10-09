@@ -23,10 +23,7 @@ use crate::{
     SphericalDomain,
 };
 use egui::Widget;
-use vgcore::{
-    io::{CompressionScheme, FileEncoding},
-    math::Sph2,
-};
+use vgcore::io::{CompressionScheme, FileEncoding};
 use vgsurf::MicroSurface;
 
 impl ReceiverParams {
@@ -115,6 +112,9 @@ pub struct MeasurementDialog {
     encoding: FileEncoding,
     /// Compression scheme of the file.
     compression: CompressionScheme,
+    /// Whether to save the measurement.
+    write_to_file: bool,
+    /// Event loop proxy.
     event_loop: EventLoopProxy,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     debug: MeasurementDialogDebug,
@@ -137,6 +137,7 @@ impl MeasurementDialog {
             format: OutputFormat::Vgmo,
             encoding: FileEncoding::Binary,
             compression: CompressionScheme::None,
+            write_to_file: false,
             event_loop,
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             debug: MeasurementDialogDebug {
@@ -298,27 +299,50 @@ impl MeasurementDialog {
                 ui.separator();
 
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Output format: ");
-                    ui.selectable_value(&mut self.format, OutputFormat::Vgmo, "vgmo");
-                    if self.kind != MeasurementKind::Msf {
-                        ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
-                    }
+                    ui.label("Write to file: ");
+                    ui.add(ToggleSwitch::new(&mut self.write_to_file));
                 });
 
-                if self.format == OutputFormat::Vgmo {
+                if self.write_to_file {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("File encoding: ");
-                        ui.selectable_value(&mut self.encoding, FileEncoding::Binary, "binary");
-                        if self.kind == MeasurementKind::Adf {
-                            ui.selectable_value(&mut self.encoding, FileEncoding::Ascii, "ascii");
+                        ui.label("Output format: ");
+                        ui.selectable_value(&mut self.format, OutputFormat::Vgmo, "vgmo");
+                        if self.kind != MeasurementKind::Msf {
+                            ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
                         }
                     });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Compression scheme: ");
-                        ui.selectable_value(&mut self.compression, CompressionScheme::None, "none");
-                        ui.selectable_value(&mut self.compression, CompressionScheme::Zlib, "zlib");
-                        ui.selectable_value(&mut self.compression, CompressionScheme::Gzip, "gzip");
-                    });
+
+                    if self.format == OutputFormat::Vgmo {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("File encoding: ");
+                            ui.selectable_value(&mut self.encoding, FileEncoding::Binary, "binary");
+                            if self.kind == MeasurementKind::Adf {
+                                ui.selectable_value(
+                                    &mut self.encoding,
+                                    FileEncoding::Ascii,
+                                    "ascii",
+                                );
+                            }
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Compression scheme: ");
+                            ui.selectable_value(
+                                &mut self.compression,
+                                CompressionScheme::None,
+                                "none",
+                            );
+                            ui.selectable_value(
+                                &mut self.compression,
+                                CompressionScheme::Zlib,
+                                "zlib",
+                            );
+                            ui.selectable_value(
+                                &mut self.compression,
+                                CompressionScheme::Gzip,
+                                "gzip",
+                            );
+                        });
+                    }
                 }
 
                 ui.horizontal_wrapped(|ui| {
@@ -334,35 +358,21 @@ impl MeasurementDialog {
                                 time: 3.0,
                             });
                         } else {
-                            match self.kind {
+                            let params = match self.kind {
                                 MeasurementKind::Bsdf => {
-                                    self.event_loop.send_event(VgonioEvent::Measure {
-                                        params: MeasurementParams::Bsdf(self.tab_bsdf.params),
-                                        surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                        format: self.format,
-                                        encoding: self.encoding,
-                                        compression: self.compression,
-                                    });
+                                    MeasurementParams::Bsdf(self.tab_bsdf.params)
                                 }
-                                MeasurementKind::Adf => {
-                                    self.event_loop.send_event(VgonioEvent::Measure {
-                                        params: MeasurementParams::Adf(self.tab_adf.params),
-                                        surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                        format: self.format,
-                                        encoding: self.encoding,
-                                        compression: self.compression,
-                                    });
-                                }
-                                MeasurementKind::Msf => {
-                                    self.event_loop.send_event(VgonioEvent::Measure {
-                                        params: MeasurementParams::Msf(self.tab_msf.params),
-                                        surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                        format: self.format,
-                                        encoding: self.encoding,
-                                        compression: self.compression,
-                                    });
-                                }
-                            }
+                                MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
+                                MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
+                            };
+                            self.event_loop.send_event(VgonioEvent::Measure {
+                                params,
+                                surfaces: self.selector.selected().collect::<Vec<_>>(),
+                                format: self.format,
+                                encoding: self.encoding,
+                                compression: self.compression,
+                                write_to_file: self.write_to_file,
+                            });
                         }
                     }
                 });

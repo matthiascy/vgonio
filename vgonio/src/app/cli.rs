@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ffi::OsStr, path::Path};
 use vgcore::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -49,7 +49,7 @@ pub fn write_measured_data_to_file(
     format: OutputFormat,
     encoding: FileEncoding,
     compression: CompressionScheme,
-    output: &Option<PathBuf>,
+    output: Option<&Path>,
 ) -> Result<(), VgonioError> {
     println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
     let output_dir = config.resolve_output_dir(output)?;
@@ -88,6 +88,52 @@ pub fn write_measured_data_to_file(
                     err
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+pub fn write_single_measured_data_to_file(
+    measured: &MeasurementData,
+    encoding: FileEncoding,
+    compression: CompressionScheme,
+    filepath: &Path,
+) -> Result<(), VgonioError> {
+    println!("    {BRIGHT_YELLOW}>{RESET} Saving measurement data...");
+    println!(
+        "      {BRIGHT_CYAN}-{RESET} Saving as \"{}\"",
+        filepath.display()
+    );
+
+    let ext = filepath
+        .extension()
+        .unwrap_or(OsStr::new("vgmo"))
+        .to_str()
+        .unwrap();
+
+    if ext != "vgmo" && ext != "exr" {
+        return Err(VgonioError::new("Unknown file format", None));
+    }
+
+    let format = if ext == "exr" {
+        OutputFormat::Exr
+    } else {
+        OutputFormat::Vgmo
+    };
+
+    match measured.write_to_file(&filepath, format, encoding, compression) {
+        Ok(_) => {
+            println!(
+                "      {BRIGHT_CYAN}✓{RESET} Successfully saved as \"{}\"",
+                filepath.display()
+            );
+        }
+        Err(err) => {
+            eprintln!(
+                "        {BRIGHT_RED}!{RESET} Failed to save as \"{}\": {}",
+                filepath.display(),
+                err
+            );
         }
     }
     Ok(())
