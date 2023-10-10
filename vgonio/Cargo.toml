@@ -57,7 +57,7 @@ serde_json = "1.0"
 toml = "0.7"
 type-map = "0.5"
 winit = "0.28"
-wgpu = { version = "0.16", features = ["spirv"] }
+wgpu = { version = "0.17", features = ["spirv"] }
 vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
 vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 vgbxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }

@@ -215,14 +215,19 @@ impl GpuContext {
 
         let adapter_limits = adapter.limits();
 
+        log::debug!("Adapter limits: {:#?}", adapter_limits);
+        log::debug!("Default limits: {:#?}", config.device_descriptor.limits);
+
         // Logical device and command queue
-        let (device, queue) = if config
+        let (device, queue) = if !config
             .device_descriptor
             .limits
             .check_limits(&adapter_limits)
         {
+            log::debug!("Request device with default limits");
             adapter.request_device(&config.device_descriptor, None)
         } else {
+            log::debug!("Request device with adapter limits");
             adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     label: config.device_descriptor.label,
@@ -239,6 +244,8 @@ impl GpuContext {
                 concat!(file!(), ":", line!())
             )
         });
+
+        log::debug!("Device limits: {:#?}", device.limits());
 
         (
             Self {

@@ -644,19 +644,14 @@ impl VgonioGuiApp {
                                         &self.ctx.gpu,
                                         &measured[0]
                                             .measured
-                                            .bsdf_data()
+                                            .bsdf()
                                             .as_ref()
                                             .unwrap()
                                             .trajectories(),
                                     );
                                     self.dbg_drawing_state.update_ray_hit_points(
                                         &self.ctx.gpu,
-                                        &measured[0]
-                                            .measured
-                                            .bsdf_data()
-                                            .as_ref()
-                                            .unwrap()
-                                            .hit_points(),
+                                        &measured[0].measured.bsdf().as_ref().unwrap().hit_points(),
                                     );
                                 }
 

@@ -1,4 +1,7 @@
-use crate::app::{cache::Asset, gfx::VertexLayout};
+use crate::app::{
+    cache::Asset,
+    gfx::{GpuContext, VertexLayout},
+};
 use uuid::Uuid;
 use vgcore::math::{Aabb, Vec3};
 use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
@@ -24,43 +27,52 @@ impl Asset for RenderableMesh {}
 // TODO: create a separate method to extract face normals of an heightfield
 impl RenderableMesh {
     pub fn from_micro_surface_with_id(
-        device: &wgpu::Device,
+        ctx: &GpuContext,
         surf: &MicroSurface,
         id: Uuid,
         offset: HeightOffset,
         pattern: TriangulationPattern,
     ) -> Self {
         let mesh = surf.as_micro_surface_mesh(offset, pattern);
-        Self::from_micro_surface_mesh_with_id(device, &mesh, id)
+        Self::from_micro_surface_mesh_with_id(ctx, &mesh, id)
     }
 
     /// Creates a new [`RenderableMesh`] directly from a [`MicroSurface`].
     pub fn from_micro_surface(
-        device: &wgpu::Device,
+        ctx: &GpuContext,
         surf: &MicroSurface,
         offset: HeightOffset,
         pattern: TriangulationPattern,
     ) -> Self {
-        Self::from_micro_surface_with_id(device, surf, Uuid::new_v4(), offset, pattern)
+        Self::from_micro_surface_with_id(ctx, surf, Uuid::new_v4(), offset, pattern)
     }
 
     pub fn from_micro_surface_mesh_with_id(
-        device: &wgpu::Device,
+        ctx: &GpuContext,
         mesh: &MicroSurfaceMesh,
         id: Uuid,
     ) -> Self {
         use wgpu::util::DeviceExt;
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_vertex_buffer"),
-            contents: bytemuck::cast_slice(&mesh.verts),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        log::debug!(
+            "Creating mesh view with vertex count: {}, expected size: {} bytes",
+            mesh.num_verts,
+            mesh.verts.len() * 3 * 4
+        );
+        let vertex_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("mesh_view_vertex_buffer"),
+                contents: bytemuck::cast_slice(&mesh.verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("mesh_view_index_buffer"),
-            contents: bytemuck::cast_slice(&mesh.facets),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let index_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("mesh_view_index_buffer"),
+                contents: bytemuck::cast_slice(&mesh.facets),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
@@ -76,13 +88,13 @@ impl RenderableMesh {
             })
             .collect::<Vec<_>>();
 
-        let normal_buffer = Some(
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let normal_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
                 label: Some("mesh_view_normal_buffer"),
                 contents: bytemuck::cast_slice(&normals),
                 usage: wgpu::BufferUsages::VERTEX,
-            }),
-        );
+            },
+        ));
 
         log::debug!(
             "TriangleMesh --> MeshView, num verts: {}, num faces: {}, num indices: {}",
@@ -106,7 +118,7 @@ impl RenderableMesh {
         }
     }
 
-    pub fn from_micro_surface_mesh(device: &wgpu::Device, mesh: &MicroSurfaceMesh) -> Self {
-        Self::from_micro_surface_mesh_with_id(device, mesh, Uuid::new_v4())
+    pub fn from_micro_surface_mesh(ctx: &GpuContext, mesh: &MicroSurfaceMesh) -> Self {
+        Self::from_micro_surface_mesh_with_id(ctx, mesh, Uuid::new_v4())
     }
 }

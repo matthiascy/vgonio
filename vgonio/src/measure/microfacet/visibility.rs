@@ -128,7 +128,7 @@ impl VisibilityEstimation {
 /// function estimation.
 impl VisibilityEstimator {
     /// Texture format used for the color attachment.
-    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
 
     /// Bytes per pixel of the color attachment.
     pub const COLOR_ATTACHMENT_FORMAT_BPP: u32 = gfx::tex_fmt_bpp(Self::COLOR_ATTACHMENT_FORMAT);
@@ -1401,6 +1401,12 @@ pub fn measure_masking_shadowing(
                 contents: bytemuck::cast_slice(&mesh.verts),
                 usage: wgpu::BufferUsages::VERTEX,
             });
+        log::debug!(
+            "Creating index buffer of {} indices, expected size {} | maximum buffer size {}",
+            mesh.facets.len(),
+            mesh.facets.len() * 4,
+            gpu.device.limits().max_buffer_size
+        );
         let facets_idx_buf = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {

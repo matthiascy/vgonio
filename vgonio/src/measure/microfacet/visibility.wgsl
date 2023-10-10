@@ -57,14 +57,18 @@ fn fs_render_pass(vert: VertexOutput) -> FragOutput {
 
     if (depth_cmp > 0.0) {
        // RGB10A2_UNORM
-       // return vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
+        output.visible_area = vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
 
-       // RGBA8_UNORM
-       output.visible_area = vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+        // RGBA8_UNORM
+        // output.visible_area = vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
     } else {
         output.visible_area = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
-    output.total_area = vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
+    // RGB10A2_UNORM
+    output.total_area = vec4<f32>(1.0 / 1024.0, 0.0, 0.0, 1.0);
+
+    // RGBA8_UNORM
+    // output.total_area = vec4<f32>(1.0 / 256.0, 0.0, 0.0, 1.0);
 
     return output;
 }

@@ -506,10 +506,7 @@ impl VgonioGui {
                             match cache.load_micro_surface(&self.config, &path) {
                                 Ok((surf, _)) => {
                                     let _ = cache
-                                        .create_micro_surface_renderable_mesh(
-                                            &self.gpu_ctx.device,
-                                            surf,
-                                        )
+                                        .create_micro_surface_renderable_mesh(&self.gpu_ctx, surf)
                                         .unwrap();
                                     surfaces.push(surf)
                                 }

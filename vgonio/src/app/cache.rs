@@ -2,6 +2,7 @@ use super::gfx::RenderableMesh;
 use crate::{
     app::{
         cli::{BRIGHT_RED, RESET},
+        gfx::GpuContext,
         Config,
     },
     measure::data::MeasurementData,
@@ -268,7 +269,7 @@ impl InnerCache {
     /// handle.
     pub fn create_micro_surface_renderable_mesh(
         &mut self,
-        device: &wgpu::Device,
+        ctx: &GpuContext,
         msurf: Handle<MicroSurface>,
     ) -> Result<Handle<RenderableMesh>, VgonioError> {
         log::debug!("Creating renderable mesh for micro-surface: {}", msurf);
@@ -294,7 +295,7 @@ impl InnerCache {
         })?;
         log::trace!("MicroSurfaceMesh of surface {}: {}", msurf, mesh.uuid);
         let handle = Handle::new();
-        let renderable = RenderableMesh::from_micro_surface_mesh_with_id(device, mesh, handle.id);
+        let renderable = RenderableMesh::from_micro_surface_mesh_with_id(ctx, mesh, handle.id);
         self.renderables.insert(handle, renderable);
         record.renderable = handle;
         log::debug!(

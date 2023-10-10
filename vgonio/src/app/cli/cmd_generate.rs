@@ -1,6 +1,5 @@
 use crate::app::{
-    cache::resolve_path,
-    cli::{resolve_output_dir, BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
+    cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
     Config,
 };
 use std::path::PathBuf;
@@ -140,31 +139,24 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
         }
     };
 
-    let path = {
-        let base = config.resolve_output_dir(&opts.output)?;
-        let p = if let Some(path) = opts.output {
-            path
-        } else {
-            PathBuf::from(
-                if opts.kind == SurfGenKind::Random {
-                    format!(
-                        "msurf-{:?}_{:?}_{}.vgms",
-                        opts.kind,
-                        opts.method.unwrap(),
-                        chrono::Local::now().format("%d-%m-%H-%M-%S")
-                    )
-                } else {
-                    format!(
-                        "msurf-{:?}_{}.vgms",
-                        opts.kind,
-                        chrono::Local::now().format("%d-%m-%H-%M-%S")
-                    )
-                }
-                .to_lowercase(),
-            )
-        };
-        resolve_path(&base, Some(&p))
+    let filename = if opts.kind == SurfGenKind::Random {
+        format!(
+            "msurf_{:?}_{:?}_{}.vgms",
+            opts.kind,
+            opts.method.unwrap(),
+            vgcore::utils::iso_timestamp_short(),
+        )
+    } else {
+        format!(
+            "msurf_{:?}_{}.vgms",
+            opts.kind,
+            vgcore::utils::iso_timestamp_short(),
+        )
     };
+
+    let path = config
+        .resolve_output_dir(opts.output.as_deref())?
+        .join(filename);
 
     println!("    {BRIGHT_CYAN}✓{RESET} Surface generated");
     println!(
