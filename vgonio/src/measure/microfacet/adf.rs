@@ -7,6 +7,7 @@ use vgsurf::MicroSurface;
 use crate::{
     app::cache::{Handle, InnerCache},
     measure::{
+        bsdf::receiver::{Receiver, ReceiverParams},
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::AdfMeasurementParams,
     },
@@ -35,13 +36,16 @@ pub struct MeasuredAdfData {
 }
 
 impl MeasuredAdfData {
-    // TODO
+    // TODO: configurable output width and height.
     /// Writes the measured data as an EXR file.
     pub fn write_as_exr(
         &self,
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
     ) -> Result<(), VgonioError> {
+        // Generate equal angle partitioned hemisphere.1
+        // Calculate the patch index for each pixel.
+        // Write the data to the EXR file.
         todo!("write_as_exr")
     }
 }

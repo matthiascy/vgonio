@@ -72,6 +72,20 @@ impl PropertyInspector {
                                 )));
                                 ui.end_row();
 
+                                ui.add(egui::Label::new("Spacing:"));
+                                ui.add(egui::Label::new(format!(
+                                    "{} {} x {} {}",
+                                    state.spacing.0, state.unit, state.spacing.1, state.unit,
+                                )));
+                                ui.end_row();
+
+                                ui.add(egui::Label::new("Offset:"));
+                                ui.add(egui::Label::new(format!(
+                                    "{} {}",
+                                    state.height_offset, state.unit
+                                )));
+                                ui.end_row();
+
                                 ui.add(egui::Label::new("Lowest:"));
                                 ui.add(egui::Label::new(format!(
                                     "{:.4} {}",

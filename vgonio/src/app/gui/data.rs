@@ -34,6 +34,8 @@ pub struct MicroSurfaceProp {
     pub height_offset: f32,
     /// Size of the micro-surface.
     pub size: (u32, u32),
+    /// The distance between two adjacent samples.
+    pub spacing: (f32, f32),
     /// Macro surface area.
     pub macro_area: f32,
     /// Micro surface area.
@@ -104,6 +106,7 @@ impl PropertyData {
                     max: surf.max,
                     height_offset: mesh.height_offset,
                     size: (surf.rows as u32, surf.cols as u32),
+                    spacing: (surf.du, surf.dv),
                     macro_area: surf.macro_area(),
                     micro_area: mesh.facet_total_area, /* TODO: maybe get this from the micro
                                                         * surface? */

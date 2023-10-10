@@ -71,6 +71,9 @@ pub enum ReceiverScheme {
     /// Partition scheme based on "Subdivision of the sky hemisphere for
     /// luminance measurements" by P.R. Tregenza.
     Tregenza = 0x01,
+    /// Simple partition scheme which divides uniformly the hemisphere into
+    /// equal angle patches.
+    EqualAngle = 0x02,
 }
 
 // TODO: implement Tregenza partitioning scheme
@@ -208,6 +211,9 @@ impl ReceiverParams {
             ReceiverScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
+            ReceiverScheme::EqualAngle => {
+                todo!("Equal angle partitioning scheme is not implemented yet")
+            }
         }
     }
 
@@ -264,6 +270,9 @@ impl ReceiverParams {
             }
             ReceiverScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
+            }
+            ReceiverScheme::EqualAngle => {
+                todo!("Equal angle partitioning scheme is not implemented yet")
             }
         }
     }

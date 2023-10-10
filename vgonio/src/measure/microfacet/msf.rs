@@ -170,7 +170,7 @@ impl VisibilityEstimator {
         });
         let shader_module = ctx
             .device
-            .create_shader_module(wgpu::include_wgsl!("./visibility.wgsl"));
+            .create_shader_module(wgpu::include_wgsl!("./msf.wgsl"));
         let color_attachments = [
             ColorAttachment::new(
                 &ctx.device,

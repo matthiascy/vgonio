@@ -15,7 +15,8 @@ use crate::{
             rtc::{RayTrajectory, RtcMethod},
         },
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::SimulationKind,
+        microfacet::MeasuredAdfData,
+        params::{AdfMeasurementParams, SimulationKind},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -60,6 +61,7 @@ pub struct MeasuredBsdfData {
     pub raw_snapshots: Option<Vec<BsdfSnapshotRaw<BounceAndEnergy>>>,
 }
 
+// TODO: Make the image size configurable.
 impl MeasuredBsdfData {
     /// Writes the BSDF data to images in exr format.
     ///
@@ -185,6 +187,24 @@ impl MeasuredBsdfData {
             .iter()
             .map(|snapshot| snapshot.hit_points.clone())
             .collect()
+    }
+
+    /// Extracts the NDF from the measured BSDF.
+    pub fn extract_ndf(&self) -> MeasuredAdfData {
+        todo!()
+        // let params =  AdfMeasurementParams {
+        //     azimuth: RangeByStepSizeInclusive {},
+        //     zenith: RangeByStepSizeInclusive {},
+        // };
+        // for snapshot in &self.snapshots {
+        //     for (patch, samples) in
+        // snapshot.samples.iter().zip(ndf.samples.iter_mut()) {
+        //         for (wavelength, sample) in samples.iter_mut().enumerate() {
+        //             *sample += patch[wavelength];
+        //         }
+        //     }
+        // }
+        // ndf
     }
 }
 
