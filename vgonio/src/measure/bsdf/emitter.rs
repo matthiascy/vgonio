@@ -163,11 +163,18 @@ impl MeasurementPoints {
     /// Returns an iterator over the measurement points.
     pub fn iter(&self) -> impl Iterator<Item = &Sph2> { self.0.iter() }
 
-    /// Returns an consuming iterator over the measurement points.
-    pub fn into_iter(self) -> impl Iterator<Item = Sph2> { self.0.into_iter() }
-
     /// Returns the number of measurement points.
     pub fn len(&self) -> usize { self.0.len() }
+
+    /// Returns `true` if the measurement points is empty.
+    pub fn is_empty(&self) -> bool { self.0.is_empty() }
+}
+
+impl IntoIterator for MeasurementPoints {
+    type Item = Sph2;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter { self.0.into_iter() }
 }
 
 /// Emitter constructed from the parameters.

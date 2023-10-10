@@ -254,12 +254,7 @@ impl ReceiverParams {
                     for j in 0..n {
                         let phi_min = phi_step * j as f32;
                         let phi_max = phi_step * (j + 1) as f32;
-                        patches.push(Patch::new(
-                            t_prev.into(),
-                            rad!(*t),
-                            phi_min.into(),
-                            phi_max.into(),
-                        ));
+                        patches.push(Patch::new(t_prev.into(), rad!(*t), phi_min, phi_max));
                     }
                 }
                 ReceiverPartition {
@@ -355,10 +350,10 @@ impl Receiver {
     ///
     /// The collected data for each simulation result which is a vector of
     /// [`BsdfSnapshotRaw`].
-    pub fn collect<'a>(
+    pub fn collect(
         &self,
         result: &SimulationResultPoint,
-        collected: &mut CollectedData<'a>,
+        collected: &mut CollectedData<'_>,
         orbit_radius: f32,
     ) {
         const CHUNK_SIZE: usize = 1024;
@@ -422,7 +417,7 @@ impl Receiver {
 
                                 // 4. Update the maximum number of bounces.
                                 let bounce = (trajectory.len() - 1) as u32;
-                                n_bounce.fetch_max(bounce as u32, atomic::Ordering::Relaxed);
+                                n_bounce.fetch_max(bounce, atomic::Ordering::Relaxed);
 
                                 // 5. Update the number of received rays.
                                 n_received.fetch_add(1, atomic::Ordering::Relaxed);
@@ -583,7 +578,7 @@ impl<'a> CollectedData<'a> {
                 for (i, patch_data) in snapshot.records.iter().enumerate() {
                     // Per wavelength
                     for (j, stats) in patch_data.iter().enumerate() {
-                        let patch = self.partition.patches.iter().nth(i).unwrap();
+                        let patch = self.partition.patches.get(i).unwrap();
                         let cos_o = patch.center().theta.cos();
                         if cos_o == 0.0 {
                             samples[i][j] = 0.0;

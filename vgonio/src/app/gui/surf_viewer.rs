@@ -184,7 +184,7 @@ impl SurfaceViewerState {
         update_camera: bool,
     ) {
         if update_camera {
-            self.camera.update(&input, dt, ProjectionKind::Perspective);
+            self.camera.update(input, dt, ProjectionKind::Perspective);
         }
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
@@ -619,7 +619,7 @@ impl MicroSurfaceState {
 
         let globals_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("micro_surface_globals_bind_group"),
-            layout: &globals_layout,
+            layout: globals_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: global_uniform_buffer.as_entire_binding(),
@@ -628,7 +628,7 @@ impl MicroSurfaceState {
 
         let locals_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("micro_surface_locals_bind_group"),
-            layout: &locals_layout,
+            layout: locals_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {

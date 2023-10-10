@@ -243,7 +243,7 @@ impl MicroSurface {
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let height_field =
-    ///     MicroSurface::from_samples(3, 3, 0.5, 0.5, LengthUnit::UM, &samples, None, None);
+    ///     MicroSurface::from_samples(3, 3, (0.5, 0.5), LengthUnit::UM, &samples, None, None);
     /// assert_eq!(height_field.samples_count(), 9);
     /// assert_eq!(height_field.cells_count(), 4);
     /// assert_eq!(height_field.cols, 3);
@@ -252,8 +252,7 @@ impl MicroSurface {
     pub fn from_samples<S: AsRef<[f32]>>(
         rows: usize,
         cols: usize,
-        du: f32,
-        dv: f32,
+        spacing: (f32, f32),
         unit: LengthUnit,
         samples: S,
         name: Option<String>,
@@ -276,8 +275,8 @@ impl MicroSurface {
             path,
             rows,
             cols,
-            du,
-            dv,
+            du: spacing.0,
+            dv: spacing.1,
             max,
             min,
             samples: samples.as_ref().to_owned(),
@@ -621,8 +620,7 @@ impl MicroSurface {
             return Self::from_samples(
                 self.rows,
                 self.cols,
-                self.du,
-                self.dv,
+                (self.du, self.dv),
                 self.unit,
                 &self.samples,
                 None,
@@ -949,8 +947,7 @@ impl MicroSurface {
                     Ok(MicroSurface::from_samples(
                         header.extra.rows as usize,
                         header.extra.cols as usize,
-                        header.extra.du,
-                        header.extra.dv,
+                        (header.extra.du, header.extra.dv),
                         header.extra.unit,
                         samples,
                         filepath

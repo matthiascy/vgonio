@@ -1,6 +1,5 @@
 use crate::{
     app::{
-        args::OutputFormat,
         cache::{Cache, Handle},
         gfx::GpuContext,
         gui::{
@@ -159,8 +158,7 @@ impl VgonioGui {
                 let dir = std::env::current_dir().unwrap();
                 let task = AsyncFileDialog::new().set_directory(dir).save_file();
                 let event_loop = self.event_loop.clone();
-                let hdl =
-                    std::thread::spawn(move || pollster::block_on(async { task.await })).join();
+                let hdl = std::thread::spawn(move || pollster::block_on(task)).join();
                 if let Ok(Some(hdl)) = hdl {
                     self.cache.read(|cache| {
                         let measured = cache.get_measurement_data(*meas).unwrap();
@@ -304,9 +302,9 @@ impl VgonioGui {
         let (surfaces, measurements) = self.open_files(files);
         self.cache.read(|cache| {
             let mut properties = self.properties.write().unwrap();
-            properties.update_surfaces(&surfaces, &cache);
-            properties.update_measurement_data(&measurements, &cache);
-            self.measurement.update_surface_selector(&surfaces, &cache);
+            properties.update_surfaces(&surfaces, cache);
+            properties.update_measurement_data(&measurements, cache);
+            self.measurement.update_surface_selector(&surfaces, cache);
         });
         self.event_loop.send_event(VgonioEvent::SurfaceViewer(
             SurfaceViewerEvent::UpdateSurfaceList { surfaces },

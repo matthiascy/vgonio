@@ -7,7 +7,6 @@ use vgsurf::MicroSurface;
 use crate::{
     app::cache::{Handle, InnerCache},
     measure::{
-        bsdf::receiver::{Receiver, ReceiverParams},
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::AdfMeasurementParams,
     },

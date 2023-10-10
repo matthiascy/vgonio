@@ -160,7 +160,7 @@ pub mod vgms {
                 vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
             }
         }
-        .map_err(|err| WriteFileErrorKind::Write(err))?;
+        .map_err(WriteFileErrorKind::Write)?;
 
         let length = writer.stream_len().unwrap() - init_size;
         writer.seek(std::io::SeekFrom::Start(
@@ -251,8 +251,7 @@ pub fn read_ascii_dong2015<R: BufRead>(
     Ok(MicroSurface::from_samples(
         rows,
         cols,
-        du,
-        dv,
+        (du, dv),
         LengthUnit::UM,
         samples,
         filepath
@@ -309,7 +308,7 @@ pub fn read_ascii_usurf<R: BufRead>(
         .map(|x_coord| {
             x_coord
                 .parse::<f32>()
-                .expect(&format!("Read f32 error! {}", x_coord))
+                .unwrap_or_else(|_| panic!("Read f32 error! {}", x_coord))
         })
         .collect();
 
@@ -330,8 +329,7 @@ pub fn read_ascii_usurf<R: BufRead>(
     Ok(MicroSurface::from_samples(
         y_coords.len(),
         x_coords.len(),
-        du,
-        dv,
+        (du, dv),
         LengthUnit::UM,
         samples,
         filepath
@@ -416,10 +414,10 @@ pub fn read_omni_surf_3d<R: BufRead>(
     }
     let (ver_major, ver_minor) = {
         let major = reader.read_i32::<LittleEndian>().map_err(|err| {
-            VgonioError::from_io_error(err, format!("Failed to read major version number!"))
+            VgonioError::from_io_error(err, "Failed to read major version number!")
         })?;
         let minor = reader.read_i32::<LittleEndian>().map_err(|err| {
-            VgonioError::from_io_error(err, format!("Failed to read minor version number!"))
+            VgonioError::from_io_error(err, "Failed to read minor version number!")
         })?;
         (major, minor)
     };
@@ -551,8 +549,7 @@ pub fn read_omni_surf_3d<R: BufRead>(
     Ok(MicroSurface::from_samples(
         rows as usize,
         cols as usize,
-        du as f32,
-        dv as f32,
+        (du as f32, dv as f32),
         LengthUnit::UM,
         samples,
         filepath

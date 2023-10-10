@@ -142,9 +142,8 @@ impl PropertyInspector {
                                 ui.end_row();
 
                                 ui.add(egui::Label::new("Timestamp:"));
-                                ui.add(egui::Label::new(format!(
-                                    "{}",
-                                    vgcore::utils::iso_timestamp_display(&state.timestamp)
+                                ui.add(egui::Label::new(vgcore::utils::iso_timestamp_display(
+                                    &state.timestamp,
                                 )));
                                 ui.end_row();
 

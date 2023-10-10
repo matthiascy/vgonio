@@ -50,6 +50,7 @@ impl MeasurementDataSource {
         }
     }
 
+    /// Returns the micro-surface handle if the measurement data is generated.
     pub fn micro_surface(&self) -> Option<Handle<MicroSurface>> {
         match self {
             MeasurementDataSource::Loaded(_) => None,

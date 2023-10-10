@@ -45,10 +45,7 @@ use crate::{
     error::RuntimeError,
     measure,
 };
-use vgcore::{
-    error::VgonioError,
-    io::{CompressionScheme, FileEncoding},
-};
+use vgcore::error::VgonioError;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyboardInput, WindowEvent},
@@ -202,11 +199,11 @@ impl VgonioGuiApp {
         let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
-            EventLoopProxy::new(&event_loop),
+            EventLoopProxy::new(event_loop),
         )));
 
         let ui = VgonioGui::new(
-            EventLoopProxy::new(&event_loop),
+            EventLoopProxy::new(event_loop),
             config.clone(),
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
@@ -225,7 +222,7 @@ impl VgonioGuiApp {
         let dbg_drawing_state = DebugDrawingState::new(
             &gpu_ctx,
             canvas.format(),
-            EventLoopProxy::new(&event_loop),
+            EventLoopProxy::new(event_loop),
             cache.clone(),
         );
 
@@ -469,7 +466,7 @@ impl VgonioGuiApp {
 
         // Handle events from the UI.
         match self.ui.on_user_event(event) {
-            EventResponse::Handled => return,
+            EventResponse::Handled => (),
             EventResponse::Ignored(event) => {
                 match event {
                     Quit => {
@@ -630,16 +627,16 @@ impl VgonioGuiApp {
                                 )
                             }),
                             MeasurementParams::Bsdf(params) => {
-                                let measured = self.cache.read(|cache| {
-                                    measure::bsdf::measure_bsdf_rt(
-                                        params,
-                                        &surfaces,
-                                        params.sim_kind,
-                                        cache,
-                                    )
-                                });
                                 #[cfg(feature = "visu-dbg")]
                                 {
+                                    let measured = self.cache.read(|cache| {
+                                        measure::bsdf::measure_bsdf_rt(
+                                            params,
+                                            &surfaces,
+                                            params.sim_kind,
+                                            cache,
+                                        )
+                                    });
                                     self.dbg_drawing_state.update_ray_trajectories(
                                         &self.ctx.gpu,
                                         &measured[0]
@@ -653,9 +650,18 @@ impl VgonioGuiApp {
                                         &self.ctx.gpu,
                                         &measured[0].measured.bsdf().as_ref().unwrap().hit_points(),
                                     );
+                                    measured
                                 }
 
-                                measured
+                                #[cfg(not(feature = "visu-dbg"))]
+                                self.cache.read(|cache| {
+                                    measure::bsdf::measure_bsdf_rt(
+                                        params,
+                                        &surfaces,
+                                        params.sim_kind,
+                                        cache,
+                                    )
+                                })
                             }
                         };
                         if write_to_file {

@@ -241,7 +241,7 @@ impl PlotInspector {
     ) -> Self {
         let mut extra = AreaDistributionExtra::default();
         cache.read(|cache| {
-            extra.pre_process(data, &cache);
+            extra.pre_process(data, cache);
         });
         Self::new_inner(name, data, Some(Box::new(extra)), cache, props, event_loop)
     }
@@ -256,7 +256,7 @@ impl PlotInspector {
     ) -> Self {
         let mut extra = MaskingShadowingExtra::default();
         cache.read(|cache| {
-            extra.pre_process(data, &cache);
+            extra.pre_process(data, cache);
         });
         Self::new_inner(
             name,
@@ -1058,7 +1058,7 @@ impl PlottingWidget for PlotInspector {
                             zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
-                        variant.ui(ui, &mut self.event_loop, self.data_handle);
+                        variant.ui(ui, &self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("mndf_plot")
@@ -1163,7 +1163,7 @@ impl PlottingWidget for PlotInspector {
                             zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.value();
-                        variant.ui(ui, &mut self.event_loop, self.data_handle);
+                        variant.ui(ui, &self.event_loop, self.data_handle);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("plot_msf")

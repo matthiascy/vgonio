@@ -144,7 +144,7 @@ impl VisualGridState {
             });
         let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("visual_grid_bind_group"),
-            layout: &bind_group_layout,
+            layout: bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: uniform_buffer.as_entire_binding(),

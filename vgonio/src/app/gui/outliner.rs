@@ -136,13 +136,7 @@ impl CollapsableHeader<Handle<MeasurementData>> {
                         None => false,
                         Some(item) => match item {
                             OutlinerItem::MicroSurface(_) => false,
-                            OutlinerItem::MeasurementData(data) => {
-                                if data == &self.item {
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
+                            OutlinerItem::MeasurementData(data) => data == &self.item,
                         },
                     };
                     let state = data.measured.get(&self.item).unwrap();
@@ -165,17 +159,15 @@ impl Outliner {
         // Update the list of surfaces and measurements.
         {
             let data = self.data.read().unwrap();
-            for (hdl, _) in &data.surfaces {
+            for hdl in data.surfaces.keys() {
                 if !self.surface_headers.iter().any(|h| h.item == *hdl) {
-                    self.surface_headers
-                        .push(CollapsableHeader { item: hdl.clone() });
+                    self.surface_headers.push(CollapsableHeader { item: *hdl });
                 }
             }
 
-            for (hdl, _) in &data.measured {
+            for hdl in data.measured.keys() {
                 if !self.measured_headers.iter().any(|h| h.item == *hdl) {
-                    self.measured_headers
-                        .push(CollapsableHeader { item: hdl.clone() });
+                    self.measured_headers.push(CollapsableHeader { item: *hdl });
                 }
             }
         }

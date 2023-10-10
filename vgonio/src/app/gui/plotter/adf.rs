@@ -150,31 +150,31 @@ impl VariantData for AreaDistributionExtra {
 
         if to_add.is_empty() {
             return;
-        } else {
-            for fitted in to_add {
-                match fitted {
-                    FittedModel::Adf(model) => {
-                        // Generate the curve for this model.
-                        let curves = phi_values
-                            .iter()
-                            .map(|(phi_l, phi_r)| {
-                                let points = {
-                                    theta_values
-                                        .iter()
-                                        .zip(theta_values.iter().map(|theta| {
-                                            let phi = if theta < &0.0 { *phi_l } else { *phi_r };
-                                            model.eval_adf(theta.cos(), phi.cos())
-                                        }))
-                                        .map(|(x, y)| [*x, y])
-                                };
-                                Curve::from(points)
-                            })
-                            .collect();
-                        self.fitted.push((model.clone_box(), curves));
-                    }
-                    _ => {
-                        unreachable!("Wrong model type for area distribution!")
-                    }
+        }
+
+        for fitted in to_add {
+            match fitted {
+                FittedModel::Adf(model) => {
+                    // Generate the curve for this model.
+                    let curves = phi_values
+                        .iter()
+                        .map(|(phi_l, phi_r)| {
+                            let points = {
+                                theta_values
+                                    .iter()
+                                    .zip(theta_values.iter().map(|theta| {
+                                        let phi = if theta < &0.0 { *phi_l } else { *phi_r };
+                                        model.eval_adf(theta.cos(), phi.cos())
+                                    }))
+                                    .map(|(x, y)| [*x, y])
+                            };
+                            Curve::from(points)
+                        })
+                        .collect();
+                    self.fitted.push((model.clone_box(), curves));
+                }
+                _ => {
+                    unreachable!("Wrong model type for area distribution!")
                 }
             }
         }

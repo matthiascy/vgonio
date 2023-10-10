@@ -207,7 +207,7 @@ impl Config {
         }
 
         let cwd = std::env::current_dir().map_err(|err| {
-            VgonioError::from_io_error(err, format!("Failed to get current working directory."))
+            VgonioError::from_io_error(err, "Failed to get current working directory.")
         })?;
 
         let user_config = if filepath.is_some_and(|p| p.exists()) {
@@ -241,7 +241,7 @@ impl Config {
                     };
                     let serialized = toml::to_string(&user_config).map_err(|err| {
                         VgonioError::new(
-                            format!("Failed to serialize default configuration."),
+                            "Failed to serialize default configuration.",
                             Some(Box::new(RuntimeError::from(err))),
                         )
                     })?;

@@ -638,7 +638,7 @@ impl InnerCache {
             )
             .unwrap();
             let refractive_indices = RefractiveIndex::read_iors_from_file(path).unwrap();
-            let iors = iors.0.entry(medium).or_insert(Vec::new());
+            let iors = iors.0.entry(medium).or_default();
             for ior in refractive_indices {
                 if !iors.contains(&ior) {
                     iors.push(ior);

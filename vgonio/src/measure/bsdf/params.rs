@@ -42,6 +42,7 @@ impl TryFrom<u8> for SimulationKind {
 }
 
 impl SimulationKind {
+    /// Returns the value as a u8. The verse of `TryFrom<u8>`.
     pub fn as_u8(&self) -> u8 {
         match self {
             Self::GeomOptics(RtcMethod::Grid) => 0x00,
@@ -184,18 +185,18 @@ impl BsdfMeasurementParams {
         );
         hash_map.insert(
             Text::new_or_panic("incident_medium"),
-            AttributeValue::Text(Text::new_or_panic(&format!("{:?}", self.incident_medium))),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.incident_medium))),
         );
         hash_map.insert(
             Text::new_or_panic("transmitted_medium"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.transmitted_medium))),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.num_rays".to_string()),
+            Text::new_or_panic("emitter.num_rays"),
             AttributeValue::I32(self.emitter.num_rays as i32),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.max_bounces".to_string()),
+            Text::new_or_panic("emitter.max_bounces"),
             AttributeValue::I32(self.emitter.max_bounces as i32),
         );
         hash_map.insert(

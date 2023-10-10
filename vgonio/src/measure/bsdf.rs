@@ -16,7 +16,7 @@ use crate::{
         },
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         microfacet::MeasuredAdfData,
-        params::{AdfMeasurementParams, SimulationKind},
+        params::SimulationKind,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -105,9 +105,7 @@ impl MeasuredBsdfData {
 
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
-            capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(
-                &timestamp,
-            )),
+            capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(timestamp)),
             software_name: Text::new_or_none("vgonio"),
             other: self.params.to_exr_extra_info(),
             ..LayerAttributes::default()
@@ -288,10 +286,13 @@ impl<T> SpectralSamples<T> {
 
     /// Returns the mutable iterator over the samples.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> { self.0.iter_mut() }
+}
 
-    /// Consumes the `SpectralSamples` and returns the iterator over the
-    /// samples.
-    pub fn into_iter(self) -> impl Iterator<Item = T> { self.0.into_iter() }
+impl<T> IntoIterator for SpectralSamples<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter { self.0.into_iter() }
 }
 
 impl<T> Clone for SpectralSamples<T>

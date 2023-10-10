@@ -9,9 +9,9 @@ pub enum NotifyKind {
     Success,
 }
 
-impl Into<ToastKind> for NotifyKind {
-    fn into(self) -> ToastKind {
-        match self {
+impl From<NotifyKind> for ToastKind {
+    fn from(value: NotifyKind) -> Self {
+        match value {
             NotifyKind::Info => ToastKind::Info,
             NotifyKind::Warning => ToastKind::Warning,
             NotifyKind::Error => ToastKind::Error,

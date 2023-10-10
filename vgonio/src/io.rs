@@ -129,20 +129,16 @@ pub mod vgmo {
         pub fn as_vgmo_header_ext(&self) -> VgmoHeaderExt {
             match self {
                 Self::Bsdf(bsdf) => VgmoHeaderExt::Bsdf {
-                    params: bsdf.params.clone(),
+                    params: bsdf.params,
                 },
-                Self::Adf(adf) => VgmoHeaderExt::Adf {
-                    params: adf.params.clone(),
-                },
-                Self::Msf(msf) => VgmoHeaderExt::Msf {
-                    params: msf.params.clone(),
-                },
+                Self::Adf(adf) => VgmoHeaderExt::Adf { params: adf.params },
+                Self::Msf(msf) => VgmoHeaderExt::Msf { params: msf.params },
             }
         }
     }
 
     impl HeaderExt for VgmoHeaderExt {
-        const MAGIC: &'static [u8; 4] = &b"VGMO";
+        const MAGIC: &'static [u8; 4] = b"VGMO";
 
         fn variant() -> VgonioFileVariant { VgonioFileVariant::Vgmo }
 
@@ -252,7 +248,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )
-                .map_err(|err| ReadFileErrorKind::Parse(err))?;
+                .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Adf(MeasuredAdfData { params, samples }))
             }
             VgmoHeaderExt::Msf { params } => {
@@ -266,7 +262,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )
-                .map_err(|err| ReadFileErrorKind::Parse(err))?;
+                .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
             }
         }
@@ -297,10 +293,10 @@ pub mod vgmo {
                     FileEncoding::Binary => vgcore::io::write_f32_data_samples_binary(
                         writer,
                         header.meta.compression,
-                        &samples,
+                        samples,
                     ),
                 }
-                .map_err(|err| WriteFileErrorKind::Write(err))?;
+                .map_err(WriteFileErrorKind::Write)?;
             }
             MeasuredData::Bsdf(bsdf) => {
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
@@ -847,7 +843,7 @@ pub mod vgmo {
             let n_bounces = {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
-                u32::from_le_bytes(buf.try_into().unwrap())
+                u32::from_le_bytes(buf)
             };
             let size_without_n_bounces = 4 * 2 + n_bounces as usize * 4 * 2;
             let mut buf = vec![0u8; size_without_n_bounces].into_boxed_slice();

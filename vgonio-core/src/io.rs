@@ -375,46 +375,46 @@ impl<E: HeaderExt> Header<E> {
                 std::io::ErrorKind::InvalidData,
                 "invalid magic number",
             ));
-        } else {
-            let mut buf = [0u8; 4];
-            let version = {
-                reader.read_exact(&mut buf)?;
-                Version::from_u32(u32::from_le_bytes(buf))
-            };
-
-            if !Self::VERSIONS.contains(&version) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("invalid version number {}", version),
-                ));
-            }
-
-            let length = {
-                reader.read_exact(&mut buf)?;
-                u32::from_le_bytes(buf)
-            };
-            let timestamp = {
-                let mut buf = [0u8; 32];
-                reader.read_exact(&mut buf)?;
-                buf
-            };
-            reader.read_exact(&mut buf)?;
-            let sample_size = buf[0];
-            let encoding = FileEncoding::from(buf[1]);
-            let compression = CompressionScheme::from(buf[2]);
-            let extra = E::read(version, reader)?;
-            Ok(Self {
-                meta: HeaderMeta {
-                    version,
-                    timestamp,
-                    length,
-                    sample_size,
-                    encoding,
-                    compression,
-                },
-                extra,
-            })
         }
+
+        let mut buf = [0u8; 4];
+        let version = {
+            reader.read_exact(&mut buf)?;
+            Version::from_u32(u32::from_le_bytes(buf))
+        };
+
+        if !Self::VERSIONS.contains(&version) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid version number {}", version),
+            ));
+        }
+
+        let length = {
+            reader.read_exact(&mut buf)?;
+            u32::from_le_bytes(buf)
+        };
+        let timestamp = {
+            let mut buf = [0u8; 32];
+            reader.read_exact(&mut buf)?;
+            buf
+        };
+        reader.read_exact(&mut buf)?;
+        let sample_size = buf[0];
+        let encoding = FileEncoding::from(buf[1]);
+        let compression = CompressionScheme::from(buf[2]);
+        let extra = E::read(version, reader)?;
+        Ok(Self {
+            meta: HeaderMeta {
+                version,
+                timestamp,
+                length,
+                sample_size,
+                encoding,
+                compression,
+            },
+            extra,
+        })
     }
 }
 
