@@ -77,7 +77,7 @@ impl MeasuredBsdfData {
         const HEIGHT: usize = 512;
         let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
         let mut bsdf_samples_per_wavelength = vec![vec![0.0; WIDTH * HEIGHT]; wavelengths.len()];
-        let patches = self.params.receiver.generate_patches();
+        let patches = self.params.receiver.partitioning();
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; WIDTH * HEIGHT];
         for i in 0..WIDTH {

@@ -203,6 +203,15 @@ impl SphericalDomain {
     pub fn clamp_azimuth(&self, azimuth: Radians) -> Radians {
         azimuth.clamp(Radians::ZERO, Radians::TWO_PI)
     }
+
+    /// Returns true if the domain is the upper hemisphere.
+    pub fn is_upper_hemisphere(&self) -> bool { matches!(self, SphericalDomain::Upper) }
+
+    /// Returns true if the domain is the lower hemisphere.
+    pub fn is_lower_hemisphere(&self) -> bool { matches!(self, SphericalDomain::Lower) }
+
+    /// Returns true if the domain is the full sphere.
+    pub fn is_full_sphere(&self) -> bool { matches!(self, SphericalDomain::Whole) }
 }
 
 /// Machine epsilon for `f32`.

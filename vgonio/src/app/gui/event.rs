@@ -12,7 +12,7 @@ use crate::{
     measure::{
         bsdf::{
             emitter::{EmitterSamples, MeasurementPoints},
-            receiver::ReceiverPartition,
+            receiver::SphericalPartition,
         },
         data::MeasurementData,
         params::{MeasurementKind, MeasurementParams},
@@ -181,7 +181,7 @@ pub enum DebuggingEvent {
 
     ToggleCollectedRaysDrawing(bool),
     ToggleDetectorDomeDrawing(bool),
-    UpdateDetectorPatches(ReceiverPartition),
+    UpdateDetectorPatches(SphericalPartition),
     ToggleSamplingRendering(bool),
     UpdateDepthMap,
     UpdateRayParams {

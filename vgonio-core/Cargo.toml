@@ -5,6 +5,11 @@ authors.workspace = true
 edition.workspace = true
 version.workspace = true
 
+[features]
+default = []
+use_f64 = []
+
+
 [dependencies]
 approx.workspace = true
 byteorder.workspace = true

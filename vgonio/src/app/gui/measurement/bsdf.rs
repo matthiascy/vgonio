@@ -360,7 +360,7 @@ impl BsdfMeasurementTab {
                                 if ui.button("update").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Debugging(
                                         DebuggingEvent::UpdateDetectorPatches(
-                                            params.generate_patches(),
+                                            params.partitioning(),
                                         ),
                                     ));
                                 }

@@ -2,7 +2,7 @@ use crate::{
     error::RuntimeError,
     measure::bsdf::{
         emitter::EmitterParams,
-        receiver::{DataRetrievalMode, ReceiverParams, ReceiverScheme},
+        receiver::{DataRetrievalMode, PartitionScheme, ReceiverParams},
         rtc::RtcMethod,
         BsdfKind,
     },
@@ -105,7 +105,7 @@ impl Default for BsdfMeasurementParams {
             receiver: ReceiverParams {
                 domain: SphericalDomain::Upper,
                 precision: deg!(2.0).to_radians(),
-                scheme: ReceiverScheme::Beckers,
+                scheme: PartitionScheme::Beckers,
                 retrieval_mode: DataRetrievalMode::BsdfOnly,
             },
         }

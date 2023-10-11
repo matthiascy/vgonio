@@ -54,17 +54,19 @@ impl From<u8> for DataRetrievalMode {
 pub struct ReceiverParams {
     /// Domain of the collector.
     pub domain: SphericalDomain,
-    /// Zenith angle step size (in radians).
-    pub precision: Radians,
-    /// Partitioning scheme of the collector.
-    pub scheme: ReceiverScheme,
+    /// Step size of the zenith and azimuth angles.
+    /// Azimuth angle precision is only used for the EqualAngle partitioning
+    /// scheme.
+    pub precision: Sph2,
+    /// Partitioning scheme of the globe.
+    pub scheme: PartitionScheme,
     /// Data retrieval mode.
     pub retrieval_mode: DataRetrievalMode,
 }
 
 /// Scheme of the partitioning of the receiver.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ReceiverScheme {
+pub enum PartitionScheme {
     /// Partition scheme based on "A general rule for disk and hemisphere
     /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.
     Beckers = 0x00,
@@ -79,16 +81,18 @@ pub enum ReceiverScheme {
 // TODO: implement Tregenza partitioning scheme
 /// Partitioned patches of the collector.
 #[derive(Debug, Clone)]
-pub struct ReceiverPartition {
+pub struct SphericalPartition {
     /// The partitioning scheme of the collector.
-    pub scheme: ReceiverScheme,
+    pub scheme: PartitionScheme,
+    /// The domain of the receiver.
+    pub domain: SphericalDomain,
     /// The annuli of the collector.
     pub rings: Vec<Ring>,
     /// The patches of the collector.
     pub patches: Vec<Patch>,
 }
 
-impl ReceiverPartition {
+impl SphericalPartition {
     /// Returns the number of patches.
     pub fn num_patches(&self) -> usize { self.patches.len() }
 
@@ -203,15 +207,15 @@ impl ReceiverParams {
     /// Returns the number of patches of the collector.
     pub fn num_patches(&self) -> usize {
         match self.scheme {
-            ReceiverScheme::Beckers => {
+            PartitionScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             }
-            ReceiverScheme::Tregenza => {
+            PartitionScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
-            ReceiverScheme::EqualAngle => {
+            PartitionScheme::EqualAngle => {
                 todo!("Equal angle partitioning scheme is not implemented yet")
             }
         }
@@ -223,14 +227,15 @@ impl ReceiverParams {
         (self.domain.zenith_angle_diff() / self.precision).round() as usize
     }
 
-    /// Generates the patches of the collector.
+    /// Partition the receiver into patches.
     ///
     /// The patches are generated based on the scheme of the collector. They are
     /// used to collect the data. The patches are generated in the order of
     /// the azimuth angle first, then the zenith angle.
-    pub fn generate_patches(&self) -> ReceiverPartition {
+    pub fn partitioning(&self) -> SphericalPartition {
         match self.scheme {
-            ReceiverScheme::Beckers => {
+            PartitionScheme::Beckers => {
+                // Generate the rings and the patches for the upper hemisphere.
                 let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
@@ -257,18 +262,55 @@ impl ReceiverParams {
                         patches.push(Patch::new(t_prev.into(), rad!(*t), phi_min, phi_max));
                     }
                 }
-                ReceiverPartition {
-                    scheme: ReceiverScheme::Beckers,
+
+                /// Mirror the patches of the upper hemisphere to the lower
+                /// hemisphere.
+                if self.domain.is_lower_hemisphere() {
+                    Self::mirror_patches_and_rings_to_lower_hemisphere(&mut patches, &mut rings);
+                }
+
+                /// Append the patches of the lower hemisphere to the upper
+                /// hemisphere.
+                if self.domain.is_full_sphere() {
+                    let mut patches_lower = patches.clone();
+                    let mut rings_lower = rings.clone();
+                    Self::mirror_patches_and_rings_to_lower_hemisphere(
+                        &mut patches_lower,
+                        &mut rings_lower,
+                    );
+                    patches.extend(patches_lower);
+                    rings.extend(rings_lower);
+                }
+
+                SphericalPartition {
+                    scheme: PartitionScheme::Beckers,
+                    domain: self.domain,
                     rings,
                     patches,
                 }
             }
-            ReceiverScheme::Tregenza => {
+            PartitionScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
-            ReceiverScheme::EqualAngle => {
+            PartitionScheme::EqualAngle => {
                 todo!("Equal angle partitioning scheme is not implemented yet")
             }
+        }
+    }
+
+    /// Mirror the patches and rings of the upper hemisphere to the lower
+    /// hemisphere.
+    fn mirror_patches_and_rings_to_lower_hemisphere(
+        patches: &mut Vec<Patch>,
+        rings: &mut Vec<Ring>,
+    ) {
+        for ring in rings.iter_mut() {
+            ring.theta_inner = std::f32::consts::FRAC_PI_2 - ring.theta_inner;
+            ring.theta_outer = std::f32::consts::FRAC_PI_2 - ring.theta_outer;
+        }
+        for patch in patches.iter_mut() {
+            patch.min.theta = std::f32::consts::FRAC_PI_2 - patch.min.theta;
+            patch.max.theta = std::f32::consts::FRAC_PI_2 - patch.max.theta;
         }
     }
 }
@@ -285,7 +327,7 @@ pub struct Receiver {
     /// Transmitted medium's refractive indices.
     pub iors_t: Vec<RefractiveIndex>,
     /// The partitioned patches of the receiver.
-    pub patches: ReceiverPartition,
+    pub patches: SphericalPartition,
 }
 
 /// Outgoing ray of a trajectory [`RayTrajectory`].
@@ -332,7 +374,7 @@ impl Receiver {
             spectrum,
             iors_i,
             iors_t,
-            patches: receiver_params.generate_patches(),
+            patches: receiver_params.partitioning(),
         }
     }
 
@@ -532,14 +574,14 @@ pub struct CollectedData<'a> {
     /// The micro-surface where the data were collected.
     pub surface: Handle<MicroSurface>,
     /// The partitioned patches of the receiver.
-    pub partition: &'a ReceiverPartition,
+    pub partition: &'a SphericalPartition,
     /// The collected data.
     pub snapshots: Vec<BsdfSnapshotRaw<BounceAndEnergy>>,
 }
 
 impl<'a> CollectedData<'a> {
     /// Creates an empty collected data.
-    pub fn empty(surf: Handle<MicroSurface>, partition: &'a ReceiverPartition) -> Self {
+    pub fn empty(surf: Handle<MicroSurface>, partition: &'a SphericalPartition) -> Self {
         Self {
             surface: surf,
             partition,

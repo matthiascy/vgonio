@@ -17,7 +17,7 @@ use crate::{
         },
     },
     measure::{
-        bsdf::receiver::{DataRetrievalMode, ReceiverParams, ReceiverScheme},
+        bsdf::receiver::{DataRetrievalMode, PartitionScheme, ReceiverParams},
         params::{MeasurementKind, MeasurementParams},
     },
     SphericalDomain,
@@ -40,7 +40,12 @@ impl ReceiverParams {
                     .num_columns(2)
                     .show(ui, |ui| {
                         ui.label("Precision:");
-                        misc::drag_angle(&mut self.precision, "").ui(ui);
+                        ui.horizontal_wrapped(|ui| {
+                            misc::drag_angle(&mut self.precision.theta, "θ").ui(ui);
+                            if self.scheme == PartitionScheme::EqualAngle {
+                                misc::drag_angle(&mut self.precision.phi, "φ").ui(ui);
+                            }
+                        });
                         ui.end_row();
 
                         ui.label("Domain:");
@@ -55,13 +60,18 @@ impl ReceiverParams {
                         ui.horizontal_wrapped(|ui| {
                             ui.selectable_value(
                                 &mut self.scheme,
-                                ReceiverScheme::Beckers,
+                                PartitionScheme::Beckers,
                                 "Beckers",
                             );
                             ui.selectable_value(
                                 &mut self.scheme,
-                                ReceiverScheme::Tregenza,
+                                PartitionScheme::Tregenza,
                                 "Tregenza",
+                            );
+                            ui.selectable_value(
+                                &mut self.scheme,
+                                PartitionScheme::EqualAngle,
+                                "EqualAngle",
                             );
                         });
                         ui.end_row();

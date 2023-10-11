@@ -9,7 +9,7 @@ use crate::{
     },
     measure::bsdf::{
         emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
-        receiver::ReceiverPartition,
+        receiver::SphericalPartition,
         rtc::{Ray, RayTrajectory},
     },
 };
@@ -105,7 +105,7 @@ pub struct DebugDrawingState {
     /// Vertex buffer for the collector dome.
     pub detector_dome_vertex_buffer: Option<wgpu::Buffer>,
     /// Collector's patches.
-    pub detector_partition: Option<ReceiverPartition>,
+    pub detector_partition: Option<SphericalPartition>,
     /// Points on the collector's surface. (Rays hitting the collector's
     /// surface)
     pub detector_ray_hit_points_buffer: Option<wgpu::Buffer>,
@@ -594,7 +594,7 @@ impl DebugDrawingState {
         ));
     }
 
-    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, partition: ReceiverPartition) {
+    pub fn update_detector_drawing(&mut self, ctx: &GpuContext, partition: SphericalPartition) {
         if self.microsurface.is_none() {
             return;
         }

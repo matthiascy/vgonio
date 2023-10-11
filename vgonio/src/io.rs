@@ -29,7 +29,7 @@ pub mod vgmo {
             bsdf::{
                 emitter::EmitterParams,
                 receiver::{
-                    BounceAndEnergy, DataRetrievalMode, ReceiverParams, ReceiverScheme, Ring,
+                    BounceAndEnergy, DataRetrievalMode, PartitionScheme, ReceiverParams, Ring,
                 },
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
                 SpectralSamples,
@@ -530,8 +530,8 @@ pub mod vgmo {
                         _ => panic!("Invalid domain kind"),
                     };
                     let scheme = match u32::from_le_bytes(buf[4..8].try_into().unwrap()) {
-                        0 => ReceiverScheme::Beckers,
-                        1 => ReceiverScheme::Tregenza,
+                        0 => PartitionScheme::Beckers,
+                        1 => PartitionScheme::Tregenza,
                         _ => panic!("Invalid scheme kind"),
                     };
                     let precision = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
@@ -583,7 +583,7 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let partition = self.generate_patches();
+                    let partition = self.partitioning();
                     buf[0..4].copy_from_slice(&(self.domain as u32).to_le_bytes());
                     buf[4..8].copy_from_slice(&(self.scheme as u32).to_le_bytes());
                     buf[8..12].copy_from_slice(&self.precision.value().to_le_bytes());

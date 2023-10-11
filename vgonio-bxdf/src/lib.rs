@@ -62,6 +62,9 @@ pub trait MicrofacetDistributionModel: Debug + Send {
     ///   normal.
     fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64;
 
+    // /// Evaluates the slop distribution function. TODO
+    // fn eval_sdf(&self, x: f64, y: f64) -> f64;
+
     /// Evaluates the Smith masking-shadowing function with the incident and
     /// outgoing directions.
     fn eval_msf(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
