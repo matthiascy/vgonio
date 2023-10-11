@@ -6,7 +6,7 @@ use crate::measure::bsdf::rtc::embr;
 use crate::{
     app::{
         cache::{Handle, InnerCache},
-        cli::{BRIGHT_CYAN, BRIGHT_YELLOW, RESET},
+        cli::ansi,
     },
     measure::{
         bsdf::{
@@ -520,7 +520,8 @@ pub fn measure_bsdf_rt(
         let sim_result_points = match sim_kind {
             SimulationKind::GeomOptics(method) => {
                 println!(
-                    "    {BRIGHT_YELLOW}>{RESET} Measuring {} with geometric optics...",
+                    "    {} Measuring {} with geometric optics...",
+                    ansi::YELLOW_GT,
                     params.kind
                 );
                 match method {
@@ -533,7 +534,8 @@ pub fn measure_bsdf_rt(
             }
             SimulationKind::WaveOptics => {
                 println!(
-                    "    {BRIGHT_YELLOW}>{RESET} Measuring {} with wave optics...",
+                    "    {} Measuring {} with wave optics...",
+                    ansi::YELLOW_GT,
                     params.kind
                 );
                 todo!("Wave optics simulation is not yet implemented")

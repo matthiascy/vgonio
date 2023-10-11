@@ -1,3 +1,15 @@
+use crate::app::{cli::ansi, Config};
+use std::path::PathBuf;
+#[cfg(feature = "surf-obj")]
+use vgcore::units::LengthUnit;
+use vgcore::{
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
+    math::Axis,
+};
+
+use vgsurf::MicroSurface;
+
 #[derive(clap::Args, Debug)]
 #[clap(
     about = "Converts non-vgonio surface files to vgonio files or resizes vgonio surface files."
@@ -76,21 +88,6 @@ pub enum ConvertKind {
     MicroSurfaceProfile,
 }
 
-use crate::app::{
-    cli::{BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
-    Config,
-};
-use std::path::PathBuf;
-#[cfg(feature = "surf-obj")]
-use vgcore::units::LengthUnit;
-use vgcore::{
-    error::VgonioError,
-    io::{CompressionScheme, FileEncoding},
-    math::Axis,
-};
-
-use vgsurf::MicroSurface;
-
 pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
     let output_dir = config.resolve_output_dir(opts.output.as_deref())?;
     for input in opts.inputs {
@@ -108,7 +105,9 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             let dir_entry = std::fs::read_dir(&resolved);
             if let Err(err) = dir_entry {
                 eprintln!(
-                    "  {BRIGHT_RED}!{RESET} Failed to read directory \"{}\": {}",
+                    "  {}!{} Failed to read directory \"{}\": {}",
+                    ansi::BRIGHT_RED,
+                    ansi::RESET,
                     resolved.display(),
                     err
                 );
@@ -117,7 +116,9 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             for entry in dir_entry.unwrap() {
                 if let Err(err) = entry {
                     eprintln!(
-                        "  {BRIGHT_RED}!{RESET} Failed to read directory \"{}\": {}",
+                        "  {}!{} Failed to read directory \"{}\": {}",
+                        ansi::BRIGHT_RED,
+                        ansi::RESET,
                         resolved.display(),
                         err
                     );
@@ -165,8 +166,11 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                 let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
                                     let (w, h) = (new_size[0] as usize, new_size[1] as usize);
                                     println!(
-                                        "  {BRIGHT_YELLOW}>{RESET} Resizing to {}x{}...",
-                                        w, h
+                                        "  {}>{} Resizing to {}x{}...",
+                                        ansi::BRIGHT_YELLOW,
+                                        ansi::RESET,
+                                        w,
+                                        h
                                     );
                                     (w, h)
                                 } else {
@@ -176,8 +180,11 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                 let (w, h) = if opts.squaring {
                                     let s = w.min(h);
                                     println!(
-                                        "  {BRIGHT_YELLOW}>{RESET} Squaring to {}x{}...",
-                                        s, s
+                                        "  {}>{} Squaring to {}x{}...",
+                                        ansi::BRIGHT_YELLOW,
+                                        ansi::RESET,
+                                        s,
+                                        s
                                     );
                                     (s, s)
                                 } else {
@@ -196,8 +203,11 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
 
                         if let Ok((ref profile, ref filename)) = result {
                             println!(
-                                "{BRIGHT_YELLOW}>{RESET} Converting {:?} to {:?}...",
-                                filepath, output_dir
+                                "{}>{} Converting {:?} to {:?}...",
+                                ansi::BRIGHT_YELLOW,
+                                ansi::RESET,
+                                filepath,
+                                output_dir
                             );
 
                             profile
@@ -208,7 +218,9 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                 )
                                 .unwrap_or_else(|err| {
                                     eprintln!(
-                                        "  {BRIGHT_RED}!{RESET} Failed to save to \"{}\": {}",
+                                        "  {}!{} Failed to save to \"{}\": {}",
+                                        ansi::BRIGHT_RED,
+                                        ansi::RESET,
                                         resolved.display(),
                                         err
                                     );
@@ -219,12 +231,14 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                     .collect::<Vec<_>>();
                 for err in errors {
                     eprintln!(
-                        "  {BRIGHT_RED}!{RESET} Failed to convert \"{}\": {}",
+                        "  {}!{} Failed to convert \"{}\": {}",
+                        ansi::BRIGHT_RED,
+                        ansi::RESET,
                         resolved.display(),
                         err
                     )
                 }
-                println!("{BRIGHT_CYAN}✓{RESET} Done!",);
+                println!("{}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
             }
         }
     }

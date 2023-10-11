@@ -3,10 +3,7 @@
 // TODO: verification
 
 use crate::{
-    app::{
-        cache::InnerCache,
-        cli::{BRIGHT_YELLOW, RESET},
-    },
+    app::cli::ansi,
     measure::{
         bsdf::{
             emitter::Emitter,
@@ -67,7 +64,8 @@ pub fn measure_bsdf(
         .iter()
         .map(|w_i| {
             println!(
-                "      {BRIGHT_YELLOW}>{RESET} Emit rays from {}° {}°",
+                "      {} Emit rays from {}° {}°",
+                ansi::YELLOW_GT,
                 w_i.theta.in_degrees().value(),
                 w_i.phi.in_degrees().value()
             );

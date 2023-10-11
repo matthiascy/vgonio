@@ -162,7 +162,7 @@ impl VgonioGui {
                 if let Ok(Some(hdl)) = hdl {
                     self.cache.read(|cache| {
                         let measured = cache.get_measurement_data(*meas).unwrap();
-                        crate::app::cli::write_single_measured_data_to_file(
+                        crate::io::write_single_measured_data_to_file(
                             measured,
                             FileEncoding::Binary,
                             CompressionScheme::Zlib,

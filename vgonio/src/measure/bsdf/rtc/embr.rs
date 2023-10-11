@@ -1,6 +1,7 @@
 //! Embree ray tracing.
 
 use crate::{
+    app::cli::ansi,
     measure::bsdf::{
         emitter::Emitter,
         rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
@@ -203,8 +204,12 @@ fn simulate_bsdf_measurement_single_point(
     geometry: Arc<Geometry>,
     scene: &Scene,
 ) -> SimulationResultPoint {
-    use crate::app::cli::{BRIGHT_YELLOW, RESET};
-    println!("      {}>{} Emit rays from {}", BRIGHT_YELLOW, RESET, w_i);
+    println!(
+        "      {}>{} Emit rays from {}",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET,
+        w_i
+    );
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     let t = Instant::now();
     let emitted_rays = emitter.emit_rays(w_i, mesh);
@@ -247,7 +252,8 @@ fn simulate_bsdf_measurement_single_point(
     ];
 
     println!(
-        "        {BRIGHT_YELLOW}>{RESET} Trace {} rays ({} streams)",
+        "        {} Trace {} rays ({} streams)",
+        ansi::YELLOW_GT,
         emitted_rays.len(),
         num_streams
     );

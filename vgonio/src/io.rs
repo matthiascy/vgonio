@@ -1,10 +1,26 @@
-use std::io::{BufReader, Read, Write};
-use vgcore::math;
-
-use crate::measure::{
-    bsdf::MeasuredBsdfData,
-    microfacet::{MeasuredAdfData, MeasuredMsfData},
+use crate::{
+    app::{
+        args::OutputFormat,
+        cache::{Cache, Handle},
+        cli::ansi,
+        Config,
+    },
+    measure::{
+        bsdf::MeasuredBsdfData,
+        data::MeasurementData,
+        microfacet::{MeasuredAdfData, MeasuredMsfData},
+    },
 };
+use std::{
+    io::{BufReader, Read, Write},
+    path::Path,
+};
+use vgcore::{
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
+    math,
+};
+use vgsurf::MicroSurface;
 
 pub mod vgmo {
     use super::*;
@@ -1357,4 +1373,117 @@ mod tests {
         .unwrap();
         assert_eq!(snapshots, snapshots2);
     }
+}
+
+/// Writes the measured data to a file.
+pub fn write_measured_data_to_file(
+    data: &[MeasurementData],
+    surfaces: &[Handle<MicroSurface>],
+    cache: &Cache,
+    config: &Config,
+    format: OutputFormat,
+    encoding: FileEncoding,
+    compression: CompressionScheme,
+    output: Option<&Path>,
+) -> Result<(), VgonioError> {
+    println!(
+        "    {}>{} Saving measurement data...",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET
+    );
+    let output_dir = config.resolve_output_dir(output)?;
+    for (measurement, surface) in data.iter().zip(surfaces.iter()) {
+        let datetime = vgcore::utils::iso_timestamp_short();
+        let filepath = cache.read(|cache| {
+            let surf_name = cache
+                .get_micro_surface_filepath(*surface)
+                .unwrap()
+                .file_stem()
+                .unwrap()
+                .to_ascii_lowercase();
+            output_dir.join(format!(
+                "{}_{}_{}",
+                measurement.kind().ascii_str(),
+                surf_name.to_str().unwrap(),
+                datetime
+            ))
+        });
+        println!(
+            "      {}-{} Saving to \"{}\"",
+            ansi::BRIGHT_CYAN,
+            ansi::RESET,
+            filepath.display()
+        );
+
+        match measurement.write_to_file(&filepath, format, encoding, compression) {
+            Ok(_) => {
+                println!(
+                    "      {} Successfully saved to \"{}\"",
+                    ansi::CYAN_CHECK,
+                    output_dir.display()
+                );
+            }
+            Err(err) => {
+                eprintln!(
+                    "        {} Failed to save to \"{}\": {}",
+                    ansi::RED_EXCLAMATION,
+                    filepath.display(),
+                    err
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Writes a single measurement data to a file.
+pub fn write_single_measured_data_to_file(
+    measured: &MeasurementData,
+    encoding: FileEncoding,
+    compression: CompressionScheme,
+    filepath: &Path,
+) -> Result<(), VgonioError> {
+    use std::ffi::OsStr;
+
+    println!("    {} Saving measurement data...", ansi::YELLOW_GT);
+    println!(
+        "      {} Saving as \"{}\"",
+        ansi::CYAN_MINUS,
+        filepath.display()
+    );
+
+    let ext = filepath
+        .extension()
+        .unwrap_or(OsStr::new("vgmo"))
+        .to_str()
+        .unwrap();
+
+    if ext != "vgmo" && ext != "exr" {
+        return Err(VgonioError::new("Unknown file format", None));
+    }
+
+    let format = if ext == "exr" {
+        OutputFormat::Exr
+    } else {
+        OutputFormat::Vgmo
+    };
+
+    match measured.write_to_file(&filepath, format, encoding, compression) {
+        Ok(_) => {
+            println!(
+                "      {} Successfully saved as \"{}\"",
+                ansi::CYAN_CHECK,
+                filepath.display()
+            );
+        }
+        Err(err) => {
+            eprintln!(
+                "        {} Failed to save as \"{}\": {}",
+                ansi::RED_EXCLAMATION,
+                filepath.display(),
+                err
+            );
+        }
+    }
+    Ok(())
 }

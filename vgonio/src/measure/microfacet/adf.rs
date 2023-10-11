@@ -1,3 +1,4 @@
+use exr::prelude::WritableImage;
 use std::path::Path;
 use vgcore::{error::VgonioError, math, units, units::Radians};
 use vgsurf::MicroSurface;
@@ -6,6 +7,7 @@ use vgsurf::MicroSurface;
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 use crate::{
     app::cache::{Handle, InnerCache},
+    error::RuntimeError::Image,
     measure::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::AdfMeasurementParams,
@@ -42,10 +44,29 @@ impl MeasuredAdfData {
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
     ) -> Result<(), VgonioError> {
-        // Generate equal angle partitioned hemisphere.1
+        use exr::prelude::*;
+        // Generate equal angle partitioned hemisphere.
         // Calculate the patch index for each pixel.
         // Write the data to the EXR file.
-        todo!("write_as_exr")
+        let width = self.params.azimuth.step_count_wrapped();
+        let height = self.params.zenith.step_count_wrapped();
+        let ndf = AnyChannel::new("NDF", FlatSamples::F32(self.samples.clone()));
+        let layer = Layer::new(
+            (width, height),
+            LayerAttributes {
+                layer_name: Some(Text::from("NDF")),
+                ..LayerAttributes::default()
+            },
+            Encoding::FAST_LOSSLESS,
+            AnyChannels {
+                list: SmallVec::from_vec(vec![ndf]),
+            },
+        );
+        let image = Image::from_layer(layer);
+        image
+            .write()
+            .to_file(filepath)
+            .map_err(|err| VgonioError::new("Failed to write NDF EXR file.", Some(Box::new(err))))
     }
 }
 

@@ -638,8 +638,7 @@ pub fn read_wavefront<R: BufRead>(
     Ok(MicroSurface::from_samples(
         rows,
         cols,
-        du,
-        dv,
+        (du, dv),
         unit,
         heights,
         filepath

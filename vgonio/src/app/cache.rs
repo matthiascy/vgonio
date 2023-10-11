@@ -1,10 +1,6 @@
 use super::gfx::RenderableMesh;
 use crate::{
-    app::{
-        cli::{BRIGHT_RED, RESET},
-        gfx::GpuContext,
-        Config,
-    },
+    app::{cli::ansi, gfx::GpuContext, Config},
     measure::data::MeasurementData,
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Medium,
@@ -583,7 +579,9 @@ impl InnerCache {
                 }
             } else {
                 eprintln!(
-                    "    {BRIGHT_RED}!{RESET} file not found: {}",
+                    "    {}!{} file not found: {}",
+                    ansi::BRIGHT_RED,
+                    ansi::RESET,
                     path.display()
                 );
             }

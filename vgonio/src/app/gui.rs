@@ -665,7 +665,7 @@ impl VgonioGuiApp {
                             }
                         };
                         if write_to_file {
-                            crate::app::cli::write_measured_data_to_file(
+                            crate::io::write_measured_data_to_file(
                                 &data,
                                 &surfaces,
                                 &self.cache,

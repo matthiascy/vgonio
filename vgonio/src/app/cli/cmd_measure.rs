@@ -1,10 +1,5 @@
 use crate::{
-    app::{
-        args::MeasureOptions,
-        cache::Cache,
-        cli::{write_measured_data_to_file, BRIGHT_CYAN, BRIGHT_RED, BRIGHT_YELLOW, RESET},
-        Config,
-    },
+    app::{args::MeasureOptions, cache::Cache, cli, cli::ansi, Config},
     measure,
     measure::params::{Measurement, MeasurementParams},
 };
@@ -22,11 +17,17 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .unwrap();
     }
     println!(
-        "{BRIGHT_YELLOW}>{RESET} Executing 'vgonio measure' with a thread pool of size: {}",
+        "{}>{} Executing 'vgonio measure' with a thread pool of size: {}",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET,
         rayon::current_num_threads()
     );
 
-    println!("  {BRIGHT_YELLOW}>{RESET} Reading measurement description files...");
+    println!(
+        "  {}>{} Reading measurement description files...",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET
+    );
     let measurements = opts
         .inputs
         .iter()
@@ -45,7 +46,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         .flatten()
         .collect::<Vec<_>>();
     println!(
-        "    {BRIGHT_CYAN}✓{RESET} {} measurement(s)",
+        "    {}✓{} {} measurement(s)",
+        ansi::BRIGHT_CYAN,
+        ansi::RESET,
         measurements.len()
     );
 
@@ -55,13 +58,23 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         // Load data files: refractive indices, spd etc. if needed.
         if measurements.iter().any(|meas| meas.params.is_bsdf()) {
             println!(
-                "  {BRIGHT_YELLOW}>{RESET} Loading data files (refractive indices, spd etc.)..."
+                "  {}>{} Loading data files (refractive indices, spd etc.)...",
+                ansi::BRIGHT_YELLOW,
+                ansi::RESET
             );
             cache.load_ior_database(&config);
-            println!("    {BRIGHT_CYAN}✓{RESET} Successfully load data files");
+            println!(
+                "    {}✓{} Successfully load data files",
+                ansi::BRIGHT_CYAN,
+                ansi::RESET
+            );
         }
 
-        println!("  {BRIGHT_YELLOW}>{RESET} Resolving and loading micro-surfaces...");
+        println!(
+            "  {}>{} Resolving and loading micro-surfaces...",
+            ansi::BRIGHT_YELLOW,
+            ansi::RESET
+        );
         let tasks = measurements
             .into_iter()
             .filter_map(|meas| {
@@ -72,7 +85,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             })
             .collect::<Vec<_>>();
         println!(
-            "    {BRIGHT_CYAN}✓{RESET} {} micro-surface(s) loaded",
+            "    {}✓{} {} micro-surface(s) loaded",
+            ansi::BRIGHT_CYAN,
+            ansi::RESET,
             cache.num_micro_surfaces()
         );
 
@@ -81,13 +96,24 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .loaded_micro_surface_paths()
             .unwrap()
             .iter()
-            .for_each(|s| println!("      {BRIGHT_CYAN}-{RESET} {}", s.display()));
+            .for_each(|s| {
+                println!(
+                    "      {}-{} {}",
+                    ansi::BRIGHT_CYAN,
+                    ansi::RESET,
+                    s.display()
+                )
+            });
 
         (tasks, cache.num_micro_surfaces())
     });
 
     if num_surfs == 0 {
-        println!("  {BRIGHT_RED}✗{RESET} No micro-surface to measure. Exiting...");
+        println!(
+            "  {}✗{} No micro-surface to measure. Exiting...",
+            ansi::BRIGHT_RED,
+            ansi::RESET
+        );
         return Ok(());
     }
 
@@ -97,7 +123,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         let measured_data = match measurement.params {
             MeasurementParams::Bsdf(params) => {
                 println!(
-                    "  {BRIGHT_YELLOW}>{RESET} Launch BSDF measurement at {}
+                    "  {}>{} Launch BSDF measurement at {}
     • parameters:
       + incident medium: {:?}
       + transmitted medium: {:?}
@@ -111,6 +137,8 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - domain: {}
         - scheme: {:?}
         - precision: {}",
+                    ansi::BRIGHT_YELLOW,
+                    ansi::RESET,
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
                     params.incident_medium,
                     params.transmitted_medium,
@@ -129,10 +157,12 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             }
             MeasurementParams::Adf(measurement) => {
                 println!(
-                    "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet area distribution:
+                    "  {}>{} Measuring microfacet area distribution:
     • parameters:
       + azimuth: {}
       + zenith: {}",
+                    ansi::BRIGHT_YELLOW,
+                    ansi::RESET,
                     measurement.azimuth.pretty_print(),
                     measurement.zenith.pretty_print(),
                 );
@@ -142,11 +172,13 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             }
             MeasurementParams::Msf(measurement) => {
                 println!(
-                    "  {BRIGHT_YELLOW}>{RESET} Measuring microfacet masking-shadowing function:
+                    "  {}>{} Measuring microfacet masking-shadowing function:
     • parameters:
       + azimuth: {}
       + zenith: {}
       + resolution: {} x {}",
+                    ansi::BRIGHT_YELLOW,
+                    ansi::RESET,
                     measurement.azimuth.pretty_print(),
                     measurement.zenith.pretty_print(),
                     measurement.resolution,
@@ -164,11 +196,13 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         };
 
         println!(
-            "    {BRIGHT_CYAN}✓{RESET} Measurement finished in {} secs.",
+            "    {}✓{} Measurement finished in {} secs.",
+            ansi::BRIGHT_CYAN,
+            ansi::RESET,
             measurement_start_time.elapsed().unwrap().as_secs_f32()
         );
 
-        write_measured_data_to_file(
+        crate::io::write_measured_data_to_file(
             &measured_data,
             &surfaces,
             &cache,
@@ -179,11 +213,13 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             opts.output.as_deref(),
         )?;
 
-        println!("    {BRIGHT_CYAN}✓{RESET} Done!");
+        println!("    {}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
     }
 
     println!(
-        "    {BRIGHT_CYAN}✓{RESET} Finished in {:.2} s",
+        "    {}✓{} Finished in {:.2} s",
+        ansi::BRIGHT_CYAN,
+        ansi::RESET,
         start_time.elapsed().as_secs_f32()
     );
 
