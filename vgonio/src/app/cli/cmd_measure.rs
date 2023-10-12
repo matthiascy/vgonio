@@ -1,5 +1,5 @@
 use crate::{
-    app::{args::MeasureOptions, cache::Cache, cli, cli::ansi, Config},
+    app::{args::MeasureOptions, cache::Cache, cli::ansi, Config},
     measure,
     measure::params::{Measurement, MeasurementParams},
 };

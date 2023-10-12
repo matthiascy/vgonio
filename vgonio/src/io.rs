@@ -504,7 +504,7 @@ pub mod vgmo {
                     major: 0,
                     minor: 1,
                     patch: 0,
-                } => Some(num_rings * Ring::REQUIRED_SIZE + 24),
+                } => Some(num_rings * Ring::REQUIRED_SIZE + 28),
                 _ => None,
             }
         }
@@ -521,7 +521,7 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let mut buf = [0u8; 24];
+                    let mut buf = [0u8; 28];
                     reader.read_exact(&mut buf).unwrap();
                     let domain = match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
                         0 => SphericalDomain::Whole,
@@ -532,26 +532,28 @@ pub mod vgmo {
                     let scheme = match u32::from_le_bytes(buf[4..8].try_into().unwrap()) {
                         0 => PartitionScheme::Beckers,
                         1 => PartitionScheme::Tregenza,
+                        2 => PartitionScheme::EqualAngle,
                         _ => panic!("Invalid scheme kind"),
                     };
-                    let precision = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                    let precision_theta = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                    let precision_phi = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
                     let retrieval_mode = DataRetrievalMode::from(u32::from_le_bytes(
-                        buf[20..24].try_into().unwrap(),
+                        buf[24..28].try_into().unwrap(),
                     ) as u8);
                     let params = ReceiverParams {
                         domain,
-                        precision,
+                        precision: Sph2::new(precision_theta, precision_phi),
                         scheme,
                         retrieval_mode,
                     };
                     let expected_num_rings = params.num_rings();
-                    let num_rings = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
+                    let num_rings = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
                     debug_assert!(
                         num_rings == expected_num_rings,
                         "Receiver's partition ring count does not match the precision",
                     );
                     let expected_num_patches = params.num_patches();
-                    let num_patches = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
+                    let num_patches = u32::from_le_bytes(buf[20..24].try_into().unwrap()) as usize;
                     debug_assert!(
                         num_patches == expected_num_patches,
                         "Receiver's partition patch count does not match the precision",
@@ -586,11 +588,12 @@ pub mod vgmo {
                     let partition = self.partitioning();
                     buf[0..4].copy_from_slice(&(self.domain as u32).to_le_bytes());
                     buf[4..8].copy_from_slice(&(self.scheme as u32).to_le_bytes());
-                    buf[8..12].copy_from_slice(&self.precision.value().to_le_bytes());
-                    buf[12..16].copy_from_slice(&(partition.num_rings() as u32).to_le_bytes());
-                    buf[16..20].copy_from_slice(&(partition.num_patches() as u32).to_le_bytes());
-                    buf[20..24].copy_from_slice(&(self.retrieval_mode as u32).to_le_bytes());
-                    let offset = 24;
+                    buf[8..12].copy_from_slice(&self.precision.theta.value().to_le_bytes());
+                    buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
+                    buf[16..20].copy_from_slice(&(partition.num_rings() as u32).to_le_bytes());
+                    buf[20..24].copy_from_slice(&(partition.num_patches() as u32).to_le_bytes());
+                    buf[24..28].copy_from_slice(&(self.retrieval_mode as u32).to_le_bytes());
+                    let offset = 28;
                     for (i, ring) in partition.rings.iter().enumerate() {
                         ring.write_to_buf(&mut buf[offset + i * Ring::REQUIRED_SIZE..]);
                     }

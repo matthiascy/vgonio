@@ -190,6 +190,9 @@ impl Sph2 {
     /// Converts to a cartesian coordinate.
     pub fn to_cartesian(&self) -> Vec3 { spherical_to_cartesian(1.0, self.theta, self.phi) }
 
+    /// Returns true if the zenith angle and azimuth angle are both positive.
+    pub fn is_positive(&self) -> bool { self.theta.is_positive() && self.phi.is_positive() }
+
     /// Converts from a cartesian coordinate.
     pub fn from_cartesian(cartesian: Vec3) -> Self {
         debug_assert!(approx::ulps_eq!(

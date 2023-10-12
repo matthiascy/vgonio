@@ -206,9 +206,9 @@ mod beckers {
 impl ReceiverParams {
     /// Returns the number of patches of the collector.
     pub fn num_patches(&self) -> usize {
-        match self.scheme {
+        let num_patches_hemi = match self.scheme {
             PartitionScheme::Beckers => {
-                let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
+                let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             }
@@ -218,13 +218,22 @@ impl ReceiverParams {
             PartitionScheme::EqualAngle => {
                 todo!("Equal angle partitioning scheme is not implemented yet")
             }
+        };
+        if self.domain == SphericalDomain::Whole {
+            return num_patches_hemi * 2;
         }
+        num_patches_hemi
     }
 
     // TODO: constify this
     /// Returns the number rings of the collector.
     pub fn num_rings(&self) -> usize {
-        (self.domain.zenith_angle_diff() / self.precision).round() as usize
+        let num_rings_hemi =
+            (self.domain.zenith_angle_diff() / self.precision.theta).round() as usize;
+        if self.domain == SphericalDomain::Whole {
+            return num_rings_hemi * 2;
+        }
+        num_rings_hemi
     }
 
     /// Partition the receiver into patches.
@@ -236,7 +245,7 @@ impl ReceiverParams {
         match self.scheme {
             PartitionScheme::Beckers => {
                 // Generate the rings and the patches for the upper hemisphere.
-                let num_rings = (Radians::HALF_PI / self.precision).round() as u32;
+                let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
                 let ts = beckers::compute_ts(&rs);
@@ -309,8 +318,8 @@ impl ReceiverParams {
             ring.theta_outer = std::f32::consts::FRAC_PI_2 - ring.theta_outer;
         }
         for patch in patches.iter_mut() {
-            patch.min.theta = std::f32::consts::FRAC_PI_2 - patch.min.theta;
-            patch.max.theta = std::f32::consts::FRAC_PI_2 - patch.max.theta;
+            patch.min.theta = Radians::HALF_PI - patch.min.theta;
+            patch.max.theta = Radians::HALF_PI - patch.max.theta;
         }
     }
 }

@@ -11,6 +11,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use vgcore::{
     error::VgonioError,
+    math::Sph2,
     units::{deg, nm, rad},
 };
 
@@ -104,7 +105,7 @@ impl Default for BsdfMeasurementParams {
             },
             receiver: ReceiverParams {
                 domain: SphericalDomain::Upper,
-                precision: deg!(2.0).to_radians(),
+                precision: Sph2::new(deg!(2.0).in_radians(), deg!(5.0).in_radians()),
                 scheme: PartitionScheme::Beckers,
                 retrieval_mode: DataRetrievalMode::BsdfOnly,
             },
@@ -176,80 +177,86 @@ impl BsdfMeasurementParams {
         use exr::meta::attribute::{AttributeValue, Text};
         let mut hash_map = std::collections::HashMap::new();
         hash_map.insert(
-            Text::new_or_panic("kind"),
+            Text::new_or_panic("vg.kind"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.kind))),
         );
         hash_map.insert(
-            Text::new_or_panic("sim_kind"),
+            Text::new_or_panic("vg.sim_kind"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.sim_kind))),
         );
         hash_map.insert(
-            Text::new_or_panic("incident_medium"),
+            Text::new_or_panic("vg.incident_medium"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.incident_medium))),
         );
         hash_map.insert(
-            Text::new_or_panic("transmitted_medium"),
+            Text::new_or_panic("vg.transmitted_medium"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.transmitted_medium))),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.num_rays"),
+            Text::new_or_panic("vg.emitter.num_rays"),
             AttributeValue::I32(self.emitter.num_rays as i32),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.max_bounces"),
+            Text::new_or_panic("vg.emitter.max_bounces"),
             AttributeValue::I32(self.emitter.max_bounces as i32),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.zenith.start"),
+            Text::new_or_panic("vg.emitter.zenith.start"),
             AttributeValue::F32(self.emitter.zenith.start.in_degrees().as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.zenith.stop"),
+            Text::new_or_panic("vg.emitter.zenith.stop"),
             AttributeValue::F32(self.emitter.zenith.stop.in_degrees().as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.zenith.step_size"),
+            Text::new_or_panic("vg.emitter.zenith.step_size"),
             AttributeValue::F32(self.emitter.zenith.step_size.in_degrees().as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.azimuth.start"),
+            Text::new_or_panic("vg.emitter.azimuth.start"),
             AttributeValue::F32(self.emitter.azimuth.start.in_degrees().as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.azimuth.stop"),
+            Text::new_or_panic("vg.emitter.azimuth.stop"),
             AttributeValue::F32(self.emitter.azimuth.stop.in_degrees().as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.azimuth.step_size"),
+            Text::new_or_panic("vg.emitter.azimuth.step_size"),
             AttributeValue::Text(Text::new_or_panic(format!(
                 "{}",
                 self.emitter.azimuth.step_size.in_degrees().as_f32()
             ))),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.spectrum.start"),
+            Text::new_or_panic("vg.emitter.spectrum.start"),
             AttributeValue::F32(self.emitter.spectrum.start.as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.spectrum.stop"),
+            Text::new_or_panic("vg.emitter.spectrum.stop"),
             AttributeValue::F32(self.emitter.spectrum.stop.as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("emitter.spectrum.step_size"),
+            Text::new_or_panic("vg.emitter.spectrum.step_size"),
             AttributeValue::F32(self.emitter.spectrum.step_size.as_f32()),
         );
         hash_map.insert(
-            Text::new_or_panic("detector.domain"),
+            Text::new_or_panic("vg.detector.domain"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.receiver.domain))),
         );
         hash_map.insert(
-            Text::new_or_panic("detector.precision"),
-            AttributeValue::F32(self.receiver.precision.in_degrees().as_f32()),
-        );
-        hash_map.insert(
-            Text::new_or_panic("detector.scheme"),
+            Text::new_or_panic("vg.detector.scheme"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.receiver.scheme))),
         );
+        hash_map.insert(
+            Text::new_or_panic("vg.detector.precision_theta"),
+            AttributeValue::F32(self.receiver.precision.theta.in_degrees().as_f32()),
+        );
+        if self.receiver.scheme == PartitionScheme::EqualAngle {
+            hash_map.insert(
+                Text::new_or_panic("vg.detector.precision_phi"),
+                AttributeValue::F32(self.receiver.precision.phi.in_degrees().as_f32()),
+            );
+        }
         hash_map
     }
 }
