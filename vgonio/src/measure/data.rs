@@ -6,7 +6,7 @@ use crate::{
         cache::{Asset, Handle},
     },
     fitting::MeasuredMdfData,
-    io::vgmo::VgmoHeaderExt,
+    io::{vgmo::VgmoHeaderExt, OutputFileFormatOptions, OutputOptions},
     measure::{
         bsdf::MeasuredBsdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData},
@@ -293,12 +293,13 @@ impl MeasurementData {
     pub fn write_to_file(
         &self,
         filepath: &Path,
-        format: OutputFormat,
-        encoding: FileEncoding,
-        compression: CompressionScheme,
+        format: &OutputFileFormatOptions,
     ) -> Result<(), VgonioError> {
         match format {
-            OutputFormat::Vgmo => {
+            OutputFileFormatOptions::Vgmo {
+                encoding,
+                compression,
+            } => {
                 let timestamp = {
                     let mut timestamp = [0_u8; 32];
                     timestamp.copy_from_slice(
@@ -312,8 +313,8 @@ impl MeasurementData {
                         timestamp,
                         length: 0,
                         sample_size: 4,
-                        encoding,
-                        compression,
+                        encoding: *encoding,
+                        compression: *compression,
                     },
                     extra: self.measured.as_vgmo_header_ext(),
                 };
@@ -346,11 +347,15 @@ impl MeasurementData {
                     )
                 })?;
             }
-            OutputFormat::Exr => {
+            OutputFileFormatOptions::Exr { resolution } => {
                 let filepath = filepath.with_extension("exr");
                 match &self.measured {
-                    MeasuredData::Bsdf(bsdf) => bsdf.write_as_exr(&filepath, &self.timestamp)?,
-                    MeasuredData::Adf(adf) => adf.write_as_exr(&filepath, &self.timestamp)?,
+                    MeasuredData::Bsdf(bsdf) => {
+                        bsdf.write_as_exr(&filepath, &self.timestamp, *resolution)?
+                    }
+                    MeasuredData::Adf(adf) => {
+                        adf.write_as_exr(&filepath, &self.timestamp, *resolution)?
+                    }
                     MeasuredData::Msf(msf) => {
                         eprintln!("Writing MSF to EXR is not supported yet.");
                     }

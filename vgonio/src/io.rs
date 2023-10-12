@@ -13,7 +13,7 @@ use crate::{
 };
 use std::{
     io::{BufReader, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use vgcore::{
     error::VgonioError,
@@ -1378,23 +1378,41 @@ mod tests {
     }
 }
 
+/// Output options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputOptions {
+    /// Output directory.
+    pub dir: Option<PathBuf>,
+    /// Output file format.
+    pub format: OutputFileFormatOptions,
+}
+
+/// Output file format options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputFileFormatOptions {
+    Vgmo {
+        encoding: FileEncoding,
+        compression: CompressionScheme,
+    },
+    Exr {
+        resolution: u32,
+    },
+}
+
 /// Writes the measured data to a file.
 pub fn write_measured_data_to_file(
     data: &[MeasurementData],
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
-    format: OutputFormat,
-    encoding: FileEncoding,
-    compression: CompressionScheme,
-    output: Option<&Path>,
+    output: OutputOptions,
 ) -> Result<(), VgonioError> {
     println!(
         "    {}>{} Saving measurement data...",
         ansi::BRIGHT_YELLOW,
         ansi::RESET
     );
-    let output_dir = config.resolve_output_dir(output)?;
+    let output_dir = config.resolve_output_dir(output.dir.as_deref())?;
     for (measurement, surface) in data.iter().zip(surfaces.iter()) {
         let datetime = vgcore::utils::iso_timestamp_short();
         let filepath = cache.read(|cache| {
@@ -1418,7 +1436,7 @@ pub fn write_measured_data_to_file(
             filepath.display()
         );
 
-        match measurement.write_to_file(&filepath, format, encoding, compression) {
+        match measurement.write_to_file(&filepath, &output.format) {
             Ok(_) => {
                 println!(
                     "      {} Successfully saved to \"{}\"",
@@ -1440,10 +1458,14 @@ pub fn write_measured_data_to_file(
 }
 
 /// Writes a single measurement data to a file.
+///
+/// Depending on the file extension, the data is saved as either a VGMO file or
+/// an EXR file.
 pub fn write_single_measured_data_to_file(
     measured: &MeasurementData,
     encoding: FileEncoding,
     compression: CompressionScheme,
+    resolution: Option<u32>,
     filepath: &Path,
 ) -> Result<(), VgonioError> {
     use std::ffi::OsStr;
@@ -1466,12 +1488,17 @@ pub fn write_single_measured_data_to_file(
     }
 
     let format = if ext == "exr" {
-        OutputFormat::Exr
+        OutputFileFormatOptions::Exr {
+            resolution: resolution.unwrap_or(512),
+        }
     } else {
-        OutputFormat::Vgmo
+        OutputFileFormatOptions::Vgmo {
+            encoding,
+            compression,
+        }
     };
 
-    match measured.write_to_file(&filepath, format, encoding, compression) {
+    match measured.write_to_file(&filepath, &format) {
         Ok(_) => {
             println!(
                 "      {} Successfully saved as \"{}\"",

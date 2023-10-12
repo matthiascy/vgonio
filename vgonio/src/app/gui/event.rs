@@ -9,6 +9,7 @@ use crate::{
         },
     },
     fitting::FittingProblemKind,
+    io::OutputOptions,
     measure::{
         bsdf::{
             emitter::{EmitterSamples, MeasurementPoints},
@@ -68,13 +69,7 @@ pub enum VgonioEvent {
         /// Surfaces to be measured.
         surfaces: Vec<Handle<MicroSurface>>,
         /// Output file format.
-        format: OutputFormat,
-        /// Output file encoding.
-        encoding: FileEncoding,
-        /// Output file compression.
-        compression: CompressionScheme,
-        /// Save the measurement data to a file.
-        write_to_file: bool,
+        output_opts: Option<OutputOptions>,
     },
     ExportMeasurement(Handle<MeasurementData>),
     Notify {

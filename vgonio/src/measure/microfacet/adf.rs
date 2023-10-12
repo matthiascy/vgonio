@@ -43,6 +43,7 @@ impl MeasuredAdfData {
         &self,
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
+        resolution: u32,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         // Generate equal angle partitioned hemisphere.

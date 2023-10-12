@@ -1,5 +1,11 @@
 use crate::{
-    app::{args::MeasureOptions, cache::Cache, cli::ansi, Config},
+    app::{
+        args::{MeasureOptions, OutputFormat},
+        cache::Cache,
+        cli::ansi,
+        Config,
+    },
+    io::{OutputFileFormatOptions, OutputOptions},
     measure,
     measure::params::{Measurement, MeasurementParams},
 };
@@ -202,15 +208,25 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             measurement_start_time.elapsed().unwrap().as_secs_f32()
         );
 
+        let format_opts = match opts.output_format {
+            OutputFormat::Vgmo => OutputFileFormatOptions::Vgmo {
+                encoding: opts.encoding,
+                compression: opts.compression,
+            },
+            OutputFormat::Exr => OutputFileFormatOptions::Exr {
+                resolution: opts.resolution,
+            },
+        };
+
         crate::io::write_measured_data_to_file(
             &measured_data,
             &surfaces,
             &cache,
             &config,
-            opts.output_format,
-            opts.encoding,
-            opts.compression,
-            opts.output.as_deref(),
+            OutputOptions {
+                dir: opts.output.clone(),
+                format: format_opts,
+            },
         )?;
 
         println!("    {}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);

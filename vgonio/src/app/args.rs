@@ -1,6 +1,7 @@
 use crate::app::cli::ConvertOptions;
 #[cfg(feature = "surf-gen")]
 use crate::app::cli::GenerateOptions;
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
@@ -157,7 +158,7 @@ pub enum FastMeasurementKind {
     MaskingShadowingFunction,
 }
 
-#[derive(Debug, Copy, Clone, Default, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     /// Vgonio internal file format.
@@ -167,7 +168,7 @@ pub enum OutputFormat {
     // Pfm,
     // /// Portable network graphics.
     // Png,
-    /// OpenEXR.
+    /// OpenEXR image format with resolution.
     Exr,
 }
 
@@ -209,6 +210,15 @@ pub struct MeasureOptions {
                 vgonio internal file format.",
     )]
     pub output_format: OutputFormat,
+
+    #[arg(
+        short,
+        long,
+        default_value_t = 512,
+        help = "The resolution of the measurement output in case the output is image.\nIf not \
+                specified, the resolution will be 512."
+    )]
+    pub resolution: u32,
 
     #[arg(
         short,

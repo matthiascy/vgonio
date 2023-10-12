@@ -71,6 +71,7 @@ impl MeasuredBsdfData {
         &self,
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
+        resolution: u32,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         const WIDTH: usize = 512;

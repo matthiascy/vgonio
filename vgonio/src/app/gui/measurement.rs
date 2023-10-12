@@ -16,6 +16,7 @@ use crate::{
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
+    io::{OutputFileFormatOptions, OutputOptions},
     measure::{
         bsdf::receiver::{DataRetrievalMode, PartitionScheme, ReceiverParams},
         params::{MeasurementKind, MeasurementParams},
@@ -119,6 +120,8 @@ pub struct MeasurementDialog {
     is_open: bool,
     /// Output format of the measurement.
     format: OutputFormat,
+    /// Output embedding image resolution.
+    img_res: u32,
     /// File encoding of the measurement.
     encoding: FileEncoding,
     /// Compression scheme of the file.
@@ -146,6 +149,7 @@ impl MeasurementDialog {
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
             is_open: false,
             format: OutputFormat::Vgmo,
+            img_res: 512,
             encoding: FileEncoding::Binary,
             compression: CompressionScheme::None,
             write_to_file: false,
@@ -323,36 +327,50 @@ impl MeasurementDialog {
                         }
                     });
 
-                    if self.format == OutputFormat::Vgmo {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label("File encoding: ");
-                            ui.selectable_value(&mut self.encoding, FileEncoding::Binary, "binary");
-                            if self.kind == MeasurementKind::Adf {
+                    match self.format {
+                        OutputFormat::Vgmo => {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("File encoding: ");
                                 ui.selectable_value(
                                     &mut self.encoding,
-                                    FileEncoding::Ascii,
-                                    "ascii",
+                                    FileEncoding::Binary,
+                                    "binary",
                                 );
-                            }
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label("Compression scheme: ");
-                            ui.selectable_value(
-                                &mut self.compression,
-                                CompressionScheme::None,
-                                "none",
-                            );
-                            ui.selectable_value(
-                                &mut self.compression,
-                                CompressionScheme::Zlib,
-                                "zlib",
-                            );
-                            ui.selectable_value(
-                                &mut self.compression,
-                                CompressionScheme::Gzip,
-                                "gzip",
-                            );
-                        });
+                                if self.kind == MeasurementKind::Adf {
+                                    ui.selectable_value(
+                                        &mut self.encoding,
+                                        FileEncoding::Ascii,
+                                        "ascii",
+                                    );
+                                }
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Compression scheme: ");
+                                ui.selectable_value(
+                                    &mut self.compression,
+                                    CompressionScheme::None,
+                                    "none",
+                                );
+                                ui.selectable_value(
+                                    &mut self.compression,
+                                    CompressionScheme::Zlib,
+                                    "zlib",
+                                );
+                                ui.selectable_value(
+                                    &mut self.compression,
+                                    CompressionScheme::Gzip,
+                                    "gzip",
+                                );
+                            });
+                        }
+                        OutputFormat::Exr => {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Image resolution: ");
+                                ui.add(
+                                    egui::DragValue::new(&mut self.img_res).clamp_range(256..=2048),
+                                );
+                            });
+                        }
                     }
                 }
 
@@ -376,13 +394,29 @@ impl MeasurementDialog {
                                 MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
                                 MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
                             };
+                            let options = if self.write_to_file {
+                                match self.format {
+                                    OutputFormat::Vgmo => Some(OutputOptions {
+                                        dir: None,
+                                        format: OutputFileFormatOptions::Vgmo {
+                                            encoding: self.encoding,
+                                            compression: self.compression,
+                                        },
+                                    }),
+                                    OutputFormat::Exr => Some(OutputOptions {
+                                        dir: None,
+                                        format: OutputFileFormatOptions::Exr {
+                                            resolution: self.img_res,
+                                        },
+                                    }),
+                                }
+                            } else {
+                                None
+                            };
                             self.event_loop.send_event(VgonioEvent::Measure {
                                 params,
                                 surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                format: self.format,
-                                encoding: self.encoding,
-                                compression: self.compression,
-                                write_to_file: self.write_to_file,
+                                output_opts: options,
                             });
                         }
                     }

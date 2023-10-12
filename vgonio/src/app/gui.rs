@@ -72,6 +72,7 @@ use crate::{
         },
         Config,
     },
+    io::OutputOptions,
     measure::params::MeasurementParams,
 };
 
@@ -610,10 +611,7 @@ impl VgonioGuiApp {
                     Measure {
                         params,
                         surfaces,
-                        format,
-                        encoding,
-                        compression,
-                        write_to_file,
+                        output_opts,
                     } => {
                         let data = match params {
                             MeasurementParams::Adf(params) => self.cache.read(|cache| {
@@ -664,16 +662,13 @@ impl VgonioGuiApp {
                                 })
                             }
                         };
-                        if write_to_file {
+                        if let Some(opts @ OutputOptions { .. }) = output_opts {
                             crate::io::write_measured_data_to_file(
                                 &data,
                                 &surfaces,
                                 &self.cache,
                                 &self.config,
-                                format,
-                                encoding,
-                                compression,
-                                None,
+                                opts,
                             )
                             .map_err(|err| {
                                 log::error!("Failed to write measured data to file: {}", err);

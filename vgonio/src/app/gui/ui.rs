@@ -166,6 +166,7 @@ impl VgonioGui {
                             measured,
                             FileEncoding::Binary,
                             CompressionScheme::Zlib,
+                            Some(512),
                             hdl.inner(),
                         )
                         .map_err(|err| {
