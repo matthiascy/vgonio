@@ -1,17 +1,24 @@
 use exr::prelude::WritableImage;
 use std::path::Path;
-use vgcore::{error::VgonioError, math, units, units::Radians};
+use vgcore::{
+    error::VgonioError,
+    math,
+    math::Sph2,
+    units,
+    units::{rad, Radians},
+};
 use vgsurf::MicroSurface;
 // NOTE(yang): The number of bins is determined by the bin size and the range of
 // the azimuth and zenith angles. How do we decide the size of the bins (solid
 // angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
 use crate::{
     app::cache::{Handle, InnerCache},
-    error::RuntimeError::Image,
     measure::{
+        bsdf::receiver::{PartitionScheme, ReceiverParams},
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::AdfMeasurementParams,
     },
+    SphericalDomain,
 };
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -37,7 +44,6 @@ pub struct MeasuredAdfData {
 }
 
 impl MeasuredAdfData {
-    // TODO: configurable output width and height.
     /// Writes the measured data as an EXR file.
     pub fn write_as_exr(
         &self,
@@ -46,21 +52,69 @@ impl MeasuredAdfData {
         resolution: u32,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
-        // Generate equal angle partitioned hemisphere.
+        let (w, h) = (resolution as usize, resolution as usize);
+        let receiver = ReceiverParams {
+            domain: SphericalDomain::Upper,
+            precision: Sph2::new(self.params.zenith.step_size, self.params.azimuth.step_size),
+            scheme: PartitionScheme::EqualAngle,
+            retrieval_mode: Default::default(),
+        };
+        let partition = receiver.partitioning();
+        // Collect the data following the patches.
+        let n_theta = self.params.zenith.step_count();
+        let n_phi = self.params.azimuth.step_count_wrapped();
+        debug_assert_eq!(
+            n_theta * n_phi,
+            self.samples.len(),
+            "The number of samples does not match the number of patches."
+        );
+        let mut patch_data = vec![0.0; partition.num_patches()];
+        patch_data.iter_mut().enumerate().for_each(|(i_p, v)| {
+            let i_theta = i_p / n_phi;
+            let i_phi = i_p % n_phi;
+            let i_adf = i_phi * n_theta + i_theta;
+            *v = self.samples[i_adf];
+        });
+        let half_phi = self.params.azimuth.step_size * 0.5;
         // Calculate the patch index for each pixel.
-        // Write the data to the EXR file.
-        let width = self.params.azimuth.step_count_wrapped();
-        let height = self.params.zenith.step_count_wrapped();
-        let ndf = AnyChannel::new("NDF", FlatSamples::F32(self.samples.clone()));
+        let mut patch_indices = vec![0; w * h];
+        for i in 0..w {
+            // x, width, column
+            for j in 0..h {
+                // y, height, row
+                let x = ((2 * i) as f32 / w as f32 - 1.0) * std::f32::consts::SQRT_2; // Flip the y-axis to match the BSDF coordinate system.
+                let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
+                let r_disc = (x * x + y * y).sqrt();
+                let theta = 2.0 * (r_disc / 2.0).asin();
+                let phi = (rad!((y).atan2(x)) + half_phi).wrap_to_tau();
+                patch_indices[i + j * w] = match partition.contains(Sph2::new(rad!(theta), phi)) {
+                    None => -1,
+                    Some(idx) => idx as i32,
+                }
+            }
+        }
+        let mut samples = vec![0.0; w * h];
+        for i in 0..w {
+            for j in 0..h {
+                let idx = patch_indices[i + j * w];
+                if idx < 0 {
+                    continue;
+                }
+                samples[i + j * w] = patch_data[idx as usize];
+            }
+        }
         let layer = Layer::new(
-            (width, height),
+            (w, h),
             LayerAttributes {
                 layer_name: Some(Text::from("NDF")),
+                capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(
+                    timestamp,
+                )),
                 ..LayerAttributes::default()
             },
             Encoding::FAST_LOSSLESS,
             AnyChannels {
-                list: SmallVec::from_vec(vec![ndf]),
+                list: SmallVec::from_vec(vec![AnyChannel::new("NDF", FlatSamples::F32(samples))]),
             },
         );
         let image = Image::from_layer(layer);

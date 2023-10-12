@@ -61,7 +61,6 @@ pub struct MeasuredBsdfData {
     pub raw_snapshots: Option<Vec<BsdfSnapshotRaw<BounceAndEnergy>>>,
 }
 
-// TODO: Make the image size configurable.
 impl MeasuredBsdfData {
     /// Writes the BSDF data to images in exr format.
     ///
@@ -74,18 +73,19 @@ impl MeasuredBsdfData {
         resolution: u32,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
-        const WIDTH: usize = 512;
-        const HEIGHT: usize = 512;
+        let (w, h) = (resolution as usize, resolution as usize);
         let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
-        let mut bsdf_samples_per_wavelength = vec![vec![0.0; WIDTH * HEIGHT]; wavelengths.len()];
+        let mut bsdf_samples_per_wavelength = vec![vec![0.0; w * h]; wavelengths.len()];
         let patches = self.params.receiver.partitioning();
         // Pre-compute the patch index for each pixel.
-        let mut patch_indices = vec![0i32; WIDTH * HEIGHT];
-        for i in 0..WIDTH {
-            for j in 0..HEIGHT {
-                let x = ((2 * i) as f32 / WIDTH as f32 - 1.0) * std::f32::consts::SQRT_2;
+        let mut patch_indices = vec![0i32; w * h];
+        for i in 0..w {
+            // x, width, column
+            for j in 0..h {
+                // y, height, row
+                let x = ((2 * i) as f32 / w as f32 - 1.0) * std::f32::consts::SQRT_2;
                 // Flip the y-axis to match the BSDF coordinate system.
-                let y = -((2 * j) as f32 / HEIGHT as f32 - 1.0) * std::f32::consts::SQRT_2;
+                let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
                 let r_disc = (x * x + y * y).sqrt();
                 let theta = 2.0 * (r_disc / 2.0).asin();
                 let phi = {
@@ -96,11 +96,11 @@ impl MeasuredBsdfData {
                         phi
                     }
                 };
-                patch_indices[i + j * WIDTH] =
-                    match patches.contains(Sph2::new(rad!(theta), rad!(phi))) {
-                        None => -1,
-                        Some(idx) => idx as i32,
-                    }
+                patch_indices[i + j * w] = match patches.contains(Sph2::new(rad!(theta), rad!(phi)))
+                {
+                    None => -1,
+                    Some(idx) => idx as i32,
+                }
             }
         }
 
@@ -122,16 +122,16 @@ impl MeasuredBsdfData {
                     snapshot.w_i.theta.in_degrees().as_f32(),
                     snapshot.w_i.phi.in_degrees().as_f32()
                 ));
-                for i in 0..WIDTH {
-                    for j in 0..HEIGHT {
-                        let idx = patch_indices[i + j * WIDTH];
+                for i in 0..w {
+                    for j in 0..h {
+                        let idx = patch_indices[i + j * w];
                         if idx < 0 {
                             continue;
                         }
                         for (wavelength_idx, bsdf) in
                             bsdf_samples_per_wavelength.iter_mut().enumerate()
                         {
-                            bsdf[i + j * WIDTH] = snapshot.samples[idx as usize][wavelength_idx];
+                            bsdf[i + j * w] = snapshot.samples[idx as usize][wavelength_idx];
                         }
                     }
                 }
@@ -147,7 +147,7 @@ impl MeasuredBsdfData {
                     })
                     .collect::<Vec<_>>();
                 Layer::new(
-                    (WIDTH, HEIGHT),
+                    (w, h),
                     layer_attrib.clone(),
                     Encoding::FAST_LOSSLESS,
                     AnyChannels {
@@ -157,7 +157,7 @@ impl MeasuredBsdfData {
             })
             .collect::<Vec<_>>();
 
-        let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (WIDTH, HEIGHT)));
+        let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
         let image = Image::from_layers(img_attrib, layers);
         image.write().to_file(filepath).map_err(|err| {
             VgonioError::new(

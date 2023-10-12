@@ -104,7 +104,16 @@ impl SphericalPartition {
         for ring in self.rings.iter() {
             if ring.theta_inner <= sph.theta.as_f32() && sph.theta.as_f32() <= ring.theta_outer {
                 for (i, patch) in self.patches.iter().skip(ring.base_index).enumerate() {
-                    if patch.min.phi <= sph.phi && sph.phi <= patch.max.phi {
+                    // The patch starts at the minus phi.
+                    if patch.min.phi > patch.max.phi {
+                        if sph.phi >= Radians::ZERO
+                            && sph.phi <= patch.min.phi
+                            && sph.phi >= patch.max.phi
+                            && sph.phi <= Radians::TAU
+                        {
+                            return Some(ring.base_index + i);
+                        }
+                    } else if patch.min.phi <= sph.phi && sph.phi <= patch.max.phi {
                         return Some(ring.base_index + i);
                     }
                 }
@@ -216,7 +225,14 @@ impl ReceiverParams {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
             PartitionScheme::EqualAngle => {
-                todo!("Equal angle partitioning scheme is not implemented yet")
+                let num_rings = (Radians::HALF_PI / self.precision.theta).round() as usize + 1;
+                let num_patches_per_ring = RangeByStepSizeInclusive::new(
+                    Radians::ZERO,
+                    Radians::TWO_PI,
+                    self.precision.phi,
+                )
+                .step_count_wrapped();
+                num_rings * num_patches_per_ring
             }
         };
         if self.domain == SphericalDomain::Whole {
@@ -277,6 +293,7 @@ impl ReceiverParams {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
             PartitionScheme::EqualAngle => {
+                // Put the measurement point at the center of the angle intervals.
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as usize + 1;
                 let num_patches_per_ring = RangeByStepSizeInclusive::new(
                     Radians::ZERO,
@@ -286,11 +303,12 @@ impl ReceiverParams {
                 .step_count_wrapped();
                 let mut rings = Vec::with_capacity(num_rings);
                 let mut patches = Vec::with_capacity(num_rings * num_patches_per_ring);
+                let half_theta = self.precision.theta * 0.5;
                 for i in 0..num_rings {
-                    let theta_min = (i as f32 * self.precision.theta - self.precision.theta / 2.0)
-                        .max(Radians::ZERO);
-                    let theta_max = (i as f32 * self.precision.theta + self.precision.theta / 2.0)
-                        .min(Radians::HALF_PI);
+                    let theta_min =
+                        (i as f32 * self.precision.theta - half_theta).max(Radians::ZERO);
+                    let theta_max =
+                        (i as f32 * self.precision.theta + half_theta).min(Radians::HALF_PI);
                     for j in 0..num_patches_per_ring {
                         let phi_min = j as f32 * self.precision.phi;
                         let phi_max = phi_min + self.precision.phi;

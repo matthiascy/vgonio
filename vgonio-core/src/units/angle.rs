@@ -193,6 +193,17 @@ impl<A: AngleUnit> Angle<A> {
     /// Wraps the angle to the range `[0, 2*PI)`.
     pub fn wrap_to_tau(self) -> Self { Self::new((self.value % A::TAU + A::TAU) % A::TAU) }
 
+    /// Wraps the angle to the range `[-PI, PI)`.
+    pub fn wrap_to_pi(self) -> Self {
+        let mut value = self.value % A::TAU;
+        if value < -A::PI {
+            value += A::TAU;
+        } else if value >= A::PI {
+            value -= A::TAU;
+        }
+        Self::new(value)
+    }
+
     /// Returns the opposite angle; i.e. the angle that is formed by the same
     /// initial and terminal sides but lies in the opposite direction.
     /// The result is always wrapped to the range [0, 2PI).
@@ -550,6 +561,15 @@ mod angle_unit_tests {
 
         let e = Radians::PI * -0.5;
         assert!(ulp_eq(e.wrap_to_tau().value, (Radians::PI * 1.5).value));
+
+        let e = Radians::PI * 0.8;
+        assert!(ulp_eq(e.wrap_to_pi().value, e.value));
+
+        let e = Radians::PI * 1.5;
+        assert!(ulp_eq(e.wrap_to_pi().value, (Radians::PI * -0.5).value));
+
+        let e = Radians::PI * -1.5;
+        assert!(ulp_eq(e.wrap_to_pi().value, (Radians::PI * 0.5).value));
     }
 
     #[test]
