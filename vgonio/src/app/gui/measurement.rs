@@ -89,6 +89,7 @@ impl ReceiverParams {
                                 "Full Data",
                             );
                         });
+                        ui.end_row();
 
                         add_contents(self, ui);
                     });

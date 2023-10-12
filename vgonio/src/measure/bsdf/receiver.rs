@@ -10,7 +10,7 @@ use crate::{
         params::BsdfMeasurementParams,
     },
     optics::{fresnel, ior::RefractiveIndex},
-    SphericalDomain,
+    RangeByStepSizeInclusive, SphericalDomain,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -242,9 +242,9 @@ impl ReceiverParams {
     /// used to collect the data. The patches are generated in the order of
     /// the azimuth angle first, then the zenith angle.
     pub fn partitioning(&self) -> SphericalPartition {
-        match self.scheme {
+        // Generate the rings and the patches for the upper hemisphere.
+        let (mut rings, mut patches) = match self.scheme {
             PartitionScheme::Beckers => {
-                // Generate the rings and the patches for the upper hemisphere.
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 let rs = beckers::compute_rs(&ks, num_rings, f32::sqrt(2.0));
@@ -271,39 +271,67 @@ impl ReceiverParams {
                         patches.push(Patch::new(t_prev.into(), rad!(*t), phi_min, phi_max));
                     }
                 }
-
-                /// Mirror the patches of the upper hemisphere to the lower
-                /// hemisphere.
-                if self.domain.is_lower_hemisphere() {
-                    Self::mirror_patches_and_rings_to_lower_hemisphere(&mut patches, &mut rings);
-                }
-
-                /// Append the patches of the lower hemisphere to the upper
-                /// hemisphere.
-                if self.domain.is_full_sphere() {
-                    let mut patches_lower = patches.clone();
-                    let mut rings_lower = rings.clone();
-                    Self::mirror_patches_and_rings_to_lower_hemisphere(
-                        &mut patches_lower,
-                        &mut rings_lower,
-                    );
-                    patches.extend(patches_lower);
-                    rings.extend(rings_lower);
-                }
-
-                SphericalPartition {
-                    scheme: PartitionScheme::Beckers,
-                    domain: self.domain,
-                    rings,
-                    patches,
-                }
+                (rings, patches)
             }
             PartitionScheme::Tregenza => {
                 todo!("Tregenza partitioning scheme is not implemented yet")
             }
             PartitionScheme::EqualAngle => {
-                todo!("Equal angle partitioning scheme is not implemented yet")
+                let num_rings = (Radians::HALF_PI / self.precision.theta).round() as usize + 1;
+                let num_patches_per_ring = RangeByStepSizeInclusive::new(
+                    Radians::ZERO,
+                    Radians::TWO_PI,
+                    self.precision.phi,
+                )
+                .step_count_wrapped();
+                let mut rings = Vec::with_capacity(num_rings);
+                let mut patches = Vec::with_capacity(num_rings * num_patches_per_ring);
+                for i in 0..num_rings {
+                    let theta_min = (i as f32 * self.precision.theta - self.precision.theta / 2.0)
+                        .max(Radians::ZERO);
+                    let theta_max = (i as f32 * self.precision.theta + self.precision.theta / 2.0)
+                        .min(Radians::HALF_PI);
+                    for j in 0..num_patches_per_ring {
+                        let phi_min = j as f32 * self.precision.phi;
+                        let phi_max = phi_min + self.precision.phi;
+                        patches.push(Patch::new(theta_min, theta_max, phi_min, phi_max));
+                    }
+                    rings.push(Ring {
+                        theta_inner: theta_min.as_f32(),
+                        theta_outer: theta_max.as_f32(),
+                        phi_step: self.precision.phi.as_f32(),
+                        patch_count: num_patches_per_ring,
+                        base_index: i * num_patches_per_ring,
+                    });
+                }
+                (rings, patches)
             }
+        };
+
+        /// Mirror the patches of the upper hemisphere to the lower
+        /// hemisphere.
+        if self.domain.is_lower_hemisphere() {
+            Self::mirror_patches_and_rings_to_lower_hemisphere(&mut patches, &mut rings);
+        }
+
+        /// Append the patches of the lower hemisphere to the upper
+        /// hemisphere.
+        if self.domain.is_full_sphere() {
+            let mut patches_lower = patches.clone();
+            let mut rings_lower = rings.clone();
+            Self::mirror_patches_and_rings_to_lower_hemisphere(
+                &mut patches_lower,
+                &mut rings_lower,
+            );
+            patches.extend(patches_lower);
+            rings.extend(rings_lower);
+        }
+
+        SphericalPartition {
+            scheme: self.scheme,
+            domain: self.domain,
+            rings,
+            patches,
         }
     }
 
@@ -314,12 +342,12 @@ impl ReceiverParams {
         rings: &mut Vec<Ring>,
     ) {
         for ring in rings.iter_mut() {
-            ring.theta_inner = std::f32::consts::FRAC_PI_2 - ring.theta_inner;
-            ring.theta_outer = std::f32::consts::FRAC_PI_2 - ring.theta_outer;
+            ring.theta_inner = std::f32::consts::PI - ring.theta_inner;
+            ring.theta_outer = std::f32::consts::PI - ring.theta_outer;
         }
         for patch in patches.iter_mut() {
-            patch.min.theta = Radians::HALF_PI - patch.min.theta;
-            patch.max.theta = Radians::HALF_PI - patch.max.theta;
+            patch.min.theta = Radians::PI - patch.min.theta;
+            patch.max.theta = Radians::PI - patch.max.theta;
         }
     }
 }
