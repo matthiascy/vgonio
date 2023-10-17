@@ -45,6 +45,8 @@ pub enum MicrofacetDistributionFittingMethod {
 ///
 /// The fitting procedure is based on the Levenberg-Marquardt algorithm.
 pub struct MicrofacetDistributionFittingProblem<'a> {
+    /// Scaling factor for the measured data.
+    scale: f32,
     /// The measured data to fit to.
     measured: MeasuredMdfData<'a>,
     /// The target model.
@@ -55,6 +57,7 @@ impl<'a> Display for MicrofacetDistributionFittingProblem<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MDF-ADF-FittingProblem")
             .field("target", &self.target)
+            .field("scale", &self.scale)
             .finish()
     }
 }
@@ -69,8 +72,10 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
     pub fn new_adf_fitting(
         measured: &'a MeasuredAdfData,
         target: MicrofacetDistributionModelKind,
+        scale: f32,
     ) -> Self {
         Self {
+            scale,
             measured: MeasuredMdfData::Adf(Cow::Borrowed(measured)),
             target,
         }
@@ -85,8 +90,10 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
     pub fn new_msf_fitting(
         measured: &'a MeasuredMsfData,
         target: MicrofacetDistributionModelKind,
+        scale: f32,
     ) -> Self {
         Self {
+            scale,
             measured: MeasuredMdfData::Msf(Cow::Borrowed(measured)),
             target,
         }
@@ -97,6 +104,7 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
         measured: MeasuredMdfData<'a>,
         method: MicrofacetDistributionFittingMethod,
         target: MicrofacetDistributionModelKind,
+        scale: f32,
     ) -> Self {
         debug_assert_matches!(
             (method, &measured),
@@ -109,7 +117,11 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
             ),
             "The fitting method and the measured data must match."
         );
-        Self { measured, target }
+        Self {
+            scale,
+            measured,
+            target,
+        }
     }
 }
 
@@ -134,6 +146,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                 model.alpha_y()
                             );
                             let problem = AreaDistributionFittingProblemProxy {
+                                scale: self.scale,
                                 measured: measured.as_ref(),
                                 model,
                             };
@@ -191,6 +204,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
 
 /// Proxy for the ADF fitting problem.
 struct AreaDistributionFittingProblemProxy<'a> {
+    scale: f32,
     measured: &'a MeasuredAdfData,
     model: Box<dyn MicrofacetDistributionFittingModel>,
 }
@@ -286,7 +300,8 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
             let theta = self.measured.params.zenith.step(theta_idx);
             let phi_idx = idx / theta_step_count;
             let phi = self.measured.params.azimuth.step(phi_idx);
-            self.model.eval_adf(theta.cos() as f64, phi.cos() as f64) * 0.25 - *meas as f64
+            self.model.eval_adf(theta.cos() as f64, phi.cos() as f64)
+                - *meas as f64 * self.scale as f64
         });
         Some(OMatrix::<f64, Dyn, U1>::from_iterator(
             residuals.len(),

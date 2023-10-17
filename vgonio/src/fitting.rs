@@ -29,8 +29,9 @@ pub enum FittingProblemKind {
 pub enum FittedModel {
     /// Bidirectional scattering distribution function.
     Bsdf(),
-    /// Microfacet area distribution function.
-    Adf(Box<dyn MicrofacetDistributionModel>),
+    /// Microfacet area distribution function with the scaling factor applied to
+    /// the measured data.
+    Adf(Box<dyn MicrofacetDistributionModel>, f32),
     /// Microfacet Masking-shadowing function.
     Msf(Box<dyn MicrofacetDistributionModel>),
 }
@@ -40,7 +41,7 @@ impl FittedModel {
     pub fn isotropy(&self) -> Isotropy {
         match self {
             FittedModel::Bsdf() => Isotropy::Isotropic, // TODO: implement
-            FittedModel::Msf(model) | FittedModel::Adf(model) => model.isotropy(),
+            FittedModel::Msf(model) | FittedModel::Adf(model, _) => model.isotropy(),
         }
     }
 
@@ -52,10 +53,17 @@ impl FittedModel {
                 model: model.kind(),
                 method: MicrofacetDistributionFittingMethod::Msf,
             },
-            FittedModel::Adf(model) => FittingProblemKind::Mdf {
+            FittedModel::Adf(model, _) => FittingProblemKind::Mdf {
                 model: model.kind(),
                 method: MicrofacetDistributionFittingMethod::Adf,
             },
+        }
+    }
+
+    pub fn scale(&self) -> Option<f32> {
+        match self {
+            FittedModel::Adf(_, scale) => Some(*scale),
+            _ => None,
         }
     }
 }
@@ -67,8 +75,10 @@ pub struct FittedModels(Vec<FittedModel>);
 impl FittedModels {
     /// Checks if the collection already contains a model with the same kind and
     /// isotropy.
-    pub fn contains(&self, kind: &FittingProblemKind) -> bool {
-        self.0.iter().any(|f| f.kind() == *kind)
+    pub fn contains(&self, kind: &FittingProblemKind, scale: Option<f32>) -> bool {
+        self.0
+            .iter()
+            .any(|f| f.kind() == *kind && f.scale() == scale)
     }
 
     /// Push a new model to the collection.

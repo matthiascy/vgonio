@@ -1098,7 +1098,7 @@ impl PlottingWidget for PlotInspector {
                                             .collect::<Vec<_>>(),
                                     )
                                     .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                    .name(format!("Measured - ADF (x {})", scale)),
+                                    .name(format!("Measured - ADF (x {:.4})", scale)),
                                 );
                                 plot_ui.line(
                                     Line::new(
@@ -1117,7 +1117,9 @@ impl PlottingWidget for PlotInspector {
                                     .downcast_ref::<AreaDistributionExtra>()
                                     .unwrap();
                                 {
-                                    for (i, (model, curves)) in extra.fitted.iter().enumerate() {
+                                    for (i, (model, scale, curves)) in
+                                        extra.fitted.iter().enumerate()
+                                    {
                                         plot_ui.line(
                                             Line::new(
                                                 curves[extra.current_azimuth_idx()].points.clone(),
@@ -1126,7 +1128,13 @@ impl PlottingWidget for PlotInspector {
                                                 2.0,
                                                 LINE_COLORS[(i + 2) % LINE_COLORS.len()],
                                             ))
-                                            .name(model.kind().to_str()),
+                                            .name(
+                                                format!(
+                                                    "{} (x {:.4})",
+                                                    model.kind().to_str(),
+                                                    scale
+                                                ),
+                                            ),
                                         )
                                     }
                                     color_idx_base += extra.fitted.len() + 1;

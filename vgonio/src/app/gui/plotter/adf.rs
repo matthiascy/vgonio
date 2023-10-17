@@ -61,6 +61,7 @@ pub struct AreaDistributionExtra {
     /// The fitted curves together with the fitted model.
     pub fitted: Vec<(
         Box<dyn MicrofacetDistributionModel>,
+        f32,
         Vec<Curve>, // Only one curve for isotropic model, otherwise one for each azimuthal angle.
     )>,
     /// Selected model to fit the data.
@@ -127,6 +128,22 @@ impl VariantData for AreaDistributionExtra {
     fn scale_factor(&self) -> f32 { self.scale_factor }
 
     fn update_fitted_curves(&mut self, models: &[FittedModel]) {
+        let to_add = models
+            .iter()
+            .filter(|fitted_model| match fitted_model {
+                FittedModel::Bsdf() | FittedModel::Msf(_) => todo!("Not implemented yet!"),
+                FittedModel::Adf(model, scale) => {
+                    !self.fitted.iter().any(|(existing, existing_scale, _)| {
+                        model.kind() == existing.kind() && *scale == *existing_scale
+                    })
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if to_add.is_empty() {
+            return;
+        }
+
         let theta_values = self
             .zenith_range
             .values_rev()
@@ -142,24 +159,10 @@ impl VariantData for AreaDistributionExtra {
                 (opposite.as_f64(), phi.as_f64())
             })
             .collect::<Vec<_>>();
-        let to_add = models
-            .iter()
-            .filter(|fitted_model| match fitted_model {
-                FittedModel::Bsdf() | FittedModel::Msf(_) => todo!("Not implemented yet!"),
-                FittedModel::Adf(model) => !self
-                    .fitted
-                    .iter()
-                    .any(|(existing, _)| model.kind() == existing.kind()),
-            })
-            .collect::<Vec<_>>();
-
-        if to_add.is_empty() {
-            return;
-        }
 
         for fitted in to_add {
             match fitted {
-                FittedModel::Adf(model) => {
+                FittedModel::Adf(model, scale) => {
                     // Generate the curve for this model.
                     let curves = phi_values
                         .iter()
@@ -176,7 +179,7 @@ impl VariantData for AreaDistributionExtra {
                             Curve::from(points)
                         })
                         .collect();
-                    self.fitted.push((model.clone_box(), curves));
+                    self.fitted.push((model.clone_box(), *scale, curves));
                 }
                 _ => {
                     unreachable!("Wrong model type for area distribution!")
@@ -259,7 +262,7 @@ impl VariantData for AreaDistributionExtra {
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .button(
-                            egui::WidgetText::RichText(egui::RichText::from("Fit"))
+                            egui::WidgetText::RichText(egui::RichText::from("Fit with scale"))
                                 .text_style(egui::TextStyle::Monospace),
                         )
                         .clicked()
@@ -270,6 +273,7 @@ impl VariantData for AreaDistributionExtra {
                                 method: MicrofacetDistributionFittingMethod::Adf,
                             },
                             data,
+                            scale: self.scale_factor,
                         });
                     }
                 });
@@ -278,16 +282,17 @@ impl VariantData for AreaDistributionExtra {
                 if self.fitted.is_empty() {
                     ui.label("None");
                 } else {
-                    for (model, _) in &self.fitted {
+                    for (model, scale, _) in &self.fitted {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
                                 egui::RichText::from(model.kind().to_str())
                                     .text_style(egui::TextStyle::Monospace),
                             );
                             ui.label(egui::RichText::from(format!(
-                                "αx = {:.4}, αy = {:.4}",
+                                "αx = {:.4}, αy = {:.4}, scale = {:.4}",
                                 model.alpha_x(),
-                                model.alpha_y()
+                                model.alpha_y(),
+                                scale
                             )));
                         });
                     }

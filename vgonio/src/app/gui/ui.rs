@@ -227,7 +227,7 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            VgonioEvent::Fitting { kind, data } => {
+            VgonioEvent::Fitting { kind, data, scale } => {
                 match kind {
                     FittingProblemKind::Bsdf() => {
                         todo!("Fitting BSDF")
@@ -236,7 +236,7 @@ impl VgonioGui {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
                         log::debug!("Fitting MDF with {:?}", model);
-                        if fitted.contains(kind) {
+                        if fitted.contains(kind, Some(*scale)) {
                             log::debug!("Already fitted, skipping");
                             return EventResponse::Handled;
                         }
@@ -260,12 +260,13 @@ impl VgonioGui {
                                     ))
                                 }
                             };
-                            let problem =
-                                MicrofacetDistributionFittingProblem::new(data, *method, *model);
+                            let problem = MicrofacetDistributionFittingProblem::new(
+                                data, *method, *model, *scale,
+                            );
                             problem.lsq_lm_fit()
                         });
                         report.log_fitting_report();
-                        fitted.push(FittedModel::Adf(report.best_model().clone_box()));
+                        fitted.push(FittedModel::Adf(report.best_model().clone_box(), *scale));
                     }
                 }
                 EventResponse::Handled

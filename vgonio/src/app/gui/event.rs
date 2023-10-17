@@ -88,6 +88,7 @@ pub enum VgonioEvent {
     Fitting {
         kind: FittingProblemKind,
         data: Handle<MeasurementData>,
+        scale: f32,
     },
 }
 
