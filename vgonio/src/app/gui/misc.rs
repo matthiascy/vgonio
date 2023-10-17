@@ -2,18 +2,6 @@ use egui::DragValue;
 
 use crate::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
 
-// impl<T: Numeric> RangeByStepSizeInclusive<T> {
-//     /// Creates the UI for the range.
-//     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
-//         ui.horizontal(|ui| {
-//             ui.add(egui::DragValue::new(&mut self.start).prefix("start: "));
-//             ui.add(egui::DragValue::new(&mut self.stop).prefix("stop: "));
-//             ui.add(egui::DragValue::new(&mut self.step_size).prefix("step:
-// "));         })
-//         .response
-//     }
-// }
-
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
     DragValue::new(angle.value_mut())
         .prefix(prefix)
@@ -143,16 +131,16 @@ pub fn input3_xyz(value: &mut Vec3) -> impl egui::Widget + '_ {
 pub fn input3_spherical(value: &mut Vec3) -> impl egui::Widget + '_ {
     move |ui: &mut egui::Ui| {
         ui.horizontal(|ui| {
-            ui.add(egui::DragValue::new(&mut value.x).prefix("r: "));
+            ui.add(DragValue::new(&mut value.x).prefix("r: "));
             ui.add(
-                egui::DragValue::new(&mut value.y)
+                DragValue::new(&mut value.y)
                     .prefix("θ: ")
                     .suffix("°")
                     .clamp_range(0.0..=90.0)
                     .speed(0.01),
             );
             ui.add(
-                egui::DragValue::new(&mut value.z)
+                DragValue::new(&mut value.z)
                     .prefix("φ: ")
                     .suffix("°")
                     .clamp_range(0.0..=360.0)
