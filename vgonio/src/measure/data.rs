@@ -9,7 +9,7 @@ use crate::{
     io::{vgmo::VgmoHeaderExt, OutputFileFormatOptions, OutputOptions},
     measure::{
         bsdf::MeasuredBsdfData,
-        microfacet::{MeasuredAdfData, MeasuredMsfData},
+        microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
         params::MeasurementKind,
     },
     RangeByStepSizeInclusive,
@@ -68,6 +68,8 @@ pub enum MeasuredData {
     Adf(MeasuredAdfData),
     /// Shadowing-masking function.
     Msf(MeasuredMsfData),
+    /// Microfacet slope distribution function.
+    Sdf(MeasuredSdfData),
 }
 
 impl MeasuredData {
@@ -77,6 +79,7 @@ impl MeasuredData {
             MeasuredData::Bsdf(_) => MeasurementKind::Bsdf,
             MeasuredData::Adf(_) => MeasurementKind::Adf,
             MeasuredData::Msf(_) => MeasurementKind::Msf,
+            MeasuredData::Sdf(_) => MeasurementKind::Sdf,
         }
     }
 
@@ -92,6 +95,14 @@ impl MeasuredData {
     pub fn adf(&self) -> Option<&MeasuredAdfData> {
         match self {
             MeasuredData::Adf(adf) => Some(adf),
+            _ => None,
+        }
+    }
+
+    /// Returns the SDF data.
+    pub fn sdf(&self) -> Option<&MeasuredSdfData> {
+        match self {
+            MeasuredData::Sdf(sdf) => Some(sdf),
             _ => None,
         }
     }
@@ -358,6 +369,9 @@ impl MeasurementData {
                     }
                     MeasuredData::Msf(msf) => {
                         eprintln!("Writing MSF to EXR is not supported yet.");
+                    }
+                    MeasuredData::Sdf(_) => {
+                        eprintln!("Writing SDF to EXR is not supported yet.");
                     }
                 }
             }

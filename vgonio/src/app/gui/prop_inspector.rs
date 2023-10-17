@@ -247,6 +247,7 @@ impl PropertyInspector {
                                             }
                                         }
                                         MeasuredData::Bsdf(_) => {}
+                                        MeasuredData::Sdf(_) => {}
                                     }
                                 })
                             });

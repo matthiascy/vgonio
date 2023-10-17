@@ -661,6 +661,9 @@ impl VgonioGuiApp {
                                     )
                                 })
                             }
+                            MeasurementParams::Sdf => self.cache.read(|cache| {
+                                measure::microfacet::measure_slope_distribution(&surfaces, cache)
+                            }),
                         };
                         if let Some(opts @ OutputOptions { .. }) = output_opts {
                             crate::io::write_measured_data_to_file(

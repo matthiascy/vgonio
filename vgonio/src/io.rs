@@ -137,6 +137,7 @@ pub mod vgmo {
         Bsdf { params: BsdfMeasurementParams },
         Adf { params: AdfMeasurementParams },
         Msf { params: MsfMeasurementParams },
+        Sdf,
     }
 
     impl MeasuredData {
@@ -144,11 +145,12 @@ pub mod vgmo {
         /// measurement data.
         pub fn as_vgmo_header_ext(&self) -> VgmoHeaderExt {
             match self {
-                Self::Bsdf(bsdf) => VgmoHeaderExt::Bsdf {
+                MeasuredData::Bsdf(bsdf) => VgmoHeaderExt::Bsdf {
                     params: bsdf.params,
                 },
-                Self::Adf(adf) => VgmoHeaderExt::Adf { params: adf.params },
-                Self::Msf(msf) => VgmoHeaderExt::Msf { params: msf.params },
+                MeasuredData::Adf(adf) => VgmoHeaderExt::Adf { params: adf.params },
+                MeasuredData::Msf(msf) => VgmoHeaderExt::Msf { params: msf.params },
+                MeasuredData::Sdf(_) => VgmoHeaderExt::Sdf,
             }
         }
     }
@@ -192,6 +194,7 @@ pub mod vgmo {
                         writer.write_all(&[MeasurementKind::Bsdf as u8])?;
                         params.write_to_vgmo(version, writer)?;
                     }
+                    VgmoHeaderExt::Sdf => {}
                 },
                 _ => {
                     log::error!("Unsupported VGMO version: {}", version.as_string());
@@ -229,6 +232,9 @@ pub mod vgmo {
                             strict: true,
                         },
                     })
+                }
+                MeasurementKind::Sdf => {
+                    todo!("SDF is not supported yet")
                 }
             }
         }
@@ -281,6 +287,9 @@ pub mod vgmo {
                 .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
             }
+            VgmoHeaderExt::Sdf => {
+                todo!("SDF is not supported yet")
+            }
         }
     }
 
@@ -316,6 +325,9 @@ pub mod vgmo {
             }
             MeasuredData::Bsdf(bsdf) => {
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
+            }
+            MeasuredData::Sdf(_) => {
+                todo!("SDF is not supported yet")
             }
         }
 

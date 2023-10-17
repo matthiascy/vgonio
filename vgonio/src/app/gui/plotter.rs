@@ -1244,6 +1244,7 @@ impl PlottingWidget for PlotInspector {
                         }
                     }
                 }
+                MeasurementKind::Sdf => {}
             }
         }
     }

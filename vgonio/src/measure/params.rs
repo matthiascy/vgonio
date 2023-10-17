@@ -24,6 +24,9 @@ pub enum MeasurementParams {
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
     Msf(MsfMeasurementParams),
+    /// Measure the micro-facet slope distribution function.
+    #[serde(alias = "microfacet-slope-distribution-function")]
+    Sdf,
 }
 
 impl MeasurementParams {
@@ -33,6 +36,7 @@ impl MeasurementParams {
             Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
             Self::Adf(mfd) => Ok(Self::Adf(mfd.validate()?)),
             Self::Msf(mfs) => Ok(Self::Msf(mfs.validate()?)),
+            MeasurementParams::Sdf => Ok(MeasurementParams::Sdf),
         }
     }
 
@@ -99,6 +103,8 @@ pub enum MeasurementKind {
     Adf = 0x01,
     /// Microfacet Masking-shadowing function measurement.
     Msf = 0x02,
+    /// Microfacet slope distribution function measurement.
+    Sdf = 0x03,
 }
 
 impl Display for MeasurementKind {
@@ -113,6 +119,9 @@ impl Display for MeasurementKind {
             MeasurementKind::Msf => {
                 write!(f, "MSF")
             }
+            MeasurementKind::Sdf => {
+                write!(f, "SDF")
+            }
         }
     }
 }
@@ -123,6 +132,7 @@ impl From<u8> for MeasurementKind {
             0x00 => Self::Bsdf,
             0x01 => Self::Adf,
             0x02 => Self::Msf,
+            0x03 => Self::Sdf,
             _ => panic!("Invalid measurement kind! {}", value),
         }
     }
@@ -136,6 +146,7 @@ impl MeasurementKind {
             MeasurementKind::Bsdf => "bsdf",
             MeasurementKind::Adf => "adf",
             MeasurementKind::Msf => "msf",
+            MeasurementKind::Sdf => "sdf",
         }
     }
 }
@@ -240,6 +251,7 @@ impl Measurement {
             MeasurementParams::Bsdf { .. } => "BSDF measurement",
             MeasurementParams::Adf { .. } => "microfacet-distribution measurement",
             MeasurementParams::Msf { .. } => "micro-surface-shadow-masking measurement",
+            MeasurementParams::Sdf => "microfacet-slope-distribution measurement",
         }
     }
 }

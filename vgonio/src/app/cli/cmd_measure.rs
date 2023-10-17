@@ -199,6 +199,15 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     measure::microfacet::measure_masking_shadowing(measurement, &surfaces, cache)
                 })
             }
+            MeasurementParams::Sdf => {
+                println!(
+                    "  {}>{} Measuring slope distribution function...",
+                    ansi::BRIGHT_YELLOW,
+                    ansi::RESET
+                );
+                cache
+                    .read(|cache| measure::microfacet::measure_slope_distribution(&surfaces, cache))
+            }
         };
 
         println!(

@@ -218,6 +218,9 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
+                        MeasurementKind::Sdf => {
+                            todo!("Plotting SDF is not implemented yet")
+                        }
                     };
                     if *independent {
                         self.plotters.push((true, plotter));

@@ -1,6 +1,7 @@
 mod bsdf;
 mod madf;
 mod mmsf;
+mod msdf;
 
 use crate::{
     app::{
@@ -10,6 +11,7 @@ use crate::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
                 bsdf::BsdfMeasurementTab, madf::AdfMeasurementTab, mmsf::MsfMeasurementTab,
+                msdf::SdfMeasurementTab,
             },
             misc,
             notify::NotifyKind,
@@ -106,6 +108,7 @@ impl MeasurementKind {
             ui.selectable_value(self, MeasurementKind::Bsdf, "BSDF");
             ui.selectable_value(self, MeasurementKind::Adf, "ADF");
             ui.selectable_value(self, MeasurementKind::Msf, "MSF");
+            ui.selectable_value(self, MeasurementKind::Sdf, "SDF");
         });
     }
 }
@@ -116,6 +119,7 @@ pub struct MeasurementDialog {
     tab_bsdf: BsdfMeasurementTab,
     tab_adf: AdfMeasurementTab,
     tab_msf: MsfMeasurementTab,
+    tab_sdf: SdfMeasurementTab,
     /// Whether the dialog is open.
     is_open: bool,
     /// Output format of the measurement.
@@ -147,6 +151,7 @@ impl MeasurementDialog {
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: AdfMeasurementTab::new(event_loop.clone()),
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
+            tab_sdf: SdfMeasurementTab,
             is_open: false,
             format: OutputFormat::Vgmo,
             img_res: 512,
@@ -310,6 +315,9 @@ impl MeasurementDialog {
                     }
                     MeasurementKind::Adf => self.tab_adf.ui(ui),
                     MeasurementKind::Msf => self.tab_msf.ui(ui),
+                    MeasurementKind::Sdf => {
+                        self.tab_sdf.ui(ui);
+                    }
                 }
                 ui.separator();
 
@@ -393,6 +401,7 @@ impl MeasurementDialog {
                                 }
                                 MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
                                 MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
+                                MeasurementKind::Sdf => MeasurementParams::Sdf,
                             };
                             let options = if self.write_to_file {
                                 match self.format {
