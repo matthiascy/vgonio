@@ -15,37 +15,25 @@ use crate::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
 // }
 
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
-    let display_factor = A::FACTOR_TO_DEG;
-    let storage_factor = A::FACTOR_FROM_DEG;
     DragValue::new(angle.value_mut())
         .prefix(prefix)
-        .custom_formatter(move |val, _| format!("{:.2}°", val as f32 * display_factor))
+        .custom_formatter(move |val, _| format!("{:6.2}°", val as f32 * A::FACTOR_TO_DEG))
         .custom_parser(move |val_str| {
             let val = val_str.parse::<f64>().unwrap_or(0.0);
-            Some((val * storage_factor as f64) % A::TAU as f64)
+            Some((val * A::FACTOR_FROM_DEG as f64) % A::TAU as f64)
         })
-        .speed(storage_factor as f64)
-}
-
-#[allow(dead_code)]
-fn drag_length<'a, L: LengthMeasurement>(length: &'a mut Length<L>, prefix: &str) -> DragValue<'a> {
-    DragValue::new(length.value_mut())
-        .prefix(prefix)
-        .custom_formatter(move |val, _| format!("{:.2}m", val))
-        .custom_parser(move |val_str| {
-            let val = val_str.parse::<f64>().unwrap_or(0.0);
-            Some(val)
-        })
-        .speed(0.1)
+        .speed(A::FACTOR_FROM_DEG as f64)
 }
 
 impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// Creates the UI for the range.
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
-            ui.add(drag_angle(&mut self.start, "start: "));
-            ui.add(drag_angle(&mut self.stop, "stop: "));
-            ui.add(drag_angle(&mut self.step_size, "step: "));
+            ui.add(drag_angle(&mut self.start, ""));
+            ui.label("..=");
+            ui.add(drag_angle(&mut self.stop, ""));
+            ui.label("per");
+            ui.add(drag_angle(&mut self.step_size, ""));
         })
         .response
     }
@@ -67,21 +55,11 @@ impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
     /// Creates the UI for the range.
     pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
-            ui.add(
-                egui::DragValue::new(self.start.value_mut())
-                    .prefix("start: ")
-                    .suffix(L::SYMBOL),
-            );
-            ui.add(
-                egui::DragValue::new(self.stop.value_mut())
-                    .prefix("stop: ")
-                    .suffix(L::SYMBOL),
-            );
-            ui.add(
-                egui::DragValue::new(self.step_size.value_mut())
-                    .prefix("step: ")
-                    .suffix(L::SYMBOL),
-            );
+            ui.add(DragValue::new(self.start.value_mut()).suffix(L::SYMBOL));
+            ui.label("..=");
+            ui.add(DragValue::new(self.stop.value_mut()).suffix(L::SYMBOL));
+            ui.label("per");
+            ui.add(DragValue::new(self.step_size.value_mut()).suffix(L::SYMBOL));
         })
         .response
     }
