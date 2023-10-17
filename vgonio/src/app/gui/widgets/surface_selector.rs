@@ -92,11 +92,12 @@ impl SurfaceSelector {
     /// Ui for the surface selector.
     pub fn ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
         let mut to_be_added: Option<Handle<MicroSurface>> = None;
-        ui.columns(1, |uis| {
-            let ui = &mut uis[0];
-            let selected = self.selected.clone();
-            for hdl in selected.into_iter() {
-                ui.horizontal_wrapped(|ui| {
+        egui::Grid::new("surface_selector_grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                let selected = self.selected.clone();
+                for hdl in selected.into_iter() {
+                    ui.label(self.surfaces.get(&hdl).unwrap());
                     if ui
                         .add(
                             egui::Button::new("\u{2716}")
@@ -107,10 +108,8 @@ impl SurfaceSelector {
                     {
                         self.selected.remove(&hdl);
                     }
-                    ui.label(self.surfaces.get(&hdl).unwrap());
-                });
-            }
-            ui.horizontal_wrapped(|ui| {
+                    ui.end_row();
+                }
                 egui::ComboBox::from_id_source(id_source)
                     .selected_text("Select micro-surface")
                     .show_ui(ui, |ui| {
@@ -129,7 +128,7 @@ impl SurfaceSelector {
                 if ui.button("Clear").clicked() {
                     self.selected.clear();
                 }
+                ui.end_row();
             });
-        });
     }
 }
