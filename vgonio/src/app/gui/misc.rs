@@ -31,7 +31,23 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
         ui.horizontal(|ui| {
             ui.add(drag_angle(&mut self.start, ""));
             ui.label("..=");
-            ui.add(drag_angle(&mut self.stop, ""));
+            let start_val = self.start.value() as f64;
+            ui.add(
+                DragValue::new(self.stop.value_mut())
+                    .custom_formatter(move |val, _| {
+                        format!("{:6.2}°", val as f32 * A::FACTOR_TO_DEG)
+                    })
+                    .custom_parser(move |val_str| {
+                        let val = val_str.parse::<f64>().unwrap_or(0.0);
+                        let wrapped = (val * A::FACTOR_FROM_DEG as f64) % A::TAU as f64;
+                        if approx::relative_eq!(wrapped, start_val, epsilon = 1e-6) {
+                            Some(val * A::FACTOR_FROM_DEG as f64)
+                        } else {
+                            Some(wrapped)
+                        }
+                    })
+                    .speed(A::FACTOR_FROM_DEG as f64),
+            );
             ui.label("per");
             ui.add(drag_angle(&mut self.step_size, ""));
         })
@@ -65,6 +81,7 @@ impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
     }
 }
 
+use approx::ulps_eq;
 use std::ops::RangeInclusive;
 use vgcore::{
     math::Vec3,
