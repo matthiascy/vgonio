@@ -1,3 +1,12 @@
+use crate::{
+    app::cache::{Handle, InnerCache},
+    measure::{
+        bsdf::receiver::{PartitionScheme, ReceiverParams},
+        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        params::AdfMeasurementParams,
+    },
+    SphericalDomain,
+};
 use exr::prelude::WritableImage;
 use std::path::Path;
 use vgcore::{
@@ -8,18 +17,6 @@ use vgcore::{
     units::{rad, Radians},
 };
 use vgsurf::MicroSurface;
-// NOTE(yang): The number of bins is determined by the bin size and the range of
-// the azimuth and zenith angles. How do we decide the size of the bins (solid
-// angle)? How do we arrange each bin on top of the hemisphere? Circle packing?
-use crate::{
-    app::cache::{Handle, InnerCache},
-    measure::{
-        bsdf::receiver::{PartitionScheme, ReceiverParams},
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::AdfMeasurementParams,
-    },
-    SphericalDomain,
-};
 
 /// Structure holding the data for microfacet area distribution measurement.
 ///

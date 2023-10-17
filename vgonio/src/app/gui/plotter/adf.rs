@@ -56,6 +56,8 @@ pub struct AreaDistributionExtra {
     /// azimuthal angle. The first one is the curve accumulated from the
     /// azimuthal angles.
     pub curves: Vec<Curve>,
+    /// The scale factor of the current curve.
+    pub scale_factor: f32,
     /// The fitted curves together with the fitted model.
     pub fitted: Vec<(
         Box<dyn MicrofacetDistributionModel>,
@@ -80,6 +82,7 @@ impl Default for AreaDistributionExtra {
             },
             azimuth_m: rad!(0.0),
             curves: vec![],
+            scale_factor: 1.0,
             fitted: vec![],
             selected: ModelSelector {
                 model: MicrofacetDistributionModelKind::Beckmann,
@@ -120,6 +123,8 @@ impl VariantData for AreaDistributionExtra {
         debug_assert!(index < self.curves.len(), "Curve index out of bounds!");
         self.curves.get(index)
     }
+
+    fn scale_factor(&self) -> f32 { self.scale_factor }
 
     fn update_fitted_curves(&mut self, models: &[FittedModel]) {
         let theta_values = self
@@ -237,6 +242,15 @@ impl VariantData for AreaDistributionExtra {
                 );
             },
         );
+
+        ui.horizontal(|ui| {
+            ui.label("Scale factor: ");
+            ui.add(
+                egui::DragValue::new(&mut self.scale_factor)
+                    .speed(0.01)
+                    .clamp_range(1.0..=1024.0),
+            );
+        });
 
         egui::CollapsingHeader::new("Fitting")
             .default_open(true)

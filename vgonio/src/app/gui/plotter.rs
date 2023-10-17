@@ -83,6 +83,9 @@ pub trait VariantData {
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
 
+    /// Returns the scale factor for the curve.
+    fn scale_factor(&self) -> f32 { 1.0 }
+
     /// Updates the fitted curves according to the given fitted models.
     fn update_fitted_curves(&mut self, fitted: &[FittedModel]);
 
@@ -1085,16 +1088,28 @@ impl PlottingWidget for PlotInspector {
                                     }),
                                 );
                             plot.show(ui, |plot_ui| {
+                                let scale = variant.scale_factor() as f64;
                                 plot_ui.line(
                                     Line::new(
                                         curve
                                             .points
                                             .iter()
-                                            .map(|[x, y]| [*x, *y * 4.0])
+                                            .map(|[x, y]| [*x, *y * scale])
                                             .collect::<Vec<_>>(),
                                     )
                                     .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
-                                    .name("Measured - ADF (scaled)"),
+                                    .name(format!("Measured - ADF (x {})", scale)),
+                                );
+                                plot_ui.line(
+                                    Line::new(
+                                        curve
+                                            .points
+                                            .iter()
+                                            .map(|[x, y]| [*x, *y])
+                                            .collect::<Vec<_>>(),
+                                    )
+                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[1]))
+                                    .name("Measured - ADF"),
                                 );
                                 let mut color_idx_base = 1;
                                 let extra = variant
@@ -1109,7 +1124,7 @@ impl PlottingWidget for PlotInspector {
                                             )
                                             .stroke(egui::epaint::Stroke::new(
                                                 2.0,
-                                                LINE_COLORS[(i + 1) % LINE_COLORS.len()],
+                                                LINE_COLORS[(i + 2) % LINE_COLORS.len()],
                                             ))
                                             .name(model.kind().to_str()),
                                         )
