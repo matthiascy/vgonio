@@ -1,5 +1,6 @@
 use crate::{error::RuntimeError, RangeByStepSizeInclusive};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::num::ParseFloatError;
 use vgcore::{
     error::VgonioError,
     units::{deg, rad, Radians},
@@ -137,5 +138,111 @@ impl MsfMeasurementParams {
         }
 
         Ok(self)
+    }
+}
+
+/// Parameters for microfacet slope distribution function measurement.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SdfMeasurementParams {
+    /// Maximum slope to visualise when embedding the slope on a disk.
+    /// Typically, this is used to write the slope distribution function to an
+    /// image.
+    #[serde(deserialize_with = "deserialize_max_slope")]
+    pub max_slope: f32,
+}
+
+fn deserialize_max_slope<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    let val_str: String = Deserialize::deserialize(deserializer)?;
+    let trimmed = val_str.trim();
+    match trimmed.parse::<f32>() {
+        Ok(max_slope) => Ok(max_slope),
+        Err(_) => {
+            let (constant, rest) = if trimmed.ends_with("pi") {
+                (std::f32::consts::PI, trimmed.trim_end_matches("pi"))
+            } else if trimmed.ends_with("tau") {
+                (std::f32::consts::TAU, trimmed.trim_end_matches("tau"))
+            } else {
+                return Err(Error::custom(format!(
+                    "invalid value for SdfMeasurementParams: {}",
+                    trimmed
+                )));
+            };
+            let rest = rest.trim();
+            if rest.contains('/') {
+                let mut split = rest.split('/');
+                let numerator = split.next().unwrap();
+                let denominator = split.next().unwrap();
+                if split.next().is_some() {
+                    return Err(Error::custom(format!(
+                        "invalid value for SdfMeasurementParams: {}",
+                        trimmed
+                    )));
+                }
+                let numerator = numerator.parse::<f32>().map_err(Error::custom)?;
+                let denominator = denominator.parse::<f32>().map_err(Error::custom)?;
+                if denominator == 0.0 {
+                    return Err(Error::custom(format!(
+                        "invalid value for SdfMeasurementParams: {}",
+                        trimmed
+                    )));
+                }
+                Ok(constant * numerator / denominator)
+            } else if rest.is_empty() {
+                Ok(constant)
+            } else {
+                let value = rest.parse::<f32>().map_err(Error::custom)?;
+                Ok(constant * value)
+            }
+        }
+    }
+}
+
+impl SdfMeasurementParams {
+    pub fn validate(self) -> Result<Self, VgonioError> {
+        if self.max_slope <= 0.0 {
+            return Err(VgonioError::new(
+                "Microfacet slope distribution measurement: max_slope must be positive!",
+                Some(Box::new(RuntimeError::InvalidParameters)),
+            ));
+        }
+        Ok(self)
+    }
+}
+
+#[test]
+fn serialisation_deserialisation() {
+    {
+        let params = SdfMeasurementParams { max_slope: 1.0 };
+        {
+            let serialised = serde_yaml::to_string(&params).unwrap();
+            assert_eq!(serialised, "max_slope: 1.0\n");
+
+            let deserialised: SdfMeasurementParams = serde_yaml::from_str(&serialised).unwrap();
+            assert_eq!(deserialised, params);
+        }
+    }
+    {
+        let params_str = "max_slope: 3pi\n";
+        let deserialised: SdfMeasurementParams = serde_yaml::from_str(params_str).unwrap();
+        assert_eq!(
+            deserialised,
+            SdfMeasurementParams {
+                max_slope: std::f32::consts::PI * 3.0
+            }
+        );
+    }
+    {
+        let params_str = "max_slope: 3.5/7pi\n";
+        let deserialised: SdfMeasurementParams = serde_yaml::from_str(params_str).unwrap();
+        assert_eq!(
+            deserialised,
+            SdfMeasurementParams {
+                max_slope: std::f32::consts::PI * 0.5
+            }
+        );
     }
 }

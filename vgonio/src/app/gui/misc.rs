@@ -7,6 +7,11 @@ pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> Dr
         .prefix(prefix)
         .custom_formatter(move |val, _| format!("{:6.2}°", val as f32 * A::FACTOR_TO_DEG))
         .custom_parser(move |val_str| {
+            if val_str == "pi" {
+                return Some(A::PI as f64);
+            } else if val_str == "tau" || val_str == "2pi" {
+                return Some(A::TAU as f64);
+            }
             let val = val_str.parse::<f64>().unwrap_or(0.0);
             Some((val * A::FACTOR_FROM_DEG as f64) % A::TAU as f64)
         })
@@ -26,6 +31,11 @@ impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
                         format!("{:6.2}°", val as f32 * A::FACTOR_TO_DEG)
                     })
                     .custom_parser(move |val_str| {
+                        if val_str == "pi" {
+                            return Some(A::PI as f64);
+                        } else if val_str == "tau" || val_str == "2pi" {
+                            return Some(A::TAU as f64);
+                        }
                         let val = val_str.parse::<f64>().unwrap_or(0.0);
                         let wrapped = (val * A::FACTOR_FROM_DEG as f64) % A::TAU as f64;
                         if approx::relative_eq!(wrapped, start_val, epsilon = 1e-6) {
@@ -69,7 +79,6 @@ impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
     }
 }
 
-use approx::ulps_eq;
 use std::ops::RangeInclusive;
 use vgcore::{
     math::Vec3,

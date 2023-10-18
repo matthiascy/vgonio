@@ -1,12 +1,9 @@
 //! Measurement data description.
 
 use crate::{
-    app::{
-        args::OutputFormat,
-        cache::{Asset, Handle},
-    },
+    app::cache::{Asset, Handle},
     fitting::MeasuredMdfData,
-    io::{vgmo::VgmoHeaderExt, OutputFileFormatOptions, OutputOptions},
+    io::{vgmo::VgmoHeaderExt, OutputFileFormatOptions},
     measure::{
         bsdf::MeasuredBsdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
@@ -24,8 +21,7 @@ use std::{
 use vgcore::{
     error::VgonioError,
     io::{
-        CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, ReadFileErrorKind,
-        WriteFileError, WriteFileErrorKind,
+        Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     units::Radians,
     Version,
@@ -370,8 +366,8 @@ impl MeasurementData {
                     MeasuredData::Msf(msf) => {
                         eprintln!("Writing MSF to EXR is not supported yet.");
                     }
-                    MeasuredData::Sdf(_) => {
-                        eprintln!("Writing SDF to EXR is not supported yet.");
+                    MeasuredData::Sdf(sdf) => {
+                        sdf.write_as_exr(&filepath, &self.timestamp, *resolution)?;
                     }
                 }
             }

@@ -1,6 +1,5 @@
 use crate::{
     app::{
-        args::OutputFormat,
         cache::Handle,
         gui::{
             notify::NotifyKind,
@@ -21,7 +20,6 @@ use crate::{
 };
 use uuid::Uuid;
 use vgcore::{
-    io::{CompressionScheme, FileEncoding},
     math::{IVec2, Sph2},
     units::Degrees,
 };

@@ -661,8 +661,10 @@ impl VgonioGuiApp {
                                     )
                                 })
                             }
-                            MeasurementParams::Sdf => self.cache.read(|cache| {
-                                measure::microfacet::measure_slope_distribution(&surfaces, cache)
+                            MeasurementParams::Sdf(params) => self.cache.read(|cache| {
+                                measure::microfacet::measure_slope_distribution(
+                                    &surfaces, params, cache,
+                                )
                             }),
                         };
                         if let Some(opts @ OutputOptions { .. }) = output_opts {

@@ -2,6 +2,7 @@
 .idea
 /tmp
 /venv
+/.venv
 /pyenv
 /.pyenv
 reflectance_*.csv

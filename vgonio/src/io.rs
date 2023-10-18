@@ -1,6 +1,5 @@
 use crate::{
     app::{
-        args::OutputFormat,
         cache::{Cache, Handle},
         cli::ansi,
         Config,

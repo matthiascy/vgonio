@@ -26,17 +26,17 @@ pub enum MeasurementParams {
     Msf(MsfMeasurementParams),
     /// Measure the micro-facet slope distribution function.
     #[serde(alias = "microfacet-slope-distribution-function")]
-    Sdf,
+    Sdf(SdfMeasurementParams),
 }
 
 impl MeasurementParams {
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, VgonioError> {
         match self {
-            Self::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
-            Self::Adf(mfd) => Ok(Self::Adf(mfd.validate()?)),
-            Self::Msf(mfs) => Ok(Self::Msf(mfs.validate()?)),
-            MeasurementParams::Sdf => Ok(MeasurementParams::Sdf),
+            MeasurementParams::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
+            MeasurementParams::Adf(mfd) => Ok(Self::Adf(mfd.validate()?)),
+            MeasurementParams::Msf(mfs) => Ok(Self::Msf(mfs.validate()?)),
+            MeasurementParams::Sdf(sdf) => Ok(Self::Sdf(sdf.validate()?)),
         }
     }
 
@@ -251,7 +251,7 @@ impl Measurement {
             MeasurementParams::Bsdf { .. } => "BSDF measurement",
             MeasurementParams::Adf { .. } => "microfacet-distribution measurement",
             MeasurementParams::Msf { .. } => "micro-surface-shadow-masking measurement",
-            MeasurementParams::Sdf => "microfacet-slope-distribution measurement",
+            MeasurementParams::Sdf { .. } => "microfacet-slope-distribution measurement",
         }
     }
 }

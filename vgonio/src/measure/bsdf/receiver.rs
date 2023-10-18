@@ -326,14 +326,12 @@ impl ReceiverParams {
             }
         };
 
-        /// Mirror the patches of the upper hemisphere to the lower
-        /// hemisphere.
+        // Mirror the patches of the upper hemisphere to the lower hemisphere.
         if self.domain.is_lower_hemisphere() {
             Self::mirror_patches_and_rings_to_lower_hemisphere(&mut patches, &mut rings);
         }
 
-        /// Append the patches of the lower hemisphere to the upper
-        /// hemisphere.
+        // Append the patches of the lower hemisphere to the upper hemisphere.
         if self.domain.is_full_sphere() {
             let mut patches_lower = patches.clone();
             let mut rings_lower = rings.clone();

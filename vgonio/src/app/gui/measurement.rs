@@ -151,7 +151,7 @@ impl MeasurementDialog {
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: AdfMeasurementTab::new(event_loop.clone()),
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
-            tab_sdf: SdfMeasurementTab,
+            tab_sdf: SdfMeasurementTab::new(),
             is_open: false,
             format: OutputFormat::Vgmo,
             img_res: 512,
@@ -401,7 +401,7 @@ impl MeasurementDialog {
                                 }
                                 MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
                                 MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
-                                MeasurementKind::Sdf => MeasurementParams::Sdf,
+                                MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),
                             };
                             let options = if self.write_to_file {
                                 match self.format {
