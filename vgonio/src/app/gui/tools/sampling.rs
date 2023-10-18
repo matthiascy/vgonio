@@ -119,7 +119,11 @@ impl Tool for SamplingInspector {
             self.samples = measure::uniform_sampling_on_unit_disk(self.sample_count as usize)
         }
         let response = ui.add(
-            egui::Image::new(self.color_attachment_id, [256.0, 256.0]).sense(egui::Sense::drag()),
+            egui::Image::new(egui::load::SizedTexture {
+                id: self.color_attachment_id,
+                size: [256.0, 256.0].into(),
+            })
+            .sense(egui::Sense::drag()),
         );
         if response.dragged_by(PointerButton::Primary) {
             let delta = response.drag_delta();

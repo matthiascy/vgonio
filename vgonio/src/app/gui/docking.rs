@@ -2,6 +2,7 @@ use crate::app::{
     cache::Cache,
     gui::{data::PropertyData, event::EventLoopProxy},
 };
+use egui_dock::DockState;
 use std::{
     fmt::{self, Debug},
     ops::{Deref, DerefMut},
@@ -26,13 +27,13 @@ pub struct DockSpace {
     /// Event loop proxy.
     event_loop: EventLoopProxy,
     /// Inner tree of the dock space.
-    inner: egui_dock::Tree<DockingWidget>,
+    inner: DockState<DockingWidget>,
     /// New widgets to be added to the dock space.
     added: Vec<NewWidget>,
 }
 
 impl Deref for DockSpace {
-    type Target = egui_dock::Tree<DockingWidget>;
+    type Target = DockState<DockingWidget>;
 
     fn deref(&self) -> &Self::Target { &self.inner }
 }
@@ -62,11 +63,11 @@ impl DockSpace {
             uuid: surf_viewer.uuid(),
             tex_id: surf_viewer.color_attachment_id(),
         }));
-        let mut inner = egui_dock::Tree::new(vec![DockingWidget {
+        let mut inner = DockState::new(vec![DockingWidget {
             index: 0,
             dockable: surf_viewer,
         }]);
-        let [_, r] = inner.split_right(
+        let [_, r] = inner.main_surface_mut().split_right(
             egui_dock::NodeIndex::root(),
             0.8,
             vec![DockingWidget {
@@ -74,7 +75,7 @@ impl DockSpace {
                 dockable: Box::new(Outliner::new(data.clone(), event_loop.clone())),
             }],
         );
-        inner.split_below(
+        inner.main_surface_mut().split_below(
             r,
             0.5,
             vec![DockingWidget {
@@ -98,6 +99,7 @@ impl DockSpace {
 
     pub fn surface_viewers(&self) -> Vec<Uuid> {
         self.inner
+            .main_surface()
             .tabs()
             .filter(|t| t.dockable.kind() == WidgetKind::SurfViewer)
             .map(|t| t.dockable.uuid())
@@ -119,9 +121,11 @@ impl DockSpace {
 
         self.added.drain(..).for_each(|new_tab| {
             // Focus the node that we want to add a tab to.
-            self.inner.set_focused_node(NodeIndex(new_tab.parent));
+            self.inner
+                .main_surface_mut()
+                .set_focused_node(NodeIndex(new_tab.parent));
             // Allocate a new index for the tab.
-            let index = self.inner.num_tabs();
+            let index = self.inner.main_surface().num_tabs();
             // Add the widget to the dock space.
             let widget: Box<dyn Dockable> = match new_tab.kind {
                 WidgetKind::Outliner => {
@@ -162,6 +166,7 @@ impl DockSpace {
     pub fn add_existing_widget(&mut self, widget: Box<dyn Dockable>) {
         if self
             .inner
+            .main_surface()
             .tabs()
             .any(|t| t.dockable.uuid() == widget.uuid())
         {
@@ -169,7 +174,7 @@ impl DockSpace {
         }
 
         self.inner.push_to_first_leaf(DockingWidget {
-            index: self.inner.num_tabs(),
+            index: self.inner.main_surface().num_tabs(),
             dockable: widget,
         });
     }
@@ -235,13 +240,22 @@ pub struct DockSpaceView<'a> {
 impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
     type Tab = DockingWidget;
 
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) { tab.dockable.ui(ui) }
-
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText { tab.dockable.title() }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) { tab.dockable.ui(ui) }
 
     fn id(&mut self, tab: &mut Self::Tab) -> egui::Id { egui::Id::new(tab.dockable.uuid()) }
 
-    fn add_popup(&mut self, ui: &mut egui::Ui, parent: egui_dock::NodeIndex) {
+    fn add_popup(
+        &mut self,
+        ui: &mut egui::Ui,
+        surface: egui_dock::SurfaceIndex,
+        parent: egui_dock::NodeIndex,
+    ) {
+        if !surface.is_main() {
+            return;
+        }
+
         ui.set_min_width(120.0);
 
         if ui.button("SurfViewer").clicked() {

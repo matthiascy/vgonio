@@ -36,25 +36,26 @@ bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
 csv = "1"
 dirs = "5.0"
-egui = { version = "0.22", features = ["bytemuck"] }
-egui_dock = { version = "0.6" }
-egui_extras = "0.22"
-egui-winit = { version = "0.22" }
+egui = { version = "0.23", features = ["bytemuck"] }
+egui_dock = { version = "0.8" }
+egui_extras = "0.23"
+egui-winit = { version = "0.23" }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
-egui-toast = "0.8"
+egui_plot = "0.23"
+egui-toast = "0.9"
 env_logger = "0.10"
 futures-intrusive = "0.5"
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 levenberg-marquardt = "0.13"
 nalgebra = "0.32"
-numpy = "0.19"
+numpy = "0.20"
 pollster = "0.3"
-pyo3 = { version = "0.19", features = ["auto-initialize"] }
-rfd = { version = "0.11", features = ["file-handle-inner"] }
+pyo3 = { version = "0.20", features = ["auto-initialize"] }
+rfd = { version = "0.12", features = ["file-handle-inner"] }
 rand_distr = "0.4"
 rand_chacha = "0.3"
 serde_json = "1.0"
-toml = "0.7"
+toml = "0.8"
 type-map = "0.5"
 winit = "0.28"
 wgpu = { version = "0.17", features = ["spirv"] }

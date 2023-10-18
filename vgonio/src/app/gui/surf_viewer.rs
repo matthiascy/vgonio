@@ -842,6 +842,9 @@ impl Dockable for SurfaceViewer {
             });
 
         self.resize_viewport(size, None);
-        ui.image(self.color_attachment_id, self.viewport_size);
+        ui.image(egui::load::SizedTexture {
+            id: self.color_attachment_id,
+            size: self.viewport_size,
+        });
     }
 }
