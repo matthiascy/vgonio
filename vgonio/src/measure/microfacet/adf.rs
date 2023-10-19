@@ -128,11 +128,15 @@ pub fn measure_area_distribution(
     handles: &[Handle<MicroSurface>],
     cache: &InnerCache,
 ) -> Vec<MeasurementData> {
+    #[cfg(feature = "bench")]
+    let start = std::time::Instant::now();
+
     use rayon::prelude::*;
     log::info!("Measuring microfacet area distribution...");
     let surfaces = cache.get_micro_surfaces(handles);
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
-    handles
+
+    let measurements = handles
         .iter()
         .zip(surfaces.iter())
         .zip(meshes.iter())
@@ -200,7 +204,13 @@ pub fn measure_area_distribution(
                 measured: MeasuredData::Adf(MeasuredAdfData { params, samples }),
             })
         })
-        .collect()
+        .collect();
+    #[cfg(feature = "bench")]
+    {
+        let elapsed = start.elapsed();
+        log::info!("ADF measurement took {} ms.", elapsed.as_millis());
+    }
+    measurements
 }
 
 /// Calculates the surface area of a spherical cap.

@@ -34,9 +34,10 @@ pub mod vgmo {
                 SpectralSamples,
             },
             data::MeasuredData,
+            microfacet::MeasuredSdfData,
             params::{
                 AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
-                SimulationKind,
+                SdfMeasurementParams, SimulationKind,
             },
         },
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
@@ -232,9 +233,7 @@ pub mod vgmo {
                         },
                     })
                 }
-                MeasurementKind::Sdf => {
-                    todo!("SDF is not supported yet")
-                }
+                MeasurementKind::Sdf => Ok(Self::Sdf),
             }
         }
     }
@@ -287,7 +286,26 @@ pub mod vgmo {
                 Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
             }
             VgmoHeaderExt::Sdf => {
-                todo!("SDF is not supported yet")
+                log::debug!("Reading SDF data from VGMO file");
+                let mut buf = [0u8; 4];
+                reader.read_exact(&mut buf)?;
+                let num_slopes = u32::from_le_bytes(buf);
+                let mut samples = vgcore::io::read_f32_data_samples(
+                    reader,
+                    num_slopes as usize * 2,
+                    header.meta.encoding,
+                    header.meta.compression,
+                )?;
+                let slopes = samples
+                    .chunks(2)
+                    .map(|s| math::Vec2::new(s[0], s[1]))
+                    .collect::<Vec<_>>();
+                Ok(MeasuredData::Sdf(MeasuredSdfData {
+                    params: SdfMeasurementParams {
+                        max_slope: std::f32::consts::PI,
+                    },
+                    slopes,
+                }))
             }
         }
     }
@@ -301,10 +319,12 @@ pub mod vgmo {
         let init_size = writer.stream_len().unwrap();
         header.write(writer)?;
 
+        #[cfg(feature = "bench")]
+        let start = std::time::Instant::now();
+
         match measured {
             MeasuredData::Adf(_) | MeasuredData::Msf(_) => {
                 let samples = measured.adf_or_msf_samples().unwrap();
-                log::debug!("Writing {} samples to VGMO file", samples.len());
                 match header.meta.encoding {
                     FileEncoding::Ascii => {
                         let cols = if let MeasuredData::Adf(adf) = &measured {
@@ -325,9 +345,27 @@ pub mod vgmo {
             MeasuredData::Bsdf(bsdf) => {
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
             }
-            MeasuredData::Sdf(_) => {
-                todo!("SDF is not supported yet")
+            MeasuredData::Sdf(sdf) => {
+                writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
+                let samples = sdf
+                    .slopes
+                    .iter()
+                    .map(|s| [s.x, s.y])
+                    .flatten()
+                    .collect::<Vec<_>>();
+                vgcore::io::write_f32_data_samples_binary(
+                    writer,
+                    header.meta.compression,
+                    &samples,
+                )
+                .map_err(WriteFileErrorKind::Write)?;
             }
+        }
+
+        #[cfg(feature = "bench")]
+        {
+            let elapsed = start.elapsed();
+            log::debug!("Write samples took {} ms", elapsed.as_millis());
         }
 
         let length = writer.stream_len().unwrap() - init_size;
@@ -335,6 +373,17 @@ pub mod vgmo {
             Header::<VgmoHeaderExt>::length_pos() as u64,
         ))?;
         writer.write_all(&(length as u32).to_le_bytes())?;
+
+        #[cfg(feature = "bench")]
+        {
+            let elapsed = start.elapsed();
+            log::debug!(
+                "Wrote {} bytes of data (compressed) to VGMO file in {} ms",
+                length,
+                elapsed.as_millis()
+            );
+        }
+        #[cfg(not(feature = "bench"))]
         log::debug!("Wrote {} bytes of data to VGMO file", length);
         Ok(())
     }

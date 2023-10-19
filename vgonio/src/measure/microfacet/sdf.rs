@@ -10,7 +10,7 @@ use std::path::Path;
 use vgcore::{
     error::VgonioError,
     math::{IVec2, UVec2, Vec2},
-    units::Radians,
+    units::{rad, Radians},
 };
 use vgsurf::MicroSurface;
 
@@ -92,41 +92,34 @@ impl MeasuredSdfData {
             .map_err(|err| VgonioError::new("Failed to write SDF EXR file.", Some(Box::new(err))))
     }
 
-    /// Returns the histogram of the slopes on the x-direction with the given
-    /// bin width.
+    /// Returns the histogram of the slope (PMF of the slope distribution).
     ///
     /// # Arguments
     ///
-    /// * `bin_width` - The width of each bin. Note that the width here is the
-    /// width of the bin (in angles) in the normal space, not the slope space,
-    /// which means that the actual width of the bin in the slope space is
-    /// the tangent of the bin width.
-    pub fn hist_x(&self, bin_width: Radians) -> Vec<f32> {
-        let bins_count = (Radians::HALF_PI / bin_width).floor();
-        for slope in &self.slopes {
-            // Compute the slope angle.
-            let angle = slope.x.atan();
-            // Compute the bin index.
-            let bin_index = (angle / bin_width).as_f32().floor() as usize;
+    /// * `azi_bin_width` - The width of each azimuth bin (in angles).
+    /// * `zen_bin_width` - The width of each zenith bin (in angles).
+    pub fn pmf(&self, azi_bin_width: Radians, zen_bin_width: Radians) -> Vec<f32> {
+        let azi_bin_count = (Radians::TAU / azi_bin_width).ceil() as usize;
+        let zen_bin_count = (Radians::HALF_PI / zen_bin_width).ceil() as usize;
+        // Bins are stored in the order of zenith first then azimuth, i.e. the
+        // zenith bins are stored in the inner loop, and the azimuth bins are
+        // stored in the outer loop.
+        let mut hist = vec![0.0; azi_bin_count * zen_bin_count];
+        for s in &self.slopes {
+            // Compute the azimuth and zenith angles of the slope.
+            // Convert from [-pi, pi] to [0, 2pi].
+            let phi = rad!(s.y.atan2(s.x)).wrap_to_tau().as_f32();
+            let theta = (s.x * s.x + s.y * s.y).sqrt().acos();
+            // Compute the azimuth and zenith bin indices.
+            let azi_bin = (phi / azi_bin_width.as_f32()).floor() as usize;
+            let zen_bin = (theta / zen_bin_width.as_f32()).floor() as usize;
+            // Compute the index of the bin.
+            let bin_index = azi_bin + zen_bin * azi_bin_count;
             // Increment the bin.
             hist[bin_index] += 1.0;
         }
         hist
     }
-
-    /// Returns the histogram of the slopes on the y-direction with the given
-    /// bin width.
-    ///
-    /// # Arguments
-    ///
-    /// * `bin_width` - The width of each bin. Note that the width here is the
-    /// width of the bin (in angles) in the normal space, not the slope space,
-    /// which means that the actual width of the bin in the slope space is
-    /// the tangent of the bin width.
-    pub fn hist_y(&self, bin_width: Radians) -> Vec<f32> { todo!("hist_slope_y") }
-
-    /// Returns the histogram of the slopes with the given bin width.
-    pub fn hist(&self, bin_width: f32) -> Vec<f32> { todo!("hist_slope") }
 }
 
 /// Measures the slope distribution function (SDF) of the given microsurfaces.
@@ -135,10 +128,13 @@ pub fn measure_slope_distribution(
     params: SdfMeasurementParams,
     cache: &InnerCache,
 ) -> Vec<MeasurementData> {
+    #[cfg(feature = "bench")]
+    let start = std::time::Instant::now();
+
     log::info!("Measuring the slope distribution function (SDF)...");
     let surfaces = cache.get_micro_surfaces(handles);
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
-    handles
+    let measurements = handles
         .iter()
         .zip(surfaces.iter())
         .zip(meshes.iter())
@@ -155,11 +151,19 @@ pub fn measure_slope_distribution(
                 *s = Vec2::new(-n.x, -n.y) / n.z;
             }
             Some(MeasurementData {
-                name: surf.unwrap().file_name().unwrap().to_owned(),
+                name: format!("sdf-{}", surf.unwrap().file_stem().unwrap()),
                 source: MeasurementDataSource::Measured(*hdl),
                 timestamp: chrono::Local::now(),
                 measured: MeasuredData::Sdf(MeasuredSdfData { params, slopes }),
             })
         })
-        .collect()
+        .collect();
+
+    #[cfg(feature = "bench")]
+    {
+        let elapsed = start.elapsed();
+        log::info!("SDF measurement took {} ms.", elapsed.as_millis());
+    }
+
+    measurements
 }
