@@ -9,6 +9,7 @@ use clap::ValueEnum;
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt,
     fmt::{Debug, Display, Formatter},
     io::{BufRead, BufReader, BufWriter, Read, Seek, Write},
@@ -444,34 +445,52 @@ pub fn write_data_samples_ascii<W: Write, F: Float + Display>(
     Ok(())
 }
 
+/// Converts an array of samples of type f32 to a byte array.
+/// The byte array is either a copy of the original array or a reference to the
+/// original array. The byte array is in little endian format.
+fn f32_samples_to_bytes(samples: &[f32]) -> Cow<[u8]> {
+    #[cfg(target_endian = "little")]
+    let bytes = unsafe {
+        // SAFETY: The buffer is not used after the conversion.
+        std::slice::from_raw_parts(samples.as_ptr() as *const u8, samples.len() * 4)
+    };
+
+    #[cfg(target_endian = "big")]
+    let bytes = {
+        let mut bytes = vec![0u8; samples.len() * 4];
+        for (i, s) in samples.iter().enumerate() {
+            bytes[i * 4..(i + 1) * 4].copy_from_slice(&s.to_le_bytes());
+        }
+        bytes
+    };
+
+    Cow::from(bytes)
+}
+
 /// Write the data samples to the given writer.
 pub fn write_f32_data_samples_binary<'a, W: Write>(
     writer: &mut BufWriter<W>,
     comp: CompressionScheme,
     samples: &[f32],
 ) -> Result<(), std::io::Error> {
+    let bytes = f32_samples_to_bytes(samples);
     match comp {
         CompressionScheme::None => {
-            for s in samples {
-                writer.write_all(&s.to_le_bytes())?;
-            }
+            writer.write_all(&bytes)?;
         }
         CompressionScheme::Zlib => {
-            let buf = vec![];
+            let encoder_buf = Vec::with_capacity(samples.len() * 4);
             let mut zlib_encoder =
-                flate2::write::ZlibEncoder::new(buf, flate2::Compression::default());
-            for s in samples {
-                zlib_encoder.write_all(&s.to_le_bytes())?;
-            }
+                flate2::write::ZlibEncoder::new(encoder_buf, flate2::Compression::default());
+
+            zlib_encoder.write_all(&bytes)?;
             writer.write_all(&zlib_encoder.flush_finish()?)?;
         }
         CompressionScheme::Gzip => {
-            let buf = vec![];
+            let encoder_buf = Vec::with_capacity(samples.len() * 4);
             let mut gzip_encoder =
-                flate2::write::GzEncoder::new(buf, flate2::Compression::default());
-            for s in samples {
-                gzip_encoder.write_all(&s.to_le_bytes())?;
-            }
+                flate2::write::GzEncoder::new(encoder_buf, flate2::Compression::default());
+            gzip_encoder.write_all(&bytes)?;
             writer.write_all(&gzip_encoder.finish()?)?;
         }
     }

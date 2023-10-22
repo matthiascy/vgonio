@@ -157,10 +157,12 @@ pub fn measure_area_distribution(
             log::debug!("  -- macro surface area: {}", surface.unwrap().macro_area());
             log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
 
+            const FACET_CHUNK_SIZE: usize = 4096;
+
             let samples = {
                 let solid_angle =
                     units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
-                let denominator = macro_area * solid_angle;
+                let denominator = math::rcp_f32(macro_area * solid_angle);
                 (0..params.azimuth.step_count_wrapped())
                     .flat_map(move |azimuth_idx| {
                         // NOTE: the zenith angle is measured from the top of the
@@ -173,17 +175,18 @@ pub fn measure_area_distribution(
                                 math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
                             let facets_surface_area = mesh
                                 .facet_normals
-                                .par_iter()
-                                .enumerate()
-                                .filter_map(|(idx, normal)| {
-                                    if normal.dot(dir) >= half_zenith_bin_size_cos {
-                                        Some(idx)
-                                    } else {
-                                        None
-                                    }
+                                .par_chunks(FACET_CHUNK_SIZE)
+                                .zip(mesh.facet_areas.par_chunks(FACET_CHUNK_SIZE))
+                                .map(|(normals, areas)| {
+                                    normals.iter().zip(areas.iter()).fold(0.0, |sum, (n, a)| {
+                                        if n.dot(dir) <= half_zenith_bin_size_cos {
+                                            sum
+                                        } else {
+                                            sum + a
+                                        }
+                                    })
                                 })
-                                .fold(|| 0.0, |area, facet| area + mesh.facet_surface_area(facet))
-                                .reduce(|| 0.0, |a, b| a + b);
+                                .sum::<f32>();
                             let value = facets_surface_area / denominator;
                             log::trace!(
                                 "-- azimuth: {}, zenith: {}  | facet area: {} => {}",

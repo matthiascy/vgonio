@@ -66,6 +66,7 @@ pub struct ReceiverParams {
 
 /// Scheme of the partitioning of the receiver.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PartitionScheme {
     /// Partition scheme based on "A general rule for disk and hemisphere
     /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.

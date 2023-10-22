@@ -194,7 +194,9 @@ pub mod vgmo {
                         writer.write_all(&[MeasurementKind::Bsdf as u8])?;
                         params.write_to_vgmo(version, writer)?;
                     }
-                    VgmoHeaderExt::Sdf => {}
+                    VgmoHeaderExt::Sdf => {
+                        writer.write_all(&[MeasurementKind::Sdf as u8])?;
+                    }
                 },
                 _ => {
                     log::error!("Unsupported VGMO version: {}", version.as_string());
@@ -347,18 +349,14 @@ pub mod vgmo {
             }
             MeasuredData::Sdf(sdf) => {
                 writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
-                let samples = sdf
-                    .slopes
-                    .iter()
-                    .map(|s| [s.x, s.y])
-                    .flatten()
-                    .collect::<Vec<_>>();
-                vgcore::io::write_f32_data_samples_binary(
-                    writer,
-                    header.meta.compression,
-                    &samples,
-                )
-                .map_err(WriteFileErrorKind::Write)?;
+                let samples = unsafe {
+                    std::slice::from_raw_parts(
+                        sdf.slopes.as_ptr() as *const f32,
+                        sdf.slopes.len() * 2,
+                    )
+                };
+                vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
+                    .map_err(WriteFileErrorKind::Write)?;
             }
         }
 
@@ -378,8 +376,13 @@ pub mod vgmo {
         {
             let elapsed = start.elapsed();
             log::debug!(
-                "Wrote {} bytes of data (compressed) to VGMO file in {} ms",
+                "Wrote {} bytes of data{}to VGMO file in {} ms",
                 length,
+                if header.meta.compression == CompressionScheme::None {
+                    " "
+                } else {
+                    " (compressed) "
+                },
                 elapsed.as_millis()
             );
         }

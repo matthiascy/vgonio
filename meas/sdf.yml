@@ -21,11 +21,11 @@ surfaces:
 #  - usr://surfaces/omnisurf3d/Pickleball_Paddle_Vufoxt_Desampled.os3d
 #  - usr://surfaces/omnisurf3d/FishScaleEdge.os3d
 
-  - usr://surfaces/olaf/aluminium1bar100.vgms
+#  - usr://surfaces/olaf/aluminium1bar100.vgms
 #  - usr://surfaces/aluminium1bar200.vgms
 #  - usr://surfaces/aluminium1bar200fine.vgms
-  - usr://surfaces/olaf/aluminium2bar100.vgms
-  - usr://surfaces/olaf/aluminium3bar100.vgms
-  - usr://surfaces/olaf/aluminium4bar100.vgms
+#  - usr://surfaces/olaf/aluminium2bar100.vgms
+#  - usr://surfaces/olaf/aluminium3bar100.vgms
+#  - usr://surfaces/olaf/aluminium4bar100.vgms
   - usr://surfaces/olaf/aluminium65bar100.vgms
-  - usr://surfaces/olaf/aluminiummirror.vgms
+#  - usr://surfaces/olaf/aluminiummirror.vgms
