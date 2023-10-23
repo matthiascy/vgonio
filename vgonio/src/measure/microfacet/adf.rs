@@ -11,7 +11,7 @@ use std::path::Path;
 use vgcore::{
     error::VgonioError,
     math,
-    math::Sph2,
+    math::{Sph2, Vec3},
     units,
     units::{rad, Radians},
 };
@@ -147,8 +147,8 @@ pub fn measure_area_distribution(
             }
             let mesh = mesh.unwrap();
             let macro_area = mesh.macro_surface_area();
-            let half_zenith_bin_size = params.zenith.step_size * 0.5;
-            let half_zenith_bin_size_cos = half_zenith_bin_size.cos();
+            let half_zenith_bin_width = params.zenith.step_size * 0.5;
+            let half_zenith_bin_width_cos = half_zenith_bin_width.cos();
 
             const FACET_CHUNK_SIZE: usize = 4096;
             let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
@@ -193,7 +193,7 @@ pub fn measure_area_distribution(
                             idxs.iter().fold(0.0, |sum, idx| {
                                 let n = &mesh.facet_normals[*idx];
                                 let a = mesh.facet_areas[*idx];
-                                if n.dot(dir) <= half_zenith_bin_size_cos {
+                                if n.dot(dir) <= half_zenith_bin_width_cos {
                                     sum
                                 } else {
                                     sum + a
@@ -212,45 +212,6 @@ pub fn measure_area_distribution(
                     );
                 }
             }
-
-            // let samples = {
-            //     (0..params.azimuth.step_count_wrapped())
-            //         .flat_map(move |azimuth_idx| {
-            //             // NOTE: the zenith angle is measured from the top of the
-            //             // hemisphere. The center of the zenith/azimuth bin are at the
-            //             // zenith/azimuth angle calculated below.
-            //             (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
-            //                 let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
-            //                 let zenith = zenith_idx as f32 * params.zenith.step_size;
-            //                 let dir =
-            //                     math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
-            //                 let facets_area = mesh
-            //                     .facet_normals
-            //                     .par_chunks(FACET_CHUNK_SIZE)
-            //                     .zip(mesh.facet_areas.par_chunks(FACET_CHUNK_SIZE))
-            //                     .map(|(normals, areas)| {
-            //                         normals.iter().zip(areas.iter()).fold(0.0, |sum, (n, a)| {
-            //                             if n.dot(dir) <= half_zenith_bin_size_cos {
-            //                                 sum
-            //                             } else {
-            //                                 sum + a
-            //                             }
-            //                         })
-            //                     })
-            //                     .sum::<f32>();
-            //                 let value = facets_area * denom_rcp;
-            //                 log::trace!(
-            //                     "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
-            //                     azimuth.prettified(),
-            //                     zenith.prettified(),
-            //                     facets_area,
-            //                     value
-            //                 );
-            //                 value
-            //             })
-            //         })
-            //         .collect::<Vec<_>>()
-            // };
             
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
@@ -286,16 +247,18 @@ pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
 fn classify_normal_by_zenith(
     zenith: Radians,
     zenith_range: RangeByStepSizeInclusive<Radians>,
-    bin_size_scale: f32,
+    bin_width_scale: f32,
 ) -> [u8; 2] {
-    // All bits set to 1.
     let mut indices = [0xFF; 2];
     let mut i = 0;
-    let half_bin_size = zenith_range.step_size * 0.5 * bin_size_scale;
+    let half_bin_width = zenith_range.step_size * 0.5 * bin_width_scale;
     for (j, bin_center) in zenith_range.values().enumerate() {
-        if (bin_center - half_bin_size..=bin_center + half_bin_size).contains(&zenith) {
+        if (bin_center - half_bin_width..=bin_center + half_bin_width).contains(&zenith) {
             indices[i] = j as u8;
             i += 1;
+        }
+        if i >= 2 {
+            break;
         }
     }
     indices

@@ -9,6 +9,7 @@ use image::FlatSamples;
 use std::path::Path;
 use vgcore::{
     error::VgonioError,
+    math,
     math::{IVec2, UVec2, Vec2},
     units::{rad, Radians},
 };
@@ -25,6 +26,22 @@ pub struct MeasuredSdfData {
     pub params: SdfMeasurementParams,
     /// Slopes of all microfacets.
     pub slopes: Vec<Slope2>,
+}
+
+/// Data of the slope distribution function (SDF) of a microsurface.
+pub struct SdfPmf {
+    /// The number of azimuth bins.
+    pub azi_bin_count: usize,
+    /// The number of zenith bins.
+    pub zen_bin_count: usize,
+    /// The width of each azimuth bin (in radians).
+    pub azi_bin_width: Radians,
+    /// The width of each zenith bin (in radians).
+    pub zen_bin_width: Radians,
+    /// The data of each bin, stored in the order of zenith first then azimuth,
+    /// i.e. the zenith bins are stored in the inner loop, and the azimuth bins
+    /// are stored in the outer loop.
+    pub hist: Vec<f32>,
 }
 
 impl MeasuredSdfData {
@@ -98,7 +115,7 @@ impl MeasuredSdfData {
     ///
     /// * `azi_bin_width` - The width of each azimuth bin (in angles).
     /// * `zen_bin_width` - The width of each zenith bin (in angles).
-    pub fn pmf(&self, azi_bin_width: Radians, zen_bin_width: Radians) -> Vec<f32> {
+    pub fn pmf(&self, azi_bin_width: Radians, zen_bin_width: Radians) -> SdfPmf {
         let azi_bin_count = (Radians::TAU / azi_bin_width).ceil() as usize;
         let zen_bin_count = (Radians::HALF_PI / zen_bin_width).ceil() as usize;
         // Bins are stored in the order of zenith first then azimuth, i.e. the
@@ -118,7 +135,15 @@ impl MeasuredSdfData {
             // Increment the bin.
             hist[bin_index] += 1.0;
         }
-        hist
+        let count_rcp = math::rcp_f32(self.slopes.len() as f32);
+        hist.iter_mut().for_each(|v| *v *= count_rcp);
+        SdfPmf {
+            azi_bin_count,
+            zen_bin_count,
+            azi_bin_width,
+            zen_bin_width,
+            hist,
+        }
     }
 }
 

@@ -80,7 +80,7 @@ impl MeasuredData {
     }
 
     /// Returns the BSDF data.
-    pub fn bsdf(&self) -> Option<&MeasuredBsdfData> {
+    pub fn as_bsdf(&self) -> Option<&MeasuredBsdfData> {
         match self {
             MeasuredData::Bsdf(bsdf) => Some(bsdf),
             _ => None,
@@ -88,7 +88,7 @@ impl MeasuredData {
     }
 
     /// Returns the ADF data.
-    pub fn adf(&self) -> Option<&MeasuredAdfData> {
+    pub fn as_adf(&self) -> Option<&MeasuredAdfData> {
         match self {
             MeasuredData::Adf(adf) => Some(adf),
             _ => None,
@@ -96,7 +96,7 @@ impl MeasuredData {
     }
 
     /// Returns the SDF data.
-    pub fn sdf(&self) -> Option<&MeasuredSdfData> {
+    pub fn as_sdf(&self) -> Option<&MeasuredSdfData> {
         match self {
             MeasuredData::Sdf(sdf) => Some(sdf),
             _ => None,
@@ -104,7 +104,7 @@ impl MeasuredData {
     }
 
     /// Returns the MSF data.
-    pub fn msf(&self) -> Option<&MeasuredMsfData> {
+    pub fn as_msf(&self) -> Option<&MeasuredMsfData> {
         match self {
             MeasuredData::Msf(msf) => Some(msf),
             _ => None,
@@ -122,7 +122,7 @@ impl MeasuredData {
     }
 
     /// Returns the MDF data.
-    pub fn mdf(&self) -> Option<MeasuredMdfData> {
+    pub fn as_mdf(&self) -> Option<MeasuredMdfData> {
         match self {
             MeasuredData::Adf(adf) => Some(MeasuredMdfData::Adf(Cow::Borrowed(adf))),
             MeasuredData::Msf(msf) => Some(MeasuredMdfData::Msf(Cow::Borrowed(msf))),
@@ -209,21 +209,21 @@ impl MeasurementData {
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn ndf_data_slice(&self, azimuth_m: Radians) -> (&[f32], Option<&[f32]>) {
         debug_assert!(self.kind() == MeasurementKind::Adf);
-        let (az, zn) = self.measured.adf_or_msf_angle_ranges().unwrap();
+        let (azi, zen) = self.measured.adf_or_msf_angle_ranges().unwrap();
         let azimuth_m = azimuth_m.wrap_to_tau();
-        let azimuth_m_idx = az.index_of(azimuth_m);
+        let azimuth_m_idx = azi.index_of(azimuth_m);
         let opposite_azimuth_m = azimuth_m.opposite();
-        let opposite_index = if az.start <= opposite_azimuth_m && opposite_azimuth_m <= az.stop {
-            Some(az.index_of(opposite_azimuth_m))
+        let opposite_index = if azi.start <= opposite_azimuth_m && opposite_azimuth_m <= azi.stop {
+            Some(azi.index_of(opposite_azimuth_m))
         } else {
             None
         };
-        let zn_step_count = zn.step_count_wrapped();
+        let zen_step_count = zen.step_count_wrapped();
         let samples = self.measured.adf_or_msf_samples().unwrap();
         (
-            &samples[azimuth_m_idx * zn_step_count..(azimuth_m_idx + 1) * zn_step_count],
+            &samples[azimuth_m_idx * zen_step_count..(azimuth_m_idx + 1) * zen_step_count],
             opposite_index
-                .map(|index| &samples[index * zn_step_count..(index + 1) * zn_step_count]),
+                .map(|index| &samples[index * zen_step_count..(index + 1) * zen_step_count]),
         )
     }
 

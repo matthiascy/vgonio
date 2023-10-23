@@ -332,7 +332,12 @@ pub mod vgmo {
                         let cols = if let MeasuredData::Adf(adf) = &measured {
                             adf.params.zenith.step_count_wrapped()
                         } else {
-                            measured.msf().unwrap().params.zenith.step_count_wrapped()
+                            measured
+                                .as_msf()
+                                .unwrap()
+                                .params
+                                .zenith
+                                .step_count_wrapped()
                         };
                         vgcore::io::write_data_samples_ascii(writer, samples, cols as u32)
                     }

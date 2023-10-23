@@ -204,23 +204,27 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Adf => Box::new(PlotInspector::new_area_distrib_plot(
+                        MeasurementKind::Adf => Box::new(PlotInspector::new_adf(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Msf => Box::new(PlotInspector::new_mmsf(
+                        MeasurementKind::Msf => Box::new(PlotInspector::new_msf(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Sdf => {
-                            todo!("Plotting SDF is not implemented yet")
-                        }
+                        MeasurementKind::Sdf => Box::new(PlotInspector::new_sdf(
+                            prop.measured.get(data).unwrap().name.clone(),
+                            *data,
+                            self.cache.clone(),
+                            self.properties.clone(),
+                            self.event_loop.clone(),
+                        )),
                     };
                     if *independent {
                         self.plotters.push((true, plotter));
@@ -250,7 +254,7 @@ impl VgonioGui {
                                     MeasuredMdfData::Adf(Cow::Borrowed(
                                         measurement
                                             .measured
-                                            .adf()
+                                            .as_adf()
                                             .expect("Measurement has no ADF data."),
                                     ))
                                 }
@@ -258,7 +262,7 @@ impl VgonioGui {
                                     MeasuredMdfData::Msf(Cow::Borrowed(
                                         measurement
                                             .measured
-                                            .msf()
+                                            .as_msf()
                                             .expect("Measurement has no MSF data."),
                                     ))
                                 }
