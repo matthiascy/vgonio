@@ -271,6 +271,17 @@ pub fn cartesian_to_spherical(v: Vec3, radius: f32) -> (f32, Radians, Radians) {
     )
 }
 
+/// Returns the zenith angle of the given vector in radians in the range
+/// [0, pi].
+pub fn theta_of(v: &Vec3) -> Radians {
+    let zenith = rad!((v.z * rcp_f32(v.length())).acos());
+    if zenith < radians!(0.0) {
+        zenith + Radians::PI
+    } else {
+        zenith
+    }
+}
+
 // TODO: generalise rcp to f32 and f64
 
 /// Returns the accurate reciprocal of the given value.

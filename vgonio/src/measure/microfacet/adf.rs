@@ -5,9 +5,8 @@ use crate::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::AdfMeasurementParams,
     },
-    SphericalDomain,
+    RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
 };
-use exr::prelude::WritableImage;
 use std::path::Path;
 use vgcore::{
     error::VgonioError,
@@ -122,6 +121,7 @@ impl MeasuredAdfData {
     }
 }
 
+#[rustfmt::skip]
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
     params: AdfMeasurementParams,
@@ -147,8 +147,12 @@ pub fn measure_area_distribution(
             }
             let mesh = mesh.unwrap();
             let macro_area = mesh.macro_surface_area();
-            let half_zenith_bin_size_cos = (params.zenith.step_size / 2.0).cos();
+            let half_zenith_bin_size = params.zenith.step_size * 0.5;
+            let half_zenith_bin_size_cos = half_zenith_bin_size.cos();
 
+            const FACET_CHUNK_SIZE: usize = 4096;
+            let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
+            let denom_rcp = math::rcp_f32(macro_area * solid_angle);
             log::info!(
                 "-- Measuring the NDF of surface: {}",
                 surface.unwrap().file_stem().unwrap()
@@ -156,50 +160,98 @@ pub fn measure_area_distribution(
             log::debug!("  -- macro surface area (mesh): {}", macro_area);
             log::debug!("  -- macro surface area: {}", surface.unwrap().macro_area());
             log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
+            log::debug!("  -- micro facet count: {}", mesh.facet_normals.len());
+            log::debug!("  -- solid angle: {}", solid_angle);
+            log::debug!("  -- denom_rcp: {}", denom_rcp);
 
-            const FACET_CHUNK_SIZE: usize = 4096;
-
-            let samples = {
-                let solid_angle =
-                    units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
-                let denominator = math::rcp_f32(macro_area * solid_angle);
-                (0..params.azimuth.step_count_wrapped())
-                    .flat_map(move |azimuth_idx| {
-                        // NOTE: the zenith angle is measured from the top of the
-                        // hemisphere. The center of the zenith/azimuth bin are at the
-                        // zenith/azimuth angle calculated below.
-                        (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
-                            let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
-                            let zenith = zenith_idx as f32 * params.zenith.step_size;
-                            let dir =
-                                math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
-                            let facets_surface_area = mesh
-                                .facet_normals
-                                .par_chunks(FACET_CHUNK_SIZE)
-                                .zip(mesh.facet_areas.par_chunks(FACET_CHUNK_SIZE))
-                                .map(|(normals, areas)| {
-                                    normals.iter().zip(areas.iter()).fold(0.0, |sum, (n, a)| {
-                                        if n.dot(dir) <= half_zenith_bin_size_cos {
-                                            sum
-                                        } else {
-                                            sum + a
-                                        }
-                                    })
-                                })
-                                .sum::<f32>();
-                            let value = facets_surface_area / denominator;
-                            log::trace!(
-                                "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
-                                azimuth.prettified(),
-                                zenith.prettified(),
-                                facets_surface_area,
-                                value
-                            );
-                            value
+            // Sort the facets into bins according to their normal direction's zenith angle.
+            let mut facets_bins = vec![vec![]; params.zenith.step_count_wrapped()];
+            for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
+                let zenith = math::theta_of(normal);
+                let idxs = classify_normal_by_zenith(zenith, params.zenith, 1.2);
+                for idx in idxs {
+                    if idx == 0xFF {
+                        continue;
+                    }
+                    facets_bins[idx as usize].push(facet_idx);
+                }
+            }
+            let mut samples = vec![
+                0.0f32;
+                params.azimuth.step_count_wrapped()
+                    * params.zenith.step_count_wrapped()
+            ];
+            for azi_idx in 0..params.azimuth.step_count_wrapped() {
+                for zen_idx in 0..params.zenith.step_count_wrapped() {
+                    let azimuth = azi_idx as f32 * params.azimuth.step_size;
+                    let zenith = zen_idx as f32 * params.zenith.step_size;
+                    let dir = math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
+                    let facets = &facets_bins[zen_idx];
+                    let facets_area = facets
+                        .par_chunks(FACET_CHUNK_SIZE)
+                        .map(|idxs| {
+                            idxs.iter().fold(0.0, |sum, idx| {
+                                let n = &mesh.facet_normals[*idx];
+                                let a = mesh.facet_areas[*idx];
+                                if n.dot(dir) <= half_zenith_bin_size_cos {
+                                    sum
+                                } else {
+                                    sum + a
+                                }
+                            })
                         })
-                    })
-                    .collect::<Vec<_>>()
-            };
+                        .sum::<f32>();
+                    let sample_idx = azi_idx * params.zenith.step_count_wrapped() + zen_idx;
+                    samples[sample_idx] = facets_area * denom_rcp;
+                    log::trace!(
+                        "-- φ: {}, θ: {}  | facet area: {} => {}",
+                        azimuth.prettified(),
+                        zenith.prettified(),
+                        facets_area,
+                        samples[sample_idx]
+                    );
+                }
+            }
+
+            // let samples = {
+            //     (0..params.azimuth.step_count_wrapped())
+            //         .flat_map(move |azimuth_idx| {
+            //             // NOTE: the zenith angle is measured from the top of the
+            //             // hemisphere. The center of the zenith/azimuth bin are at the
+            //             // zenith/azimuth angle calculated below.
+            //             (0..params.zenith.step_count_wrapped()).map(move |zenith_idx| {
+            //                 let azimuth = azimuth_idx as f32 * params.azimuth.step_size;
+            //                 let zenith = zenith_idx as f32 * params.zenith.step_size;
+            //                 let dir =
+            //                     math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
+            //                 let facets_area = mesh
+            //                     .facet_normals
+            //                     .par_chunks(FACET_CHUNK_SIZE)
+            //                     .zip(mesh.facet_areas.par_chunks(FACET_CHUNK_SIZE))
+            //                     .map(|(normals, areas)| {
+            //                         normals.iter().zip(areas.iter()).fold(0.0, |sum, (n, a)| {
+            //                             if n.dot(dir) <= half_zenith_bin_size_cos {
+            //                                 sum
+            //                             } else {
+            //                                 sum + a
+            //                             }
+            //                         })
+            //                     })
+            //                     .sum::<f32>();
+            //                 let value = facets_area * denom_rcp;
+            //                 log::trace!(
+            //                     "-- azimuth: {}, zenith: {}  | facet area: {} => {}",
+            //                     azimuth.prettified(),
+            //                     zenith.prettified(),
+            //                     facets_area,
+            //                     value
+            //                 );
+            //                 value
+            //             })
+            //         })
+            //         .collect::<Vec<_>>()
+            // };
+            
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
@@ -221,4 +273,65 @@ pub fn measure_area_distribution(
 /// https://en.wikipedia.org/wiki/Spherical_cap
 pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
     2.0 * std::f32::consts::PI * radius * radius * (1.0 - zenith.cos())
+}
+
+/// Classifies the zenith angle of a microfacet normal into a bin index.
+/// The zenith angle is measured from the top of the hemisphere. The center of
+/// the zenith bin is at the zenith angle calculated from the zenith range.
+///
+///
+/// # Returns
+///
+/// The indices of the bins that the zenith angle falls into.
+fn classify_normal_by_zenith(
+    zenith: Radians,
+    zenith_range: RangeByStepSizeInclusive<Radians>,
+    bin_size_scale: f32,
+) -> [u8; 2] {
+    // All bits set to 1.
+    let mut indices = [0xFF; 2];
+    let mut i = 0;
+    let half_bin_size = zenith_range.step_size * 0.5 * bin_size_scale;
+    for (j, bin_center) in zenith_range.values().enumerate() {
+        if (bin_center - half_bin_size..=bin_center + half_bin_size).contains(&zenith) {
+            indices[i] = j as u8;
+            i += 1;
+        }
+    }
+    indices
+}
+
+#[test]
+fn test_normal_classification_by_zenith() {
+    use vgcore::units::deg;
+    let range =
+        RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
+    assert_eq!(
+        classify_normal_by_zenith(deg!(0.0).to_radians(), range, 1.0),
+        [0, 0xff]
+    );
+    assert_eq!(
+        classify_normal_by_zenith(deg!(7.5).to_radians(), range, 1.0),
+        [0, 0xff]
+    );
+    assert_eq!(
+        classify_normal_by_zenith(deg!(15.0).to_radians(), range, 1.0),
+        [0, 1]
+    );
+    assert_eq!(
+        classify_normal_by_zenith(deg!(22.5).to_radians(), range, 1.0),
+        [1, 0xff]
+    );
+    assert_eq!(
+        classify_normal_by_zenith(deg!(30.0).to_radians(), range, 1.0),
+        [1, 0xff]
+    );
+    assert_eq!(
+        classify_normal_by_zenith(deg!(37.5).to_radians(), range, 1.0),
+        [1, 0xff]
+    );
+    assert_eq!(
+        classify_normal_by_zenith(deg!(45.0).to_radians(), range, 1.0),
+        [1, 2]
+    );
 }

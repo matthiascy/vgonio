@@ -39,7 +39,7 @@ opt-level = 3
 
 [profile.release]
 strip = "debuginfo"
-lto = true
+lto = "fat"
 
 [profile.release.build-override]
 opt-level = 3
