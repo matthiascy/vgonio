@@ -28,6 +28,7 @@ use std::{
 };
 use vgcore::{
     error::VgonioError,
+    math,
     math::{Sph2, Vec3},
     units::rad,
 };
@@ -122,77 +123,172 @@ impl MeasuredBsdfData {
             other: self.params.to_exr_extra_info(),
             ..LayerAttributes::default()
         };
-
-        // Each snapshot is saved as a separate layer of the image.
-        // Each channel of the layer stores the BSDF data for a single wavelength.
-        for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
-            layer_attrib.layer_name = Text::new_or_none(format!(
-                "th{:4.2}_ph{:4.2}",
-                snapshot.w_i.theta.in_degrees().as_f32(),
-                snapshot.w_i.phi.in_degrees().as_f32()
-            ));
-            let offset = snap_idx * w * h * wavelengths.len();
-            for i in 0..w {
-                for j in 0..h {
-                    let idx = patch_indices[i + j * w];
-                    if idx < 0 {
-                        continue;
-                    }
-                    for wavelength_idx in 0..wavelengths.len() {
-                        bsdf_samples_per_wavelength[offset + i + j * w + wavelength_idx * w * h] =
-                            snapshot.samples[idx as usize][wavelength_idx];
-                    }
-                }
-            }
-        }
-
-        let layers = self
-            .snapshots
-            .iter()
-            .enumerate()
-            .map(|(snap_idx, snapshot)| {
+        {
+            // Each snapshot is saved as a separate layer of the image.
+            // Each channel of the layer stores the BSDF data for a single wavelength.
+            for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
                 layer_attrib.layer_name = Text::new_or_none(format!(
                     "th{:4.2}_ph{:4.2}",
                     snapshot.w_i.theta.in_degrees().as_f32(),
                     snapshot.w_i.phi.in_degrees().as_f32()
                 ));
                 let offset = snap_idx * w * h * wavelengths.len();
-                let channels = wavelengths
-                    .iter()
-                    .enumerate()
-                    .map(|(i, wavelength)| {
-                        let name = Text::new_or_panic(format!("{}", wavelength));
-                        AnyChannel::new(
-                            name,
-                            FlatSamples::F32(Cow::Borrowed(
-                                &bsdf_samples_per_wavelength
-                                    [offset + i * w * h..offset + (i + 1) * w * h],
-                            )),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Layer::new(
-                    (w, h),
-                    layer_attrib.clone(),
-                    Encoding::FAST_LOSSLESS,
-                    AnyChannels {
-                        list: SmallVec::from(channels),
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
+                for i in 0..w {
+                    for j in 0..h {
+                        let idx = patch_indices[i + j * w];
+                        if idx < 0 {
+                            continue;
+                        }
+                        for wavelength_idx in 0..wavelengths.len() {
+                            bsdf_samples_per_wavelength
+                                [offset + i + j * w + wavelength_idx * w * h] =
+                                snapshot.samples[idx as usize][wavelength_idx];
+                        }
+                    }
+                }
+            }
 
-        let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
-        let image = Image::from_layers(img_attrib, layers);
-        image.write().to_file(filepath).map_err(|err| {
-            VgonioError::new(
-                format!(
-                    "Failed to write BSDF measurement data to image file: {}",
-                    err
-                ),
-                Some(Box::new(err)),
-            )
-        })
+            let layers = self
+                .snapshots
+                .iter()
+                .enumerate()
+                .map(|(snap_idx, snapshot)| {
+                    layer_attrib.layer_name = Text::new_or_none(format!(
+                        "th{:4.2}_ph{:4.2}",
+                        snapshot.w_i.theta.in_degrees().as_f32(),
+                        snapshot.w_i.phi.in_degrees().as_f32()
+                    ));
+                    let offset = snap_idx * w * h * wavelengths.len();
+                    let channels = wavelengths
+                        .iter()
+                        .enumerate()
+                        .map(|(i, wavelength)| {
+                            let name = Text::new_or_panic(format!("{}", wavelength));
+                            AnyChannel::new(
+                                name,
+                                FlatSamples::F32(Cow::Borrowed(
+                                    &bsdf_samples_per_wavelength
+                                        [offset + i * w * h..offset + (i + 1) * w * h],
+                                )),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    Layer::new(
+                        (w, h),
+                        layer_attrib.clone(),
+                        Encoding::FAST_LOSSLESS,
+                        AnyChannels {
+                            list: SmallVec::from(channels),
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
+            let image = Image::from_layers(img_attrib, layers);
+            image.write().to_file(filepath).map_err(|err| {
+                VgonioError::new(
+                    format!(
+                        "Failed to write BSDF measurement data to image file: {}",
+                        err
+                    ),
+                    Some(Box::new(err)),
+                )
+            })?;
+        }
+
+        if let Some(raw_snapshots) = &self.raw_snapshots {
+            let max_bounces = self
+                .raw_snapshots
+                .as_ref()
+                .map(|snapshots| {
+                    snapshots
+                        .iter()
+                        .map(|snap| snap.stats.n_bounces)
+                        .max()
+                        .unwrap()
+                })
+                .unwrap_or(0) as usize;
+            if max_bounces > wavelengths.len() {
+                // Try to reuse the bsdf_samples_per_wavelength buffer for the raw snapshots.
+                // If the buffer is too small, allocate a new one.
+                bsdf_samples_per_wavelength = vec![0.0; w * h * max_bounces * raw_snapshots.len()];
+            }
+            // Each snapshot is saved as a separate layer of the image.
+            // Each channel of the layer stores the percentage of rays that have bounced a
+            // certain number of times.
+            for (snap_idx, snapshot) in raw_snapshots.iter().enumerate() {
+                let offset = snap_idx * w * h * max_bounces;
+                let rcp_n_received = math::rcp_f32(snapshot.stats.n_received as f32);
+                for i in 0..w {
+                    for j in 0..h {
+                        let idx = patch_indices[i + j * w];
+                        if idx < 0 {
+                            continue;
+                        }
+                        for bounce_idx in 0..max_bounces {
+                            bsdf_samples_per_wavelength[offset + i + j * w + bounce_idx * w * h] =
+                                snapshot.records[idx as usize][0].num_rays_per_bounce[bounce_idx]
+                                    as f32
+                                    * rcp_n_received;
+                        }
+                    }
+                }
+            }
+
+            let layers = raw_snapshots
+                .iter()
+                .enumerate()
+                .map(|(snap_idx, snapshot)| {
+                    layer_attrib.layer_name = Text::new_or_none(format!(
+                        "th{:4.2}_ph{:4.2}",
+                        snapshot.w_i.theta.in_degrees().as_f32(),
+                        snapshot.w_i.phi.in_degrees().as_f32()
+                    ));
+                    let offset = snap_idx * w * h * max_bounces;
+                    let channels = (0..max_bounces)
+                        .map(|bounce_idx| {
+                            let name = Text::new_or_panic(format!("bounce {}", bounce_idx));
+                            AnyChannel::new(
+                                name,
+                                FlatSamples::F32(Cow::Borrowed(
+                                    &bsdf_samples_per_wavelength[offset + bounce_idx * w * h
+                                        ..offset + (bounce_idx + 1) * w * h],
+                                )),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    Layer::new(
+                        (w, h),
+                        layer_attrib.clone(),
+                        Encoding::FAST_LOSSLESS,
+                        AnyChannels {
+                            list: SmallVec::from(channels),
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let filename = format!(
+                "{}_bounces.exr",
+                filepath.file_stem().unwrap().to_str().unwrap()
+            );
+            let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
+            let image = Image::from_layers(img_attrib, layers);
+            image
+                .write()
+                .to_file(filepath.with_file_name(filename))
+                .map_err(|err| {
+                    VgonioError::new(
+                        format!(
+                            "Failed to write BSDF bounces measurement data to image file: {}",
+                            err
+                        ),
+                        Some(Box::new(err)),
+                    )
+                })?;
+        }
+        Ok(())
     }
 
     #[cfg(feature = "visu-dbg")]
