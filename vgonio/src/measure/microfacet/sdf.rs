@@ -4,6 +4,7 @@ use crate::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::SdfMeasurementParams,
     },
+    RangeByStepSizeInclusive,
 };
 use image::FlatSamples;
 use std::path::Path;
@@ -116,8 +117,11 @@ impl MeasuredSdfData {
     /// * `azi_bin_width` - The width of each azimuth bin (in angles).
     /// * `zen_bin_width` - The width of each zenith bin (in angles).
     pub fn pmf(&self, azi_bin_width: Radians, zen_bin_width: Radians) -> SdfPmf {
-        let azi_bin_count = (Radians::TAU / azi_bin_width).ceil() as usize;
-        let zen_bin_count = (Radians::HALF_PI / zen_bin_width).ceil() as usize;
+        let azi_range = RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TAU, azi_bin_width);
+        let zen_range =
+            RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, zen_bin_width);
+        let azi_bin_count = azi_range.step_count_wrapped();
+        let zen_bin_count = zen_range.step_count_wrapped();
         // Bins are stored in the order of zenith first then azimuth, i.e. the
         // zenith bins are stored in the inner loop, and the azimuth bins are
         // stored in the outer loop.
@@ -125,16 +129,20 @@ impl MeasuredSdfData {
         for s in &self.slopes {
             // Compute the azimuth and zenith angles of the slope.
             // Convert from [-pi, pi] to [0, 2pi].
-            let phi = rad!(s.y.atan2(s.x)).wrap_to_tau().as_f32();
-            let theta = (s.x * s.x + s.y * s.y).sqrt().acos();
+            let phi = rad!(-s.y.atan2(-s.x)).wrap_to_tau();
+            let theta = rad!((s.x * s.x + s.y * s.y).sqrt().atan());
             // Compute the azimuth and zenith bin indices.
-            let azi_bin = (phi / azi_bin_width.as_f32()).floor() as usize;
-            let zen_bin = (theta / zen_bin_width.as_f32()).floor() as usize;
+            let azi_bin = azi_range.index_of(phi);
+            let zen_bin = zen_range.index_of(theta);
             // Compute the index of the bin.
-            let bin_index = azi_bin + zen_bin * azi_bin_count;
+            let bin_index = azi_bin * zen_bin_count + zen_bin;
             // Increment the bin.
             hist[bin_index] += 1.0;
         }
+        // let central_val = hist.iter().step_by(zen_bin_count).sum();
+        // hist.iter_mut()
+        //     .step_by(zen_bin_count)
+        //     .for_each(|v| *v = central_val);
         let count_rcp = math::rcp_f32(self.slopes.len() as f32);
         hist.iter_mut().for_each(|v| *v *= count_rcp);
         SdfPmf {

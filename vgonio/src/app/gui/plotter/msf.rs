@@ -2,7 +2,7 @@
 use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
 use crate::{
     app::{
-        cache::{Handle, InnerCache},
+        cache::{Cache, Handle, InnerCache},
         gui::{
             event::EventLoopProxy,
             plotter::{angle_knob, Curve, VariantData},
@@ -147,7 +147,13 @@ impl VariantData for MaskingShadowingExtra {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(&mut self, ui: &mut Ui, _event_loop: &EventLoopProxy, _data: Handle<MeasurementData>) {
+    fn ui(
+        &mut self,
+        ui: &mut Ui,
+        _event_loop: &EventLoopProxy,
+        _data: Handle<MeasurementData>,
+        _cache: &Cache,
+    ) {
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
             egui::Layout::left_to_right(Align::Center),

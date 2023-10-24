@@ -32,7 +32,10 @@ use vgbxdf::{
     dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
     MicrofacetDistributionModel,
 };
-use vgcore::units::{deg, rad, Radians};
+use vgcore::{
+    math,
+    units::{deg, rad, Radians},
+};
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),
@@ -96,7 +99,13 @@ pub trait VariantData {
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle<MeasurementData>);
+    fn ui(
+        &mut self,
+        ui: &mut Ui,
+        event_loop: &EventLoopProxy,
+        data: Handle<MeasurementData>,
+        cache: &Cache,
+    );
 }
 
 pub struct PlotInspector {
@@ -231,7 +240,13 @@ impl VariantData for BsdfPlotExtraData {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(&mut self, _ui: &mut Ui, _event_loop: &EventLoopProxy, _data: Handle<MeasurementData>) {
+    fn ui(
+        &mut self,
+        _ui: &mut Ui,
+        _event_loop: &EventLoopProxy,
+        _data: Handle<MeasurementData>,
+        cache: &Cache,
+    ) {
         todo!()
     }
 }
@@ -528,7 +543,7 @@ impl PlottingWidget for PlotInspector {
                             zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
-                        variant.ui(ui, &self.event_loop, self.data_handle);
+                        variant.ui(ui, &self.event_loop, self.data_handle, &self.cache);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("mndf_plot")
@@ -653,7 +668,7 @@ impl PlottingWidget for PlotInspector {
                             zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.value();
-                        variant.ui(ui, &self.event_loop, self.data_handle);
+                        variant.ui(ui, &self.event_loop, self.data_handle, &self.cache);
                         if let Some(curve) = variant.current_curve() {
                             let aspect = curve.max_val[0] / curve.max_val[1];
                             let plot = Plot::new("plot_msf")
@@ -713,7 +728,7 @@ impl PlottingWidget for PlotInspector {
                 }
                 MeasurementKind::Sdf => {
                     if let Some(variant) = &mut self.variant {
-                        variant.ui(ui, &self.event_loop, self.data_handle);
+                        variant.ui(ui, &self.event_loop, self.data_handle, &self.cache);
                         let extra = variant
                             .as_any()
                             .downcast_ref::<SlopeDistributionExtra>()
@@ -744,17 +759,33 @@ impl PlottingWidget for PlotInspector {
                                     }),
                                 );
                             plot.show(ui, |plot_ui| {
-                                plot_ui.line(
-                                    Line::new(
-                                        curve
-                                            .points
-                                            .iter()
-                                            .map(|[x, y]| [*x, *y])
-                                            .collect::<Vec<_>>(),
-                                    )
-                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[1]))
-                                    .name("Measured - ADF"),
-                                );
+                                if extra.apply_jacobian {
+                                    plot_ui.line(
+                                        Line::new(
+                                            curve
+                                                .points
+                                                .iter()
+                                                .map(|[x, y]| {
+                                                    [*x, *y * math::rcp_f64(x.cos().powi(4))]
+                                                })
+                                                .collect::<Vec<_>>(),
+                                        )
+                                        .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[1]))
+                                        .name("Measured - ADF"),
+                                    );
+                                } else {
+                                    plot_ui.line(
+                                        Line::new(
+                                            curve
+                                                .points
+                                                .iter()
+                                                .map(|[x, y]| [*x, *y])
+                                                .collect::<Vec<_>>(),
+                                        )
+                                        .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[1]))
+                                        .name("Measured - ADF"),
+                                    );
+                                }
                             });
                         }
                     }

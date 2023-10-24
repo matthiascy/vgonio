@@ -17,6 +17,7 @@ use vgcore::units::{rad, Radians};
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
 use crate::{
+    app::cache::Cache,
     fitting::{FittingProblemKind, MicrofacetDistributionFittingMethod},
     measure::data::MeasurementData,
 };
@@ -192,7 +193,13 @@ impl VariantData for AreaDistributionExtra {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle<MeasurementData>) {
+    fn ui(
+        &mut self,
+        ui: &mut Ui,
+        event_loop: &EventLoopProxy,
+        data: Handle<MeasurementData>,
+        cache: &Cache,
+    ) {
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
             egui::Layout::left_to_right(Align::Center),
