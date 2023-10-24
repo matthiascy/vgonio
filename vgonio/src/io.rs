@@ -27,9 +27,7 @@ pub mod vgmo {
         measure::{
             bsdf::{
                 emitter::EmitterParams,
-                receiver::{
-                    BounceAndEnergy, DataRetrievalMode, PartitionScheme, ReceiverParams, Ring,
-                },
+                receiver::{BounceAndEnergy, DataRetrieval, PartitionScheme, ReceiverParams, Ring},
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
                 SpectralSamples,
             },
@@ -605,14 +603,14 @@ pub mod vgmo {
                     };
                     let precision_theta = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
                     let precision_phi = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
-                    let retrieval_mode = DataRetrievalMode::from(u32::from_le_bytes(
+                    let retrieval = DataRetrieval::from(u32::from_le_bytes(
                         buf[24..28].try_into().unwrap(),
                     ) as u8);
                     let params = ReceiverParams {
                         domain,
                         precision: Sph2::new(precision_theta, precision_phi),
                         scheme,
-                        retrieval_mode,
+                        retrieval,
                     };
                     let expected_num_rings = params.num_rings();
                     let num_rings = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
@@ -660,7 +658,7 @@ pub mod vgmo {
                     buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
                     buf[16..20].copy_from_slice(&(partition.num_rings() as u32).to_le_bytes());
                     buf[20..24].copy_from_slice(&(partition.num_patches() as u32).to_le_bytes());
-                    buf[24..28].copy_from_slice(&(self.retrieval_mode as u32).to_le_bytes());
+                    buf[24..28].copy_from_slice(&(self.retrieval as u32).to_le_bytes());
                     let offset = 28;
                     for (i, ring) in partition.rings.iter().enumerate() {
                         ring.write_to_buf(&mut buf[offset + i * Ring::REQUIRED_SIZE..]);
@@ -1177,7 +1175,7 @@ pub mod vgmo {
                         params.emitter.measurement_points_count(),
                     )?;
                     let mut raw_snapshots = None;
-                    if params.receiver.retrieval_mode == DataRetrievalMode::FullData {
+                    if params.receiver.retrieval == DataRetrieval::FullData {
                         let n_patches = params.receiver.num_patches();
                         let mut snapshots = Vec::with_capacity(n_patches);
                         for _ in 0..n_patches {
@@ -1214,7 +1212,7 @@ pub mod vgmo {
             match compression {
                 CompressionScheme::None => {
                     Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelengths)?;
-                    if self.params.receiver.retrieval_mode == DataRetrievalMode::FullData {
+                    if self.params.receiver.retrieval == DataRetrieval::FullData {
                         for snapshot in self.raw_snapshots.as_ref().unwrap() {
                             snapshot.write(writer, n_wavelengths)?;
                         }

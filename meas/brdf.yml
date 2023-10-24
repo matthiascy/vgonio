@@ -16,7 +16,7 @@ type: !bsdf
       theta: 2.0 deg
       phi: 0.5 deg
     scheme: beckers
-    retrieval_mode: bsdf-only # full-data / bsdf-only
+    retrieval: full-data # full-data / bsdf-only
 surfaces:
    - usr://surfaces/olaf/aluminium65bar100.vgms
   # - usr://surfaces/gaussian_sigma_0.5.vgms

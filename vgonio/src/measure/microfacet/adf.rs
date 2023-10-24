@@ -7,7 +7,7 @@ use crate::{
     },
     RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
 };
-use std::path::Path;
+use std::{borrow::Cow, path::Path};
 use vgcore::{
     error::VgonioError,
     math,
@@ -53,7 +53,7 @@ impl MeasuredAdfData {
             domain: SphericalDomain::Upper,
             precision: Sph2::new(self.params.zenith.step_size, self.params.azimuth.step_size),
             scheme: PartitionScheme::EqualAngle,
-            retrieval_mode: Default::default(),
+            retrieval: Default::default(),
         };
         let partition = receiver.partitioning();
         // Collect the data following the patches.
@@ -110,7 +110,10 @@ impl MeasuredAdfData {
             },
             Encoding::FAST_LOSSLESS,
             AnyChannels {
-                list: SmallVec::from_vec(vec![AnyChannel::new("NDF", FlatSamples::F32(samples))]),
+                list: SmallVec::from_vec(vec![AnyChannel::new(
+                    "NDF",
+                    FlatSamples::F32(Cow::Borrowed(&samples)),
+                )]),
             },
         );
         let image = Image::from_layer(layer);

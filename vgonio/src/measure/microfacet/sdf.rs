@@ -7,7 +7,7 @@ use crate::{
     RangeByStepSizeInclusive,
 };
 use image::FlatSamples;
-use std::path::Path;
+use std::{borrow::Cow, path::Path};
 use vgcore::{
     error::VgonioError,
     math,
@@ -100,7 +100,10 @@ impl MeasuredSdfData {
             },
             Encoding::FAST_LOSSLESS,
             AnyChannels {
-                list: SmallVec::from_vec(vec![AnyChannel::new("SDF", FlatSamples::F32(pixels))]),
+                list: SmallVec::from_vec(vec![AnyChannel::new(
+                    "SDF",
+                    FlatSamples::F32(Cow::Borrowed(&pixels)),
+                )]),
             },
         );
         let image = Image::from_layer(layer);

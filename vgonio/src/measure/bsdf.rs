@@ -11,7 +11,7 @@ use crate::{
     measure::{
         bsdf::{
             emitter::Emitter,
-            receiver::{BounceAndEnergy, CollectedData, DataRetrievalMode, PerPatchData, Receiver},
+            receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
@@ -21,6 +21,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut, Index, IndexMut},
     path::Path,
@@ -75,34 +76,44 @@ impl MeasuredBsdfData {
         use exr::prelude::*;
         let (w, h) = (resolution as usize, resolution as usize);
         let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
-        let mut bsdf_samples_per_wavelength = vec![vec![0.0; w * h]; wavelengths.len()];
-        let patches = self.params.receiver.partitioning();
+        // The BSDF data are stored in a single flat array, with the order of
+        // the dimensions as follows:
+        // - x: width
+        // - y: height
+        // - z: wavelength
+        // - w: snapshot
+        let mut bsdf_samples_per_wavelength =
+            vec![0.0; w * h * wavelengths.len() * self.snapshots.len()];
         // Pre-compute the patch index for each pixel.
-        let mut patch_indices = vec![0i32; w * h];
-        for i in 0..w {
-            // x, width, column
-            for j in 0..h {
-                // y, height, row
-                let x = ((2 * i) as f32 / w as f32 - 1.0) * std::f32::consts::SQRT_2;
-                // Flip the y-axis to match the BSDF coordinate system.
-                let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
-                let r_disc = (x * x + y * y).sqrt();
-                let theta = 2.0 * (r_disc / 2.0).asin();
-                let phi = {
-                    let phi = (y).atan2(x);
-                    if phi < 0.0 {
-                        phi + std::f32::consts::TAU
-                    } else {
-                        phi
-                    }
-                };
-                patch_indices[i + j * w] = match patches.contains(Sph2::new(rad!(theta), rad!(phi)))
-                {
-                    None => -1,
-                    Some(idx) => idx as i32,
+        let patch_indices = {
+            let patches = self.params.receiver.partitioning();
+            let mut patch_indices = vec![0i32; w * h];
+            for i in 0..w {
+                // x, width, column
+                for j in 0..h {
+                    // y, height, row
+                    let x = ((2 * i) as f32 / w as f32 - 1.0) * std::f32::consts::SQRT_2;
+                    // Flip the y-axis to match the BSDF coordinate system.
+                    let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
+                    let r_disc = (x * x + y * y).sqrt();
+                    let theta = 2.0 * (r_disc / 2.0).asin();
+                    let phi = {
+                        let phi = (y).atan2(x);
+                        if phi < 0.0 {
+                            phi + std::f32::consts::TAU
+                        } else {
+                            phi
+                        }
+                    };
+                    patch_indices[i + j * w] =
+                        match patches.contains(Sph2::new(rad!(theta), rad!(phi))) {
+                            None => -1,
+                            Some(idx) => idx as i32,
+                        }
                 }
             }
-        }
+            patch_indices
+        };
 
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
@@ -113,28 +124,39 @@ impl MeasuredBsdfData {
         };
 
         // Each snapshot is saved as a separate layer of the image.
+        // Each channel of the layer stores the BSDF data for a single wavelength.
+        for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
+            layer_attrib.layer_name = Text::new_or_none(format!(
+                "th{:4.2}_ph{:4.2}",
+                snapshot.w_i.theta.in_degrees().as_f32(),
+                snapshot.w_i.phi.in_degrees().as_f32()
+            ));
+            let offset = snap_idx * w * h * wavelengths.len();
+            for i in 0..w {
+                for j in 0..h {
+                    let idx = patch_indices[i + j * w];
+                    if idx < 0 {
+                        continue;
+                    }
+                    for wavelength_idx in 0..wavelengths.len() {
+                        bsdf_samples_per_wavelength[offset + i + j * w + wavelength_idx * w * h] =
+                            snapshot.samples[idx as usize][wavelength_idx];
+                    }
+                }
+            }
+        }
+
         let layers = self
             .snapshots
             .iter()
-            .map(|snapshot| {
+            .enumerate()
+            .map(|(snap_idx, snapshot)| {
                 layer_attrib.layer_name = Text::new_or_none(format!(
                     "th{:4.2}_ph{:4.2}",
                     snapshot.w_i.theta.in_degrees().as_f32(),
                     snapshot.w_i.phi.in_degrees().as_f32()
                 ));
-                for i in 0..w {
-                    for j in 0..h {
-                        let idx = patch_indices[i + j * w];
-                        if idx < 0 {
-                            continue;
-                        }
-                        for (wavelength_idx, bsdf) in
-                            bsdf_samples_per_wavelength.iter_mut().enumerate()
-                        {
-                            bsdf[i + j * w] = snapshot.samples[idx as usize][wavelength_idx];
-                        }
-                    }
-                }
+                let offset = snap_idx * w * h * wavelengths.len();
                 let channels = wavelengths
                     .iter()
                     .enumerate()
@@ -142,7 +164,10 @@ impl MeasuredBsdfData {
                         let name = Text::new_or_panic(format!("{}", wavelength));
                         AnyChannel::new(
                             name,
-                            FlatSamples::F32(bsdf_samples_per_wavelength[i].clone()),
+                            FlatSamples::F32(Cow::Borrowed(
+                                &bsdf_samples_per_wavelength
+                                    [offset + i * w * h..offset + (i + 1) * w * h],
+                            )),
                         )
                     })
                     .collect::<Vec<_>>();
@@ -565,9 +590,9 @@ pub fn measure_bsdf_rt(
         }
 
         let snapshots = collected.compute_bsdf(&params);
-        let raw_snapshots = match params.receiver.retrieval_mode {
-            DataRetrievalMode::FullData => Some(collected.snapshots),
-            DataRetrievalMode::BsdfOnly => None,
+        let raw_snapshots = match params.receiver.retrieval {
+            DataRetrieval::FullData => Some(collected.snapshots),
+            DataRetrieval::BsdfOnly => None,
         };
         measurements.push(MeasurementData {
             name: surf.file_stem().unwrap().to_owned(),

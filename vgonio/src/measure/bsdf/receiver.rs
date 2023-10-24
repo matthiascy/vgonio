@@ -23,7 +23,7 @@ use vgsurf::MicroSurface;
 
 /// Data collected by the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
-pub enum DataRetrievalMode {
+pub enum DataRetrieval {
     /// The full data are collected.
     #[serde(rename = "full-data")]
     FullData = 0x00,
@@ -33,7 +33,7 @@ pub enum DataRetrievalMode {
     BsdfOnly = 0x01,
 }
 
-impl From<u8> for DataRetrievalMode {
+impl From<u8> for DataRetrieval {
     fn from(v: u8) -> Self {
         match v {
             0x00 => Self::FullData,
@@ -60,8 +60,8 @@ pub struct ReceiverParams {
     pub precision: Sph2,
     /// Partitioning scheme of the globe.
     pub scheme: PartitionScheme,
-    /// Data retrieval mode.
-    pub retrieval_mode: DataRetrievalMode,
+    /// Type of data to retrieve.
+    pub retrieval: DataRetrieval,
 }
 
 /// Scheme of the partitioning of the receiver.

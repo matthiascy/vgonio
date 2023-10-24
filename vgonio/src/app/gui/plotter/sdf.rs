@@ -4,11 +4,11 @@ use crate::{
         gui::{
             event::EventLoopProxy,
             misc::drag_angle,
-            plotter::{angle_knob, debug_print_angle_pair, Curve, VariantData},
+            plotter::{angle_knob, Curve, VariantData},
         },
     },
     fitting::FittedModel,
-    measure::{data::MeasurementData, params::MeasurementKind},
+    measure::data::MeasurementData,
     RangeByStepSizeInclusive,
 };
 use egui::{Align, Ui};
@@ -17,6 +17,9 @@ use vgcore::{
     math,
     units::{deg, rad, Radians},
 };
+
+#[cfg(debug_assertions)]
+use crate::app::gui::plotter::debug_print_angle_pair;
 
 pub struct SlopeDistributionExtra {
     /// The azimuth of the facet normal.

@@ -20,7 +20,7 @@ use crate::{
     },
     io::{OutputFileFormatOptions, OutputOptions},
     measure::{
-        bsdf::receiver::{DataRetrievalMode, PartitionScheme, ReceiverParams},
+        bsdf::receiver::{DataRetrieval, PartitionScheme, ReceiverParams},
         params::{MeasurementKind, MeasurementParams},
     },
     SphericalDomain,
@@ -82,13 +82,13 @@ impl ReceiverParams {
                         ui.label("Data Retrieval:");
                         ui.horizontal_wrapped(|ui| {
                             ui.selectable_value(
-                                &mut self.retrieval_mode,
-                                DataRetrievalMode::BsdfOnly,
+                                &mut self.retrieval,
+                                DataRetrieval::BsdfOnly,
                                 "BSDF Only",
                             );
                             ui.selectable_value(
-                                &mut self.retrieval_mode,
-                                DataRetrievalMode::FullData,
+                                &mut self.retrieval,
+                                DataRetrieval::FullData,
                                 "Full Data",
                             );
                         });
