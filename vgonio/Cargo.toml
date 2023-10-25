@@ -20,6 +20,14 @@ verbose-dbg = []
 [dependencies]
 chrono = { workspace = true }
 clap = { workspace = true }
+egui = { workspace = true }
+egui_dock = { workspace = true }
+egui_extras = { workspace = true }
+egui-winit = { workspace = true }
+egui-gizmo = { workspace = true }
+egui_plot = { workspace = true }
+egui-toast = { workspace = true }
+env_logger = { workspace = true }
 embree = { workspace = true, optional = true }
 exr = { workspace = true }
 flate2 = { workspace = true }
@@ -36,14 +44,6 @@ bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
 csv = "1"
 dirs = "5.0"
-egui = { version = "0.23", features = ["bytemuck"] }
-egui_dock = { version = "0.8" }
-egui_extras = "0.23"
-egui-winit = { version = "0.23" }
-egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
-egui_plot = "0.23"
-egui-toast = "0.9"
-env_logger = "0.10"
 futures-intrusive = "0.5"
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 levenberg-marquardt = "0.13"
