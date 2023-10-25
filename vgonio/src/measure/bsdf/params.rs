@@ -169,6 +169,11 @@ impl BsdfMeasurementParams {
         self.emitter.measurement_points_count() * self.receiver.num_patches()
     }
 
+    /// Checks if the incident and transmitted media are air.
+    pub fn is_both_air_medium(&self) -> bool {
+        self.incident_medium == Medium::Air && self.transmitted_medium == Medium::Air
+    }
+
     /// Returns the parameters as a HashMap.
     pub fn to_exr_extra_info(
         &self,

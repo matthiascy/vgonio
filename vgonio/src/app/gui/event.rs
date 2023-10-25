@@ -32,6 +32,7 @@ use super::outliner::OutlinerItem;
 pub struct EventLoopProxy(winit::event_loop::EventLoopProxy<VgonioEvent>);
 
 impl EventLoopProxy {
+    /// Send an event to the event loop.
     pub fn send_event(&self, event: VgonioEvent) {
         match self.0.send_event(event) {
             Ok(_) => {}
@@ -41,6 +42,7 @@ impl EventLoopProxy {
         }
     }
 
+    /// Create a new event loop proxy.
     pub fn new(event_loop: &winit::event_loop::EventLoop<VgonioEvent>) -> Self {
         Self(event_loop.create_proxy())
     }

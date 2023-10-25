@@ -67,6 +67,7 @@ use crate::{
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},
+            notify::NotifyKind,
             state::debug::DebugDrawingState,
             surf_viewer::SurfaceViewerStates,
         },
@@ -156,6 +157,8 @@ pub struct VgonioGuiApp {
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// Debug drawing state.
     dbg_drawing_state: DebugDrawingState,
+    /// Event loop proxy for sending events to the application.
+    event_loop_proxy: EventLoopProxy,
 }
 
 impl VgonioGuiApp {
@@ -178,6 +181,7 @@ impl VgonioGuiApp {
             },
             ..Default::default()
         };
+        let event_loop_proxy = EventLoopProxy::new(event_loop);
         let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
         let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
@@ -200,7 +204,7 @@ impl VgonioGuiApp {
         let bsdf_viewer = Arc::new(RwLock::new(BsdfViewer::new(
             gpu_ctx.clone(),
             gui_ctx.renderer.clone(),
-            EventLoopProxy::new(event_loop),
+            event_loop_proxy.clone(),
         )));
 
         let ui = VgonioGui::new(
@@ -223,7 +227,7 @@ impl VgonioGuiApp {
         let dbg_drawing_state = DebugDrawingState::new(
             &gpu_ctx,
             canvas.format(),
-            EventLoopProxy::new(event_loop),
+            event_loop_proxy.clone(),
             cache.clone(),
         );
 
@@ -244,6 +248,7 @@ impl VgonioGuiApp {
             bsdf_viewer,
             surface_viewer_states,
             theme: Default::default(),
+            event_loop_proxy,
         })
     }
 
@@ -625,6 +630,16 @@ impl VgonioGuiApp {
                                 )
                             }),
                             MeasurementParams::Bsdf(params) => {
+                                if params.is_both_air_medium() {
+                                    log::error!("Cannot measure BSDF for both air medium");
+                                    self.event_loop_proxy.send_event(Notify {
+                                        kind: NotifyKind::Error,
+                                        text: "Cannot measure BSDF for both air medium".to_string(),
+                                        time: 2.0,
+                                    });
+                                    return;
+                                }
+
                                 #[cfg(feature = "visu-dbg")]
                                 {
                                     let measured = self.cache.read(|cache| {

@@ -394,40 +394,33 @@ impl MeasurementDialog {
                                 text: "No surfaces selected!".to_string(),
                                 time: 3.0,
                             });
-                        } else {
-                            let params = match self.kind {
-                                MeasurementKind::Bsdf => {
-                                    MeasurementParams::Bsdf(self.tab_bsdf.params)
-                                }
-                                MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
-                                MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
-                                MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),
-                            };
-                            let options = if self.write_to_file {
-                                match self.format {
-                                    OutputFormat::Vgmo => Some(OutputOptions {
-                                        dir: None,
-                                        format: OutputFileFormatOptions::Vgmo {
-                                            encoding: self.encoding,
-                                            compression: self.compression,
-                                        },
-                                    }),
-                                    OutputFormat::Exr => Some(OutputOptions {
-                                        dir: None,
-                                        format: OutputFileFormatOptions::Exr {
-                                            resolution: self.img_res,
-                                        },
-                                    }),
-                                }
-                            } else {
-                                None
-                            };
-                            self.event_loop.send_event(VgonioEvent::Measure {
-                                params,
-                                surfaces: self.selector.selected().collect::<Vec<_>>(),
-                                output_opts: options,
-                            });
                         }
+                        let params = match self.kind {
+                            MeasurementKind::Bsdf => MeasurementParams::Bsdf(self.tab_bsdf.params),
+                            MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
+                            MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
+                            MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),
+                        };
+                        let options = self.write_to_file.then(|| match self.format {
+                            OutputFormat::Vgmo => OutputOptions {
+                                dir: None,
+                                format: OutputFileFormatOptions::Vgmo {
+                                    encoding: self.encoding,
+                                    compression: self.compression,
+                                },
+                            },
+                            OutputFormat::Exr => OutputOptions {
+                                dir: None,
+                                format: OutputFileFormatOptions::Exr {
+                                    resolution: self.img_res,
+                                },
+                            },
+                        });
+                        self.event_loop.send_event(VgonioEvent::Measure {
+                            params,
+                            surfaces: self.selector.selected().collect::<Vec<_>>(),
+                            output_opts: options,
+                        });
                     }
                 });
             });

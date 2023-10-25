@@ -239,16 +239,19 @@ impl MeasuredBsdfData {
             let layers = raw_snapshots
                 .iter()
                 .enumerate()
-                .map(|(snap_idx, snapshot)| {
+                .filter_map(|(snap_idx, snapshot)| {
                     layer_attrib.layer_name = Text::new_or_none(format!(
                         "th{:4.2}_ph{:4.2}",
                         snapshot.w_i.theta.in_degrees().as_f32(),
                         snapshot.w_i.phi.in_degrees().as_f32()
                     ));
                     let offset = snap_idx * w * h * max_bounces;
-                    let channels = (0..max_bounces)
+                    if snapshot.stats.n_bounces == 0 {
+                        return None;
+                    }
+                    let channels = (0..snapshot.stats.n_bounces as usize)
                         .map(|bounce_idx| {
-                            let name = Text::new_or_panic(format!("bounce {}", bounce_idx));
+                            let name = Text::new_or_panic(format!("bounce {}", bounce_idx + 1));
                             AnyChannel::new(
                                 name,
                                 FlatSamples::F32(Cow::Borrowed(
@@ -258,14 +261,14 @@ impl MeasuredBsdfData {
                             )
                         })
                         .collect::<Vec<_>>();
-                    Layer::new(
+                    Some(Layer::new(
                         (w, h),
                         layer_attrib.clone(),
                         Encoding::FAST_LOSSLESS,
                         AnyChannels {
                             list: SmallVec::from(channels),
                         },
-                    )
+                    ))
                 })
                 .collect::<Vec<_>>();
 
