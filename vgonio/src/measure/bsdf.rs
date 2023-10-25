@@ -198,6 +198,7 @@ impl MeasuredBsdfData {
         }
 
         if let Some(raw_snapshots) = &self.raw_snapshots {
+            log::debug!("Writing BSDF bounces measurement data to image file.");
             let max_bounces = self
                 .raw_snapshots
                 .as_ref()
@@ -211,7 +212,6 @@ impl MeasuredBsdfData {
                 .unwrap_or(0) as usize;
             if max_bounces > wavelengths.len() {
                 // Try to reuse the bsdf_samples_per_wavelength buffer for the raw snapshots.
-                // If the buffer is too small, allocate a new one.
                 bsdf_samples_per_wavelength = vec![0.0; w * h * max_bounces * raw_snapshots.len()];
             }
             // Each snapshot is saved as a separate layer of the image.
@@ -226,7 +226,7 @@ impl MeasuredBsdfData {
                         if idx < 0 {
                             continue;
                         }
-                        for bounce_idx in 0..max_bounces {
+                        for bounce_idx in 0..snapshot.stats.n_bounces as usize {
                             bsdf_samples_per_wavelength[offset + i + j * w + bounce_idx * w * h] =
                                 snapshot.records[idx as usize][0].num_rays_per_bounce[bounce_idx]
                                     as f32

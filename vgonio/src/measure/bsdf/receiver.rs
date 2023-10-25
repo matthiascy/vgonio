@@ -536,9 +536,9 @@ impl Receiver {
 
         log::debug!("n_escaped: {}", n_escaped.load(atomic::Ordering::Relaxed));
 
-        let max_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
+        let max_bounces = n_bounce.load(atomic::Ordering::Relaxed) as usize;
 
-        let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounce);
+        let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounces);
         stats.n_received = n_received.load(atomic::Ordering::Relaxed);
 
         // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
@@ -562,10 +562,11 @@ impl Receiver {
         log::debug!("stats.n_reflected: {:?}", stats.n_reflected);
         log::debug!("stats.n_received: {:?}", stats.n_received);
 
-        let mut data = vec![
-            SpectralSamples::splat(BounceAndEnergy::empty(max_bounce), spectrum_len);
-            self.patches.num_patches()
-        ];
+        let mut data =
+            vec![
+                SpectralSamples::splat(BounceAndEnergy::empty(max_bounces), spectrum_len);
+                self.patches.num_patches()
+            ];
 
         // Compute the vertex positions of the outgoing rays.
         #[cfg(any(feature = "visu-dbg", debug_assertions))]
