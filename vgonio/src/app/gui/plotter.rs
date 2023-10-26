@@ -571,6 +571,7 @@ impl PlottingWidget for PlotInspector {
                                 );
                             plot.show(ui, |plot_ui| {
                                 let scale = variant.scale_factor() as f64;
+                                let mut color_idx_base = 0;
                                 plot_ui.line(
                                     Line::new(
                                         curve
@@ -579,9 +580,13 @@ impl PlottingWidget for PlotInspector {
                                             .map(|[x, y]| [*x, *y * scale])
                                             .collect::<Vec<_>>(),
                                     )
-                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[0]))
+                                    .stroke(egui::epaint::Stroke::new(
+                                        2.0,
+                                        LINE_COLORS[color_idx_base],
+                                    ))
                                     .name(format!("Measured - ADF (x {:.4})", scale)),
                                 );
+                                color_idx_base += 1;
                                 plot_ui.line(
                                     Line::new(
                                         curve
@@ -590,14 +595,34 @@ impl PlottingWidget for PlotInspector {
                                             .map(|[x, y]| [*x, *y])
                                             .collect::<Vec<_>>(),
                                     )
-                                    .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[1]))
+                                    .stroke(egui::epaint::Stroke::new(
+                                        2.0,
+                                        LINE_COLORS[color_idx_base],
+                                    ))
                                     .name("Measured - ADF"),
                                 );
-                                let mut color_idx_base = 1;
+                                color_idx_base += 1;
                                 let extra = variant
                                     .as_any()
                                     .downcast_ref::<AreaDistributionExtra>()
                                     .unwrap();
+                                if extra.show_slope_distribution {
+                                    plot_ui.line(
+                                        Line::new(
+                                            curve
+                                                .points
+                                                .iter()
+                                                .map(|[x, y]| [*x, *y * x.cos().powi(4) * scale])
+                                                .collect::<Vec<_>>(),
+                                        )
+                                        .stroke(egui::epaint::Stroke::new(
+                                            2.0,
+                                            LINE_COLORS[color_idx_base],
+                                        ))
+                                        .name("Converted - SDF"),
+                                    );
+                                }
+                                color_idx_base += 1;
                                 {
                                     for (i, (model, scale, curves)) in
                                         extra.fitted.iter().enumerate()
@@ -608,7 +633,8 @@ impl PlottingWidget for PlotInspector {
                                             )
                                             .stroke(egui::epaint::Stroke::new(
                                                 2.0,
-                                                LINE_COLORS[(i + 2) % LINE_COLORS.len()],
+                                                LINE_COLORS
+                                                    [(i + color_idx_base) % LINE_COLORS.len()],
                                             ))
                                             .name(
                                                 format!(

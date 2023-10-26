@@ -59,6 +59,8 @@ pub struct AreaDistributionExtra {
     pub curves: Vec<Curve>,
     /// The scale factor of the current curve.
     pub scale_factor: f32,
+    /// Enable the Slope Distribution plot.
+    pub show_slope_distribution: bool,
     /// The fitted curves together with the fitted model.
     pub fitted: Vec<(
         Box<dyn MicrofacetDistributionModel>,
@@ -85,6 +87,7 @@ impl Default for AreaDistributionExtra {
             azimuth_m: rad!(0.0),
             curves: vec![],
             scale_factor: 1.0,
+            show_slope_distribution: false,
             fitted: vec![],
             selected: ModelSelector {
                 model: MicrofacetDistributionModelKind::Beckmann,
@@ -260,6 +263,7 @@ impl VariantData for AreaDistributionExtra {
                     .speed(0.01)
                     .clamp_range(1.0..=1024.0),
             );
+            ui.toggle_value(&mut self.show_slope_distribution, "Show slope distribution");
         });
 
         egui::CollapsingHeader::new("Fitting")

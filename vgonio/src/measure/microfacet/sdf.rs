@@ -46,9 +46,18 @@ pub struct SdfPmf {
 }
 
 impl MeasuredSdfData {
-    /// Computes the slope distribution function (SDF) of the measured data then
-    /// writes it as an OpenEXR file.
-    pub fn write_as_exr(
+    /// Save the measured slopes as an image.
+    ///
+    /// The image is actually a histogram of the slopes. Each pixel in the image
+    /// represents the number of slopes that fall into the corresponding bin.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - The path to the image file. It should be a complete path
+    ///   with the file name and extension.
+    /// * `timestamp` - The timestamp of the measurement.
+    /// * `resolution` - The resolution of the output image.
+    pub fn write_histogram_as_exr(
         &self,
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
@@ -93,7 +102,7 @@ impl MeasuredSdfData {
             (resolution as usize, resolution as usize),
             LayerAttributes {
                 layer_name: Some(Text::from("SDF")),
-                capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(
+                capture_date: Text::new_or_none(vgcore::utils::iso_timestamp_from_datetime(
                     timestamp,
                 )),
                 ..LayerAttributes::default()
@@ -113,7 +122,8 @@ impl MeasuredSdfData {
             .map_err(|err| VgonioError::new("Failed to write SDF EXR file.", Some(Box::new(err))))
     }
 
-    /// Returns the histogram of the slope (PMF of the slope distribution).
+    /// Computes the histogram of the slope (PMF of the slope distribution)
+    /// binned over the whole hemisphere.
     ///
     /// # Arguments
     ///
@@ -142,10 +152,6 @@ impl MeasuredSdfData {
             // Increment the bin.
             hist[bin_index] += 1.0;
         }
-        // let central_val = hist.iter().step_by(zen_bin_count).sum();
-        // hist.iter_mut()
-        //     .step_by(zen_bin_count)
-        //     .for_each(|v| *v = central_val);
         let count_rcp = math::rcp_f32(self.slopes.len() as f32);
         hist.iter_mut().for_each(|v| *v *= count_rcp);
         SdfPmf {

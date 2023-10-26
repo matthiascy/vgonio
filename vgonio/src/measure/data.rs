@@ -370,7 +370,7 @@ impl MeasurementData {
                         eprintln!("Writing MSF to EXR is not supported yet.");
                     }
                     MeasuredData::Sdf(sdf) => {
-                        sdf.write_as_exr(&filepath, &self.timestamp, *resolution)?;
+                        sdf.write_histogram_as_exr(&filepath, &self.timestamp, *resolution)?;
                     }
                 }
             }
