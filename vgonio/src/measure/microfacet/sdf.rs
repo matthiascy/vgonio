@@ -66,60 +66,139 @@ impl MeasuredSdfData {
         use exr::prelude::*;
         let pixels_count = resolution * resolution;
         let mut pixels = vec![0.0; pixels_count as usize];
+        let mut pixels_weighted = vec![0.0; pixels_count as usize];
+        let mut pixels_diff = vec![0.0; pixels_count as usize];
         let mut num_slopes_out_of_range = 0;
+        let mut num_weighted_slopes_out_range = 0;
         for slope in &self.slopes {
-            // Scale the slope to the range [-1, 1] by dividing it by the
-            // maximum slope.
-            let slope = *slope / self.params.max_slope;
-            // Scale the slope to the range [0, 1] by multiplying it by 0.5 and
-            // then adding 0.5.
-            let slope = slope * 0.5 + 0.5;
-            // Convert the slope value to a pixel coordinate.
-            let bin: IVec2 = (slope * resolution as f32).as_ivec2();
+            {
+                // Scale the slope to the range [-1, 1] by dividing it by the
+                // maximum slope.
+                let slope = *slope / self.params.max_slope;
+                // Scale the slope to the range [0, 1] by multiplying it by 0.5 and
+                // then adding 0.5.
+                let slope = slope * 0.5 + 0.5;
+                // Convert the slope value to a pixel coordinate.
+                let bin: IVec2 = (slope * resolution as f32).as_ivec2();
 
-            // There may be some slopes that are outside the range [0, 1] due to
-            // the fact that the maximum slope is not always the largest slope.
-            if bin.x < 0 || bin.x >= resolution as i32 {
-                num_slopes_out_of_range += 1;
-                continue;
+                // There may be some slopes that are outside the range [0, 1] due to
+                // the fact that the maximum slope is not always the largest slope.
+                if bin.x < 0 || bin.x >= resolution as i32 {
+                    num_slopes_out_of_range += 1;
+                    continue;
+                }
+                if bin.y < 0 || bin.y >= resolution as i32 {
+                    num_slopes_out_of_range += 1;
+                    continue;
+                }
+                // Compute the pixel index.
+                let index = bin.y as u32 * resolution + bin.x as u32;
+                pixels[index as usize] += 1.0;
             }
-            if bin.y < 0 || bin.y >= resolution as i32 {
-                num_slopes_out_of_range += 1;
-                continue;
+            {
+                let theta = math::sqr(slope.x) + math::sqr(slope.y).sqrt().atan();
+                let rcp_cos4 = math::rcp_f32(theta.cos().powi(4));
+                let weighted = *slope * rcp_cos4;
+                let bin: IVec2 = {
+                    let mut _slope = weighted / self.params.max_slope;
+                    _slope = _slope * 0.5 + 0.5;
+                    (_slope * resolution as f32).as_ivec2()
+                };
+                if bin.x < 0 || bin.x >= resolution as i32 {
+                    num_weighted_slopes_out_range += 1;
+                    continue;
+                }
+                if bin.y < 0 || bin.y >= resolution as i32 {
+                    num_weighted_slopes_out_range += 1;
+                    continue;
+                }
+                let index = bin.y as u32 * resolution + bin.x as u32;
+                pixels_weighted[index as usize] += 1.0;
             }
-            // Compute the pixel index.
-            let index = bin.y as u32 * resolution + bin.x as u32;
-            pixels[index as usize] += 1.0;
         }
         log::info!(
             "Percentage of slopes out of range: %{}",
             (num_slopes_out_of_range as f32 / self.slopes.len() as f32) * 100.0
         );
+        log::info!(
+            "Percentage of weighted slopes out of range: %{}",
+            (num_weighted_slopes_out_range as f32 / self.slopes.len() as f32) * 100.0
+        );
         // Normalize the pixels.
         pixels.iter_mut().for_each(|v| *v /= pixels_count as f32);
-        // Write the pixels as an OpenEXR file.
-        let layer = Layer::new(
-            (resolution as usize, resolution as usize),
-            LayerAttributes {
-                layer_name: Some(Text::from("SDF")),
-                capture_date: Text::new_or_none(vgcore::utils::iso_timestamp_from_datetime(
-                    timestamp,
-                )),
-                ..LayerAttributes::default()
-            },
-            Encoding::FAST_LOSSLESS,
-            AnyChannels {
-                list: SmallVec::from_vec(vec![AnyChannel::new(
-                    "SDF",
-                    FlatSamples::F32(Cow::Borrowed(&pixels)),
-                )]),
-            },
-        );
-        let image = Image::from_layer(layer);
-        image
-            .write()
-            .to_file(filepath)
-            .map_err(|err| VgonioError::new("Failed to write SDF EXR file.", Some(Box::new(err))))
+        pixels_weighted
+            .iter_mut()
+            .for_each(|v| *v /= pixels_count as f32);
+        pixels_diff
+            .iter_mut()
+            .zip(pixels.iter())
+            .zip(pixels_weighted.iter())
+            .for_each(|((v, p), p_conv)| *v = (p_conv - p).abs());
+        {
+            // Write the pixels as an OpenEXR file.
+            let layers = vec![
+                Layer::new(
+                    (resolution as usize, resolution as usize),
+                    LayerAttributes {
+                        layer_name: Some(Text::from("SDF")),
+                        capture_date: Text::new_or_none(
+                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                        ),
+                        ..LayerAttributes::default()
+                    },
+                    Encoding::FAST_LOSSLESS,
+                    AnyChannels {
+                        list: SmallVec::from_vec(vec![AnyChannel::new(
+                            "SDF",
+                            FlatSamples::F32(Cow::Borrowed(&pixels)),
+                        )]),
+                    },
+                ),
+                Layer::new(
+                    (resolution as usize, resolution as usize),
+                    LayerAttributes {
+                        layer_name: Some(Text::from("SDF weighted")),
+                        capture_date: Text::new_or_none(
+                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                        ),
+                        ..LayerAttributes::default()
+                    },
+                    Encoding::FAST_LOSSLESS,
+                    AnyChannels {
+                        list: SmallVec::from_vec(vec![AnyChannel::new(
+                            "SDF",
+                            FlatSamples::F32(Cow::Borrowed(&pixels_weighted)),
+                        )]),
+                    },
+                ),
+                Layer::new(
+                    (resolution as usize, resolution as usize),
+                    LayerAttributes {
+                        layer_name: Some(Text::from("SDF difference")),
+                        capture_date: Text::new_or_none(
+                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                        ),
+                        ..LayerAttributes::default()
+                    },
+                    Encoding::FAST_LOSSLESS,
+                    AnyChannels {
+                        list: SmallVec::from_vec(vec![AnyChannel::new(
+                            "SDF",
+                            FlatSamples::F32(Cow::Borrowed(&pixels_diff)),
+                        )]),
+                    },
+                ),
+            ];
+            let img_attrib = ImageAttributes::new(IntegerBounds::new(
+                (0, 0),
+                (resolution as usize, resolution as usize),
+            ));
+            let image = Image::from_layers(img_attrib, layers);
+            image.write().to_file(filepath).map_err(|err| {
+                VgonioError::new("Failed to write SDF EXR file.", Some(Box::new(err)))
+            })?;
+        }
+        Ok(())
     }
 
     /// Computes the histogram of the slope (PMF of the slope distribution)
