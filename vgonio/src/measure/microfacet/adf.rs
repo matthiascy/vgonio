@@ -172,21 +172,25 @@ pub fn measure_area_distribution(
                     log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
                     log::debug!("  -- micro facet count: {}", mesh.facet_normals.len());
                     
-                    partition.patches.iter().zip(samples.iter_mut())
-                        .par_bridge().for_each(|(patch, v)| {
+                    let mut normals_per_patch = vec![vec![]; partition.num_patches()];
+                    for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
+                        match partition.contains(Sph2::from_cartesian(*normal)) {
+                            None => {
+                                log::warn!("Facet normal {} is not contained in any patch.", normal);
+                            }
+                            Some(patch_idx) => {
+                                normals_per_patch[patch_idx].push(facet_idx);
+                            }
+                        }
+                    }
+                    
+                    normals_per_patch.par_iter().enumerate()
+                        .zip(samples.par_iter_mut())
+                        .for_each(|((patch_idx, facet_idxs), sample)| {
+                        let patch = partition.patches[patch_idx];
                         let solid_angle = patch.solid_angle();
                         let denom_rcp = math::rcp_f32(macro_area * solid_angle.as_f32());
-                        let facets = mesh.facet_normals.iter()
-                            .enumerate()
-                            .filter_map(|(i, n)| {
-                                if patch.contains(*n) {
-                                    Some(i)
-                                } else {
-                                    None
-                                }
-                            }).collect::<Vec<_>>();
-                        
-                        let facets_area = facets
+                        let facets_area = facet_idxs
                             .par_chunks(FACET_CHUNK_SIZE)
                             .map(|idxs| {
                                 idxs.iter().fold(0.0, |sum, idx| {
@@ -194,8 +198,7 @@ pub fn measure_area_distribution(
                                 })
                             })
                             .sum::<f32>();
-
-                        *v = facets_area * denom_rcp;
+                        *sample = facets_area * denom_rcp;
                     });
 
                     Some(MeasurementData {
