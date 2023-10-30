@@ -4,9 +4,10 @@ use crate::{
         Config,
     },
     measure::params::{
-        AdfMeasurementParams, BsdfMeasurementParams, Measurement, MeasurementParams,
-        MsfMeasurementParams,
+        AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, Measurement,
+        MeasurementParams, MsfMeasurementParams,
     },
+    partition::PartitionScheme,
 };
 use std::{
     fmt::{Display, Formatter},
@@ -16,19 +17,36 @@ use vgcore::error::VgonioError;
 
 impl Display for AdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "MicrofacetDistributionMeasurement\n    - azimuthal angle: {} ~ {} per {}, {} bins\n    - \
-             polar angle    : {} ~ {} per {}, {} bins\n",
-            self.azimuth.start.prettified(),
-            self.azimuth.stop.prettified(),
-            self.azimuth.step_size.prettified(),
-            self.azimuth.step_count_wrapped(),
-            self.zenith.start.prettified(),
-            self.zenith.stop.prettified(),
-            self.zenith.step_size.prettified(),
-            self.zenith.step_count_wrapped(),
-        )
+        match &self.mode {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                write!(
+                    f,
+                    "MicrofacetDistributionMeasurement\n    - by-points\n    - azimuthal angle: \
+                     {} ~ {} per {}, {} bins\n    - polar angle    : {} ~ {} per {}, {} bins\n",
+                    azimuth.start.prettified(),
+                    azimuth.stop.prettified(),
+                    azimuth.step_size.prettified(),
+                    azimuth.step_count_wrapped(),
+                    zenith.start.prettified(),
+                    zenith.stop.prettified(),
+                    zenith.step_size.prettified(),
+                    zenith.step_count_wrapped(),
+                )
+            }
+            AdfMeasurementMode::ByPartition { precision, scheme } => {
+                write!(
+                    f,
+                    "MicrofacetDistributionMeasurement\n    - by-partition\n    - scheme: {:?}\n    \
+                     - precision: {}",
+                    scheme,
+                    if scheme == &PartitionScheme::EqualAngle {
+                        precision.to_string()
+                    } else {
+                        precision.theta.prettified()
+                    }
+                )
+            }
+        }
     }
 }
 

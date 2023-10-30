@@ -7,7 +7,8 @@ use crate::{
     },
     io::{OutputFileFormatOptions, OutputOptions},
     measure,
-    measure::params::{Measurement, MeasurementParams},
+    measure::params::{AdfMeasurementMode, Measurement, MeasurementParams},
+    partition::PartitionScheme,
 };
 use std::time::Instant;
 use vgcore::error::VgonioError;
@@ -162,16 +163,38 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 })
             }
             MeasurementParams::Adf(measurement) => {
-                println!(
-                    "  {}>{} Measuring microfacet area distribution:
+                match &measurement.mode {
+                    AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                        println!(
+                            "  {}>{} Measuring microfacet area distribution:
     • parameters:
-      + azimuth: {}
-      + zenith: {}",
-                    ansi::BRIGHT_YELLOW,
-                    ansi::RESET,
-                    measurement.azimuth.pretty_print(),
-                    measurement.zenith.pretty_print(),
-                );
+      + mode: by points
+        + azimuth: {}
+        + zenith: {}",
+                            ansi::BRIGHT_YELLOW,
+                            ansi::RESET,
+                            azimuth.pretty_print(),
+                            zenith.pretty_print(),
+                        );
+                    }
+                    AdfMeasurementMode::ByPartition { precision, scheme } => {
+                        println!(
+                            "  {}>{} Measuring microfacet area distribution:
+    • parameters:
+       + mode: by partition
+           + scheme: {:?}
+           + precision: {}",
+                            ansi::BRIGHT_YELLOW,
+                            ansi::RESET,
+                            scheme,
+                            if scheme == &PartitionScheme::EqualAngle {
+                                precision.to_string()
+                            } else {
+                                precision.theta.prettified()
+                            }
+                        );
+                    }
+                }
                 cache.read(|cache| {
                     measure::microfacet::measure_area_distribution(measurement, &surfaces, cache)
                 })

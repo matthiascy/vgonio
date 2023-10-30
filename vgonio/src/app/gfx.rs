@@ -10,12 +10,9 @@ pub use buffers::*;
 use wgpu::TextureFormat;
 
 pub use context::{GpuContext, WgpuConfig, WindowSurface};
-pub use mesh::*;
-pub use shadow_pass::ShadowPass;
+pub use mesh::RenderableMesh;
 pub use texture::Texture;
 pub use vertex::*;
-
-pub use mesh::RenderableMesh;
 
 /// Enum for selecting the right buffer type.
 #[derive(Debug)]

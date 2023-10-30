@@ -242,6 +242,7 @@ impl VariantData for AreaDistributionExtra {
                             for [x, y] in &curve.points {
                                 content.push_str(&format!("{}, {}\n", x, y));
                             }
+                            log::debug!("Copied data: {}", content);
                             o.copied_text = content;
                         }
                     });

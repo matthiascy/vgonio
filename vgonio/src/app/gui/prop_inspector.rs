@@ -12,7 +12,10 @@ use crate::{
             outliner::OutlinerItem,
         },
     },
-    measure::data::{MeasuredData, MeasurementDataSource},
+    measure::{
+        data::{MeasuredData, MeasurementDataSource},
+        params::AdfMeasurementMode,
+    },
 };
 
 /// The property inspector.
@@ -168,45 +171,51 @@ impl PropertyInspector {
 
                                 self.cache.read(|cache| {
                                     match &cache.get_measurement_data(meas).unwrap().measured {
-                                        MeasuredData::Adf(madf) => {
-                                            ui.label("θ:");
-                                            ui.label(format!(
-                                                "{} ~ {}, every {}",
-                                                madf.params.zenith.start.prettified(),
-                                                madf.params.zenith.stop.prettified(),
-                                                madf.params.zenith.step_size.prettified()
-                                            ));
-                                            ui.end_row();
-
-                                            #[cfg(debug_assertions)]
-                                            {
-                                                ui.label("θ bins count:");
+                                        MeasuredData::Adf(adf) => match adf.params.mode {
+                                            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                                                ui.label("θ:");
                                                 ui.label(format!(
-                                                    "{}",
-                                                    madf.params.zenith.step_count_wrapped()
+                                                    "{} ~ {}, every {}",
+                                                    zenith.start.prettified(),
+                                                    zenith.stop.prettified(),
+                                                    zenith.step_size.prettified()
                                                 ));
-                                                ui.end_row()
-                                            }
+                                                ui.end_row();
 
-                                            ui.label("φ:");
-                                            ui.label(format!(
-                                                "{} ~ {}, every {}",
-                                                madf.params.azimuth.start.prettified(),
-                                                madf.params.azimuth.stop.prettified(),
-                                                madf.params.azimuth.step_size.prettified(),
-                                            ));
-                                            ui.end_row();
+                                                #[cfg(debug_assertions)]
+                                                {
+                                                    ui.label("θ bins count:");
+                                                    ui.label(format!(
+                                                        "{}",
+                                                        zenith.step_count_wrapped()
+                                                    ));
+                                                    ui.end_row()
+                                                }
 
-                                            #[cfg(debug_assertions)]
-                                            {
-                                                ui.label("φ bins count:");
+                                                ui.label("φ:");
                                                 ui.label(format!(
-                                                    "{}",
-                                                    madf.params.azimuth.step_count_wrapped()
+                                                    "{} ~ {}, every {}",
+                                                    azimuth.start.prettified(),
+                                                    azimuth.stop.prettified(),
+                                                    azimuth.step_size.prettified(),
                                                 ));
-                                                ui.end_row()
+                                                ui.end_row();
+
+                                                #[cfg(debug_assertions)]
+                                                {
+                                                    ui.label("φ bins count:");
+                                                    ui.label(format!(
+                                                        "{}",
+                                                        azimuth.step_count_wrapped()
+                                                    ));
+                                                    ui.end_row()
+                                                }
                                             }
-                                        }
+                                            AdfMeasurementMode::ByPartition { .. } => {
+                                                // TODO: Add partition info.
+                                                log::info!("Partition mode not implemented");
+                                            }
+                                        },
                                         MeasuredData::Msf(mmsf) => {
                                             ui.label("θ:");
                                             ui.label(format!(

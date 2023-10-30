@@ -10,13 +10,11 @@ use crate::{
     fitting::FittingProblemKind,
     io::OutputOptions,
     measure::{
-        bsdf::{
-            emitter::{EmitterSamples, MeasurementPoints},
-            receiver::SphericalPartition,
-        },
+        bsdf::emitter::{EmitterSamples, MeasurementPoints},
         data::MeasurementData,
         params::{MeasurementKind, MeasurementParams},
     },
+    partition::SphericalPartition,
 };
 use uuid::Uuid;
 use vgcore::{

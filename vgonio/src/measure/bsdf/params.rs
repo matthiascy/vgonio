@@ -2,10 +2,11 @@ use crate::{
     error::RuntimeError,
     measure::bsdf::{
         emitter::EmitterParams,
-        receiver::{DataRetrieval, PartitionScheme, ReceiverParams},
+        receiver::{DataRetrieval, ReceiverParams},
         rtc::RtcMethod,
         BsdfKind,
     },
+    partition::PartitionScheme,
     Medium, RangeByStepSizeInclusive, SphericalDomain,
 };
 use serde::{Deserialize, Serialize};

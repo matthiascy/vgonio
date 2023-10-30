@@ -14,7 +14,7 @@ type: !bsdf
     domain: upper_hemisphere
     precision:
       theta: 2.0 deg
-      phi: 0.5 deg
+      phi: 0.5 deg # only for equal-angle scheme
     scheme: beckers
     retrieval: full-data # full-data / bsdf-only
 surfaces:

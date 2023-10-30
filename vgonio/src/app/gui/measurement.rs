@@ -1,7 +1,7 @@
+mod adf;
 mod bsdf;
-mod madf;
-mod mmsf;
-mod msdf;
+mod msf;
+mod sdf;
 
 use crate::{
     app::{
@@ -10,8 +10,8 @@ use crate::{
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
-                bsdf::BsdfMeasurementTab, madf::AdfMeasurementTab, mmsf::MsfMeasurementTab,
-                msdf::SdfMeasurementTab,
+                adf::AdfMeasurementTab, bsdf::BsdfMeasurementTab, msf::MsfMeasurementTab,
+                sdf::SdfMeasurementTab,
             },
             misc,
             notify::NotifyKind,
@@ -20,9 +20,10 @@ use crate::{
     },
     io::{OutputFileFormatOptions, OutputOptions},
     measure::{
-        bsdf::receiver::{DataRetrieval, PartitionScheme, ReceiverParams},
+        bsdf::receiver::{DataRetrieval, ReceiverParams},
         params::{MeasurementKind, MeasurementParams},
     },
+    partition::PartitionScheme,
     SphericalDomain,
 };
 use egui::Widget;
@@ -65,11 +66,6 @@ impl ReceiverParams {
                                 &mut self.scheme,
                                 PartitionScheme::Beckers,
                                 "Beckers",
-                            );
-                            ui.selectable_value(
-                                &mut self.scheme,
-                                PartitionScheme::Tregenza,
-                                "Tregenza",
                             );
                             ui.selectable_value(
                                 &mut self.scheme,

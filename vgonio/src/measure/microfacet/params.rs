@@ -1,8 +1,13 @@
-use crate::{error::RuntimeError, RangeByStepSizeInclusive};
+use crate::{
+    error::RuntimeError,
+    partition::{PartitionScheme, SphericalPartition},
+    RangeByStepSizeInclusive,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::num::ParseFloatError;
 use vgcore::{
     error::VgonioError,
+    math::Sph2,
     units::{deg, rad, Radians},
 };
 
@@ -16,19 +21,80 @@ pub const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
     RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, deg!(2.0).in_radians());
 
 /// Parameters for microfacet area distribution measurement.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AdfMeasurementParams {
-    /// Azimuthal angle sampling range.
-    pub azimuth: RangeByStepSizeInclusive<Radians>,
-    /// Polar angle sampling range.
-    pub zenith: RangeByStepSizeInclusive<Radians>,
+    /// The way to measure the area distribution function.
+    pub mode: AdfMeasurementMode,
+    /// Whether crop the surface to a disk during the measurement.
+    pub crop_to_disk: bool,
 }
 
-impl Default for AdfMeasurementParams {
+/// How to measure the area distribution function.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum AdfMeasurementMode {
+    /// Measure the area distribution function at the different measurement
+    /// points.
+    #[serde(rename = "points")]
+    ByPoints {
+        /// Azimuthal angle sampling range.
+        azimuth: RangeByStepSizeInclusive<Radians>,
+        /// Polar angle sampling range.
+        zenith: RangeByStepSizeInclusive<Radians>,
+    },
+    /// Measure the area distribution function by partitioning the hemisphere
+    /// covering the surface.
+    #[serde(rename = "partition")]
+    ByPartition {
+        /// Partition precision along the zenith angle and azimuth angle.
+        /// Note: the azimuth angle precision is not used when the partition
+        /// scheme is not `PartitionScheme::EqualAngle`.
+        precision: Sph2,
+        /// Partition scheme.
+        scheme: PartitionScheme,
+    },
+}
+
+impl Default for AdfMeasurementMode {
     fn default() -> Self {
-        Self {
+        AdfMeasurementMode::ByPoints {
             azimuth: DEFAULT_AZIMUTH_RANGE,
             zenith: DEFAULT_ZENITH_RANGE,
+        }
+    }
+}
+
+impl AdfMeasurementMode {
+    /// Default parameters when the measurement mode is `ByPoints`.
+    pub fn default_by_points() -> Self {
+        AdfMeasurementMode::ByPoints {
+            azimuth: DEFAULT_AZIMUTH_RANGE,
+            zenith: DEFAULT_ZENITH_RANGE,
+        }
+    }
+
+    /// Default parameters when the measurement mode is `ByPartition`.
+    pub fn default_by_partition() -> Self {
+        AdfMeasurementMode::ByPartition {
+            precision: Sph2::new(deg!(2.0).in_radians(), deg!(5.0).in_radians()),
+            scheme: PartitionScheme::Beckers,
+        }
+    }
+
+    //// Returns the corresponding partition scheme.
+    pub fn partition_scheme(&self) -> PartitionScheme {
+        match self {
+            AdfMeasurementMode::ByPoints { .. } => PartitionScheme::EqualAngle,
+            AdfMeasurementMode::ByPartition { .. } => PartitionScheme::Beckers,
+        }
+    }
+
+    /// Returns the corresponding partition precision.
+    pub fn partition_precision(&self) -> Sph2 {
+        match self {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                Sph2::new(zenith.step_size, azimuth.step_size)
+            }
+            AdfMeasurementMode::ByPartition { precision, .. } => *precision,
         }
     }
 }
@@ -36,35 +102,74 @@ impl Default for AdfMeasurementParams {
 impl AdfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
-        self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
+        match self.mode {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                azimuth.step_count_wrapped() * zenith.step_count_wrapped()
+            }
+            AdfMeasurementMode::ByPartition { precision, scheme } => scheme.num_patches(precision),
+        }
+    }
+
+    /// Counts the number of samples (on hemisphere) that will be taken during
+    /// the measurement.
+    pub fn expected_samples_count_by_points(
+        azi: &RangeByStepSizeInclusive<Radians>,
+        zen: &RangeByStepSizeInclusive<Radians>,
+    ) -> usize {
+        azi.step_count_wrapped() * zen.step_count_wrapped()
+    }
+
+    /// Counts the number of samples (on hemisphere) that will be taken during
+    /// the measurement.
+    pub fn expected_samples_count_by_partition(precision: Sph2, scheme: PartitionScheme) -> usize {
+        scheme.num_patches(precision)
     }
 
     /// Validate the parameters.
     pub fn validate(self) -> Result<Self, VgonioError> {
-        if !(self.azimuth.start >= Radians::ZERO
-            && self.azimuth.stop
-                <= (Radians::TWO_PI + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
-        {
-            return Err(VgonioError::new(
-                "Microfacet distribution measurement: azimuth angle must be in the range [0°, \
-                 360°]",
-                Some(Box::new(RuntimeError::InvalidParameters)),
-            ));
+        match self.mode {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                if !(azimuth.start >= Radians::ZERO
+                    && azimuth.stop
+                        <= (Radians::TWO_PI
+                            + rad!(f32::EPSILON + std::f32::consts::PI * f32::EPSILON)))
+                {
+                    return Err(VgonioError::new(
+                        "Microfacet distribution measurement: azimuth angle must be in the range \
+                         [0°, 360°]",
+                        Some(Box::new(RuntimeError::InvalidParameters)),
+                    ));
+                }
+                if !(zenith.start >= Radians::ZERO && zenith.start <= Radians::HALF_PI) {
+                    return Err(VgonioError::new(
+                        "Microfacet distribution measurement: zenith angle must be in the range \
+                         [0°, 90°]",
+                        Some(Box::new(RuntimeError::InvalidParameters)),
+                    ));
+                }
+                if !(azimuth.step_size > rad!(0.0) && zenith.step_size > rad!(0.0)) {
+                    return Err(VgonioError::new(
+                        "Microfacet distribution measurement: azimuth and zenith step sizes must \
+                         be positive!",
+                        Some(Box::new(RuntimeError::InvalidParameters)),
+                    ));
+                }
+            }
+            AdfMeasurementMode::ByPartition { precision, scheme } => {
+                if precision.theta <= rad!(0.0) {
+                    return Err(VgonioError::new(
+                        "Microfacet distribution measurement: theta precision must be positive!",
+                        Some(Box::new(RuntimeError::InvalidParameters)),
+                    ));
+                }
+                if scheme == PartitionScheme::EqualAngle && precision.phi <= rad!(0.0) {
+                    return Err(VgonioError::new(
+                        "Microfacet distribution measurement: phi precision must be positive!",
+                        Some(Box::new(RuntimeError::InvalidParameters)),
+                    ));
+                }
+            }
         }
-        if !(self.zenith.start >= Radians::ZERO && self.zenith.start <= Radians::HALF_PI) {
-            return Err(VgonioError::new(
-                "Microfacet distribution measurement: zenith angle must be in the range [0°, 90°]",
-                Some(Box::new(RuntimeError::InvalidParameters)),
-            ));
-        }
-        if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
-            return Err(VgonioError::new(
-                "Microfacet distribution measurement: azimuth and zenith step sizes must be \
-                 positive!",
-                Some(Box::new(RuntimeError::InvalidParameters)),
-            ));
-        }
-
         Ok(self)
     }
 }
@@ -99,6 +204,15 @@ impl MsfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         (self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()).pow(2)
+    }
+
+    /// Counts the number of samples (on hemisphere) that will be taken during
+    /// the measurement.
+    pub fn expected_samples_count(
+        azi: &RangeByStepSizeInclusive<Radians>,
+        zen: &RangeByStepSizeInclusive<Radians>,
+    ) -> usize {
+        (azi.step_count_wrapped() * zen.step_count_wrapped()).pow(2)
     }
 
     /// Counts the number of samples (on hemisphere) that will be taken during

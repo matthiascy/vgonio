@@ -1,21 +1,22 @@
 use crate::{
     app::cache::{Handle, InnerCache},
     measure::{
-        bsdf::receiver::{PartitionScheme, ReceiverParams},
+        bsdf::receiver::ReceiverParams,
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::AdfMeasurementParams,
+        params::{AdfMeasurementMode, AdfMeasurementParams},
     },
+    partition::{PartitionScheme, SphericalPartition},
     RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
 };
-use std::{borrow::Cow, path::Path};
+use std::{borrow::Cow, path::Path, sync::atomic::AtomicU32};
 use vgcore::{
     error::VgonioError,
     math,
-    math::{Sph2, Vec3},
+    math::{Sph2, Vec2, Vec2Swizzles, Vec3, Vec3Swizzles},
     units,
     units::{rad, Radians},
 };
-use vgsurf::MicroSurface;
+use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
 /// Structure holding the data for microfacet area distribution measurement.
 ///
@@ -48,59 +49,56 @@ impl MeasuredAdfData {
         resolution: u32,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
-        let (w, h) = (resolution as usize, resolution as usize);
-        let receiver = ReceiverParams {
-            domain: SphericalDomain::Upper,
-            precision: Sph2::new(self.params.zenith.step_size, self.params.azimuth.step_size),
-            scheme: PartitionScheme::EqualAngle,
-            retrieval: Default::default(),
-        };
-        let partition = receiver.partitioning();
-        // Collect the data following the patches.
-        let n_theta = self.params.zenith.step_count();
-        let n_phi = self.params.azimuth.step_count_wrapped();
-        debug_assert_eq!(
-            n_theta * n_phi,
-            self.samples.len(),
-            "The number of samples does not match the number of patches."
+        let (w, h) = (resolution, resolution);
+        let partition = SphericalPartition::new(
+            self.params.mode.partition_scheme(),
+            SphericalDomain::Upper,
+            self.params.mode.partition_precision(),
         );
+
+        // Collect the data following the patches.
         let mut patch_data = vec![0.0; partition.num_patches()];
-        patch_data.iter_mut().enumerate().for_each(|(i_p, v)| {
-            let i_theta = i_p / n_phi;
-            let i_phi = i_p % n_phi;
-            let i_adf = i_phi * n_theta + i_theta;
-            *v = self.samples[i_adf];
-        });
-        let half_phi = self.params.azimuth.step_size * 0.5;
+        match self.params.mode {
+            AdfMeasurementMode::ByPoints { zenith, azimuth } => {
+                let n_theta = zenith.step_count();
+                let n_phi = azimuth.step_count_wrapped();
+                debug_assert_eq!(
+                    n_theta * n_phi,
+                    self.samples.len(),
+                    "The number of samples does not match the number of patches."
+                );
+                patch_data.iter_mut().enumerate().for_each(|(i_p, v)| {
+                    let i_theta = i_p / n_phi;
+                    let i_phi = i_p % n_phi;
+                    let i_adf = i_phi * n_theta + i_theta;
+                    *v = self.samples[i_adf];
+                });
+            }
+            AdfMeasurementMode::ByPartition { .. } => {
+                patch_data.copy_from_slice(&self.samples);
+            }
+        }
+
         // Calculate the patch index for each pixel.
-        let mut patch_indices = vec![0; w * h];
+        let mut indices = vec![0i32; (w * h) as usize];
+        partition.compute_pixel_patch_indices(w, h, &mut indices);
+
+        let mut samples = vec![0.0f32; (w * h) as usize];
+        // Collect the data into the buffer.
         for i in 0..w {
             // x, width, column
             for j in 0..h {
                 // y, height, row
-                let x = ((2 * i) as f32 / w as f32 - 1.0) * std::f32::consts::SQRT_2; // Flip the y-axis to match the BSDF coordinate system.
-                let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
-                let r_disc = (x * x + y * y).sqrt();
-                let theta = 2.0 * (r_disc / 2.0).asin();
-                let phi = (rad!((y).atan2(x)) + half_phi).wrap_to_tau();
-                patch_indices[i + j * w] = match partition.contains(Sph2::new(rad!(theta), phi)) {
-                    None => -1,
-                    Some(idx) => idx as i32,
+                let idx = i + j * w;
+                let patch_idx = indices[idx as usize];
+                if patch_idx >= 0 {
+                    samples[idx as usize] = patch_data[patch_idx as usize];
                 }
             }
         }
-        let mut samples = vec![0.0; w * h];
-        for i in 0..w {
-            for j in 0..h {
-                let idx = patch_indices[i + j * w];
-                if idx < 0 {
-                    continue;
-                }
-                samples[i + j * w] = patch_data[idx as usize];
-            }
-        }
+
         let layer = Layer::new(
-            (w, h),
+            (w as usize, h as usize),
             LayerAttributes {
                 layer_name: Some(Text::from("NDF")),
                 capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(
@@ -124,6 +122,9 @@ impl MeasuredAdfData {
     }
 }
 
+/// Size of the chunk of facets to process in parallel.
+const FACET_CHUNK_SIZE: usize = 4096;
+
 #[rustfmt::skip]
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
@@ -138,57 +139,169 @@ pub fn measure_area_distribution(
     log::info!("Measuring microfacet area distribution...");
     let surfaces = cache.get_micro_surfaces(handles);
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
+    
+    let measurements = match params.mode {
+        AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+            measure_area_distribution_by_points(handles
+                .iter()
+                .zip(surfaces.iter())
+                .zip(meshes.iter()), params, azimuth, zenith)
+        }
+        AdfMeasurementMode::ByPartition { precision, scheme } => {
+            let partition = SphericalPartition::new(scheme, SphericalDomain::Upper, precision);
+            log::info!("  -- Partitioning the hemisphere into {} patches.", partition.num_patches());
+            // Data buffer for data of each patch.
+            let mut samples = vec![0.0; partition.num_patches()];
+            handles
+                .iter()
+                .zip(surfaces.iter())
+                .zip(meshes.iter())
+                .filter_map(|((hdl, surface), mesh)| {
+                    if surface.is_none() || mesh.is_none() {
+                        log::debug!("Skipping a surface because it is not loaded {:?}.", mesh);
+                        return None;
+                    }
+                    // Reset the patch data.
+                    samples.iter_mut().for_each(|v| *v = 0.0);
+                    
+                    let mesh = mesh.unwrap();
+                    let mut macro_area = mesh.macro_surface_area();
+                    log::info!("  -- Measuring the NDF of surface: {}", surface.unwrap().file_stem().unwrap());
+                    log::debug!("  -- macro surface area (mesh): {}", macro_area);
+                    log::debug!("  -- macro surface area: {}", surface.unwrap().macro_area());
+                    log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
+                    log::debug!("  -- micro facet count: {}", mesh.facet_normals.len());
+                    
+                    partition.patches.iter().zip(samples.iter_mut())
+                        .par_bridge().for_each(|(patch, v)| {
+                        let solid_angle = patch.solid_angle();
+                        let denom_rcp = math::rcp_f32(macro_area * solid_angle.as_f32());
+                        let facets = mesh.facet_normals.iter()
+                            .enumerate()
+                            .filter_map(|(i, n)| {
+                                if patch.contains(*n) {
+                                    Some(i)
+                                } else {
+                                    None
+                                }
+                            }).collect::<Vec<_>>();
+                        
+                        let facets_area = facets
+                            .par_chunks(FACET_CHUNK_SIZE)
+                            .map(|idxs| {
+                                idxs.iter().fold(0.0, |sum, idx| {
+                                    sum + mesh.facet_areas[*idx]
+                                })
+                            })
+                            .sum::<f32>();
 
-    let measurements = handles
-        .iter()
-        .zip(surfaces.iter())
-        .zip(meshes.iter())
+                        *v = facets_area * denom_rcp;
+                    });
+
+                    Some(MeasurementData {
+                        name: surface.unwrap().file_stem().unwrap().to_owned(),
+                        source: MeasurementDataSource::Measured(*hdl),
+                        timestamp: chrono::Local::now(),
+                        measured: MeasuredData::Adf(MeasuredAdfData { params, samples: samples.clone() }),
+                    })
+                })
+                .collect()
+        }
+    };
+    
+    #[cfg(feature = "bench")]
+    {
+        let elapsed = start.elapsed();
+        log::info!("ADF measurement took {} ms.", elapsed.as_millis());
+    }
+    measurements
+}
+
+/// Measure the microfacet area distribution function by sampling the hemisphere
+/// with equal angle steps.
+fn measure_area_distribution_by_points<'a>(
+    surfaces: impl Iterator<
+        Item = (
+            (&'a Handle<MicroSurface>, &'a Option<&'a MicroSurface>),
+            &'a Option<&'a MicroSurfaceMesh>,
+        ),
+    >,
+    params: AdfMeasurementParams,
+    azimuth: RangeByStepSizeInclusive<Radians>,
+    zenith: RangeByStepSizeInclusive<Radians>,
+) -> Vec<MeasurementData> {
+    use rayon::prelude::*;
+    surfaces
         .filter_map(|((hdl, surface), mesh)| {
             if surface.is_none() || mesh.is_none() {
                 log::debug!("Skipping a surface because it is not loaded {:?}.", mesh);
                 return None;
             }
-            let mesh = mesh.unwrap();
-            let macro_area = mesh.macro_surface_area();
-            let half_zenith_bin_width = params.zenith.step_size * 0.5;
-            let half_zenith_bin_width_cos = half_zenith_bin_width.cos();
 
-            const FACET_CHUNK_SIZE: usize = 4096;
-            let solid_angle = units::solid_angle_of_spherical_cap(params.zenith.step_size).value();
-            let denom_rcp = math::rcp_f32(macro_area * solid_angle);
+            let mesh = mesh.unwrap();
+            let mut macro_area = mesh.macro_surface_area();
+
+            let half_zenith_bin_width = zenith.step_size * 0.5;
+            let half_zenith_bin_width_cos = half_zenith_bin_width.cos();
             log::info!(
-                "-- Measuring the NDF of surface: {}",
+                "  -- Measuring the NDF of surface: {}",
                 surface.unwrap().file_stem().unwrap()
             );
             log::debug!("  -- macro surface area (mesh): {}", macro_area);
             log::debug!("  -- macro surface area: {}", surface.unwrap().macro_area());
             log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
             log::debug!("  -- micro facet count: {}", mesh.facet_normals.len());
+
+            // Sort the facets into bins according to their normal direction's zenith angle.
+            let mut facets_bins = vec![vec![]; zenith.step_count_wrapped()];
+            if !params.crop_to_disk {
+                for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
+                    let zen = math::theta_of(normal);
+                    let idxs = classify_normal_by_zenith(zen, zenith, 1.2);
+                    for idx in idxs {
+                        if idx == 0xFF {
+                            continue;
+                        }
+                        facets_bins[idx as usize].push(facet_idx);
+                    }
+                }
+            } else {
+                let extent = mesh.bounds.extent();
+                let radius = extent.x.min(extent.y) * 0.5;
+                macro_area = 0.0; // Reset the macro surface area.
+                for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
+                    let vert_idxs = &mesh.facets[facet_idx..facet_idx + 3];
+                    let center = vert_idxs.iter().fold(Vec2::ZERO, |sum, idx| {
+                        sum.xy() + mesh.verts[*idx as usize].xy()
+                    }) / 3.0;
+                    if center.length() > radius {
+                        continue;
+                    }
+                    macro_area += mesh.facet_areas[facet_idx];
+                    let zen = math::theta_of(normal);
+                    let idxs = classify_normal_by_zenith(zen, zenith, 1.2);
+                    for idx in idxs {
+                        if idx == 0xFF {
+                            continue;
+                        }
+                        facets_bins[idx as usize].push(facet_idx);
+                    }
+                }
+                log::debug!("  -- macro surface area (cropped): {}", macro_area);
+            }
+
+            let solid_angle = units::solid_angle_of_spherical_cap(zenith.step_size).value();
+            let denom_rcp = math::rcp_f32(macro_area * solid_angle);
             log::debug!("  -- solid angle: {}", solid_angle);
             log::debug!("  -- denom_rcp: {}", denom_rcp);
 
-            // Sort the facets into bins according to their normal direction's zenith angle.
-            let mut facets_bins = vec![vec![]; params.zenith.step_count_wrapped()];
-            for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
-                let zenith = math::theta_of(normal);
-                let idxs = classify_normal_by_zenith(zenith, params.zenith, 1.2);
-                for idx in idxs {
-                    if idx == 0xFF {
-                        continue;
-                    }
-                    facets_bins[idx as usize].push(facet_idx);
-                }
-            }
-            let mut samples = vec![
-                0.0f32;
-                params.azimuth.step_count_wrapped()
-                    * params.zenith.step_count_wrapped()
-            ];
-            for azi_idx in 0..params.azimuth.step_count_wrapped() {
-                for zen_idx in 0..params.zenith.step_count_wrapped() {
-                    let azimuth = azi_idx as f32 * params.azimuth.step_size;
-                    let zenith = zen_idx as f32 * params.zenith.step_size;
-                    let dir = math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
+            let mut samples =
+                vec![0.0f32; azimuth.step_count_wrapped() * zenith.step_count_wrapped()];
+            for azi_idx in 0..azimuth.step_count_wrapped() {
+                for zen_idx in 0..zenith.step_count_wrapped() {
+                    let azimuth = azi_idx as f32 * azimuth.step_size;
+                    let zen = zen_idx as f32 * zenith.step_size;
+                    let dir = math::spherical_to_cartesian(1.0, zen, azimuth).normalize();
                     let facets = &facets_bins[zen_idx];
                     let facets_area = facets
                         .par_chunks(FACET_CHUNK_SIZE)
@@ -204,18 +317,18 @@ pub fn measure_area_distribution(
                             })
                         })
                         .sum::<f32>();
-                    let sample_idx = azi_idx * params.zenith.step_count_wrapped() + zen_idx;
+                    let sample_idx = azi_idx * zenith.step_count_wrapped() + zen_idx;
                     samples[sample_idx] = facets_area * denom_rcp;
                     log::trace!(
                         "-- φ: {}, θ: {}  | facet area: {} => {}",
                         azimuth.prettified(),
-                        zenith.prettified(),
+                        zen.prettified(),
                         facets_area,
                         samples[sample_idx]
                     );
                 }
             }
-            
+
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
@@ -223,13 +336,19 @@ pub fn measure_area_distribution(
                 measured: MeasuredData::Adf(MeasuredAdfData { params, samples }),
             })
         })
-        .collect();
-    #[cfg(feature = "bench")]
-    {
-        let elapsed = start.elapsed();
-        log::info!("ADF measurement took {} ms.", elapsed.as_millis());
-    }
-    measurements
+        .collect()
+}
+
+/// Measure the microfacet area distribution function by partitioning the
+/// hemisphere into patches and calculating the corresponding values.
+fn measure_area_distribution_by_partition<'a>(
+    surfaces: impl Iterator<
+        Item = (
+            (Handle<MicroSurface>, &'a MicroSurface),
+            &'a MicroSurfaceMesh,
+        ),
+    >,
+) {
 }
 
 /// Calculates the surface area of a spherical cap.

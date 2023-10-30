@@ -1,6 +1,9 @@
 use crate::{
     fitting::{FittingProblem, FittingReport, MicrofacetDistributionModel},
-    measure::microfacet::{MeasuredAdfData, MeasuredMsfData},
+    measure::{
+        microfacet::{MeasuredAdfData, MeasuredMsfData},
+        params::AdfMeasurementMode,
+    },
     RangeByStepSizeInclusive,
 };
 use levenberg_marquardt::{
@@ -279,6 +282,8 @@ fn extract_azimuth_zenith_angles_cos(
         .unzip()
 }
 
+// TODO: maybe split this into two different structs for measured ADF in
+// different modes?
 impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemProxy<'a> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -294,30 +299,40 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        let theta_step_count = self.measured.params.zenith.step_count_wrapped();
-        let residuals = self.measured.samples.iter().enumerate().map(|(idx, meas)| {
-            let theta_idx = idx % theta_step_count;
-            let theta = self.measured.params.zenith.step(theta_idx);
-            let phi_idx = idx / theta_step_count;
-            let phi = self.measured.params.azimuth.step(phi_idx);
-            self.model.eval_adf(theta.cos() as f64, phi.cos() as f64)
-                - *meas as f64 * self.scale as f64
-        });
-        Some(OMatrix::<f64, Dyn, U1>::from_iterator(
-            residuals.len(),
-            residuals,
-        ))
+        match self.measured.params.mode {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                let theta_step_count = zenith.step_count_wrapped();
+                let residuals = self.measured.samples.iter().enumerate().map(|(idx, meas)| {
+                    let theta_idx = idx % theta_step_count;
+                    let theta = zenith.step(theta_idx);
+                    let phi_idx = idx / theta_step_count;
+                    let phi = azimuth.step(phi_idx);
+                    self.model.eval_adf(theta.cos() as f64, phi.cos() as f64)
+                        - *meas as f64 * self.scale as f64
+                });
+                Some(OMatrix::<f64, Dyn, U1>::from_iterator(
+                    residuals.len(),
+                    residuals,
+                ))
+            }
+            AdfMeasurementMode::ByPartition { .. } => {
+                // TODO: Implement this.
+                None
+            }
+        }
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
-        let (cos_phis, cos_thetas) = extract_azimuth_zenith_angles_cos(
-            self.measured.samples.len(),
-            self.measured.params.azimuth,
-            self.measured.params.zenith,
-        );
-        Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
-            &self.model.adf_partial_derivatives(&cos_thetas, &cos_phis),
-        ))
+        match self.measured.params.mode {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                let (cos_phis, cos_thetas) =
+                    extract_azimuth_zenith_angles_cos(self.measured.samples.len(), azimuth, zenith);
+                Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
+                    &self.model.adf_partial_derivatives(&cos_thetas, &cos_phis),
+                ))
+            }
+            AdfMeasurementMode::ByPartition { .. } => None,
+        }
     }
 }
 

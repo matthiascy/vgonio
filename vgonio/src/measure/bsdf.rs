@@ -30,7 +30,6 @@ use vgcore::{
     error::VgonioError,
     math,
     math::{Sph2, Vec3},
-    units::rad,
 };
 use vgsurf::{MicroSurface, MicroSurfaceMesh};
 
@@ -86,36 +85,9 @@ impl MeasuredBsdfData {
         let mut bsdf_samples_per_wavelength =
             vec![0.0; w * h * wavelengths.len() * self.snapshots.len()];
         // Pre-compute the patch index for each pixel.
-        let patch_indices = {
-            let patches = self.params.receiver.partitioning();
-            let mut patch_indices = vec![0i32; w * h];
-            for i in 0..w {
-                // x, width, column
-                for j in 0..h {
-                    // y, height, row
-                    let x = ((2 * i) as f32 / w as f32 - 1.0) * std::f32::consts::SQRT_2;
-                    // Flip the y-axis to match the BSDF coordinate system.
-                    let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
-                    let r_disc = (x * x + y * y).sqrt();
-                    let theta = 2.0 * (r_disc / 2.0).asin();
-                    let phi = {
-                        let phi = (y).atan2(x);
-                        if phi < 0.0 {
-                            phi + std::f32::consts::TAU
-                        } else {
-                            phi
-                        }
-                    };
-                    patch_indices[i + j * w] =
-                        match patches.contains(Sph2::new(rad!(theta), rad!(phi))) {
-                            None => -1,
-                            Some(idx) => idx as i32,
-                        }
-                }
-            }
-            patch_indices
-        };
-
+        let mut patch_indices = vec![0i32; (w * h) as usize];
+        let partition = self.params.receiver.partitioning();
+        partition.compute_pixel_patch_indices(resolution, resolution, &mut patch_indices);
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
             capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(timestamp)),

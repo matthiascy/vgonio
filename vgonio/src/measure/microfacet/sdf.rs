@@ -6,12 +6,11 @@ use crate::{
     },
     RangeByStepSizeInclusive,
 };
-use image::FlatSamples;
 use std::{borrow::Cow, path::Path};
 use vgcore::{
     error::VgonioError,
     math,
-    math::{IVec2, UVec2, Vec2},
+    math::{IVec2, Vec2},
     units::{rad, Radians},
 };
 use vgsurf::MicroSurface;

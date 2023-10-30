@@ -194,12 +194,13 @@ impl Sph2 {
     pub fn is_positive(&self) -> bool { self.theta.is_positive() && self.phi.is_positive() }
 
     /// Converts from a cartesian coordinate.
+    #[track_caller]
     pub fn from_cartesian(cartesian: Vec3) -> Self {
-        debug_assert!(approx::ulps_eq!(
-            cartesian.length_squared(),
-            1.0,
-            epsilon = f32::EPSILON
-        ));
+        debug_assert!(
+            approx::ulps_eq!(cartesian.length(), 1.0, epsilon = 1.0e-6),
+            "expected 1.0, got {}",
+            cartesian.length()
+        );
         let (_, zenith, azimuth) = cartesian_to_spherical(cartesian, 1.0);
         Self {
             theta: zenith,

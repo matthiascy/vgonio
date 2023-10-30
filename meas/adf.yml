@@ -1,7 +1,14 @@
 ---
 type: !microfacet-area-distribution-function # !adf
-  azimuth: 0 rad .. =360 deg / 5 deg
-  zenith: 0 rad .. =90 deg / 2 deg
+  mode: !points
+    azimuth: 0 rad .. =360 deg / 5 deg
+    zenith: 0 rad .. =90 deg / 2 deg
+#  mode: !partition
+#    precision:
+#      theta: 2.0 deg
+#      phi: 0.5 deg # only for equal-angle scheme
+#    scheme: beckers
+  crop_to_disk: true
 surfaces:
 #  - usr://surfaces/2x2.txt
 #  - usr://surfaces/32x32.vgms

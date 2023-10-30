@@ -9,9 +9,9 @@ use crate::{
     },
     measure::bsdf::{
         emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
-        receiver::SphericalPartition,
         rtc::{Ray, RayTrajectory},
     },
+    partition::SphericalPartition,
 };
 use std::sync::Arc;
 use uuid::Uuid;

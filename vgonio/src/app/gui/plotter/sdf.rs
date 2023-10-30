@@ -13,10 +13,7 @@ use crate::{
 };
 use egui::{Align, Ui};
 use std::any::Any;
-use vgcore::{
-    math,
-    units::{deg, rad, Radians},
-};
+use vgcore::units::{deg, rad, Radians};
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;

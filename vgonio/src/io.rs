@@ -27,17 +27,18 @@ pub mod vgmo {
         measure::{
             bsdf::{
                 emitter::EmitterParams,
-                receiver::{BounceAndEnergy, DataRetrieval, PartitionScheme, ReceiverParams, Ring},
+                receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
                 BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
                 SpectralSamples,
             },
             data::MeasuredData,
             microfacet::MeasuredSdfData,
             params::{
-                AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
-                SdfMeasurementParams, SimulationKind,
+                AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind,
+                MsfMeasurementParams, SdfMeasurementParams, SimulationKind,
             },
         },
+        partition::{PartitionScheme, Ring},
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     };
     use std::io::{BufWriter, Seek};
@@ -153,6 +154,7 @@ pub mod vgmo {
         }
     }
 
+    // TODO: deal with ADF measurement params
     impl HeaderExt for VgmoHeaderExt {
         const MAGIC: &'static [u8; 4] = b"VGMO";
 
@@ -170,15 +172,15 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => match self {
-                    Self::Adf { params } => {
-                        writer.write_all(&[MeasurementKind::Adf as u8])?;
-                        write_adf_or_msf_params_to_vgmo(
-                            &params.azimuth,
-                            &params.zenith,
-                            writer,
-                            true,
-                        )?;
-                    }
+                    Self::Adf { params } => match &params.mode {
+                        AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                            writer.write_all(&[MeasurementKind::Adf as u8])?;
+                            write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
+                        }
+                        AdfMeasurementMode::ByPartition { .. } => {
+                            // TODO: implement
+                        }
+                    },
                     Self::Msf { params } => {
                         writer.write_all(&[MeasurementKind::Msf as u8])?;
                         write_adf_or_msf_params_to_vgmo(
@@ -212,27 +214,12 @@ pub mod vgmo {
             let mut kind = [0u8; 1];
             reader.read_exact(&mut kind)?;
             match MeasurementKind::from(kind[0]) {
-                MeasurementKind::Bsdf => {
-                    let params = BsdfMeasurementParams::read_from_vgmo(version, reader)?;
-                    Ok(Self::Bsdf { params })
-                }
-                MeasurementKind::Adf => {
-                    let (azimuth, zenith) = read_adf_or_msf_params_from_vgmo(reader, true)?;
-                    Ok(Self::Adf {
-                        params: AdfMeasurementParams { azimuth, zenith },
-                    })
-                }
-                MeasurementKind::Msf => {
-                    let (azimuth, zenith) = read_adf_or_msf_params_from_vgmo(reader, false)?;
-                    Ok(Self::Msf {
-                        params: MsfMeasurementParams {
-                            azimuth,
-                            zenith,
-                            resolution: 512,
-                            strict: true,
-                        },
-                    })
-                }
+                MeasurementKind::Bsdf => BsdfMeasurementParams::read_from_vgmo(version, reader)
+                    .map(|params| Ok(Self::Bsdf { params }))?,
+                MeasurementKind::Adf => AdfMeasurementParams::read_from_vgmo(version, reader)
+                    .map(|params| Ok(Self::Adf { params }))?,
+                MeasurementKind::Msf => MsfMeasurementParams::read_from_vgmo(version, reader)
+                    .map(|params| Ok(Self::Msf { params }))?,
                 MeasurementKind::Sdf => Ok(Self::Sdf),
             }
         }
@@ -310,6 +297,7 @@ pub mod vgmo {
         }
     }
 
+    // TODO: write partitioned adf data
     /// Writes the given measurement data to the given writer.
     pub fn write<W: Write + Seek>(
         writer: &mut BufWriter<W>,
@@ -328,7 +316,14 @@ pub mod vgmo {
                 match header.meta.encoding {
                     FileEncoding::Ascii => {
                         let cols = if let MeasuredData::Adf(adf) = &measured {
-                            adf.params.zenith.step_count_wrapped()
+                            match &adf.params.mode {
+                                AdfMeasurementMode::ByPoints { zenith, .. } => {
+                                    zenith.step_count_wrapped()
+                                }
+                                AdfMeasurementMode::ByPartition { .. } => {
+                                    unimplemented!()
+                                }
+                            }
                         } else {
                             measured
                                 .as_msf()
@@ -597,8 +592,7 @@ pub mod vgmo {
                     };
                     let scheme = match u32::from_le_bytes(buf[4..8].try_into().unwrap()) {
                         0 => PartitionScheme::Beckers,
-                        1 => PartitionScheme::Tregenza,
-                        2 => PartitionScheme::EqualAngle,
+                        1 => PartitionScheme::EqualAngle,
                         _ => panic!("Invalid scheme kind"),
                     };
                     let precision_theta = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
@@ -690,6 +684,77 @@ pub mod vgmo {
                 b"al\0" => Self::Aluminium,
                 b"cu\0" => Self::Copper,
                 _ => panic!("Invalid medium kind {:?}", &buf[0..3]),
+            }
+        }
+    }
+
+    impl AdfMeasurementParams {
+        // TODO: resolve `crop_to_disk`
+        // TODO: read partitioned ADF data
+        pub fn read_from_vgmo<R: Read + Seek>(
+            version: Version,
+            reader: &mut BufReader<R>,
+        ) -> Result<Self, std::io::Error> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let mut buf = [0u8; 36];
+                    reader.read_exact(&mut buf)?;
+                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
+                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
+                    let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
+                    debug_assert_eq!(
+                        sample_count as usize,
+                        AdfMeasurementParams::expected_samples_count_by_points(&azimuth, &zenith)
+                    );
+                    Ok(Self {
+                        mode: AdfMeasurementMode::ByPoints { azimuth, zenith },
+                        crop_to_disk: false,
+                    })
+                }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Unsupported VGMO[AdfMeasurementParams] version {}", version),
+                )),
+            }
+        }
+    }
+
+    impl MsfMeasurementParams {
+        // TODO: resolve resolution and strict
+        pub fn read_from_vgmo<R: Read + Seek>(
+            version: Version,
+            reader: &mut BufReader<R>,
+        ) -> Result<Self, std::io::Error> {
+            match version {
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                } => {
+                    let mut buf = [0u8; 36];
+                    reader.read_exact(&mut buf)?;
+                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
+                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
+                    let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
+                    debug_assert_eq!(
+                        sample_count as usize,
+                        MsfMeasurementParams::expected_samples_count(&azimuth, &zenith)
+                    );
+                    Ok(Self {
+                        azimuth,
+                        zenith,
+                        resolution: 512,
+                        strict: true,
+                    })
+                }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Unsupported VGMO[MsfMeasurementParams] version {}", version),
+                )),
             }
         }
     }

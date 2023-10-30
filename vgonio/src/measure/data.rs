@@ -7,7 +7,7 @@ use crate::{
     measure::{
         bsdf::MeasuredBsdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
-        params::MeasurementKind,
+        params::{AdfMeasurementMode, MeasurementKind},
     },
     RangeByStepSizeInclusive,
 };
@@ -134,7 +134,10 @@ impl MeasuredData {
     /// it is a ADF or MSF measurement.
     pub fn adf_or_msf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Adf(adf) => Some(adf.params.azimuth),
+            MeasuredData::Adf(adf) => match adf.params.mode {
+                AdfMeasurementMode::ByPoints { azimuth, .. } => Some(azimuth),
+                AdfMeasurementMode::ByPartition { .. } => None,
+            },
             MeasuredData::Msf(msf) => Some(msf.params.azimuth),
             _ => None,
         }
@@ -144,7 +147,10 @@ impl MeasuredData {
     /// it is a ADF or MSF measurement.
     pub fn adf_or_msf_zenith(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
-            MeasuredData::Adf(adf) => Some(adf.params.zenith),
+            MeasuredData::Adf(adf) => match adf.params.mode {
+                AdfMeasurementMode::ByPoints { zenith, .. } => Some(zenith),
+                AdfMeasurementMode::ByPartition { .. } => None,
+            },
             MeasuredData::Msf(msf) => Some(msf.params.zenith),
             _ => None,
         }
@@ -159,7 +165,10 @@ impl MeasuredData {
         RangeByStepSizeInclusive<Radians>,
     )> {
         match self {
-            MeasuredData::Adf(adf) => Some((adf.params.azimuth, adf.params.zenith)),
+            MeasuredData::Adf(adf) => match adf.params.mode {
+                AdfMeasurementMode::ByPoints { azimuth, zenith } => Some((azimuth, zenith)),
+                AdfMeasurementMode::ByPartition { .. } => None,
+            },
             MeasuredData::Msf(msf) => Some((msf.params.azimuth, msf.params.zenith)),
             _ => None,
         }

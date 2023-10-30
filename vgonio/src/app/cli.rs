@@ -23,7 +23,7 @@ mod cmd_generate;
 mod cmd_info;
 mod cmd_measure;
 
-pub use cmd_convert::{ConvertKind, ConvertOptions};
+pub use cmd_convert::ConvertOptions;
 #[cfg(feature = "surf-gen")]
 pub use cmd_generate::GenerateOptions;
 

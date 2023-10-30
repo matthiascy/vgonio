@@ -20,6 +20,7 @@ pub mod fitting;
 mod io;
 pub mod measure;
 pub mod optics;
+mod partition;
 mod range;
 
 pub use range::*;
