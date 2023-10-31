@@ -65,9 +65,13 @@ pub fn solid_angle_of_region(
     SolidAngle((zenith.0.cos() - zenith.1.cos()) * (azimuth.1.value() - azimuth.0.value()))
 }
 
-/// Calculates the solid angle subtended by a spherical cap.
-pub fn solid_angle_of_spherical_cap(zenith: Radians) -> SolidAngle {
-    SolidAngle(2.0 * std::f32::consts::PI * (1.0 - zenith.cos()))
+/// Calculates the solid angle subtended by a spherical cap on a unit sphere.
+///
+/// # Arguments
+///
+/// * `zenith` - The open angle of the cone that defines the spherical cap.
+pub fn solid_angle_of_spherical_cap(open_angle: Radians) -> SolidAngle {
+    SolidAngle(2.0 * std::f32::consts::PI * (1.0 - (open_angle * 0.5).cos()))
 }
 
 /// Calculates the solid angle subtended by a spherical strip.
