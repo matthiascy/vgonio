@@ -855,6 +855,15 @@ impl MicroSurfaceMesh {
         (self.bounds.max.x - self.bounds.min.x) * (self.bounds.max.y - self.bounds.min.y)
     }
 
+    /// Returns the center of a facet.
+    pub fn center_of_facet(&self, facet: usize) -> Vec3 {
+        let idx = facet * 3;
+        let p0 = self.verts[self.facets[idx] as usize];
+        let p1 = self.verts[self.facets[idx + 1] as usize];
+        let p2 = self.verts[self.facets[idx + 2] as usize];
+        (p0 + p1 + p2) / 3.0
+    }
+
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
     #[cfg(feature = "embree")]
     pub fn as_embree_geometry<'g>(&self, device: &Device) -> Geometry<'g> {

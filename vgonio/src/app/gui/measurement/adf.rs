@@ -26,6 +26,9 @@ impl AdfMeasurementTab {
                 ui.checkbox(&mut self.params.crop_to_disk, "Crop to disk");
                 ui.end_row();
 
+                ui.checkbox(&mut self.params.use_facet_area, "Use facet area");
+                ui.end_row();
+
                 ui.selectable_value(
                     &mut self.params.mode,
                     AdfMeasurementMode::default_by_points(),

@@ -713,6 +713,7 @@ pub mod vgmo {
                     Ok(Self {
                         mode: AdfMeasurementMode::ByPoints { azimuth, zenith },
                         crop_to_disk: false,
+                        use_facet_area: true,
                     })
                 }
                 _ => Err(std::io::Error::new(

@@ -27,6 +27,8 @@ pub struct AdfMeasurementParams {
     pub mode: AdfMeasurementMode,
     /// Whether crop the surface to a disk during the measurement.
     pub crop_to_disk: bool,
+    /// Whether use the facet area during the measurement.
+    pub use_facet_area: bool, // TODO: serialise/deserialise
 }
 
 /// How to measure the area distribution function.
@@ -80,21 +82,48 @@ impl AdfMeasurementMode {
         }
     }
 
-    //// Returns the corresponding partition scheme.
-    pub fn partition_scheme(&self) -> PartitionScheme {
+    /// Returns the `PartitionScheme` for data collection with the current
+    /// parameters, especially when storing the data in a file.
+    pub fn partition_scheme_for_data_collection(&self) -> PartitionScheme {
         match self {
             AdfMeasurementMode::ByPoints { .. } => PartitionScheme::EqualAngle,
-            AdfMeasurementMode::ByPartition { .. } => PartitionScheme::Beckers,
+            AdfMeasurementMode::ByPartition { scheme, .. } => *scheme,
         }
     }
 
     /// Returns the corresponding partition precision.
-    pub fn partition_precision(&self) -> Sph2 {
+    pub fn partition_precision_for_data_collection(&self) -> Sph2 {
         match self {
             AdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 Sph2::new(zenith.step_size, azimuth.step_size)
             }
             AdfMeasurementMode::ByPartition { precision, .. } => *precision,
+        }
+    }
+
+    /// Returns the corresponding partition precision and scheme.
+    pub fn as_mode_by_partition(&self) -> Option<(Sph2, PartitionScheme)> {
+        match self {
+            AdfMeasurementMode::ByPoints { .. } => None,
+            AdfMeasurementMode::ByPartition { precision, scheme } => Some((*precision, *scheme)),
+        }
+    }
+
+    /// Returns the corresponding measurement points.
+    ///
+    /// # Returns
+    ///
+    /// - `Some((azimuth, zenith))` if the measurement mode is `ByPoints`.
+    /// - `None` if the measurement mode is `ByPartition`.
+    pub fn as_mode_by_points(
+        &self,
+    ) -> Option<(
+        RangeByStepSizeInclusive<Radians>,
+        RangeByStepSizeInclusive<Radians>,
+    )> {
+        match self {
+            AdfMeasurementMode::ByPoints { azimuth, zenith } => Some((*azimuth, *zenith)),
+            AdfMeasurementMode::ByPartition { .. } => None,
         }
     }
 }
