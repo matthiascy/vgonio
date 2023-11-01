@@ -85,12 +85,12 @@ impl MeasuredBsdfData {
         let mut bsdf_samples_per_wavelength =
             vec![0.0; w * h * wavelengths.len() * self.snapshots.len()];
         // Pre-compute the patch index for each pixel.
-        let mut patch_indices = vec![0i32; (w * h) as usize];
+        let mut patch_indices = vec![0i32; w * h];
         let partition = self.params.receiver.partitioning();
         partition.compute_pixel_patch_indices(resolution, resolution, &mut patch_indices);
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
-            capture_date: Text::new_or_none(&vgcore::utils::iso_timestamp_from_datetime(timestamp)),
+            capture_date: Text::new_or_none(vgcore::utils::iso_timestamp_from_datetime(timestamp)),
             software_name: Text::new_or_none("vgonio"),
             other: self.params.to_exr_extra_info(),
             ..LayerAttributes::default()
@@ -223,7 +223,7 @@ impl MeasuredBsdfData {
                     }
                     let channels = (0..snapshot.stats.n_bounces as usize)
                         .map(|bounce_idx| {
-                            let name = Text::new_or_panic(format!("bounce {}", bounce_idx + 1));
+                            let name = Text::new_or_panic(format!("{} bounce", bounce_idx + 1));
                             AnyChannel::new(
                                 name,
                                 FlatSamples::F32(Cow::Borrowed(
