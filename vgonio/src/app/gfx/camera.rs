@@ -87,26 +87,19 @@ impl Projection {
     }
 
     pub fn matrix(&self, kind: ProjectionKind) -> Mat4 {
-        let scale_depth = Mat4::from_cols(
-            Vec4::new(1.0, 0.0, 0.0, 0.0),
-            Vec4::new(0.0, 1.0, 0.0, 0.0),
-            Vec4::new(0.0, 0.0, 0.5, 0.0),
-            Vec4::new(0.0, 0.0, 0.5, 1.0),
-        );
-        scale_depth
-            * match kind {
-                ProjectionKind::Perspective => {
-                    Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
-                }
-                ProjectionKind::Orthographic => Mat4::orthographic_rh(
-                    -self.width / 2.0,
-                    self.width / 2.0,
-                    -self.height / 2.0,
-                    self.height / 2.0,
-                    self.near,
-                    self.far,
-                ),
+        match kind {
+            ProjectionKind::Perspective => {
+                Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
             }
+            ProjectionKind::Orthographic => Mat4::orthographic_rh(
+                -self.width / 2.0,
+                self.width / 2.0,
+                -self.height / 2.0,
+                self.height / 2.0,
+                self.near,
+                self.far,
+            ),
+        }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
