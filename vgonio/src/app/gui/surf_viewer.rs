@@ -336,7 +336,7 @@ impl SurfaceViewerStates {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(theme.visuals().clear_color),
-                            store: true,
+                            store: wgpu::StoreOp::Store,
                         },
                     },
                 )],
@@ -344,10 +344,12 @@ impl SurfaceViewerStates {
                     view: &state.d_attachment.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
 
             let aligned_micro_surface_uniform_size =

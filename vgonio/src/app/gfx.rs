@@ -88,7 +88,8 @@ pub const fn tex_fmt_bpp(format: wgpu::TextureFormat) -> u32 {
         | TextureFormat::Bgra8UnormSrgb
         | TextureFormat::Rgb9e5Ufloat
         | TextureFormat::Rgb10a2Unorm
-        | TextureFormat::Rg11b10Float => 4,
+        | TextureFormat::Rg11b10Float
+        | TextureFormat::Rgb10a2Uint => 4,
         TextureFormat::Rg32Uint
         | TextureFormat::Rg32Sint
         | TextureFormat::Rg32Float

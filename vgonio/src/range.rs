@@ -104,7 +104,7 @@ impl_range_by_step_size_sub_types!(RangeByStepSizeInclusive<T>; RangeByStepSizeE
 
 impl<T> RangeByStepSizeInclusive<T>
 where
-    T: ~const NumericCast<f32> + Copy + Clone + From<f32>,
+    T: NumericCast<f32> + Copy + Clone + From<f32>,
 {
     /// Returns all possible values of the range.
     pub fn values(&self) -> impl ExactSizeIterator<Item = T> {
@@ -129,7 +129,7 @@ where
 
 impl<T> RangeByStepSizeInclusive<T>
 where
-    T: ~const NumericCast<f32> + Copy + Clone,
+    T: NumericCast<f32> + Copy + Clone,
 {
     /// Returns the step count of the range.
     pub fn step_count(&self) -> usize {
@@ -160,7 +160,7 @@ pub struct RangeByStepSizeExclusive<T: Copy + Clone> {
 
 impl<T> RangeByStepSizeExclusive<T>
 where
-    T: Div<Output = T> + Sub<Output = T> + ~const NumericCast<f32> + Copy + Clone,
+    T: Div<Output = T> + Sub<Output = T> + NumericCast<f32> + Copy + Clone,
 {
     /// Returns the step count of the exclusive range.
     pub fn step_count(&self) -> usize {
@@ -564,7 +564,7 @@ impl_range_by_step_count_sub_types!(
 
 impl<T> RangeByStepCountInclusive<T>
 where
-    T: ~const NumericCast<f32> + Copy + Clone + Sub<Output = T>,
+    T: NumericCast<f32> + Copy + Clone + Sub<Output = T>,
     f32: NumericCast<T>,
 {
     /// Returns the step size of this range.
@@ -1051,7 +1051,7 @@ where
 
 impl<T> From<RangeByStepSizeInclusive<T>> for RangeByStepCountInclusive<T>
 where
-    T: ~const NumericCast<f32> + Copy + Clone,
+    T: NumericCast<f32> + Copy + Clone,
 {
     fn from(value: RangeByStepSizeInclusive<T>) -> Self {
         Self::new(value.start, value.stop, value.step_count())

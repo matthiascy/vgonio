@@ -57,8 +57,8 @@ rand_chacha = "0.3"
 serde_json = "1.0"
 toml = "0.8"
 type-map = "0.5"
-winit = "0.28"
-wgpu = { version = "0.17", features = ["spirv"] }
+winit.workspace = true
+wgpu.workspace = true
 vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
 vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 vgbxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }

@@ -785,6 +785,8 @@ impl DebugDrawingState {
                     label: Some("debug-render-pass"),
                     color_attachments: &[color_output],
                     depth_stencil_attachment: depth_output,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
                 });
 
                 let mut constants = [0.0f32; 20];

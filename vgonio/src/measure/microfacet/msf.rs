@@ -520,10 +520,12 @@ impl VisibilityEstimator {
                         view: self.depth_attachment.layer_view(i),
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
+                            store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
                     }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
                 });
                 pass.set_pipeline(&self.depth_pass.pipeline);
                 pass.set_bind_group(0, &self.depth_pass.bind_groups[0], &[]);
@@ -580,7 +582,7 @@ impl VisibilityEstimator {
                                     b: 0.0,
                                     a: 1.0,
                                 }),
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             },
                         }),
                         // Whole projected area
@@ -594,11 +596,13 @@ impl VisibilityEstimator {
                                     b: 0.0,
                                     a: 1.0,
                                 }),
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             },
                         }),
                     ],
                     depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
                 });
 
                 let depth_map_idx = self.depth_attachment.texture_index_of_layer(i);

@@ -192,7 +192,9 @@ impl GpuContext {
     pub async fn new(window: &Window, config: &WgpuConfig) -> (Self, wgpu::Surface) {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::VALIDATION,
             dx12_shader_compiler: Default::default(),
+            gles_minor_version: Default::default(),
         });
         let surface = unsafe {
             instance
@@ -262,7 +264,9 @@ impl GpuContext {
     pub async fn offscreen(config: &WgpuConfig) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
+            flags: Default::default(),
             dx12_shader_compiler: Default::default(),
+            gles_minor_version: Default::default(),
         });
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
