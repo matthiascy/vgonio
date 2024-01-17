@@ -6,7 +6,7 @@ use crate::{
             data::PropertyData,
             event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
             file_drop::FileDragDrop,
-            gizmo::NavigationGizmo,
+            // gizmo::NavigationGizmo,
             icons,
             measurement::MeasurementDialog,
             notify::{NotifyKind, NotifySystem},
@@ -56,9 +56,8 @@ pub struct VgonioGui {
     /// The drag and drop state.
     drag_drop: FileDragDrop,
 
-    /// Gizmo inside the viewport for navigating the scene.
-    navigator: NavigationGizmo,
-
+    // Gizmo inside the viewport for navigating the scene.
+    // navigator: NavigationGizmo,
     /// Notification system.
     notif: NotifySystem,
 
@@ -95,7 +94,7 @@ impl VgonioGui {
             tools: Tools::new(event_loop.clone(), gpu.clone(), gui.clone()),
             cache: cache.clone(),
             drag_drop: FileDragDrop::new(event_loop.clone()),
-            navigator: NavigationGizmo::new(GizmoOrientation::Global),
+            // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             measurement: MeasurementDialog::new(
                 event_loop.clone(),
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -282,9 +281,9 @@ impl VgonioGui {
         }
     }
 
-    pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4) {
-        self.navigator.update_matrices(model, view, proj);
-    }
+    // pub fn update_gizmo_matrices(&mut self, model: Mat4, view: Mat4, proj: Mat4)
+    // {     self.navigator.update_matrices(model, view, proj);
+    // }
 
     pub fn show(&mut self, ctx: &egui::Context, theme_kind: ThemeKind) {
         egui::TopBottomPanel::top("vgonio_top_panel")
@@ -298,7 +297,7 @@ impl VgonioGui {
         self.dock_space.show(ctx, self.properties.clone());
         self.tools.show(ctx);
         self.drag_drop.show(ctx);
-        self.navigator.show(ctx);
+        // self.navigator.show(ctx);
         self.measurement.show(ctx);
         self.notif.show(ctx);
         for (is_open, plotter) in &mut self.plotters {

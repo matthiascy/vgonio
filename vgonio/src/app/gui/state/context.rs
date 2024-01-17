@@ -15,10 +15,13 @@ pub struct RawGuiContext {
 
 impl RawGuiContext {
     /// Creates a new GUI context.
-    pub(crate) fn new(event_loop: &EventLoopWindowTarget<VgonioEvent>) -> Self {
+    pub(crate) fn new(window: &Window) -> Self {
+        let context = egui::Context::default();
+        let state =
+            egui_winit::State::new(context.clone(), egui::ViewportId::ROOT, window, None, None);
         Self {
-            inner: egui::Context::default(),
-            state: egui_winit::State::new(event_loop),
+            inner: context,
+            state,
             input: egui::RawInput::default(),
         }
     }
@@ -31,14 +34,13 @@ impl RawGuiContext {
     /// Updates the GUI context when a window event is received.
     ///
     /// This function should always be called before rendering the GUI.
-    pub fn on_window_event(&mut self, event: &WindowEvent) -> EventResponse {
-        self.state.on_event(&self.inner, event)
+    pub fn on_window_event(&mut self, window: &Window, event: &WindowEvent) -> EventResponse {
+        self.state.on_window_event(window, event)
     }
 
     /// Processes the non-rendering outputs of each frame.
     pub fn handle_platform_output(&mut self, window: &Window, output: egui::PlatformOutput) {
-        self.state
-            .handle_platform_output(window, &self.inner, output);
+        self.state.handle_platform_output(window, output);
     }
 
     /// Runs the Ui code for one frame then returns the output.

@@ -239,13 +239,13 @@ impl GuiContext {
     /// If the format passed is not a *Srgb format, the shader will
     /// automatically convert to sRGB colors in the shader.
     pub fn new(
+        window: &Window,
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
         surface_format: wgpu::TextureFormat,
-        event_loop: &EventLoopWindowTarget<VgonioEvent>,
         msaa_samples: u32,
     ) -> Self {
-        let context = RawGuiContext::new(event_loop);
+        let context = RawGuiContext::new(window);
         let renderer = Arc::new(RwLock::new(GuiRenderer::new(
             &device,
             surface_format,
@@ -283,7 +283,10 @@ impl GuiContext {
         self.context
             .handle_platform_output(window, output.platform_output);
 
-        let primitives = self.context.inner.tessellate(output.shapes);
+        let primitives = self
+            .context
+            .inner
+            .tessellate(output.shapes, output.pixels_per_point);
 
         {
             let mut renderer = self.renderer.write().unwrap();
@@ -333,7 +336,7 @@ impl GuiContext {
     }
 
     /// Update the context whenever there is a window event.
-    pub fn on_window_event(&mut self, event: &WindowEvent) -> EventResponse {
-        self.context.on_window_event(event)
+    pub fn on_window_event(&mut self, window: &Window, event: &WindowEvent) -> EventResponse {
+        self.context.on_window_event(window, event)
     }
 }

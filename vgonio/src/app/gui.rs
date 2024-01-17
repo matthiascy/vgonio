@@ -4,7 +4,7 @@ mod data;
 mod docking;
 mod event;
 mod file_drop;
-mod gizmo;
+// mod gizmo;
 mod icons;
 mod measurement;
 mod misc;
@@ -48,8 +48,9 @@ use crate::{
 use vgcore::error::VgonioError;
 use winit::{
     dpi::PhysicalSize,
-    event::{Event, KeyboardInput, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    event::{Event, KeyEvent, WindowEvent},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
+    keyboard::PhysicalKey,
     window::{Window, WindowBuilder},
 };
 
@@ -79,7 +80,9 @@ use crate::{
 
 /// Launches Vgonio GUI application.
 pub fn run(config: Config) -> Result<(), VgonioError> {
-    let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event().build();
+    let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event()
+        .build()
+        .unwrap();
     let window = WindowBuilder::new()
         .with_decorations(true)
         .with_resizable(true)
@@ -91,34 +94,34 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
         .with_title("vgonio")
         .build(&event_loop)
         .unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut vgonio = pollster::block_on(VgonioGuiApp::new(config, &window, &event_loop))?;
 
     let mut last_frame_time = Instant::now();
 
-    event_loop.run(move |event, _, control| {
-        let now = Instant::now();
-        let dt = now - last_frame_time;
-        last_frame_time = now;
+    event_loop
+        .run(move |event, elwt| {
+            let now = Instant::now();
+            let dt = now - last_frame_time;
+            last_frame_time = now;
 
-        match event {
-            Event::UserEvent(event) => vgonio.on_user_event(event, control),
-            Event::WindowEvent {
-                window_id,
-                ref event,
-            } if window_id == window.id() => {
-                vgonio.on_window_event(&window, event, control);
+            match event {
+                Event::UserEvent(event) => vgonio.on_user_event(event, elwt),
+                Event::WindowEvent {
+                    window_id,
+                    ref event,
+                } if window_id == window.id() => {
+                    vgonio.on_window_event(&window, event, elwt);
+                }
+                Event::AboutToWait => {
+                    vgonio.update_and_render(&window, elwt, dt);
+                    window.request_redraw();
+                }
+                _ => {}
             }
-
-            Event::RedrawRequested(window_id) if window_id == window.id() => {
-                vgonio.on_redraw_requested(&window, dt, control);
-            }
-
-            Event::MainEventsCleared => window.request_redraw(),
-
-            _ => {}
-        }
-    })
+        })
+        .map_err(|err| VgonioError::new("Failed to run the application", Some(Box::new(err))))
 }
 
 /// Vgonio application context.
@@ -186,10 +189,10 @@ impl VgonioGuiApp {
         let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
         let gui_ctx = GuiContext::new(
+            window,
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             canvas.format(),
-            event_loop,
             1,
         );
 
@@ -267,17 +270,18 @@ impl VgonioGuiApp {
         &mut self,
         window: &Window,
         event: &WindowEvent,
-        control: &mut ControlFlow,
+        elwt: &EventLoopWindowTarget<VgonioEvent>,
     ) {
-        let _ = self.ctx.gui.on_window_event(event);
+        let _ = self.ctx.gui.on_window_event(window, event);
         // Even if the event was consumed by the UI, we still need to update the
         // input state.
         match event {
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
+                device_id,
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(keycode),
                         state,
-                        virtual_keycode: Some(keycode),
                         ..
                     },
                 ..
@@ -296,13 +300,10 @@ impl VgonioGuiApp {
             WindowEvent::Resized(new_size) => {
                 self.resize(*new_size, Some(window.scale_factor() as f32));
             }
-            WindowEvent::ScaleFactorChanged {
-                new_inner_size,
-                scale_factor,
-            } => {
-                self.resize(**new_inner_size, Some(*scale_factor as f32));
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.resize(window.inner_size(), Some(*scale_factor as f32));
             }
-            WindowEvent::CloseRequested => *control = ControlFlow::Exit,
+            WindowEvent::CloseRequested => elwt.exit(),
             _ => {}
         }
     }
@@ -467,7 +468,7 @@ impl VgonioGuiApp {
         Ok(())
     }
 
-    pub fn on_user_event(&mut self, event: VgonioEvent, control_flow: &mut ControlFlow) {
+    pub fn on_user_event(&mut self, event: VgonioEvent, elwt: &EventLoopWindowTarget<VgonioEvent>) {
         use VgonioEvent::*;
 
         // Handle events from the UI.
@@ -476,7 +477,7 @@ impl VgonioGuiApp {
             EventResponse::Ignored(event) => {
                 match event {
                     Quit => {
-                        *control_flow = ControlFlow::Exit;
+                        elwt.exit();
                     }
                     RequestRedraw => {}
                     Debugging(event) => {
@@ -755,11 +756,11 @@ impl VgonioGuiApp {
     }
 
     /// Update the state of the application then render the current frame.
-    pub fn on_redraw_requested(
+    pub fn update_and_render(
         &mut self,
         window: &Window,
+        elwt: &EventLoopWindowTarget<VgonioEvent>,
         dt: Duration,
-        control: &mut ControlFlow,
     ) {
         match self.render_frame(window, dt) {
             Ok(_) => {}
@@ -770,7 +771,7 @@ impl VgonioGuiApp {
                             // Reconfigure the surface if lost
                             wgpu::SurfaceError::Lost => self.reconfigure_surface(),
                             // The system is out of memory, we should quit
-                            wgpu::SurfaceError::OutOfMemory => *control = ControlFlow::Exit,
+                            wgpu::SurfaceError::OutOfMemory => elwt.exit(),
                             // All other errors (Outdated, Timeout) should be resolved by the next
                             // frame
                             error => eprintln!("{error:?}"),

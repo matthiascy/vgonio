@@ -14,13 +14,13 @@ byteorder = "1.4"
 cfg-if = "1.0"
 chrono = "0.4"
 clap = { version = "~4", features = ["derive"] }
-egui = { version = "~0.23", features = ["bytemuck"] }
-egui_dock = { version = "~0.8" }
-egui_extras = "~0.23"
-egui-winit = { version = "~0.23" }
+egui = { version = "~0.25", features = ["bytemuck"] }
+egui_dock = { version = "~0.10" }
+egui_extras = "~0.25"
+egui-winit = { version = "~0.25" }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
-egui_plot = "~0.23"
-egui-toast = "~0.9"
+egui_plot = "~0.25"
+egui-toast = "~0.11"
 env_logger = "~0.10"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 exr = { git = "https://github.com/matthiascy/exr.git", branch = "master" }
@@ -38,7 +38,7 @@ serde_yaml = "0.9"
 static_assertions = "1.1"
 tobj = "4.0"
 uuid = { version = "1.2", features = ["serde", "v4"] }
-winit = "0.28"
+winit = "~0.29"
 wgpu = { version = "0.18", features = ["spirv"] }
 
 [profile.dev]

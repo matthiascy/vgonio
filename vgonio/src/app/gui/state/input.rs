@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use winit::{
     dpi::PhysicalPosition,
-    event::{ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode},
+    event::{ElementState, MouseButton, MouseScrollDelta},
+    keyboard::KeyCode,
 };
 
 pub struct InputState {
-    pub(crate) key_map: HashMap<VirtualKeyCode, bool>,
+    pub(crate) key_map: HashMap<KeyCode, bool>,
     pub(crate) mouse_map: HashMap<MouseButton, bool>,
     pub(crate) scroll_delta: f32,
     pub(crate) cursor_delta: [f32; 2],
@@ -27,7 +28,7 @@ impl Default for InputState {
 impl InputState {
     pub fn new() -> Self { Self::default() }
 
-    pub fn update_key_map(&mut self, key_code: VirtualKeyCode, state: ElementState) {
+    pub fn update_key_map(&mut self, key_code: KeyCode, state: ElementState) {
         *self.key_map.entry(key_code).or_insert(false) = state == ElementState::Pressed;
     }
 
@@ -52,7 +53,7 @@ impl InputState {
         };
     }
 
-    pub fn is_key_pressed(&self, key_code: VirtualKeyCode) -> bool {
+    pub fn is_key_pressed(&self, key_code: KeyCode) -> bool {
         *self.key_map.get(&key_code).unwrap_or(&false)
     }
 

@@ -1,7 +1,7 @@
 use crate::app::gui::state::InputState;
 use std::cmp::Ordering::Equal;
 use vgcore::math::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles};
-use winit::event::{MouseButton, VirtualKeyCode};
+use winit::{event::MouseButton, keyboard::KeyCode};
 
 // pub struct OrthonormalBasis {
 //     axis_x: Vec3,
@@ -301,10 +301,10 @@ impl OrbitControls {
 impl CameraController for OrbitControls {
     fn update(&mut self, input: &InputState, camera: &mut Camera, dt: std::time::Duration) {
         let is_middle_button_pressed = *input.mouse_map.get(&MouseButton::Middle).unwrap_or(&false);
-        let is_shift_pressed = input.is_key_pressed(VirtualKeyCode::LShift)
-            || input.is_key_pressed(VirtualKeyCode::RShift);
-        let is_ctrl_pressed = input.is_key_pressed(VirtualKeyCode::LControl)
-            || input.is_key_pressed(VirtualKeyCode::RControl);
+        let is_shift_pressed =
+            input.is_key_pressed(KeyCode::ShiftLeft) || input.is_key_pressed(KeyCode::ShiftRight);
+        let is_ctrl_pressed = input.is_key_pressed(KeyCode::ControlLeft)
+            || input.is_key_pressed(KeyCode::ControlRight);
         let [dx, dy] = input.cursor_delta;
         let scroll_delta = input.scroll_delta * 5.0;
 
