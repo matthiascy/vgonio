@@ -18,27 +18,27 @@ visu-dbg = []
 verbose-dbg = []
 
 [dependencies]
-chrono = { workspace = true }
-clap = { workspace = true }
-egui = { workspace = true }
-egui_dock = { workspace = true }
-egui_extras = { workspace = true }
-egui-winit = { workspace = true }
-egui-gizmo = { workspace = true }
-egui_plot = { workspace = true }
-egui-toast = { workspace = true }
-env_logger = { workspace = true }
+chrono.workspace = true
+clap.workspace = true
+egui.workspace = true
+egui_dock.workspace = true
+egui_extras.workspace = true
+egui-winit.workspace = true
+egui-gizmo.workspace = true
+egui_plot.workspace = true
+egui-toast.workspace = true
+env_logger.workspace = true
 embree = { workspace = true, optional = true }
-exr = { workspace = true }
-flate2 = { workspace = true }
-log = { workspace = true }
-paste = { workspace = true }
-rand = { workspace = true }
-rayon = { workspace = true }
-serde = { workspace = true }
-serde_yaml = { workspace = true }
-static_assertions = { workspace = true }
-uuid = { workspace = true }
+exr.workspace = true
+flate2.workspace = true
+log.workspace = true
+paste.workspace = true
+rand.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+static_assertions.workspace = true
+uuid.workspace = true
 approx = "0.5"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
