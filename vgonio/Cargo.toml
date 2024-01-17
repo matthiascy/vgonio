@@ -62,6 +62,7 @@ wgpu.workspace = true
 vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
 vgcore = { package = "vgonio-core", path = "../vgonio-core" }
 vgbxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }
+vgwgpu = { package = "vgonio-wgpu", path = "../vgonio-wgpu" }
 
 [build-dependencies]
 shaderc = "0.8"

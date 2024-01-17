@@ -1,11 +1,3 @@
-mod buffers;
-pub mod camera;
-mod context;
-mod mesh;
-mod shadow_pass;
-mod texture;
-mod vertex;
-
 pub use buffers::*;
 use wgpu::TextureFormat;
 

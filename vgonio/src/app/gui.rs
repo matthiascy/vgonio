@@ -5,6 +5,7 @@ mod docking;
 mod event;
 mod file_drop;
 // mod gizmo;
+pub mod gfx;
 mod icons;
 mod measurement;
 mod misc;
@@ -34,10 +35,10 @@ pub use ui::VgonioGui;
 use crate::{
     app::{
         cache::InnerCache,
-        gfx::{GpuContext, WgpuConfig},
         gui::{
             bsdf_viewer::BsdfViewer,
             event::{BsdfViewerEvent, DebuggingEvent, EventResponse, VgonioEvent},
+            gfx::{GpuContext, WgpuConfig},
             state::{GuiContext, InputState},
             theme::ThemeState,
         },
@@ -64,10 +65,10 @@ use self::tools::SamplingInspector;
 use crate::{
     app::{
         cache::Cache,
-        gfx::WindowSurface,
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},
+            gfx::WindowSurface,
             notify::NotifyKind,
             state::debug::DebugDrawingState,
             surf_viewer::SurfaceViewerStates,
@@ -123,28 +124,21 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
         })
         .map_err(|err| VgonioError::new("Failed to run the application", Some(Box::new(err))))
 }
-
-/// Vgonio application context.
-/// Contains all the resources needed for rendering.
-pub struct Context {
-    /// GPU context for rendering.
-    gpu: Arc<GpuContext>,
-    /// GUI context for rendering.
-    gui: GuiContext,
-}
-
 // TODO: add MSAA
 
 /// Vgonio client application with GUI.
 pub struct VgonioGuiApp {
     /// The time when the application started.
     pub start_time: Instant,
-    /// The application context.
-    ctx: Context,
+    /// Gui context
+    gui_ctx: GuiContext,
+    /// Gpu context
+    gpu_ctx: Arc<GpuContext>,
     /// Surface for presenting rendered frames.
     canvas: WindowSurface,
     /// The GUI application state.
     ui: VgonioGui,
+    /// The theme of the application.
     theme: ThemeState,
     /// The configuration of the application. See [`Config`].
     config: Arc<Config>,
@@ -238,10 +232,8 @@ impl VgonioGuiApp {
 
         Ok(Self {
             start_time: Instant::now(),
-            ctx: Context {
-                gpu: gpu_ctx,
-                gui: gui_ctx,
-            },
+            gpu_ctx,
+            gui_ctx,
             config,
             ui,
             cache,
@@ -255,11 +247,11 @@ impl VgonioGuiApp {
         })
     }
 
-    pub fn reconfigure_surface(&mut self) { self.canvas.reconfigure(&self.ctx.gpu.device); }
+    pub fn reconfigure_surface(&mut self) { self.canvas.reconfigure(&self.gpu_ctx.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
         self.canvas.resize(
-            &self.ctx.gpu.device,
+            &self.gpu_ctx.device,
             new_size.width,
             new_size.height,
             scale_factor,
@@ -272,12 +264,11 @@ impl VgonioGuiApp {
         event: &WindowEvent,
         elwt: &EventLoopWindowTarget<VgonioEvent>,
     ) {
-        let _ = self.ctx.gui.on_window_event(window, event);
+        let _ = self.gui_ctx.on_window_event(window, event);
         // Even if the event was consumed by the UI, we still need to update the
         // input state.
         match event {
             WindowEvent::KeyboardInput {
-                device_id,
                 event:
                     KeyEvent {
                         physical_key: PhysicalKey::Code(keycode),
@@ -326,7 +317,7 @@ impl VgonioGuiApp {
                 .unwrap()
                 .camera_view_proj();
             self.dbg_drawing_state.update_uniform_buffer(
-                &self.ctx.gpu,
+                &self.gpu_ctx,
                 &(view_proj.proj * view_proj.view),
                 lowest,
                 highest,
@@ -335,7 +326,7 @@ impl VgonioGuiApp {
         }
 
         // Update GUI context.
-        self.ctx.gui.update(window);
+        self.gui_ctx.update(window);
 
         // Update the renderings.
         self.render(window, dt)?;
@@ -387,7 +378,7 @@ impl VgonioGuiApp {
 
                 self.cache.read(|cache| {
                     self.surface_viewer_states.record_render_pass(
-                        &self.ctx.gpu,
+                        &self.gpu_ctx,
                         active_viewer,
                         &self.input,
                         dt,
@@ -400,7 +391,7 @@ impl VgonioGuiApp {
 
             let dbg_drawing_encoder = match self.dbg_drawing_state.output_viewer {
                 Some(viewer) => self.dbg_drawing_state.record_render_pass(
-                    &self.ctx.gpu,
+                    &self.gpu_ctx,
                     Some(wgpu::RenderPassColorAttachment {
                         view: &self
                             .surface_viewer_states
@@ -434,7 +425,7 @@ impl VgonioGuiApp {
         };
 
         // UI render pass recoding.
-        let ui_render_output = self.ctx.gui.render(
+        let ui_render_output = self.gui_ctx.render(
             window,
             self.canvas.screen_descriptor(),
             &output_view,
@@ -460,7 +451,7 @@ impl VgonioGuiApp {
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
-        self.ctx.gpu.queue.submit(cmds);
+        self.gpu_ctx.queue.submit(cmds);
 
         // Present the frame to the screen.
         output_frame.present();
@@ -488,7 +479,7 @@ impl VgonioGuiApp {
                             }
                             DebuggingEvent::UpdateDepthMap => {
                                 // self.depth_map.copy_to_buffer(
-                                //     &self.ctx.gpu,
+                                //     &self.gpu_ctx,
                                 //     self.canvas.width(),
                                 //     self.canvas.height(),
                                 // );
@@ -498,8 +489,8 @@ impl VgonioGuiApp {
                                 //     .unwrap()
                                 //     .depth_map_pane
                                 //     .update_depth_map(
-                                //         &self.ctx.gpu,
-                                //         &self.ctx.gui,
+                                //         &self.gpu_ctx,
+                                //         &self.gui_ctx,
                                 //         &self.depth_map.
                                 // depth_attachment_storage,
                                 //         self.depth_map.width,
@@ -512,12 +503,12 @@ impl VgonioGuiApp {
                             DebuggingEvent::UpdateEmitterSamples(samples) => {
                                 log::trace!("Updating emitter samples: {:?}", samples.len());
                                 self.dbg_drawing_state
-                                    .update_emitter_samples(&self.ctx.gpu, samples);
+                                    .update_emitter_samples(&self.gpu_ctx, samples);
                             }
                             DebuggingEvent::UpdateMeasurementPoints(points) => {
                                 log::trace!("Updating measurement points: {:?}", points.len());
                                 self.dbg_drawing_state
-                                    .update_measurement_points(&self.ctx.gpu, points);
+                                    .update_measurement_points(&self.gpu_ctx, points);
                             }
                             DebuggingEvent::ToggleMeasurementPointsDrawing(status) => {
                                 log::trace!("Toggling measurement points drawing: {:?}", status);
@@ -526,11 +517,11 @@ impl VgonioGuiApp {
                             DebuggingEvent::UpdateEmitterPosition { position } => {
                                 log::trace!("Updating emitter position: {:?}", position);
                                 self.dbg_drawing_state
-                                    .update_emitter_position(&self.ctx.gpu, position);
+                                    .update_emitter_position(&self.gpu_ctx, position);
                             }
                             DebuggingEvent::EmitRays => {
                                 log::trace!("Emitting rays");
-                                self.dbg_drawing_state.emit_rays(&self.ctx.gpu);
+                                self.dbg_drawing_state.emit_rays(&self.gpu_ctx);
                             }
                             DebuggingEvent::ToggleDebugDrawing(status) => {
                                 log::trace!("Toggling debug drawing: {:?}", status);
@@ -546,11 +537,11 @@ impl VgonioGuiApp {
                                     patches.num_patches()
                                 );
                                 self.dbg_drawing_state
-                                    .update_detector_drawing(&self.ctx.gpu, patches);
+                                    .update_detector_drawing(&self.gpu_ctx, patches);
                             }
                             DebuggingEvent::UpdateRayParams { t } => {
                                 log::trace!("Updating ray params: {t}");
-                                self.dbg_drawing_state.update_ray_params(&self.ctx.gpu, t);
+                                self.dbg_drawing_state.update_ray_params(&self.gpu_ctx, t);
                             }
                             DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
                                 log::trace!("Toggling emitter rays drawing: {:?}", status);
@@ -652,7 +643,7 @@ impl VgonioGuiApp {
                                         )
                                     });
                                     self.dbg_drawing_state.update_ray_trajectories(
-                                        &self.ctx.gpu,
+                                        &self.gpu_ctx,
                                         &measured[0]
                                             .measured
                                             .as_bsdf()
@@ -661,7 +652,7 @@ impl VgonioGuiApp {
                                             .trajectories(),
                                     );
                                     self.dbg_drawing_state.update_ray_hit_points(
-                                        &self.ctx.gpu,
+                                        &self.gpu_ctx,
                                         &measured[0]
                                             .measured
                                             .as_bsdf()
@@ -720,8 +711,8 @@ impl VgonioGuiApp {
                             self.surface_viewer_states.allocate_viewer_resources(
                                 uuid,
                                 texture_id,
-                                &self.ctx.gpu,
-                                &self.ctx.gui.renderer,
+                                &self.gpu_ctx,
+                                &self.gui_ctx.renderer,
                             );
                         }
                         SurfaceViewerEvent::Resize { uuid, size } => {
@@ -729,8 +720,8 @@ impl VgonioGuiApp {
                                 uuid,
                                 size.0,
                                 size.1,
-                                &self.ctx.gpu,
-                                &self.ctx.gui.renderer,
+                                &self.gpu_ctx,
+                                &self.gui_ctx.renderer,
                             );
                         }
                         SurfaceViewerEvent::Close { .. } => {
@@ -769,7 +760,9 @@ impl VgonioGuiApp {
                     if let Some(surface_error) = error.get::<wgpu::SurfaceError>() {
                         match surface_error {
                             // Reconfigure the surface if lost
-                            wgpu::SurfaceError::Lost => self.reconfigure_surface(),
+                            wgpu::SurfaceError::Lost => {
+                                self.canvas.reconfigure(&self.gpu_ctx.device)
+                            }
                             // The system is out of memory, we should quit
                             wgpu::SurfaceError::OutOfMemory => elwt.exit(),
                             // All other errors (Outdated, Timeout) should be resolved by the next

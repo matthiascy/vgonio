@@ -1,0 +1,8 @@
+[package]
+name = "vgonio-wgpu"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+wgpu.workspace = true

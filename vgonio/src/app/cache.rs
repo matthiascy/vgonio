@@ -1,6 +1,5 @@
-use super::gfx::RenderableMesh;
 use crate::{
-    app::{cli::ansi, gfx::GpuContext, Config},
+    app::{cli::ansi, Config},
     measure::data::MeasurementData,
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Medium,

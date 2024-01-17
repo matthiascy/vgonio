@@ -3159,6 +3159,7 @@ dependencies = [
  "vgonio-bxdf",
  "vgonio-core",
  "vgonio-surf",
+ "vgonio-wgpu",
  "wgpu",
  "winit",
 ]
@@ -3218,6 +3219,13 @@ dependencies = [
 [[package]]
 name = "vgonio-visu"
 version = "0.3.0"
+
+[[package]]
+name = "vgonio-wgpu"
+version = "0.3.0"
+dependencies = [
+ "wgpu",
+]
 
 [[package]]
 name = "wait-timeout"
