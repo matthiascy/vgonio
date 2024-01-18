@@ -1,0 +1,18 @@
+[package]
+name = "vgonio-wgut"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+wgpu.workspace = true
+bytemuck.workspace = true
+futures-intrusive.workspace = true
+image.workspace = true
+log.workspace = true
+pollster.workspace = true
+rayon.workspace = true
+winit.workspace = true
+uuid.workspace = true
+vgcore = { package = "vgonio-core", path = "../vgonio-core", features = ["winit"] }
+vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }

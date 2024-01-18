@@ -2603,17 +2603,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_json"
-version = "1.0.111"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "176e46fa42316f18edd598015a5166857fc835ec732f5215eac6b7bdbf0a84f4"
-dependencies = [
- "itoa",
- "ryu",
- "serde",
-]
-
-[[package]]
 name = "serde_spanned"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3149,7 +3138,6 @@ dependencies = [
  "rayon",
  "rfd",
  "serde",
- "serde_json",
  "serde_yaml",
  "shaderc",
  "static_assertions",
@@ -3159,7 +3147,7 @@ dependencies = [
  "vgonio-bxdf",
  "vgonio-core",
  "vgonio-surf",
- "vgonio-wgpu",
+ "vgonio-wgut",
  "wgpu",
  "winit",
 ]
@@ -3190,6 +3178,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_yaml",
+ "winit",
 ]
 
 [[package]]
@@ -3217,14 +3206,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-uire"
+version = "0.3.0"
+
+[[package]]
 name = "vgonio-visu"
 version = "0.3.0"
 
 [[package]]
-name = "vgonio-wgpu"
+name = "vgonio-wgut"
 version = "0.3.0"
 dependencies = [
+ "bytemuck",
+ "futures-intrusive",
+ "image",
+ "log",
+ "pollster",
+ "rayon",
+ "uuid",
+ "vgonio-core",
+ "vgonio-surf",
  "wgpu",
+ "winit",
 ]
 
 [[package]]

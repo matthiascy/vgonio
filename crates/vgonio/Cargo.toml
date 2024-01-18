@@ -1,0 +1,67 @@
+[package]
+name = "vgonio"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+build = "build.rs"
+description = "Microscopic level light transport simulation."
+publish = false
+
+[features]
+default = []
+embree = ["dep:embree", "vgsurf/embree"]
+optix = []
+bench = ["vgsurf/bench"]
+surf-obj = ["vgsurf/surf-obj"]
+surf-gen = ["vgsurf/surf-gen"]
+visu-dbg = []
+verbose-dbg = []
+
+[dependencies]
+chrono.workspace = true
+clap.workspace = true
+egui.workspace = true
+egui_dock.workspace = true
+egui_extras.workspace = true
+egui-winit.workspace = true
+egui-gizmo.workspace = true
+egui_plot.workspace = true
+egui-toast.workspace = true
+env_logger.workspace = true
+embree = { workspace = true, optional = true }
+exr.workspace = true
+flate2.workspace = true
+log.workspace = true
+paste.workspace = true
+rand.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+static_assertions.workspace = true
+uuid.workspace = true
+approx.workspace = true
+bincode.workspace = true
+bytemuck.workspace = true
+csv.workspace = true
+dirs.workspace = true
+futures-intrusive.workspace = true
+image.workspace = true
+levenberg-marquardt.workspace = true
+nalgebra.workspace = true
+numpy.workspace = true
+pollster.workspace = true
+pyo3.workspace = true
+rfd.workspace = true
+rand_distr.workspace = true
+rand_chacha.workspace = true
+toml.workspace = true
+type-map.workspace = true
+winit.workspace = true
+wgpu.workspace = true
+vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
+vgcore = { package = "vgonio-core", path = "../vgonio-core", features = ["winit"] }
+vgbxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }
+vgwgut = { package = "vgonio-wgut", path = "../vgonio-wgut" }
+
+[build-dependencies]
+shaderc = "0.8"

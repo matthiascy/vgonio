@@ -1,6 +1,15 @@
 [workspace]
-members = ["vgonio", "vgonio-core", "vgonio-bxdf", "vgonio-jabr", "vgonio-surf", "vgonio-visu", "vgonio-wgpu"]
 resolver = "2"
+members = [
+    "crates/vgonio",
+    "crates/vgonio-core",
+    "crates/vgonio-bxdf",
+    "crates/vgonio-jabr",
+    "crates/vgonio-surf",
+    "crates/vgonio-visu",
+    "crates/vgonio-wgut",
+    "crates/vgonio-uire"
+]
 
 [workspace.package]
 authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
@@ -10,10 +19,14 @@ version = "0.3.0"
 [workspace.dependencies]
 ahash = "0.8"
 approx = "0.5"
+bincode = "1"
+bytemuck = { version = "1.12", features = ["derive"] }
 byteorder = "1.4"
 cfg-if = "1.0"
 chrono = "0.4"
 clap = { version = "~4", features = ["derive"] }
+csv = "1"
+dirs = "5.0"
 egui = { version = "~0.25", features = ["bytemuck"] }
 egui_dock = { version = "~0.10" }
 egui_extras = "~0.25"
@@ -25,21 +38,35 @@ env_logger = "~0.10"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 exr = { git = "https://github.com/matthiascy/exr.git", branch = "master" }
 flate2 = { version = "~1.0", features = ["zlib-ng-compat"], default-features = false }
+futures-intrusive = "0.5"
 glam = { version = "~0.24", features = ["serde", "bytemuck"] }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
+levenberg-marquardt = "0.13"
+nalgebra = "0.32"
+numpy = "0.20"
 libm = "0.2"
 log = "0.4"
 num-traits = "0.2"
 paste = "1.0"
+pollster = "0.3"
 proptest = "1.0"
+pyo3 = { version = "0.20", features = ["auto-initialize"] }
 rand = "0.8"
 rayon = "1.8"
+rfd = { version = "0.12", features = ["file-handle-inner"] }
+rand_distr = "0.4"
+rand_chacha = "0.3"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
 serde_yaml = "0.9"
 static_assertions = "1.1"
 tobj = "4.0"
+toml = "0.8"
+type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 winit = "~0.29"
 wgpu = { version = "0.18", features = ["spirv"] }
+
 
 [profile.dev]
 split-debuginfo = "unpacked"
