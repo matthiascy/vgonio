@@ -1369,8 +1369,8 @@ pub fn measure_masking_shadowing(
     let wgpu_config = WgpuConfig {
         device_descriptor: wgpu::DeviceDescriptor {
             label: Some("occlusion-measurement-device"),
-            features: wgpu::Features::POLYGON_MODE_LINE,
-            limits: if cfg!(target_arch = "wasm32") {
+            required_features: wgpu::Features::POLYGON_MODE_LINE,
+            required_limits: if cfg!(target_arch = "wasm32") {
                 wgpu::Limits::downlevel_webgl2_defaults()
             } else {
                 wgpu::Limits::default()

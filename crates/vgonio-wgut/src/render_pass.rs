@@ -1,5 +1,3 @@
-use wgpu::TextureFormat;
-
 /// Enum for selecting the right buffer type.
 #[derive(Debug)]
 pub enum BufferType {
@@ -42,6 +40,7 @@ pub fn linearize_depth(depth: f32, near: f32, far: f32) -> f32 {
 
 /// Returns the texture format's pixel size in bytes.
 pub const fn tex_fmt_bpp(format: wgpu::TextureFormat) -> u32 {
+    use wgpu::TextureFormat;
     match format {
         TextureFormat::R8Unorm
         | TextureFormat::R8Snorm
@@ -115,5 +114,6 @@ pub const fn tex_fmt_bpp(format: wgpu::TextureFormat) -> u32 {
         TextureFormat::EacRg11Unorm => 16,
         TextureFormat::EacRg11Snorm => 16,
         TextureFormat::Astc { .. } => 16,
+        TextureFormat::NV12 => 12,
     }
 }

@@ -124,7 +124,7 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
 // TODO: add MSAA
 
 /// Vgonio client application with GUI.
-pub struct VgonioGuiApp {
+pub struct VgonioGuiApp<'w> {
     /// The time when the application started.
     pub start_time: Instant,
     /// Gui context
@@ -132,7 +132,7 @@ pub struct VgonioGuiApp {
     /// Gpu context
     gpu_ctx: Arc<GpuContext>,
     /// Surface for presenting rendered frames.
-    canvas: WindowSurface,
+    canvas: WindowSurface<'w>,
     /// The GUI application state.
     ui: VgonioGui,
     /// The theme of the application.
@@ -155,20 +155,20 @@ pub struct VgonioGuiApp {
     event_loop_proxy: EventLoopProxy,
 }
 
-impl VgonioGuiApp {
+impl<'w> VgonioGuiApp<'w> {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
         config: Config,
-        window: &Window,
+        window: &'w Window,
         event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, VgonioError> {
         let wgpu_config = WgpuConfig {
             device_descriptor: wgpu::DeviceDescriptor {
                 label: Some("vgonio-wgpu-device"),
-                features: wgpu::Features::POLYGON_MODE_LINE
+                required_features: wgpu::Features::POLYGON_MODE_LINE
                     | wgpu::Features::TIMESTAMP_QUERY
                     | wgpu::Features::PUSH_CONSTANTS,
-                limits: wgpu::Limits {
+                required_limits: wgpu::Limits {
                     max_push_constant_size: 256,
                     ..Default::default()
                 },
@@ -176,7 +176,7 @@ impl VgonioGuiApp {
             ..Default::default()
         };
         let event_loop_proxy = EventLoopProxy::new(event_loop);
-        let (gpu_ctx, surface) = GpuContext::new(window, &wgpu_config).await;
+        let (gpu_ctx, surface) = GpuContext::onscreen(window, &wgpu_config).await;
         let gpu_ctx = Arc::new(gpu_ctx);
         let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
         let gui_ctx = GuiContext::new(

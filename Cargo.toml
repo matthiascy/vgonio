@@ -65,7 +65,7 @@ toml = "0.8"
 type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 winit = "~0.29"
-wgpu = { version = "0.18", features = ["spirv"] }
+wgpu = { version = "0.19", features = ["spirv"] }
 
 
 [profile.dev]

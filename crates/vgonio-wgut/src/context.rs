@@ -58,32 +58,32 @@ impl ScreenDescriptor {
 }
 
 /// Surface state for presenting to a window.
-pub struct WindowSurface {
+pub struct WindowSurface<'w> {
     /// Surface (image texture/framebuffer) to draw on.
-    pub inner: wgpu::Surface,
+    pub inner: wgpu::Surface<'w>,
     /// Surface configuration (size, format, etc).
     pub config: wgpu::SurfaceConfiguration,
     /// Scale factor of the window.
     pub window_scale_factor: f32,
 }
 
-impl Deref for WindowSurface {
-    type Target = wgpu::Surface;
+impl<'w> Deref for WindowSurface<'w> {
+    type Target = wgpu::Surface<'w>;
 
     fn deref(&self) -> &Self::Target { &self.inner }
 }
 
-impl DerefMut for WindowSurface {
+impl<'w> DerefMut for WindowSurface<'w> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
 }
 
-impl WindowSurface {
+impl<'w> WindowSurface<'w> {
     /// Create a new surface for a window.
     pub fn new(
         gpu: &GpuContext,
-        window: &Window,
+        window: &'w Window,
         config: &WgpuConfig,
-        surface: wgpu::Surface,
+        surface: wgpu::Surface<'w>,
     ) -> Self {
         let capabilities = surface.get_capabilities(&gpu.adapter);
         log::info!("Supported surface formats: {:?}", &capabilities.formats);
@@ -98,6 +98,7 @@ impl WindowSurface {
             width: win_size.width,
             height: win_size.height,
             present_mode: config.present_mode,
+            desired_maximum_frame_latency: 2,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
@@ -207,14 +208,14 @@ impl Default for WgpuConfig {
         Self {
             device_descriptor: wgpu::DeviceDescriptor {
                 label: Some("wgpu-default-device"),
-                features: wgpu::Features::default(),
-                limits: if cfg!(target_arch = "wasm32") {
+                required_features: wgpu::Features::default(),
+                required_limits: if cfg!(target_arch = "wasm32") {
                     wgpu::Limits::downlevel_webgl2_defaults()
                 } else {
                     wgpu::Limits::default()
                 },
             },
-            backends: wgpu::Backends::PRIMARY | wgpu::Backends::GL,
+            backends: wgpu::Backends::PRIMARY,
             present_mode: wgpu::PresentMode::AutoVsync,
             power_preference: wgpu::PowerPreference::HighPerformance,
             depth_format: None,
@@ -238,9 +239,12 @@ impl WgpuConfig {
 }
 
 impl GpuContext {
-    /// Creates a new context and requests necessary resources to use the GPU
-    /// for presenting to a window.
-    pub async fn new(window: &Window, config: &WgpuConfig) -> (Self, wgpu::Surface) {
+    // returns window surface
+    /// Creates a new onscreen rendering context.
+    pub async fn onscreen<'w>(
+        window: &'w Window,
+        config: &WgpuConfig,
+    ) -> (Self, wgpu::Surface<'w>) {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             flags: wgpu::InstanceFlags::VALIDATION,
@@ -269,12 +273,15 @@ impl GpuContext {
         let adapter_limits = adapter.limits();
 
         log::debug!("Adapter limits: {:#?}", adapter_limits);
-        log::debug!("Default limits: {:#?}", config.device_descriptor.limits);
+        log::debug!(
+            "Default limits: {:#?}",
+            config.device_descriptor.required_limits
+        );
 
         // Logical device and command queue
         let (device, queue) = if !config
             .device_descriptor
-            .limits
+            .required_limits
             .check_limits(&adapter_limits)
         {
             log::debug!("Request device with default limits");
@@ -284,8 +291,8 @@ impl GpuContext {
             adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     label: config.device_descriptor.label,
-                    features: config.device_descriptor.features,
-                    limits: adapter_limits,
+                    required_features: config.device_descriptor.required_features,
+                    required_limits: adapter_limits,
                 },
                 None,
             )
@@ -311,7 +318,7 @@ impl GpuContext {
         )
     }
 
-    /// Offscreen rendering context.
+    /// Creates a new offscreen rendering context.
     pub async fn offscreen(config: &WgpuConfig) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -338,7 +345,7 @@ impl GpuContext {
         // Logical device and command queue
         let (device, queue) = if config
             .device_descriptor
-            .limits
+            .required_limits
             .check_limits(&adapter_limits)
         {
             adapter.request_device(&config.device_descriptor, None)
@@ -346,8 +353,8 @@ impl GpuContext {
             adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     label: config.device_descriptor.label,
-                    features: config.device_descriptor.features,
-                    limits: adapter_limits,
+                    required_features: config.device_descriptor.required_features,
+                    required_limits: adapter_limits,
                 },
                 None,
             )
