@@ -1,7 +1,10 @@
 use jabr::{Clr3, Pnt3, Vec3};
-use std::sync::atomic::AtomicU32;
 
-use crate::{hit::HittableList, ray::Ray};
+use crate::{
+    hit::HittableList,
+    random::{random_vec3_on_hemisphere, random_vec3_on_unit_sphere},
+    ray::Ray,
+};
 
 pub struct Camera {
     /// Image plane width in pixels.
@@ -60,42 +63,8 @@ impl Camera {
         }
     }
 
-    pub fn render(&self, world: &HittableList, spp: u32) {
-        // let mut remaining_rows = AtomicU32::new(self.img_h);
-
-        let mut image = image::RgbaImage::new(self.img_w, self.img_h);
-        let mut rays = vec![Ray::empty(); spp as usize];
-        let scale = 1.0 / spp as f64;
-        for j in 0..self.img_h {
-            print!("\rScanlines remaining: {}", self.img_h - j - 1);
-            for i in 0..self.img_w {
-                self.generate_rays(i, j, &mut rays);
-                let mut pixel_color = Clr3::zeros();
-                for ray in &rays {
-                    pixel_color += ray_color(ray, world) * scale;
-                }
-                pixel_color = pixel_color.clamp(0.0, 0.999);
-                image.put_pixel(
-                    i,
-                    j,
-                    image::Rgba([
-                        (256.0 * pixel_color.x) as u8,
-                        (256.0 * pixel_color.y) as u8,
-                        (256.0 * pixel_color.z) as u8,
-                        255,
-                    ]),
-                );
-            }
-        }
-        let filename = format!("image-{}x{}-{}spp.png", self.img_w, self.img_h, spp);
-        image
-            .save_with_format(filename, image::ImageFormat::Png)
-            .unwrap();
-        println!("\rDone.                   ");
-    }
-
     /// Generates `n` rays for the pixel at `(u, v)`.
-    fn generate_rays(&self, u: u32, v: u32, rays: &mut [Ray]) {
+    pub fn generate_rays(&self, u: u32, v: u32, rays: &mut [Ray]) {
         let n = rays.len();
         let pixel_center = self.pixel_tlc
             + (u as f64 + 0.5) * self.pixel_delta_u
@@ -116,9 +85,16 @@ impl Camera {
     }
 }
 
-fn ray_color(ray: &Ray, world: &HittableList) -> Clr3 {
-    if let Some(rec) = world.hit(ray, 0.0..=f64::INFINITY) {
-        return 0.5 * (rec.n + Clr3::new(1.0, 1.0, 1.0));
+pub fn ray_color(ray: &Ray, world: &HittableList, bounces: u32, max_bounces: u32) -> Clr3 {
+    if bounces >= max_bounces {
+        return Clr3::zeros();
+    }
+
+    if let Some(rec) = world.hit(ray, 0.0001..=f64::INFINITY) {
+        let n = if rec.front_face { rec.n } else { -rec.n };
+        // let dir = random_vec3_on_hemisphere(&n);
+        let dir = n + random_vec3_on_unit_sphere();
+        return 0.5 * ray_color(&Ray::new(rec.p, dir), world, bounces + 1, max_bounces);
     }
 
     let unit_direction = ray.dir.normalize();

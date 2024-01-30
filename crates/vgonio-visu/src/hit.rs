@@ -1,6 +1,6 @@
 use crate::ray::Ray;
 use jabr::{Pnt3, Vec3};
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, sync::Arc};
 
 pub struct Hit {
     pub n: Vec3,
@@ -29,12 +29,12 @@ impl Hit {
     }
 }
 
-pub trait Hittable {
+pub trait Hittable: Send + Sync {
     fn hit(&self, ray: &Ray, t: RangeInclusive<f64>) -> Option<Hit>;
 }
 
 pub struct HittableList {
-    objects: Vec<Box<dyn Hittable>>,
+    objects: Vec<Arc<dyn Hittable>>,
 }
 
 impl HittableList {
@@ -44,7 +44,7 @@ impl HittableList {
         }
     }
 
-    pub fn add(&mut self, object: Box<dyn Hittable>) { self.objects.push(object); }
+    pub fn add(&mut self, object: Arc<dyn Hittable>) { self.objects.push(object); }
 
     pub fn clear(&mut self) { self.objects.clear(); }
 
