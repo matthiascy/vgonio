@@ -33,13 +33,22 @@ pub struct TileMut<'a> {
     /// The height of the tile in pixels.
     pub h: u32,
     /// The underlying pixel buffer, in RGBA format, in row-major order.
-    pub pixels: &'a [u32],
+    pub pixels: &'a mut [u32],
 }
 
 /// Converts an RGBA pixel to a 32-bit unsigned integer in format 0xAABBGGRR.
 #[inline(always)]
 pub const fn rgba_to_u32(r: u8, g: u8, b: u8, a: u8) -> u32 {
     (a as u32) << 24 | (b as u32) << 16 | (g as u32) << 8 | r as u32
+}
+
+#[inline(always)]
+pub fn linear_to_srgb(x: f64) -> f64 {
+    if x <= 0.00313066844250063 {
+        12.92 * x
+    } else {
+        1.055 * x.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 /// An image that is decomposed into smaller tiles for parallel processing.
@@ -130,6 +139,17 @@ impl TiledImage {
                 }
             }
         }
+    }
+
+    pub fn put_pixel(&mut self, x: u32, y: u32, r: u8, g: u8, b: u8, a: u8) {
+        let tile_x = x / self.tile_width;
+        let tile_y = y / self.tile_height;
+        let tile_idx = tile_y * self.tiles_per_row + tile_x;
+        let tile_offset = tile_idx * self.pixels_per_tile;
+        let tile_i = x % self.tile_width;
+        let tile_j = y % self.tile_height;
+        let tile_pixel_idx = tile_offset + tile_j * self.tile_width + tile_i;
+        self.pixels[tile_pixel_idx as usize] = rgba_to_u32(r, g, b, a);
     }
 
     pub fn tile(&self, index: usize) -> Tile<'_> {

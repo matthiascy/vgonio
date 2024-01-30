@@ -1,6 +1,19 @@
 use clap::Parser;
-use jabr::Vec3;
-use vgonio_visu::{camera::Camera, hit::HittableList, sphere::Sphere};
+use jabr::{Clr3, Vec3};
+use std::{
+    sync::{
+        atomic::{AtomicU32, AtomicU64},
+        Arc,
+    },
+    thread,
+};
+use vgonio_visu::{
+    camera::{ray_color, Camera},
+    hit::HittableList,
+    image::{linear_to_srgb, rgba_to_u32, TiledImage},
+    ray::Ray,
+    sphere::Sphere,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -19,6 +32,8 @@ struct Args {
     /// Samples per pixel
     #[arg(short = 's', default_value_t = 1)]
     spp: u32,
+    #[arg(short = 'b', default_value_t = 16)]
+    max_bounces: u32,
 }
 
 fn main() {
@@ -33,8 +48,109 @@ fn main() {
 
     // World
     let mut world = HittableList::new();
-    world.add(Box::new(Sphere::new(Vec3::new(0.0, 1.0, 0.0), 0.5)));
-    world.add(Box::new(Sphere::new(Vec3::new(0.0, 1.0, -100.5), 100.0)));
+    world.add(Arc::new(Sphere::new(Vec3::new(0.0, 1.0, 0.0), 0.5)));
+    world.add(Arc::new(Sphere::new(Vec3::new(0.0, 1.0, -100.5), 100.0)));
 
-    camera.render(&world, args.spp.clamp(0, u32::MAX));
+    let spp = args.spp.clamp(1, u32::MAX);
+
+    let mut film = TiledImage::new(image_width, image_height, 32, 32);
+
+    render_film(&camera, &world, spp, args.max_bounces, &mut film);
+
+    let mut image = image::RgbaImage::new(image_width, image_height);
+    // film.write_to_image(&mut image);
+    film.write_to_flat_buffer(image.as_mut());
+    let filename = format!(
+        "image-{}x{}-{}spp-{}bnc.png",
+        image_width, image_height, spp, args.max_bounces
+    );
+    image
+        .save_with_format(filename, image::ImageFormat::Png)
+        .unwrap();
+}
+
+fn render_film(
+    camera: &Camera,
+    world: &HittableList,
+    spp: u32,
+    max_bounces: u32,
+    film: &mut TiledImage,
+) {
+    use rayon::iter::ParallelIterator;
+    let num_tiles = film.tiles_per_image;
+    let num_done = &AtomicU32::new(0);
+    let total_time = &AtomicU64::new(0);
+    let max_time = &AtomicU64::new(0);
+    let start_time = std::time::Instant::now();
+
+    thread::scope(|s| {
+        s.spawn(move || {
+            film.par_tiles_mut().for_each(|tile| {
+                let start = std::time::Instant::now();
+                tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
+                    let x = tile.x + (i % tile.w as usize) as u32;
+                    let y = tile.y + (i / tile.w as usize) as u32;
+                    let mut rays = vec![Ray::empty(); spp as usize];
+                    *pixel = render_pixel(x, y, camera, world, max_bounces, &mut rays);
+                });
+                let time_taken = start.elapsed().as_millis() as u64;
+
+                num_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                total_time.fetch_add(time_taken, std::sync::atomic::Ordering::Relaxed);
+                max_time.fetch_max(time_taken, std::sync::atomic::Ordering::Relaxed);
+            });
+        });
+
+        loop {
+            let n = num_done.load(std::sync::atomic::Ordering::Relaxed);
+            let total_time = total_time.load(std::sync::atomic::Ordering::Relaxed);
+            let max_time = max_time.load(std::sync::atomic::Ordering::Relaxed);
+            if n == 0 {
+                continue;
+            } else if n == num_tiles {
+                break;
+            } else {
+                print!(
+                    "\rProgress: {}/{} tiles done, {}ms average, {}ms peek, {}ms elapsed",
+                    n + 1,
+                    num_tiles,
+                    total_time / n as u64,
+                    max_time,
+                    start_time.elapsed().as_millis()
+                );
+            }
+            thread::sleep(std::time::Duration::from_millis(10));
+        }
+    });
+    println!("\nDone!");
+}
+
+fn render_pixel(
+    x: u32,
+    y: u32,
+    camera: &Camera,
+    world: &HittableList,
+    max_bounces: u32,
+    rays: &mut [Ray],
+) -> u32 {
+    let rcp_spp = 1.0 / rays.len() as f64;
+    camera.generate_rays(x, y, rays);
+    let mut pixel_color = Clr3::zeros();
+    for ray in rays.iter_mut() {
+        pixel_color += ray_color(ray, world, 0, max_bounces) * rcp_spp;
+    }
+    pixel_color.x = linear_to_srgb(pixel_color.x);
+    pixel_color.y = linear_to_srgb(pixel_color.y);
+    pixel_color.z = linear_to_srgb(pixel_color.z);
+    pixel_color.clamp(0.0, 0.9999);
+    let color = rgba_to_u32(
+        (256.0 * pixel_color.x) as u8,
+        (256.0 * pixel_color.y) as u8,
+        (256.0 * pixel_color.z) as u8,
+        255,
+    );
+    for ray in rays {
+        *ray = Ray::empty();
+    }
+    color
 }
