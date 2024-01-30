@@ -1,6 +1,6 @@
 #![feature(const_fn_floating_point_arithmetic)]
 
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
@@ -15,6 +15,8 @@ impl Vec3 {
     pub fn norm(&self) -> f64 { self.norm_sqr().sqrt() }
 
     pub const fn norm_sqr(&self) -> f64 { self.x * self.x + self.y * self.y + self.z * self.z }
+
+    pub const fn zeros() -> Self { Vec3::new(0.0, 0.0, 0.0) }
 
     pub const fn dot(&self, other: &Vec3) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z
@@ -31,6 +33,14 @@ impl Vec3 {
     pub fn normalize(&self) -> Vec3 {
         let norm = self.norm();
         Vec3::new(self.x / norm, self.y / norm, self.z / norm)
+    }
+
+    pub fn clamp(&self, min: f64, max: f64) -> Vec3 {
+        Vec3::new(
+            self.x.clamp(min, max),
+            self.y.clamp(min, max),
+            self.z.clamp(min, max),
+        )
     }
 }
 
@@ -72,11 +82,40 @@ macro_rules! impl_ops {
     };
 }
 
+macro_rules! impl_ops_assign {
+    ($($trait:ident, $op:ident);*) => {
+        $(
+            impl $trait for Vec3 {
+                fn $op(&mut self, other: Vec3) {
+                    self.x.$op(other.x);
+                    self.y.$op(other.y);
+                    self.z.$op(other.z);
+                }
+            }
+
+            impl $trait<&Vec3> for Vec3 {
+                fn $op(&mut self, other: &Vec3) {
+                    self.x.$op(other.x);
+                    self.y.$op(other.y);
+                    self.z.$op(other.z);
+                }
+            }
+        )*
+    };
+}
+
 impl_ops! {
     Add, add;
     Sub, sub;
-    Mul, mul
+    Mul, mul;
+    Div, div
 }
+
+impl_ops_assign!(
+    AddAssign, add_assign;
+    SubAssign, sub_assign;
+    MulAssign, mul_assign;
+    DivAssign, div_assign);
 
 impl Div<f64> for Vec3 {
     type Output = Vec3;

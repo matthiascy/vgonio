@@ -3172,6 +3172,9 @@ name = "vgonio-visu"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "image",
+ "rand",
+ "rayon",
  "vgonio-jabr",
 ]
 

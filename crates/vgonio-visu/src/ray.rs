@@ -7,7 +7,9 @@ pub struct Ray {
 }
 
 impl Ray {
-    pub fn new(org: Pnt3, dir: Vec3) -> Self { Ray { org, dir } }
+    pub const fn new(org: Pnt3, dir: Vec3) -> Self { Ray { org, dir } }
+
+    pub const fn empty() -> Self { Ray::new(Pnt3::zeros(), Vec3::zeros()) }
 
     pub fn at(&self, t: f64) -> Pnt3 { self.org + t * self.dir }
 }

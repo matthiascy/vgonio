@@ -7,4 +7,4 @@
 /.pyenv
 reflectance_*.csv
 debug_*/
-*.png
+**.png
