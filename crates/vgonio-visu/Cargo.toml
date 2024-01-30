@@ -8,4 +8,7 @@ version.workspace = true
 
 [dependencies]
 clap.workspace = true
+rand.workspace = true
+rayon.workspace = true
+image.workspace = true
 jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
