@@ -11,6 +11,7 @@ use vgonio_visu::{
     camera::{ray_color, Camera},
     hit::HittableList,
     image::{linear_to_srgb, rgba_to_u32, TiledImage},
+    material::{Lambertian, Metal},
     ray::Ray,
     sphere::Sphere,
 };
@@ -48,8 +49,36 @@ fn main() {
 
     // World
     let mut world = HittableList::new();
-    world.add(Arc::new(Sphere::new(Vec3::new(0.0, 1.0, 0.0), 0.5)));
-    world.add(Arc::new(Sphere::new(Vec3::new(0.0, 1.0, -100.5), 100.0)));
+
+    let material_ground = Arc::new(Lambertian {
+        albedo: Clr3::new(0.8, 0.8, 0.0),
+    });
+    let material_center = Arc::new(Lambertian {
+        albedo: Clr3::new(0.7, 0.3, 0.3),
+    });
+    let material_left = Arc::new(Metal::new(Clr3::new(0.8, 0.8, 0.8), 0.3));
+    let material_right = Arc::new(Metal::new(Clr3::new(0.8, 0.6, 0.2), 1.0));
+
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(0.0, 1.0, -100.5),
+        100.0,
+        material_ground,
+    )));
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(0.0, 1.0, 0.0),
+        0.5,
+        material_center,
+    )));
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(-1.0, 1.0, 0.0),
+        0.5,
+        material_left,
+    )));
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(1.0, 1.0, 0.0),
+        0.5,
+        material_right,
+    )));
 
     let spp = args.spp.clamp(1, u32::MAX);
 
@@ -64,6 +93,7 @@ fn main() {
         "image-{}x{}-{}spp-{}bnc.png",
         image_width, image_height, spp, args.max_bounces
     );
+    println!("Saving image to {}", filename);
     image
         .save_with_format(filename, image::ImageFormat::Png)
         .unwrap();
@@ -87,10 +117,10 @@ fn render_film(
         s.spawn(move || {
             film.par_tiles_mut().for_each(|tile| {
                 let start = std::time::Instant::now();
+                let mut rays = vec![Ray::empty(); spp as usize];
                 tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
                     let x = tile.x + (i % tile.w as usize) as u32;
                     let y = tile.y + (i / tile.w as usize) as u32;
-                    let mut rays = vec![Ray::empty(); spp as usize];
                     *pixel = render_pixel(x, y, camera, world, max_bounces, &mut rays);
                 });
                 let time_taken = start.elapsed().as_millis() as u64;

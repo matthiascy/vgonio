@@ -42,6 +42,13 @@ impl Vec3 {
             self.z.clamp(min, max),
         )
     }
+
+    pub fn near_zero(&self) -> bool {
+        const S: f64 = 1e-8;
+        self.x.abs() < S && self.y.abs() < S && self.z.abs() < S
+    }
+
+    pub fn reflect(&self, n: &Vec3) -> Vec3 { self - 2.0 * self.dot(n) * n }
 }
 
 macro_rules! impl_ops {
