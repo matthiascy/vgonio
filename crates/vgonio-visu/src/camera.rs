@@ -86,15 +86,18 @@ impl Camera {
 }
 
 pub fn ray_color(ray: &Ray, world: &HittableList, bounces: u32, max_bounces: u32) -> Clr3 {
+    use crate::material::Material;
+
     if bounces >= max_bounces {
         return Clr3::zeros();
     }
 
     if let Some(rec) = world.hit(ray, 0.0001..=f64::INFINITY) {
-        let n = if rec.front_face { rec.n } else { -rec.n };
-        // let dir = random_vec3_on_hemisphere(&n);
-        let dir = n + random_vec3_on_unit_sphere();
-        return 0.5 * ray_color(&Ray::new(rec.p, dir), world, bounces + 1, max_bounces);
+        let mat = rec.mat.upgrade().unwrap();
+        if let Some((scattered, attenuation)) = mat.scatter(ray, &rec) {
+            return attenuation * ray_color(&scattered, world, bounces + 1, max_bounces);
+        }
+        return Clr3::zeros();
     }
 
     let unit_direction = ray.dir.normalize();

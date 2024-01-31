@@ -1,17 +1,19 @@
 use crate::{
     hit::{Hit, Hittable},
+    material::Material,
     ray::Ray,
 };
 use jabr::Pnt3;
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, sync::Arc};
 
 pub struct Sphere {
     pub c: Pnt3,
     pub r: f64,
+    pub m: Arc<dyn Material>,
 }
 
 impl Sphere {
-    pub fn new(c: Pnt3, r: f64) -> Self { Sphere { c, r } }
+    pub fn new(c: Pnt3, r: f64, m: Arc<dyn Material>) -> Self { Sphere { c, r, m } }
 }
 
 impl Hittable for Sphere {
@@ -38,6 +40,6 @@ impl Hittable for Sphere {
 
         let p = ray.at(root);
         let n = (p - self.c).normalize();
-        Some(Hit::new(ray, root, &n))
+        Some(Hit::new(ray, root, &n, self.m.clone()))
     }
 }

@@ -228,7 +228,7 @@ pub enum RefractionResult {
 /// Use this function when you are sure that the incident vector `wi` is at the
 /// same side of the surface as the normal `n`; the relative refraction index
 /// should be the ratio of the refractive indices of the incident medium
-/// (outside of transmitted medium) over the transmitted medium (inside of
+/// (outside transmitted medium) over the transmitted medium (inside
 /// transmitted medium).
 ///
 /// # Arguments
@@ -303,7 +303,7 @@ pub fn refract2(wi: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> RefractionResult
 /// media with the given refractive indices.
 ///
 /// Use this function when you are NOT sure at which side of the surface the
-/// incident vector `i` lies.
+/// incident vector `wi` lies.
 ///
 /// # Arguments
 ///
@@ -316,7 +316,7 @@ pub fn refract2(wi: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> RefractionResult
 /// # Notes
 ///
 /// The normal vector `n` is not necessarily pointing towards the outside of the
-/// incident medium. Thus we need to check the dot product of `i` and `n` to
+/// incident medium. Thus, we need to check the dot product of `i` and `n` to
 /// determine which side of the surface the incident vector is pointing to.
 pub fn refract(wi: Vec3A, n: Vec3A, eta_o: f32, eta_i: f32) -> RefractionResult {
     debug_assert!(
