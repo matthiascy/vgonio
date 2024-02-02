@@ -116,6 +116,7 @@ impl TiledImage {
 
                 #[cfg(not(debug_assertions))]
                 unsafe {
+                    use image::GenericImage;
                     image.unsafe_put_pixel(i, j, image::Rgba(pixel.to_le_bytes()));
                 }
             }

@@ -1,4 +1,8 @@
 #![feature(const_fn_floating_point_arithmetic)]
+#![feature(const_trait_impl)]
+#![feature(effects)]
+
+pub mod optics;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
@@ -11,6 +15,8 @@ pub struct Vec3 {
 
 impl Vec3 {
     pub const fn new(x: f64, y: f64, z: f64) -> Self { Vec3 { x, y, z } }
+
+    pub const fn splat(v: f64) -> Self { Vec3::new(v, v, v) }
 
     pub fn norm(&self) -> f64 { self.norm_sqr().sqrt() }
 
@@ -47,8 +53,6 @@ impl Vec3 {
         const S: f64 = 1e-8;
         self.x.abs() < S && self.y.abs() < S && self.z.abs() < S
     }
-
-    pub fn reflect(&self, n: &Vec3) -> Vec3 { self - 2.0 * self.dot(n) * n }
 }
 
 macro_rules! impl_ops {

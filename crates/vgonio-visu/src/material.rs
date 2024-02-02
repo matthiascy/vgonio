@@ -1,5 +1,5 @@
 use crate::{hit::Hit, ray::Ray};
-use jabr::Clr3;
+use jabr::{optics, optics::Refracted, Clr3};
 
 pub trait Material: Send + Sync {
     /// Produces a scattered ray and attenuation color.
@@ -12,8 +12,8 @@ pub struct Lambertian {
 }
 
 impl Material for Lambertian {
-    fn scatter(&self, _wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
-        let n = if hit.front_face { hit.n } else { -hit.n };
+    fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
+        let n = if hit.is_outside(wi) { hit.n } else { -hit.n };
         let mut scatter_dir = n + crate::random::random_vec3_on_unit_sphere();
         if scatter_dir.near_zero() {
             scatter_dir = n;
@@ -43,8 +43,8 @@ impl Metal {
 
 impl Material for Metal {
     fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
-        let n = if hit.front_face { hit.n } else { -hit.n };
-        let reflected = wi.dir.reflect(&n);
+        let n = if hit.is_outside(wi) { hit.n } else { -hit.n };
+        let reflected = optics::reflect(&wi.dir, &n);
         let scattered = Ray::new(
             hit.p,
             // Randomize the reflected ray direction by randomly sampling a
@@ -66,5 +66,12 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
-    fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> { todo!() }
+    fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
+        let attenuation = Clr3::splat(1.0);
+        let dir = wi.dir.normalize();
+        match optics::refract2(&dir, &hit.n, 1.0, self.ior) {
+            Refracted::Reflection(dir_r) => Some((Ray::new(hit.p, dir_r), attenuation)),
+            Refracted::Refraction { dir_t, .. } => Some((Ray::new(hit.p, dir_t), attenuation)),
+        }
+    }
 }

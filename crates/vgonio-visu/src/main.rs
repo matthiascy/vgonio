@@ -11,7 +11,7 @@ use vgonio_visu::{
     camera::{ray_color, Camera},
     hit::HittableList,
     image::{linear_to_srgb, rgba_to_u32, TiledImage},
-    material::{Lambertian, Metal},
+    material::{Dielectric, Lambertian, Metal},
     ray::Ray,
     sphere::Sphere,
 };
@@ -56,7 +56,8 @@ fn main() {
     let material_center = Arc::new(Lambertian {
         albedo: Clr3::new(0.7, 0.3, 0.3),
     });
-    let material_left = Arc::new(Metal::new(Clr3::new(0.8, 0.8, 0.8), 0.3));
+    let material_left = Arc::new(Dielectric { ior: 1.5 });
+    // let material_left = Arc::new(Metal::new(Clr3::new(0.8, 0.8, 0.8), 0.3));
     let material_right = Arc::new(Metal::new(Clr3::new(0.8, 0.6, 0.2), 1.0));
 
     world.add(Arc::new(Sphere::new(
