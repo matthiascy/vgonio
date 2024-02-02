@@ -1,10 +1,6 @@
 use jabr::{Clr3, Pnt3, Vec3};
 
-use crate::{
-    hit::HittableList,
-    random::{random_vec3_on_hemisphere, random_vec3_on_unit_sphere},
-    ray::Ray,
-};
+use crate::{hit::HittableList, ray::Ray};
 
 pub struct Camera {
     /// Image plane width in pixels.
@@ -86,8 +82,6 @@ impl Camera {
 }
 
 pub fn ray_color(ray: &Ray, world: &HittableList, bounces: u32, max_bounces: u32) -> Clr3 {
-    use crate::material::Material;
-
     if bounces >= max_bounces {
         return Clr3::zeros();
     }

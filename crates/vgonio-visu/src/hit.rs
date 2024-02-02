@@ -9,7 +9,6 @@ pub struct Hit {
     pub n: Vec3,
     pub p: Pnt3,
     pub t: f64,
-    pub front_face: bool,
     pub mat: Weak<dyn Material>,
 }
 
@@ -22,16 +21,24 @@ impl Hit {
     /// * `t` - The distance from the ray origin to the hit point.
     /// * `n` - The outward normal vector on the surface of the hit point.
     pub fn new(ray: &Ray, t: f64, n: &Vec3, mat: Arc<dyn Material>) -> Self {
-        let front_face = ray.dir.dot(n) < 0.0;
         let p = ray.at(t);
         Hit {
             n: *n,
             p,
             t,
-            front_face,
             mat: Arc::downgrade(&mat),
         }
     }
+
+    /// Returns if the ray is outside the surface.
+    #[must_use]
+    #[inline(always)]
+    pub fn is_outside(&self, ray: &Ray) -> bool { ray.dir.dot(&self.n) < 0.0 }
+
+    /// Returns if the ray is inside the surface.
+    #[must_use]
+    #[inline(always)]
+    pub fn is_inside(&self, ray: &Ray) -> bool { ray.dir.dot(&self.n) > 0.0 }
 }
 
 pub trait Hittable: Send + Sync {
