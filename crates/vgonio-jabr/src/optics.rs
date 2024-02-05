@@ -257,3 +257,28 @@ pub fn refract2(wi: &Vec3, n: &Vec3, eta_o: f64, eta_i: f64) -> Refracted {
         refract_cos(wi, &(-n), cos_i, eta_i / eta_o)
     }
 }
+
+/// Computes the Schlick's approximation for the Fresnel reflectance(specular
+/// reflection factor).
+///
+/// # Arguments
+///
+/// * `cos_i` - The absolute value of the cosine of the incident angle.
+/// * `eta_i` - The refractive index of the incident medium.
+/// * `eta_t` - The refractive index of the transmitted medium.
+pub fn reflectance_schlick(cos_i: f64, eta_i: f64, eta_t: f64) -> f64 {
+    debug_assert!(
+        cos_i >= 0.0 && cos_i <= 1.0,
+        "The cosine of the incident angle must be in the range [0, 1]."
+    );
+    debug_assert!(
+        eta_i > 0.0,
+        "The refractive index of the incident medium must be positive."
+    );
+    debug_assert!(
+        eta_t > 0.0,
+        "The refractive index of the transmitted medium must be positive."
+    );
+    let r0 = ((eta_i - eta_t) / (eta_i + eta_t)).powi(2);
+    r0 + (1.0 - r0) * (1.0 - cos_i).powi(5)
+}

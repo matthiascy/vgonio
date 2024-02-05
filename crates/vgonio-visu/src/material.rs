@@ -43,6 +43,7 @@ impl Metal {
 
 impl Material for Metal {
     fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
+        // TODO: reflectance for metal
         let n = if hit.is_outside(wi) { hit.n } else { -hit.n };
         let reflected = optics::reflect(&wi.dir, &n);
         let scattered = Ray::new(
@@ -68,10 +69,21 @@ impl Dielectric {
 impl Material for Dielectric {
     fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
         let attenuation = Clr3::splat(1.0);
+        let (n, eta, eta_i, eta_t) = if hit.is_outside(wi) {
+            (hit.n, 1.0 / self.ior, 1.0, self.ior)
+        } else {
+            (-hit.n, self.ior, self.ior, 1.0)
+        };
         let dir = wi.dir.normalize();
-        match optics::refract2(&dir, &hit.n, 1.0, self.ior) {
-            Refracted::Reflection(dir_r) => Some((Ray::new(hit.p, dir_r), attenuation)),
-            Refracted::Refraction { dir_t, .. } => Some((Ray::new(hit.p, dir_t), attenuation)),
+        let cos_i = dir.dot(&n).abs();
+        let reflectance = optics::reflectance_schlick(cos_i, eta_i, eta_t);
+        match optics::refract_cos(&dir, &n, cos_i, eta) {
+            Refracted::Reflection(dir_r) => {
+                Some((Ray::new(hit.p, dir_r), attenuation * reflectance))
+            }
+            Refracted::Refraction { dir_t, .. } => {
+                Some((Ray::new(hit.p, dir_t), attenuation * (1.0 - reflectance)))
+            }
         }
     }
 }

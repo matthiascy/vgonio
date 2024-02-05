@@ -6,6 +6,12 @@ pub mod optics;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
+pub struct Basis {
+    pub u: Vec3,
+    pub v: Vec3,
+    pub w: Vec3,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
     pub x: f64,

@@ -35,6 +35,8 @@ struct Args {
     spp: u32,
     #[arg(short = 'b', default_value_t = 16)]
     max_bounces: u32,
+    #[arg(long = "vfov", default_value_t = 90.0)]
+    vfov_in_deg: f64,
 }
 
 fn main() {
@@ -45,7 +47,7 @@ fn main() {
         return;
     }
 
-    let camera = Camera::new(image_width, image_height);
+    let camera = Camera::new(image_width, image_height, args.vfov_in_deg);
 
     // World
     let mut world = HittableList::new();
@@ -91,8 +93,8 @@ fn main() {
     // film.write_to_image(&mut image);
     film.write_to_flat_buffer(image.as_mut());
     let filename = format!(
-        "image-{}x{}-{}spp-{}bnc.png",
-        image_width, image_height, spp, args.max_bounces
+        "image-{}x{}-{}spp-{}bnc-{:.2}fov.png",
+        image_width, image_height, spp, args.max_bounces, args.vfov_in_deg
     );
     println!("Saving image to {}", filename);
     image

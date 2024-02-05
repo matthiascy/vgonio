@@ -9,6 +9,8 @@ pub struct Camera {
     pub img_h: u32,
     /// Image plane width to height ratio.
     pub ratio: f64,
+    /// Vertical field of view in radians.
+    pub vfov: f64,
     /// Camera origin.
     origin: Pnt3,
     /// Top left corner of the image plane.
@@ -17,14 +19,31 @@ pub struct Camera {
     pixel_delta_u: Vec3,
     /// Offset to the next pixel in the v direction. (vertical)
     pixel_delta_v: Vec3,
+    /// Camera frame basis right vector.
+    basis_right: Vec3,
+    /// Camera frame basis up vector.
+    basis_up: Vec3,
+    /// Camera frame basis forward vector.
+    basis_forward: Vec3,
 }
 
 impl Camera {
-    pub fn new(img_w: u32, img_h: u32) -> Self {
+    /// Creates a new camera.
+    ///
+    /// # Arguments
+    ///
+    /// * `img_w` - Image plane width in pixels.
+    /// * `img_h` - Image plane height in pixels.
+    /// * `vfov` - Vertical field of view in degrees.
+    pub fn new(img_w: u32, img_h: u32, vfov: f64) -> Self {
         let ratio = img_w as f64 / img_h as f64;
-        let viewport_h = 2.0; // [-1, 1]
-        let viewport_w = ratio * viewport_h;
+        let vfov = vfov.to_radians();
+        let h = (vfov * 0.5).tan();
+        // The distance from the camera center to the image plane.
         let focal_length = 1.0;
+        let viewport_h = 2.0 * h * focal_length;
+        let viewport_w = ratio * viewport_h;
+
         let center = Pnt3::new(0.0, 0.0, 0.0);
 
         // Camera/World coordinate system
@@ -52,6 +71,7 @@ impl Camera {
             img_w,
             img_h,
             ratio,
+            vfov,
             origin: center,
             pixel_tlc,
             pixel_delta_u,
