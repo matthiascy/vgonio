@@ -8,7 +8,7 @@ members = [
     "crates/vgonio-surf",
     "crates/vgonio-visu",
     "crates/vgonio-wgut",
-    "crates/vgonio-uire"
+    "crates/vgonio-uikt"
 ]
 
 [workspace.package]

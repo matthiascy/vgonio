@@ -1,4 +1,3 @@
-#![forbid(unsafe_code)]
 #![warn(clippy::all, rust_2021_compatibility)]
 
 // TODO: rewrite in client/server model to separate the UI from the computation

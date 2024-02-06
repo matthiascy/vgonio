@@ -10,6 +10,7 @@
 #![feature(stmt_expr_attributes)]
 #![feature(adt_const_params)]
 #![feature(seek_stream_len)]
+#![feature(trait_upcasting)]
 #![warn(missing_docs)]
 
 extern crate core;

@@ -81,20 +81,25 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event()
         .build()
         .unwrap();
-    let window = WindowBuilder::new()
-        .with_decorations(true)
-        .with_resizable(true)
-        .with_transparent(false)
-        .with_inner_size(PhysicalSize {
-            width: WIN_INITIAL_WIDTH,
-            height: WIN_INITIAL_HEIGHT,
-        })
-        .with_title("vgonio")
-        .build(&event_loop)
-        .unwrap();
+    let (window, win_id) = {
+        let window = WindowBuilder::new()
+            .with_decorations(true)
+            .with_resizable(true)
+            .with_transparent(false)
+            .with_inner_size(PhysicalSize {
+                width: WIN_INITIAL_WIDTH,
+                height: WIN_INITIAL_HEIGHT,
+            })
+            .with_title("vgonio")
+            .build(&event_loop)
+            .unwrap();
+        let id = window.id();
+        (Arc::new(window), id)
+    };
+
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut vgonio = pollster::block_on(VgonioGuiApp::new(config, &window, &event_loop))?;
+    let mut vgonio = pollster::block_on(VgonioGuiApp::new(config, window.clone(), &event_loop))?;
 
     let mut last_frame_time = Instant::now();
 
@@ -109,11 +114,11 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
                 Event::WindowEvent {
                     window_id,
                     ref event,
-                } if window_id == window.id() => {
-                    vgonio.on_window_event(&window, event, elwt);
+                } if window_id == win_id => {
+                    vgonio.on_window_event(event, elwt);
                 }
                 Event::AboutToWait => {
-                    vgonio.update_and_render(&window, elwt, dt);
+                    vgonio.update_and_render(elwt, dt);
                     window.request_redraw();
                 }
                 _ => {}
@@ -124,15 +129,17 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
 // TODO: add MSAA
 
 /// Vgonio client application with GUI.
-pub struct VgonioGuiApp<'w> {
+pub struct VgonioGuiApp {
     /// The time when the application started.
     pub start_time: Instant,
     /// Gui context
     gui_ctx: GuiContext,
     /// Gpu context
     gpu_ctx: Arc<GpuContext>,
+    /// The main window of the application.
+    window: Arc<Window>,
     /// Surface for presenting rendered frames.
-    canvas: WindowSurface<'w>,
+    canvas: WindowSurface,
     /// The GUI application state.
     ui: VgonioGui,
     /// The theme of the application.
@@ -155,11 +162,11 @@ pub struct VgonioGuiApp<'w> {
     event_loop_proxy: EventLoopProxy,
 }
 
-impl<'w> VgonioGuiApp<'w> {
+impl VgonioGuiApp {
     // TODO: broadcast errors; replace unwraps
     pub async fn new(
         config: Config,
-        window: &'w Window,
+        window: Arc<Window>,
         event_loop: &EventLoop<VgonioEvent>,
     ) -> Result<Self, VgonioError> {
         let wgpu_config = WgpuConfig {
@@ -176,11 +183,11 @@ impl<'w> VgonioGuiApp<'w> {
             ..Default::default()
         };
         let event_loop_proxy = EventLoopProxy::new(event_loop);
-        let (gpu_ctx, surface) = GpuContext::onscreen(window, &wgpu_config).await;
+        let (gpu_ctx, surface) = GpuContext::onscreen(window.clone(), &wgpu_config).await;
         let gpu_ctx = Arc::new(gpu_ctx);
-        let canvas = WindowSurface::new(&gpu_ctx, window, &wgpu_config, surface);
+        let canvas = WindowSurface::new(&gpu_ctx, &window, &wgpu_config, surface);
         let gui_ctx = GuiContext::new(
-            window,
+            &window,
             gpu_ctx.device.clone(),
             gpu_ctx.queue.clone(),
             canvas.format(),
@@ -235,6 +242,7 @@ impl<'w> VgonioGuiApp<'w> {
             surface_viewer_states,
             theme: Default::default(),
             event_loop_proxy,
+            window,
         })
     }
 
@@ -251,11 +259,10 @@ impl<'w> VgonioGuiApp<'w> {
 
     pub fn on_window_event(
         &mut self,
-        window: &Window,
         event: &WindowEvent,
         elwt: &EventLoopWindowTarget<VgonioEvent>,
     ) {
-        let _ = self.gui_ctx.on_window_event(window, event);
+        let _ = self.gui_ctx.on_window_event(&self.window, event);
         // Even if the event was consumed by the UI, we still need to update the
         // input state.
         match event {
@@ -280,10 +287,10 @@ impl<'w> VgonioGuiApp<'w> {
                 self.input.update_cursor_delta((*position).cast::<f32>());
             }
             WindowEvent::Resized(new_size) => {
-                self.resize(*new_size, Some(window.scale_factor() as f32));
+                self.resize(*new_size, Some(self.window.scale_factor() as f32));
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.resize(window.inner_size(), Some(*scale_factor as f32));
+                self.resize(self.window.inner_size(), Some(*scale_factor as f32));
             }
             WindowEvent::CloseRequested => elwt.exit(),
             _ => {}
@@ -737,13 +744,9 @@ impl<'w> VgonioGuiApp<'w> {
     }
 
     /// Update the state of the application then render the current frame.
-    pub fn update_and_render(
-        &mut self,
-        window: &Window,
-        elwt: &EventLoopWindowTarget<VgonioEvent>,
-        dt: Duration,
-    ) {
-        match self.render_frame(window, dt) {
+    pub fn update_and_render(&mut self, elwt: &EventLoopWindowTarget<VgonioEvent>, dt: Duration) {
+        let window = self.window.clone();
+        match self.render_frame(&window, dt) {
             Ok(_) => {}
             Err(RuntimeError::Rhi(error)) => {
                 if error.is_surface_error() {

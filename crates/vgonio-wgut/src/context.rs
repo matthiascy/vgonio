@@ -58,32 +58,32 @@ impl ScreenDescriptor {
 }
 
 /// Surface state for presenting to a window.
-pub struct WindowSurface<'w> {
+pub struct WindowSurface {
     /// Surface (image texture/framebuffer) to draw on.
-    pub inner: wgpu::Surface<'w>,
+    pub inner: wgpu::Surface<'static>,
     /// Surface configuration (size, format, etc).
     pub config: wgpu::SurfaceConfiguration,
     /// Scale factor of the window.
     pub window_scale_factor: f32,
 }
 
-impl<'w> Deref for WindowSurface<'w> {
-    type Target = wgpu::Surface<'w>;
+impl Deref for WindowSurface {
+    type Target = wgpu::Surface<'static>;
 
     fn deref(&self) -> &Self::Target { &self.inner }
 }
 
-impl<'w> DerefMut for WindowSurface<'w> {
+impl DerefMut for WindowSurface {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
 }
 
-impl<'w> WindowSurface<'w> {
+impl WindowSurface {
     /// Create a new surface for a window.
     pub fn new(
         gpu: &GpuContext,
-        window: &'w Window,
+        window: &Window,
         config: &WgpuConfig,
-        surface: wgpu::Surface<'w>,
+        surface: wgpu::Surface<'static>,
     ) -> Self {
         let capabilities = surface.get_capabilities(&gpu.adapter);
         log::info!("Supported surface formats: {:?}", &capabilities.formats);
@@ -241,10 +241,10 @@ impl WgpuConfig {
 impl GpuContext {
     // returns window surface
     /// Creates a new onscreen rendering context.
-    pub async fn onscreen<'w>(
-        window: &'w Window,
+    pub async fn onscreen(
+        window: Arc<Window>,
         config: &WgpuConfig,
-    ) -> (Self, wgpu::Surface<'w>) {
+    ) -> (Self, wgpu::Surface<'static>) {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             flags: wgpu::InstanceFlags::VALIDATION,
