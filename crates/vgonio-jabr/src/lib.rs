@@ -6,7 +6,8 @@ pub mod optics;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-pub struct Basis {
+/// Orthonormal basis.
+pub struct OrthoBasis {
     pub u: Vec3,
     pub v: Vec3,
     pub w: Vec3,
