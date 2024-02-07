@@ -7,4 +7,4 @@ version.workspace = true
 [dependencies]
 libm.workspace = true
 num-traits.workspace = true
-vgcore = { package = "vgonio-core", path = "../vgonio-core" }
+base = { package = "vgonio-base", path = "../vgonio-base" }

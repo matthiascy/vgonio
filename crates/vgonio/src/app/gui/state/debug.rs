@@ -12,12 +12,12 @@ use crate::{
     },
     partition::SphericalPartition,
 };
+use base::math::{Mat4, Sph2, Vec3};
 use std::sync::Arc;
+use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
-use vgcore::math::{Mat4, Sph2, Vec3};
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
-use vgwgut::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use wgpu::util::DeviceExt;
+use wgut::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 
 pub const DEBUG_DRAWING_SHADER: &str = r#"
 struct Uniforms {

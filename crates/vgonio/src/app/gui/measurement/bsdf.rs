@@ -8,9 +8,9 @@ use crate::{
     },
     Medium, SphericalDomain,
 };
-use std::hash::Hash;
 #[cfg(feature = "visu-dbg")]
-use vgcore::math::Sph2;
+use base::math::Sph2;
+use std::hash::Hash;
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.

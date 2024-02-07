@@ -1,12 +1,12 @@
 #![feature(decl_macro)]
 
+use base::Isotropy;
 use std::fmt::Debug;
-use vgcore::Isotropy;
 
 mod brdf;
 pub mod dist;
 
-use vgcore::math::Vec3;
+use base::math::Vec3;
 
 /// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

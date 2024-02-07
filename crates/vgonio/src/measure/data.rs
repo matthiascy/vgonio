@@ -11,14 +11,7 @@ use crate::{
     },
     RangeByStepSizeInclusive,
 };
-use chrono::{DateTime, Local};
-use std::{
-    borrow::Cow,
-    fs::File,
-    io::{BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
-};
-use vgcore::{
+use base::{
     error::VgonioError,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
@@ -26,7 +19,14 @@ use vgcore::{
     units::Radians,
     Asset, Version,
 };
-use vgsurf::MicroSurface;
+use chrono::{DateTime, Local};
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{BufReader, BufWriter, Write},
+    path::{Path, PathBuf},
+};
+use surf::MicroSurface;
 
 /// Measurement data source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,7 +167,11 @@ impl MeasuredData {
         match self {
             MeasuredData::Adf(adf) => match adf.params.mode {
                 AdfMeasurementMode::ByPoints { azimuth, zenith } => Some((azimuth, zenith)),
-                AdfMeasurementMode::ByPartition { .. } => None,
+                // TODO: implement this.
+                AdfMeasurementMode::ByPartition { .. } => {
+                    eprintln!("Partition mode is not supported yet.");
+                    None
+                }
             },
             MeasuredData::Msf(msf) => Some((msf.params.azimuth, msf.params.zenith)),
             _ => None,
@@ -319,7 +323,7 @@ impl MeasurementData {
                 let timestamp = {
                     let mut timestamp = [0_u8; 32];
                     timestamp.copy_from_slice(
-                        vgcore::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
+                        base::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
                     );
                     timestamp
                 };

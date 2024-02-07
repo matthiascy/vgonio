@@ -79,11 +79,11 @@ impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
     }
 }
 
-use std::ops::RangeInclusive;
-use vgcore::{
+use base::{
     math::Vec3,
     units::{Angle, AngleUnit, Length, LengthMeasurement},
 };
+use std::ops::RangeInclusive;
 
 #[allow(dead_code)]
 pub fn input_ui<T: egui::emath::Numeric>(

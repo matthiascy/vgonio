@@ -4,16 +4,16 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use vgcore::{
+use base::{
     math::{Mat4, Vec3},
     units::deg,
 };
-use vgwgut::{
+use wgpu::util::DeviceExt;
+use wgut::{
     camera::{Camera, Projection, ProjectionKind},
     context::GpuContext,
     texture::Texture,
 };
-use wgpu::util::DeviceExt;
 
 use crate::{
     app::gui::{

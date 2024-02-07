@@ -1,10 +1,10 @@
+use base::error::VgonioError;
 use egui::epaint::ahash::HashMap;
 use egui_extras::RetainedImage;
 use std::sync::{
     atomic::{AtomicPtr, Ordering},
     Arc, Mutex,
 };
-use vgcore::error::VgonioError;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Icon {

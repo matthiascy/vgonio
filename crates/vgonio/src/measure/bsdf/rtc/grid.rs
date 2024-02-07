@@ -15,13 +15,13 @@ use crate::{
     },
     optics::fresnel,
 };
-use rayon::prelude::*;
-use std::time::Instant;
-use vgcore::{
+use base::{
     math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles},
 };
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
+use rayon::prelude::*;
+use std::time::Instant;
+use surf::{MicroSurface, MicroSurfaceMesh};
 
 /// Extra data associated with a ray stream.
 ///
@@ -1205,11 +1205,11 @@ impl<'ms> MultilevelGrid<'ms> {
 #[cfg(test)]
 mod tests {
     use crate::measure::bsdf::rtc::{grid::MultilevelGrid, Hit, Ray};
-    use vgcore::{
+    use base::{
         math::{ulp_eq, IVec2, UVec2, Vec3, Vec3Swizzles},
         units::LengthUnit,
     };
-    use vgsurf::{HeightOffset, MicroSurface, TriangulationPattern};
+    use surf::{HeightOffset, MicroSurface, TriangulationPattern};
 
     #[test]
     fn multilevel_grid_creation() {

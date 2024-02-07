@@ -10,8 +10,8 @@ use crate::{
     measure::params::{AdfMeasurementMode, Measurement, MeasurementParams},
     partition::PartitionScheme,
 };
+use base::error::VgonioError;
 use std::time::Instant;
-use vgcore::error::VgonioError;
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {

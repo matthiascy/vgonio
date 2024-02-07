@@ -1,9 +1,9 @@
 use crate::measure::bsdf::rtc::{Ray, RayTriIsect};
-use std::borrow::Cow;
-use vgcore::{
+use base::{
     math,
     math::{gamma, Vec3},
 };
+use std::borrow::Cow;
 
 const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
@@ -369,7 +369,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
 mod tests {
     use super::ray_tri_intersect_woop;
     use crate::measure::bsdf::rtc::{ray_tri_intersect_moller_trumbore, Ray};
-    use vgcore::math::Vec3;
+    use base::math::Vec3;
 
     #[test]
     fn test_ray_tri_intersection_woop() {

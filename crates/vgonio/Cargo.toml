@@ -9,11 +9,11 @@ publish = false
 
 [features]
 default = []
-embree = ["dep:embree", "vgsurf/embree"]
+embree = ["dep:embree", "surf/embree"]
 optix = []
-bench = ["vgsurf/bench"]
-surf-obj = ["vgsurf/surf-obj"]
-surf-gen = ["vgsurf/surf-gen"]
+bench = ["surf/bench"]
+surf-obj = ["surf/surf-obj"]
+surf-gen = ["surf/surf-gen"]
 visu-dbg = []
 verbose-dbg = []
 
@@ -58,10 +58,10 @@ toml.workspace = true
 type-map.workspace = true
 winit.workspace = true
 wgpu.workspace = true
-vgsurf = { package = "vgonio-surf", path = "../vgonio-surf" }
-vgcore = { package = "vgonio-core", path = "../vgonio-core", features = ["winit"] }
-vgbxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }
-vgwgut = { package = "vgonio-wgut", path = "../vgonio-wgut" }
+surf = { package = "vgonio-surf", path = "../vgonio-surf" }
+base = { package = "vgonio-base", path = "../vgonio-base", features = ["winit"] }
+bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }
+wgut = { package = "vgonio-wgut", path = "../vgonio-wgut" }
 
 [build-dependencies]
 shaderc = "0.8"

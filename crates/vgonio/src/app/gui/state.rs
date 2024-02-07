@@ -16,12 +16,12 @@ use std::{
     path::Path,
     sync::{Arc, RwLock},
 };
-use vgwgut::{
+use wgut::{
     context::{GpuContext, ScreenDescriptor, WindowSurface},
     render_pass::remap_depth,
     texture::Texture,
 };
-use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
+use winit::{event::WindowEvent, window::Window};
 
 pub const AZIMUTH_BIN_SIZE_DEG: usize = 5;
 pub const ZENITH_BIN_SIZE_DEG: usize = 2;

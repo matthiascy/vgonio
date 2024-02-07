@@ -1,8 +1,8 @@
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
-use vgcore::units::LengthUnit;
-use vgsurf::MicroSurface;
+use base::units::LengthUnit;
+use surf::MicroSurface;
 
 use crate::{
     app::cache::{Handle, InnerCache},

@@ -2,8 +2,8 @@ use crate::{
     impl_microfacet_distribution_common_methods, MicrofacetDistributionFittingModel,
     MicrofacetDistributionModel, MicrofacetDistributionModelKind,
 };
+use base::math::{cbr, rcp_f64, sqr, Vec3};
 use std::fmt::Debug;
-use vgcore::math::{cbr, rcp_f64, sqr, Vec3};
 
 /// Trowbridge-Reitz(GGX) microfacet distribution function.
 ///

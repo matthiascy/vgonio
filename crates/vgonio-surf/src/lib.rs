@@ -4,7 +4,7 @@
 #![warn(missing_docs)]
 
 #[cfg(feature = "surf-obj")]
-use vgcore::math::Axis;
+use base::math::Axis;
 #[cfg(feature = "surf-gen")]
 mod gen;
 #[cfg(feature = "surf-gen")]
@@ -14,14 +14,7 @@ pub mod io;
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Seek, Write},
-    path::{Path, PathBuf},
-};
-use vgcore::{
+use base::{
     error::VgonioError,
     io::{
         CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError,
@@ -30,6 +23,13 @@ use vgcore::{
     math::{rcp_f32, Aabb, Vec3},
     units::LengthUnit,
     Asset, Version,
+};
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter, Read, Seek, Write},
+    path::{Path, PathBuf},
 };
 
 /// Static variable used to generate height field name.
@@ -129,7 +129,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, LengthUnit::UM);
     /// assert_eq!(height_field.samples_count(), 100);
@@ -170,7 +170,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let msurf = MicroSurface::new_by(4, 4, 0.1, 0.1, LengthUnit::UM, |row, col| {
     ///     (row + col) as f32
@@ -241,7 +241,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let height_field =
@@ -307,7 +307,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let msurf = MicroSurface::new(100, 100, 0.1, 0.1, 0.1, LengthUnit::UM);
     /// assert_eq!(msurf.dimension(), (10.0, 10.0));
@@ -321,7 +321,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
@@ -334,7 +334,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
@@ -358,7 +358,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, None, None);
@@ -366,7 +366,7 @@ impl MicroSurface {
     /// ```
     ///
     /// ```should_panic
-    /// # use vgcore::units::LengthUnit;
+    /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, None, None);
@@ -1030,7 +1030,7 @@ impl MicroSurface {
 
         let timestamp = {
             let mut timestamp = [0_u8; 32];
-            timestamp.copy_from_slice(vgcore::utils::iso_timestamp().as_bytes());
+            timestamp.copy_from_slice(base::utils::iso_timestamp().as_bytes());
             timestamp
         };
         let header = Header {

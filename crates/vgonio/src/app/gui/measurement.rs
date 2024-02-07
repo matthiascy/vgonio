@@ -26,9 +26,9 @@ use crate::{
     partition::PartitionScheme,
     SphericalDomain,
 };
+use base::io::{CompressionScheme, FileEncoding};
 use egui::Widget;
-use vgcore::io::{CompressionScheme, FileEncoding};
-use vgsurf::MicroSurface;
+use surf::MicroSurface;
 
 impl ReceiverParams {
     /// UI for detector parameters.

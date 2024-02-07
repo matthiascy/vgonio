@@ -5,6 +5,10 @@ pub mod data;
 pub mod microfacet;
 pub mod params;
 
+use base::{
+    math::{Mat3, Sph2, Sph3, Vec3},
+    units::{rad, Radians},
+};
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
@@ -14,11 +18,7 @@ use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     prelude::ParallelSliceMut,
 };
-use vgcore::{
-    math::{Mat3, Sph2, Sph3, Vec3},
-    units::{rad, Radians},
-};
-use vgsurf::MicroSurfaceMesh;
+use surf::MicroSurfaceMesh;
 
 /// Helper structure dealing with the spherical transform related to the
 /// acquisition.

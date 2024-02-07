@@ -11,7 +11,7 @@ use crate::{
 };
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
-use vgsurf::MicroSurface;
+use surf::MicroSurface;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///

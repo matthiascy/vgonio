@@ -6,14 +6,14 @@ use crate::{
     },
     RangeByStepSizeInclusive,
 };
-use std::{borrow::Cow, path::Path};
-use vgcore::{
+use base::{
     error::VgonioError,
     math,
     math::{IVec2, Vec2},
     units::{rad, Radians},
 };
-use vgsurf::MicroSurface;
+use std::{borrow::Cow, path::Path};
+use surf::MicroSurface;
 
 /// Slope of the microfacet normal, i.e. the normal of the microfacet in the
 /// tangent space or the slope space.
@@ -25,7 +25,7 @@ pub struct MeasuredSdfData {
     /// Parameters of the measurement.
     pub params: SdfMeasurementParams,
     /// Slopes of all microfacets.
-    pub slopes: Vec<Slope2>,
+    pub slopes: Box<[Slope2]>,
 }
 
 /// Data of the slope distribution function (SDF) of a microsurface.
@@ -69,7 +69,7 @@ impl MeasuredSdfData {
         let mut pixels_diff = vec![0.0; pixels_count as usize];
         let mut num_slopes_out_of_range = 0;
         let mut num_weighted_slopes_out_range = 0;
-        for slope in &self.slopes {
+        for slope in self.slopes.iter() {
             {
                 // Scale the slope to the range [-1, 1] by dividing it by the
                 // maximum slope.
@@ -140,9 +140,9 @@ impl MeasuredSdfData {
                     (resolution as usize, resolution as usize),
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF")),
-                        capture_date: Text::new_or_none(
-                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
-                        ),
+                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
+                            timestamp,
+                        )),
                         ..LayerAttributes::default()
                     },
                     Encoding::FAST_LOSSLESS,
@@ -157,9 +157,9 @@ impl MeasuredSdfData {
                     (resolution as usize, resolution as usize),
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF weighted")),
-                        capture_date: Text::new_or_none(
-                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
-                        ),
+                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
+                            timestamp,
+                        )),
                         ..LayerAttributes::default()
                     },
                     Encoding::FAST_LOSSLESS,
@@ -174,9 +174,9 @@ impl MeasuredSdfData {
                     (resolution as usize, resolution as usize),
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF difference")),
-                        capture_date: Text::new_or_none(
-                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
-                        ),
+                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
+                            timestamp,
+                        )),
                         ..LayerAttributes::default()
                     },
                     Encoding::FAST_LOSSLESS,
@@ -217,7 +217,7 @@ impl MeasuredSdfData {
         // zenith bins are stored in the inner loop, and the azimuth bins are
         // stored in the outer loop.
         let mut hist = vec![0.0; azi_bin_count * zen_bin_count];
-        for s in &self.slopes {
+        for s in self.slopes.iter() {
             // Compute the azimuth and zenith angles of the slope.
             // Convert from [-pi, pi] to [0, 2pi].
             let phi = rad!(-s.y.atan2(-s.x)).wrap_to_tau();
@@ -247,14 +247,14 @@ pub fn measure_slope_distribution(
     handles: &[Handle<MicroSurface>],
     params: SdfMeasurementParams,
     cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Box<[MeasurementData]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
 
     log::info!("Measuring the slope distribution function (SDF)...");
     let surfaces = cache.get_micro_surfaces(handles);
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
-    let measurements = handles
+    let measurements: Vec<_> = handles
         .iter()
         .zip(surfaces.iter())
         .zip(meshes.iter())
@@ -264,12 +264,16 @@ pub fn measure_slope_distribution(
                 return None;
             }
             let mesh = mesh.unwrap();
-            let mut slopes = vec![Vec2::ZERO; mesh.facet_normals.len()];
-            // Iterate over all facet normals to compute the slopes.
-            for (n, s) in mesh.facet_normals.iter().zip(slopes.iter_mut()) {
-                // Compute the slope of the microfacet normal.
-                *s = Vec2::new(-n.x, -n.y) / n.z;
-            }
+            let slopes = {
+                let mut slopes = Box::new_uninit_slice(mesh.facet_normals.len());
+                // Iterate over all facet normals to compute the slopes.
+                for (n, s) in mesh.facet_normals.iter().zip(slopes.iter_mut()) {
+                    // Compute the slope of the microfacet normal.
+                    s.write(Vec2::new(-n.x, -n.y) / n.z);
+                }
+                unsafe { slopes.assume_init() }
+            };
+
             Some(MeasurementData {
                 name: format!("sdf-{}", surf.unwrap().file_stem().unwrap()),
                 source: MeasurementDataSource::Measured(*hdl),
@@ -285,5 +289,5 @@ pub fn measure_slope_distribution(
         log::info!("SDF measurement took {} ms.", elapsed.as_millis());
     }
 
-    measurements
+    measurements.into_boxed_slice()
 }

@@ -1,14 +1,14 @@
+use base::input::InputState;
 use egui::{Ui, WidgetText};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use vgcore::input::InputState;
 
-use vgcore::math::{Mat4, Vec4};
-use vgsurf::MicroSurface;
-use vgwgut::{
+use base::math::{Mat4, Vec4};
+use surf::MicroSurface;
+use wgut::{
     camera::{ProjectionKind, ViewProjUniform},
     context::GpuContext,
     texture::Texture,

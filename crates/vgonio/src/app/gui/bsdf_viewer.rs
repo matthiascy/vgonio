@@ -1,13 +1,13 @@
 use crate::app::gui::state::GuiRenderer;
+use base::{
+    math,
+    math::{Mat4, Vec3},
+};
 use std::{
     borrow::Cow,
     sync::{Arc, RwLock},
 };
-use vgcore::{
-    math,
-    math::{Mat4, Vec3},
-};
-use vgwgut::{
+use wgut::{
     camera::{Camera, Projection, ProjectionKind},
     context::GpuContext,
     texture::Texture,

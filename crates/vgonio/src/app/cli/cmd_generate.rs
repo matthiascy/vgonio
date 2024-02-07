@@ -1,11 +1,11 @@
 use crate::app::{cli::ansi, Config};
-use std::path::PathBuf;
-use vgcore::{
+use base::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     units::LengthUnit,
 };
-use vgsurf::{MicroSurface, RandomGenMethod, SurfGenKind};
+use std::path::PathBuf;
+use surf::{MicroSurface, RandomGenMethod, SurfGenKind};
 
 #[derive(clap::Args, Debug)]
 #[clap(about = "Generate a micro-geometry level surface using Gaussian distribution.")]
@@ -154,13 +154,13 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             "msurf_{:?}_{:?}_{}.vgms",
             opts.kind,
             opts.method.unwrap(),
-            vgcore::utils::iso_timestamp_short(),
+            base::utils::iso_timestamp_short(),
         )
     } else {
         format!(
             "msurf_{:?}_{}.vgms",
             opts.kind,
-            vgcore::utils::iso_timestamp_short(),
+            base::utils::iso_timestamp_short(),
         )
     };
 

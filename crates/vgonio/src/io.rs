@@ -10,16 +10,17 @@ use crate::{
         microfacet::{MeasuredAdfData, MeasuredMsfData},
     },
 };
-use std::{
-    io::{BufReader, Read, Write},
-    path::{Path, PathBuf},
-};
-use vgcore::{
+use base::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math,
 };
-use vgsurf::MicroSurface;
+use std::{
+    io::{BufReader, Read, Write},
+    mem::MaybeUninit,
+    path::{Path, PathBuf},
+};
+use surf::MicroSurface;
 
 pub mod vgmo {
     use super::*;
@@ -41,8 +42,7 @@ pub mod vgmo {
         partition::{PartitionScheme, Ring},
         Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     };
-    use std::io::{BufWriter, Seek};
-    use vgcore::{
+    use base::{
         io::{
             CompressionScheme, FileEncoding, Header, HeaderExt, ReadFileErrorKind,
             VgonioFileVariant, WriteFileErrorKind,
@@ -50,6 +50,11 @@ pub mod vgmo {
         math::Sph2,
         units::{rad, Nanometres, Radians},
         Version,
+    };
+    use numpy::ndarray::AssignElem;
+    use std::{
+        io::{BufWriter, Seek},
+        mem::MaybeUninit,
     };
 
     macro_rules! impl_range_by_step_size_inclusive_read_write {
@@ -249,7 +254,7 @@ pub mod vgmo {
                     "Reading ADF data of {} samples from VGMO file",
                     params.samples_count()
                 );
-                let samples = vgcore::io::read_f32_data_samples(
+                let samples = base::io::read_f32_data_samples(
                     reader,
                     params.samples_count(),
                     header.meta.encoding,
@@ -263,7 +268,7 @@ pub mod vgmo {
                     "Reading MSF data of {} samples from VGMO file",
                     params.samples_count()
                 );
-                let samples = vgcore::io::read_f32_data_samples(
+                let samples = base::io::read_f32_data_samples(
                     reader,
                     params.samples_count(),
                     header.meta.encoding,
@@ -277,7 +282,7 @@ pub mod vgmo {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
                 let num_slopes = u32::from_le_bytes(buf);
-                let mut samples = vgcore::io::read_f32_data_samples(
+                let mut samples = base::io::read_f32_data_samples(
                     reader,
                     num_slopes as usize * 2,
                     header.meta.encoding,
@@ -286,7 +291,8 @@ pub mod vgmo {
                 let slopes = samples
                     .chunks(2)
                     .map(|s| math::Vec2::new(s[0], s[1]))
-                    .collect::<Vec<_>>();
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
                 Ok(MeasuredData::Sdf(MeasuredSdfData {
                     params: SdfMeasurementParams {
                         max_slope: std::f32::consts::PI,
@@ -332,9 +338,9 @@ pub mod vgmo {
                                 .zenith
                                 .step_count_wrapped()
                         };
-                        vgcore::io::write_data_samples_ascii(writer, samples, cols as u32)
+                        base::io::write_data_samples_ascii(writer, samples, cols as u32)
                     }
-                    FileEncoding::Binary => vgcore::io::write_f32_data_samples_binary(
+                    FileEncoding::Binary => base::io::write_f32_data_samples_binary(
                         writer,
                         header.meta.compression,
                         samples,
@@ -353,7 +359,7 @@ pub mod vgmo {
                         sdf.slopes.len() * 2,
                     )
                 };
-                vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
+                base::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
                     .map_err(WriteFileErrorKind::Write)?;
             }
         }
@@ -1190,7 +1196,7 @@ pub mod vgmo {
             n_wavelengths: usize,
             n_patches: usize,
             n_snapshots: usize,
-        ) -> Result<Vec<BsdfSnapshot>, std::io::Error> {
+        ) -> Result<Box<[BsdfSnapshot]>, std::io::Error> {
             let mut snapshots = Vec::with_capacity(n_snapshots);
             let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for _ in 0..n_snapshots {
@@ -1201,7 +1207,7 @@ pub mod vgmo {
                     &mut samples_buf,
                 )?);
             }
-            Ok(snapshots)
+            Ok(snapshots.into_boxed_slice())
         }
 
         /// Reads the measured BSDF data from the given reader.
@@ -1243,15 +1249,18 @@ pub mod vgmo {
                     let mut raw_snapshots = None;
                     if params.receiver.retrieval == DataRetrieval::FullData {
                         let n_patches = params.receiver.num_patches();
-                        let mut snapshots = Vec::with_capacity(n_patches);
-                        for _ in 0..n_patches {
-                            let snapshot = BsdfSnapshotRaw::<BounceAndEnergy>::read(
-                                &mut decoder,
-                                params.emitter.spectrum.step_count(),
-                                params.receiver.num_patches(),
-                            )?;
-                            snapshots.push(snapshot);
-                        }
+                        let snapshots = {
+                            let mut snapshots = Box::new_uninit_slice(n_patches);
+                            for i in 0..n_patches {
+                                let snapshot = BsdfSnapshotRaw::<BounceAndEnergy>::read(
+                                    &mut decoder,
+                                    params.emitter.spectrum.step_count(),
+                                    params.receiver.num_patches(),
+                                )?;
+                                snapshots[i].write(snapshot);
+                            }
+                            unsafe { snapshots.assume_init() }
+                        };
                         raw_snapshots = Some(snapshots);
                     };
 
@@ -1279,7 +1288,7 @@ pub mod vgmo {
                 CompressionScheme::None => {
                     Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelengths)?;
                     if self.params.receiver.retrieval == DataRetrieval::FullData {
-                        for snapshot in self.raw_snapshots.as_ref().unwrap() {
+                        for snapshot in self.raw_snapshots.as_ref().unwrap().iter() {
                             snapshot.write(writer, n_wavelengths)?;
                         }
                     }
@@ -1310,8 +1319,8 @@ mod tests {
         receiver::BounceAndEnergy, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
         MeasuredBsdfData, SpectralSamples,
     };
+    use base::math::Sph2;
     use std::io::{BufReader, BufWriter, Cursor, Write};
-    use vgcore::math::Sph2;
 
     #[test]
     fn test_bsdf_measurement_stats_point_read_write() {
@@ -1546,7 +1555,7 @@ pub fn write_measured_data_to_file(
     );
     let output_dir = config.resolve_output_dir(output.dir.as_deref())?;
     for (measurement, surface) in data.iter().zip(surfaces.iter()) {
-        let datetime = vgcore::utils::iso_timestamp_short();
+        let datetime = base::utils::iso_timestamp_short();
         let filepath = cache.read(|cache| {
             let surf_name = cache
                 .get_micro_surface_filepath(*surface)

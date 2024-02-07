@@ -5,10 +5,10 @@ mod mdf;
 
 pub use mdf::*;
 
+use base::Isotropy;
+use bxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
 use levenberg_marquardt::MinimizationReport;
 use std::fmt::Debug;
-use vgbxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
-use vgcore::Isotropy;
 
 /// Types of the fitting problem.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

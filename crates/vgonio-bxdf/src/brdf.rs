@@ -1,4 +1,4 @@
-use vgcore::math::Vec3;
+use base::math::Vec3;
 
 /// Common interface for BRDFs.
 pub trait Brdf {

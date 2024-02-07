@@ -1,9 +1,9 @@
 use crate::{RangeByStepSizeInclusive, SphericalDomain};
-use serde::{Deserialize, Serialize};
-use vgcore::{
+use base::{
     math::{Sph2, Vec3},
     units::{rad, Radians, SolidAngle},
 };
+use serde::{Deserialize, Serialize};
 
 /// Scheme of the spherical partition.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -281,7 +281,7 @@ pub struct Ring {
 
 /// Beckers partitioning scheme helper functions.
 pub mod beckers {
-    use vgcore::math::sqr;
+    use base::math::sqr;
 
     /// Computes the number of cells inside the external circle of the ring.
     pub fn compute_ks(k0: u32, num_rings: u32) -> Vec<u32> {

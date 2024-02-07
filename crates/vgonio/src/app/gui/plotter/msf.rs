@@ -12,10 +12,10 @@ use crate::{
     measure::data::MeasurementData,
     RangeByStepSizeInclusive,
 };
+use base::units::{rad, Radians};
+use bxdf::MicrofacetDistributionModel;
 use egui::{Align, Ui};
 use std::any::Any;
-use vgbxdf::MicrofacetDistributionModel;
-use vgcore::units::{rad, Radians};
 
 pub struct MaskingShadowingExtra {
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in

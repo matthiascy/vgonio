@@ -24,19 +24,18 @@ use crate::{
     },
     measure::{data::MeasurementData, params::MeasurementKind},
 };
+use base::{
+    io::{CompressionScheme, FileEncoding},
+    math::Mat4,
+};
 use egui::NumExt;
-use egui_gizmo::GizmoOrientation;
 use std::{
     borrow::Cow,
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use vgcore::{
-    io::{CompressionScheme, FileEncoding},
-    math::Mat4,
-};
-use vgsurf::MicroSurface;
-use vgwgut::context::GpuContext;
+use surf::MicroSurface;
+use wgut::context::GpuContext;
 
 use super::{docking::DockSpace, event::EventResponse};
 

@@ -20,6 +20,14 @@ use crate::{
     measure::{data::MeasurementData, params::MeasurementKind},
     RangeByStepSizeInclusive,
 };
+use base::{
+    math,
+    units::{deg, rad, Radians},
+};
+use bxdf::{
+    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
+    MicrofacetDistributionModel,
+};
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
 use std::{
@@ -28,14 +36,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use vgbxdf::{
-    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    MicrofacetDistributionModel,
-};
-use vgcore::{
-    math,
-    units::{deg, rad, Radians},
-};
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),

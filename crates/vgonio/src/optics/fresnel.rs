@@ -161,7 +161,7 @@
 // TODO: unify fresnel calculation (using complex refractive index).
 
 use crate::optics::ior::RefractiveIndex;
-use vgcore::{math, math::Vec3A};
+use base::{math, math::Vec3A};
 
 /// Reflects a vector `wi` with respect to surface normal `n`.
 ///
@@ -592,8 +592,8 @@ pub fn reflectance_dielectric_conductor_spectrum(
 #[cfg(test)]
 mod tests {
     use crate::optics::ior::RefractiveIndex;
+    use base::units::nm;
     use std::{fs::OpenOptions, io::Write};
-    use vgcore::units::nm;
 
     #[test]
     fn reflectance_dielectric_test() {

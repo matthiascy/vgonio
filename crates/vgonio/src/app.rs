@@ -13,8 +13,8 @@ pub mod cli;
 pub(crate) mod gui;
 
 use args::CliArgs;
-use vgcore::error::VgonioError;
-use vgsurf::TriangulationPattern;
+use base::error::VgonioError;
+use surf::TriangulationPattern;
 
 /// Vgonio configuration.
 #[derive(Debug)]

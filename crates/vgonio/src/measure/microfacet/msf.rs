@@ -5,22 +5,22 @@ use crate::{
         params::MsfMeasurementParams,
     },
 };
-use bytemuck::{Pod, Zeroable};
-use std::path::Path;
-use vgcore::{
+use base::{
     error::VgonioError,
     math,
     math::{Mat4, Vec3},
     units::Radians,
 };
-use vgsurf::MicroSurface;
-use vgwgut::{
+use bytemuck::{Pod, Zeroable};
+use std::path::Path;
+use surf::MicroSurface;
+use wgpu::{util::DeviceExt, ColorTargetState};
+use wgut::{
     camera::{Camera, Projection},
     context::{GpuContext, WgpuConfig},
     render_pass::{tex_fmt_bpp, RenderPass},
     texture::Texture,
 };
-use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of
 /// micro-facets) function of a micro-surface. For a certain viewing direction,
@@ -1364,7 +1364,7 @@ pub fn measure_masking_shadowing(
     params: MsfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Box<[MeasurementData]> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {
         device_descriptor: wgpu::DeviceDescriptor {
@@ -1561,5 +1561,5 @@ pub fn measure_masking_shadowing(
             }),
         });
     }
-    results
+    results.into_boxed_slice()
 }

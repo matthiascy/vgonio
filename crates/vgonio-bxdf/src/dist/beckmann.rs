@@ -2,7 +2,7 @@ use crate::{
     impl_microfacet_distribution_common_methods, MicrofacetDistributionFittingModel,
     MicrofacetDistributionModel, MicrofacetDistributionModelKind,
 };
-use vgcore::math::{rcp_f64, sqr, Vec3};
+use base::math::{rcp_f64, sqr, Vec3};
 
 /// Beckmann microfacet distribution function.
 ///

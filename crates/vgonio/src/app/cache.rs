@@ -4,6 +4,7 @@ use crate::{
     optics::ior::{RefractiveIndex, RefractiveIndexDatabase},
     Medium,
 };
+use base::{error::VgonioError, Asset};
 use std::{
     any::TypeId,
     collections::HashMap,
@@ -12,10 +13,9 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 use uuid::Uuid;
-use vgcore::{error::VgonioError, Asset};
-use vgsurf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
-use vgwgut::{context::GpuContext, mesh::RenderableMesh};
+use wgut::{context::GpuContext, mesh::RenderableMesh};
 
 /// Handle referencing loaded assets.
 pub struct Handle<T>

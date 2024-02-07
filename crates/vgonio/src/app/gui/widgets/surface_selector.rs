@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
-use vgsurf::MicroSurface;
+use surf::MicroSurface;
 
 /// The selection mode for surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -11,9 +11,9 @@ use crate::{
     measure::data::MeasurementData,
     RangeByStepSizeInclusive,
 };
+use base::units::{deg, rad, Radians};
 use egui::{Align, Ui};
 use std::any::Any;
-use vgcore::units::{deg, rad, Radians};
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;

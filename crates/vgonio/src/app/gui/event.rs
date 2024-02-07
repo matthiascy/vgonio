@@ -16,12 +16,12 @@ use crate::{
     },
     partition::SphericalPartition,
 };
-use uuid::Uuid;
-use vgcore::{
+use base::{
     math::{IVec2, Sph2},
     units::Degrees,
 };
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
+use surf::{MicroSurface, MicroSurfaceMesh};
+use uuid::Uuid;
 
 use super::outliner::OutlinerItem;
 

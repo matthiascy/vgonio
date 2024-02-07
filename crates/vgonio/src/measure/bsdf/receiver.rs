@@ -13,14 +13,14 @@ use crate::{
     partition::{PartitionScheme, SphericalPartition},
     RangeByStepSizeInclusive, SphericalDomain,
 };
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use std::sync::atomic;
-use vgcore::{
+use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
     units::{Nanometres, Radians},
 };
-use vgsurf::MicroSurface;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic;
+use surf::MicroSurface;
 
 /// Data collected by the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
@@ -206,7 +206,7 @@ impl Receiver {
         let n_received = atomic::AtomicU32::new(0);
         // Convert the last rays of the trajectories into a vector located
         // at the center of the collector.
-        let dirs = result
+        let dirs: Box<[OutgoingRay]> = result
             .trajectories
             .par_chunks(CHUNK_SIZE)
             .enumerate()
@@ -275,7 +275,8 @@ impl Receiver {
                     })
                     .collect::<Vec<_>>()
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
 
         log::debug!("n_escaped: {}", n_escaped.load(atomic::Ordering::Relaxed));
 
@@ -292,7 +293,7 @@ impl Receiver {
         #[cfg(feature = "bench")]
         log::info!("Collector::collect: dirs: {} ms", dirs_proc_time);
 
-        for dir in &dirs {
+        for dir in dirs.iter() {
             for i in 0..spectrum_len {
                 match dir.energy[i] {
                     Energy::Absorbed => stats.n_absorbed[i] += 1,
@@ -399,7 +400,7 @@ impl<'a> CollectedData<'a> {
     /// incident spectrum. The output vector is of size equal to the number of
     /// measurement points of the emitter times the number of patches of the
     /// receiver.
-    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Vec<BsdfSnapshot> {
+    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Box<[BsdfSnapshot]> {
         // For each snapshot (w_i), compute the BSDF.
         log::info!(
             "Computing BSDF... with {} patches",
@@ -449,6 +450,7 @@ impl<'a> CollectedData<'a> {
                 }
             })
             .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 }
 

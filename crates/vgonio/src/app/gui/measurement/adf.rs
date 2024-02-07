@@ -23,10 +23,17 @@ impl AdfMeasurementTab {
         egui::Grid::new("madf_sim_grid")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.checkbox(&mut self.params.crop_to_disk, "Crop to disk");
+                ui.checkbox(&mut self.params.crop_to_disk, "Crop to disk")
+                    .on_hover_text(
+                        "Crop the surface measurement area to disk. This is useful for simulating \
+                         a circular sample.",
+                    );
                 ui.end_row();
 
-                ui.checkbox(&mut self.params.use_facet_area, "Use facet area");
+                ui.checkbox(&mut self.params.use_facet_area, "Use facet area")
+                    .on_hover_text(
+                        "Use the facet area instead of number of facets for the measurement.",
+                    );
                 ui.end_row();
 
                 ui.selectable_value(

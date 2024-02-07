@@ -7,15 +7,15 @@ use crate::{
     partition::{PartitionScheme, SphericalPartition},
     RangeByStepSizeInclusive, SphericalDomain,
 };
-use std::{borrow::Cow, path::Path};
-use vgcore::{
+use base::{
     error::VgonioError,
     math,
     math::{Sph2, Vec2, Vec2Swizzles, Vec3, Vec3Swizzles},
     units,
     units::{rad, Radians},
 };
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
+use std::{borrow::Cow, path::Path};
+use surf::{MicroSurface, MicroSurfaceMesh};
 
 /// Structure holding the data for microfacet area distribution measurement.
 ///
@@ -107,7 +107,7 @@ impl MeasuredAdfData {
             (w as usize, h as usize),
             LayerAttributes {
                 layer_name: Some(Text::from("NDF")),
-                capture_date: Text::new_or_none(vgcore::utils::iso_timestamp_from_datetime(
+                capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
                     timestamp,
                 )),
                 ..LayerAttributes::default()
@@ -136,7 +136,7 @@ pub fn measure_area_distribution(
     params: AdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Box<[MeasurementData]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
     log::info!("Measuring microfacet area distribution...");
@@ -159,7 +159,7 @@ pub fn measure_area_distribution(
         let elapsed = start.elapsed();
         log::info!("ADF measurement took {} ms.", elapsed.as_millis());
     }
-    measurements
+    measurements.into_boxed_slice()
 }
 
 /// Measure the microfacet area distribution function by sampling the hemisphere
@@ -487,7 +487,7 @@ fn classify_normal_by_zenith(
 
 #[test]
 fn test_normal_classification_by_zenith() {
-    use vgcore::units::deg;
+    use base::units::deg;
     let range =
         RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
     assert_eq!(

@@ -6,16 +6,16 @@ use crate::{
     },
     RangeByStepSizeInclusive,
 };
+use base::units::Radians;
+use bxdf::{
+    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
+    MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
+};
 use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
 };
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
-use vgbxdf::{
-    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
-};
-use vgcore::units::Radians;
 
 // TODO: Would MDF = ADF + MSF be more appropriate?
 /// The measured microfacet distribution data (MDF).

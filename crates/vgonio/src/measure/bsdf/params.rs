@@ -9,12 +9,12 @@ use crate::{
     partition::PartitionScheme,
     Medium, RangeByStepSizeInclusive, SphericalDomain,
 };
-use serde::{Deserialize, Serialize};
-use vgcore::{
+use base::{
     error::VgonioError,
     math::Sph2,
     units::{deg, nm, rad},
 };
+use serde::{Deserialize, Serialize};
 
 /// Possible ways to conduct a simulation.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

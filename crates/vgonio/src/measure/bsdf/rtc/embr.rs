@@ -9,6 +9,7 @@ use crate::{
     },
     optics::fresnel,
 };
+use base::math::{Sph2, Vec3A};
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
@@ -18,8 +19,7 @@ use rayon::prelude::*;
 use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
 use std::time::Instant;
-use vgcore::math::{Sph2, Vec3A};
-use vgsurf::MicroSurfaceMesh;
+use surf::MicroSurfaceMesh;
 
 /// Extra data associated with a ray stream.
 ///

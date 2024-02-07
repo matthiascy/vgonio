@@ -3102,8 +3102,8 @@ dependencies = [
  "toml",
  "type-map",
  "uuid",
+ "vgonio-base",
  "vgonio-bxdf",
- "vgonio-core",
  "vgonio-surf",
  "vgonio-wgut",
  "wgpu",
@@ -3111,16 +3111,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vgonio-bxdf"
-version = "0.3.0"
-dependencies = [
- "libm",
- "num-traits",
- "vgonio-core",
-]
-
-[[package]]
-name = "vgonio-core"
+name = "vgonio-base"
 version = "0.3.0"
 dependencies = [
  "approx",
@@ -3137,6 +3128,15 @@ dependencies = [
  "serde",
  "serde_yaml",
  "winit",
+]
+
+[[package]]
+name = "vgonio-bxdf"
+version = "0.3.0"
+dependencies = [
+ "libm",
+ "num-traits",
+ "vgonio-base",
 ]
 
 [[package]]
@@ -3160,7 +3160,7 @@ dependencies = [
  "serde",
  "tobj",
  "uuid",
- "vgonio-core",
+ "vgonio-base",
 ]
 
 [[package]]
@@ -3182,7 +3182,7 @@ dependencies = [
  "pollster",
  "rayon",
  "uuid",
- "vgonio-core",
+ "vgonio-base",
  "vgonio-surf",
  "wgpu",
  "winit",

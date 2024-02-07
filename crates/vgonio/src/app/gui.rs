@@ -43,8 +43,8 @@ use crate::{
     error::RuntimeError,
     measure,
 };
-use vgcore::{error::VgonioError, input::InputState};
-use vgwgut::context::{GpuContext, WgpuConfig, WindowSurface};
+use base::{error::VgonioError, input::InputState};
+use wgut::context::{GpuContext, WgpuConfig, WindowSurface};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},
@@ -690,7 +690,7 @@ impl VgonioGuiApp {
                             .unwrap();
                         }
                         self.cache.write(|cache| {
-                            let meas = data
+                            let meas = Vec::from(data)
                                 .into_iter()
                                 .map(|measured| {
                                     cache.add_micro_surface_measurement(measured).unwrap()

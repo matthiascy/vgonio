@@ -1,16 +1,16 @@
 //! Index of refraction.
 
 use crate::{MaterialKind, Medium};
+use base::{
+    math,
+    units::{nanometres, Length, LengthMeasurement, Nanometres},
+};
 use std::{
     cmp::Ordering,
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     ops::Deref,
     path::Path,
-};
-use vgcore::{
-    math,
-    units::{nanometres, Length, LengthMeasurement, Nanometres},
 };
 
 /// Material's complex refractive index which varies with wavelength of the

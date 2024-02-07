@@ -1,6 +1,8 @@
 //! Measurement of the BSDF (bidirectional scattering distribution function) of
 //! micro-surfaces.
 
+// TODO: use Box<[T]> instead of Vec<T> for fixed-size arrays on the heap.
+
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
 use crate::{
@@ -19,6 +21,11 @@ use crate::{
         params::SimulationKind,
     },
 };
+use base::{
+    error::VgonioError,
+    math,
+    math::{Sph2, Vec3},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -26,12 +33,7 @@ use std::{
     ops::{Deref, DerefMut, Index, IndexMut},
     path::Path,
 };
-use vgcore::{
-    error::VgonioError,
-    math,
-    math::{Sph2, Vec3},
-};
-use vgsurf::{MicroSurface, MicroSurfaceMesh};
+use surf::{MicroSurface, MicroSurfaceMesh};
 
 use super::params::BsdfMeasurementParams;
 
@@ -53,13 +55,13 @@ pub struct MeasuredBsdfData {
     pub params: BsdfMeasurementParams,
     /// Snapshot of the BSDF at each incident direction of the emitter.
     /// See [`BsdfSnapshot`] for more details.
-    pub snapshots: Vec<BsdfSnapshot>,
+    pub snapshots: Box<[BsdfSnapshot]>,
     /// Raw snapshots of the BSDF containing the full measurement data.
     /// This field is only available when the
     /// [`crate::measure::bsdf::params::DataRetrievalMode`] is set to
     /// `FullData`.
     /// See [`BsdfSnapshotRaw`] for more details.
-    pub raw_snapshots: Option<Vec<BsdfSnapshotRaw<BounceAndEnergy>>>,
+    pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
 }
 
 impl MeasuredBsdfData {
@@ -90,7 +92,7 @@ impl MeasuredBsdfData {
         partition.compute_pixel_patch_indices(resolution, resolution, &mut patch_indices);
         let mut layer_attrib = LayerAttributes {
             owner: Text::new_or_none("vgonio"),
-            capture_date: Text::new_or_none(vgcore::utils::iso_timestamp_from_datetime(timestamp)),
+            capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(timestamp)),
             software_name: Text::new_or_none("vgonio"),
             other: self.params.to_exr_extra_info(),
             ..LayerAttributes::default()
@@ -587,7 +589,7 @@ pub fn measure_bsdf_rt(
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
     cache: &InnerCache,
-) -> Vec<MeasurementData> {
+) -> Box<[MeasurementData]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
@@ -599,7 +601,7 @@ pub fn measure_bsdf_rt(
         emitter.measpts.len()
     );
 
-    let mut measurements = Vec::new();
+    let mut measurements = Vec::with_capacity(surfaces.len());
     for (surf, mesh) in surfaces.iter().zip(meshes) {
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
@@ -662,7 +664,7 @@ pub fn measure_bsdf_rt(
 
         let snapshots = collected.compute_bsdf(&params);
         let raw_snapshots = match params.receiver.retrieval {
-            DataRetrieval::FullData => Some(collected.snapshots),
+            DataRetrieval::FullData => Some(collected.snapshots.into_boxed_slice()),
             DataRetrieval::BsdfOnly => None,
         };
         measurements.push(MeasurementData {
@@ -677,7 +679,7 @@ pub fn measure_bsdf_rt(
         })
     }
 
-    measurements
+    measurements.into_boxed_slice()
 }
 
 /// Brdf measurement of a microfacet surface using the grid ray tracing.

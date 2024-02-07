@@ -9,10 +9,10 @@ use crate::{
     fitting::FittedModel,
     RangeByStepSizeInclusive,
 };
+use base::units::{rad, Radians};
+use bxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
 use egui::{Align, Ui};
 use std::any::Any;
-use vgbxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
-use vgcore::units::{rad, Radians};
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;

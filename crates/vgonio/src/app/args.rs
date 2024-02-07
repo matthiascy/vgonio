@@ -1,6 +1,7 @@
 use crate::app::cli::ConvertOptions;
 #[cfg(feature = "surf-gen")]
 use crate::app::cli::GenerateOptions;
+use base::io::{CompressionScheme, FileEncoding};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -8,7 +9,6 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
-use vgcore::io::{CompressionScheme, FileEncoding};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]

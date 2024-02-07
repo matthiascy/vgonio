@@ -1,15 +1,15 @@
 use approx::AbsDiffEq;
+use base::{
+    math,
+    math::NumericCast,
+    units::{Angle, AngleUnit, Radians},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
     ops::{Add, Div, Mul, RangeInclusive, Sub},
     str::FromStr,
-};
-use vgcore::{
-    math,
-    math::NumericCast,
-    units::{Angle, AngleUnit, Radians},
 };
 
 /// Defines a right inclusive range [a, b] of values with a given step.
@@ -1125,7 +1125,7 @@ mod range_by_step_count_tests {
 #[cfg(test)]
 mod range_by_step_size_tests {
     use super::*;
-    use vgcore::units::{deg, rad, Degrees, Rads};
+    use base::units::{deg, rad, Degrees, Rads};
 
     #[test]
     fn try_from_str_inclusive() {

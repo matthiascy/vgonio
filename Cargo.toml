@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/vgonio",
-    "crates/vgonio-core",
+    "crates/vgonio-base",
     "crates/vgonio-bxdf",
     "crates/vgonio-jabr",
     "crates/vgonio-surf",

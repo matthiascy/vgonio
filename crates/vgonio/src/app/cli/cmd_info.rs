@@ -9,11 +9,11 @@ use crate::{
     },
     partition::PartitionScheme,
 };
+use base::error::VgonioError;
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
 };
-use vgcore::error::VgonioError;
 
 impl Display for AdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

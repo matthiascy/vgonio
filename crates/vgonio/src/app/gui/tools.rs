@@ -7,7 +7,7 @@ pub(crate) use debugging::DebuggingInspector;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
 use std::sync::{Arc, RwLock};
-use vgwgut::context::GpuContext;
+use wgut::context::GpuContext;
 
 use super::state::GuiRenderer;
 

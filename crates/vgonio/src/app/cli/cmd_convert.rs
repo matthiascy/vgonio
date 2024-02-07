@@ -1,14 +1,13 @@
 use crate::app::{cli::ansi, Config};
-use std::path::PathBuf;
 #[cfg(feature = "surf-obj")]
-use vgcore::units::LengthUnit;
-use vgcore::{
+use base::units::LengthUnit;
+use base::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math::Axis,
 };
-
-use vgsurf::MicroSurface;
+use std::path::PathBuf;
+use surf::MicroSurface;
 
 #[derive(clap::Args, Debug)]
 #[clap(

@@ -3,13 +3,13 @@ use crate::{
     partition::{PartitionScheme, SphericalPartition},
     RangeByStepSizeInclusive,
 };
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::num::ParseFloatError;
-use vgcore::{
+use base::{
     error::VgonioError,
     math::Sph2,
     units::{deg, rad, Radians},
 };
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::num::ParseFloatError;
 
 /// Default azimuth angle range for the measurement: [0°, 360°] with 5° step
 /// size.
@@ -25,9 +25,11 @@ pub const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
 pub struct AdfMeasurementParams {
     /// The way to measure the area distribution function.
     pub mode: AdfMeasurementMode,
-    /// Whether crop the surface to a disk during the measurement.
+    /// Whether to crop the surface to a disk during the measurement.
     pub crop_to_disk: bool,
-    /// Whether use the facet area during the measurement.
+    /// Whether to use the actual facet area during the measurement.
+    /// If `false`, the area distribution function is normalised by
+    /// the number of facets.
     pub use_facet_area: bool, // TODO: serialise/deserialise
 }
 

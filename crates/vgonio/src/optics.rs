@@ -3,7 +3,7 @@
 pub mod fresnel;
 pub mod ior;
 
-use vgcore::math::Vec3A;
+use base::math::Vec3A;
 
 /// Orients a vector to point away from a surface as defined by its
 /// normal.

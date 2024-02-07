@@ -11,6 +11,7 @@
 #![feature(adt_const_params)]
 #![feature(seek_stream_len)]
 #![feature(trait_upcasting)]
+#![feature(new_uninit)]
 #![warn(missing_docs)]
 
 extern crate core;
@@ -23,13 +24,13 @@ pub mod optics;
 mod partition;
 mod range;
 
+use base::{error::VgonioError, units::Radians};
 pub use range::*;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     str::FromStr,
 };
-use vgcore::{error::VgonioError, units::Radians};
 
 /// Main entry point for the application.
 pub fn run() -> Result<(), VgonioError> {
@@ -224,7 +225,7 @@ pub const fn gamma_f32(n: f32) -> f32 { (n * MACHINE_EPSILON) / (1.0 - n * MACHI
 #[cfg(test)]
 mod tests {
     use crate::SphericalDomain;
-    use vgcore::units::deg;
+    use base::units::deg;
 
     #[test]
     fn spherical_domain_clamp() {

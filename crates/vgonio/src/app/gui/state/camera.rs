@@ -1,5 +1,5 @@
-use vgcore::{input::InputState, math::Vec3};
-use vgwgut::camera::{
+use base::{input::InputState, math::Vec3};
+use wgut::camera::{
     Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind,
 };
 

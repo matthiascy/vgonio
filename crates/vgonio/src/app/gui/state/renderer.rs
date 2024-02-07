@@ -1,7 +1,7 @@
 use egui::epaint;
 use std::{borrow::Cow, collections::HashMap};
 use type_map::TypeMap;
-use vgwgut::{
+use wgut::{
     buffers::SlicedBuffer,
     context::{ScreenDescriptor, UiUniforms},
 };

@@ -3,7 +3,7 @@ use crate::app::gui::{
     state::GuiContext,
 };
 use egui::{Sense, TextureFilter};
-use vgwgut::{context::GpuContext, render_pass::remap_depth};
+use wgut::{context::GpuContext, render_pass::remap_depth};
 
 const IMG_WIDTH: usize = 480;
 const IMG_HEIGHT: usize = 270;

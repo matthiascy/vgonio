@@ -1,6 +1,6 @@
+use base::units::{rad, Radians};
 use egui::{emath::Rot2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
 use std::f32::consts::TAU;
-use vgcore::units::{rad, Radians};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AngleKnobWinding {

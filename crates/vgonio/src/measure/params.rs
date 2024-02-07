@@ -2,6 +2,7 @@
 pub use crate::measure::{bsdf::params::*, microfacet::params::*};
 
 use crate::error::RuntimeError;
+use base::error::VgonioError;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
@@ -10,7 +11,6 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
 };
-use vgcore::error::VgonioError;
 
 /// Describes the different kind of measurements with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
