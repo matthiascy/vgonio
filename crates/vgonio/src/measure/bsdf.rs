@@ -566,7 +566,7 @@ pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.
     pub w_i: Sph2,
     /// BSDF values for each patch of the collector.
-    pub samples: Vec<SpectralSamples<f32>>,
+    pub samples: Box<[SpectralSamples<f32>]>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Extra ray trajectory data for debugging purposes.
     pub trajectories: Vec<RayTrajectory>,

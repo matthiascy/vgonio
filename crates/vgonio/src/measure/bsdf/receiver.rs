@@ -409,11 +409,17 @@ impl<'a> CollectedData<'a> {
         self.snapshots
             .par_iter()
             .map(|snapshot| {
-                let mut samples =
-                    vec![
-                        SpectralSamples::splat(0.0, params.emitter.spectrum.values().len());
-                        snapshot.records.len()
-                    ];
+                let mut samples = {
+                    let mut samples = Box::new_uninit_slice(snapshot.records.len());
+                    for spectral_samples in samples.iter_mut() {
+                        spectral_samples.write(SpectralSamples::splat(
+                            0.0,
+                            params.emitter.spectrum.values().len(),
+                        ));
+                    }
+                    unsafe { samples.assume_init() }
+                };
+
                 let cos_i = snapshot.w_i.theta.cos();
                 let l_i = snapshot.stats.n_received as f32 * cos_i;
                 for (i, patch_data) in snapshot.records.iter().enumerate() {

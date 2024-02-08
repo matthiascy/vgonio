@@ -1134,11 +1134,17 @@ pub mod vgmo {
             let mut buf = [0u8; 8];
             reader.read_exact(&mut buf)?;
             let w_i = read_sph2_from_buf(&buf);
-            let mut samples = vec![SpectralSamples::<f32>::new(); n_patches];
-            for i in 0..n_patches {
-                reader.read_exact(samples_buf)?;
-                samples[i] = SpectralSamples::<f32>::read_from_buf(samples_buf, n_wavelengths);
-            }
+            let samples = {
+                let mut samples = Box::new_uninit_slice(n_patches);
+                for i in 0..n_patches {
+                    reader.read_exact(samples_buf)?;
+                    samples[i].write(SpectralSamples::<f32>::read_from_buf(
+                        samples_buf,
+                        n_wavelengths,
+                    ));
+                }
+                unsafe { samples.assume_init() }
+            };
             Ok(Self {
                 w_i,
                 samples,
@@ -1169,7 +1175,7 @@ pub mod vgmo {
             buf[0..4].copy_from_slice(&self.w_i.theta.as_f32().to_le_bytes());
             buf[4..8].copy_from_slice(&self.w_i.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
-            for samples in &self.samples {
+            for samples in self.samples.iter() {
                 samples.write_to_buf(samples_buf);
                 writer.write_all(samples_buf)?;
             }
