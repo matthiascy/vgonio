@@ -18,7 +18,7 @@ use std::any::Any;
 use crate::app::gui::plotter::debug_print_angle_pair;
 use crate::{
     app::cache::Cache,
-    fitting::{FittingProblemKind, MicrofacetDistributionFittingMethod},
+    fitting::{FittingProblemKind, MicrofacetDistributionFittingVariant},
     measure::data::MeasurementData,
 };
 
@@ -282,7 +282,7 @@ impl VariantData for AreaDistributionExtra {
                         event_loop.send_event(VgonioEvent::Fitting {
                             kind: FittingProblemKind::Mdf {
                                 model: self.selected.model,
-                                method: MicrofacetDistributionFittingMethod::Adf,
+                                method: MicrofacetDistributionFittingVariant::Adf,
                             },
                             data,
                             scale: self.scale_factor,

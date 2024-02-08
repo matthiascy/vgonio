@@ -20,7 +20,7 @@ use crate::{
     },
     fitting::{
         FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData,
-        MicrofacetDistributionFittingMethod, MicrofacetDistributionFittingProblem,
+        MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
     },
     measure::{data::MeasurementData, params::MeasurementKind},
 };
@@ -248,7 +248,7 @@ impl VgonioGui {
                         let report = self.cache.read(|cache| {
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = match method {
-                                MicrofacetDistributionFittingMethod::Adf => {
+                                MicrofacetDistributionFittingVariant::Adf => {
                                     MeasuredMdfData::Adf(Cow::Borrowed(
                                         measurement
                                             .measured
@@ -256,7 +256,7 @@ impl VgonioGui {
                                             .expect("Measurement has no ADF data."),
                                     ))
                                 }
-                                MicrofacetDistributionFittingMethod::Msf => {
+                                MicrofacetDistributionFittingVariant::Msf => {
                                     MeasuredMdfData::Msf(Cow::Borrowed(
                                         measurement
                                             .measured

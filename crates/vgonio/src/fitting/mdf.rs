@@ -30,9 +30,9 @@ pub enum MeasuredMdfData<'a> {
     Msf(Cow<'a, MeasuredMsfData>),
 }
 
-/// Fitting method for the microfacet distribution function (MDF).
+/// Fitting variant for the microfacet distribution function (MDF).
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum MicrofacetDistributionFittingMethod {
+pub enum MicrofacetDistributionFittingVariant {
     /// Fitting the MDF through area distribution function (ADF).
     Adf,
     /// Fitting the MDF through masking-shadowing function (MSF).
@@ -105,17 +105,17 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
     /// Creates a new fitting problem.
     pub fn new(
         measured: MeasuredMdfData<'a>,
-        method: MicrofacetDistributionFittingMethod,
+        method: MicrofacetDistributionFittingVariant,
         target: MicrofacetDistributionModelKind,
         scale: f32,
     ) -> Self {
         debug_assert_matches!(
             (method, &measured),
             (
-                MicrofacetDistributionFittingMethod::Adf,
+                MicrofacetDistributionFittingVariant::Adf,
                 MeasuredMdfData::Adf(_)
             ) | (
-                MicrofacetDistributionFittingMethod::Msf,
+                MicrofacetDistributionFittingVariant::Msf,
                 MeasuredMdfData::Msf(_)
             ),
             "The fitting method and the measured data must match."

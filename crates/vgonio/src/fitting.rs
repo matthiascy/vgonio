@@ -1,6 +1,7 @@
 //! Fitting of microfacet distribution functions and bidirectional
 //! scattering distribution functions.
 
+mod bsdf;
 mod mdf;
 
 pub use mdf::*;
@@ -17,8 +18,8 @@ pub enum FittingProblemKind {
     Mdf {
         /// The target microfacet distribution model.
         model: MicrofacetDistributionModelKind,
-        /// The fitting method.
-        method: MicrofacetDistributionFittingMethod,
+        /// The fitting variant.
+        variant: MicrofacetDistributionFittingVariant,
     },
     /// Fitting the bidirectional scattering distribution function.
     Bsdf(), // TODO: implement
@@ -51,11 +52,11 @@ impl FittedModel {
             FittedModel::Bsdf() => FittingProblemKind::Bsdf(), // TODO: implement
             FittedModel::Msf(model) => FittingProblemKind::Mdf {
                 model: model.kind(),
-                method: MicrofacetDistributionFittingMethod::Msf,
+                method: MicrofacetDistributionFittingVariant::Msf,
             },
             FittedModel::Adf(model, _) => FittingProblemKind::Mdf {
                 model: model.kind(),
-                method: MicrofacetDistributionFittingMethod::Adf,
+                method: MicrofacetDistributionFittingVariant::Adf,
             },
         }
     }
