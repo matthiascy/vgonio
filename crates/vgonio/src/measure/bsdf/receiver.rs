@@ -354,7 +354,7 @@ impl Receiver {
 
         collected.snapshots.push(BsdfSnapshotRaw {
             w_i: result.w_i,
-            records: data,
+            records: data.into_boxed_slice(),
             stats,
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: result.trajectories.to_vec(),

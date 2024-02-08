@@ -1095,6 +1095,7 @@ pub mod vgmo {
             reader.read_exact(&mut buf)?;
             let w_i = read_sph2_from_buf(&buf);
             let stats = BsdfMeasurementStatsPoint::read(reader, n_wavelengths).unwrap();
+            // TODO: improve this
             let mut records = Vec::with_capacity(n_patches);
             let mut samples = vec![BounceAndEnergy::default(); n_wavelengths];
             for _ in 0..n_patches {
@@ -1107,7 +1108,7 @@ pub mod vgmo {
             Ok(Self {
                 w_i,
                 stats,
-                records,
+                records: records.into_boxed_slice(),
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 trajectories: vec![],
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -1127,7 +1128,7 @@ pub mod vgmo {
             // Writes the stats for the current measurement point.
             self.stats.write(writer, n_wavelengths)?;
             // Writes the collected data for each patch.
-            for samples in &self.records {
+            for samples in self.records.iter() {
                 // Writes the data for each wavelength.
                 for s in samples.iter() {
                     s.write(writer)?;

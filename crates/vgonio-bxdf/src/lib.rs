@@ -108,7 +108,7 @@ pub trait MicrofacetDistributionFittingModel: MicrofacetDistributionModel {
     /// vector contains the partial derivatives with respect to the roughness
     /// parameters: ∂f/∂αx and ∂f/∂αy for microfacet normals with the given
     /// the polar angles and azimuthal angles.
-    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Vec<f64>;
+    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]>;
 
     /// Computes the partial derivatives of the masking-shadowing function G1
     /// term with respect to the roughness parameters of the distribution

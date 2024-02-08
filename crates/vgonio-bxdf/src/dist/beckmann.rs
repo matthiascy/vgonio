@@ -71,7 +71,7 @@ impl MicrofacetDistributionModel for BeckmannDistribution {
 }
 
 impl MicrofacetDistributionFittingModel for BeckmannDistribution {
-    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Vec<f64> {
+    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]> {
         debug_assert!(
             cos_thetas.len() == cos_phis.len(),
             "The number of cosines of the zenith angle and the number of cosines of the azimuth \
@@ -107,7 +107,8 @@ impl MicrofacetDistributionFittingModel for BeckmannDistribution {
                 };
                 [d_alpha_x, d_alpha_y]
             })
-            .collect()
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     /// Compute the partial derivative of the masking-shadowing function with

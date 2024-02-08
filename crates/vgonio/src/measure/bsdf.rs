@@ -78,7 +78,13 @@ impl MeasuredBsdfData {
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         let (w, h) = (resolution as usize, resolution as usize);
-        let wavelengths = self.params.emitter.spectrum.values().collect::<Vec<_>>();
+        let wavelengths = self
+            .params
+            .emitter
+            .spectrum
+            .values()
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         // The BSDF data are stored in a single flat array, with the order of
         // the dimensions as follows:
         // - x: width
@@ -546,7 +552,7 @@ where
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.
-    pub records: Vec<SpectralSamples<D>>,
+    pub records: Box<[SpectralSamples<D>]>,
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub trajectories: Vec<RayTrajectory>,
