@@ -960,23 +960,41 @@ pub mod vgmo {
             );
             offset += 4 * n_wavelengths;
 
-            let mut num_rays_per_bounce = vec![vec![0u32; n_bounces as usize]; n_wavelengths];
-            for i in 0..n_wavelengths {
-                for j in 0..n_bounces as usize {
-                    num_rays_per_bounce[i][j] =
-                        u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-                    offset += 4;
+            let num_rays_per_bounce = {
+                let mut num_rays_per_bounce_per_wavelength = Box::new_uninit_slice(n_wavelengths);
+                for n_rays_per_bounce_per_wavelength in
+                    num_rays_per_bounce_per_wavelength.iter_mut()
+                {
+                    let mut num_rays_per_bounce = Box::new_uninit_slice(n_bounces as usize);
+                    for n_rays_per_bounce in num_rays_per_bounce.iter_mut() {
+                        n_rays_per_bounce.write(u32::from_le_bytes(
+                            buf[offset..offset + 4].try_into().unwrap(),
+                        ));
+                        offset += 4;
+                    }
+                    unsafe {
+                        n_rays_per_bounce_per_wavelength.write(num_rays_per_bounce.assume_init());
+                    }
                 }
-            }
+                unsafe { num_rays_per_bounce_per_wavelength.assume_init() }
+            };
 
-            let mut energy_per_bounce = vec![vec![0f32; n_bounces as usize]; n_wavelengths];
-            for i in 0..n_wavelengths {
-                for j in 0..n_bounces as usize {
-                    energy_per_bounce[i][j] =
-                        f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-                    offset += 4;
+            let energy_per_bounce = {
+                let mut energy_per_bounce_per_wavelength = Box::new_uninit_slice(n_wavelengths);
+                for e_per_bounce_per_wavelength in energy_per_bounce_per_wavelength.iter_mut() {
+                    let mut energy_per_bounce = Box::new_uninit_slice(n_bounces as usize);
+                    for energy in energy_per_bounce.iter_mut() {
+                        energy.write(f32::from_le_bytes(
+                            buf[offset..offset + 4].try_into().unwrap(),
+                        ));
+                        offset += 4;
+                    }
+                    unsafe {
+                        e_per_bounce_per_wavelength.write(energy_per_bounce.assume_init());
+                    }
                 }
-            }
+                unsafe { energy_per_bounce_per_wavelength.assume_init() }
+            };
 
             Ok(Self {
                 n_bounces,
@@ -985,8 +1003,8 @@ pub mod vgmo {
                 n_reflected,
                 n_captured,
                 e_captured,
-                num_rays_per_bounce: SpectralSamples::from_vec(num_rays_per_bounce),
-                energy_per_bounce: SpectralSamples::from_vec(energy_per_bounce),
+                num_rays_per_bounce: SpectralSamples::from_boxed_slice(num_rays_per_bounce),
+                energy_per_bounce: SpectralSamples::from_boxed_slice(energy_per_bounce),
             })
         }
     }

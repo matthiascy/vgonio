@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     fmt::{Debug, Display, Formatter},
+    mem::MaybeUninit,
     ops::{Deref, DerefMut, Index, IndexMut},
     path::Path,
 };
@@ -363,22 +364,26 @@ impl From<u8> for BsdfKind {
 
 /// Stores the sample data per wavelength for a spectrum.
 #[derive(Debug, Default)]
-pub struct SpectralSamples<T>(Vec<T>);
+pub struct SpectralSamples<T>(Box<[T]>);
 
 impl<T> SpectralSamples<T> {
-    /// Creates a new empty `SpectralSamples`.
-    pub fn new() -> Self { Self(Vec::new()) }
+    pub fn new_uninit(len: usize) -> SpectralSamples<MaybeUninit<T>> {
+        SpectralSamples(Box::new_uninit_slice(len))
+    }
 
     /// Creates a new `PerWavelength` with the given value for each wavelength.
     pub fn splat(val: T, len: usize) -> Self
     where
         T: Clone,
     {
-        Self(vec![val; len])
+        Self(vec![val; len].into_boxed_slice())
     }
 
     /// Creates a new `PerWavelength` from the given vector.
-    pub fn from_vec(vec: Vec<T>) -> Self { Self(vec) }
+    pub fn from_vec(vec: Vec<T>) -> Self { Self(vec.into_boxed_slice()) }
+
+    /// Creates a new `PerWavelength` from the given boxed slice.
+    pub fn from_boxed_slice(slice: Box<[T]>) -> Self { Self(slice) }
 
     /// Returns the iterator over the samples.
     pub fn iter(&self) -> impl Iterator<Item = &T> { self.0.iter() }
@@ -387,11 +392,15 @@ impl<T> SpectralSamples<T> {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> { self.0.iter_mut() }
 }
 
+impl<T> SpectralSamples<MaybeUninit<T>> {
+    pub unsafe fn assume_init(self) -> SpectralSamples<T> { SpectralSamples(self.0.assume_init()) }
+}
+
 impl<T> IntoIterator for SpectralSamples<T> {
     type Item = T;
     type IntoIter = std::vec::IntoIter<T>;
 
-    fn into_iter(self) -> Self::IntoIter { self.0.into_iter() }
+    fn into_iter(self) -> Self::IntoIter { Vec::from(self.0).into_iter() }
 }
 
 impl<T> Clone for SpectralSamples<T>
@@ -399,11 +408,6 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self { Self(self.0.clone()) }
-}
-
-impl<T> SpectralSamples<T> {
-    /// Creates a new empty `PerWavelength`.
-    pub fn empty() -> Self { Self(Vec::new()) }
 }
 
 impl<T> Deref for SpectralSamples<T> {
@@ -450,10 +454,10 @@ pub struct BsdfMeasurementStatsPoint {
     pub e_captured: SpectralSamples<f32>,
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength.
-    pub num_rays_per_bounce: SpectralSamples<Vec<u32>>,
+    pub num_rays_per_bounce: SpectralSamples<Box<[u32]>>,
     /// Histogram of energy of reflected rays by number of bounces, variant
     /// over wavelength.
-    pub energy_per_bounce: SpectralSamples<Vec<f32>>,
+    pub energy_per_bounce: SpectralSamples<Box<[f32]>>,
 }
 
 impl PartialEq for BsdfMeasurementStatsPoint {
@@ -480,12 +484,18 @@ impl BsdfMeasurementStatsPoint {
         Self {
             n_bounces: max_bounces as u32,
             n_received: 0,
-            n_absorbed: SpectralSamples(vec![0; n_wavelengths]),
-            n_reflected: SpectralSamples(vec![0; n_wavelengths]),
-            n_captured: SpectralSamples(vec![0; n_wavelengths]),
-            e_captured: SpectralSamples(vec![0.0; n_wavelengths]),
-            num_rays_per_bounce: SpectralSamples(vec![vec![0; max_bounces]; n_wavelengths]),
-            energy_per_bounce: SpectralSamples(vec![vec![0.0; max_bounces]; n_wavelengths]),
+            n_absorbed: SpectralSamples::splat(0, n_wavelengths),
+            n_reflected: SpectralSamples::splat(0, n_wavelengths),
+            n_captured: SpectralSamples::splat(0, n_wavelengths),
+            e_captured: SpectralSamples::splat(0.0, n_wavelengths),
+            num_rays_per_bounce: SpectralSamples::splat(
+                vec![0; max_bounces].into_boxed_slice(),
+                n_wavelengths,
+            ),
+            energy_per_bounce: SpectralSamples::splat(
+                vec![0.0; max_bounces].into_boxed_slice(),
+                n_wavelengths,
+            ),
         }
     }
 }
