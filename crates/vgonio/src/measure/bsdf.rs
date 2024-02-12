@@ -20,6 +20,7 @@ use crate::{
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
+    partition::SphericalPartition,
 };
 use base::{
     error::VgonioError,
@@ -63,6 +64,35 @@ pub struct MeasuredBsdfData {
     /// `FullData`.
     /// See [`BsdfSnapshotRaw`] for more details.
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
+}
+
+pub struct BsdfDataInterpolator<'a> {
+    measured: &'a MeasuredBsdfData,
+    partition: SphericalPartition,
+}
+
+impl<'a> BsdfDataInterpolator<'a> {
+    pub fn new(measured: &'a MeasuredBsdfData) -> Self {
+        Self {
+            measured,
+            partition: measured.params.receiver.partitioning(),
+        }
+    }
+
+    pub fn interpolate(&self, w_i: Sph2, w_o: Sph2) -> Option<&BsdfSnapshot> {
+        // Find the closest snapshot to the incident direction.
+        // TODO: limit w_i to only the incident directions of the emitter.
+        let bdsf_snapshot = self
+            .measured
+            .snapshots
+            .iter()
+            .find(|snapshot| snapshot.w_i.theta == w_i.theta && snapshot.w_i.phi == w_i.phi)
+            .unwrap();
+        // Interpolate the BSDF data for the outgoing direction. Bilinear
+        // interpolation is used.
+        // TODO: implement the interpolation.
+        todo!()
+    }
 }
 
 impl MeasuredBsdfData {
@@ -666,6 +696,7 @@ pub fn measure_bsdf_rt(
             #[cfg(feature = "bench")]
             let t = std::time::Instant::now();
 
+            // Collect the tracing data into raw bsdf snapshots.
             receiver.collect(&sim_result_point, &mut collected, orbit_radius);
 
             #[cfg(feature = "bench")]

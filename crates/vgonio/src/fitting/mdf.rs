@@ -134,7 +134,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     fn lsq_lm_fit(self) -> FittingReport<Self::Model> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
-        let result: Vec<(
+        let mut result: Vec<(
             Box<dyn MicrofacetDistributionModel>,
             MinimizationReport<f64>,
         )> = {
@@ -189,10 +189,12 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                 }
             }
         };
+        result.shrink_to_fit();
         let reports = result
             .into_iter()
             .filter(|(_m, r)| matches!(r.termination, TerminationReason::Converged { .. }))
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let mut lowest = f64::INFINITY;
         let mut best = 0;
         for (i, (_, report)) in reports.iter().enumerate() {
@@ -245,7 +247,7 @@ fn initialise_microfacet_mdf_models(
 }
 
 /// Extracts all the measured azimuth and zenith angles and applies the given
-/// operation to them.
+/// operation to them.p
 fn extract_azimuth_zenith_angles(
     len: usize, // sample count
     azimuth: RangeByStepSizeInclusive<Radians>,

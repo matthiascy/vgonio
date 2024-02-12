@@ -6,8 +6,11 @@ mod mdf;
 
 pub use mdf::*;
 
+use crate::fitting::bsdf::MicrofacetBasedBsdfModel;
 use base::Isotropy;
-use bxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
+use bxdf::{
+    MicrofacetBasedBsdfModelKind, MicrofacetDistributionModel, MicrofacetDistributionModelKind,
+};
 use levenberg_marquardt::MinimizationReport;
 use std::fmt::Debug;
 
@@ -22,14 +25,17 @@ pub enum FittingProblemKind {
         variant: MicrofacetDistributionFittingVariant,
     },
     /// Fitting the bidirectional scattering distribution function.
-    Bsdf(), // TODO: implement
+    Bsdf {
+        /// The target BSDF model.
+        model: MicrofacetBasedBsdfModelKind,
+    },
 }
 
 /// A model after fitting.
 #[derive(Debug, Clone)]
 pub enum FittedModel {
     /// Bidirectional scattering distribution function.
-    Bsdf(),
+    Bsdf(Box<dyn MicrofacetBasedBsdfModel>),
     /// Microfacet area distribution function with the scaling factor applied to
     /// the measured data.
     Adf(Box<dyn MicrofacetDistributionModel>, f32),
@@ -41,7 +47,7 @@ impl FittedModel {
     /// Returns the isotropy of the model.
     pub fn isotropy(&self) -> Isotropy {
         match self {
-            FittedModel::Bsdf() => Isotropy::Isotropic, // TODO: implement
+            FittedModel::Bsdf(model) => model.isotropy(),
             FittedModel::Msf(model) | FittedModel::Adf(model, _) => model.isotropy(),
         }
     }
@@ -49,14 +55,16 @@ impl FittedModel {
     /// Returns the kind of fitting problem.
     pub fn kind(&self) -> FittingProblemKind {
         match self {
-            FittedModel::Bsdf() => FittingProblemKind::Bsdf(), // TODO: implement
+            FittedModel::Bsdf(model) => FittingProblemKind::Bsdf {
+                model: model.kind(),
+            },
             FittedModel::Msf(model) => FittingProblemKind::Mdf {
                 model: model.kind(),
-                method: MicrofacetDistributionFittingVariant::Msf,
+                variant: MicrofacetDistributionFittingVariant::Msf,
             },
             FittedModel::Adf(model, _) => FittingProblemKind::Mdf {
                 model: model.kind(),
-                method: MicrofacetDistributionFittingVariant::Adf,
+                variant: MicrofacetDistributionFittingVariant::Adf,
             },
         }
     }
@@ -96,7 +104,7 @@ pub struct FittingReport<M> {
     best: usize,
     /// The reports of the fitting process. Includes the model and the
     /// minimization report with different initial values.
-    pub reports: Vec<(M, MinimizationReport<f64>)>,
+    pub reports: Box<[(M, MinimizationReport<f64>)]>,
 }
 
 impl<M> FittingReport<M> {

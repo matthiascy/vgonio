@@ -135,7 +135,7 @@ impl VariantData for AreaDistributionExtra {
         let to_add = models
             .iter()
             .filter(|fitted_model| match fitted_model {
-                FittedModel::Bsdf() | FittedModel::Msf(_) => todo!("Not implemented yet!"),
+                FittedModel::Bsdf(_) | FittedModel::Msf(_) => todo!("Not implemented yet!"),
                 FittedModel::Adf(model, scale) => {
                     !self.fitted.iter().any(|(existing, existing_scale, _)| {
                         model.kind() == existing.kind() && *scale == *existing_scale
@@ -282,7 +282,7 @@ impl VariantData for AreaDistributionExtra {
                         event_loop.send_event(VgonioEvent::Fitting {
                             kind: FittingProblemKind::Mdf {
                                 model: self.selected.model,
-                                method: MicrofacetDistributionFittingVariant::Adf,
+                                variant: MicrofacetDistributionFittingVariant::Adf,
                             },
                             data,
                             scale: self.scale_factor,

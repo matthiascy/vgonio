@@ -51,9 +51,9 @@ pub struct SphericalPartition {
     /// The domain of the receiver.
     pub domain: SphericalDomain,
     /// The annuli of the collector.
-    pub rings: Vec<Ring>,
+    pub rings: Box<[Ring]>,
     /// The patches of the collector.
-    pub patches: Vec<Patch>,
+    pub patches: Box<[Patch]>,
 }
 
 impl SphericalPartition {
@@ -112,8 +112,8 @@ impl SphericalPartition {
             precision,
             scheme: PartitionScheme::Beckers,
             domain,
-            rings,
-            patches,
+            rings: rings.into_boxed_slice(),
+            patches: patches.into_boxed_slice(),
         }
     }
 
@@ -162,8 +162,8 @@ impl SphericalPartition {
             precision,
             scheme: PartitionScheme::EqualAngle,
             domain,
-            rings,
-            patches,
+            rings: rings.into_boxed_slice(),
+            patches: patches.into_boxed_slice(),
         }
     }
 
@@ -284,29 +284,33 @@ pub mod beckers {
     use base::math::sqr;
 
     /// Computes the number of cells inside the external circle of the ring.
-    pub fn compute_ks(k0: u32, num_rings: u32) -> Vec<u32> {
+    pub fn compute_ks(k0: u32, num_rings: u32) -> Box<[u32]> {
         let mut ks = vec![0; num_rings as usize];
         ks[0] = k0;
         let sqrt_pi = std::f32::consts::PI.sqrt();
         for i in 1..num_rings as usize {
             ks[i] = sqr(f32::sqrt(ks[i - 1] as f32) + sqrt_pi).round() as u32;
         }
-        ks
+        ks.into_boxed_slice()
     }
 
     /// Computes the radius of the rings.
-    pub fn compute_rs(ks: &[u32], num_rings: u32, radius: f32) -> Vec<f32> {
+    pub fn compute_rs(ks: &[u32], num_rings: u32, radius: f32) -> Box<[f32]> {
         let mut rs = vec![0.0; num_rings as usize];
         rs[0] = radius * f32::sqrt(ks[0] as f32 / ks[num_rings as usize - 1] as f32);
         for i in 1..num_rings as usize {
             rs[i] = (ks[i] as f32 / ks[i - 1] as f32).sqrt() * rs[i - 1]
         }
-        rs
+        rs.into_boxed_slice()
     }
 
     /// Computes the zenith angle of the rings on the hemisphere.
-    pub fn compute_ts(rs: &[f32]) -> Vec<f32> {
-        rs.iter().map(|r| 2.0 * (r / 2.0).asin()).collect()
+    pub fn compute_ts(rs: &[f32]) -> Box<[f32]> {
+        let mut ts = vec![0.0; rs.len()];
+        for (i, r) in rs.iter().enumerate() {
+            ts[i] = 2.0 * (r / 2.0).asin();
+        }
+        ts.into_boxed_slice()
     }
 }
 

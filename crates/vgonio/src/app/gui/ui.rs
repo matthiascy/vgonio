@@ -234,10 +234,10 @@ impl VgonioGui {
             }
             VgonioEvent::Fitting { kind, data, scale } => {
                 match kind {
-                    FittingProblemKind::Bsdf() => {
+                    FittingProblemKind::Bsdf { model } => {
                         todo!("Fitting BSDF")
                     }
-                    FittingProblemKind::Mdf { model, method } => {
+                    FittingProblemKind::Mdf { model, variant } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
                         log::debug!("Fitting MDF with {:?}", model);
@@ -247,7 +247,7 @@ impl VgonioGui {
                         }
                         let report = self.cache.read(|cache| {
                             let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = match method {
+                            let data = match variant {
                                 MicrofacetDistributionFittingVariant::Adf => {
                                     MeasuredMdfData::Adf(Cow::Borrowed(
                                         measurement
@@ -266,7 +266,7 @@ impl VgonioGui {
                                 }
                             };
                             let problem = MicrofacetDistributionFittingProblem::new(
-                                data, *method, *model, *scale,
+                                data, *variant, *model, *scale,
                             );
                             problem.lsq_lm_fit()
                         });

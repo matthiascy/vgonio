@@ -23,6 +23,14 @@ pub enum MicrofacetDistributionModelKind {
     TrowbridgeReitz,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MicrofacetBasedBsdfModelKind {
+    /// BSDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
+    TrowbridgeReitz,
+    /// BSDF model based on Beckmann microfacet distribution.
+    Beckmann,
+}
+
 impl MicrofacetDistributionModelKind {
     pub fn to_str(&self) -> &'static str {
         match self {
