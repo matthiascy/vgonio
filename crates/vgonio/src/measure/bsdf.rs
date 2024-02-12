@@ -66,6 +66,8 @@ pub struct MeasuredBsdfData {
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
 }
 
+// TODO: Implement the interpolator for all kinds of data collected
+// with the Beckers' method.
 pub struct BsdfDataInterpolator<'a> {
     measured: &'a MeasuredBsdfData,
     partition: SphericalPartition,
