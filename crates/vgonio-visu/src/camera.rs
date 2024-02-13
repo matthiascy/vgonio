@@ -19,12 +19,12 @@ pub struct Camera {
     pixel_delta_u: Vec3,
     /// Offset to the next pixel in the v direction. (vertical)
     pixel_delta_v: Vec3,
-    /// Camera frame basis right vector.
-    basis_right: Vec3,
-    /// Camera frame basis up vector.
-    basis_up: Vec3,
-    /// Camera frame basis forward vector.
-    basis_forward: Vec3,
+    // /// Camera frame basis right vector.
+    // basis_right: Vec3,
+    // /// Camera frame basis up vector.
+    // basis_up: Vec3,
+    // /// Camera frame basis forward vector.
+    // basis_forward: Vec3,
 }
 
 impl Camera {

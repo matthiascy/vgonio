@@ -36,7 +36,7 @@ pub struct MeasuredAdfData {
     /// The distribution data. The outermost index is the azimuthal angle of the
     /// microfacet normal, and the inner index is the zenith angle of the
     /// microfacet normal.
-    pub samples: Vec<f32>,
+    pub samples: Box<[f32]>,
 }
 
 impl MeasuredAdfData {
@@ -256,6 +256,7 @@ fn measure_area_distribution_by_points<'a>(
             log::debug!("  -- solid angle: {}", solid_angle);
             log::debug!("  -- denom_rcp: {}", denom_rcp);
 
+            // TODO: allocate exactly the needed size for the samples. Boxed slice
             let mut samples =
                 vec![0.0f32; azimuth.step_count_wrapped() * zenith.step_count_wrapped()];
             for azi_idx in 0..azimuth.step_count_wrapped() {
@@ -312,7 +313,10 @@ fn measure_area_distribution_by_points<'a>(
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
                 timestamp: chrono::Local::now(),
-                measured: MeasuredData::Adf(MeasuredAdfData { params, samples }),
+                measured: MeasuredData::Adf(MeasuredAdfData {
+                    params,
+                    samples: samples.into_boxed_slice(),
+                }),
             })
         })
         .collect()

@@ -3,7 +3,10 @@ use crate::{
     measure::bsdf::MeasuredBsdfData,
     partition::SphericalPartition,
 };
-use base::{math::Vec3, Isotropy};
+use base::{
+    math::{Sph2, Vec3},
+    Isotropy,
+};
 use bxdf::MicrofacetBasedBsdfModelKind;
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, Owned, VecStorage, Vector, U1, U2};
@@ -11,117 +14,6 @@ use std::{
     borrow::Cow,
     fmt::{Debug, Display},
 };
-
-/// Beckmann microfacet BSDF model.
-/// See [Beckmann Distribution](crate::dist::BeckmannDistribution).
-#[derive(Debug, Clone, Copy)]
-pub struct BeckmannBsdfModel {
-    /// Roughness parameter of the originated from microfacet distribution
-    /// function.
-    alpha_x: f64,
-    /// Roughness parameter of the originated from microfacet distribution
-    alpha_y: f64,
-}
-
-/// Trowbridge-Reitz(GGX) microfacet BSDF model.
-/// See [Trowbridge-Reitz
-/// Distribution](crate::dist::TrowbridgeReitzDistribution).
-#[derive(Debug, Clone, Copy)]
-pub struct TrowbridgeReitzBsdfModel {
-    /// Roughness parameter of the originated from microfacet distribution
-    alpha_x: f64,
-    /// Roughness parameter of the originated from microfacet distribution
-    alpha_y: f64,
-}
-
-impl BeckmannBsdfModel {
-    pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
-        BeckmannBsdfModel {
-            alpha_x: alpha_x.max(1.0e-6),
-            alpha_y: alpha_y.max(1.0e-6),
-        }
-    }
-}
-
-impl TrowbridgeReitzBsdfModel {
-    pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
-        TrowbridgeReitzBsdfModel {
-            alpha_x: alpha_x.max(1.0e-6),
-            alpha_y: alpha_y.max(1.0e-6),
-        }
-    }
-}
-
-impl MicrofacetBasedBsdfModel for BeckmannBsdfModel {
-    fn kind(&self) -> MicrofacetBasedBsdfModelKind { todo!() }
-
-    fn isotropy(&self) -> Isotropy { todo!() }
-
-    fn alpha_x(&self) -> f64 { todo!() }
-
-    fn set_alpha_x(&mut self, alpha_x: f64) { todo!() }
-
-    fn alpha_y(&self) -> f64 { todo!() }
-
-    fn set_alpha_y(&mut self, alpha_y: f64) { todo!() }
-
-    fn eval(&self, wo: Vec3, wi: Vec3) -> Vec3 { todo!() }
-
-    fn clone_box(&self) -> Box<dyn MicrofacetBasedBsdfModel> { todo!() }
-}
-
-impl MicrofacetBasedBsdfModel for TrowbridgeReitzBsdfModel {
-    fn kind(&self) -> MicrofacetBasedBsdfModelKind { todo!() }
-
-    fn isotropy(&self) -> Isotropy { todo!() }
-
-    fn alpha_x(&self) -> f64 { todo!() }
-
-    fn set_alpha_x(&mut self, alpha_x: f64) { todo!() }
-
-    fn alpha_y(&self) -> f64 { todo!() }
-
-    fn set_alpha_y(&mut self, alpha_y: f64) { todo!() }
-
-    fn eval(&self, wo: Vec3, wi: Vec3) -> Vec3 { todo!() }
-
-    fn clone_box(&self) -> Box<dyn MicrofacetBasedBsdfModel> { todo!() }
-}
-
-pub trait MicrofacetBasedBsdfModel: Debug + Send {
-    /// Returns the kind of the BSDF model.
-    fn kind(&self) -> MicrofacetBasedBsdfModelKind;
-
-    /// Returns the isotropy of the model.
-    fn isotropy(&self) -> Isotropy;
-
-    /// Returns the roughness parameter αx of the model.
-    fn alpha_x(&self) -> f64;
-
-    /// Sets the roughness parameter αx of the model.
-    fn set_alpha_x(&mut self, alpha_x: f64);
-
-    /// Returns the roughness parameter αy of the model.
-    fn alpha_y(&self) -> f64;
-
-    /// Sets the roughness parameter αy of the model.
-    fn set_alpha_y(&mut self, alpha_y: f64);
-
-    /// Evaluates the BSDF model.
-    fn eval(&self, wo: Vec3, wi: Vec3) -> Vec3;
-
-    /// Clones the model into a boxed trait object.
-    fn clone_box(&self) -> Box<dyn MicrofacetBasedBsdfModel>;
-}
-
-impl Clone for Box<dyn MicrofacetBasedBsdfModel> {
-    fn clone(&self) -> Box<dyn MicrofacetBasedBsdfModel> { self.clone_box() }
-}
-
-pub trait MicrofactBasedBsdfModelFittingModel: MicrofacetBasedBsdfModel {
-    fn partial_derivative(&self, wo: Vec3, wi: Vec3) -> Vec3;
-    fn partial_derivatives(&self, wo: Vec3, wi: Vec3) -> (Vec3, Vec3);
-}
 
 /// The fitting problem for the microfacet based BSDF model.
 ///
@@ -265,7 +157,34 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MicrofacetBasedFittingProblemProx
         Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(), self.model.alpha_y())
     }
 
-    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> { todo!() }
+    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
+        // The number of residuals is the number of patches times the number of
+        // snapshots.
+        let residuals_count = self.partition.num_patches() * self.measured.snapshots.len();
+        let mut residuals = Box::new_uninit_slice(residuals_count);
+        self.measured
+            .snapshots
+            .iter()
+            .enumerate()
+            .for_each(|(i, snapshot)| {
+                let wi = snapshot.w_i;
+                self.partition
+                    .patches
+                    .iter()
+                    .enumerate()
+                    .for_each(|(j, patch)| {
+                        let wo = patch.center();
+                        // Only the first wavelength is used. TODO: Use all
+                        let measured = snapshot.samples[j][0];
+                        let modelled = self.model.eval(wi, wo);
+                    });
+            });
+        Some(Matrix::from_column_slice_generic(
+            U2,
+            self.partition.len(),
+            residuals.as_slice(),
+        ))
+    }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> { todo!() }
 }

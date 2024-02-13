@@ -9,6 +9,7 @@ use crate::{
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
         params::{AdfMeasurementMode, MeasurementKind},
     },
+    partition::SphericalPartition,
     RangeByStepSizeInclusive,
 };
 use base::{
@@ -16,6 +17,7 @@ use base::{
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
+    math::Sph2,
     units::Radians,
     Asset, Version,
 };
@@ -175,6 +177,60 @@ impl MeasuredData {
             },
             MeasuredData::Msf(msf) => Some((msf.params.azimuth, msf.params.zenith)),
             _ => None,
+        }
+    }
+}
+
+/// Structure for sampling the measurement data.
+/// In case we don't have the exact data for the given azimuthal and zenith
+/// angles, we do the interpolation.
+pub struct MeasuredDataSampler<'a> {
+    data: &'a MeasuredData,
+    partition: SphericalPartition,
+}
+
+impl<'a> MeasuredDataSampler<'a> {
+    /// Creates a new sampler for the given measurement data.
+    pub fn new(data: &'a MeasuredData) -> Self {
+        let partition = match data {
+            MeasuredData::Bsdf(bsdf) => bsdf.params.receiver.partitioning(),
+            MeasuredData::Adf(adf) => adf.params.receiver.partitioning(),
+            MeasuredData::Msf(msf) => msf.params.receiver.partitioning(),
+            MeasuredData::Sdf(sdf) => sdf.params.receiver.partitioning(),
+        };
+        Self { data, partition }
+    }
+
+    /// Samples the measurement data for the given incident and outgoing
+    /// directions.
+    ///
+    /// In case the measurement data is a BSDF, the outgoing direction is
+    /// required. The BSDF data is going to be sampled depending on the
+    /// outgoing direction.
+    ///
+    /// # Arguments
+    ///
+    /// * `wi` - Incident direction.
+    /// * `wo` - Outgoing direction. Only required for BSDF measurement. For
+    ///   ADF, MSF and SDF measurements, this should be `None`.
+    ///
+    /// # Returns
+    ///
+    /// The sampled value.
+    pub fn sample(&self, wi: Sph2, wo: Option<Sph2>) -> f32 {
+        match self.data {
+            MeasuredData::Bsdf(bsdf) => {
+                let wo = wo.expect("Outgoing direction is required for BSDF measurement.");
+                // Find the snapshot for the given incident direction.
+                let bsdf = bsdf.snapshots.iter().find(|s| s.wi == wi).expect(
+                    "Incident direction is not found in the BSDF snapshots. Currenty, we don't \
+                     support the interpolation on incident direction.",
+                );
+                // Interpolate the BSDF data for the given outgoing direction.
+                // Bilinear interpolation is used for the interpolation.
+                unimplemented!("Interpolation for BSDF data is not supported yet.")
+            }
+            _ => unimplemented!("Sampling for the given measurement data is not supported yet."),
         }
     }
 }

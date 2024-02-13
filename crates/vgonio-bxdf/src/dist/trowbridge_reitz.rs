@@ -1,6 +1,6 @@
 use crate::{
-    impl_microfacet_distribution_common_methods, MicrofacetDistributionFittingModel,
-    MicrofacetDistributionModel, MicrofacetDistributionModelKind,
+    impl_common_methods, MicrofacetDistributionFittingModel, MicrofacetDistributionModel,
+    MicrofacetDistributionModelKind,
 };
 use base::math::{cbr, rcp_f64, sqr, Vec3};
 use std::fmt::Debug;
@@ -48,7 +48,7 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
         MicrofacetDistributionModelKind::TrowbridgeReitz
     }
 
-    impl_microfacet_distribution_common_methods!();
+    impl_common_methods!();
 
     fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
         let cos_theta2 = sqr(cos_theta);

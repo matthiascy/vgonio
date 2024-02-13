@@ -1,9 +1,10 @@
 #![feature(decl_macro)]
 
-use base::Isotropy;
+use base::{math::Sph2, Isotropy};
 use std::fmt::Debug;
 
 mod brdf;
+pub mod bsdf;
 pub mod dist;
 
 use base::math::Vec3;
@@ -15,12 +16,24 @@ pub enum ReflectionModelFamily {
     Microfacet,
 }
 
+// TODO: merge microfacet distribution modle kind and microfacet based bsdf
+// model kind into a single enum.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MicrofacetDistributionModelKind {
     /// Beckmann microfacet distribution.
     Beckmann,
     /// Trowbridge-Reitz microfacet distribution.
     TrowbridgeReitz,
+}
+
+impl MicrofacetDistributionModelKind {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            MicrofacetDistributionModelKind::Beckmann => "Beckmann",
+            MicrofacetDistributionModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,11 +44,11 @@ pub enum MicrofacetBasedBsdfModelKind {
     Beckmann,
 }
 
-impl MicrofacetDistributionModelKind {
+impl MicrofacetBasedBsdfModelKind {
     pub fn to_str(&self) -> &'static str {
         match self {
-            MicrofacetDistributionModelKind::Beckmann => "Beckmann",
-            MicrofacetDistributionModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
+            MicrofacetBasedBsdfModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
+            MicrofacetBasedBsdfModelKind::Beckmann => "Beckmann",
         }
     }
 }
@@ -131,7 +144,7 @@ pub trait MicrofacetDistributionFittingModel: MicrofacetDistributionModel {
     fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64;
 }
 
-macro impl_microfacet_distribution_common_methods() {
+macro impl_common_methods() {
     fn isotropy(&self) -> Isotropy {
         if (self.alpha_x - self.alpha_y).abs() < 1.0e-6 {
             Isotropy::Isotropic
@@ -147,4 +160,39 @@ macro impl_microfacet_distribution_common_methods() {
     fn alpha_y(&self) -> f64 { self.alpha_y }
 
     fn set_alpha_y(&mut self, alpha_y: f64) { self.alpha_y = alpha_y; }
+}
+
+pub trait MicrofacetBasedBsdfModel: Debug + Send {
+    /// Returns the kind of the BSDF model.
+    fn kind(&self) -> MicrofacetBasedBsdfModelKind;
+
+    /// Returns the isotropy of the model.
+    fn isotropy(&self) -> Isotropy;
+
+    /// Returns the roughness parameter αx of the model.
+    fn alpha_x(&self) -> f64;
+
+    /// Sets the roughness parameter αx of the model.
+    fn set_alpha_x(&mut self, alpha_x: f64);
+
+    /// Returns the roughness parameter αy of the model.
+    fn alpha_y(&self) -> f64;
+
+    /// Sets the roughness parameter αy of the model.
+    fn set_alpha_y(&mut self, alpha_y: f64);
+
+    /// Evaluates the BSDF model.
+    fn eval(&self, wi: Sph2, wo: Sph2) -> f64;
+
+    /// Clones the model into a boxed trait object.
+    fn clone_box(&self) -> Box<dyn MicrofacetBasedBsdfModel>;
+}
+
+impl Clone for Box<dyn MicrofacetBasedBsdfModel> {
+    fn clone(&self) -> Box<dyn MicrofacetBasedBsdfModel> { self.clone_box() }
+}
+
+pub trait MicrofactBasedBsdfModelFittingModel: MicrofacetBasedBsdfModel {
+    fn partial_derivative(&self, wo: Vec3, wi: Vec3) -> Vec3;
+    fn partial_derivatives(&self, wo: Vec3, wi: Vec3) -> (Vec3, Vec3);
 }
