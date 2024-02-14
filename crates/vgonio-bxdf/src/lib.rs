@@ -1,4 +1,5 @@
 #![feature(decl_macro)]
+#![feature(new_uninit)]
 
 use base::{math::Sph2, Isotropy};
 use std::fmt::Debug;
@@ -134,7 +135,7 @@ pub trait MicrofacetDistributionFittingModel: MicrofacetDistributionModel {
     /// Computes the partial derivatives of the masking-shadowing function G1
     /// term with respect to the roughness parameters of the distribution
     /// model. For derivatives evaluated with the Microfacet Area
-    /// Distribution Function, see `params_partial_derivatives_adf`.
+    /// Dipstribution Function, see `params_partial_derivatives_adf`.
     ///
     /// # Arguments
     ///
@@ -162,7 +163,7 @@ macro impl_common_methods() {
     fn set_alpha_y(&mut self, alpha_y: f64) { self.alpha_y = alpha_y; }
 }
 
-pub trait MicrofacetBasedBsdfModel: Debug + Send {
+pub trait MicrofacetBasedBrdfModel: Debug + Send {
     /// Returns the kind of the BSDF model.
     fn kind(&self) -> MicrofacetBasedBsdfModelKind;
 
@@ -181,18 +182,32 @@ pub trait MicrofacetBasedBsdfModel: Debug + Send {
     /// Sets the roughness parameter αy of the model.
     fn set_alpha_y(&mut self, alpha_y: f64);
 
-    /// Evaluates the BSDF model.
-    fn eval(&self, wi: Sph2, wo: Sph2) -> f64;
+    /// Evaluates the BRDF model.
+    fn eval(&self, wi: Vec3, wo: Vec3) -> f64;
+
+    // TODO: eval with spherical coordinates?
 
     /// Clones the model into a boxed trait object.
-    fn clone_box(&self) -> Box<dyn MicrofacetBasedBsdfModel>;
+    fn clone_box(&self) -> Box<dyn MicrofacetBasedBrdfModel>;
 }
 
-impl Clone for Box<dyn MicrofacetBasedBsdfModel> {
-    fn clone(&self) -> Box<dyn MicrofacetBasedBsdfModel> { self.clone_box() }
+impl Clone for Box<dyn MicrofacetBasedBrdfModel> {
+    fn clone(&self) -> Box<dyn MicrofacetBasedBrdfModel> { self.clone_box() }
 }
 
-pub trait MicrofactBasedBsdfModelFittingModel: MicrofacetBasedBsdfModel {
-    fn partial_derivative(&self, wo: Vec3, wi: Vec3) -> Vec3;
-    fn partial_derivatives(&self, wo: Vec3, wi: Vec3) -> (Vec3, Vec3);
+pub trait MicrofacetBasedBrdfModelFittingModel: MicrofacetBasedBrdfModel {
+    /// Computes the partial derivatives of the BRDF model with respect to the
+    /// roughness parameters of the model.
+    ///
+    /// # Arguments
+    ///
+    /// * `wis` - The incident directions.
+    /// * `wos` - The outgoing directions.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the BRDF model with respect to the roughness
+    /// parameters of the model in the order of αx and αy for each incident and
+    /// outgoing direction pair.
+    fn partial_derivatives(&self, wis: &[Vec3], wos: &[Vec3]) -> Box<[f64]>;
 }

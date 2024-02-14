@@ -3,7 +3,11 @@
 use crate::units::{rad, radians, Radians};
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Display, Formatter};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    num::Add,
+    ops::{Add, Mul},
+};
 
 mod aabb;
 mod axis;
@@ -212,6 +216,28 @@ impl Sph2 {
 impl Debug for Sph2 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{ θ: {}, φ: {} }}", self.theta, self.phi)
+    }
+}
+
+impl Add for Sph2 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            theta: self.theta + rhs.theta,
+            phi: self.phi + rhs.phi,
+        }
+    }
+}
+
+impl Mul<f32> for Sph2 {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            theta: self.theta * rhs,
+            phi: self.phi * rhs,
+        }
     }
 }
 

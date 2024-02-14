@@ -1,5 +1,11 @@
 use base::math::Vec3;
 
+mod beckmann;
+mod trowbridge_reitz;
+
+pub use beckmann::*;
+pub use trowbridge_reitz::*;
+
 /// Common interface for BRDFs.
 pub trait Brdf {
     /// Evaluates the BRDF (f_r) with the classical parameterisation.

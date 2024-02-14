@@ -71,7 +71,7 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
         if m.dot(v) <= 0.0 {
             return 0.0;
         }
-        let cos_theta_v2 = sqr(v.y as f64);
+        let cos_theta_v2 = sqr(v.z as f64);
         let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
         2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * self.alpha_x * self.alpha_y).sqrt())
     }
