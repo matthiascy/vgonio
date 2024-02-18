@@ -103,11 +103,12 @@ impl RefractiveIndexDatabase {
         &self,
         medium: Medium,
         wavelengths: &[Length<A>],
-    ) -> Option<Vec<RefractiveIndex>> {
+    ) -> Option<Box<[RefractiveIndex]>> {
         wavelengths
             .iter()
             .map(|wavelength| self.ior_of(medium, wavelength.in_nanometres()))
-            .collect()
+            .collect::<Option<Vec<_>>>()
+            .map(|iors| iors.into_boxed_slice())
     }
 }
 

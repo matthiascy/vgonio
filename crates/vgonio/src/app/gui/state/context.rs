@@ -1,8 +1,6 @@
 use egui_winit::EventResponse;
 use std::ops::{Deref, DerefMut};
-use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window};
-
-use crate::app::gui::event::VgonioEvent;
+use winit::{event::WindowEvent, window::Window};
 
 pub struct RawGuiContext {
     /// Context for using egui.

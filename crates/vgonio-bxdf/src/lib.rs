@@ -1,11 +1,10 @@
 #![feature(decl_macro)]
 #![feature(new_uninit)]
 
-use base::{math::Sph2, Isotropy};
+use base::Isotropy;
 use std::fmt::Debug;
 
-mod brdf;
-pub mod bsdf;
+pub mod brdf;
 pub mod dist;
 
 use base::math::Vec3;
@@ -38,18 +37,18 @@ impl MicrofacetDistributionModelKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MicrofacetBasedBsdfModelKind {
-    /// BSDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
+pub enum MicrofacetBasedBrdfModelKind {
+    /// BRDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
     TrowbridgeReitz,
-    /// BSDF model based on Beckmann microfacet distribution.
+    /// BRDF model based on Beckmann microfacet distribution.
     Beckmann,
 }
 
-impl MicrofacetBasedBsdfModelKind {
+impl MicrofacetBasedBrdfModelKind {
     pub fn to_str(&self) -> &'static str {
         match self {
-            MicrofacetBasedBsdfModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
-            MicrofacetBasedBsdfModelKind::Beckmann => "Beckmann",
+            MicrofacetBasedBrdfModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
+            MicrofacetBasedBrdfModelKind::Beckmann => "Beckmann",
         }
     }
 }
@@ -165,7 +164,7 @@ macro impl_common_methods() {
 
 pub trait MicrofacetBasedBrdfModel: Debug + Send {
     /// Returns the kind of the BSDF model.
-    fn kind(&self) -> MicrofacetBasedBsdfModelKind;
+    fn kind(&self) -> MicrofacetBasedBrdfModelKind;
 
     /// Returns the isotropy of the model.
     fn isotropy(&self) -> Isotropy;
@@ -195,7 +194,7 @@ impl Clone for Box<dyn MicrofacetBasedBrdfModel> {
     fn clone(&self) -> Box<dyn MicrofacetBasedBrdfModel> { self.clone_box() }
 }
 
-pub trait MicrofacetBasedBrdfModelFittingModel: MicrofacetBasedBrdfModel {
+pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model.
     ///
@@ -209,5 +208,11 @@ pub trait MicrofacetBasedBrdfModelFittingModel: MicrofacetBasedBrdfModel {
     /// The partial derivatives of the BRDF model with respect to the roughness
     /// parameters of the model in the order of αx and αy for each incident and
     /// outgoing direction pair.
+    ///
+    /// # Note
+    ///
+    /// The returned vector has the length of 2 times the length of `wis` times
+    /// the length of `wos`. For each incident direction wi, the derivatives
+    /// with respect to αx and αy are evaluated for each outgoing direction wo.
     fn partial_derivatives(&self, wis: &[Vec3], wos: &[Vec3]) -> Box<[f64]>;
 }

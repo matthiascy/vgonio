@@ -1,15 +1,30 @@
 //! Fitting of microfacet distribution functions and bidirectional
 //! scattering distribution functions.
 
-mod bsdf;
+/// Common method when implementing [`LeastSquaresProblem`] for a fitting
+macro_rules! impl_least_squares_problem_common_methods {
+    ($self:ident, $params_ty:ty) => {
+        fn set_params(&mut $self, params: &$params_ty) {
+            $self.model.set_alpha_x(params[0]);
+            $self.model.set_alpha_y(params[1]);
+        }
+
+        fn params(&self) -> $params_ty {
+            <$params_ty>::new(self.model.alpha_x(), self.model.alpha_y())
+        }
+    }
+}
+
+mod brdf;
 mod mdf;
 
+pub use brdf::*;
 pub use mdf::*;
 
-use crate::fitting::bsdf::MicrofacetBasedBsdfModel;
 use base::Isotropy;
 use bxdf::{
-    MicrofacetBasedBsdfModelKind, MicrofacetDistributionModel, MicrofacetDistributionModelKind,
+    MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistributionModel,
+    MicrofacetDistributionModelKind,
 };
 use levenberg_marquardt::MinimizationReport;
 use std::fmt::Debug;
@@ -27,7 +42,7 @@ pub enum FittingProblemKind {
     /// Fitting the bidirectional scattering distribution function.
     Bsdf {
         /// The target BSDF model.
-        model: MicrofacetBasedBsdfModelKind,
+        model: MicrofacetBasedBrdfModelKind,
     },
 }
 
@@ -35,7 +50,7 @@ pub enum FittingProblemKind {
 #[derive(Debug, Clone)]
 pub enum FittedModel {
     /// Bidirectional scattering distribution function.
-    Bsdf(Box<dyn MicrofacetBasedBsdfModel>),
+    Bsdf(Box<dyn MicrofacetBasedBrdfModel>),
     /// Microfacet area distribution function with the scaling factor applied to
     /// the measured data.
     Adf(Box<dyn MicrofacetDistributionModel>, f32),
@@ -109,7 +124,13 @@ pub struct FittingReport<M> {
 
 impl<M> FittingReport<M> {
     /// Returns the best model found.
-    pub fn best_model(&self) -> &M { &self.reports[self.best].0 }
+    pub fn best_model(&self) -> Option<&M> {
+        if self.reports.is_empty() {
+            None
+        } else {
+            Some(&self.reports[self.best].0)
+        }
+    }
 
     /// Returns the report of the best model found.
     pub fn best_model_report(&self) -> &(M, MinimizationReport<f64>) { &self.reports[self.best] }
@@ -137,6 +158,6 @@ pub trait FittingProblem {
     /// The model to fit.
     type Model;
 
-    /// Non linear least squares fitting using Levenberg-Marquardt algorithm.
+    /// Non-linear least squares fitting using Levenberg-Marquardt algorithm.
     fn lsq_lm_fit(self) -> FittingReport<Self::Model>;
 }

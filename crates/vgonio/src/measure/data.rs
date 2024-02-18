@@ -194,9 +194,12 @@ impl<'a> MeasuredDataSampler<'a> {
     pub fn new(data: &'a MeasuredData) -> Self {
         let partition = match data {
             MeasuredData::Bsdf(bsdf) => bsdf.params.receiver.partitioning(),
-            MeasuredData::Adf(adf) => adf.params.receiver.partitioning(),
-            MeasuredData::Msf(msf) => msf.params.receiver.partitioning(),
-            MeasuredData::Sdf(sdf) => sdf.params.receiver.partitioning(),
+            _ => {
+                unimplemented!("Partitioning for the given measurement data is not supported yet.")
+            } /* TODO: implement this.
+               * MeasuredData::Adf(adf) => adf.params.receiver.partitioning(),
+               * MeasuredData::Msf(msf) => msf.params.receiver.partitioning(),
+               * MeasuredData::Sdf(sdf) => sdf.params.receiver.partitioning(), */
         };
         Self { data, partition }
     }
@@ -222,8 +225,8 @@ impl<'a> MeasuredDataSampler<'a> {
             MeasuredData::Bsdf(bsdf) => {
                 let wo = wo.expect("Outgoing direction is required for BSDF measurement.");
                 // Find the snapshot for the given incident direction.
-                let bsdf = bsdf.snapshots.iter().find(|s| s.wi == wi).expect(
-                    "Incident direction is not found in the BSDF snapshots. Currenty, we don't \
+                let bsdf = bsdf.snapshots.iter().find(|s| s.w_i == wi).expect(
+                    "Incident direction is not found in the BSDF snapshots. Currently, we don't \
                      support the interpolation on incident direction.",
                 );
                 // Interpolate the BSDF data for the given outgoing direction.

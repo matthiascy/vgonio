@@ -12,6 +12,7 @@ use crate::{
             outliner::OutlinerItem,
         },
     },
+    fitting::FittingProblemKind,
     measure::{
         data::{MeasuredData, MeasurementDataSource},
         params::AdfMeasurementMode,
@@ -278,6 +279,26 @@ impl PropertyInspector {
                                 if ui.button("Export").clicked() {
                                     self.event_loop
                                         .send_event(VgonioEvent::ExportMeasurement(meas));
+                                }
+                                // Temporary fitting button.
+                                if ui.button("Fit Beckmann").clicked() {
+                                    self.event_loop.send_event(VgonioEvent::Fitting {
+                                        kind: FittingProblemKind::Bsdf {
+                                            model: bxdf::MicrofacetBasedBrdfModelKind::Beckmann,
+                                        },
+                                        data: meas,
+                                        scale: 1.0,
+                                    });
+                                }
+                                if ui.button("Fit GGX").clicked() {
+                                    self.event_loop.send_event(VgonioEvent::Fitting {
+                                        kind: FittingProblemKind::Bsdf {
+                                            model:
+                                                bxdf::MicrofacetBasedBrdfModelKind::TrowbridgeReitz,
+                                        },
+                                        data: meas,
+                                        scale: 1.0,
+                                    });
                                 }
                             });
                         }

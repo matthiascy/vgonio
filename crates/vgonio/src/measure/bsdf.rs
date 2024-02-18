@@ -7,7 +7,7 @@
 use crate::measure::bsdf::rtc::embr;
 use crate::{
     app::{
-        cache::{Handle, InnerCache},
+        cache::{Handle, RawCache},
         cli::ansi,
     },
     measure::{
@@ -605,7 +605,7 @@ pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
-    cache: &InnerCache,
+    cache: &RawCache,
 ) -> Box<[MeasurementData]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
@@ -706,7 +706,7 @@ fn rtc_simulation_grid(
     _surf: &MicroSurface,
     _mesh: &MicroSurfaceMesh,
     _emitter: &Emitter,
-    _cache: &InnerCache,
+    _cache: &RawCache,
 ) -> Box<dyn Iterator<Item = SimulationResultPoint>> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
@@ -737,7 +737,7 @@ fn rtc_simulation_optix(
     _params: &BsdfMeasurementParams,
     _surf: &MicroSurfaceMesh,
     _emitter: &Emitter,
-    _cache: &InnerCache,
+    _cache: &RawCache,
 ) -> Box<dyn Iterator<Item = SimulationResultPoint>> {
     todo!()
 }

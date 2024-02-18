@@ -5,7 +5,7 @@ use base::units::LengthUnit;
 use surf::MicroSurface;
 
 use crate::{
-    app::cache::{Handle, InnerCache},
+    app::cache::{Handle, RawCache},
     fitting::FittedModels,
     measure::{
         data::{MeasurementData, MeasurementDataSource},
@@ -91,7 +91,7 @@ impl PropertyData {
     ///
     /// This should be called whenever the micro surface cache is updated (new
     /// micro surfaces are added or removed)
-    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &InnerCache) {
+    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &RawCache) {
         for hdl in surfs {
             if let std::collections::hash_map::Entry::Vacant(e) = self.surfaces.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
@@ -142,7 +142,7 @@ impl PropertyData {
     pub fn update_measurement_data(
         &mut self,
         measurements: &[Handle<MeasurementData>],
-        cache: &InnerCache,
+        cache: &RawCache,
     ) {
         for meas in measurements {
             if let std::collections::hash_map::Entry::Vacant(e) = self.measured.entry(*meas) {

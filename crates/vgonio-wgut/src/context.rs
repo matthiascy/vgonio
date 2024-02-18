@@ -251,11 +251,9 @@ impl GpuContext {
             dx12_shader_compiler: Default::default(),
             gles_minor_version: Default::default(),
         });
-        let surface = unsafe {
-            instance
-                .create_surface(window)
-                .expect("Unable to create a window surface!")
-        };
+        let surface = instance
+            .create_surface(window)
+            .expect("Unable to create a window surface!");
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: config.power_preference,

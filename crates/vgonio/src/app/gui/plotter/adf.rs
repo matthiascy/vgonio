@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        cache::{Handle, InnerCache},
+        cache::{Handle, RawCache},
         gui::{
             event::{EventLoopProxy, VgonioEvent},
             plotter::{angle_knob, Curve, VariantData},
@@ -104,7 +104,7 @@ impl AreaDistributionExtra {
 }
 
 impl VariantData for AreaDistributionExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &InnerCache) {
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache) {
         let measurement = cache.get_measurement_data(data).unwrap();
         let (azimuth, zenith) = measurement.measured.adf_or_msf_angle_ranges().unwrap();
         self.azimuth_range = azimuth;

@@ -503,7 +503,7 @@ pub fn read_f32_data_samples<R: Read>(
     count: usize,
     encoding: FileEncoding,
     compression: CompressionScheme,
-) -> Result<Vec<f32>, ParseError> {
+) -> Result<Box<[f32]>, ParseError> {
     let mut zlib_decoder;
     let mut gzip_decoder;
 
@@ -519,7 +519,7 @@ pub fn read_f32_data_samples<R: Read>(
         }
     };
 
-    let mut samples = vec![0.0; count];
+    let mut samples = vec![0.0; count].into_boxed_slice();
     match encoding {
         FileEncoding::Ascii => read_ascii_samples(decoder, count, &mut samples)?,
         FileEncoding::Binary => read_binary_samples(decoder, count, &mut samples)?,

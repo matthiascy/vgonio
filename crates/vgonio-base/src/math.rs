@@ -5,7 +5,6 @@ use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
-    num::Add,
     ops::{Add, Mul},
 };
 

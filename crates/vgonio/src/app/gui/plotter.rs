@@ -7,7 +7,7 @@ pub use msf::*;
 
 use crate::{
     app::{
-        cache::{Cache, Handle, InnerCache},
+        cache::{Cache, Handle, RawCache},
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
@@ -84,7 +84,7 @@ pub trait PlottingWidget {
 /// Trait for extra data to be used by the plotting inspector.
 pub trait VariantData {
     /// Initialise the extra data.
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &InnerCache);
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache);
 
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
@@ -228,7 +228,7 @@ impl Deref for Curve {
 }
 
 impl VariantData for BsdfPlotExtraData {
-    fn pre_process(&mut self, _data: Handle<MeasurementData>, _cache: &InnerCache) {
+    fn pre_process(&mut self, _data: Handle<MeasurementData>, _cache: &RawCache) {
         // TODO: pre-process data
     }
 

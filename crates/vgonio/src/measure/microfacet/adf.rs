@@ -1,16 +1,16 @@
 use crate::{
-    app::cache::{Handle, InnerCache},
+    app::cache::{Handle, RawCache},
     measure::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::{AdfMeasurementMode, AdfMeasurementParams},
     },
-    partition::{PartitionScheme, SphericalPartition},
+    partition::SphericalPartition,
     RangeByStepSizeInclusive, SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math,
-    math::{Sph2, Vec2, Vec2Swizzles, Vec3, Vec3Swizzles},
+    math::{Sph2, Vec3Swizzles},
     units,
     units::{rad, Radians},
 };
@@ -135,7 +135,7 @@ const FACET_CHUNK_SIZE: usize = 4096;
 pub fn measure_area_distribution(
     params: AdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
-    cache: &InnerCache,
+    cache: &RawCache,
 ) -> Box<[MeasurementData]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
@@ -340,6 +340,7 @@ fn measure_area_distribution_by_partition<'a>(
         "  -- Partitioning the hemisphere into {} patches.",
         partition.num_patches()
     );
+    // TODO: Boxed slice
     // Data buffer for data of each patch.
     let mut samples = vec![0.0; partition.num_patches()];
     surfaces
@@ -398,6 +399,7 @@ fn measure_area_distribution_by_partition<'a>(
                         continue;
                     }
                     macro_area += mesh.facet_areas[facet_idx];
+                    num_normals += 1;
                     match partition.contains(Sph2::from_cartesian(*normal)) {
                         None => {
                             log::warn!("Facet normal {} is not contained in any patch.", normal);
@@ -447,7 +449,7 @@ fn measure_area_distribution_by_partition<'a>(
                 timestamp: chrono::Local::now(),
                 measured: MeasuredData::Adf(MeasuredAdfData {
                     params,
-                    samples: samples.clone(),
+                    samples: samples.clone().into_boxed_slice(),
                 }),
             })
         })

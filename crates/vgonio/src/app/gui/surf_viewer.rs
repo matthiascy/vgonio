@@ -15,7 +15,7 @@ use wgut::{
 };
 
 use crate::app::{
-    cache::{Handle, InnerCache},
+    cache::{Handle, RawCache},
     gui::{
         data::MicroSurfaceProp,
         docking::{Dockable, WidgetKind},
@@ -309,7 +309,7 @@ impl SurfaceViewerStates {
         input: &InputState,
         dt: std::time::Duration,
         theme: &ThemeState,
-        cache: &InnerCache,
+        cache: &RawCache,
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
     ) -> wgpu::CommandEncoder {
         let mut encoder = gpu

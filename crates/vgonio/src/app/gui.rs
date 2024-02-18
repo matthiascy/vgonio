@@ -33,7 +33,7 @@ pub use ui::VgonioGui;
 
 use crate::{
     app::{
-        cache::InnerCache,
+        cache::RawCache,
         gui::{
             bsdf_viewer::BsdfViewer,
             event::{BsdfViewerEvent, DebuggingEvent, EventResponse, VgonioEvent},
@@ -196,9 +196,9 @@ impl VgonioGuiApp {
 
         let config = Arc::new(config);
         let cache = {
-            let mut inner = InnerCache::new(config.cache_dir());
+            let mut inner = RawCache::new(config.cache_dir());
             inner.load_ior_database(&config);
-            Cache::from_inner(inner)
+            Cache::from_raw(inner)
         };
 
         // TODO: remove this
@@ -245,8 +245,6 @@ impl VgonioGuiApp {
             window,
         })
     }
-
-    pub fn reconfigure_surface(&mut self) { self.canvas.reconfigure(&self.gpu_ctx.device); }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>, scale_factor: Option<f32>) {
         self.canvas.resize(

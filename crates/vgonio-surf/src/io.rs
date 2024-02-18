@@ -128,7 +128,7 @@ pub mod vgms {
     /// Reads the VGMS file from the given reader.
     pub fn read<R: Read + Seek>(
         reader: &mut BufReader<R>,
-    ) -> Result<(Header<VgmsHeaderExt>, Vec<f32>), ReadFileErrorKind> {
+    ) -> Result<(Header<VgmsHeaderExt>, Box<[f32]>), ReadFileErrorKind> {
         let header = Header::<VgmsHeaderExt>::read(reader)?;
         log::debug!("Reading VGMS file of length: {}", header.meta.length);
         // TODO: file length

@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        cache::{Cache, Handle, InnerCache},
+        cache::{Cache, Handle, RawCache},
         gui::{
             event::EventLoopProxy,
             misc::drag_angle,
@@ -101,7 +101,7 @@ impl SlopeDistributionExtra {
 }
 
 impl VariantData for SlopeDistributionExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &InnerCache) {
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache) {
         self.generate_curves(cache.get_measurement_data(data).unwrap());
     }
 

@@ -1,3 +1,4 @@
+use crate::fitting::MicrofacetBasedBrdfFittingProblem;
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -24,10 +25,8 @@ use crate::{
     },
     measure::{data::MeasurementData, params::MeasurementKind},
 };
-use base::{
-    io::{CompressionScheme, FileEncoding},
-    math::Mat4,
-};
+use base::io::{CompressionScheme, FileEncoding};
+use bxdf::MicrofacetBasedBrdfModelKind;
 use egui::NumExt;
 use std::{
     borrow::Cow,
@@ -235,7 +234,17 @@ impl VgonioGui {
             VgonioEvent::Fitting { kind, data, scale } => {
                 match kind {
                     FittingProblemKind::Bsdf { model } => {
-                        todo!("Fitting BSDF")
+                        let report = self.cache.read(|cache| {
+                            let measurement = cache.get_measurement_data(*data).unwrap();
+                            let problem = MicrofacetBasedBrdfFittingProblem::new(
+                                measurement.measured.as_bsdf().unwrap(),
+                                *model,
+                                cache,
+                            );
+                            problem.lsq_lm_fit()
+                        });
+                        report.log_fitting_report();
+                        // TODO: update the fitted models
                     }
                     FittingProblemKind::Mdf { model, variant } => {
                         let mut prop = self.properties.write().unwrap();
@@ -271,7 +280,11 @@ impl VgonioGui {
                             problem.lsq_lm_fit()
                         });
                         report.log_fitting_report();
-                        fitted.push(FittedModel::Adf(report.best_model().clone_box(), *scale));
+                        if let Some(model) = report.best_model() {
+                            fitted.push(FittedModel::Adf(model.clone_box(), *scale));
+                        } else {
+                            log::warn!("No model fitted");
+                        }
                     }
                 }
                 EventResponse::Handled

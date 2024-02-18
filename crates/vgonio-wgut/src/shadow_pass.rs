@@ -337,7 +337,7 @@ impl ShadowPass {
                         img.save(path).map_err(|err| {
                             VgonioError::new(
                                 format!("Failed to save the image to {}", path.display()),
-                                None,
+                                Some(Box::new(err)),
                             )
                         })
                     })?;

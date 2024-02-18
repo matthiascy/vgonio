@@ -1,4 +1,4 @@
-use crate::app::cache::{Handle, InnerCache};
+use crate::app::cache::{Handle, RawCache};
 use egui::Color32;
 use std::{
     collections::{HashMap, HashSet},
@@ -80,7 +80,7 @@ impl SurfaceSelector {
     pub fn selection_changed(&mut self) -> bool { self.changed }
 
     /// Updates the list of surfaces.
-    pub fn update(&mut self, surfs: &[Handle<MicroSurface>], cache: &InnerCache) {
+    pub fn update(&mut self, surfs: &[Handle<MicroSurface>], cache: &RawCache) {
         let surfs = surfs
             .iter()
             .filter(|hdl| !self.surfaces.iter().any(|(s, _)| s == *hdl));

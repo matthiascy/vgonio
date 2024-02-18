@@ -1,7 +1,7 @@
 //! Sensor of the virtual gonio-reflectometer.
 
 use crate::{
-    app::cache::{Handle, InnerCache},
+    app::cache::{Handle, RawCache},
     measure::{
         bsdf::{
             BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SimulationResultPoint,
@@ -120,9 +120,9 @@ pub struct Receiver {
     /// Wavelengths of the measurement.
     pub spectrum: Vec<Nanometres>,
     /// Incident medium's refractive indices.
-    pub iors_i: Vec<RefractiveIndex>,
+    pub iors_i: Box<[RefractiveIndex]>,
     /// Transmitted medium's refractive indices.
-    pub iors_t: Vec<RefractiveIndex>,
+    pub iors_t: Box<[RefractiveIndex]>,
     /// The partitioned patches of the receiver.
     pub patches: SphericalPartition,
 }
@@ -153,7 +153,7 @@ impl Receiver {
     pub fn new(
         receiver_params: &ReceiverParams,
         meas_params: &BsdfMeasurementParams,
-        cache: &InnerCache,
+        cache: &RawCache,
     ) -> Self {
         let spectrum = meas_params.emitter.spectrum.values().collect::<Vec<_>>();
         // Retrieve the incident medium's refractive indices for each wavelength.

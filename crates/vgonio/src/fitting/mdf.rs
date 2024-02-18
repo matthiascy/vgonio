@@ -291,14 +291,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for AreaDistributionFittingProblemPro
     type JacobianStorage = Owned<f64, Dyn, U2>;
     type ParameterStorage = Owned<f64, U2, U1>;
 
-    fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
-        self.model.set_alpha_x(x[0]);
-        self.model.set_alpha_y(x[1]);
-    }
-
-    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
-        Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(), self.model.alpha_y())
-    }
+    impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
         match self.measured.params.mode {
@@ -343,14 +336,16 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MaskingShadowingFittingProblemPro
     type JacobianStorage = Owned<f64, Dyn, U2>;
     type ParameterStorage = Owned<f64, U2, U1>;
 
-    fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
-        self.model.set_alpha_x(x[0]);
-        self.model.set_alpha_y(x[1]);
-    }
+    // fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
+    //     self.model.set_alpha_x(x[0]);
+    //     self.model.set_alpha_y(x[1]);
+    // }
+    //
+    // fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
+    //     Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(),
+    // self.model.alpha_y()) }
 
-    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
-        Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(), self.model.alpha_y())
-    }
+    impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
         // let (phis, thetas) = extract_azimuth_zenith_angles(

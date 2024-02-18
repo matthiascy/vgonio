@@ -11,7 +11,6 @@ use egui_winit::EventResponse;
 pub use renderer::GuiRenderer;
 
 use std::{
-    default::Default,
     ops::Deref,
     path::Path,
     sync::{Arc, RwLock},

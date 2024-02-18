@@ -2,7 +2,7 @@
 use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
 use crate::{
     app::{
-        cache::{Cache, Handle, InnerCache},
+        cache::{Cache, Handle, RawCache},
         gui::{
             event::EventLoopProxy,
             plotter::{angle_knob, Curve, VariantData},
@@ -63,7 +63,7 @@ impl Default for MaskingShadowingExtra {
 }
 
 impl VariantData for MaskingShadowingExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &InnerCache) {
+    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache) {
         let measurement = cache.get_measurement_data(data).unwrap();
         let (azimuth, zenith) = measurement.measured.adf_or_msf_angle_ranges().unwrap();
         self.azimuth_range = azimuth;
