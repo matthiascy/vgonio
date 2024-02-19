@@ -25,6 +25,8 @@ pub mod units;
 pub use asset::*;
 #[cfg(feature = "winit")]
 pub mod input;
+pub mod medium;
+pub mod optics;
 
 /// Indicates whether something is uniform in all directions or not.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

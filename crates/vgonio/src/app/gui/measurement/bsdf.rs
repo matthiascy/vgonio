@@ -6,10 +6,11 @@ use crate::{
         bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
     },
-    Medium, SphericalDomain,
+    SphericalDomain,
 };
 #[cfg(feature = "visu-dbg")]
 use base::math::Sph2;
+use base::medium::Medium;
 use std::hash::Hash;
 
 impl BsdfKind {
@@ -27,18 +28,15 @@ impl BsdfKind {
     }
 }
 
-impl Medium {
-    /// Creates the UI for selecting the medium.
-    pub fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
-        egui::ComboBox::from_id_source(id_source)
-            .selected_text(format!("{:?}", self))
-            .show_ui(ui, |ui| {
-                ui.selectable_value(self, Medium::Air, "Air");
-                ui.selectable_value(self, Medium::Copper, "Copper");
-                ui.selectable_value(self, Medium::Aluminium, "Aluminium");
-                ui.selectable_value(self, Medium::Vacuum, "Vacuum");
-            });
-    }
+pub fn medium_selectable_ui(medium: &mut Medium, id_source: impl Hash, ui: &mut egui::Ui) {
+    egui::ComboBox::from_id_source(id_source)
+        .selected_text(format!("{:?}", medium))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(medium, Medium::Air, "Air");
+            ui.selectable_value(medium, Medium::Copper, "Copper");
+            ui.selectable_value(medium, Medium::Aluminium, "Aluminium");
+            ui.selectable_value(medium, Medium::Vacuum, "Vacuum");
+        });
 }
 
 impl EmitterParams {
@@ -176,15 +174,19 @@ impl BsdfMeasurementTab {
                         ui.end_row();
 
                         ui.label("Incident medium:");
-                        self.params
-                            .incident_medium
-                            .selectable_ui("incident_medium_choice", ui);
+                        medium_selectable_ui(
+                            &mut self.params.incident_medium,
+                            "incident_medium_choice",
+                            ui,
+                        );
                         ui.end_row();
 
                         ui.label("Surface medium:");
-                        self.params
-                            .transmitted_medium
-                            .selectable_ui("transmitted_medium_choice", ui);
+                        medium_selectable_ui(
+                            &mut self.params.transmitted_medium,
+                            "transmitted_medium_choice",
+                            ui,
+                        );
                         ui.end_row();
 
                         ui.label("Simulation kind: ");

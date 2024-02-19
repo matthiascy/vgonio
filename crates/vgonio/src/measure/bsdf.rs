@@ -374,6 +374,7 @@ impl From<u8> for BsdfKind {
 pub struct SpectralSamples<T>(Box<[T]>);
 
 impl<T> SpectralSamples<T> {
+    /// Creates a new `SpectralSamples` with uninitialized values.
     pub fn new_uninit(len: usize) -> SpectralSamples<MaybeUninit<T>> {
         SpectralSamples(Box::new_uninit_slice(len))
     }

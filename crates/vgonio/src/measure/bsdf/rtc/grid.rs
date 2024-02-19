@@ -13,11 +13,11 @@ use crate::{
         },
         params::BsdfMeasurementParams,
     },
-    optics::fresnel,
 };
 use base::{
     math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles},
+    optics::fresnel,
 };
 use rayon::prelude::*;
 use std::time::Instant;

@@ -241,8 +241,8 @@ impl Patch {
     /// Returns the center of the patch.
     pub fn center(&self) -> Sph2 {
         Sph2::new(
-            (self.min.theta + self.max.theta) / 2.0,
-            (self.min.phi + self.max.phi) / 2.0,
+            (self.min.theta + self.max.theta) * 0.5,
+            (self.min.phi + self.max.phi) * 0.5,
         )
     }
 

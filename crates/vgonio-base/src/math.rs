@@ -272,7 +272,7 @@ pub fn spherical_to_cartesian(r: f32, zenith: Radians, azimuth: Radians) -> Vec3
 /// # Arguments
 ///
 /// * `v` - vector in cartesian coordinate system
-/// * `handedness` - handedness of the cartesian coordinate system
+/// * `r` - radius
 ///
 /// # Returns
 ///

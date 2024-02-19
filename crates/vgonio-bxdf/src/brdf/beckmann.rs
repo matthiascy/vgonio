@@ -1,4 +1,7 @@
-use base::math::{rcp_f64, sqr, Vec3};
+use base::{
+    math::{rcp_f64, sqr, Vec3},
+    optics::{fresnel, ior::RefractiveIndex},
+};
 use libm::erf;
 
 use crate::{
@@ -31,26 +34,66 @@ impl MicrofacetBasedBrdfModel for BeckmannBrdfModel {
 
     impl_common_methods!();
 
-    fn eval(&self, wi: Vec3, wo: Vec3) -> f64 {
+    fn eval(&self, wi: Vec3, wo: Vec3, ior_i: &RefractiveIndex, ior_t: &RefractiveIndex) -> f64 {
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
         let wh = (wi + wo).normalize();
         let dist = BeckmannDistribution::new(self.alpha_x, self.alpha_y);
         let d = dist.eval_adf(wh.z as f64, wh.y.atan2(wh.x) as f64);
         let g = dist.eval_msf1(wh, wi) * dist.eval_msf1(wh, wo);
-        // TODO: eval fresnel
-        let f = 1.0;
+        // TODO: test medium type
+        let f = fresnel::reflectance_dielectric_conductor(wi.z.abs(), ior_i.eta, ior_t.eta, ior_t.k)
+            as f64;
         (d * g * f) / (4.0 * wi.z as f64 * wo.z as f64)
+    }
+
+    fn eval_spectrum(
+        &self,
+        wi: Vec3,
+        wo: Vec3,
+        iors_i: &[RefractiveIndex],
+        iors_t: &[RefractiveIndex],
+    ) -> Box<[f64]> {
+        debug_assert!(wi.is_normalized(), "incident direction is not normalized");
+        debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
+        debug_assert_eq!(
+            iors_i.len(),
+            iors_t.len(),
+            "length of iors_i and iors_t must be equal"
+        );
+        // TODO: test medium type
+        let mut result = Box::new_uninit_slice(iors_i.len());
+        for i in 0..iors_i.len() {
+            let ior_i = iors_i[i];
+            let ior_t = iors_t[i];
+            let wh = (wi + wo).normalize();
+            let dist = BeckmannDistribution::new(self.alpha_x, self.alpha_y);
+            let d = dist.eval_adf(wh.z as f64, wh.y.atan2(wh.x) as f64);
+            let g = dist.eval_msf1(wh, wi) * dist.eval_msf1(wh, wo);
+            let f = fresnel::reflectance_dielectric_conductor(
+                wi.z.abs(),
+                ior_i.eta,
+                ior_t.eta,
+                ior_t.k,
+            ) as f64;
+            result[i].write((d * g * f) / (4.0 * wi.z as f64 * wo.z as f64));
+        }
+        unsafe { result.assume_init() }
     }
 
     fn clone_box(&self) -> Box<dyn MicrofacetBasedBrdfModel> { Box::new(*self) }
 }
 
 impl MicrofacetBasedBrdfFittingModel for BeckmannBrdfModel {
-    fn partial_derivatives(&self, wos: &[Vec3], wis: &[Vec3]) -> Box<[f64]> {
+    fn partial_derivatives(
+        &self,
+        wos: &[Vec3],
+        wis: &[Vec3],
+        ior_i: &RefractiveIndex,
+        ior_t: &RefractiveIndex,
+    ) -> Box<[f64]> {
         let mut result = Box::new_uninit_slice(wis.len() * wos.len() * 2);
-        // TODO: eval fresnel
-        let f = 1.0;
+        // TODO: test medium type
         for i in 0..wis.len() {
             let wi = wis[i];
             for j in 0..wos.len() {
@@ -58,6 +101,14 @@ impl MicrofacetBasedBrdfFittingModel for BeckmannBrdfModel {
                 debug_assert!(wi.is_normalized(), "incident direction is not normalized");
                 debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
                 let wh = (wi + wo).normalize();
+
+                let f = fresnel::reflectance_dielectric_conductor(
+                    wi.z.abs(),
+                    ior_i.eta,
+                    ior_t.eta,
+                    ior_t.k,
+                ) as f64;
+
                 let alpha_x2 = self.alpha_x * self.alpha_x;
                 let alpha_y2 = self.alpha_y * self.alpha_y;
                 let alpha_x4 = alpha_x2 * alpha_x2;

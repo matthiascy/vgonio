@@ -2,10 +2,12 @@ use crate::{
     app::cache::{Cache, RawCache},
     fitting::{FittingProblem, FittingReport},
     measure::bsdf::MeasuredBsdfData,
-    optics::ior::RefractiveIndex,
     partition::SphericalPartition,
 };
-use base::math::{spherical_to_cartesian, Vec3};
+use base::{
+    math::{spherical_to_cartesian, Vec3},
+    optics::ior::RefractiveIndex,
+};
 use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
@@ -230,14 +232,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MicrofacetBasedBrdfFittingProblem
     type JacobianStorage = Owned<f64, Dyn, U2>;
     type ParameterStorage = Owned<f64, U2, U1>;
 
-    // fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
-    //     self.model.set_alpha_x(x[0]);
-    //     self.model.set_alpha_y(x[1]);
-    // }
-    //
-    // fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
-    //     Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(),
-    // self.model.alpha_y()) }
     impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
@@ -267,7 +261,8 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MicrofacetBasedBrdfFittingProblem
                             };
                             // Only the first wavelength is used. TODO: Use all
                             let measured = snapshot.samples[j][0] as f64;
-                            let modelled = self.model.eval(wi, wo);
+                            let modelled =
+                                self.model.eval(wi, wo, &self.iors_i[0], &self.iors_t[0]);
                             rs[i * n_patches + j].write(modelled - measured);
                         });
                 });
@@ -278,8 +273,11 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MicrofacetBasedBrdfFittingProblem
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
+        // Temporary implementation: only first wavelength is used.
         Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
-            &self.model.partial_derivatives(&self.wis, &self.wos),
+            &self
+                .model
+                .partial_derivatives(&self.wis, &self.wos, &self.iors_i[0], &self.iors_t[0]),
         ))
     }
 }

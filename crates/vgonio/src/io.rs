@@ -40,7 +40,7 @@ pub mod vgmo {
             },
         },
         partition::{PartitionScheme, Ring},
-        Medium, RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
+        RangeByStepCountInclusive, RangeByStepSizeInclusive, SphericalDomain,
     };
     use base::{
         io::{
@@ -48,6 +48,7 @@ pub mod vgmo {
             VgonioFileVariant, WriteFileErrorKind,
         },
         math::Sph2,
+        medium::Medium,
         units::{rad, Nanometres, Radians},
         Version,
     };
@@ -667,29 +668,6 @@ pub mod vgmo {
                 _ => {
                     log::error!("Unsupported VGMO[ReceiverParams] version: {version}");
                 }
-            }
-        }
-    }
-
-    impl Medium {
-        fn write_to_buf(&self, buf: &mut [u8]) {
-            debug_assert!(buf.len() >= 3, "Medium needs at least 3 bytes of space");
-            match self {
-                Self::Vacuum => buf[0..3].copy_from_slice(b"vac"),
-                Self::Air => buf[0..3].copy_from_slice(b"air"),
-                Self::Aluminium => buf[0..3].copy_from_slice(b"al\0"),
-                Self::Copper => buf[0..3].copy_from_slice(b"cu\0"),
-            }
-        }
-
-        fn read_from_buf(buf: &[u8]) -> Self {
-            debug_assert!(buf.len() >= 3, "Medium needs at least 3 bytes of space");
-            match &buf[0..3] {
-                b"vac" => Self::Vacuum,
-                b"air" => Self::Air,
-                b"al\0" => Self::Aluminium,
-                b"cu\0" => Self::Copper,
-                _ => panic!("Invalid medium kind {:?}", &buf[0..3]),
             }
         }
     }

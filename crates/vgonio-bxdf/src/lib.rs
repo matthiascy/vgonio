@@ -7,7 +7,7 @@ use std::fmt::Debug;
 pub mod brdf;
 pub mod dist;
 
-use base::math::Vec3;
+use base::{math::Vec3, optics::ior::RefractiveIndex};
 
 /// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -182,7 +182,16 @@ pub trait MicrofacetBasedBrdfModel: Debug + Send {
     fn set_alpha_y(&mut self, alpha_y: f64);
 
     /// Evaluates the BRDF model.
-    fn eval(&self, wi: Vec3, wo: Vec3) -> f64;
+    fn eval(&self, wi: Vec3, wo: Vec3, ior_i: &RefractiveIndex, ior_t: &RefractiveIndex) -> f64;
+
+    /// Evaluates the BRDF model with the given spectrum.
+    fn eval_spectrum(
+        &self,
+        wi: Vec3,
+        wo: Vec3,
+        iors_i: &[RefractiveIndex],
+        iors_t: &[RefractiveIndex],
+    ) -> Box<[f64]>;
 
     // TODO: eval with spherical coordinates?
 
@@ -214,5 +223,11 @@ pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
     /// The returned vector has the length of 2 times the length of `wis` times
     /// the length of `wos`. For each incident direction wi, the derivatives
     /// with respect to αx and αy are evaluated for each outgoing direction wo.
-    fn partial_derivatives(&self, wis: &[Vec3], wos: &[Vec3]) -> Box<[f64]>;
+    fn partial_derivatives(
+        &self,
+        wis: &[Vec3],
+        wos: &[Vec3],
+        ior_i: &RefractiveIndex,
+        ior_t: &RefractiveIndex,
+    ) -> Box<[f64]>;
 }

@@ -7,11 +7,12 @@ use crate::{
         BsdfKind,
     },
     partition::PartitionScheme,
-    Medium, RangeByStepSizeInclusive, SphericalDomain,
+    RangeByStepSizeInclusive, SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math::Sph2,
+    medium::Medium,
     units::{deg, nm, rad},
 };
 use serde::{Deserialize, Serialize};

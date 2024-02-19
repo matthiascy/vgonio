@@ -3104,6 +3104,7 @@ dependencies = [
  "uuid",
  "vgonio-base",
  "vgonio-bxdf",
+ "vgonio-jabr",
  "vgonio-surf",
  "vgonio-wgut",
  "wgpu",
@@ -3135,6 +3136,7 @@ name = "vgonio-bxdf"
 version = "0.3.0"
 dependencies = [
  "libm",
+ "log",
  "num-traits",
  "vgonio-base",
 ]

@@ -61,6 +61,7 @@ wgpu.workspace = true
 surf = { package = "vgonio-surf", path = "../vgonio-surf" }
 base = { package = "vgonio-base", path = "../vgonio-base", features = ["winit"] }
 bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf" }
+jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
 wgut = { package = "vgonio-wgut", path = "../vgonio-wgut" }
 
 [build-dependencies]

@@ -7,9 +7,11 @@ use crate::{
         rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
         SimulationResultPoint,
     },
+};
+use base::{
+    math::{Sph2, Vec3A},
     optics::fresnel,
 };
-use base::math::{Sph2, Vec3A};
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,

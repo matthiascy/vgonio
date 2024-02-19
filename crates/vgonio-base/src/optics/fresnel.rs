@@ -160,8 +160,8 @@
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::optics::ior::RefractiveIndex;
-use base::{math, math::Vec3A};
+use crate::{math::rcp_f32, optics::ior::RefractiveIndex};
+use glam::Vec3A;
 
 /// Reflects a vector `wi` with respect to surface normal `n`.
 ///
@@ -459,10 +459,8 @@ pub fn reflectance_dielectric2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
     }
 
     let cos_t = (1.0 - sin_t * sin_t).sqrt();
-    let r_parl =
-        (eta_t * cos_i_abs - eta_i * cos_t) * math::rcp_f32(eta_t * cos_i_abs + eta_i * cos_t);
-    let r_perp =
-        (eta_i * cos_i_abs - eta_t * cos_t) * math::rcp_f32(eta_i * cos_i_abs + eta_t * cos_t);
+    let r_parl = (eta_t * cos_i_abs - eta_i * cos_t) * rcp_f32(eta_t * cos_i_abs + eta_i * cos_t);
+    let r_perp = (eta_i * cos_i_abs - eta_t * cos_t) * rcp_f32(eta_i * cos_i_abs + eta_t * cos_t);
 
     // No polarisation.
     0.5 * (r_parl * r_parl + r_perp * r_perp)

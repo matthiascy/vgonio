@@ -9,12 +9,12 @@ use crate::{
         },
         params::BsdfMeasurementParams,
     },
-    optics::{fresnel, ior::RefractiveIndex},
     partition::{PartitionScheme, SphericalPartition},
     RangeByStepSizeInclusive, SphericalDomain,
 };
 use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
+    optics::{fresnel, ior::RefractiveIndex},
     units::{Nanometres, Radians},
 };
 use rayon::prelude::*;
