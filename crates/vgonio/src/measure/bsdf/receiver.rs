@@ -194,6 +194,7 @@ impl Receiver {
         result: &SimulationResultPoint,
         collected: &mut CollectedData<'_>,
         orbit_radius: f32,
+        fresnel: bool,
     ) {
         const CHUNK_SIZE: usize = 1024;
         // TODO: deal with the domain of the receiver
@@ -229,13 +230,17 @@ impl Receiver {
                                         match energy[i] {
                                             Energy::Absorbed => continue,
                                             Energy::Reflected(ref mut e) => {
-                                                *e *= fresnel::reflectance(
-                                                    node.cos.unwrap_or(1.0),
-                                                    self.iors_i[i],
-                                                    self.iors_t[i],
-                                                );
-                                                if *e <= 0.0 {
-                                                    energy[i] = Energy::Absorbed;
+                                                if fresnel {
+                                                    *e *= fresnel::reflectance(
+                                                        node.cos.unwrap_or(1.0),
+                                                        self.iors_i[i],
+                                                        self.iors_t[i],
+                                                    );
+                                                    if *e <= 0.0 {
+                                                        energy[i] = Energy::Absorbed;
+                                                    }
+                                                } else {
+                                                    *e *= 1.0;
                                                 }
                                             }
                                         }

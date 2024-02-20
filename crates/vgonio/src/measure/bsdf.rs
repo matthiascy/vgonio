@@ -669,7 +669,12 @@ pub fn measure_bsdf_rt(
             let t = std::time::Instant::now();
 
             // Collect the tracing data into raw bsdf snapshots.
-            receiver.collect(&sim_result_point, &mut collected, orbit_radius);
+            receiver.collect(
+                &sim_result_point,
+                &mut collected,
+                orbit_radius,
+                params.fresnel,
+            );
 
             #[cfg(feature = "bench")]
             {

@@ -123,8 +123,7 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
-            // initialise_microfacet_bsdf_models(0.001, 2.0, 32, self.target)
-            initialise_microfacet_bsdf_models(0.001, 4.0, 64, self.target)
+            initialise_microfacet_bsdf_models(0.001, 2.0, 32, self.target)
                 // .into_par_iter()
                 .into_iter()
                 .filter_map(|model| {
@@ -287,7 +286,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
     }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        println!("isotropic residuals");
         Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
             self,
         )))

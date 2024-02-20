@@ -189,6 +189,10 @@ impl BsdfMeasurementTab {
                         );
                         ui.end_row();
 
+                        ui.label("Fresnel reflection:");
+                        ui.checkbox(&mut self.params.fresnel, "Fresnel reflection");
+                        ui.end_row();
+
                         ui.label("Simulation kind: ");
                         ui.horizontal_wrapped(|ui| {
                             #[cfg(feature = "embree")]
@@ -284,7 +288,7 @@ impl BsdfMeasurementTab {
                                             &mut self.debug.emitter_ray_param_t,
                                             1.0..=orbit_radius * 2.0,
                                         )
-                                        .text("t"),
+                                            .text("t"),
                                     )
                                     .changed()
                                 {

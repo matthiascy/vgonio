@@ -2,8 +2,6 @@
 //! Core library for vgonio.
 //! Contains all the basic types and functions for the vgonio project.
 
-// Enable _mm_rcp14_ss
-#![feature(stdsimd)]
 // Enable macro 2.0
 #![feature(decl_macro)]
 // Enable const trait implementation
@@ -15,11 +13,13 @@
 #![feature(const_format_args)]
 #![feature(adt_const_params)]
 #![feature(structural_match)]
+// Enable _mm_rcp14_ss
+#![feature(stdarch_x86_avx512)]
 #![warn(missing_docs)]
 
 use std::{
     fmt::Display,
-    marker::{ConstParamTy, StructuralEq, StructuralPartialEq},
+    marker::{ConstParamTy, StructuralPartialEq},
 };
 
 mod asset;
@@ -27,7 +27,9 @@ pub mod error;
 pub mod io;
 pub mod math;
 pub mod units;
+
 pub use asset::*;
+
 #[cfg(feature = "winit")]
 pub mod input;
 pub mod medium;
@@ -42,8 +44,6 @@ pub enum Isotropy {
     Anisotropic,
 }
 
-impl StructuralEq for Isotropy {}
-
 impl StructuralPartialEq for Isotropy {}
 
 impl Eq for Isotropy {}
@@ -51,8 +51,8 @@ impl Eq for Isotropy {}
 impl PartialEq<Self> for Isotropy {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Isotropic, Self::Isotropic) => true,
-            (Self::Anisotropic, Self::Anisotropic) => true,
+            (Isotropy::Isotropic, Isotropy::Isotropic) => true,
+            (Isotropy::Anisotropic, Isotropy::Anisotropic) => true,
             _ => false,
         }
     }

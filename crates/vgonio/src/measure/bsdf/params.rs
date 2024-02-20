@@ -78,6 +78,9 @@ pub struct BsdfMeasurementParams {
 
     /// Description of the detector.
     pub receiver: ReceiverParams,
+
+    /// Whether to apply the Fresnel equations during the simulation.
+    pub fresnel: bool,
 }
 
 impl Default for BsdfMeasurementParams {
@@ -111,6 +114,7 @@ impl Default for BsdfMeasurementParams {
                 scheme: PartitionScheme::Beckers,
                 retrieval: DataRetrieval::BsdfOnly,
             },
+            fresnel: true,
         }
     }
 }
@@ -198,6 +202,10 @@ impl BsdfMeasurementParams {
         hash_map.insert(
             Text::new_or_panic("vg.transmitted_medium"),
             AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.transmitted_medium))),
+        );
+        hash_map.insert(
+            Text::new_or_panic("vg.fresnel"),
+            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.fresnel))),
         );
         hash_map.insert(
             Text::new_or_panic("vg.emitter.num_rays"),

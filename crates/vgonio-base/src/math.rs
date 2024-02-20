@@ -4,6 +4,10 @@ use crate::units::{rad, radians, Radians};
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use std::{
+    arch::x86_64::{
+        _mm_add_ss, _mm_cvtsd_f64, _mm_cvtss_f32, _mm_mul_sd, _mm_mul_ss, _mm_rcp_ss, _mm_rsqrt_ss,
+        _mm_set_sd, _mm_set_ss, _mm_sub_sd,
+    },
     fmt::{Debug, Display, Formatter},
     ops::{Add, Mul},
 };
@@ -14,7 +18,8 @@ mod axis;
 pub use aabb::*;
 pub use axis::*;
 
-pub use glam::*; // TODO: remove this
+pub use glam::*;
+// TODO: remove this
 use num_traits::Float;
 
 // TODO: self-contained math library, tailored for specific use cases
@@ -663,7 +668,7 @@ mod tests {
     fn spherical_cartesian_conversion() {
         println!(
             "{:?}",
-            spherical_to_cartesian(1.0, radians!(0.0), radians!(0.0),)
+            spherical_to_cartesian(1.0, radians!(0.0), radians!(0.0))
         );
         println!(
             "{:?}",
