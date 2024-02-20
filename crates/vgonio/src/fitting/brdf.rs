@@ -7,6 +7,7 @@ use crate::{
 use base::{
     math::{spherical_to_cartesian, Vec3},
     optics::ior::RefractiveIndex,
+    Isotropy,
 };
 use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
@@ -122,22 +123,24 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
-            initialise_microfacet_bsdf_models(0.001, 2.0, 32, self.target)
+            // initialise_microfacet_bsdf_models(0.001, 2.0, 32, self.target)
+            initialise_microfacet_bsdf_models(0.001, 4.0, 64, self.target)
                 // .into_par_iter()
                 .into_iter()
                 .filter_map(|model| {
                     log::debug!(
-                        "Fitting BRDF model: {:?} with αx = {} αy = {}",
+                        "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
                         model.kind(),
                         model.alpha_x(),
                         model.alpha_y()
                     );
-                    let problem = MicrofacetBasedBrdfFittingProblemProxy::new(
-                        &self.measured,
-                        model,
-                        &self.iors_i,
-                        &self.iors_t,
-                    );
+                    let problem =
+                        MicrofacetBasedBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                            &self.measured,
+                            model,
+                            &self.iors_i,
+                            &self.iors_t,
+                        );
                     let (result, report) = solver.minimize(problem);
                     log::debug!(
                         "Fitted αx = {} αy = {}, report: {:?}",
@@ -170,7 +173,7 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
     }
 }
 
-struct MicrofacetBasedBrdfFittingProblemProxy<'a> {
+struct MicrofacetBasedBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// The measured BSDF data.
     measured: &'a MeasuredBsdfData,
     /// The target BSDF model.
@@ -189,7 +192,47 @@ struct MicrofacetBasedBrdfFittingProblemProxy<'a> {
     wos: Box<[Vec3]>,
 }
 
-impl<'a> MicrofacetBasedBrdfFittingProblemProxy<'a> {
+fn eval_residuals<const I: Isotropy>(
+    problem: &MicrofacetBasedBrdfFittingProblemProxy<I>,
+) -> Box<[f64]> {
+    // The number of residuals is the number of patches times the number of
+    // snapshots.
+    let n_patches = problem.partition.num_patches();
+    let residuals_count = n_patches * problem.measured.snapshots.len();
+    let mut rs = Box::new_uninit_slice(residuals_count);
+    problem
+        .measured
+        .snapshots
+        .iter()
+        .enumerate()
+        .for_each(|(i, snapshot)| {
+            let wi = {
+                let sph = snapshot.w_i;
+                spherical_to_cartesian(1.0, sph.theta, sph.phi)
+            };
+            problem
+                .partition
+                .patches
+                .iter()
+                .enumerate()
+                .for_each(|(j, patch)| {
+                    let wo = {
+                        let c = patch.center();
+                        spherical_to_cartesian(1.0, c.theta, c.phi)
+                    };
+                    // Only the first wavelength is used. TODO: Use all
+                    let measured = snapshot.samples[j][0] as f64;
+                    let modelled =
+                        problem
+                            .model
+                            .eval(wi, wo, &problem.iors_i[0], &problem.iors_t[0]);
+                    rs[i * n_patches + j].write(modelled - measured);
+                });
+        });
+    unsafe { rs.assume_init() }
+}
+
+impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
     pub fn new(
         measured: &'a MeasuredBsdfData,
         model: Box<dyn MicrofacetBasedBrdfFittingModel>,
@@ -227,7 +270,45 @@ impl<'a> MicrofacetBasedBrdfFittingProblemProxy<'a> {
     }
 }
 
-impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MicrofacetBasedBrdfFittingProblemProxy<'a> {
+impl<'a> LeastSquaresProblem<f64, Dyn, U1>
+    for MicrofacetBasedBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
+{
+    type ResidualStorage = VecStorage<f64, Dyn, U1>;
+    type JacobianStorage = Owned<f64, Dyn, U1>;
+    type ParameterStorage = Owned<f64, U1, U1>;
+
+    fn set_params(&mut self, params: &Vector<f64, U1, Self::ParameterStorage>) {
+        self.model.set_alpha_x(params[0]);
+        self.model.set_alpha_y(params[0]);
+    }
+
+    fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
+        Vector::<f64, U1, Self::ParameterStorage>::new(self.model.alpha_x())
+    }
+
+    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
+        println!("isotropic residuals");
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
+            self,
+        )))
+    }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
+        // Temporary implementation: only first wavelength is used.
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+            &self.model.partial_derivatives_isotropic(
+                &self.wis,
+                &self.wos,
+                &self.iors_i[0],
+                &self.iors_t[0],
+            ),
+        ))
+    }
+}
+
+impl<'a> LeastSquaresProblem<f64, Dyn, U2>
+    for MicrofacetBasedBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
+{
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
     type ParameterStorage = Owned<f64, U2, U1>;
@@ -235,41 +316,9 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MicrofacetBasedBrdfFittingProblem
     impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        // The number of residuals is the number of patches times the number of
-        // snapshots.
-        let n_patches = self.partition.num_patches();
-        let residuals_count = n_patches * self.measured.snapshots.len();
-        let residuals = {
-            let mut rs = Box::new_uninit_slice(residuals_count);
-            self.measured
-                .snapshots
-                .iter()
-                .enumerate()
-                .for_each(|(i, snapshot)| {
-                    let wi = {
-                        let sph = snapshot.w_i;
-                        spherical_to_cartesian(1.0, sph.theta, sph.phi)
-                    };
-                    self.partition
-                        .patches
-                        .iter()
-                        .enumerate()
-                        .for_each(|(j, patch)| {
-                            let wo = {
-                                let c = patch.center();
-                                spherical_to_cartesian(1.0, c.theta, c.phi)
-                            };
-                            // Only the first wavelength is used. TODO: Use all
-                            let measured = snapshot.samples[j][0] as f64;
-                            let modelled =
-                                self.model.eval(wi, wo, &self.iors_i[0], &self.iors_t[0]);
-                            rs[i * n_patches + j].write(modelled - measured);
-                        });
-                });
-            unsafe { rs.assume_init() }
-        };
-
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&residuals))
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
+            self,
+        )))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {

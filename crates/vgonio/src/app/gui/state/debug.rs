@@ -13,11 +13,11 @@ use crate::{
     partition::SphericalPartition,
 };
 use base::math::{Mat4, Sph2, Vec3};
+use gfxkit::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
 use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
-use wgut::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 
 pub const DEBUG_DRAWING_SHADER: &str = r#"
 struct Uniforms {

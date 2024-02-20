@@ -10,15 +10,15 @@ pub use context::RawGuiContext;
 use egui_winit::EventResponse;
 pub use renderer::GuiRenderer;
 
+use gfxkit::{
+    context::{GpuContext, ScreenDescriptor, WindowSurface},
+    render_pass::remap_depth,
+    texture::Texture,
+};
 use std::{
     ops::Deref,
     path::Path,
     sync::{Arc, RwLock},
-};
-use wgut::{
-    context::{GpuContext, ScreenDescriptor, WindowSurface},
-    render_pass::remap_depth,
-    texture::Texture,
 };
 use winit::{event::WindowEvent, window::Window};
 

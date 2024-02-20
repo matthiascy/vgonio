@@ -13,9 +13,14 @@
 // Enable const mut references
 #![feature(const_mut_refs)]
 #![feature(const_format_args)]
+#![feature(adt_const_params)]
+#![feature(structural_match)]
 #![warn(missing_docs)]
 
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    marker::{ConstParamTy, StructuralEq, StructuralPartialEq},
+};
 
 mod asset;
 pub mod error;
@@ -29,13 +34,31 @@ pub mod medium;
 pub mod optics;
 
 /// Indicates whether something is uniform in all directions or not.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, Hash)]
 pub enum Isotropy {
     /// Uniformity in all directions.
     Isotropic,
     /// Non-uniformity in some directions.
     Anisotropic,
 }
+
+impl StructuralEq for Isotropy {}
+
+impl StructuralPartialEq for Isotropy {}
+
+impl Eq for Isotropy {}
+
+impl PartialEq<Self> for Isotropy {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Isotropic, Self::Isotropic) => true,
+            (Self::Anisotropic, Self::Anisotropic) => true,
+            _ => false,
+        }
+    }
+}
+
+impl ConstParamTy for Isotropy {}
 
 /// Version of anything in vgonio.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

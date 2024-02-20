@@ -1,10 +1,10 @@
-use std::fmt::{Debug, Formatter};
 use base::{
     math::{cartesian_to_spherical, rcp_f64, spherical_to_cartesian, sqr, Vec3},
     optics::{fresnel, ior::RefractiveIndex},
 };
 use libm::log;
 use log::log;
+use std::fmt::{Debug, Formatter};
 
 use crate::{
     dist::TrowbridgeReitzDistribution, impl_common_methods, MicrofacetBasedBrdfFittingModel,
@@ -37,16 +37,40 @@ impl MicrofacetBasedBrdfModel for TrowbridgeReitzBrdfModel {
     impl_common_methods!();
 
     fn eval(&self, wi: Vec3, wo: Vec3, ior_i: &RefractiveIndex, ior_t: &RefractiveIndex) -> f64 {
-        debug_assert!(wi.is_normalized(), "incident direction is not normalized");p
+        debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
+        let cos_theta_i = wi.z;
+        let cos_theta_o = wo.z;
+        if cos_theta_i.abs() < 1.0e-6 || cos_theta_o.abs() < 1.0e-6 {
+            return 0.0;
+        }
         let wh = (wi + wo).normalize();
         let dist = TrowbridgeReitzDistribution::new(self.alpha_x, self.alpha_y);
-        let d = dist.eval_adf(wh.z as f64, wh.y.atan2(wh.x) as f64);
+        let (_, theta_h, phi_h) = cartesian_to_spherical(wh, 1.0);
+        let d = dist.eval_adf(theta_h.as_f64(), phi_h.cos() as f64);
+        if d.abs() < 1.0e-6 {
+            return 0.0;
+        }
         let g = dist.eval_msf1(wh, wi) * dist.eval_msf1(wh, wo);
+        if g.abs() < 1.0e-6 {
+            return 0.0;
+        }
         // TODO: test medium type
         let f = fresnel::reflectance_dielectric_conductor(wi.z.abs(), ior_i.eta, ior_t.eta, ior_t.k)
             as f64;
-        (d * g * f) / (4.0 * wi.z as f64 * wo.z as f64)
+        let val = (d * g * f) / (4.0 * wi.z as f64 * wo.z as f64);
+        assert_ne!(
+            val.is_nan(),
+            true,
+            "d = {}, g = {}, f = {}, wi = {:?}, wo = {:?}, wh = {:?}",
+            d,
+            g,
+            f,
+            wi,
+            wo,
+            wh
+        );
+        val
     }
 
     fn eval_spectrum(
@@ -267,6 +291,122 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
 
                 result[i * wos.len() * 2 + j * 2].write(dfr_dalpha_x);
                 result[i * wos.len() * 2 + j * 2 + 1].write(dfr_dalpha_y);
+            }
+        }
+        unsafe { result.assume_init() }
+    }
+
+    fn partial_derivatives_isotropic(
+        &self,
+        wis: &[Vec3],
+        wos: &[Vec3],
+        ior_i: &RefractiveIndex,
+        ior_t: &RefractiveIndex,
+    ) -> Box<[f64]> {
+        let mut result = Box::new_uninit_slice(wis.len() * wos.len());
+        log::debug!("---- ---- TrowbridgeReitzBrdfModel::partial_derivatives_isotropic");
+        // TODO: test medium type
+        for i in 0..wis.len() {
+            let wi = wis[i];
+            for j in 0..wos.len() {
+                let wo = wos[j];
+                debug_assert!(wi.is_normalized(), "incident direction is not normalized");
+                debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
+                let wh = (wi + wo).normalize();
+                let cos_theta_h = wh.z.abs();
+                let cos_theta_h2 = sqr(cos_theta_h as f64);
+                let cos_theta_h4 = sqr(cos_theta_h2);
+                let cos_theta_i = wi.z.abs();
+                let cos_theta_o = wo.z.abs();
+
+                if cos_theta_h4 < 1.0e-6 || cos_theta_i.abs() < 1.0e-6 || cos_theta_o.abs() < 1.0e-6
+                {
+                    result[i * wos.len() + j].write(0.0);
+                    continue;
+                }
+
+                let tan_theta_h2 = (1.0 - cos_theta_h2) * rcp_f64(cos_theta_h2);
+                if tan_theta_h2.is_infinite() {
+                    result[i * wos.len() + j].write(0.0);
+                    continue;
+                }
+
+                let f = fresnel::reflectance_dielectric_conductor(
+                    cos_theta_i.abs(),
+                    ior_i.eta,
+                    ior_t.eta,
+                    ior_t.k,
+                ) as f64;
+
+                let alpha = self.alpha_x;
+                let alpha2 = sqr(self.alpha_x);
+
+                let cos_theta_hi = wi.dot(wh).abs() as f64;
+                let cos_theta_hi2 = sqr(cos_theta_hi);
+                let tan_theta_hi2 = (1.0 - cos_theta_hi2) * rcp_f64(cos_theta_hi2);
+                let ai = (1.0 + alpha2 * tan_theta_hi2).sqrt();
+
+                let cos_theta_ho = wo.dot(wh).abs() as f64;
+                let cos_theta_ho2 = sqr(cos_theta_ho);
+                let tan_theta_ho2 = (1.0 - cos_theta_ho2) * rcp_f64(cos_theta_ho2);
+                let ao = (1.0 + alpha2 * tan_theta_ho2).sqrt();
+
+                let one_plus_ai = 1.0 + ai;
+                let one_plus_ao = 1.0 + ao;
+                let one_plus_ai2 = sqr(one_plus_ai);
+                let one_plus_ao2 = sqr(one_plus_ao);
+
+                let nominator = f
+                    * alpha
+                    * (one_plus_ai
+                        * (4.0 * one_plus_ao + tan_theta_ho2 * (5.0 * alpha2 + tan_theta_h2))
+                        + tan_theta_hi2
+                            * (tan_theta_h2 * (1.0 + ao + 2.0 * alpha2 * tan_theta_ho2)
+                                + alpha2 * (5.0 + 5.0 * ao + 6.0 * alpha2 * tan_theta_ho2)));
+                let denominator = std::f64::consts::PI
+                    * one_plus_ai2
+                    * one_plus_ao2
+                    * cos_theta_h4
+                    * cos_theta_i as f64
+                    * cos_theta_o as f64
+                    * (alpha2 + tan_theta_h2).powi(3)
+                    * ai
+                    * ao;
+
+                let dfr_dalpha = nominator * rcp_f64(denominator);
+
+                assert_ne!(
+                    dfr_dalpha.is_nan(),
+                    true,
+                    "== NaN\n alpha = {}, alpha2 = {}, cos_theta_hi = {}, tan_theta_hi2 = {}, ai \
+                     = {}, cos_theta_ho = {}, tan_theta_ho2 = {}, ao = {}, one_plus_ai = {}, \
+                     one_plus_ao = {}, nominator = {}, denominator = {}, dfr_dalpha = {} at wi = \
+                     {:?} - <{}, {}> , wo = {:?} - <{}, {}>, wh = {:?} - <{}, {}>",
+                    alpha,
+                    alpha2,
+                    cos_theta_hi,
+                    tan_theta_hi2,
+                    ai,
+                    cos_theta_ho,
+                    tan_theta_ho2,
+                    ao,
+                    one_plus_ai,
+                    one_plus_ao,
+                    nominator,
+                    denominator,
+                    dfr_dalpha,
+                    wi,
+                    cartesian_to_spherical(wi, 1.0).1.to_degrees(),
+                    cartesian_to_spherical(wi, 1.0).2.to_degrees(),
+                    wo,
+                    cartesian_to_spherical(wo, 1.0).1.to_degrees(),
+                    cartesian_to_spherical(wo, 1.0).2.to_degrees(),
+                    wh,
+                    cartesian_to_spherical(wh, 1.0).1.to_degrees(),
+                    cartesian_to_spherical(wh, 1.0).2.to_degrees()
+                );
+
+                result[i * wos.len() + j].write(dfr_dalpha);
             }
         }
         unsafe { result.assume_init() }

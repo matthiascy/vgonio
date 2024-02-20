@@ -230,4 +230,12 @@ pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
         ior_i: &RefractiveIndex,
         ior_t: &RefractiveIndex,
     ) -> Box<[f64]>;
+
+    fn partial_derivatives_isotropic(
+        &self,
+        wis: &[Vec3],
+        wos: &[Vec3],
+        ior_i: &RefractiveIndex,
+        ior_t: &RefractiveIndex,
+    ) -> Box<[f64]>;
 }

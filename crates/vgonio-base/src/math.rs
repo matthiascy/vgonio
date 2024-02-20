@@ -315,7 +315,7 @@ pub fn theta_of(v: &Vec3) -> Radians {
 /// Newton-Raphson iteration is used to compute the reciprocal.
 #[inline(always)]
 pub fn rcp_f32(x: f32) -> f32 {
-    // Intel' intrinsic will give us NaN if x is 0.0 or -0.0
+    // Intel's intrinsic will give us NaN if x is 0.0 or -0.0
     if x == 0.0 {
         return f32::INFINITY * x.signum();
     }

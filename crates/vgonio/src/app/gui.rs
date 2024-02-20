@@ -44,7 +44,7 @@ use crate::{
     measure,
 };
 use base::{error::VgonioError, input::InputState};
-use wgut::context::{GpuContext, WgpuConfig, WindowSurface};
+use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},

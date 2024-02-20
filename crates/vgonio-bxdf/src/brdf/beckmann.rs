@@ -35,6 +35,7 @@ impl MicrofacetBasedBrdfModel for BeckmannBrdfModel {
     impl_common_methods!();
 
     fn eval(&self, wi: Vec3, wo: Vec3, ior_i: &RefractiveIndex, ior_t: &RefractiveIndex) -> f64 {
+        // TODO: recheck the implementation
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
         let wh = (wi + wo).normalize();
@@ -54,6 +55,7 @@ impl MicrofacetBasedBrdfModel for BeckmannBrdfModel {
         iors_i: &[RefractiveIndex],
         iors_t: &[RefractiveIndex],
     ) -> Box<[f64]> {
+        // TODO: recheck the implementation
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
         debug_assert_eq!(
@@ -196,5 +198,15 @@ impl MicrofacetBasedBrdfFittingModel for BeckmannBrdfModel {
             }
         }
         unsafe { result.assume_init() }
+    }
+
+    fn partial_derivatives_isotropic(
+        &self,
+        wis: &[Vec3],
+        wos: &[Vec3],
+        ior_i: &RefractiveIndex,
+        ior_t: &RefractiveIndex,
+    ) -> Box<[f64]> {
+        todo!()
     }
 }

@@ -3104,9 +3104,9 @@ dependencies = [
  "uuid",
  "vgonio-base",
  "vgonio-bxdf",
+ "vgonio-gfxkit",
  "vgonio-jabr",
  "vgonio-surf",
- "vgonio-wgut",
  "wgpu",
  "winit",
 ]
@@ -3142,7 +3142,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-gfxkit"
+version = "0.3.0"
+dependencies = [
+ "bytemuck",
+ "futures-intrusive",
+ "image",
+ "log",
+ "pollster",
+ "rayon",
+ "uuid",
+ "vgonio-base",
+ "vgonio-surf",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "vgonio-jabr"
+version = "0.3.0"
+
+[[package]]
+name = "vgonio-nlopt"
 version = "0.3.0"
 
 [[package]]
@@ -3166,7 +3187,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vgonio-uikt"
+name = "vgonio-uikit"
 version = "0.3.0"
 
 [[package]]
@@ -3178,23 +3199,6 @@ dependencies = [
  "rand",
  "rayon",
  "vgonio-jabr",
-]
-
-[[package]]
-name = "vgonio-wgut"
-version = "0.3.0"
-dependencies = [
- "bytemuck",
- "futures-intrusive",
- "image",
- "log",
- "pollster",
- "rayon",
- "uuid",
- "vgonio-base",
- "vgonio-surf",
- "wgpu",
- "winit",
 ]
 
 [[package]]

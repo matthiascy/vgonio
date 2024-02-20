@@ -7,12 +7,12 @@ use std::{
 use uuid::Uuid;
 
 use base::math::{Mat4, Vec4};
-use surf::MicroSurface;
-use wgut::{
+use gfxkit::{
     camera::{ProjectionKind, ViewProjUniform},
     context::GpuContext,
     texture::Texture,
 };
+use surf::MicroSurface;
 
 use crate::app::{
     cache::{Handle, RawCache},

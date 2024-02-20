@@ -8,12 +8,12 @@ use base::{
     math::{Mat4, Vec3},
     units::deg,
 };
-use wgpu::util::DeviceExt;
-use wgut::{
+use gfxkit::{
     camera::{Camera, Projection, ProjectionKind},
     context::GpuContext,
     texture::Texture,
 };
+use wgpu::util::DeviceExt;
 
 use crate::{
     app::gui::{

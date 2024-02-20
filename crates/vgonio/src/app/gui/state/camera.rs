@@ -1,5 +1,5 @@
 use base::{input::InputState, math::Vec3};
-use wgut::camera::{
+use gfxkit::camera::{
     Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind,
 };
 

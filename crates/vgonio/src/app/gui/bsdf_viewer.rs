@@ -3,14 +3,14 @@ use base::{
     math,
     math::{Mat4, Vec3},
 };
-use std::{
-    borrow::Cow,
-    sync::{Arc, RwLock},
-};
-use wgut::{
+use gfxkit::{
     camera::{Camera, Projection, ProjectionKind},
     context::GpuContext,
     texture::Texture,
+};
+use std::{
+    borrow::Cow,
+    sync::{Arc, RwLock},
 };
 
 use crate::app::gui::event::EventLoopProxy;

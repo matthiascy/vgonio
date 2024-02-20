@@ -1,10 +1,10 @@
 use egui::epaint;
-use std::{borrow::Cow, collections::HashMap};
-use type_map::TypeMap;
-use wgut::{
+use gfxkit::{
     buffers::SlicedBuffer,
     context::{ScreenDescriptor, UiUniforms},
 };
+use std::{borrow::Cow, collections::HashMap};
+use type_map::TypeMap;
 
 type SetupCallback = dyn Fn(
         &wgpu::Device,

@@ -1,5 +1,5 @@
 [package]
-name = "vgonio-wgut"
+name = "vgonio-gfxkit"
 authors.workspace = true
 edition.workspace = true
 version.workspace = true

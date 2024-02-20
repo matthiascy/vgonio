@@ -12,15 +12,15 @@ use base::{
     units::Radians,
 };
 use bytemuck::{Pod, Zeroable};
-use std::path::Path;
-use surf::MicroSurface;
-use wgpu::{util::DeviceExt, ColorTargetState};
-use wgut::{
+use gfxkit::{
     camera::{Camera, Projection},
     context::{GpuContext, WgpuConfig},
     render_pass::{tex_fmt_bpp, RenderPass},
     texture::Texture,
 };
+use std::path::Path;
+use surf::MicroSurface;
+use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by occlusion of
 /// micro-facets) function of a micro-surface. For a certain viewing direction,

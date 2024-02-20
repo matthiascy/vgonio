@@ -10,6 +10,7 @@ use base::{
     units::{Length, LengthMeasurement, Nanometres},
     Asset,
 };
+use gfxkit::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     any::TypeId,
     collections::HashMap,
@@ -21,7 +22,6 @@ use std::{
 };
 use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 use uuid::Uuid;
-use wgut::{context::GpuContext, mesh::RenderableMesh};
 
 /// Handle referencing loaded assets.
 pub struct Handle<T>

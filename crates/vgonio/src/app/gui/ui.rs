@@ -28,13 +28,13 @@ use crate::{
 use base::io::{CompressionScheme, FileEncoding};
 use bxdf::MicrofacetBasedBrdfModelKind;
 use egui::NumExt;
+use gfxkit::context::GpuContext;
 use std::{
     borrow::Cow,
     path::PathBuf,
     sync::{Arc, RwLock},
 };
 use surf::MicroSurface;
-use wgut::context::GpuContext;
 
 use super::{docking::DockSpace, event::EventResponse};
 

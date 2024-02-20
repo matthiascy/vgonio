@@ -1,5 +1,5 @@
 [package]
-name = "vgonio-uikt"
+name = "vgonio-uikit"
 authors.workspace = true
 edition.workspace = true
 version.workspace = true
