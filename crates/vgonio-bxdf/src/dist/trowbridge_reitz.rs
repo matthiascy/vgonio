@@ -2,7 +2,7 @@ use crate::{
     impl_common_methods, MicrofacetDistributionFittingModel, MicrofacetDistributionModel,
     MicrofacetDistributionModelKind,
 };
-use base::math::{cbr, rcp_f64, sqr, Vec3};
+use base::math::{cartesian_to_spherical, cbr, rcp_f64, sqr, Vec3};
 use std::fmt::Debug;
 
 /// Trowbridge-Reitz(GGX) microfacet distribution function.
@@ -71,9 +71,13 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
         if m.dot(v) <= 0.0 {
             return 0.0;
         }
+        let (_, _, phi_m) = cartesian_to_spherical(m, 1.0);
+        let cos_phi_m2 = sqr(phi_m.cos()) as f64;
+        let sin_phi_m2 = 1.0 - cos_phi_m2;
         let cos_theta_v2 = sqr(v.z as f64);
         let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
-        2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * self.alpha_x * self.alpha_y).sqrt())
+        let alpha2 = sqr(self.alpha_x) * cos_phi_m2 + sqr(self.alpha_y) * sin_phi_m2;
+        2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * alpha2).sqrt())
     }
 
     fn clone_box(&self) -> Box<dyn MicrofacetDistributionModel> { Box::new(*self) }

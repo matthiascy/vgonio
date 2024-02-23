@@ -288,7 +288,7 @@ impl BsdfMeasurementTab {
                                             &mut self.debug.emitter_ray_param_t,
                                             1.0..=orbit_radius * 2.0,
                                         )
-                                            .text("t"),
+                                        .text("t"),
                                     )
                                     .changed()
                                 {

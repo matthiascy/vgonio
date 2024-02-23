@@ -419,6 +419,38 @@ pub fn rsqrt(x: f32) -> f32 {
     }
 }
 
+pub fn cos_theta(v: &Vec3) -> f32 { v.z }
+
+pub fn cos_theta2(v: &Vec3) -> f32 { sqr(v.z) }
+
+pub fn abs_cos_theta(v: &Vec3) -> f32 { v.z.abs() }
+
+pub fn sin_theta2(v: &Vec3) -> f32 { (1.0 - cos_theta2(v)).max(0.0) }
+
+pub fn sin_theta(v: &Vec3) -> f32 { sin_theta2(v).sqrt() }
+
+pub fn tan_theta(v: &Vec3) -> f32 { sin_theta(v) / cos_theta(v) }
+
+pub fn tan_theta2(v: &Vec3) -> f32 { sin_theta2(v) / cos_theta2(v) }
+
+pub fn cos_phi(v: &Vec3) -> f32 {
+    let sin_theta = sin_theta(v);
+    if sin_theta == 0.0 {
+        1.0
+    } else {
+        (v.x / sin_theta).clamp(-1.0, 1.0)
+    }
+}
+
+pub fn sin_phi(v: &Vec3) -> f32 {
+    let sin_theta = sin_theta(v);
+    if sin_theta == 0.0 {
+        0.0
+    } else {
+        (v.y / sin_theta).clamp(-1.0, 1.0)
+    }
+}
+
 /// Returns the fused multiply-subtract of the given values.
 ///
 /// This is equivalent to `a * b - c`. However, this function may fall back to

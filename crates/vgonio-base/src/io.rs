@@ -205,7 +205,8 @@ impl From<std::io::Error> for WriteFileErrorKind {
 #[repr(u8)]
 pub enum FileEncoding {
     /// The data is encoded as ascii text (plain text).
-    Ascii = 0x23, // '#'
+    Ascii = 0x23,
+    // '#'
     /// The data is encoded as binary data.
     Binary = 0x21, // '!'
 }
@@ -350,7 +351,15 @@ impl<E: HeaderExt> Header<E> {
     /// Note: the length of the whole file is not known at this point. Therefore
     /// the length field is set to 0. The length field is updated after the
     /// whole file is written.
-    pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), WriteFileErrorKind> {
+    pub fn write<W: Write + Seek>(
+        &self,
+        writer: &mut BufWriter<W>,
+    ) -> Result<(), WriteFileErrorKind> {
+        log::debug!(
+            "Writing header to file, starting at position {:?}, buffer len: {}",
+            writer.stream_len(),
+            writer.buffer().len()
+        );
         writer.write_all(E::MAGIC)?;
         writer.write_all(&self.meta.version.as_u32().to_le_bytes())?;
         writer.write_all(&self.meta.length.to_le_bytes())?;
@@ -360,6 +369,11 @@ impl<E: HeaderExt> Header<E> {
         writer.write_all(&[self.meta.compression as u8])?;
         writer.write_all(&[0u8; 1])?; // padding
         self.extra.write(self.meta.version, writer)?;
+        log::debug!(
+            "Finished writing header to file, ending at position {:?}, buffer len: {}",
+            writer.stream_len(),
+            writer.buffer().len()
+        );
         Ok(())
     }
 

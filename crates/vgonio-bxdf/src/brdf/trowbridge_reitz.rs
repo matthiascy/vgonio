@@ -54,22 +54,9 @@ impl MicrofacetBasedBrdfModel for TrowbridgeReitzBrdfModel {
             return 0.0;
         }
         // TODO: test medium type
-        // let f = fresnel::reflectance_dielectric_conductor(wi.z.abs(), ior_i.eta,
-        // ior_t.eta, ior_t.k)     as f64;
-        let f = 1.0;
-        let val = (d * g * f) / (4.0 * wi.z as f64 * wo.z as f64);
-        assert_ne!(
-            val.is_nan(),
-            true,
-            "d = {}, g = {}, f = {}, wi = {:?}, wo = {:?}, wh = {:?}",
-            d,
-            g,
-            f,
-            wi,
-            wo,
-            wh
-        );
-        val
+        let f = fresnel::reflectance_dielectric_conductor(wi.z.abs(), ior_i.eta, ior_t.eta, ior_t.k)
+            as f64;
+        (d * g * f) / (4.0 * wi.z as f64 * wo.z as f64)
     }
 
     fn eval_spectrum(
@@ -134,13 +121,12 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
 
                 let cos_theta_i = wi.z;
                 let cos_theta_o = wo.z;
-                // let f = fresnel::reflectance_dielectric_conductor(
-                //     cos_theta_i.abs(),
-                //     ior_i.eta,
-                //     ior_t.eta,
-                //     ior_t.k,
-                // ) as f64;
-                let f = 1.0;
+                let f = fresnel::reflectance_dielectric_conductor(
+                    cos_theta_i.abs(),
+                    ior_i.eta,
+                    ior_t.eta,
+                    ior_t.k,
+                ) as f64;
 
                 let alpha_x2 = self.alpha_x * self.alpha_x;
                 let alpha_y2 = self.alpha_y * self.alpha_y;
@@ -190,7 +176,7 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
                 let sin_phi_h = phi_h.sin() as f64;
                 let b = 1.0
                     + (sqr(cos_phi_h) * rcp_f64(alpha_x2) + sqr(sin_phi_h) * rcp_f64(alpha_y2))
-                    * tan_theta_h2;
+                        * tan_theta_h2;
 
                 let one_plus_ahi = 1.0 + ahi;
                 let one_plus_aho = 1.0 + aho;
@@ -214,21 +200,21 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
                 let rcp_ahi = if ahi.abs() < 1.0e-6 { 0.0 } else { 1.0 / ahi };
                 let dfr_dalpha_x = coeff_dfr_dalpha_x
                     * (-cos_phi_ho * b * one_plus_ahi * tan_theta_ho2 * rcp_aho
-                    - cos_phi_hi * b * one_plus_aho * tan_theta_hi2 * rcp_ahi
-                    + (4.0 * cos_phi_h2 * tan_theta_h2 * rcp_f64(alpha_x4)
-                    - b * rcp_f64(alpha_x2))
-                    * one_plus_ahi
-                    * one_plus_aho);
+                        - cos_phi_hi * b * one_plus_aho * tan_theta_hi2 * rcp_ahi
+                        + (4.0 * cos_phi_h2 * tan_theta_h2 * rcp_f64(alpha_x4)
+                            - b * rcp_f64(alpha_x2))
+                            * one_plus_ahi
+                            * one_plus_aho);
 
                 let coeff_dfr_dalpha_y = f * rcp_f64(common * self.alpha_x);
                 let sin_phi_h2 = sqr(sin_phi_h);
                 let dfr_dalpha_y = coeff_dfr_dalpha_y
                     * (-sin_phi_ho * b * one_plus_ahi * tan_theta_ho2 * rcp_aho
-                    - sin_phi_hi * b * one_plus_aho * tan_theta_hi2 * rcp_ahi
-                    + (4.0 * sin_phi_h2 * tan_theta_h2 * rcp_f64(alpha_y4)
-                    - b * rcp_f64(alpha_y2))
-                    * one_plus_ahi
-                    * one_plus_aho);
+                        - sin_phi_hi * b * one_plus_aho * tan_theta_hi2 * rcp_ahi
+                        + (4.0 * sin_phi_h2 * tan_theta_h2 * rcp_f64(alpha_y4)
+                            - b * rcp_f64(alpha_y2))
+                            * one_plus_ahi
+                            * one_plus_aho);
 
                 assert_ne!(
                     dfr_dalpha_x.is_infinite() || dfr_dalpha_y.is_infinite(),
@@ -329,13 +315,12 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
                     continue;
                 }
 
-                // let f = fresnel::reflectance_dielectric_conductor(
-                //     cos_theta_i.abs(),
-                //     ior_i.eta,
-                //     ior_t.eta,
-                //     ior_t.k,
-                // ) as f64;
-                let f = 1.0;
+                let f = fresnel::reflectance_dielectric_conductor(
+                    cos_theta_i.abs(),
+                    ior_i.eta,
+                    ior_t.eta,
+                    ior_t.k,
+                ) as f64;
 
                 let alpha = self.alpha_x;
                 let alpha2 = sqr(self.alpha_x);
@@ -357,58 +342,24 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
 
                 let part_one = -f
                     * rcp_f64(
-                    std::f64::consts::PI
-                        * cos_theta_h4
-                        * cos_theta_i as f64
-                        * cos_theta_o as f64,
-                );
+                        std::f64::consts::PI
+                            * cos_theta_h4
+                            * cos_theta_i as f64
+                            * cos_theta_o as f64,
+                    );
 
                 let nominator =
                     (alpha.powi(3) * one_plus_ai * (2.0 + 2.0 * ao + 3.0 * alpha2 * tan_theta_ho2))
                         + (alpha.powi(5)
-                        * tan_theta_hi2
-                        * (3.0 + 3.0 * ao + 4.0 * alpha2 * tan_theta_ho2))
+                            * tan_theta_hi2
+                            * (3.0 + 3.0 * ao + 4.0 * alpha2 * tan_theta_ho2))
                         - (alpha
-                        * tan_theta_h2
-                        * (alpha2 * one_plus_ao * tan_theta_hi2
-                        + one_plus_ai2 * (2.0 + 2.0 * ao + alpha2 * tan_theta_ho2)));
+                            * tan_theta_h2
+                            * (alpha2 * one_plus_ao * tan_theta_hi2
+                                + one_plus_ai2 * (2.0 + 2.0 * ao + alpha2 * tan_theta_ho2)));
                 let denominator =
                     one_plus_ai2 * one_plus_ao2 * (alpha2 + tan_theta_h2).powi(3) * ai * ao;
-
-                let dfr_dalpha = part_one * nominator * rcp_f64(denominator);
-
-                assert_ne!(
-                    dfr_dalpha.is_nan(),
-                    true,
-                    "== NaN\n alpha = {}, alpha2 = {}, cos_theta_hi = {}, tan_theta_hi2 = {}, ai \
-                     = {}, cos_theta_ho = {}, tan_theta_ho2 = {}, ao = {}, one_plus_ai = {}, \
-                     one_plus_ao = {}, nominator = {}, denominator = {}, dfr_dalpha = {} at wi = \
-                     {:?} - <{}, {}> , wo = {:?} - <{}, {}>, wh = {:?} - <{}, {}>",
-                    alpha,
-                    alpha2,
-                    cos_theta_hi,
-                    tan_theta_hi2,
-                    ai,
-                    cos_theta_ho,
-                    tan_theta_ho2,
-                    ao,
-                    one_plus_ai,
-                    one_plus_ao,
-                    nominator,
-                    denominator,
-                    dfr_dalpha,
-                    wi,
-                    cartesian_to_spherical(wi, 1.0).1.to_degrees(),
-                    cartesian_to_spherical(wi, 1.0).2.to_degrees(),
-                    wo,
-                    cartesian_to_spherical(wo, 1.0).1.to_degrees(),
-                    cartesian_to_spherical(wo, 1.0).2.to_degrees(),
-                    wh,
-                    cartesian_to_spherical(wh, 1.0).1.to_degrees(),
-                    cartesian_to_spherical(wh, 1.0).2.to_degrees()
-                );
-
-                result[i * wos.len() + j].write(dfr_dalpha);
+                result[i * wos.len() + j].write(part_one * nominator * rcp_f64(denominator));
             }
         }
         unsafe { result.assume_init() }

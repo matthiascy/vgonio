@@ -261,7 +261,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )
-                .map_err(ReadFileErrorKind::Parse)?;
+                    .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Adf(MeasuredAdfData { params, samples }))
             }
             VgmoHeaderExt::Msf { params } => {
@@ -275,7 +275,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )
-                .map_err(ReadFileErrorKind::Parse)?;
+                    .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
             }
             VgmoHeaderExt::Sdf => {
@@ -312,10 +312,15 @@ pub mod vgmo {
         measured: &MeasuredData,
     ) -> Result<(), WriteFileErrorKind> {
         let init_size = writer.stream_len().unwrap();
+        log::debug!("Writing VGMO file with writer at position {}", init_size);
         header.write(writer)?;
+        log::debug!(
+            "Wrote VGMO header to file, writer at position {}",
+            writer.stream_len().unwrap()
+        );
 
         #[cfg(feature = "bench")]
-        let start = std::time::Instant::now();
+            let start = std::time::Instant::now();
 
         match measured {
             MeasuredData::Adf(_) | MeasuredData::Msf(_) => {
@@ -347,7 +352,7 @@ pub mod vgmo {
                         samples,
                     ),
                 }
-                .map_err(WriteFileErrorKind::Write)?;
+                    .map_err(WriteFileErrorKind::Write)?;
             }
             MeasuredData::Bsdf(bsdf) => {
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
@@ -942,7 +947,7 @@ pub mod vgmo {
             let num_rays_per_bounce = {
                 let mut num_rays_per_bounce_per_wavelength = Box::new_uninit_slice(n_wavelengths);
                 for n_rays_per_bounce_per_wavelength in
-                    num_rays_per_bounce_per_wavelength.iter_mut()
+                num_rays_per_bounce_per_wavelength.iter_mut()
                 {
                     let mut num_rays_per_bounce = Box::new_uninit_slice(n_bounces as usize);
                     for n_rays_per_bounce in num_rays_per_bounce.iter_mut() {
@@ -1190,6 +1195,7 @@ pub mod vgmo {
         ) -> Result<(), std::io::Error> {
             let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for snapshot in snapshots {
+                println!("-- {:?}", snapshot.samples);
                 snapshot.write(writer, n_wavelengths, &mut samples_buf)?;
             }
             Ok(())
@@ -1290,8 +1296,15 @@ pub mod vgmo {
             let n_wavelengths = self.params.emitter.spectrum.step_count();
             match compression {
                 CompressionScheme::None => {
+                    let before = writer.buffer().len();
                     Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelengths)?;
+                    log::debug!(
+                        "BSDF snapshots written in {} bytes",
+                        writer.buffer().len() - before
+                    );
                     if self.params.receiver.retrieval == DataRetrieval::FullData {
+                        // TODO: the same for zlib and gzip
+                        log::debug!("Writing raw BSDF snapshots");
                         for snapshot in self.raw_snapshots.as_ref().unwrap().iter() {
                             snapshot.write(writer, n_wavelengths)?;
                         }
@@ -1518,7 +1531,7 @@ mod tests {
             n_patches,
             snapshots.len(),
         )
-        .unwrap();
+            .unwrap();
         assert_eq!(snapshots, snapshots2);
     }
 }
