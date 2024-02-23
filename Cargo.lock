@@ -3163,10 +3163,6 @@ name = "vgonio-jabr"
 version = "0.3.0"
 
 [[package]]
-name = "vgonio-nlopt"
-version = "0.3.0"
-
-[[package]]
 name = "vgonio-surf"
 version = "0.3.0"
 dependencies = [

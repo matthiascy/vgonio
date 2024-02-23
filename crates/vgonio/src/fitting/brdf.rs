@@ -328,3 +328,41 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
         ))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        fitting::brdf::MicrofacetBasedBrdfFittingProblemProxy, measure::data::MeasurementData,
+    };
+    use approx::assert_relative_eq;
+    use base::{optics::ior::RefractiveIndex, units::nm, Isotropy};
+    use bxdf::{brdf::TrowbridgeReitzBrdfModel, MicrofacetBasedBrdfModelKind};
+    use levenberg_marquardt::{differentiate_numerically, LeastSquaresProblem};
+    use nalgebra::{Dyn, Owned, VecStorage, U1};
+
+    fn test_trowbridge_reitz_derivative_impl() {
+        let measured = MeasurementData::read_from_file(
+            "~/Documents/virtual-gonio/output/brdf-simple.vgmo".as_ref(),
+        )
+        .unwrap()
+        .measured
+        .as_bsdf()
+        .unwrap();
+        let model = Box::new(TrowbridgeReitzBrdfModel::new(0.1, 0.1));
+        let iors_i = Box::new([
+            RefractiveIndex::new(nm!(400.0), 1.0, 0.0),
+            RefractiveIndex::new(nm!(400.0), 1.0, 0.0),
+        ]);
+        let iors_t = Box::new([
+            RefractiveIndex::new(nm!(400.0), 0.392, 4.305),
+            RefractiveIndex::new(nm!(400.0), 0.392, 4.305),
+        ]);
+
+        let mut problem = Box::new(MicrofacetBasedBrdfFittingProblemProxy::<
+            { Isotropy::Isotropic },
+        >::new(measured, model, &iors_i, &iors_t));
+        let jacobian_numerical = differentiate_numerically(&mut problem).unwrap();
+        let jacobian_analytical = problem.jacobian().unwrap();
+        assert_relative_eq!(jacobian_numerical, jacobian_analytical, epsilon = 1e-13);
+    }
+}

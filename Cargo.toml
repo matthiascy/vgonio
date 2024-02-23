@@ -8,8 +8,8 @@ members = [
     "crates/vgonio-surf",
     "crates/vgonio-visu",
     "crates/vgonio-gfxkit",
-    "crates/vgonio-uikit",
-    "crates/vgonio-nlopt"]
+    "crates/vgonio-uikit"
+]
 
 [workspace.package]
 authors = ["Yang Chen <y.chen-14@tudelft.nl>"]

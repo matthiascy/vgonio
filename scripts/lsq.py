@@ -3,6 +3,7 @@ import sys
 
 import scipy.optimize as opt
 import numpy as np
+from scipy.special import erf
 
 
 def read_brdf_data(filename):
@@ -13,11 +14,10 @@ def read_brdf_data(filename):
         # Read the metadata
         metadata = f.read(141)
         file_format = metadata[0:4]
-        print('file format: ', file_format)
         if file_format != b'VGMO':
-            raise Exception('Invalid file format, the file does not contain the correct data: BRDF required.')
+            raise Exception(
+                f'Invalid file format, the file does not contain the correct data: BRDF required. {file_format}')
         (major, minor, patch, _) = struct.unpack('<BBBB', metadata[4:8])
-        print(f"version: {major}.{minor}.{patch}")
         (file_size,) = struct.unpack('<I', metadata[8:12])
         print(f"file size: {file_size}")
         timestamp = metadata[12:44]
@@ -135,7 +135,7 @@ def read_brdf_data(filename):
         return wis, wos, snapshots
 
 
-def trowbridge_reitz_ndf(alpha, cos_theta_h):
+def trowbridge_reitz_ndf_iso(alpha, cos_theta_h):
     """
     Calculate the Trowbridge-Reitz BRDF model with the given roughness
     and the given incident and outgoing directions.
@@ -149,6 +149,16 @@ def trowbridge_reitz_ndf(alpha, cos_theta_h):
         return 0.0
     alpha2 = alpha * alpha
     return alpha2 / (np.pi * cos_theta_h2 * cos_theta_h2 * (alpha2 + tan_theta_h2) ** 2)
+
+
+def beckmann_ndf_iso(alpha, cos_theta_h):
+    alpha2 = alpha * alpha
+    cos_theta_h2 = cos_theta_h * cos_theta_h
+    cos_theta_h4 = cos_theta_h2 * cos_theta_h2
+    if cos_theta_h4 < 1e-8:
+        return 0.0
+    tan_theta_h2 = (1 - cos_theta_h2) / cos_theta_h2
+    return np.exp(-tan_theta_h2 / alpha2) / (np.pi * alpha2 * cos_theta_h4)
 
 
 def fresnel(cos_i_abs, eta_i, eta_t, k_t):
@@ -174,7 +184,7 @@ def fresnel(cos_i_abs, eta_i, eta_t, k_t):
     return 0.5 * (rp + rs)
 
 
-def trowbridge_reitz_geom(alpha, cos_theta_hi, cos_theta_ho):
+def trowbridge_reitz_geom_iso(alpha, cos_theta_hi, cos_theta_ho):
     """
     Calculate the Trowbridge-Reitz geometric attenuation factor.
     """
@@ -184,6 +194,20 @@ def trowbridge_reitz_geom(alpha, cos_theta_hi, cos_theta_ho):
     tan_theta_hi2 = (1 - cos_theta_hi2) / cos_theta_hi2
     tan_theta_ho2 = (1 - cos_theta_ho2) / cos_theta_ho2
     return 2 / (1 + np.sqrt(1 + alpha2 * tan_theta_hi2)) * 2 / (1 + np.sqrt(1 + alpha2 * tan_theta_ho2))
+
+
+def beckmann_geom_iso(alpha, cos_theta_hi, cos_theta_ho):
+    tan_theta_hi = np.sqrt(1 - cos_theta_hi * cos_theta_hi) / cos_theta_hi
+    tan_theta_ho = np.sqrt(1 - cos_theta_ho * cos_theta_ho) / cos_theta_ho
+    ai = 1.0 / (alpha * tan_theta_hi)
+    ao = 1.0 / (alpha * tan_theta_ho)
+    erf_ai = erf(ai)
+    erf_ao = erf(ao)
+    ei = np.exp(-ai * ai)
+    eo = np.exp(-ao * ao)
+    gi = 2.0 / (1.0 + erf_ai + ei / (np.sqrt(np.pi) * ai))
+    go = 2.0 / (1.0 + erf_ao + eo / (np.sqrt(np.pi) * ao))
+    return gi * go
 
 
 def trowbridge_reitz_iso(alpha, wi: np.ndarray, wo: np.ndarray):
@@ -197,33 +221,75 @@ def trowbridge_reitz_iso(alpha, wi: np.ndarray, wo: np.ndarray):
     cos_theta_h = wh[2]
     cos_theta_hi = np.dot(wi, wh)
     cos_theta_ho = np.dot(wo, wh)
-    D = trowbridge_reitz_ndf(alpha, cos_theta_h)
-    G = trowbridge_reitz_geom(alpha, cos_theta_hi, cos_theta_ho)
+    D = trowbridge_reitz_ndf_iso(alpha, cos_theta_h)
+    G = trowbridge_reitz_geom_iso(alpha, cos_theta_hi, cos_theta_ho)
     F = fresnel(cos_theta_i, 1.0, 0.392, 4.305)
     return D * G * F / (4 * cos_theta_i * cos_theta_o)
 
 
-# def trowbridge_reitz_jacobian(alpha, wi: np.ndarray, wo: np.ndarray):
-#     """
-#     Calculate the Jacobian of the Trowbridge-Reitz isotropic BRDF model with respect to the parameters.
-#     """
-#     wh = (wi + wo) / np.linalg.norm(wi + wo)
-#     cos_theta_h = wh[2]
-#     cos_theta_h2 = cos_theta_h * cos_theta_h
-#     cos_theta_h4 = cos_theta_h2 * cos_theta_h2
-#     if cos_theta_h4 < 1e-8:
-#         return 0.0
-#     cos_theta_i = wi[2]
-#     cos_theta_o = wo[2]
-#     if cos_theta_i < 1e-8 or cos_theta_o < 1e-8:
-#         return 0.0
-#     tan_theta_h2 = (1 - cos_theta_h2) / cos_theta_h2
-#     if tan_theta_h2 == np.inf:
-#         return 0.0
-#     f =
+def beckmann_iso(alpha, wi: np.ndarray, wo: np.ndarray):
+    """
+    Calculate the Beckmann isotropic BRDF model with the given
+    roughness and the given incident and outgoing directions.
+    """
+    wh = (wi + wo) / np.linalg.norm(wi + wo)
+    cos_theta_i = wi[2]
+    cos_theta_o = wo[2]
+    cos_theta_h = wh[2]
+    cos_theta_hi = np.dot(wi, wh)
+    cos_theta_ho = np.dot(wo, wh)
+    D = beckmann_ndf_iso(alpha, cos_theta_h)
+    G = beckmann_geom_iso(alpha, cos_theta_hi, cos_theta_ho)
+    F = fresnel(cos_theta_i, 1.0, 0.392, 4.305)
+    return D * G * F / (4 * cos_theta_i * cos_theta_o)
 
 
-def residuals(x, wis, wos, snapshots):
+def trowbridge_reitz_jacobian(alpha, wi: np.ndarray, wo: np.ndarray):
+    """
+    Calculate the Jacobian of the Trowbridge-Reitz isotropic BRDF model with respect to the parameters.
+    """
+    wh = (wi + wo) / np.linalg.norm(wi + wo)
+    cos_theta_h = wh[2]
+    cos_theta_h2 = cos_theta_h * cos_theta_h
+    cos_theta_h4 = cos_theta_h2 * cos_theta_h2
+    if cos_theta_h4 < 1e-8:
+        return 0.0
+    cos_theta_i = wi[2]
+    cos_theta_o = wo[2]
+    if cos_theta_i < 1e-8 or cos_theta_o < 1e-8:
+        return 0.0
+    tan_theta_h2 = (1 - cos_theta_h2) / cos_theta_h2
+    if tan_theta_h2 == np.inf:
+        return 0.0
+    f = fresnel(cos_theta_i, 1.0, 0.392, 4.305)
+    alpha2 = alpha * alpha
+    alpha3 = alpha2 * alpha
+    alpha5 = alpha3 * alpha2
+    cos_theta_hi = np.abs(np.dot(wi, wh))
+    cos_theta_ho = np.abs(np.dot(wo, wh))
+    cos_theta_hi2 = cos_theta_hi * cos_theta_hi
+    cos_theta_ho2 = cos_theta_ho * cos_theta_ho
+    tan_theta_hi2 = (1 - cos_theta_hi2) / cos_theta_hi2
+    tan_theta_ho2 = (1 - cos_theta_ho2) / cos_theta_ho2
+    ai = np.sqrt(1.0 + alpha2 * tan_theta_hi2)
+    ao = np.sqrt(1.0 + alpha2 * tan_theta_ho2)
+    one_plus_ai = 1.0 + ai
+    one_plus_ao = 1.0 + ao
+    one_plus_ai2 = one_plus_ai * one_plus_ai
+    one_plus_ao2 = one_plus_ao * one_plus_ao
+    sec_theta_i = 1.0 / cos_theta_i
+    sec_theta_o = 1.0 / cos_theta_o
+    sec_theta_h4 = 1.0 / cos_theta_h4
+    nominator = f * sec_theta_h4 * sec_theta_i * sec_theta_o * (
+            alpha3 * one_plus_ai * (2.0 + 2.0 * ao + 3.0 * alpha2 * tan_theta_ho2)
+            + alpha5 * tan_theta_hi2 * (3.0 + 3.0 * ao + 4.0 * alpha2 * tan_theta_ho2)
+            - alpha * tan_theta_h2 * (alpha2 * one_plus_ao * tan_theta_hi2 + one_plus_ai * (
+            2.0 + 2.0 * ao + alpha2 * tan_theta_ho2)))
+    denominator = np.pi * one_plus_ai2 * one_plus_ao2 * np.power(alpha2 + tan_theta_h2, 3) * ai * ao
+    return -nominator / denominator
+
+
+def residuals_trowbridge_reitz_iso(x, wis, wos, snapshots):
     """
     Calculate the residuals of the BRDF model with the given parameters x
     and the given data.
@@ -238,17 +304,29 @@ def residuals(x, wis, wos, snapshots):
     return (brdf - snapshots).flatten()
 
 
-def jacobian(x, wis, wos, snapshots):
+def residuals_beckmann_iso(x, wis, wos, snapshots):
     """
-    Calculate the Jacobian of the BRDF model with the given parameters x
+    Calculate the residuals of the BRDF model with the given parameters x
     and the given data.
     """
-    # Calculate the Jacobian
+    # Calculate the BRDF model
+    brdf = np.zeros((len(wis), len(wos)))
+    for i in range(len(wis)):
+        for j in range(len(wos)):
+            brdf[i] += beckmann_iso(x, wis[i], wos[j])
+
+    # Calculate the residuals
+    return (brdf - snapshots).flatten()
+
+
+def jacobian_trowbridge_reitz_iso(x, wis, wos, _snapshots):
+    """
+    Calculate the Jacobian of the residuals with respect to the parameters.
+    """
     jacobian = np.zeros((len(wis) * len(wos), 1))
     for i in range(len(wis)):
         for j in range(len(wos)):
-            jacobian[i * len(wos) + j] = trowbridge_reitz_iso(x, wis[i], wos[j])
-
+            jacobian[i * len(wos) + j] = trowbridge_reitz_jacobian(x, wis[i], wos[j])
     return jacobian
 
 
@@ -270,12 +348,15 @@ if __name__ == '__main__':
     x0 = 1.0
 
     # Minimize the function
-    res = opt.least_squares(fun=residuals, x0=x0, bounds=(0, 1.0), method='trf', args=(wis_cart, wos_cart, snapshots))
+    res = opt.least_squares(fun=residuals_trowbridge_reitz_iso, x0=x0, method='dogbox',
+                            # jac=jacobian_trowbridge_reitz_iso,
+                            bounds=(0, 2),
+                            args=(wis_cart, wos_cart, snapshots))
 
     # Print the result
     if res.success:
-        print("Success!")
-        print(res.x)
+        print(f"Success! {res.x}")
     else:
         print("Failure!")
-        print(res.message)
+
+    print(res)
