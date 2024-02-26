@@ -22,6 +22,7 @@ mod widgets;
 
 // TODO: MSAA
 
+use core::slice::SlicePattern;
 use std::{
     default::Default,
     sync::{Arc, RwLock},
@@ -44,6 +45,7 @@ use crate::{
     measure,
 };
 use base::{error::VgonioError, input::InputState};
+use bxdf::brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel};
 use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};
 use winit::{
     dpi::PhysicalSize,
@@ -72,8 +74,12 @@ use crate::{
         },
         Config,
     },
+    fitting::mse::compute_brdf_mse,
     io::OutputOptions,
-    measure::params::MeasurementParams,
+    measure::{
+        data::{MeasuredData, MeasurementData},
+        params::MeasurementParams,
+    },
 };
 
 /// Launches Vgonio GUI application.
@@ -686,6 +692,50 @@ impl VgonioGuiApp {
                                 log::error!("Failed to write measured data to file: {}", err);
                             })
                             .unwrap();
+                            for measurement in data.iter() {
+                                match &measurement.measured {
+                                    MeasuredData::Bsdf(brdf) => {
+                                        // Calculate the mean squared error with models of
+                                        // different roughness.
+                                        let (beckmann_models, trowbridge_models): (Vec<_>, Vec<_>) =
+                                            (1..=128)
+                                                .map(|i| {
+                                                    let alpha = i as f64 / 128.0;
+                                                    (
+                                                        Box::new(BeckmannBrdfModel::new(
+                                                            alpha, alpha,
+                                                        ))
+                                                            as _,
+                                                        Box::new(TrowbridgeReitzBrdfModel::new(
+                                                            alpha, alpha,
+                                                        ))
+                                                            as _,
+                                                    )
+                                                })
+                                                .unzip();
+                                        let (beckmann_mses, trowbridge_mses) = (
+                                            compute_brdf_mse(
+                                                brdf,
+                                                &beckmann_models,
+                                                None,
+                                                &self.cache,
+                                            ),
+                                            compute_brdf_mse(
+                                                brdf,
+                                                &trowbridge_models,
+                                                None,
+                                                &self.cache,
+                                            ),
+                                        );
+                                        println!("Beckmann MSE: {:?}", beckmann_mses.as_slice());
+                                        println!(
+                                            "Trowbridge MSE: {:?}",
+                                            trowbridge_mses.as_slice()
+                                        );
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                         self.cache.write(|cache| {
                             let meas = Vec::from(data)

@@ -13,9 +13,11 @@
 #![feature(trait_upcasting)]
 #![feature(new_uninit)]
 #![feature(portable_simd)]
+#![feature(slice_pattern)]
 #![warn(missing_docs)]
 
 extern crate core;
+
 mod app;
 mod error;
 pub mod fitting;

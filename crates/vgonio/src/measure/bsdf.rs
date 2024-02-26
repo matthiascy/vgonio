@@ -20,7 +20,7 @@ use crate::{
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
-    partition::SphericalPartition,
+    partition::{Patch, SphericalPartition},
 };
 use base::{
     error::VgonioError,

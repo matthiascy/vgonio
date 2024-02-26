@@ -8,7 +8,7 @@ use bxdf::{
     MicrofacetBasedBrdfModel,
 };
 use rayon::iter::{ParallelBridge, ParallelIterator};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::atomic::AtomicU64};
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -19,9 +19,11 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     );
 
     const NUM_MODELS: usize = 128;
-
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
+    // Get the maximum colatitude angle for outgoing directions (a little bit
+    // greater than 90 degrees)
+    let max_theta_o = opts.max_theta_o.unwrap_or(95.0).to_radians();
     cache.write(|cache| {
         cache.load_ior_database(&config);
         for input in opts.inputs {
@@ -85,7 +87,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 unsafe { models.assume_init() }
             };
 
-            let rcp_num_samples = 1.0 / measured_brdf.num_samples() as f64;
+            let num_samples = AtomicU64::new(0);
             let mut mse = [0.0; NUM_MODELS];
             // Search the best fit for alpha in brute force way between 0 and 1
             measured_brdf.snapshots.iter().for_each(|snapshot| {
@@ -99,16 +101,18 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .zip(partition.patches.iter())
                     .par_bridge()
                     .map(|(sample, patch)| {
-                        let wo = {
-                            let sph = patch.center();
-                            spherical_to_cartesian(1.0, sph.theta, sph.phi)
-                        };
+                        let wo_sph = patch.center();
+                        if wo_sph.theta.as_f64() > max_theta_o {
+                            return [0.0; NUM_MODELS];
+                        }
+                        let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
                         let brdf = sample[0] as f64;
                         let mut sqr_err = [0.0; NUM_MODELS];
                         for (i, model) in models.iter().enumerate() {
                             let model_brdf = model.eval(wi, wo, &iors_i[0], &iors_t[0]);
                             sqr_err[i] = sqr(brdf - model_brdf);
                         }
+                        num_samples.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         sqr_err
                     })
                     .reduce(
@@ -124,6 +128,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     *a += *b;
                 }
             });
+            let n_samples = num_samples.load(std::sync::atomic::Ordering::Relaxed) as f64;
+            mse.iter_mut().for_each(|mse| *mse /= n_samples);
             println!("    {}>{} MSE {:?}", ansi::BRIGHT_YELLOW, ansi::RESET, mse);
         }
     });
@@ -151,6 +157,11 @@ pub struct FitOptions {
         help = "Model to fit the measurement to. If not specified, the default model will be used."
     )]
     pub model: BrdfModel,
+    #[clap(
+        long,
+        help = "Maximum colatitude angle in degrees for outgoing directions."
+    )]
+    pub max_theta_o: Option<f64>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
