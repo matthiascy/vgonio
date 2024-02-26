@@ -261,7 +261,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )
-                    .map_err(ReadFileErrorKind::Parse)?;
+                .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Adf(MeasuredAdfData { params, samples }))
             }
             VgmoHeaderExt::Msf { params } => {
@@ -275,7 +275,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )
-                    .map_err(ReadFileErrorKind::Parse)?;
+                .map_err(ReadFileErrorKind::Parse)?;
                 Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
             }
             VgmoHeaderExt::Sdf => {
@@ -320,7 +320,7 @@ pub mod vgmo {
         );
 
         #[cfg(feature = "bench")]
-            let start = std::time::Instant::now();
+        let start = std::time::Instant::now();
 
         match measured {
             MeasuredData::Adf(_) | MeasuredData::Msf(_) => {
@@ -352,7 +352,7 @@ pub mod vgmo {
                         samples,
                     ),
                 }
-                    .map_err(WriteFileErrorKind::Write)?;
+                .map_err(WriteFileErrorKind::Write)?;
             }
             MeasuredData::Bsdf(bsdf) => {
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
@@ -947,7 +947,7 @@ pub mod vgmo {
             let num_rays_per_bounce = {
                 let mut num_rays_per_bounce_per_wavelength = Box::new_uninit_slice(n_wavelengths);
                 for n_rays_per_bounce_per_wavelength in
-                num_rays_per_bounce_per_wavelength.iter_mut()
+                    num_rays_per_bounce_per_wavelength.iter_mut()
                 {
                     let mut num_rays_per_bounce = Box::new_uninit_slice(n_bounces as usize);
                     for n_rays_per_bounce in num_rays_per_bounce.iter_mut() {
@@ -1195,7 +1195,6 @@ pub mod vgmo {
         ) -> Result<(), std::io::Error> {
             let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
             for snapshot in snapshots {
-                println!("-- {:?}", snapshot.samples);
                 snapshot.write(writer, n_wavelengths, &mut samples_buf)?;
             }
             Ok(())
@@ -1531,7 +1530,7 @@ mod tests {
             n_patches,
             snapshots.len(),
         )
-            .unwrap();
+        .unwrap();
         assert_eq!(snapshots, snapshots2);
     }
 }
@@ -1542,12 +1541,12 @@ pub struct OutputOptions {
     /// Output directory.
     pub dir: Option<PathBuf>,
     /// Output file format.
-    pub format: OutputFileFormatOptions,
+    pub format: OutputFileFormatOption,
 }
 
 /// Output file format options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputFileFormatOptions {
+pub enum OutputFileFormatOption {
     Vgmo {
         encoding: FileEncoding,
         compression: CompressionScheme,
@@ -1646,11 +1645,11 @@ pub fn write_single_measured_data_to_file(
     }
 
     let format = if ext == "exr" {
-        OutputFileFormatOptions::Exr {
+        OutputFileFormatOption::Exr {
             resolution: resolution.unwrap_or(512),
         }
     } else {
-        OutputFileFormatOptions::Vgmo {
+        OutputFileFormatOption::Vgmo {
             encoding,
             compression,
         }

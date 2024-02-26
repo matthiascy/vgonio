@@ -1,17 +1,15 @@
 use crate::{
-    app::{
-        args::{MeasureOptions, OutputFormat},
-        cache::Cache,
-        cli::ansi,
-        Config,
-    },
-    io::{OutputFileFormatOptions, OutputOptions},
+    app::{args::OutputFormat, cache::Cache, cli::ansi, Config},
+    io::{OutputFileFormatOption, OutputOptions},
     measure,
     measure::params::{AdfMeasurementMode, Measurement, MeasurementParams},
     partition::PartitionScheme,
 };
-use base::error::VgonioError;
-use std::time::Instant;
+use base::{
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
+};
+use std::{path::PathBuf, time::Instant};
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
@@ -242,11 +240,11 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         );
 
         let format_opts = match opts.output_format {
-            OutputFormat::Vgmo => OutputFileFormatOptions::Vgmo {
+            OutputFormat::Vgmo => OutputFileFormatOption::Vgmo {
                 encoding: opts.encoding,
                 compression: opts.compression,
             },
-            OutputFormat::Exr => OutputFileFormatOptions::Exr {
+            OutputFormat::Exr => OutputFileFormatOption::Exr {
                 resolution: opts.resolution,
             },
         };
@@ -273,4 +271,75 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     );
 
     Ok(())
+}
+
+/// Options for the `measure` command.
+#[derive(clap::Args, Debug)]
+#[clap(about = "Measure different aspects of the micro-surface.")]
+pub struct MeasureOptions {
+    #[arg(
+        short,
+        long,
+        num_args(1..),
+        help = "The measurement description files or directories."
+    )]
+    pub inputs: Vec<PathBuf>,
+
+    #[arg(
+        short,
+        long,
+        help = "The path where stores the simulation data. Use // at the start of the\npath to \
+                set the output path relative to the input file location.\nOutput path can also be \
+                specified in configuration file."
+    )]
+    pub output: Option<PathBuf>,
+
+    #[arg(
+        short = 'f',
+        long,
+        default_value_t = OutputFormat::Vgmo,
+        help = "The format of the measurement output. If not specified, the format\nwill be the \
+                vgonio internal file format.",
+    )]
+    pub output_format: OutputFormat,
+
+    #[arg(
+        short,
+        long,
+        default_value_t = 512,
+        help = "The resolution of the measurement output in case the output is image.\nIf not \
+                specified, the resolution will be 512."
+    )]
+    pub resolution: u32,
+
+    #[arg(
+        short,
+        long,
+        required_if_eq("output_format", "vgms"),
+        default_value_t = FileEncoding::Binary,
+        help = "Data format for the measurement output.\nOnly used when output format is vgms."
+    )]
+    pub encoding: FileEncoding,
+
+    #[arg(
+    short,
+    long,
+    required_if_eq("output_format", "vgms"),
+    default_value_t = CompressionScheme::None,
+    help = "Data compression for the measurement output."
+    )]
+    pub compression: CompressionScheme,
+
+    #[arg(
+        short,
+        long = "num-threads",
+        help = "The number of threads in the thread pool"
+    )]
+    pub nthreads: Option<u32>,
+
+    #[clap(
+        long,
+        help = "Show detailed statistics about memory and time\nusage during the measurement"
+    )]
+    pub print_stats: bool,
 }

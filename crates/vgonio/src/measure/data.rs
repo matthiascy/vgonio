@@ -3,7 +3,7 @@
 use crate::{
     app::cache::Handle,
     fitting::MeasuredMdfData,
-    io::{vgmo::VgmoHeaderExt, OutputFileFormatOptions},
+    io::{vgmo::VgmoHeaderExt, OutputFileFormatOption},
     measure::{
         bsdf::MeasuredBsdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
@@ -372,10 +372,10 @@ impl MeasurementData {
     pub fn write_to_file(
         &self,
         filepath: &Path,
-        format: &OutputFileFormatOptions,
+        format: &OutputFileFormatOption,
     ) -> Result<(), VgonioError> {
         match format {
-            OutputFileFormatOptions::Vgmo {
+            OutputFileFormatOption::Vgmo {
                 encoding,
                 compression,
             } => {
@@ -429,7 +429,7 @@ impl MeasurementData {
                     )
                 })?;
             }
-            OutputFileFormatOptions::Exr { resolution } => {
+            OutputFileFormatOption::Exr { resolution } => {
                 let filepath = filepath.with_extension("exr");
                 match &self.measured {
                     MeasuredData::Bsdf(bsdf) => {

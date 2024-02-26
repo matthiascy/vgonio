@@ -162,7 +162,7 @@ macro impl_common_methods() {
     fn set_alpha_y(&mut self, alpha_y: f64) { self.alpha_y = alpha_y; }
 }
 
-pub trait MicrofacetBasedBrdfModel: Debug + Send {
+pub trait MicrofacetBasedBrdfModel: Debug + Send + Sync {
     /// Returns the kind of the BSDF model.
     fn kind(&self) -> MicrofacetBasedBrdfModelKind;
 

@@ -335,6 +335,7 @@ x0 = np.array([0.001])
 if __name__ == '__main__':
     # Read the data from the file
     wis_sph, wos_sph, snapshots = read_brdf_data(sys.argv[1])
+    fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
 
     # Convert the direction from spherical coordinates to Cartesian coordinates
     wis_cart = np.array(
@@ -348,7 +349,7 @@ if __name__ == '__main__':
     x0 = 1.0
 
     # Minimize the function
-    res = opt.least_squares(fun=residuals_trowbridge_reitz_iso, x0=x0, method='dogbox',
+    res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
                             # jac=jacobian_trowbridge_reitz_iso,
                             bounds=(0, 2),
                             args=(wis_cart, wos_cart, snapshots))

@@ -41,28 +41,47 @@ impl MicrofacetDistributionModel for BeckmannDistribution {
 
     fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
         let cos_theta2 = sqr(cos_theta);
-        let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
+        let e = if cos_theta2 < 1.0e-16 {
+            1.0
+        } else {
+            let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
+            let cos_phi2 = sqr(cos_phi);
+            let sin_phi2 = 1.0 - cos_phi2;
+            (-tan_theta2
+                * (cos_phi2 * rcp_f64(sqr(self.alpha_x)) + sin_phi2 * rcp_f64(sqr(self.alpha_y))))
+            .exp()
+        };
         let cos_theta4 = sqr(cos_theta2);
         if cos_theta4 < 1.0e-16 {
             return 0.0;
         }
-        let cos_phi2 = sqr(cos_phi);
-        let sin_phi2 = 1.0 - cos_phi2;
-        let e = tan_theta2
-            * (cos_phi2 * rcp_f64(sqr(self.alpha_x)) + sin_phi2 * rcp_f64(sqr(self.alpha_y)));
-        (-e).exp() * rcp_f64(std::f64::consts::PI * cos_theta4 * self.alpha_x * self.alpha_y)
+        e * rcp_f64(std::f64::consts::PI * cos_theta4 * self.alpha_x * self.alpha_y)
     }
 
     fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64 {
+        // TODO: anisotropic
         if m.dot(v) <= 0.0 {
             0.0
         } else {
-            let cos_theta_v2 = sqr(v.y as f64);
+            let cos_theta_v2 = sqr(v.z as f64);
+            if cos_theta_v2 < 1.0e-8 {
+                return 0.0;
+            }
             let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
-            let tan_theta_v = tan_theta_v2.sqrt();
-            let a = rcp_f64(self.alpha_x * tan_theta_v);
+            let tan_theta_v = if tan_theta_v2 < 1.0e-8 {
+                0.0
+            } else {
+                tan_theta_v2.sqrt()
+            };
+            let alpha_tan_theta_v = self.alpha_x * tan_theta_v;
+            let a = if alpha_tan_theta_v < 1.0e-8 {
+                0.0
+            } else {
+                rcp_f64(alpha_tan_theta_v)
+            };
             2.0 * rcp_f64(
-                1.0 + libm::erf(a) + (-sqr(a)).exp() * rcp_f64(std::f64::consts::PI.sqrt() * a),
+                1.0 + libm::erf(a)
+                    + (-sqr(a)).exp() * alpha_tan_theta_v * rcp_f64(std::f64::consts::PI.sqrt()),
             )
         }
     }

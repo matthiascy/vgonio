@@ -18,7 +18,7 @@ use crate::{
             widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
-    io::{OutputFileFormatOptions, OutputOptions},
+    io::{OutputFileFormatOption, OutputOptions},
     measure::{
         bsdf::receiver::{DataRetrieval, ReceiverParams},
         params::{MeasurementKind, MeasurementParams},
@@ -400,14 +400,14 @@ impl MeasurementDialog {
                         let options = self.write_to_file.then(|| match self.format {
                             OutputFormat::Vgmo => OutputOptions {
                                 dir: None,
-                                format: OutputFileFormatOptions::Vgmo {
+                                format: OutputFileFormatOption::Vgmo {
                                     encoding: self.encoding,
                                     compression: self.compression,
                                 },
                             },
                             OutputFormat::Exr => OutputOptions {
                                 dir: None,
-                                format: OutputFileFormatOptions::Exr {
+                                format: OutputFileFormatOption::Exr {
                                     resolution: self.img_res,
                                 },
                             },

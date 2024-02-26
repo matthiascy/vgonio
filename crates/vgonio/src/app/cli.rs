@@ -18,14 +18,17 @@ pub mod ansi {
 
 mod cmd_convert;
 
+mod cmd_fit;
 #[cfg(feature = "surf-gen")]
 mod cmd_generate;
 mod cmd_info;
 mod cmd_measure;
 
 pub use cmd_convert::ConvertOptions;
+pub use cmd_fit::FitOptions;
 #[cfg(feature = "surf-gen")]
 pub use cmd_generate::GenerateOptions;
+pub use cmd_measure::MeasureOptions;
 
 /// Entry point of vgonio CLI.
 pub fn run(cmd: SubCommand, config: Config) -> Result<(), VgonioError> {
@@ -37,5 +40,7 @@ pub fn run(cmd: SubCommand, config: Config) -> Result<(), VgonioError> {
         SubCommand::Generate(opts) => cmd_generate::generate(opts, config),
 
         SubCommand::Convert(opts) => cmd_convert::convert(opts, config),
+
+        SubCommand::Fit(opts) => cmd_fit::fit(opts, config),
     }
 }
