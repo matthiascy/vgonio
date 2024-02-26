@@ -1,9 +1,11 @@
 import struct
 import sys
 
+import matplotlib.pyplot as plt
 import scipy.optimize as opt
 import numpy as np
 from scipy.special import erf
+import matplotlib.tri as mtri
 
 
 def read_brdf_data(filename):
@@ -223,7 +225,7 @@ def trowbridge_reitz_iso(alpha, wi: np.ndarray, wo: np.ndarray):
     cos_theta_ho = np.dot(wo, wh)
     D = trowbridge_reitz_ndf_iso(alpha, cos_theta_h)
     G = trowbridge_reitz_geom_iso(alpha, cos_theta_hi, cos_theta_ho)
-    F = fresnel(cos_theta_i, 1.0, 0.392, 4.305)
+    F = fresnel(cos_theta_i, 1.0, 0.314, 3.8)  # 400nm
     return D * G * F / (4 * cos_theta_i * cos_theta_o)
 
 
@@ -330,12 +332,26 @@ def jacobian_trowbridge_reitz_iso(x, wis, wos, _snapshots):
     return jacobian
 
 
-x0 = np.array([0.001])
+def plot_data_surface(wi_idx, wis_sph, wos_cart, snapshots):
+    """
+    Plot the data as a surface.
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    x = wos_cart[:, 0]
+    y = wos_cart[:, 1]
+    z = snapshots[wi_idx, :]
+    tri = mtri.Triangulation(x, y)
+    ax.plot_trisurf(x, y, z, triangles=tri.triangles, cmap='viridis')
+    ax.set_title(f'wi: {np.degrees(wis_sph[wi_idx, 0])}, {np.degrees(wis_sph[wi_idx, 1])}')
+    plt.show()
+
+
+x0 = np.array([0.9])
 
 if __name__ == '__main__':
     # Read the data from the file
     wis_sph, wos_sph, snapshots = read_brdf_data(sys.argv[1])
-    fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
 
     # Convert the direction from spherical coordinates to Cartesian coordinates
     wis_cart = np.array(
@@ -345,19 +361,23 @@ if __name__ == '__main__':
         [np.sin(wos_sph[:, 0]) * np.cos(wos_sph[:, 1]), np.sin(wos_sph[:, 0]) * np.sin(wos_sph[:, 1]),
          np.cos(wos_sph[:, 0])]).T
 
-    # Make an initial guess
-    x0 = 1.0
+    for i in range(len(wis_sph)):
+        plot_data_surface(i, wis_sph, wos_cart, snapshots)
 
-    # Minimize the function
-    res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
-                            # jac=jacobian_trowbridge_reitz_iso,
-                            bounds=(0, 2),
-                            args=(wis_cart, wos_cart, snapshots))
-
-    # Print the result
-    if res.success:
-        print(f"Success! {res.x}")
-    else:
-        print("Failure!")
-
-    print(res)
+    # fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
+    # # Make an initial guess
+    # x0 = 1.0
+    #
+    # # Minimize the function
+    # res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
+    #                         # jac=jacobian_trowbridge_reitz_iso,
+    #                         bounds=(0, 2),
+    #                         args=(wis_cart, wos_cart, snapshots))
+    #
+    # # Print the result
+    # if res.success:
+    #     print(f"Success! {res.x}")
+    # else:
+    #     print("Failure!")
+    #
+    # print(res)

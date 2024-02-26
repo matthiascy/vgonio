@@ -12,6 +12,7 @@
 #![feature(seek_stream_len)]
 #![feature(trait_upcasting)]
 #![feature(new_uninit)]
+#![feature(portable_simd)]
 #![warn(missing_docs)]
 
 extern crate core;

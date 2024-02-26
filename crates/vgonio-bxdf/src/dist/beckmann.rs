@@ -40,6 +40,16 @@ impl MicrofacetDistributionModel for BeckmannDistribution {
     impl_common_methods!();
 
     fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
+        if self.alpha_x == self.alpha_y {
+            let cos_theta2 = sqr(cos_theta);
+            let cos_theta4 = sqr(cos_theta2);
+            if cos_theta4 < 1.0e-16 {
+                return 0.0;
+            }
+            let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
+            return (-tan_theta2 * rcp_f64(sqr(self.alpha_x))).exp()
+                * rcp_f64(std::f64::consts::PI * cos_theta4 * sqr(self.alpha_x));
+        }
         let cos_theta2 = sqr(cos_theta);
         let e = if cos_theta2 < 1.0e-16 {
             1.0

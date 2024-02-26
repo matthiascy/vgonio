@@ -329,52 +329,61 @@ impl MeasurementDialog {
                         if self.kind != MeasurementKind::Msf {
                             ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
                         }
+                        ui.selectable_value(&mut self.format, OutputFormat::VgmoExr, "vgmo+exr");
                     });
 
-                    match self.format {
-                        OutputFormat::Vgmo => {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label("File encoding: ");
-                                ui.selectable_value(
-                                    &mut self.encoding,
-                                    FileEncoding::Binary,
-                                    "binary",
-                                );
-                                if self.kind == MeasurementKind::Adf {
+                    if self.format.is_vgmo() {
+                        egui::CollapsingHeader::new("Vgmo Options")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label("File encoding: ");
                                     ui.selectable_value(
                                         &mut self.encoding,
-                                        FileEncoding::Ascii,
-                                        "ascii",
+                                        FileEncoding::Binary,
+                                        "binary",
                                     );
-                                }
+                                    if self.kind == MeasurementKind::Adf {
+                                        ui.selectable_value(
+                                            &mut self.encoding,
+                                            FileEncoding::Ascii,
+                                            "ascii",
+                                        );
+                                    }
+                                });
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label("Compression scheme: ");
+                                    ui.selectable_value(
+                                        &mut self.compression,
+                                        CompressionScheme::None,
+                                        "none",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.compression,
+                                        CompressionScheme::Zlib,
+                                        "zlib",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.compression,
+                                        CompressionScheme::Gzip,
+                                        "gzip",
+                                    );
+                                });
                             });
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label("Compression scheme: ");
-                                ui.selectable_value(
-                                    &mut self.compression,
-                                    CompressionScheme::None,
-                                    "none",
-                                );
-                                ui.selectable_value(
-                                    &mut self.compression,
-                                    CompressionScheme::Zlib,
-                                    "zlib",
-                                );
-                                ui.selectable_value(
-                                    &mut self.compression,
-                                    CompressionScheme::Gzip,
-                                    "gzip",
-                                );
+                    }
+
+                    if self.format.is_exr() {
+                        egui::CollapsingHeader::new("Exr Options")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label("Image resolution: ");
+                                    ui.add(
+                                        egui::DragValue::new(&mut self.img_res)
+                                            .clamp_range(256..=2048),
+                                    );
+                                });
                             });
-                        }
-                        OutputFormat::Exr => {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label("Image resolution: ");
-                                ui.add(
-                                    egui::DragValue::new(&mut self.img_res).clamp_range(256..=2048),
-                                );
-                            });
-                        }
                     }
                 }
 
@@ -400,16 +409,28 @@ impl MeasurementDialog {
                         let options = self.write_to_file.then(|| match self.format {
                             OutputFormat::Vgmo => OutputOptions {
                                 dir: None,
-                                format: OutputFileFormatOption::Vgmo {
+                                formats: Box::new([OutputFileFormatOption::Vgmo {
                                     encoding: self.encoding,
                                     compression: self.compression,
-                                },
+                                }]),
                             },
                             OutputFormat::Exr => OutputOptions {
                                 dir: None,
-                                format: OutputFileFormatOption::Exr {
+                                formats: Box::new([OutputFileFormatOption::Exr {
                                     resolution: self.img_res,
-                                },
+                                }]),
+                            },
+                            OutputFormat::VgmoExr => OutputOptions {
+                                dir: None,
+                                formats: Box::new([
+                                    OutputFileFormatOption::Vgmo {
+                                        encoding: self.encoding,
+                                        compression: self.compression,
+                                    },
+                                    OutputFileFormatOption::Exr {
+                                        resolution: self.img_res,
+                                    },
+                                ]),
                             },
                         });
                         self.event_loop.send_event(VgonioEvent::Measure {

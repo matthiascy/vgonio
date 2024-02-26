@@ -1541,7 +1541,7 @@ pub struct OutputOptions {
     /// Output directory.
     pub dir: Option<PathBuf>,
     /// Output file format.
-    pub format: OutputFileFormatOption,
+    pub formats: Box<[OutputFileFormatOption]>,
 }
 
 /// Output file format options.
@@ -1593,21 +1593,23 @@ pub fn write_measured_data_to_file(
             filepath.display()
         );
 
-        match measurement.write_to_file(&filepath, &output.format) {
-            Ok(_) => {
-                println!(
-                    "      {} Successfully saved to \"{}\"",
-                    ansi::CYAN_CHECK,
-                    output_dir.display()
-                );
-            }
-            Err(err) => {
-                eprintln!(
-                    "        {} Failed to save to \"{}\": {}",
-                    ansi::RED_EXCLAMATION,
-                    filepath.display(),
-                    err
-                );
+        for format in output.formats.iter() {
+            match measurement.write_to_file(&filepath, format) {
+                Ok(_) => {
+                    println!(
+                        "      {} Successfully saved to \"{}\"",
+                        ansi::CYAN_CHECK,
+                        output_dir.display()
+                    );
+                }
+                Err(err) => {
+                    eprintln!(
+                        "        {} Failed to save to \"{}\": {}",
+                        ansi::RED_EXCLAMATION,
+                        filepath.display(),
+                        err
+                    );
+                }
             }
         }
     }

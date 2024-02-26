@@ -1,14 +1,14 @@
 use crate::app::{cache::Cache, cli::ansi, Config};
-use base::{error::VgonioError, math::spherical_to_cartesian};
+use base::{
+    error::VgonioError,
+    math::{spherical_to_cartesian, sqr},
+};
 use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
 };
-use rayon::{
-    iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
-    slice::ParallelSlice,
-};
-use std::{path::PathBuf, process::abort};
+use rayon::iter::{ParallelBridge, ParallelIterator};
+use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -17,6 +17,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         ansi::RESET,
         opts.model,
     );
+
+    const NUM_MODELS: usize = 128;
 
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
@@ -59,13 +61,13 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     )
                 });
             let models: Box<[Box<dyn MicrofacetBasedBrdfModel>]> = {
-                let mut models = Box::new_uninit_slice(100);
+                let mut models = Box::new_uninit_slice(NUM_MODELS);
                 match opts.model {
                     BrdfModel::Beckmann => {
                         for (i, model) in models.iter_mut().enumerate() {
                             model.write(Box::new(BeckmannBrdfModel::new(
-                                (i + 1) as f64 / 100.0,
-                                (i + 1) as f64 / 100.0,
+                                (i + 1) as f64 / NUM_MODELS as f64,
+                                (i + 1) as f64 / NUM_MODELS as f64,
                             ))
                                 as Box<dyn MicrofacetBasedBrdfModel>);
                         }
@@ -73,8 +75,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     BrdfModel::TrowbridgeReitz => {
                         for (i, model) in models.iter_mut().enumerate() {
                             model.write(Box::new(TrowbridgeReitzBrdfModel::new(
-                                (i + 1) as f64 / 100.0,
-                                (i + 1) as f64 / 100.0,
+                                (i + 1) as f64 / NUM_MODELS as f64,
+                                (i + 1) as f64 / NUM_MODELS as f64,
                             ))
                                 as Box<dyn MicrofacetBasedBrdfModel>);
                         }
@@ -83,14 +85,15 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 unsafe { models.assume_init() }
             };
 
-            let mut difference = [0.0; 100];
+            let rcp_num_samples = 1.0 / measured_brdf.num_samples() as f64;
+            let mut mse = [0.0; NUM_MODELS];
             // Search the best fit for alpha in brute force way between 0 and 1
             measured_brdf.snapshots.iter().for_each(|snapshot| {
                 let wi = {
                     let sph = snapshot.w_i;
                     spherical_to_cartesian(1.0, sph.theta, sph.phi)
                 };
-                let diff = snapshot
+                let sqr_err = snapshot
                     .samples
                     .iter()
                     .zip(partition.patches.iter())
@@ -101,15 +104,15 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             spherical_to_cartesian(1.0, sph.theta, sph.phi)
                         };
                         let brdf = sample[0] as f64;
-                        let mut difference = [0.0; 100];
+                        let mut sqr_err = [0.0; NUM_MODELS];
                         for (i, model) in models.iter().enumerate() {
                             let model_brdf = model.eval(wi, wo, &iors_i[0], &iors_t[0]);
-                            difference[i] = (brdf - model_brdf).abs();
+                            sqr_err[i] = sqr(brdf - model_brdf);
                         }
-                        difference
+                        sqr_err
                     })
                     .reduce(
-                        || [0.0; 100],
+                        || [0.0; NUM_MODELS],
                         |mut a, b| {
                             for (a, b) in a.iter_mut().zip(b.iter()) {
                                 *a += *b;
@@ -117,16 +120,11 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             a
                         },
                     );
-                for (a, b) in difference.iter_mut().zip(diff.iter()) {
+                for (a, b) in mse.iter_mut().zip(sqr_err.iter()) {
                     *a += *b;
                 }
             });
-            println!(
-                "    {}>{} Differences: {:?}",
-                ansi::BRIGHT_YELLOW,
-                ansi::RESET,
-                difference,
-            );
+            println!("    {}>{} MSE {:?}", ansi::BRIGHT_YELLOW, ansi::RESET, mse);
         }
     });
 

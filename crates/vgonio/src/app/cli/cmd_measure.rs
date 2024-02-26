@@ -239,14 +239,26 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             measurement_start_time.elapsed().unwrap().as_secs_f32()
         );
 
-        let format_opts = match opts.output_format {
-            OutputFormat::Vgmo => OutputFileFormatOption::Vgmo {
+        let formats = match opts.output_format {
+            OutputFormat::Vgmo => vec![OutputFileFormatOption::Vgmo {
                 encoding: opts.encoding,
                 compression: opts.compression,
-            },
-            OutputFormat::Exr => OutputFileFormatOption::Exr {
+            }]
+            .into_boxed_slice(),
+            OutputFormat::Exr => vec![OutputFileFormatOption::Exr {
                 resolution: opts.resolution,
-            },
+            }]
+            .into_boxed_slice(),
+            OutputFormat::VgmoExr => vec![
+                OutputFileFormatOption::Vgmo {
+                    encoding: opts.encoding,
+                    compression: opts.compression,
+                },
+                OutputFileFormatOption::Exr {
+                    resolution: opts.resolution,
+                },
+            ]
+            .into_boxed_slice(),
         };
 
         crate::io::write_measured_data_to_file(
@@ -256,7 +268,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             &config,
             OutputOptions {
                 dir: opts.output.clone(),
-                format: format_opts,
+                formats,
             },
         )?;
 

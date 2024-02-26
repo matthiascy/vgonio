@@ -98,22 +98,10 @@ impl MeasuredBsdfData {
         let mut patch_indices = vec![0i32; w * h];
         let partition = self.params.receiver.partitioning();
         partition.compute_pixel_patch_indices(resolution, resolution, &mut patch_indices);
-        let mut layer_attrib = LayerAttributes {
-            owner: Text::new_or_none("vgonio"),
-            capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(timestamp)),
-            software_name: Text::new_or_none("vgonio"),
-            other: self.params.to_exr_extra_info(),
-            ..LayerAttributes::default()
-        };
         {
             // Each snapshot is saved as a separate layer of the image.
             // Each channel of the layer stores the BSDF data for a single wavelength.
             for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
-                layer_attrib.layer_name = Text::new_or_none(format!(
-                    "th{:4.2}_ph{:4.2}",
-                    snapshot.w_i.theta.in_degrees().as_f32(),
-                    snapshot.w_i.phi.in_degrees().as_f32()
-                ));
                 let offset = snap_idx * w * h * wavelengths.len();
                 for i in 0..w {
                     for j in 0..h {
@@ -135,11 +123,20 @@ impl MeasuredBsdfData {
                 .iter()
                 .enumerate()
                 .map(|(snap_idx, snapshot)| {
-                    layer_attrib.layer_name = Text::new_or_none(format!(
-                        "th{:4.2}_ph{:4.2}",
-                        snapshot.w_i.theta.in_degrees().as_f32(),
-                        snapshot.w_i.phi.in_degrees().as_f32()
-                    ));
+                    let theta = format!("{:4.2}", snapshot.w_i.theta.in_degrees().as_f32())
+                        .replace(".", "_");
+                    let phi =
+                        format!("{:4.2}", snapshot.w_i.phi.in_degrees().as_f32()).replace(".", "_");
+                    let layer_attrib = LayerAttributes {
+                        owner: Text::new_or_none("vgonio"),
+                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
+                            timestamp,
+                        )),
+                        software_name: Text::new_or_none("vgonio"),
+                        other: self.params.to_exr_extra_info(),
+                        layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta, phi))),
+                        ..LayerAttributes::default()
+                    };
                     let offset = snap_idx * w * h * wavelengths.len();
                     let channels = wavelengths
                         .iter()
@@ -157,7 +154,7 @@ impl MeasuredBsdfData {
                         .collect::<Vec<_>>();
                     Layer::new(
                         (w, h),
-                        layer_attrib.clone(),
+                        layer_attrib,
                         Encoding::FAST_LOSSLESS,
                         AnyChannels {
                             list: SmallVec::from(channels),
@@ -222,11 +219,20 @@ impl MeasuredBsdfData {
                 .iter()
                 .enumerate()
                 .filter_map(|(snap_idx, snapshot)| {
-                    layer_attrib.layer_name = Text::new_or_none(format!(
-                        "th{:4.2}_ph{:4.2}",
-                        snapshot.w_i.theta.in_degrees().as_f32(),
-                        snapshot.w_i.phi.in_degrees().as_f32()
-                    ));
+                    let mut layer_attrib = LayerAttributes {
+                        owner: Text::new_or_none("vgonio"),
+                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
+                            timestamp,
+                        )),
+                        software_name: Text::new_or_none("vgonio"),
+                        other: self.params.to_exr_extra_info(),
+                        layer_name: Some(Text::new_or_panic(format!(
+                            "theta{:4.2}.phi{:4.2}",
+                            snapshot.w_i.theta.in_degrees().as_f32(),
+                            snapshot.w_i.phi.in_degrees().as_f32()
+                        ))),
+                        ..LayerAttributes::default()
+                    };
                     let offset = snap_idx * w * h * max_bounces;
                     if snapshot.stats.n_bounces == 0 {
                         return None;
@@ -245,7 +251,7 @@ impl MeasuredBsdfData {
                         .collect::<Vec<_>>();
                     Some(Layer::new(
                         (w, h),
-                        layer_attrib.clone(),
+                        layer_attrib,
                         Encoding::FAST_LOSSLESS,
                         AnyChannels {
                             list: SmallVec::from(channels),
@@ -275,6 +281,11 @@ impl MeasuredBsdfData {
         }
         Ok(())
     }
+
+    /// Returns the number of samples (number of incident & outgoing direction
+    /// pairs) in total without considering the wavelength.
+    #[inline(always)]
+    pub fn num_samples(&self) -> usize { self.params.receiver.num_patches() * self.snapshots.len() }
 
     #[cfg(feature = "visu-dbg")]
     /// Returns the trajectories of the rays for each BSDF snapshot.

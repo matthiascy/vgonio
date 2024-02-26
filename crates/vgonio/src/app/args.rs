@@ -172,6 +172,8 @@ pub enum OutputFormat {
     // Png,
     /// OpenEXR image format with resolution.
     Exr,
+    /// Vgonio interal file format together with a EXR file.
+    VgmoExr,
 }
 
 impl Display for OutputFormat {
@@ -179,6 +181,13 @@ impl Display for OutputFormat {
         match self {
             Self::Vgmo => write!(f, "vgmo"),
             Self::Exr => write!(f, "exr"),
+            Self::VgmoExr => write!(f, "vgmo+exr"),
         }
     }
+}
+
+impl OutputFormat {
+    pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
+
+    pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
 }

@@ -117,7 +117,7 @@ pub struct PlotInspector {
     data_handle: Handle<MeasurementData>,
     /// Cache of the application.
     cache: Cache,
-    /// Inspector properties data might used by the plot.
+    /// Inspector properties data might be used by the plot.
     props: Arc<RwLock<PropertyData>>,
     /// The legend to be displayed
     legend: Legend,
@@ -364,7 +364,6 @@ impl PlotInspector {
             variant: extra,
             new_curve_kind: CurveKind::None,
             adf_models: vec![],
-            // mmsf_models: vec![],
             event_loop,
             azimuth_m: rad!(0.0),
         }
@@ -377,6 +376,10 @@ enum CurveKind {
     TrowbridgeReitzADF,
     BeckmannADF,
 }
+
+/// Inspector for microfacet distribution function.
+pub struct MicrofacetDistributionPlotter {}
+pub struct BxdfPlotter {}
 
 impl PlottingWidget for PlotInspector {
     fn uuid(&self) -> Uuid { self.uuid }
