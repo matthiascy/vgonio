@@ -1,12 +1,29 @@
-use crate::app::{cache::Cache, cli::ansi, Config};
+use crate::{
+    app::{cache::Cache, cli::ansi, Config},
+    fitting::mse::compute_brdf_mse,
+    measure::{
+        bsdf::{
+            emitter::EmitterParams,
+            receiver::{DataRetrieval, ReceiverParams},
+            rtc::RtcMethod::Embree,
+            BsdfKind, BsdfSnapshot, MeasuredBsdfData, SpectralSamples,
+        },
+        params::{BsdfMeasurementParams, SimulationKind},
+    },
+    partition::PartitionScheme,
+    RangeByStepSizeInclusive, SphericalDomain,
+};
 use base::{
     error::VgonioError,
-    math::{spherical_to_cartesian, sqr},
+    math::{spherical_to_cartesian, sqr, Sph2},
+    medium::Medium,
+    units::{nm, Rads},
 };
 use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
 };
+use core::slice::SlicePattern;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use std::{path::PathBuf, sync::atomic::AtomicU64};
 
@@ -21,116 +38,138 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     const NUM_MODELS: usize = 128;
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
-    // Get the maximum colatitude angle for outgoing directions (a little bit
-    // greater than 90 degrees)
-    let max_theta_o = opts.max_theta_o.unwrap_or(95.0).to_radians();
+    let models = match opts.model {
+        BrdfModel::Beckmann => {
+            let mut models = Vec::with_capacity(NUM_MODELS);
+            for i in 0..NUM_MODELS {
+                let alpha_x = (i + 1) as f64 / NUM_MODELS as f64;
+                let alpha_y = (i + 1) as f64 / NUM_MODELS as f64;
+                models.push(Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
+                    as Box<dyn MicrofacetBasedBrdfModel>);
+            }
+            models.into_boxed_slice()
+        }
+        BrdfModel::TrowbridgeReitz => {
+            let mut models = Vec::with_capacity(NUM_MODELS);
+            for i in 0..NUM_MODELS {
+                let alpha_x = (i + 1) as f64 / NUM_MODELS as f64;
+                let alpha_y = (i + 1) as f64 / NUM_MODELS as f64;
+                models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
+                    as Box<dyn MicrofacetBasedBrdfModel>);
+            }
+            models.into_boxed_slice()
+        }
+    };
+
     cache.write(|cache| {
         cache.load_ior_database(&config);
-        for input in opts.inputs {
-            let measurement = cache
-                .load_micro_surface_measurement(&config, &input)
-                .unwrap();
-            let measured_brdf = cache
-                .get_measurement_data(measurement)
-                .unwrap()
-                .measured
-                .as_bsdf()
-                .unwrap();
-            let partition = measured_brdf.params.receiver.partitioning();
-            let wavelengths = measured_brdf
-                .params
-                .emitter
-                .spectrum
-                .values()
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            let iors_i = cache
-                .iors
-                .ior_of_spectrum(measured_brdf.params.incident_medium, &wavelengths)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "missing refractive indices for {:?}",
-                        measured_brdf.params.incident_medium
-                    )
-                });
-            let iors_t = cache
-                .iors
-                .ior_of_spectrum(measured_brdf.params.transmitted_medium, &wavelengths)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "missing refractive indices for {:?}",
-                        measured_brdf.params.transmitted_medium
-                    )
-                });
-            let models: Box<[Box<dyn MicrofacetBasedBrdfModel>]> = {
-                let mut models = Box::new_uninit_slice(NUM_MODELS);
-                match opts.model {
-                    BrdfModel::Beckmann => {
-                        for (i, model) in models.iter_mut().enumerate() {
-                            model.write(Box::new(BeckmannBrdfModel::new(
-                                (i + 1) as f64 / NUM_MODELS as f64,
-                                (i + 1) as f64 / NUM_MODELS as f64,
-                            ))
-                                as Box<dyn MicrofacetBasedBrdfModel>);
-                        }
-                    }
-                    BrdfModel::TrowbridgeReitz => {
-                        for (i, model) in models.iter_mut().enumerate() {
-                            model.write(Box::new(TrowbridgeReitzBrdfModel::new(
-                                (i + 1) as f64 / NUM_MODELS as f64,
-                                (i + 1) as f64 / NUM_MODELS as f64,
-                            ))
-                                as Box<dyn MicrofacetBasedBrdfModel>);
-                        }
-                    }
-                }
-                unsafe { models.assume_init() }
-            };
 
-            let num_samples = AtomicU64::new(0);
-            let mut mse = [0.0; NUM_MODELS];
-            // Search the best fit for alpha in brute force way between 0 and 1
-            measured_brdf.snapshots.iter().for_each(|snapshot| {
-                let wi = {
-                    let sph = snapshot.w_i;
-                    spherical_to_cartesian(1.0, sph.theta, sph.phi)
-                };
-                let sqr_err = snapshot
-                    .samples
-                    .iter()
-                    .zip(partition.patches.iter())
-                    .par_bridge()
-                    .map(|(sample, patch)| {
-                        let wo_sph = patch.center();
-                        if wo_sph.theta.as_f64() > max_theta_o {
-                            return [0.0; NUM_MODELS];
-                        }
-                        let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
-                        let brdf = sample[0] as f64;
-                        let mut sqr_err = [0.0; NUM_MODELS];
-                        for (i, model) in models.iter().enumerate() {
-                            let model_brdf = model.eval(wi, wo, &iors_i[0], &iors_t[0]);
-                            sqr_err[i] = sqr(brdf - model_brdf);
-                        }
-                        num_samples.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        sqr_err
-                    })
-                    .reduce(
-                        || [0.0; NUM_MODELS],
-                        |mut a, b| {
-                            for (a, b) in a.iter_mut().zip(b.iter()) {
-                                *a += *b;
-                            }
-                            a
+        if opts.generate {
+            for model in models.iter() {
+                let mut brdf = MeasuredBsdfData {
+                    params: BsdfMeasurementParams {
+                        kind: BsdfKind::Brdf,
+                        sim_kind: SimulationKind::GeomOptics(Embree),
+                        incident_medium: Medium::Air,
+                        transmitted_medium: Medium::Aluminium,
+                        emitter: EmitterParams {
+                            num_rays: 0,
+                            max_bounces: 0,
+                            zenith: RangeByStepSizeInclusive {
+                                start: Rads::ZERO,
+                                stop: Rads::HALF_PI,
+                                step_size: Rads::from_degrees(5.0),
+                            },
+                            azimuth: RangeByStepSizeInclusive {
+                                start: Rads::ZERO,
+                                stop: Rads::TWO_PI,
+                                step_size: Rads::from_degrees(60.0),
+                            },
+                            spectrum: RangeByStepSizeInclusive {
+                                start: nm!(400.0),
+                                stop: nm!(700.0),
+                                step_size: nm!(300.0),
+                            },
                         },
-                    );
-                for (a, b) in mse.iter_mut().zip(sqr_err.iter()) {
-                    *a += *b;
+                        receiver: ReceiverParams {
+                            domain: SphericalDomain::Upper,
+                            precision: Sph2::new(Rads::from_degrees(2.0), Rads::from_degrees(2.0)),
+                            scheme: PartitionScheme::Beckers,
+                            retrieval: DataRetrieval::BsdfOnly,
+                        },
+                        fresnel: true,
+                    },
+                    snapshots: Box::new([]),
+                    raw_snapshots: None,
+                };
+                let partition = brdf.params.receiver.partitioning();
+                let mut snapshots = vec![];
+                let iors_i = cache
+                    .iors
+                    .ior_of_spectrum(Medium::Air, &[nm!(400.0), nm!(700.0)])
+                    .unwrap();
+                let iors_o = cache
+                    .iors
+                    .ior_of_spectrum(Medium::Aluminium, &[nm!(400.0), nm!(700.0)])
+                    .unwrap();
+                for theta in (0..=90).step_by(5) {
+                    for phi in (0..=360).step_by(60) {
+                        let wi_sph = Sph2::new(
+                            Rads::from_degrees(theta as f32),
+                            Rads::from_degrees(phi as f32),
+                        );
+                        let wi = spherical_to_cartesian(
+                            1.0,
+                            Rads::from_degrees(theta as f32),
+                            Rads::from_degrees(phi as f32),
+                        );
+                        let mut samples = vec![];
+                        for patch in partition.patches.iter() {
+                            let wo_sph = patch.center();
+                            let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
+                            let sample = SpectralSamples::from_vec(vec![
+                                model.eval(wi, wo, &iors_i[0], &iors_o[0]) as f32,
+                                model.eval(wi, wo, &iors_i[0], &iors_o[0]) as f32,
+                            ]);
+                            samples.push(sample);
+                        }
+                        snapshots.push(BsdfSnapshot {
+                            wi: wi_sph,
+                            samples: samples.into_boxed_slice(),
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                            trajectories: vec![],
+                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                            hit_points: vec![],
+                        });
+                    }
                 }
-            });
-            let n_samples = num_samples.load(std::sync::atomic::Ordering::Relaxed) as f64;
-            mse.iter_mut().for_each(|mse| *mse /= n_samples);
-            println!("    {}>{} MSE {:?}", ansi::BRIGHT_YELLOW, ansi::RESET, mse);
+                brdf.snapshots = snapshots.into_boxed_slice();
+                let output =
+                    config
+                        .output_dir()
+                        .join(format!("{:?}_{}.exr", model.kind(), model.alpha_x()));
+                brdf.write_as_exr(&output, &chrono::Local::now(), 512)
+                    .unwrap();
+            }
+        } else {
+            for input in opts.inputs {
+                let measurement = cache
+                    .load_micro_surface_measurement(&config, &input)
+                    .unwrap();
+                let measured_brdf = cache
+                    .get_measurement_data(measurement)
+                    .unwrap()
+                    .measured
+                    .as_bsdf()
+                    .unwrap();
+                let mses = compute_brdf_mse(&measured_brdf, &models, opts.max_theta_o, &cache);
+                println!(
+                    "    {}>{} MSE {:?}",
+                    ansi::BRIGHT_YELLOW,
+                    ansi::RESET,
+                    mses.as_slice()
+                );
+            }
         }
     });
 
@@ -162,6 +201,13 @@ pub struct FitOptions {
         help = "Maximum colatitude angle in degrees for outgoing directions."
     )]
     pub max_theta_o: Option<f64>,
+    #[clap(
+        long,
+        help = "Generate the analytical model for the given model. If not specified, the \
+                analytical model will not be generated.",
+        default_value = "false"
+    )]
+    pub generate: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

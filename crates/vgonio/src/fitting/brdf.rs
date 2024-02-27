@@ -193,7 +193,7 @@ fn eval_residuals<const I: Isotropy>(
         .enumerate()
         .for_each(|(i, snapshot)| {
             let wi = {
-                let sph = snapshot.w_i;
+                let sph = snapshot.wi;
                 spherical_to_cartesian(1.0, sph.theta, sph.phi)
             };
             problem
@@ -230,7 +230,7 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
             .snapshots
             .iter()
             .map(|s| {
-                let c = s.w_i;
+                let c = s.wi;
                 spherical_to_cartesian(1.0, c.theta, c.phi)
             })
             .collect::<Vec<_>>()

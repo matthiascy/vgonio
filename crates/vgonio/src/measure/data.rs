@@ -225,7 +225,7 @@ impl<'a> MeasuredDataSampler<'a> {
             MeasuredData::Bsdf(bsdf) => {
                 let wo = wo.expect("Outgoing direction is required for BSDF measurement.");
                 // Find the snapshot for the given incident direction.
-                let bsdf = bsdf.snapshots.iter().find(|s| s.w_i == wi).expect(
+                let bsdf = bsdf.snapshots.iter().find(|s| s.wi == wi).expect(
                     "Incident direction is not found in the BSDF snapshots. Currently, we don't \
                      support the interpolation on incident direction.",
                 );

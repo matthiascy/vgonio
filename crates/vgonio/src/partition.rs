@@ -1,7 +1,7 @@
 use crate::{RangeByStepSizeInclusive, SphericalDomain};
 use base::{
     math::{Sph2, Vec3},
-    units::{rad, Radians, SolidAngle},
+    units::{rad, Radians, Rads, SolidAngle},
 };
 use serde::{Deserialize, Serialize};
 
@@ -240,10 +240,14 @@ impl Patch {
 
     /// Returns the center of the patch.
     pub fn center(&self) -> Sph2 {
-        Sph2::new(
-            (self.min.theta + self.max.theta) * 0.5,
-            (self.min.phi + self.max.phi) * 0.5,
-        )
+        // For the patch at the center of the top of the hemisphere
+        let phi =
+            if self.min.phi.as_f32() <= 1e-6 && (self.max.phi - Rads::TAU).as_f32().abs() <= 1e-6 {
+                Rads::ZERO
+            } else {
+                (self.min.phi + self.max.phi) * 0.5
+            };
+        Sph2::new((self.min.theta + self.max.theta) * 0.5, phi)
     }
 
     /// Returns the solid angle of the patch.

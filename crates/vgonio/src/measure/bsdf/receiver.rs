@@ -452,7 +452,7 @@ impl<'a> CollectedData<'a> {
                 // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 // log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
                 BsdfSnapshot {
-                    w_i: snapshot.w_i,
+                    wi: snapshot.w_i,
                     samples,
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     trajectories: snapshot.trajectories.clone(),

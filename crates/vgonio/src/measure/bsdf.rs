@@ -123,10 +123,10 @@ impl MeasuredBsdfData {
                 .iter()
                 .enumerate()
                 .map(|(snap_idx, snapshot)| {
-                    let theta = format!("{:4.2}", snapshot.w_i.theta.in_degrees().as_f32())
+                    let theta = format!("{:4.2}", snapshot.wi.theta.in_degrees().as_f32())
                         .replace(".", "_");
                     let phi =
-                        format!("{:4.2}", snapshot.w_i.phi.in_degrees().as_f32()).replace(".", "_");
+                        format!("{:4.2}", snapshot.wi.phi.in_degrees().as_f32()).replace(".", "_");
                     let layer_attrib = LayerAttributes {
                         owner: Text::new_or_none("vgonio"),
                         capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
@@ -593,7 +593,7 @@ impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.
-    pub w_i: Sph2,
+    pub wi: Sph2,
     /// BSDF values for each patch of the collector.
     pub samples: Box<[SpectralSamples<f32>]>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]

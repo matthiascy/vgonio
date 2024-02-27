@@ -6,8 +6,9 @@ use crate::{
     },
     measure::{
         bsdf::MeasuredBsdfData,
-        data::MeasurementData,
+        data::{MeasuredData, MeasurementData},
         microfacet::{MeasuredAdfData, MeasuredMsfData},
+        params::MeasurementKind,
     },
 };
 use base::{
@@ -1149,7 +1150,7 @@ pub mod vgmo {
                 unsafe { samples.assume_init() }
             };
             Ok(Self {
-                w_i,
+                wi: w_i,
                 samples,
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 trajectories: vec![],
@@ -1175,8 +1176,8 @@ pub mod vgmo {
                 "Writing BSDF snapshot: samples buffer too small!"
             );
             let mut buf = [0u8; 8];
-            buf[0..4].copy_from_slice(&self.w_i.theta.as_f32().to_le_bytes());
-            buf[4..8].copy_from_slice(&self.w_i.phi.as_f32().to_le_bytes());
+            buf[0..4].copy_from_slice(&self.wi.theta.as_f32().to_le_bytes());
+            buf[4..8].copy_from_slice(&self.wi.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
             for samples in self.samples.iter() {
                 samples.write_to_buf(samples_buf);
@@ -1499,7 +1500,7 @@ mod tests {
         let n_wavelengths = 4;
         let n_patches = 4;
         let snapshot = BsdfSnapshot {
-            w_i: Sph2::zero(),
+            wi: Sph2::zero(),
             samples: vec![SpectralSamples::splat(11.0, n_wavelengths); n_patches],
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: vec![],
@@ -1592,6 +1593,17 @@ pub fn write_measured_data_to_file(
             ansi::RESET,
             filepath.display()
         );
+
+        // TODO: to be removed
+        if let MeasuredData::Bsdf(brdf) = &measurement.measured {
+            for snapshot in brdf.snapshots.iter() {
+                print!("        {:?}: ", snapshot.wi);
+                for sample in snapshot.samples.iter() {
+                    print!("{:?} ", sample[0]);
+                }
+                println!();
+            }
+        }
 
         for format in output.formats.iter() {
             match measurement.write_to_file(&filepath, format) {

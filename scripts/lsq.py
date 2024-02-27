@@ -96,25 +96,30 @@ def read_brdf_data(filename):
         rings = []
         for i in range(n_rings):
             (theta_min, theta_max, phi_step_size, r_n_patches, index_offset) = \
-                struct.unpack('<ffIII', rings_info[i * 20:i * 20 + 20])
+                struct.unpack('<fffII', rings_info[i * 20:i * 20 + 20])
+            # print(f"ring {i}: theta_min: {np.degrees(theta_min)}, theta_max: {np.degrees(theta_max)}, \
+            #      phi_step_size: {np.degrees(phi_step_size)}, r_n_patches: {r_n_patches}, index_offset: {index_offset}")
             rings.append((theta_min, theta_max, phi_step_size, r_n_patches, index_offset))
 
         # Calculate the outgoing direction for each patch in each ring
         wos = np.zeros((n_patches, 2))
         print(wos.shape)
-        for ring in rings:
+        for j, ring in enumerate(rings):
             (theta_min, theta_max, phi_step_size, r_n_patches, index_offset) = ring
             theta = (theta_min + theta_max) * 0.5
             for i in range(r_n_patches):
                 phi_min = i * phi_step_size
                 phi_max = (i + 1) * phi_step_size
-                phi = (phi_min + phi_max) * 0.5
+                phi = 0.0 if np.abs(phi_step_size - np.pi * 2.0) <= 1e-6 else (phi_min + phi_max) * 0.5
+                if j < 2:
+                    print(np.abs(phi_step_size - np.pi * 2.0))
+                    print(
+                        f"@p -- θ: [{np.degrees(theta_min)}, {np.degrees(theta_max)}], φ: [{np.degrees(phi_min)}, {np.degrees(phi_max)}], c - ({np.degrees(theta)}, {np.degrees(phi)})")
                 wos[index_offset + i, :] = [theta, phi]
 
-        snapshot_size = n_patches * sample_size * wavelength_count * 4 + 8
-
-        print(
-            f"file size: {file_size} =? {141 + n_rings * 20 + wi_count * (n_patches * sample_size * wavelength_count * 4 + 8)}")
+        snapshot_size = n_patches * sample_size * wavelength_count + 8
+        estimated_file_size = 141 + n_rings * 20 + wi_count * snapshot_size
+        print(f"file size: {file_size} =? {estimated_file_size} ({file_size - estimated_file_size})")
 
         # Read the data
         wis = np.zeros((wi_count, 2))
@@ -353,6 +358,12 @@ if __name__ == '__main__':
     # Read the data from the file
     wis_sph, wos_sph, snapshots = read_brdf_data(sys.argv[1])
 
+    # for i in range(len(wis_sph)):
+    #     print(f"wi: {wis_sph[i, 0]}, {wis_sph[i, 1]}: ")
+    #     for j in range(len(wos_sph)):
+    #         print(f"{snapshots[i, j]}")
+    #     print("\n")
+
     # Convert the direction from spherical coordinates to Cartesian coordinates
     wis_cart = np.array(
         [np.sin(wis_sph[:, 0]) * np.cos(wis_sph[:, 1]), np.sin(wis_sph[:, 0]) * np.sin(wis_sph[:, 1]),
@@ -361,8 +372,8 @@ if __name__ == '__main__':
         [np.sin(wos_sph[:, 0]) * np.cos(wos_sph[:, 1]), np.sin(wos_sph[:, 0]) * np.sin(wos_sph[:, 1]),
          np.cos(wos_sph[:, 0])]).T
 
-    for i in range(len(wis_sph)):
-        plot_data_surface(i, wis_sph, wos_cart, snapshots)
+    # for i in range(len(wis_sph)):
+    #     plot_data_surface(i, wis_sph, wos_cart, snapshots)
 
     # fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
     # # Make an initial guess
@@ -379,5 +390,5 @@ if __name__ == '__main__':
     #     print(f"Success! {res.x}")
     # else:
     #     print("Failure!")
-
-    print(res)
+    #
+    # print(res)

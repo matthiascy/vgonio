@@ -717,20 +717,23 @@ impl VgonioGuiApp {
                                                     )
                                                 })
                                                 .unzip();
-                                        let (beckmann_mses, trowbridge_mses) = (
-                                            compute_brdf_mse(
-                                                brdf,
-                                                &beckmann_models,
-                                                None,
-                                                &self.cache,
-                                            ),
-                                            compute_brdf_mse(
-                                                brdf,
-                                                &trowbridge_models,
-                                                None,
-                                                &self.cache,
-                                            ),
-                                        );
+                                        let (beckmann_mses, trowbridge_mses) =
+                                            self.cache.read(|cache| {
+                                                (
+                                                    compute_brdf_mse(
+                                                        brdf,
+                                                        &beckmann_models,
+                                                        Some(70.0f64.to_radians()),
+                                                        cache,
+                                                    ),
+                                                    compute_brdf_mse(
+                                                        brdf,
+                                                        &trowbridge_models,
+                                                        Some(70.0f64.to_radians()),
+                                                        cache,
+                                                    ),
+                                                )
+                                            });
                                         println!("Beckmann MSE: {:?}", beckmann_mses.as_slice());
                                         println!(
                                             "Trowbridge MSE: {:?}",
