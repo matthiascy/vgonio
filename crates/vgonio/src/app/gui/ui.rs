@@ -243,7 +243,7 @@ impl VgonioGui {
                             );
                             problem.lsq_lm_fit()
                         });
-                        report.log_fitting_report();
+                        report.log_fitting_reports();
                         // TODO: update the fitted models
                     }
                     FittingProblemKind::Mdf { model, variant } => {
@@ -279,7 +279,7 @@ impl VgonioGui {
                             );
                             problem.lsq_lm_fit()
                         });
-                        report.log_fitting_report();
+                        report.log_fitting_reports();
                         if let Some(model) = report.best_model() {
                             fitted.push(FittedModel::Adf(model.clone_box(), *scale));
                         } else {

@@ -190,20 +190,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
             }
         };
         result.shrink_to_fit();
-        let reports = result
-            .into_iter()
-            .filter(|(_m, r)| matches!(r.termination, TerminationReason::Converged { .. }))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let mut lowest = f64::INFINITY;
-        let mut best = 0;
-        for (i, (_, report)) in reports.iter().enumerate() {
-            if report.objective_function < lowest {
-                lowest = report.objective_function;
-                best = i;
-            }
-        }
-        FittingReport { best, reports }
+        FittingReport::new(result, |m| m.alpha_x() > 0.0 && m.alpha_y() > 0.0)
     }
 }
 
@@ -335,15 +322,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2> for MaskingShadowingFittingProblemPro
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
     type ParameterStorage = Owned<f64, U2, U1>;
-
-    // fn set_params(&mut self, x: &Vector<f64, U2, Self::ParameterStorage>) {
-    //     self.model.set_alpha_x(x[0]);
-    //     self.model.set_alpha_y(x[1]);
-    // }
-    //
-    // fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
-    //     Vector::<f64, U2, Self::ParameterStorage>::new(self.model.alpha_x(),
-    // self.model.alpha_y()) }
 
     impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 

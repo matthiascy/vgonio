@@ -697,6 +697,10 @@ impl VgonioGuiApp {
                                     MeasuredData::Bsdf(brdf) => {
                                         // Calculate the mean squared error with models of
                                         // different roughness.
+                                        println!(
+                                            "Calculating MSE for the measured BSDF: {}",
+                                            measurement.name
+                                        );
                                         let (beckmann_models, trowbridge_models): (Vec<_>, Vec<_>) =
                                             (1..=128)
                                                 .map(|i| {

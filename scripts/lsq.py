@@ -361,23 +361,23 @@ if __name__ == '__main__':
         [np.sin(wos_sph[:, 0]) * np.cos(wos_sph[:, 1]), np.sin(wos_sph[:, 0]) * np.sin(wos_sph[:, 1]),
          np.cos(wos_sph[:, 0])]).T
 
-    # for i in range(len(wis_sph)):
-    #     plot_data_surface(i, wis_sph, wos_cart, snapshots)
+    for i in range(len(wis_sph)):
+        plot_data_surface(i, wis_sph, wos_cart, snapshots)
 
-    fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
-    # Make an initial guess
-    x0 = 1.0
-
-    # Minimize the function
-    res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
-                            # jac=jacobian_trowbridge_reitz_iso,
-                            bounds=(0, 1.5),
-                            args=(wis_cart, wos_cart, snapshots))
-
-    # Print the result
-    if res.success:
-        print(f"Success! {res.x}")
-    else:
-        print("Failure!")
+    # fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
+    # # Make an initial guess
+    # x0 = 1.0
+    #
+    # # Minimize the function
+    # res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
+    #                         # jac=jacobian_trowbridge_reitz_iso,
+    #                         bounds=(0, 1.5),
+    #                         args=(wis_cart, wos_cart, snapshots))
+    #
+    # # Print the result
+    # if res.success:
+    #     print(f"Success! {res.x}")
+    # else:
+    #     print("Failure!")
 
     print(res)

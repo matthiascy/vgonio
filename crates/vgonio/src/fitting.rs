@@ -28,8 +28,8 @@ use bxdf::{
     MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistributionModel,
     MicrofacetDistributionModelKind,
 };
-use levenberg_marquardt::MinimizationReport;
-use std::fmt::Debug;
+use levenberg_marquardt::{MinimizationReport, TerminationReason};
+use std::{fmt::Debug, ops::Bound};
 
 /// Types of the fitting problem.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -118,27 +118,41 @@ impl AsRef<[FittedModel]> for FittedModels {
 /// Report of a fitting process.
 pub struct FittingReport<M> {
     /// Index of the best model found.
-    best: usize,
+    best: Option<usize>,
     /// The reports of the fitting process. Includes the model and the
     /// minimization report with different initial values.
     pub reports: Box<[(M, MinimizationReport<f64>)]>,
 }
 
 impl<M> FittingReport<M> {
-    /// Returns the best model found.
-    pub fn best_model(&self) -> Option<&M> {
-        if self.reports.is_empty() {
-            None
-        } else {
-            Some(&self.reports[self.best].0)
+    /// Creates a new fitting report from the results of the fitting process.
+    pub fn new(results: Vec<(M, MinimizationReport<f64>)>, cond: impl Fn(&M) -> bool) -> Self {
+        let reports = results
+            .into_iter()
+            .filter(|(_, r)| matches!(r.termination, TerminationReason::Converged { .. }))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let mut lowest_obj_func = f64::INFINITY;
+        let mut best = None;
+        for (i, (m, r)) in reports.iter().enumerate() {
+            if r.objective_function < lowest_obj_func && cond(m) {
+                lowest_obj_func = r.objective_function;
+                best = Some(i);
+            }
         }
+        FittingReport { best, reports }
     }
 
+    /// Returns the best model found.
+    pub fn best_model(&self) -> Option<&M> { self.best.map(|i| &self.reports[i].0) }
+
     /// Returns the report of the best model found.
-    pub fn best_model_report(&self) -> &(M, MinimizationReport<f64>) { &self.reports[self.best] }
+    pub fn best_model_report(&self) -> Option<&(M, MinimizationReport<f64>)> {
+        self.best.map(|i| &self.reports[i])
+    }
 
     /// Log the fitting report.
-    pub fn log_fitting_report(&self)
+    pub fn log_fitting_reports(&self)
     where
         M: Debug,
     {

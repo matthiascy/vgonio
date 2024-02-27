@@ -155,20 +155,7 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
                 .collect::<Vec<_>>()
         };
         results.shrink_to_fit();
-        let reports = results
-            .into_iter()
-            .filter(|(_, report)| matches!(report.termination, TerminationReason::Converged { .. }))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let mut lowest = f64::INFINITY;
-        let mut best = 0;
-        for (i, (_, report)) in reports.iter().enumerate() {
-            if report.objective_function < lowest {
-                lowest = report.objective_function;
-                best = i;
-            }
-        }
-        FittingReport { best, reports }
+        FittingReport::new(results, |m| m.alpha_x() > 0.0 && m.alpha_y() > 0.0)
     }
 }
 
