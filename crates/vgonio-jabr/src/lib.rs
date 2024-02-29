@@ -1,7 +1,9 @@
 #![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_trait_impl)]
 #![feature(effects)]
+#![feature(adt_const_params)]
 
+mod array;
 pub mod optics;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
