@@ -458,7 +458,7 @@ fn measure_area_distribution_by_partition<'a>(
 
 /// Calculates the surface area of a spherical cap.
 ///
-/// https://en.wikipedia.org/wiki/Spherical_cap
+/// <https://en.wikipedia.org/wiki/Spherical_cap>
 pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
     2.0 * std::f32::consts::PI * radius * radius * (1.0 - zenith.cos())
 }

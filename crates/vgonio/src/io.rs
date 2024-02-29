@@ -101,8 +101,9 @@ pub mod vgmo {
     );
 
     impl RangeByStepCountInclusive<Radians> {
-        /// Writes the RangeByStepCountInclusive<Radians> into the given buffer,
-        /// following the order: start, stop, step_size, step_count.
+        /// Writes the `RangeByStepCountInclusive<Radians>` into the given
+        /// buffer, following the order: start, stop, step_size,
+        /// step_count.
         pub fn write_to_buf(&self, buf: &mut [u8]) {
             debug_assert!(
                 buf.len() >= 16,
@@ -115,8 +116,9 @@ pub mod vgmo {
             buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
         }
 
-        /// Reads the RangeByStepCountInclusive<Radians> from the given buffer,
-        /// checking that the step size matches the expected value.
+        /// Reads the `RangeByStepCountInclusive<Radians>` from the given
+        /// buffer, checking that the step size matches the expected
+        /// value.
         pub fn read_from_buf(buf: &[u8]) -> Self {
             debug_assert!(
                 buf.len() >= 16,

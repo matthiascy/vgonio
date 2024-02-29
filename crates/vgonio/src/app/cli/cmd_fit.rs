@@ -1,3 +1,5 @@
+#[cfg(feature = "embree")]
+use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
     fitting::mse::compute_iso_brdf_mse,
@@ -5,7 +7,6 @@ use crate::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
-            rtc::RtcMethod::Embree,
             BsdfKind, BsdfSnapshot, MeasuredBsdfData, SpectralSamples,
         },
         params::{BsdfMeasurementParams, SimulationKind},
@@ -15,7 +16,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math::{spherical_to_cartesian, sqr, Sph2},
+    math::{spherical_to_cartesian, Sph2},
     medium::Medium,
     units::{nm, Rads},
 };
@@ -24,8 +25,8 @@ use bxdf::{
     MicrofacetBasedBrdfModel,
 };
 use core::slice::SlicePattern;
-use rayon::iter::{ParallelBridge, ParallelIterator};
-use std::{path::PathBuf, sync::atomic::AtomicU64};
+use rayon::iter::ParallelIterator;
+use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(

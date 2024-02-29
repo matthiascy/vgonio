@@ -103,22 +103,8 @@ pub fn compute_iso_brdf_mse(
                 .iter()
                 .zip(sqr_err.iter_mut())
                 .for_each(|(model, sqr_err)| {
-                    *sqr_err = model.eval(wi, wo, &iors_i[0], &iors_o[0]);
-                    // *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0])
-                    // - sample as f64);
+                    *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0]) - sample as f64);
                 });
-            // TODO: remove this debug print and rewrite the code to make it faster.
-            // println!(
-            //     "wi{}, wo{}, sample: {}, evaluated: {:?}",
-            //     snapshot.wi,
-            //     wo_sph,
-            //     sample,
-            //     sqr_err.as_slice(),
-            // );
-            for sqr_err in sqr_err.iter_mut() {
-                *sqr_err = sqr(*sqr_err - sample as f64) / wo_sph.theta.cos() as f64;
-            }
-            // println!("Calculated mse: {:?}", sqr_err.as_slice());
             num_samples += 1.0;
             // Accumulate the squared error.
             mses.iter_mut()

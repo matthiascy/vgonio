@@ -3,6 +3,8 @@ mod bsdf;
 mod msf;
 mod sdf;
 
+#[cfg(any(feature = "visu-dbg", debug_assertions))]
+use crate::app::cache::Cache;
 use crate::{
     app::{
         args::OutputFormat,
@@ -132,7 +134,7 @@ pub struct MeasurementDialog {
     event_loop: EventLoopProxy,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     debug: MeasurementDialogDebug,
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
     cache: Cache,
 }
 
