@@ -1594,16 +1594,16 @@ pub fn write_measured_data_to_file(
             filepath.display()
         );
 
-        // TODO: to be removed
-        if let MeasuredData::Bsdf(brdf) = &measurement.measured {
-            for snapshot in brdf.snapshots.iter() {
-                print!("        {:?}: ", snapshot.wi);
-                for sample in snapshot.samples.iter() {
-                    print!("{:?} ", sample[0]);
-                }
-                println!();
-            }
-        }
+        // // TODO: to be removed
+        // if let MeasuredData::Bsdf(brdf) = &measurement.measured {
+        //     for snapshot in brdf.snapshots.iter() {
+        //         print!("        {:?}: ", snapshot.wi);
+        //         for sample in snapshot.samples.iter() {
+        //             print!("{:?} ", sample[0]);
+        //         }
+        //         println!();
+        //     }
+        // }
 
         for format in output.formats.iter() {
             match measurement.write_to_file(&filepath, format) {

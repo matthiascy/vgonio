@@ -1,9 +1,17 @@
 use crate::{
-    app::cache::{Cache, RawCache},
+    app::{
+        cache::{Cache, RawCache},
+        cli::BrdfModel,
+    },
     measure::{bsdf::MeasuredBsdfData, data::MeasuredData},
+    RangeByStepSizeInclusive,
 };
 use base::math::{spherical_to_cartesian, sqr};
-use bxdf::MicrofacetBasedBrdfModel;
+use bxdf::{
+    brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
+    MicrofacetBasedBrdfModel,
+};
+use core::slice::SlicePattern;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use std::sync::atomic::AtomicU64;
 
@@ -17,12 +25,36 @@ use std::sync::atomic::AtomicU64;
 ///   directions. If set, the samples with the outgoing directions with the
 ///   colatitude angle greater than `max_theta_o` will be ignored.
 /// * `cache` - The cache to use for loading the IOR database.
-pub fn compute_brdf_mse(
+pub fn compute_iso_brdf_mse(
     measured: &MeasuredBsdfData,
-    models: &[Box<dyn MicrofacetBasedBrdfModel>],
     max_theta_o: Option<f64>,
+    model: BrdfModel,
+    alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) -> Box<[f64]> {
+    let count = alpha.step_count();
+    let models = match model {
+        BrdfModel::Beckmann => {
+            let mut models = Vec::with_capacity(count);
+            for i in 0..count {
+                let alpha_x = i as f64 / count as f64 * alpha.span() + alpha.start;
+                let alpha_y = i as f64 / count as f64 * alpha.span() + alpha.start;
+                models.push(Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
+                    as Box<dyn MicrofacetBasedBrdfModel>);
+            }
+            models.into_boxed_slice()
+        }
+        BrdfModel::TrowbridgeReitz => {
+            let mut models = Vec::with_capacity(count);
+            for i in 0..count {
+                let alpha_x = i as f64 / count as f64 * alpha.span() + alpha.start;
+                let alpha_y = i as f64 / count as f64 * alpha.span() + alpha.start;
+                models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
+                    as Box<dyn MicrofacetBasedBrdfModel>);
+            }
+            models.into_boxed_slice()
+        }
+    };
     let partition = measured.params.receiver.partitioning();
     let wavelengths = measured
         .params
@@ -71,8 +103,22 @@ pub fn compute_brdf_mse(
                 .iter()
                 .zip(sqr_err.iter_mut())
                 .for_each(|(model, sqr_err)| {
-                    *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0]) - sample as f64);
+                    *sqr_err = model.eval(wi, wo, &iors_i[0], &iors_o[0]);
+                    // *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0])
+                    // - sample as f64);
                 });
+            // TODO: remove this debug print and rewrite the code to make it faster.
+            // println!(
+            //     "wi{}, wo{}, sample: {}, evaluated: {:?}",
+            //     snapshot.wi,
+            //     wo_sph,
+            //     sample,
+            //     sqr_err.as_slice(),
+            // );
+            for sqr_err in sqr_err.iter_mut() {
+                *sqr_err = sqr(*sqr_err - sample as f64) / wo_sph.theta.cos() as f64;
+            }
+            // println!("Calculated mse: {:?}", sqr_err.as_slice());
             num_samples += 1.0;
             // Accumulate the squared error.
             mses.iter_mut()

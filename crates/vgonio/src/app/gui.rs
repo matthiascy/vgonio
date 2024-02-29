@@ -42,7 +42,7 @@ use crate::{
         },
     },
     error::RuntimeError,
-    measure,
+    measure, RangeByStepSizeInclusive,
 };
 use base::{error::VgonioError, input::InputState};
 use bxdf::brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel};
@@ -65,6 +65,7 @@ use self::tools::SamplingInspector;
 use crate::{
     app::{
         cache::Cache,
+        cli::{BrdfModel, ALPHA_RANGE},
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},
@@ -74,7 +75,7 @@ use crate::{
         },
         Config,
     },
-    fitting::mse::compute_brdf_mse,
+    fitting::mse::compute_iso_brdf_mse,
     io::OutputOptions,
     measure::{
         data::{MeasuredData, MeasurementData},
@@ -701,35 +702,21 @@ impl VgonioGuiApp {
                                             "Calculating MSE for the measured BSDF: {}",
                                             measurement.name
                                         );
-                                        let (beckmann_models, trowbridge_models): (Vec<_>, Vec<_>) =
-                                            (1..=128)
-                                                .map(|i| {
-                                                    let alpha = i as f64 / 128.0;
-                                                    (
-                                                        Box::new(BeckmannBrdfModel::new(
-                                                            alpha, alpha,
-                                                        ))
-                                                            as _,
-                                                        Box::new(TrowbridgeReitzBrdfModel::new(
-                                                            alpha, alpha,
-                                                        ))
-                                                            as _,
-                                                    )
-                                                })
-                                                .unzip();
                                         let (beckmann_mses, trowbridge_mses) =
                                             self.cache.read(|cache| {
                                                 (
-                                                    compute_brdf_mse(
+                                                    compute_iso_brdf_mse(
                                                         brdf,
-                                                        &beckmann_models,
-                                                        Some(70.0f64.to_radians()),
+                                                        None,
+                                                        BrdfModel::Beckmann,
+                                                        ALPHA_RANGE,
                                                         cache,
                                                     ),
-                                                    compute_brdf_mse(
+                                                    compute_iso_brdf_mse(
                                                         brdf,
-                                                        &trowbridge_models,
-                                                        Some(70.0f64.to_radians()),
+                                                        None,
+                                                        BrdfModel::TrowbridgeReitz,
+                                                        ALPHA_RANGE,
                                                         cache,
                                                     ),
                                                 )

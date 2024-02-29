@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::mse::compute_brdf_mse,
+    fitting::mse::compute_iso_brdf_mse,
     measure::{
         bsdf::{
             emitter::EmitterParams,
@@ -34,37 +34,35 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         ansi::RESET,
         opts.model,
     );
-
-    const NUM_MODELS: usize = 128;
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
-    let models = match opts.model {
-        BrdfModel::Beckmann => {
-            let mut models = Vec::with_capacity(NUM_MODELS);
-            for i in 0..NUM_MODELS {
-                let alpha_x = (i + 1) as f64 / NUM_MODELS as f64;
-                let alpha_y = (i + 1) as f64 / NUM_MODELS as f64;
-                models.push(Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
-                    as Box<dyn MicrofacetBasedBrdfModel>);
-            }
-            models.into_boxed_slice()
-        }
-        BrdfModel::TrowbridgeReitz => {
-            let mut models = Vec::with_capacity(NUM_MODELS);
-            for i in 0..NUM_MODELS {
-                let alpha_x = (i + 1) as f64 / NUM_MODELS as f64;
-                let alpha_y = (i + 1) as f64 / NUM_MODELS as f64;
-                models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
-                    as Box<dyn MicrofacetBasedBrdfModel>);
-            }
-            models.into_boxed_slice()
-        }
-    };
-
     cache.write(|cache| {
         cache.load_ior_database(&config);
-
         if opts.generate {
+            let alpha = RangeByStepSizeInclusive::<f64>::new(0.1, 1.0, 0.1);
+            let count = alpha.step_count();
+            let models = match opts.model {
+                BrdfModel::Beckmann => {
+                    let mut models = Vec::with_capacity(count);
+                    for i in 0..count {
+                        let alpha_x = i as f64 / count as f64 * alpha.span() + alpha.start;
+                        let alpha_y = i as f64 / count as f64 * alpha.span() + alpha.start;
+                        models.push(Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
+                            as Box<dyn MicrofacetBasedBrdfModel>);
+                    }
+                    models.into_boxed_slice()
+                }
+                BrdfModel::TrowbridgeReitz => {
+                    let mut models = Vec::with_capacity(count);
+                    for i in 0..count {
+                        let alpha_x = i as f64 / count as f64 * alpha.span() + alpha.start;
+                        let alpha_y = i as f64 / count as f64 * alpha.span() + alpha.start;
+                        models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
+                            as Box<dyn MicrofacetBasedBrdfModel>);
+                    }
+                    models.into_boxed_slice()
+                }
+            };
             for model in models.iter() {
                 let mut brdf = MeasuredBsdfData {
                     params: BsdfMeasurementParams {
@@ -162,7 +160,13 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .measured
                     .as_bsdf()
                     .unwrap();
-                let mses = compute_brdf_mse(&measured_brdf, &models, opts.max_theta_o, &cache);
+                let mses = compute_iso_brdf_mse(
+                    &measured_brdf,
+                    opts.max_theta_o,
+                    opts.model,
+                    ALPHA_RANGE,
+                    &cache,
+                );
                 println!(
                     "    {}>{} MSE {:?}",
                     ansi::BRIGHT_YELLOW,
@@ -215,3 +219,6 @@ pub enum BrdfModel {
     Beckmann,
     TrowbridgeReitz,
 }
+
+pub const ALPHA_RANGE: RangeByStepSizeInclusive<f64> =
+    RangeByStepSizeInclusive::new(0.01, 1.0, 0.01);

@@ -98,7 +98,7 @@ def read_brdf_data(filename):
             (theta_min, theta_max, phi_step_size, r_n_patches, index_offset) = \
                 struct.unpack('<fffII', rings_info[i * 20:i * 20 + 20])
             # print(f"ring {i}: theta_min: {np.degrees(theta_min)}, theta_max: {np.degrees(theta_max)}, \
-            #      phi_step_size: {np.degrees(phi_step_size)}, r_n_patches: {r_n_patches}, index_offset: {index_offset}")
+            #       phi_step_size: {np.degrees(phi_step_size)}, r_n_patches: {r_n_patches}, index_offset: {index_offset}")
             rings.append((theta_min, theta_max, phi_step_size, r_n_patches, index_offset))
 
         # Calculate the outgoing direction for each patch in each ring
@@ -358,11 +358,11 @@ if __name__ == '__main__':
     # Read the data from the file
     wis_sph, wos_sph, snapshots = read_brdf_data(sys.argv[1])
 
-    # for i in range(len(wis_sph)):
-    #     print(f"wi: {wis_sph[i, 0]}, {wis_sph[i, 1]}: ")
-    #     for j in range(len(wos_sph)):
-    #         print(f"{snapshots[i, j]}")
-    #     print("\n")
+    for i in range(len(wis_sph)):
+        print(f"wi: {wis_sph[i, 0]}, {wis_sph[i, 1]}: ")
+        for j in range(len(wos_sph)):
+            print(f"{snapshots[i, j]}")
+        print("\n")
 
     # Convert the direction from spherical coordinates to Cartesian coordinates
     wis_cart = np.array(
