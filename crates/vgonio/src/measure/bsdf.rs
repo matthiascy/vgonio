@@ -86,6 +86,24 @@ impl MeasuredBsdfData {
             .values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        // Compute maximum value of the BSDF samples for each wavelength per snapshot.
+        let mut max_samples = vec![0.0; wavelengths.len() * self.snapshots.len()];
+        if std::env::var("NORM").is_ok() {
+            for (i, snapshot) in self.snapshots.iter().enumerate() {
+                for spectral_samples in snapshot.samples.iter() {
+                    for (wavelength_idx, sample) in spectral_samples.iter().enumerate() {
+                        max_samples[i * wavelengths.len() + wavelength_idx] =
+                            f32::max(max_samples[i * wavelengths.len() + wavelength_idx], *sample);
+                    }
+                }
+            }
+        } else {
+            for sample in max_samples.iter_mut() {
+                *sample = 1.0;
+            }
+        }
+        log::debug!("max_bsdf_samples: {:?}", max_samples);
+
         // The BSDF data are stored in a single flat array, with the order of
         // the dimensions as follows:
         // - x: width
@@ -95,7 +113,7 @@ impl MeasuredBsdfData {
         let mut bsdf_samples_per_wavelength =
             vec![0.0; w * h * wavelengths.len() * self.snapshots.len()];
         // Pre-compute the patch index for each pixel.
-        let mut patch_indices = vec![0i32; w * h];
+        let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         let partition = self.params.receiver.partitioning();
         partition.compute_pixel_patch_indices(resolution, resolution, &mut patch_indices);
         {
@@ -111,8 +129,9 @@ impl MeasuredBsdfData {
                         }
                         for wavelength_idx in 0..wavelengths.len() {
                             bsdf_samples_per_wavelength
-                                [offset + i + j * w + wavelength_idx * w * h] =
-                                snapshot.samples[idx as usize][wavelength_idx];
+                                [offset + i + j * w + wavelength_idx * w * h] = snapshot.samples
+                                [idx as usize][wavelength_idx]
+                                / max_samples[snap_idx * wavelengths.len() + wavelength_idx];
                         }
                     }
                 }

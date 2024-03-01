@@ -4,21 +4,23 @@ type: !bsdf
   sim_kind: !geom-optics embree # embree/grid/optix # !wave_optics
   incident_medium: air
   transmitted_medium: al
+  fresnel: true
   emitter:
-    num_rays: 100000
+    num_rays: 1000000
     max_bounces: 10
     zenith: 0deg .. =0deg / 5deg
-    azimuth: 0deg .. =0deg / 30deg
-    spectrum: 380 nm .. =780 nm / 300 nm
+    azimuth: 0deg .. =0deg / 60deg
+    spectrum: 380 nm .. =780 nm / 400 nm
   receiver:
     domain: upper_hemisphere
     precision:
       theta: 2.0 deg
       phi: 0.5 deg # only for equal-angle scheme
     scheme: beckers
-    retrieval: full-data # full-data / bsdf-only
+    retrieval: bsdf-only # full-data / bsdf-only
 surfaces:
-   - usr://surfaces/olaf/aluminium65bar100.vgms
+  #  - usr://surfaces/olaf/aluminium65bar100.vgms
+  - usr://surfaces/olaf/aluminium1bar100.vgms
   # - usr://surfaces/gaussian_sigma_0.5.vgms
   # - usr://surfaces/8x8_flat.vgms
   # - usr://surfaces/generated/8x8_flat.txt

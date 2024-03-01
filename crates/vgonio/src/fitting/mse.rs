@@ -6,7 +6,7 @@ use crate::{
     measure::{bsdf::MeasuredBsdfData, data::MeasuredData},
     RangeByStepSizeInclusive,
 };
-use base::math::{spherical_to_cartesian, sqr};
+use base::math::{spherical_to_cartesian, sqr, Vec3};
 use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
@@ -87,6 +87,19 @@ pub fn compute_iso_brdf_mse(
     let max_theta_o = max_theta_o.unwrap_or(95.0).to_radians();
     let mut num_samples = 0.0;
     let mut mses = vec![0.0; models.len()].into_boxed_slice();
+    let mut max_values_measured = -1.0f64;
+    measured.snapshots.iter().for_each(|snapshot| {
+        snapshot.samples.iter().for_each(|samples| {
+            max_values_measured = max_values_measured.max(samples[0] as f64);
+        });
+    });
+    let mut max_values_model = vec![0.0; models.len()].into_boxed_slice();
+    models
+        .iter()
+        .zip(max_values_model.iter_mut())
+        .for_each(|(model, max_value)| {
+            *max_value = model.eval(Vec3::Z, Vec3::Z, &iors_i[0], &iors_o[0]);
+        });
     // Iterate over the samples and compute the mean squared error.
     measured.snapshots.iter().for_each(|snapshot| {
         let wi = spherical_to_cartesian(1.0, snapshot.wi.theta, snapshot.wi.phi);
@@ -102,8 +115,11 @@ pub fn compute_iso_brdf_mse(
             models
                 .iter()
                 .zip(sqr_err.iter_mut())
-                .for_each(|(model, sqr_err)| {
-                    *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0]) - sample as f64);
+                .enumerate()
+                .for_each(|(i, (model, sqr_err))| {
+                    *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0])
+                        / max_values_model[i]
+                        - sample as f64 / max_values_measured);
                 });
             num_samples += 1.0;
             // Accumulate the squared error.

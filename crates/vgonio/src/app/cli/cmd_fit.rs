@@ -16,7 +16,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math::{spherical_to_cartesian, Sph2},
+    math::{spherical_to_cartesian, Sph2, Vec3},
     medium::Medium,
     units::{nm, Rads},
 };
@@ -64,6 +64,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     models.into_boxed_slice()
                 }
             };
+            let iors_i = cache
+                .iors
+                .ior_of_spectrum(Medium::Air, &[nm!(400.0), nm!(700.0)])
+                .unwrap();
+            let iors_o = cache
+                .iors
+                .ior_of_spectrum(Medium::Aluminium, &[nm!(400.0), nm!(700.0)])
+                .unwrap();
             for model in models.iter() {
                 let mut brdf = MeasuredBsdfData {
                     params: BsdfMeasurementParams {
@@ -103,14 +111,6 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 };
                 let partition = brdf.params.receiver.partitioning();
                 let mut snapshots = vec![];
-                let iors_i = cache
-                    .iors
-                    .ior_of_spectrum(Medium::Air, &[nm!(400.0), nm!(700.0)])
-                    .unwrap();
-                let iors_o = cache
-                    .iors
-                    .ior_of_spectrum(Medium::Aluminium, &[nm!(400.0), nm!(700.0)])
-                    .unwrap();
                 for theta in (0..=90).step_by(5) {
                     for phi in (0..=360).step_by(60) {
                         let wi_sph = Sph2::new(
@@ -126,11 +126,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         for patch in partition.patches.iter() {
                             let wo_sph = patch.center();
                             let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
-                            let sample = SpectralSamples::from_vec(vec![
+                            samples.push(SpectralSamples::from_vec(vec![
                                 model.eval(wi, wo, &iors_i[0], &iors_o[0]) as f32,
-                                model.eval(wi, wo, &iors_i[0], &iors_o[0]) as f32,
-                            ]);
-                            samples.push(sample);
+                                model.eval(wi, wo, &iors_i[1], &iors_o[1]) as f32,
+                            ]));
                         }
                         snapshots.push(BsdfSnapshot {
                             wi: wi_sph,
