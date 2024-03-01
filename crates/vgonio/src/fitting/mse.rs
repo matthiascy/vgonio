@@ -11,7 +11,9 @@ use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
 };
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use std::sync::atomic::AtomicU64;
+use wgpu::naga::TypeInner::Atomic;
 
 /// Compute the mean squared error between the measured data and the model.
 ///
@@ -83,70 +85,89 @@ pub fn compute_iso_brdf_mse(
     );
 
     let max_theta_o = max_theta_o.unwrap_or(95.0).to_radians();
-    let mut num_samples = 0.0;
-    let mut mses = vec![0.0; models.len()].into_boxed_slice();
-    // Maximum values of the measured samples for each snapshot.
-    let max_values_measured = measured
-        .snapshots
-        .iter()
-        .map(|snapshot| {
-            snapshot.samples.iter().fold(0.0f64, |m, spectral_samples| {
-                m.max(spectral_samples[0] as f64)
+    let num_samples = AtomicU64::new(0);
+    // Maximum values of the measured samples and the modelled samples for each
+    // snapshot.
+    let (max_values_measured, max_values_model) = {
+        let (max_measured, max_model): (Vec<_>, Vec<_>) = measured
+            .snapshots
+            .iter()
+            .map(|snapshot| {
+                let wi = spherical_to_cartesian(1.0, snapshot.wi.theta, snapshot.wi.phi);
+                let wo: Vec3 = fresnel::reflect(Vec3A::from(-wi), Vec3A::Z).into();
+                (
+                    snapshot.samples.iter().fold(0.0f64, |m, spectral_samples| {
+                        m.max(spectral_samples[0] as f64)
+                    }),
+                    models
+                        .iter()
+                        .map(|model| model.eval(wi, wo, &iors_i[0], &iors_o[0]))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                )
             })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    // Compute the maximum values of the modelled samples.
-    let mut max_values_model = measured
-        .snapshots
-        .iter()
-        .map(|snapshot| {
-            let wi = spherical_to_cartesian(1.0, snapshot.wi.theta, snapshot.wi.phi);
-            let wo: Vec3 = fresnel::reflect(Vec3A::from(-wi), Vec3A::Z).into();
-            models
-                .iter()
-                .map(|model| model.eval(wi, wo, &iors_i[0], &iors_o[0]))
-                .collect::<Vec<_>>()
-                .into_boxed_slice()
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+            .unzip();
+        (
+            max_measured.into_boxed_slice(),
+            max_model.into_boxed_slice(),
+        )
+    };
 
     // Iterate over the samples and compute the mean squared error.
-    measured
+    let mut mses = measured
         .snapshots
         .iter()
         .enumerate()
-        .for_each(|(snap_idx, snapshot)| {
+        .map(|(snap_idx, snapshot)| {
             let wi = spherical_to_cartesian(1.0, snapshot.wi.theta, snapshot.wi.phi);
-            for (samples, patch) in snapshot.samples.iter().zip(partition.patches.iter()) {
-                let sample = samples[0];
-                let wo_sph = patch.center();
-                if wo_sph.theta.as_f64() > max_theta_o {
-                    continue;
-                }
-                let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
-                let mut sqr_err = vec![0.0; models.len()].into_boxed_slice();
-                // Compute the squared error for each model per sample.
-                models.iter().zip(sqr_err.iter_mut()).enumerate().for_each(
-                    |(i, (model, sqr_err))| {
-                        *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0])
-                            / max_values_model[snap_idx][i]
-                            - sample as f64 / max_values_measured[snap_idx]);
-                    },
-                );
-                num_samples += 1.0;
-                // Accumulate the squared error.
-                mses.iter_mut()
-                    .zip(sqr_err.iter())
-                    .for_each(|(mse, sqr_err)| {
-                        *mse += *sqr_err;
-                    });
-            }
-        });
+            snapshot
+                .samples
+                .iter()
+                .zip(partition.patches.iter())
+                .par_bridge()
+                .map(|(s_samples, patch)| {
+                    let sample = s_samples[0];
+                    let wo_sph = patch.center();
+                    if wo_sph.theta.as_f64() > max_theta_o {
+                        return vec![0.0; models.len()].into_boxed_slice();
+                    }
+                    let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
+                    let mut sqr_err = vec![0.0; models.len()].into_boxed_slice();
+                    // Compute the squared error for each model per sample.
+                    models.iter().zip(sqr_err.iter_mut()).enumerate().for_each(
+                        |(i, (model, sqr_err))| {
+                            *sqr_err = sqr(model.eval(wi, wo, &iors_i[0], &iors_o[0])
+                                / max_values_model[snap_idx][i]
+                                - sample as f64 / max_values_measured[snap_idx]);
+                        },
+                    );
+                    num_samples.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    sqr_err
+                })
+                .reduce(
+                    || vec![0.0; models.len()].into_boxed_slice(),
+                    sqr_err_accumulator,
+                )
+        })
+        .fold(
+            vec![0.0; models.len()].into_boxed_slice(),
+            sqr_err_accumulator,
+        );
+
+    let n_samples = num_samples.load(std::sync::atomic::Ordering::Relaxed) as f64;
     // Compute the mean squared error.
     mses.iter_mut().for_each(|mse| {
-        *mse /= num_samples;
+        *mse /= n_samples;
     });
     mses
+}
+
+// Accumulates the squared error.
+fn sqr_err_accumulator(mut acc: Box<[f64]>, sqr_err: Box<[f64]>) -> Box<[f64]> {
+    acc.iter_mut()
+        .zip(sqr_err.iter())
+        .for_each(|(err, sqr_err)| {
+            *err += *sqr_err;
+        });
+    acc
 }
