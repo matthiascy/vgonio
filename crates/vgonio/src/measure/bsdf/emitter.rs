@@ -145,7 +145,7 @@ impl FromIterator<Vec3> for EmitterSamples {
 
 /// Emitter's possible positions in spherical coordinates.
 #[derive(Debug, Clone)]
-pub struct MeasurementPoints(Vec<Sph2>);
+pub struct MeasurementPoints(Box<[Sph2]>);
 
 impl Deref for MeasurementPoints {
     type Target = [Sph2];
@@ -155,7 +155,7 @@ impl Deref for MeasurementPoints {
 
 impl FromIterator<Sph2> for MeasurementPoints {
     fn from_iter<T: IntoIterator<Item = Sph2>>(iter: T) -> Self {
-        MeasurementPoints(iter.into_iter().collect())
+        MeasurementPoints(iter.into_iter().collect::<Vec<_>>().into_boxed_slice())
     }
 }
 
@@ -174,7 +174,7 @@ impl IntoIterator for MeasurementPoints {
     type Item = Sph2;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
-    fn into_iter(self) -> Self::IntoIter { self.0.into_iter() }
+    fn into_iter(self) -> Self::IntoIter { Vec::from(self.0).into_iter() }
 }
 
 /// Emitter constructed from the parameters.

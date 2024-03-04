@@ -1,8 +1,12 @@
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
-    app::{cache::Cache, cli::ansi, Config},
-    fitting::mse::compute_iso_brdf_mse,
+    app::{
+        cache::{Cache, RefractiveIndexRegistry},
+        cli::ansi,
+        Config,
+    },
+    fitting::mse::{compute_iso_brdf_mse, generate_analytical_brdf},
     measure::{
         bsdf::{
             emitter::EmitterParams,
@@ -62,83 +66,49 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     models.into_boxed_slice()
                 }
             };
-            let iors_i = cache
-                .iors
-                .ior_of_spectrum(Medium::Air, &[nm!(400.0), nm!(700.0)])
-                .unwrap();
-            let iors_o = cache
-                .iors
-                .ior_of_spectrum(Medium::Aluminium, &[nm!(400.0), nm!(700.0)])
-                .unwrap();
-            for model in models.iter() {
-                let mut brdf = MeasuredBsdfData {
-                    params: BsdfMeasurementParams {
-                        kind: BsdfKind::Brdf,
-                        sim_kind: SimulationKind::GeomOptics(Embree),
-                        incident_medium: Medium::Air,
-                        transmitted_medium: Medium::Aluminium,
-                        emitter: EmitterParams {
-                            num_rays: 0,
-                            max_bounces: 0,
-                            zenith: RangeByStepSizeInclusive {
-                                start: Rads::ZERO,
-                                stop: Rads::HALF_PI,
-                                step_size: Rads::from_degrees(5.0),
-                            },
-                            azimuth: RangeByStepSizeInclusive {
-                                start: Rads::ZERO,
-                                stop: Rads::TWO_PI,
-                                step_size: Rads::from_degrees(60.0),
-                            },
-                            spectrum: RangeByStepSizeInclusive {
-                                start: nm!(400.0),
-                                stop: nm!(700.0),
-                                step_size: nm!(300.0),
-                            },
-                        },
-                        receiver: ReceiverParams {
-                            domain: SphericalDomain::Upper,
-                            precision: Sph2::new(Rads::from_degrees(2.0), Rads::from_degrees(2.0)),
-                            scheme: PartitionScheme::Beckers,
-                            retrieval: DataRetrieval::BsdfOnly,
-                        },
-                        fresnel: true,
+            let params = BsdfMeasurementParams {
+                kind: BsdfKind::Brdf,
+                sim_kind: SimulationKind::GeomOptics(Embree),
+                incident_medium: Medium::Air,
+                transmitted_medium: Medium::Aluminium,
+                emitter: EmitterParams {
+                    num_rays: 0,
+                    max_bounces: 0,
+                    zenith: RangeByStepSizeInclusive {
+                        start: Rads::ZERO,
+                        stop: Rads::HALF_PI,
+                        step_size: Rads::from_degrees(5.0),
                     },
-                    snapshots: Box::new([]),
-                    raw_snapshots: None,
-                };
-                let partition = brdf.params.receiver.partitioning();
-                let mut snapshots = vec![];
-                for theta in (0..=90).step_by(5) {
-                    for phi in (0..=360).step_by(60) {
-                        let wi_sph = Sph2::new(
-                            Rads::from_degrees(theta as f32),
-                            Rads::from_degrees(phi as f32),
-                        );
-                        let wi = sph_to_cart(
-                            Rads::from_degrees(theta as f32),
-                            Rads::from_degrees(phi as f32),
-                        );
-                        let mut samples = vec![];
-                        for patch in partition.patches.iter() {
-                            let wo_sph = patch.center();
-                            let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
-                            samples.push(SpectralSamples::from_vec(vec![
-                                model.eval(wi, wo, &iors_i[0], &iors_o[0]) as f32,
-                                model.eval(wi, wo, &iors_i[1], &iors_o[1]) as f32,
-                            ]));
+                    azimuth: RangeByStepSizeInclusive {
+                        start: Rads::ZERO,
+                        stop: Rads::TWO_PI,
+                        step_size: Rads::from_degrees(60.0),
+                    },
+                    spectrum: RangeByStepSizeInclusive {
+                        start: nm!(400.0),
+                        stop: nm!(700.0),
+                        step_size: nm!(300.0),
+                    },
+                },
+                receiver: ReceiverParams {
+                    domain: SphericalDomain::Upper,
+                    precision: Sph2::new(Rads::from_degrees(2.0), Rads::from_degrees(2.0)),
+                    scheme: PartitionScheme::Beckers,
+                    retrieval: DataRetrieval::BsdfOnly,
+                },
+                fresnel: true,
+            };
+            for model in models.iter() {
+                let (mut brdf, max_values) = generate_analytical_brdf(&params, model, &cache.iors);
+                if opts.normalize {
+                    for (snapshot, max_vals) in brdf.snapshots.iter_mut().zip(max_values.iter()) {
+                        for spectral_samples in snapshot.samples.iter_mut() {
+                            for (sample, max) in spectral_samples.iter_mut().zip(max_vals.iter()) {
+                                *sample /= *max as f32;
+                            }
                         }
-                        snapshots.push(BsdfSnapshot {
-                            wi: wi_sph,
-                            samples: samples.into_boxed_slice(),
-                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                            trajectories: vec![],
-                            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                            hit_points: vec![],
-                        });
                     }
                 }
-                brdf.snapshots = snapshots.into_boxed_slice();
                 let output =
                     config
                         .output_dir()
@@ -210,6 +180,13 @@ pub struct FitOptions {
         default_value = "false"
     )]
     pub generate: bool,
+    #[clap(
+        long,
+        help = "Whether to normalize the generated analytical model. If not specified, the \
+                generated analytical model will not be normalized.",
+        default_value = "false"
+    )]
+    pub normalize: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
