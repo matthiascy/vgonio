@@ -200,7 +200,7 @@ fn measure_area_distribution_by_points<'a>(
             let mut facets_bins = vec![vec![]; zenith.step_count_wrapped()];
             let macro_area = if !params.crop_to_disk {
                 for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
-                    let zen = math::theta_of(normal);
+                    let zen = math::theta(normal);
                     let idxs = classify_normal_by_zenith(zen, zenith, 1.2);
                     for idx in idxs {
                         if idx == 0xFF {
@@ -231,7 +231,7 @@ fn measure_area_distribution_by_points<'a>(
                     }
                     macro_area += mesh.facet_areas[facet_idx];
                     num_normals += 1;
-                    let zen = math::theta_of(normal);
+                    let zen = math::theta(normal);
                     for idx in classify_normal_by_zenith(zen, zenith, 1.2) {
                         if idx == 0xFF {
                             continue;
@@ -263,7 +263,7 @@ fn measure_area_distribution_by_points<'a>(
                 for zen_idx in 0..zenith.step_count_wrapped() {
                     let azimuth = azi_idx as f32 * azimuth.step_size;
                     let zen = zen_idx as f32 * zenith.step_size;
-                    let dir = math::spherical_to_cartesian(1.0, zen, azimuth).normalize();
+                    let dir = math::sph_to_cart(zen, azimuth);
                     let facets = &facets_bins[zen_idx];
 
                     let facets_area = if params.use_facet_area {

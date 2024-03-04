@@ -5,7 +5,7 @@ use crate::{
     partition::SphericalPartition,
 };
 use base::{
-    math::{spherical_to_cartesian, Vec3},
+    math::{sph_to_cart, Vec3},
     optics::ior::RefractiveIndex,
     Isotropy,
 };
@@ -194,7 +194,7 @@ fn eval_residuals<const I: Isotropy>(
         .for_each(|(i, snapshot)| {
             let wi = {
                 let sph = snapshot.wi;
-                spherical_to_cartesian(1.0, sph.theta, sph.phi)
+                sph_to_cart(sph.theta, sph.phi)
             };
             problem
                 .partition
@@ -204,7 +204,7 @@ fn eval_residuals<const I: Isotropy>(
                 .for_each(|(j, patch)| {
                     let wo = {
                         let c = patch.center();
-                        spherical_to_cartesian(1.0, c.theta, c.phi)
+                        sph_to_cart(c.theta, c.phi)
                     };
                     // Only the first wavelength is used. TODO: Use all
                     let measured = snapshot.samples[j][0] as f64;
@@ -231,7 +231,7 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
             .iter()
             .map(|s| {
                 let c = s.wi;
-                spherical_to_cartesian(1.0, c.theta, c.phi)
+                sph_to_cart(c.theta, c.phi)
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
@@ -240,7 +240,7 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
             .iter()
             .map(|p| {
                 let c = p.center();
-                spherical_to_cartesian(1.0, c.theta, c.phi)
+                sph_to_cart(c.theta, c.phi)
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();

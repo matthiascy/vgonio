@@ -17,6 +17,7 @@
 #![feature(stdarch_x86_avx512)]
 #![feature(seek_stream_len)]
 #![warn(missing_docs)]
+#![feature(effects)]
 
 use std::{
     fmt::Display,

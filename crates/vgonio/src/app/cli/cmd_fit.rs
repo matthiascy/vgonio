@@ -16,7 +16,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math::{spherical_to_cartesian, Sph2, Vec3},
+    math::{sph_to_cart, Sph2, Vec3},
     medium::Medium,
     units::{nm, Rads},
 };
@@ -40,15 +40,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         if opts.generate {
-            let alpha = RangeByStepSizeInclusive::<f64>::new(0.1, 1.0, 0.1);
-            let count = alpha.step_count();
+            let roughness = RangeByStepSizeInclusive::<f64>::new(0.1, 1.0, 0.1);
+            let count = roughness.step_count();
             let models = match opts.model {
                 BrdfModel::Beckmann => {
                     let mut models = Vec::with_capacity(count);
                     for i in 0..count {
-                        let alpha_x = i as f64 / count as f64 * alpha.span() + alpha.start;
-                        let alpha_y = i as f64 / count as f64 * alpha.span() + alpha.start;
-                        models.push(Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
+                        let alpha = i as f64 / count as f64 * roughness.span() + roughness.start;
+                        models.push(Box::new(BeckmannBrdfModel::new(alpha, alpha))
                             as Box<dyn MicrofacetBasedBrdfModel>);
                     }
                     models.into_boxed_slice()
@@ -56,9 +55,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 BrdfModel::TrowbridgeReitz => {
                     let mut models = Vec::with_capacity(count);
                     for i in 0..count {
-                        let alpha_x = i as f64 / count as f64 * alpha.span() + alpha.start;
-                        let alpha_y = i as f64 / count as f64 * alpha.span() + alpha.start;
-                        models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
+                        let alpha = i as f64 / count as f64 * roughness.span() + roughness.start;
+                        models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha, alpha))
                             as Box<dyn MicrofacetBasedBrdfModel>);
                     }
                     models.into_boxed_slice()
@@ -117,15 +115,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             Rads::from_degrees(theta as f32),
                             Rads::from_degrees(phi as f32),
                         );
-                        let wi = spherical_to_cartesian(
-                            1.0,
+                        let wi = sph_to_cart(
                             Rads::from_degrees(theta as f32),
                             Rads::from_degrees(phi as f32),
                         );
                         let mut samples = vec![];
                         for patch in partition.patches.iter() {
                             let wo_sph = patch.center();
-                            let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
+                            let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
                             samples.push(SpectralSamples::from_vec(vec![
                                 model.eval(wi, wo, &iors_i[0], &iors_o[0]) as f32,
                                 model.eval(wi, wo, &iors_i[1], &iors_o[1]) as f32,
@@ -168,9 +165,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     &cache,
                 );
                 println!(
-                    "    {}>{} MSE {:?}",
+                    "    {}>{} MSE ({}) {:?}",
                     ansi::BRIGHT_YELLOW,
                     ansi::RESET,
+                    input.file_name().unwrap().display(),
                     mses.as_slice()
                 );
             }

@@ -1,10 +1,10 @@
 mod dyn_sized;
 mod fixed_sized;
 
-use std::fmt::Write;
+use core::{fmt::Write, marker::ConstParamTy};
 
 /// Memory layout of a multidimensional array.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(ConstParamTy, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MemLayout {
     /// Row-major layout (or C layout). The data is stored row by row in memory;
     /// the strides grow from right to left; the last dimension varies the

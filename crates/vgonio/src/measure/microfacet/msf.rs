@@ -1436,7 +1436,7 @@ pub fn measure_masking_shadowing(
                 let zenith =
                     params.zenith.step_size * (i % params.zenith.step_count_wrapped()) as f32;
                 let view_dir =
-                    math::spherical_to_cartesian(1.0, zenith, azimuth).normalize();
+                    math::sph_to_cart(zenith, azimuth);
                 let pos = view_dir * diagonal;
                 let proj_view_mat = {
                     let view_mat = Camera::new(pos, Vec3::ZERO).view_matrix();

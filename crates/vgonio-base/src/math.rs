@@ -132,17 +132,10 @@ impl Sph3 {
     }
 
     /// Convert to a cartesian coordinate.
-    pub fn to_cartesian(&self) -> Vec3 { spherical_to_cartesian(self.rho, self.theta, self.phi) }
+    pub fn to_cartesian(&self) -> Vec3 { sph_to_cart(self.theta, self.phi) * self.rho }
 
     /// Convert from a cartesian coordinate.
-    pub fn from_cartesian(cartesian: Vec3, radius: f32) -> Self {
-        let (radius, zenith, azimuth) = cartesian_to_spherical(cartesian, radius);
-        Self {
-            rho: radius,
-            theta: zenith,
-            phi: azimuth,
-        }
-    }
+    pub fn from_cartesian(cartesian: Vec3) -> Self { cart_to_sph(cartesian) }
 }
 
 impl Debug for Sph3 {
@@ -196,7 +189,7 @@ impl Sph2 {
     }
 
     /// Converts to a cartesian coordinate.
-    pub fn to_cartesian(&self) -> Vec3 { spherical_to_cartesian(1.0, self.theta, self.phi) }
+    pub fn to_cartesian(&self) -> Vec3 { sph_to_cart(self.theta, self.phi) }
 
     /// Returns true if the zenith angle and azimuth angle are both positive.
     pub fn is_positive(&self) -> bool { self.theta.is_positive() && self.phi.is_positive() }
@@ -209,10 +202,10 @@ impl Sph2 {
             "expected 1.0, got {}",
             cartesian.length()
         );
-        let (_, zenith, azimuth) = cartesian_to_spherical(cartesian, 1.0);
+        let sph = cart_to_sph(cartesian);
         Self {
-            theta: zenith,
-            phi: azimuth,
+            theta: sph.theta,
+            phi: sph.phi,
         }
     }
 }
@@ -260,15 +253,13 @@ impl Display for Sph2 {
 ///
 /// # Arguments
 ///
-/// * `r` - radius
 /// * `zenith` - polar angle
 /// * `azimuth` - azimuthal angle
-/// * `handedness` - handedness of the cartesian coordinate system
-pub fn spherical_to_cartesian(r: f32, zenith: Radians, azimuth: Radians) -> Vec3 {
+pub fn sph_to_cart(zenith: Radians, azimuth: Radians) -> Vec3 {
     Vec3::new(
-        r * zenith.sin() * azimuth.cos(),
-        r * zenith.sin() * azimuth.sin(),
-        r * zenith.cos(),
+        zenith.sin() * azimuth.cos(),
+        zenith.sin() * azimuth.sin(),
+        zenith.cos(),
     )
 }
 
@@ -277,40 +268,21 @@ pub fn spherical_to_cartesian(r: f32, zenith: Radians, azimuth: Radians) -> Vec3
 /// # Arguments
 ///
 /// * `v` - vector in cartesian coordinate system
-/// * `r` - radius
 ///
 /// # Returns
 ///
-/// * `r` - radius
-/// * `zenith` - polar angle
-/// * `azimuth` - azimuthal angle
-pub fn cartesian_to_spherical(v: Vec3, radius: f32) -> (f32, Radians, Radians) {
-    let (zenith, azimuth) = (rad!((v.z * rcp_f32(radius)).acos()), rad!(v.y.atan2(v.x)));
-
-    (
-        radius,
-        if zenith < radians!(0.0) {
-            zenith + Radians::PI
-        } else {
-            zenith
-        },
-        if azimuth < radians!(0.0) {
-            azimuth + Radians::TAU
-        } else {
-            azimuth
-        },
-    )
-}
-
-/// Returns the zenith angle of the given vector in radians in the range
-/// [0, pi].
-pub fn theta_of(v: &Vec3) -> Radians {
-    let zenith = rad!((v.z * rcp_f32(v.length())).acos());
-    if zenith < radians!(0.0) {
-        zenith + Radians::PI
-    } else {
-        zenith
+/// Spherical coordinate in radians.
+pub fn cart_to_sph(v: Vec3) -> Sph3 {
+    let rho = v.length();
+    let mut theta = rad!((v.z * rcp_f32(rho)).acos());
+    let mut phi = rad!(v.y.atan2(v.x));
+    if theta < radians!(0.0) {
+        theta += Radians::PI;
     }
+    if phi < radians!(0.0) {
+        phi += Radians::TAU;
+    }
+    Sph3::new(rho, theta, phi)
 }
 
 // TODO: generalise rcp to f32 and f64
@@ -419,20 +391,59 @@ pub fn rsqrt(x: f32) -> f32 {
     }
 }
 
-pub fn cos_theta(v: &Vec3) -> f32 { v.z }
+/// Returns the zenith angle of the given vector in radians in the range
+/// [0, pi].
+pub fn theta(v: &Vec3) -> Radians {
+    debug_assert!(
+        approx::ulps_eq!(v.length(), 1.0, epsilon = 1.0e-6),
+        "Vec3 must be normalized, got {}",
+        v.length()
+    );
+    let zenith = rad!((v.z * rcp_f32(v.length())).acos());
+    if zenith < radians!(0.0) {
+        zenith + Radians::PI
+    } else {
+        zenith
+    }
+}
 
-pub fn cos_theta2(v: &Vec3) -> f32 { sqr(v.z) }
+/// Returns the cosine of the zenith angle of the given vector.
+/// The vector must be normalized.
+#[inline(always)]
+pub fn cos_theta(v: &Vec3) -> f32 {
+    debug_assert!(
+        approx::ulps_eq!(v.length(), 1.0, epsilon = 1.0e-6),
+        "Vec3 must be normalized, got {}",
+        v.length()
+    );
+    v.z
+}
 
-pub fn abs_cos_theta(v: &Vec3) -> f32 { v.z.abs() }
+/// Returns the square of the cosine of the zenith angle of the given vector.
+/// The vector must be normalized.
+#[inline(always)]
+pub fn cos_theta2(v: &Vec3) -> f32 {
+    debug_assert!(
+        approx::ulps_eq!(v.length(), 1.0, epsilon = 1.0e-6),
+        "Vec3 must be normalized, got {}",
+        v.length()
+    );
+    sqr(v.z)
+}
 
+/// Returns the square of the sine of the zenith angle of the given vector.
 pub fn sin_theta2(v: &Vec3) -> f32 { (1.0 - cos_theta2(v)).max(0.0) }
 
+/// Returns the sine of the zenith angle of the given vector.
 pub fn sin_theta(v: &Vec3) -> f32 { sin_theta2(v).sqrt() }
 
+/// Returns the azimuth angle of the given vector in radians in the range
 pub fn tan_theta(v: &Vec3) -> f32 { sin_theta(v) / cos_theta(v) }
 
+/// Returns the square of the tangent of the zenith angle of the given vector.
 pub fn tan_theta2(v: &Vec3) -> f32 { sin_theta2(v) / cos_theta2(v) }
 
+/// Returns the cosine of the azimuth angle of the given vector.
 pub fn cos_phi(v: &Vec3) -> f32 {
     let sin_theta = sin_theta(v);
     if sin_theta == 0.0 {
@@ -442,6 +453,7 @@ pub fn cos_phi(v: &Vec3) -> f32 {
     }
 }
 
+/// Returns the square of the cosine of the azimuth angle of the given vector.
 pub fn sin_phi(v: &Vec3) -> f32 {
     let sin_theta = sin_theta(v);
     if sin_theta == 0.0 {
@@ -576,13 +588,13 @@ pub fn generate_triangulated_hemisphere(
     let phi_step_size = Radians::TWO_PI / phi_steps as f32;
 
     // Generate top vertex
-    vertices.push(spherical_to_cartesian(1.0, Radians::ZERO, Radians::ZERO));
+    vertices.push(sph_to_cart(Radians::ZERO, Radians::ZERO));
 
     for i in 1..=theta_steps {
         let theta = theta_step_size * i as f32;
         for j in 0..phi_steps {
             let phi = phi_step_size * j as f32;
-            vertices.push(spherical_to_cartesian(1.0, rad!(theta), phi));
+            vertices.push(sph_to_cart(rad!(theta), phi));
         }
     }
 
@@ -631,13 +643,13 @@ pub fn generate_parametric_hemisphere_cells(
     let phi_step_size = Radians::TWO_PI / phi_steps as f32;
 
     // Generate top vertex
-    vertices.push(spherical_to_cartesian(1.0, Radians::ZERO, Radians::ZERO));
+    vertices.push(sph_to_cart(Radians::ZERO, Radians::ZERO));
 
     for i in 1..=theta_steps {
         let theta = theta_step_size * i as f32;
         for j in 0..phi_steps {
             let phi = phi_step_size * j as f32;
-            vertices.push(spherical_to_cartesian(1.0, theta, phi));
+            vertices.push(sph_to_cart(theta, phi));
         }
     }
 
@@ -678,8 +690,8 @@ pub fn calc_aligned_size(size: u32, alignment: u32) -> u32 {
 mod tests {
     use crate::{
         math::{
-            cartesian_to_spherical, madd, msub, nmadd, nmsub, rcp_f32, rsqrt, solve_quadratic,
-            spherical_to_cartesian, ulp_eq, QuadraticSolution, MACHINE_EPSILON_F32,
+            cart_to_sph, madd, msub, nmadd, nmsub, rcp_f32, rsqrt, solve_quadratic, sph_to_cart,
+            ulp_eq, QuadraticSolution, MACHINE_EPSILON_F32,
         },
         units::{degrees, radians},
     };
@@ -698,20 +710,14 @@ mod tests {
     // TODO: improve accuracy
     #[test]
     fn spherical_cartesian_conversion() {
-        println!(
-            "{:?}",
-            spherical_to_cartesian(1.0, radians!(0.0), radians!(0.0))
-        );
-        println!(
-            "{:?}",
-            cartesian_to_spherical(Vec3::new(0.0, 1.0, 0.0), 1.0)
-        );
+        println!("{:?}", sph_to_cart(1.0, radians!(0.0), radians!(0.0)));
+        println!("{:?}", cart_to_sph(Vec3::new(0.0, 1.0, 0.0), 1.0));
 
         let r = 1.0;
         let zenith = radians!(0.0);
         let azimuth = radians!(0.0);
-        let v = spherical_to_cartesian(r, zenith, azimuth);
-        let (radius, sph_zenith, sph_azimuth) = cartesian_to_spherical(v, r);
+        let v = sph_to_cart(r, zenith, azimuth);
+        let (radius, sph_zenith, sph_azimuth) = cart_to_sph(v, r);
         assert!(ulp_eq(r, radius));
         println!("{:.20} {:.20}", zenith.value, sph_zenith.value);
         assert!(ulp_eq(zenith.value, sph_zenith.value));
@@ -720,8 +726,8 @@ mod tests {
         let r = 2.0;
         let zenith = degrees!(45.0).into();
         let azimuth = degrees!(120.0).into();
-        let v = spherical_to_cartesian(r, zenith, azimuth);
-        let (radius, sph_zenith, sph_azimuth) = cartesian_to_spherical(v, r);
+        let v = sph_to_cart(r, zenith, azimuth);
+        let (radius, sph_zenith, sph_azimuth) = cart_to_sph(v, r);
         assert!(ulp_eq(r, radius));
         assert!(ulp_eq(zenith.value, sph_zenith.value));
         assert!(ulp_eq(azimuth.value, sph_azimuth.value));

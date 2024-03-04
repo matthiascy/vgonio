@@ -1,5 +1,5 @@
 use base::{
-    math::{cartesian_to_spherical, rcp_f64, sqr, Vec3},
+    math::{cart_to_sph, cos_theta, rcp_f64, sqr, Vec3},
     optics::{fresnel, ior::RefractiveIndex},
 };
 use std::fmt::{Debug, Formatter};
@@ -39,24 +39,23 @@ impl MicrofacetBasedBrdfModel for TrowbridgeReitzBrdfModel {
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
         let cos_theta_i = wi.z;
         let cos_theta_o = wo.z;
-        if cos_theta_i.abs() < 1.0e-6 || cos_theta_o.abs() < 1.0e-6 {
+        let cos_theta_io = (cos_theta_i * cos_theta_o) as f64;
+        if cos_theta_io <= 1e-16 {
             return 0.0;
         }
         let wh = (wi + wo).normalize();
         let dist = TrowbridgeReitzDistribution::new(self.alpha_x, self.alpha_y);
-        let (_, theta_h, phi_h) = cartesian_to_spherical(wh, 1.0);
-        let d = dist.eval_adf(theta_h.as_f64(), phi_h.cos() as f64);
-        if d.abs() < 1.0e-6 {
-            return 0.0;
-        }
+        let wh_sph = cart_to_sph(wh);
+        let d = dist.eval_adf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
         let g = dist.eval_msf1(wh, wi) * dist.eval_msf1(wh, wo);
-        if g.abs() < 1.0e-6 {
-            return 0.0;
-        }
         // TODO: test medium type
-        let f = fresnel::reflectance_dielectric_conductor(wi.z.abs(), ior_i.eta, ior_t.eta, ior_t.k)
-            as f64;
-        (d * g * f) / (4.0 * wi.z as f64 * wo.z as f64)
+        let f = fresnel::reflectance_dielectric_conductor(
+            cos_theta_i.abs(),
+            ior_i.eta,
+            ior_t.eta,
+            ior_t.k,
+        ) as f64;
+        (d * g * f) / (4.0 * cos_theta_io)
     }
 
     fn eval_spectrum(
@@ -133,9 +132,9 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
                 let alpha_x4 = alpha_x2 * alpha_x2;
                 let alpha_y4 = alpha_y2 * alpha_y2;
 
-                let (_, _, phi_h) = cartesian_to_spherical(wh, 1.0);
-                let (_, _, phi_o) = cartesian_to_spherical(wo, 1.0);
-                let (_, _, phi_i) = cartesian_to_spherical(wi, 1.0);
+                let phi_h = cart_to_sph(wh).phi;
+                let phi_o = cart_to_sph(wo).phi;
+                let phi_i = cart_to_sph(wi).phi;
                 let phi_hi = (phi_h - phi_i).abs().as_f64();
                 let cos_phi_hi = phi_hi.cos();
                 let sin_phi_hi = phi_hi.sin();
@@ -264,14 +263,14 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
                     coeff_dfr_dalpha_y,
                     dfr_dalpha_y,
                     wi,
-                    cartesian_to_spherical(wi, 1.0).1.to_degrees(),
-                    cartesian_to_spherical(wi, 1.0).2.to_degrees(),
+                    cart_to_sph(wi).theta.to_degrees(),
+                    cart_to_sph(wi).phi.to_degrees(),
                     wo,
-                    cartesian_to_spherical(wo, 1.0).1.to_degrees(),
-                    cartesian_to_spherical(wo, 1.0).2.to_degrees(),
+                    cart_to_sph(wo).theta.to_degrees(),
+                    cart_to_sph(wo).phi.to_degrees(),
                     wh,
-                    cartesian_to_spherical(wh, 1.0).1.to_degrees(),
-                    cartesian_to_spherical(wh, 1.0).2.to_degrees(),
+                    cart_to_sph(wh).theta.to_degrees(),
+                    cart_to_sph(wh).phi.to_degrees(),
                 );
 
                 result[i * wos.len() * 2 + j * 2].write(dfr_dalpha_x);

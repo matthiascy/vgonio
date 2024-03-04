@@ -4,7 +4,7 @@ use crate::{
     RangeByStepSizeInclusive,
 };
 use base::{
-    math::{spherical_to_cartesian, sqr, Vec3, Vec3A},
+    math::{sph_to_cart, sqr, Vec3, Vec3A},
     optics::fresnel,
 };
 use bxdf::{
@@ -86,6 +86,7 @@ pub fn compute_iso_brdf_mse(
 
     let max_theta_o = max_theta_o.unwrap_or(95.0).to_radians();
     let num_samples = AtomicU64::new(0);
+
     // Maximum values of the measured samples and the modelled samples for each
     // snapshot.
     let (max_values_measured, max_values_model) = {
@@ -93,7 +94,7 @@ pub fn compute_iso_brdf_mse(
             .snapshots
             .iter()
             .map(|snapshot| {
-                let wi = spherical_to_cartesian(1.0, snapshot.wi.theta, snapshot.wi.phi);
+                let wi = sph_to_cart(snapshot.wi.theta, snapshot.wi.phi);
                 let wo: Vec3 = fresnel::reflect(Vec3A::from(-wi), Vec3A::Z).into();
                 (
                     snapshot.samples.iter().fold(0.0f64, |m, spectral_samples| {
@@ -119,7 +120,7 @@ pub fn compute_iso_brdf_mse(
         .iter()
         .enumerate()
         .map(|(snap_idx, snapshot)| {
-            let wi = spherical_to_cartesian(1.0, snapshot.wi.theta, snapshot.wi.phi);
+            let wi = snapshot.wi.to_cartesian();
             snapshot
                 .samples
                 .iter()
@@ -131,7 +132,7 @@ pub fn compute_iso_brdf_mse(
                     if wo_sph.theta.as_f64() > max_theta_o {
                         return vec![0.0; models.len()].into_boxed_slice();
                     }
-                    let wo = spherical_to_cartesian(1.0, wo_sph.theta, wo_sph.phi);
+                    let wo = wo_sph.to_cartesian();
                     let mut sqr_err = vec![0.0; models.len()].into_boxed_slice();
                     // Compute the squared error for each model per sample.
                     models.iter().zip(sqr_err.iter_mut()).enumerate().for_each(

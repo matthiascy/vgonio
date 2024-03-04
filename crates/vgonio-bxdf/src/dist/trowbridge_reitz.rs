@@ -2,7 +2,7 @@ use crate::{
     impl_common_methods, MicrofacetDistributionFittingModel, MicrofacetDistributionModel,
     MicrofacetDistributionModelKind,
 };
-use base::math::{cartesian_to_spherical, cbr, rcp_f64, sqr, Vec3};
+use base::math::{cart_to_sph, cbr, rcp_f64, sqr, Vec3};
 use std::fmt::Debug;
 
 /// Trowbridge-Reitz(GGX) microfacet distribution function.
@@ -51,15 +51,13 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
     impl_common_methods!();
 
     fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
+        // TODO: recheck the implementation
         let cos_theta2 = sqr(cos_theta);
         let tan_theta2 = (1.0 - cos_theta2) / cos_theta2;
         if tan_theta2.is_infinite() {
             return 0.0;
         }
         let cos_theta4 = sqr(cos_theta2);
-        if cos_theta4 < 1.0e-16 {
-            return 0.0;
-        }
         let alpha_xy = self.alpha_x * self.alpha_y;
         let cos_phi2 = sqr(cos_phi);
         let sin_phi2 = 1.0 - cos_phi2;
@@ -68,15 +66,24 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
     }
 
     fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64 {
+        // TODO: recheck the implementation, especially the anisotropic case
         if m.dot(v) <= 0.0 {
             return 0.0;
         }
-        let (_, _, phi_m) = cartesian_to_spherical(m, 1.0);
-        let cos_phi_m2 = sqr(phi_m.cos()) as f64;
-        let sin_phi_m2 = 1.0 - cos_phi_m2;
         let cos_theta_v2 = sqr(v.z as f64);
+        if cos_theta_v2 < 1.0e-16 {
+            return 0.0;
+        }
         let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
-        let alpha2 = sqr(self.alpha_x) * cos_phi_m2 + sqr(self.alpha_y) * sin_phi_m2;
+        // // aniostropic case
+        // let (_, _, phi_m) = cartesian_to_spherical(m, 1.0);
+        // let cos_phi_m2 = sqr(phi_m.cos()) as f64;
+        // let sin_phi_m2 = 1.0 - cos_phi_m2;
+        // let alpha2 = sqr(self.alpha_x) * cos_phi_m2 + sqr(self.alpha_y) * sin_phi_m2;
+
+        // isotropic case
+        let alpha2 = sqr(self.alpha_x);
+
         2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * alpha2).sqrt())
     }
 

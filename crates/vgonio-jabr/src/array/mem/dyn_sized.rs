@@ -1,4 +1,4 @@
-use crate::array::mem::{Data, DataRaw, Sealed};
+use crate::array::mem::{Data, Sealed};
 use std::fmt::Debug;
 
 pub struct DynSized<T>(pub(crate) Vec<T>);

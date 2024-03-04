@@ -1,5 +1,5 @@
 use base::{
-    math::{rcp_f64, sqr, Vec3},
+    math::{cart_to_sph, cos_theta, rcp_f64, sqr, Vec3},
     optics::{fresnel, ior::RefractiveIndex},
 };
 use libm::erf;
@@ -38,15 +38,16 @@ impl MicrofacetBasedBrdfModel for BeckmannBrdfModel {
         // TODO: recheck the implementation
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
-        let cos_theta_i = wi.z;
-        let cos_theta_o = wo.z;
+        let cos_theta_i = cos_theta(&wi);
+        let cos_theta_o = cos_theta(&wo);
         let cos_theta_io = (cos_theta_i * cos_theta_o) as f64;
         if cos_theta_io <= 1e-16 {
             return 0.0;
         }
         let wh = (wi + wo).normalize();
         let dist = BeckmannDistribution::new(self.alpha_x, self.alpha_y);
-        let d = dist.eval_adf(wh.z as f64, wh.y.atan2(wh.x) as f64);
+        let wh_sph = cart_to_sph(wh);
+        let d = dist.eval_adf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
         let g = dist.eval_msf1(wh, wi) * dist.eval_msf1(wh, wo);
         // TODO: test medium type
         let f = fresnel::reflectance_dielectric_conductor(

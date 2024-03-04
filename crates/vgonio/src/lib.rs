@@ -14,6 +14,7 @@
 #![feature(new_uninit)]
 #![feature(portable_simd)]
 #![feature(slice_pattern)]
+#![feature(os_str_display)]
 #![warn(missing_docs)]
 
 extern crate core;
