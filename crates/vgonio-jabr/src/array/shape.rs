@@ -1,26 +1,33 @@
-/// Dimension sequence.
+use crate::array::dim::DimSeq;
+
+/// Common trait for types that can be used to represent the shape of an array.
+pub trait Shape {
+    /// The underlying type used to store the shape.
+    type Underlying: DimSeq;
+}
+
+/// Trait for fixed-size multidimensional shapes with a known number of
+/// dimensions and size of each dimension at compile-time.
 ///
-/// Trait for types that can be used to represent the shape of an array.
-pub trait DimSeq: Clone + PartialEq + Eq {
-    fn n_dims(&self) -> usize;
-    fn as_slice(&self) -> &[usize];
-    fn as_mut_slice(&mut self) -> &mut [usize];
+/// This trait is a helper to construct a concrete array shape from
+/// the recursively defined const shape type `ConstShape`.
+pub trait CShape {
+    /// Underlying storage type for the shape.
+    type Underlying: DimSeq;
+    /// The number of dimensions of the array.
+    const N_DIMS: usize;
+    /// The number of elements in the array.
+    const N_ELEMS: usize;
+    /// The shape of the array. For a fixed-size shape, this is a const array.
+    const SHAPE: Self::Underlying;
+    /// Pre-computed array strides for row-major layout: the number of elements
+    /// needed to move one step in each dimension.
+    const ROW_MAJOR_STRIDES: Self::Underlying;
+    /// Pre-computed array strides for column-major layout: the number of
+    /// elements needed to move one step in each dimension.
+    const COL_MAJOR_STRIDES: Self::Underlying;
 }
 
-/// A fixed-size dimension sequence with `N` elements.
-impl<const N: usize> DimSeq for [usize; N] {
-    fn n_dims(&self) -> usize { N }
-
-    fn as_slice(&self) -> &[usize] { &self[..] }
-
-    fn as_mut_slice(&mut self) -> &mut [usize] { &mut self[..] }
-}
-
-/// A dynamically-sized dimension sequence.
-impl DimSeq for Vec<usize> {
-    fn n_dims(&self) -> usize { self.len() }
-
-    fn as_slice(&self) -> &[usize] { &self[..] }
-
-    fn as_mut_slice(&mut self) -> &mut [usize] { &mut self[..] }
+impl<const N: usize> Shape for [usize; N] {
+    type Underlying = [usize; N];
 }
