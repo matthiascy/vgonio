@@ -25,7 +25,7 @@ mod cmd_info;
 mod cmd_measure;
 
 pub use cmd_convert::ConvertOptions;
-pub use cmd_fit::{BrdfModel, FitOptions, ALPHA_RANGE};
+pub use cmd_fit::{BrdfModel, FitOptions};
 #[cfg(feature = "surf-gen")]
 pub use cmd_generate::GenerateOptions;
 pub use cmd_measure::MeasureOptions;

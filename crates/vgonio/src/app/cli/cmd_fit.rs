@@ -99,16 +99,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 fresnel: true,
             };
             for model in models.iter() {
-                let (mut brdf, max_values) = generate_analytical_brdf(&params, model, &cache.iors);
-                if opts.normalize {
-                    for (snapshot, max_vals) in brdf.snapshots.iter_mut().zip(max_values.iter()) {
-                        for spectral_samples in snapshot.samples.iter_mut() {
-                            for (sample, max) in spectral_samples.iter_mut().zip(max_vals.iter()) {
-                                *sample /= *max as f32;
-                            }
-                        }
-                    }
-                }
+                let (mut brdf, max_values) =
+                    generate_analytical_brdf(&params, model, &cache.iors, opts.normalize);
                 let output =
                     config
                         .output_dir()
@@ -131,8 +123,13 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     &measured_brdf,
                     opts.max_theta_o,
                     opts.model,
-                    ALPHA_RANGE,
+                    RangeByStepSizeInclusive::new(
+                        opts.alpha_start.unwrap(),
+                        opts.alpha_end.unwrap(),
+                        opts.alpha_step.unwrap(),
+                    ),
                     &cache,
+                    opts.normalize,
                 );
                 println!(
                     "    {}>{} MSE ({}) {:?}",
@@ -187,6 +184,12 @@ pub struct FitOptions {
         default_value = "false"
     )]
     pub normalize: bool,
+    #[clap(long, help = "Start roughness.", default_value = "0.01")]
+    pub alpha_start: Option<f64>,
+    #[clap(long, help = "End roughness.", default_value = "1.0")]
+    pub alpha_end: Option<f64>,
+    #[clap(long, help = "Roughness step size.", default_value = "0.01")]
+    pub alpha_step: Option<f64>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -194,6 +197,3 @@ pub enum BrdfModel {
     Beckmann,
     TrowbridgeReitz,
 }
-
-pub const ALPHA_RANGE: RangeByStepSizeInclusive<f64> =
-    RangeByStepSizeInclusive::new(0.01, 1.0, 0.01);

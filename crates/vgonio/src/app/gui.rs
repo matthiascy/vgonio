@@ -65,7 +65,7 @@ use self::tools::SamplingInspector;
 use crate::{
     app::{
         cache::Cache,
-        cli::{BrdfModel, ALPHA_RANGE},
+        cli::BrdfModel,
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},
@@ -693,43 +693,6 @@ impl VgonioGuiApp {
                                 log::error!("Failed to write measured data to file: {}", err);
                             })
                             .unwrap();
-                            for measurement in data.iter() {
-                                match &measurement.measured {
-                                    MeasuredData::Bsdf(brdf) => {
-                                        // Calculate the mean squared error with models of
-                                        // different roughness.
-                                        println!(
-                                            "Calculating MSE for the measured BSDF: {}",
-                                            measurement.name
-                                        );
-                                        let (beckmann_mses, trowbridge_mses) =
-                                            self.cache.read(|cache| {
-                                                (
-                                                    compute_iso_brdf_mse(
-                                                        brdf,
-                                                        None,
-                                                        BrdfModel::Beckmann,
-                                                        ALPHA_RANGE,
-                                                        cache,
-                                                    ),
-                                                    compute_iso_brdf_mse(
-                                                        brdf,
-                                                        None,
-                                                        BrdfModel::TrowbridgeReitz,
-                                                        ALPHA_RANGE,
-                                                        cache,
-                                                    ),
-                                                )
-                                            });
-                                        println!("Beckmann MSE: {:?}", beckmann_mses.as_slice());
-                                        println!(
-                                            "Trowbridge MSE: {:?}",
-                                            trowbridge_mses.as_slice()
-                                        );
-                                    }
-                                    _ => {}
-                                }
-                            }
                         }
                         self.cache.write(|cache| {
                             let meas = Vec::from(data)
