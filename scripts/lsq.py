@@ -124,6 +124,7 @@ def read_brdf_data(filename):
         # Read the data
         wis = np.zeros((wi_count, 2))
         snapshots = np.zeros((wi_count, n_patches))
+        snapshots_max = np.zeros(wi_count)
         print('snapshot shape: ', snapshots.shape)
         if is_binary:
             if compression_type == 'none':
@@ -137,9 +138,10 @@ def read_brdf_data(filename):
                         count=n_patches * wavelength_count,
                     ).reshape(1, n_patches, wavelength_count)
                     snapshots[i][:] = full_snapshot[:, :, 0][:]
+                    snapshots_max[i] = np.max(snapshots[i])
             else:
                 raise Exception('Not implemented yet.')
-        return wis, wos, snapshots
+        return wis, wos, snapshots, snapshots_max
 
 
 def trowbridge_reitz_ndf_iso(alpha, cos_theta_h):
@@ -352,11 +354,11 @@ def plot_data_surface(wi_idx, wis_sph, wos_cart, snapshots):
     plt.show()
 
 
-x0 = np.array([0.9])
+x0 = np.array([0.001])
 
 if __name__ == '__main__':
     # Read the data from the file
-    wis_sph, wos_sph, snapshots = read_brdf_data(sys.argv[1])
+    wis_sph, wos_sph, snapshots, snapshots_max = read_brdf_data(sys.argv[1])
 
     for i in range(len(wis_sph)):
         print(f"wi: {wis_sph[i, 0]}, {wis_sph[i, 1]}: ")
@@ -375,20 +377,18 @@ if __name__ == '__main__':
     # for i in range(len(wis_sph)):
     #     plot_data_surface(i, wis_sph, wos_cart, snapshots)
 
-    # fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
-    # # Make an initial guess
-    # x0 = 1.0
-    #
-    # # Minimize the function
-    # res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
-    #                         # jac=jacobian_trowbridge_reitz_iso,
-    #                         bounds=(0, 1.5),
-    #                         args=(wis_cart, wos_cart, snapshots))
-    #
-    # # Print the result
-    # if res.success:
-    #     print(f"Success! {res.x}")
-    # else:
-    #     print("Failure!")
-    #
-    # print(res)
+    fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
+
+    # Minimize the function
+    res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
+                            # jac=jacobian_trowbridge_reitz_iso,
+                            bounds=(0.001, 1.0),
+                            args=(wis_cart, wos_cart, snapshots))
+
+    # Print the result
+    if res.success:
+        print(f"Success! {res.x}")
+    else:
+        print("Failure!")
+
+    print(res)

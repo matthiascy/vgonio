@@ -2739,14 +2739,14 @@ y_100_2_b_norm = []
 lowest100_2_norm = np.zeros((6, 2))
 for i in range(6):
     label = f'b2-{surfaces[i]}-norm'
-    y_100_2_b_norm.append(np.log(y_100[label]))
+    y_100_2_b_norm.append(y_100[label])
     lowest100_2_norm[i] = [x_100[np.argmin(y_100_2_b_norm[i])], np.min(y_100_2_b_norm[i])]
     axs100_2_norm[0].plot(x_100, y_100_2_b_norm[i], label=label)
 
 axs100_2_norm[0].scatter(lowest100_2_norm[:, 0], lowest100_2_norm[:, 1], color='r', marker='x')
 # annotate the lowest point
 for i in range(6):
-    axs100_2_norm[0].annotate(f'{lowest100_2_norm[i, 0]}', (lowest100_2_norm[i, 0], lowest100_2_norm[i, 1]))
+    axs100_2_norm[0].annotate(f'{lowest100_2_norm[i, 0]:.3}', (lowest100_2_norm[i, 0], lowest100_2_norm[i, 1]))
 axs100_2_norm[0].legend()
 axs100_2_norm[0].grid()
 
@@ -2755,14 +2755,14 @@ y_100_2_t_norm = []
 lowest100_2_t_norm = np.zeros((6, 2))
 for i in range(6):
     label = f't2-{surfaces[i]}-norm'
-    y_100_2_t_norm.append(np.log(y_100[label]))
+    y_100_2_t_norm.append(y_100[label])
     lowest100_2_t_norm[i] = [x_100[np.argmin(y_100_2_t_norm[i])], np.min(y_100_2_t_norm[i])]
     axs100_2_norm[1].plot(x_100, y_100_2_t_norm[i], label=label)
 
 axs100_2_norm[1].scatter(lowest100_2_t_norm[:, 0], lowest100_2_t_norm[:, 1], color='r', marker='x')
 # annotate the lowest point
 for i in range(6):
-    axs100_2_norm[1].annotate(f'{lowest100_2_t_norm[i, 0]}', (lowest100_2_t_norm[i, 0], lowest100_2_t_norm[i, 1]))
+    axs100_2_norm[1].annotate(f'{lowest100_2_t_norm[i, 0]:.3}', (lowest100_2_t_norm[i, 0], lowest100_2_t_norm[i, 1]))
 axs100_2_norm[1].legend()
 axs100_2_norm[1].grid()
 
@@ -2774,7 +2774,7 @@ y_1k_2_b_norm = []
 lowest1k_2_b_norm = np.zeros((6, 2))
 for i in range(6):
     label = f'b2-{surfaces[i]}-norm'
-    y_1k_2_b_norm.append(np.log(y_1k[label]))
+    y_1k_2_b_norm.append(y_1k[label])
     lowest1k_2_b_norm[i] = [x_1k[np.argmin(y_1k_2_b_norm[i])], np.min(y_1k_2_b_norm[i])]
     axs1k_2_norm[0].plot(x_1k, y_1k_2_b_norm[i], label=f'{label}-1k')
 
@@ -2792,7 +2792,7 @@ y_1k_2_t_norm = []
 lowest1k_2_t_norm = np.zeros((6, 2))
 for i in range(6):
     label = f't2-{surfaces[i]}-norm'
-    y_1k_2_t_norm.append(np.log(y_1k[label]))
+    y_1k_2_t_norm.append(y_1k[label])
     lowest1k_2_t_norm[i] = [x_1k[np.argmin(y_1k_2_t_norm[i])], np.min(y_1k_2_t_norm[i])]
     axs1k_2_norm[1].plot(x_1k, y_1k_2_t_norm[i], label=f'{label}-1k')
 
@@ -2805,3 +2805,21 @@ axs1k_2_norm[1].legend()
 axs1k_2_norm[1].grid()
 
 plt.show()
+
+"""
+TR   | alpha_ndf       | alpha_brdf | err
+al0  | 0.0237 / 0.0250 | 0.021      | -0.0027 / -0.0040
+al1  | 0.1195 / 0.1142 | 0.122      | 0.0025 / 0.0078
+al2  | 0.1670 / 0.1706 | 0.184      | 0.0170 / 0.0134
+al3  | 0.1938 / 0.1957 | 0.209      | 0.0152 / 0.0133
+al4  | 0.2481 / 0.2477 | 0.258      | 0.0099 / 0.0103
+al65 | 0.2822 / 0.2835 | 0.293      | 0.0108 / 0.0095
+
+Bk   | alpha_ndf       | alpha_brdf | err
+al0  | 0.0240 / 0.0247 | 0.020      | -0.0040 / -0.0047
+al1  | 0.1240 / 0.1197 | 0.112      | -0.0120 / -0.0163
+al2  | 0.1724 / 0.1757 | 0.171      | -0.0016 / 0.0037
+al3  | 0.1994 / 0.2022 | 0.198      | -0.0014 / -0.0042
+al4  | 0.2563 / 0.2560 | 0.252      | -0.0043 / -0.0046
+al65 | 0.2936 / 0.2934 | 0.285      | -0.0086 / -0.0084
+"""

@@ -77,6 +77,8 @@ pub fn compute_iso_brdf_mse(
         unsafe { brdfs.assume_init() }
     };
 
+    println!(" Finished generating analytical BRDFs");
+
     let max_theta_o = max_theta_o.unwrap_or(95.0).to_radians();
     // Maximum values of the measured samples for each snapshot. Only the first
     // spectral sample is considered.

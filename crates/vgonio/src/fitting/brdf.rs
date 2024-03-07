@@ -5,14 +5,15 @@ use crate::{
     partition::SphericalPartition,
 };
 use base::{
-    math::{sph_to_cart, Vec3},
-    optics::ior::RefractiveIndex,
+    math::{sph_to_cart, Vec3, Vec3A},
+    optics::{fresnel, ior::RefractiveIndex},
     Isotropy,
 };
 use bxdf::{
     brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
 };
+use jabr::optics::reflect;
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::{
@@ -123,9 +124,8 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
-            initialise_microfacet_bsdf_models(0.001, 2.0, 32, self.target)
-                // .into_par_iter()
-                .into_iter()
+            initialise_microfacet_bsdf_models(0.2, 0.3, 100, self.target)
+                .into_par_iter()
                 .filter_map(|model| {
                     log::debug!(
                         "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
@@ -162,6 +162,9 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
 struct MicrofacetBasedBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// The measured BSDF data.
     measured: &'a MeasuredBsdfData,
+    /// Maximum value of the measured samples for each snapshot. Only the first
+    /// spectral sample is considered.
+    max_measured: Box<[f64]>,
     /// The target BSDF model.
     model: Box<dyn MicrofacetBasedBrdfFittingModel>,
     /// The actual partition (not the params) of the measured BSDF data.
@@ -196,6 +199,12 @@ fn eval_residuals<const I: Isotropy>(
                 let sph = snapshot.wi;
                 sph_to_cart(sph.theta, sph.phi)
             };
+            let max_measured = problem.max_measured[i];
+            // Use precise max value for the modelled samples
+            let wo: Vec3 = fresnel::reflect(Vec3A::from(-wi), Vec3A::Z).into();
+            let max_modelled = problem
+                .model
+                .eval(wi, wo, &problem.iors_i[0], &problem.iors_t[0]);
             problem
                 .partition
                 .patches
@@ -207,11 +216,12 @@ fn eval_residuals<const I: Isotropy>(
                         sph_to_cart(c.theta, c.phi)
                     };
                     // Only the first wavelength is used. TODO: Use all
-                    let measured = snapshot.samples[j][0] as f64;
+                    let measured = snapshot.samples[j][0] as f64 / max_measured;
                     let modelled =
                         problem
                             .model
-                            .eval(wi, wo, &problem.iors_i[0], &problem.iors_t[0]);
+                            .eval(wi, wo, &problem.iors_i[0], &problem.iors_t[0])
+                            / max_modelled;
                     rs[i * n_patches + j].write(modelled - measured);
                 });
         });
@@ -226,6 +236,12 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
         iors_t: &'a [RefractiveIndex],
     ) -> Self {
         let partition = measured.params.receiver.partitioning();
+        let max_measured = measured
+            .snapshots
+            .iter()
+            .map(|s| s.samples.iter().map(|s| s[0] as f64).fold(0.0, f64::max))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let wis = measured
             .snapshots
             .iter()
@@ -246,6 +262,7 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
             .into_boxed_slice();
         Self {
             measured,
+            max_measured,
             model,
             partition,
             iors_i,
@@ -313,43 +330,5 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
                 .model
                 .partial_derivatives(&self.wis, &self.wos, &self.iors_i[0], &self.iors_t[0]),
         ))
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{
-        fitting::brdf::MicrofacetBasedBrdfFittingProblemProxy, measure::data::MeasurementData,
-    };
-    use approx::assert_relative_eq;
-    use base::{optics::ior::RefractiveIndex, units::nm, Isotropy};
-    use bxdf::{brdf::TrowbridgeReitzBrdfModel, MicrofacetBasedBrdfModelKind};
-    use levenberg_marquardt::{differentiate_numerically, LeastSquaresProblem};
-    use nalgebra::{Dyn, Owned, VecStorage, U1};
-
-    fn test_trowbridge_reitz_derivative_impl() {
-        let measured = MeasurementData::read_from_file(
-            "~/Documents/virtual-gonio/output/brdf-simple.vgmo".as_ref(),
-        )
-        .unwrap()
-        .measured
-        .as_bsdf()
-        .unwrap();
-        let model = Box::new(TrowbridgeReitzBrdfModel::new(0.1, 0.1));
-        let iors_i = Box::new([
-            RefractiveIndex::new(nm!(400.0), 1.0, 0.0),
-            RefractiveIndex::new(nm!(400.0), 1.0, 0.0),
-        ]);
-        let iors_t = Box::new([
-            RefractiveIndex::new(nm!(400.0), 0.392, 4.305),
-            RefractiveIndex::new(nm!(400.0), 0.392, 4.305),
-        ]);
-
-        let mut problem = Box::new(MicrofacetBasedBrdfFittingProblemProxy::<
-            { Isotropy::Isotropic },
-        >::new(measured, model, &iors_i, &iors_t));
-        let jacobian_numerical = differentiate_numerically(&mut problem).unwrap();
-        let jacobian_analytical = problem.jacobian().unwrap();
-        assert_relative_eq!(jacobian_numerical, jacobian_analytical, epsilon = 1e-13);
     }
 }
