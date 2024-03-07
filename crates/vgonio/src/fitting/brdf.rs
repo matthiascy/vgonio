@@ -10,7 +10,7 @@ use base::{
     Isotropy,
 };
 use bxdf::{
-    brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
+    brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
 };
 use jabr::optics::reflect;
@@ -24,7 +24,7 @@ use std::{
 /// The fitting problem for the microfacet based BSDF model.
 ///
 /// The fitting procedure ir based on the Levenberg-Marquardt algorithm.
-pub struct MicrofacetBasedBrdfFittingProblem<'a> {
+pub struct MicrofacetBrdfFittingProblem<'a> {
     /// The measured BSDF data.
     pub measured: Cow<'a, MeasuredBsdfData>,
     /// The target BSDF model.
@@ -37,7 +37,7 @@ pub struct MicrofacetBasedBrdfFittingProblem<'a> {
     pub iors_t: Box<[RefractiveIndex]>,
 }
 
-impl<'a> Display for MicrofacetBasedBrdfFittingProblem<'a> {
+impl<'a> Display for MicrofacetBrdfFittingProblem<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BSDF Fitting Problem")
             .field("target", &self.target)
@@ -45,7 +45,7 @@ impl<'a> Display for MicrofacetBasedBrdfFittingProblem<'a> {
     }
 }
 
-impl<'a> MicrofacetBasedBrdfFittingProblem<'a> {
+impl<'a> MicrofacetBrdfFittingProblem<'a> {
     /// Creates a new BSDF fitting problem.
     ///
     /// # Arguments
@@ -117,7 +117,7 @@ fn initialise_microfacet_bsdf_models(
 }
 
 // Actual implementation of the fitting problem.
-impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
+impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
     type Model = Box<dyn MicrofacetBasedBrdfModel>;
 
     fn lsq_lm_fit(self) -> FittingReport<Self::Model> {
@@ -125,7 +125,8 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
         let solver = LevenbergMarquardt::new();
         let mut results = {
             initialise_microfacet_bsdf_models(0.2, 0.3, 100, self.target)
-                .into_par_iter()
+                // .into_par_iter()
+                .into_iter()
                 .filter_map(|model| {
                     log::debug!(
                         "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
@@ -133,13 +134,12 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
                         model.alpha_x(),
                         model.alpha_y()
                     );
-                    let problem =
-                        MicrofacetBasedBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
-                            &self.measured,
-                            model,
-                            &self.iors_i,
-                            &self.iors_t,
-                        );
+                    let problem = MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                        &self.measured,
+                        model,
+                        &self.iors_i,
+                        &self.iors_t,
+                    );
                     let (result, report) = solver.minimize(problem);
                     log::debug!(
                         "Fitted αx = {} αy = {}, report: {:?}",
@@ -159,7 +159,7 @@ impl<'a> FittingProblem for MicrofacetBasedBrdfFittingProblem<'a> {
     }
 }
 
-struct MicrofacetBasedBrdfFittingProblemProxy<'a, const I: Isotropy> {
+struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// The measured BSDF data.
     measured: &'a MeasuredBsdfData,
     /// Maximum value of the measured samples for each snapshot. Only the first
@@ -181,9 +181,7 @@ struct MicrofacetBasedBrdfFittingProblemProxy<'a, const I: Isotropy> {
     wos: Box<[Vec3]>,
 }
 
-fn eval_residuals<const I: Isotropy>(
-    problem: &MicrofacetBasedBrdfFittingProblemProxy<I>,
-) -> Box<[f64]> {
+fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy<I>) -> Box<[f64]> {
     // The number of residuals is the number of patches times the number of
     // snapshots.
     let n_patches = problem.partition.num_patches();
@@ -228,7 +226,7 @@ fn eval_residuals<const I: Isotropy>(
     unsafe { rs.assume_init() }
 }
 
-impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
+impl<'a, const I: Isotropy> MicrofacetBrdfFittingProblemProxy<'a, I> {
     pub fn new(
         measured: &'a MeasuredBsdfData,
         model: Box<dyn MicrofacetBasedBrdfFittingModel>,
@@ -239,25 +237,24 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
         let max_measured = measured
             .snapshots
             .iter()
-            .map(|s| s.samples.iter().map(|s| s[0] as f64).fold(0.0, f64::max))
+            .map(|snapshot| {
+                snapshot
+                    .samples
+                    .iter()
+                    .fold(0.0, |m: f64, s| m.max(s[0] as f64))
+            })
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let wis = measured
             .snapshots
             .iter()
-            .map(|s| {
-                let c = s.wi;
-                sph_to_cart(c.theta, c.phi)
-            })
+            .map(|s| s.wi.to_cartesian())
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let wos = partition
             .patches
             .iter()
-            .map(|p| {
-                let c = p.center();
-                sph_to_cart(c.theta, c.phi)
-            })
+            .map(|p| p.center().to_cartesian())
             .collect::<Vec<_>>()
             .into_boxed_slice();
         Self {
@@ -274,7 +271,7 @@ impl<'a, const I: Isotropy> MicrofacetBasedBrdfFittingProblemProxy<'a, I> {
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
-    for MicrofacetBasedBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
+    for MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
@@ -309,7 +306,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for MicrofacetBasedBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
+    for MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;

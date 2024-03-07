@@ -15,7 +15,7 @@ use base::{
     optics::fresnel,
 };
 use bxdf::{
-    brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
+    brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
 };
 use rand::seq::index::sample;
@@ -87,9 +87,10 @@ pub fn compute_iso_brdf_mse(
             .snapshots
             .par_iter()
             .map(|snapshot| {
-                snapshot.samples.iter().fold(0.0f64, |m, spectral_samples| {
-                    m.max(spectral_samples[0] as f64)
-                })
+                snapshot
+                    .samples
+                    .iter()
+                    .fold(0.0f64, |m, s| m.max(s[0] as f64))
             })
             .collect::<Vec<_>>()
             .into_boxed_slice()

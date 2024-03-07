@@ -1,6 +1,6 @@
 use crate::{
-    impl_common_methods, MicrofacetDistributionFittingModel, MicrofacetDistributionModel,
-    MicrofacetDistributionModelKind,
+    impl_common_methods, MicrofacetDistribution, MicrofacetDistributionFittingModel,
+    MicrofacetDistributionKind,
 };
 use base::math::{cart_to_sph, cbr, rcp_f64, sqr, Vec3};
 use std::fmt::Debug;
@@ -43,10 +43,8 @@ impl TrowbridgeReitzDistribution {
     }
 }
 
-impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
-    fn kind(&self) -> MicrofacetDistributionModelKind {
-        MicrofacetDistributionModelKind::TrowbridgeReitz
-    }
+impl MicrofacetDistribution for TrowbridgeReitzDistribution {
+    fn kind(&self) -> MicrofacetDistributionKind { MicrofacetDistributionKind::TrowbridgeReitz }
 
     impl_common_methods!();
 
@@ -87,7 +85,7 @@ impl MicrofacetDistributionModel for TrowbridgeReitzDistribution {
         2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * alpha2).sqrt())
     }
 
-    fn clone_box(&self) -> Box<dyn MicrofacetDistributionModel> { Box::new(*self) }
+    fn clone_box(&self) -> Box<dyn MicrofacetDistribution> { Box::new(*self) }
 }
 
 impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {

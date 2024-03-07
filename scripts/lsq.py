@@ -124,7 +124,7 @@ def read_brdf_data(filename):
         # Read the data
         wis = np.zeros((wi_count, 2))
         snapshots = np.zeros((wi_count, n_patches))
-        snapshots_max = np.zeros(wi_count)
+        snapshots_max = np.zeros((wi_count, 1))
         print('snapshot shape: ', snapshots.shape)
         if is_binary:
             if compression_type == 'none':
@@ -224,6 +224,9 @@ def trowbridge_reitz_iso(alpha, wi: np.ndarray, wo: np.ndarray):
     Calculate the Trowbridge-Reitz isotropic BRDF model with the given
     roughness and the given incident and outgoing directions.
     """
+    # wi, wo may cancel each other out and result in a zero vector
+    if np.linalg.norm(wi + wo) < 1e-8:
+        return 0.0
     wh = (wi + wo) / np.linalg.norm(wi + wo)
     cos_theta_i = wi[2]
     cos_theta_o = wo[2]
@@ -298,34 +301,50 @@ def trowbridge_reitz_jacobian(alpha, wi: np.ndarray, wo: np.ndarray):
     return -nominator / denominator
 
 
-def residuals_trowbridge_reitz_iso(x, wis, wos, snapshots):
+def residuals_trowbridge_reitz_iso(x, wis, wos, snapshots, snapshots_max):
     """
     Calculate the residuals of the BRDF model with the given parameters x
     and the given data.
     """
     # Calculate the BRDF model
     brdf = np.zeros((len(wis), len(wos)))
+    brdf_max = np.zeros(len(wis))
+    for i in range(len(wis)):
+        wi = -wis[i]
+        wo = wi - 2 * np.dot(wi, np.array([0, 0, 1])) * np.array([0, 0, 1])
+        brdf_max[i] = trowbridge_reitz_iso(x, wi, wo)
     for i in range(len(wis)):
         for j in range(len(wos)):
-            brdf[i] += trowbridge_reitz_iso(x, wis[i], wos[j])
+            if brdf_max[i] == 0:
+                brdf[i] = trowbridge_reitz_iso(x, wis[i], wos[j])
+            else:
+                brdf[i] = trowbridge_reitz_iso(x, wis[i], wos[j]) / brdf_max[i]
 
     # Calculate the residuals
-    return (brdf - snapshots).flatten()
+    return (brdf - snapshots / snapshots_max).flatten()
 
 
-def residuals_beckmann_iso(x, wis, wos, snapshots):
+def residuals_beckmann_iso(x, wis, wos, snapshots, snapshots_max):
     """
     Calculate the residuals of the BRDF model with the given parameters x
     and the given data.
     """
     # Calculate the BRDF model
     brdf = np.zeros((len(wis), len(wos)))
+    brdf_max = np.zeros(len(wis))
+    for i in range(len(wis)):
+        wi = -wis[i]
+        wo = wi - 2 * np.dot(wi, np.array([0, 0, 1])) * np.array([0, 0, 1])
+        brdf_max[i] = beckmann_iso(x, wi, wo)
     for i in range(len(wis)):
         for j in range(len(wos)):
-            brdf[i] += beckmann_iso(x, wis[i], wos[j])
+            if brdf_max[i] == 0:
+                brdf[i] = beckmann_iso(x, wis[i], wos[j])
+            else:
+                brdf[i] = beckmann_iso(x, wis[i], wos[j]) / brdf_max[i]
 
     # Calculate the residuals
-    return (brdf - snapshots).flatten()
+    return (brdf - snapshots / snapshots_max).flatten()
 
 
 def jacobian_trowbridge_reitz_iso(x, wis, wos, _snapshots):
@@ -354,17 +373,17 @@ def plot_data_surface(wi_idx, wis_sph, wos_cart, snapshots):
     plt.show()
 
 
-x0 = np.array([0.001])
+x0 = np.array([0.01])
 
 if __name__ == '__main__':
     # Read the data from the file
     wis_sph, wos_sph, snapshots, snapshots_max = read_brdf_data(sys.argv[1])
 
-    for i in range(len(wis_sph)):
-        print(f"wi: {wis_sph[i, 0]}, {wis_sph[i, 1]}: ")
-        for j in range(len(wos_sph)):
-            print(f"{snapshots[i, j]}")
-        print("\n")
+    # for i in range(len(wis_sph)):
+    #     print(f"wi: {wis_sph[i, 0]}, {wis_sph[i, 1]}: ")
+    #     for j in range(len(wos_sph)):
+    #         print(f"{snapshots[i, j]}")
+    #     print("\n")
 
     # Convert the direction from spherical coordinates to Cartesian coordinates
     wis_cart = np.array(
@@ -380,10 +399,10 @@ if __name__ == '__main__':
     fun = residuals_beckmann_iso if sys.argv[2] == 'beckmann' else residuals_trowbridge_reitz_iso
 
     # Minimize the function
-    res = opt.least_squares(fun=fun, x0=x0, method='dogbox',
+    res = opt.least_squares(fun=fun, x0=x0, method='trf',
                             # jac=jacobian_trowbridge_reitz_iso,
-                            bounds=(0.001, 1.0),
-                            args=(wis_cart, wos_cart, snapshots))
+                            bounds=(0.001, 0.5),
+                            args=(wis_cart, wos_cart, snapshots, snapshots_max))
 
     # Print the result
     if res.success:

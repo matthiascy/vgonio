@@ -1,4 +1,4 @@
-use crate::fitting::MicrofacetBasedBrdfFittingProblem;
+use crate::fitting::MicrofacetBrdfFittingProblem;
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -236,7 +236,7 @@ impl VgonioGui {
                     FittingProblemKind::Bsdf { model } => {
                         let report = self.cache.read(|cache| {
                             let measurement = cache.get_measurement_data(*data).unwrap();
-                            let problem = MicrofacetBasedBrdfFittingProblem::new(
+                            let problem = MicrofacetBrdfFittingProblem::new(
                                 measurement.measured.as_bsdf().unwrap(),
                                 *model,
                                 cache,

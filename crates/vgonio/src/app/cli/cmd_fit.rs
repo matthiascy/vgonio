@@ -25,7 +25,7 @@ use base::{
     units::{nm, Rads},
 };
 use bxdf::{
-    brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
+    brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
 };
 use core::slice::SlicePattern;

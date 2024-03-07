@@ -10,7 +10,7 @@ use crate::{
     RangeByStepSizeInclusive,
 };
 use base::units::{rad, Radians};
-use bxdf::{MicrofacetDistributionModel, MicrofacetDistributionModelKind};
+use bxdf::{MicrofacetDistribution, MicrofacetDistributionKind};
 use egui::{Align, Ui};
 use std::any::Any;
 
@@ -23,7 +23,7 @@ use crate::{
 };
 
 struct ModelSelector {
-    model: MicrofacetDistributionModelKind,
+    model: MicrofacetDistributionKind,
 }
 
 impl ModelSelector {
@@ -32,12 +32,12 @@ impl ModelSelector {
             ui.label("Model: ");
             ui.selectable_value(
                 &mut self.model,
-                MicrofacetDistributionModelKind::Beckmann,
+                MicrofacetDistributionKind::Beckmann,
                 "Beckmann",
             );
             ui.selectable_value(
                 &mut self.model,
-                MicrofacetDistributionModelKind::TrowbridgeReitz,
+                MicrofacetDistributionKind::TrowbridgeReitz,
                 "Trowbridge-Reitz",
             );
         });
@@ -63,7 +63,7 @@ pub struct AreaDistributionExtra {
     pub show_slope_distribution: bool,
     /// The fitted curves together with the fitted model.
     pub fitted: Vec<(
-        Box<dyn MicrofacetDistributionModel>,
+        Box<dyn MicrofacetDistribution>,
         f32,
         Vec<Curve>, // Only one curve for isotropic model, otherwise one for each azimuthal angle.
     )>,
@@ -90,7 +90,7 @@ impl Default for AreaDistributionExtra {
             show_slope_distribution: false,
             fitted: vec![],
             selected: ModelSelector {
-                model: MicrofacetDistributionModelKind::Beckmann,
+                model: MicrofacetDistributionKind::Beckmann,
             },
         }
     }

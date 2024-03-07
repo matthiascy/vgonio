@@ -20,18 +20,18 @@ pub enum ReflectionModelFamily {
 // model kind into a single enum.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MicrofacetDistributionModelKind {
+pub enum MicrofacetDistributionKind {
     /// Beckmann microfacet distribution.
     Beckmann,
     /// Trowbridge-Reitz microfacet distribution.
     TrowbridgeReitz,
 }
 
-impl MicrofacetDistributionModelKind {
+impl MicrofacetDistributionKind {
     pub fn to_str(&self) -> &'static str {
         match self {
-            MicrofacetDistributionModelKind::Beckmann => "Beckmann",
-            MicrofacetDistributionModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
+            MicrofacetDistributionKind::Beckmann => "Beckmann",
+            MicrofacetDistributionKind::TrowbridgeReitz => "Trowbridge-Reitz",
         }
     }
 }
@@ -53,9 +53,9 @@ impl MicrofacetBasedBrdfModelKind {
     }
 }
 
-pub trait MicrofacetDistributionModel: Debug + Send {
+pub trait MicrofacetDistribution: Debug + Send {
     /// Returns the kind of the distribution.
-    fn kind(&self) -> MicrofacetDistributionModelKind;
+    fn kind(&self) -> MicrofacetDistributionKind;
 
     /// Returns whether the distribution is isotropic or anisotropic.
     fn isotropy(&self) -> Isotropy;
@@ -97,14 +97,14 @@ pub trait MicrofacetDistributionModel: Debug + Send {
     fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64;
 
     /// Clones the distribution model into a boxed trait object.
-    fn clone_box(&self) -> Box<dyn MicrofacetDistributionModel>;
+    fn clone_box(&self) -> Box<dyn MicrofacetDistribution>;
 }
 
-impl Clone for Box<dyn MicrofacetDistributionModel> {
+impl Clone for Box<dyn MicrofacetDistribution> {
     fn clone(&self) -> Self { self.clone_box() }
 }
 
-pub trait MicrofacetDistributionFittingModel: MicrofacetDistributionModel {
+pub trait MicrofacetDistributionFittingModel: MicrofacetDistribution {
     /// Computes the partial derivatives of the microfacet area distribution
     /// function with respect to the roughness parameters of the distribution
     /// model. The derivatives are evaluated with the Microfacet Area

@@ -5,9 +5,14 @@ use base::{
 use libm::erf;
 
 use crate::{
-    dist::BeckmannDistribution, impl_common_methods, MicrofacetBasedBrdfFittingModel,
-    MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistributionModel,
+    brdf::microfacet::MicrofacetBrdf, dist::BeckmannDistribution, impl_common_methods,
+    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
+    MicrofacetDistribution,
 };
+
+// TODO: remove BeckmannBrdfModel and use MicrofacetBrdf instead
+
+pub type BeckmannBrdf = MicrofacetBrdf<BeckmannDistribution>;
 
 /// Beckmann microfacet BRDF model.
 /// See [Beckmann Distribution](crate::dist::BeckmannDistribution).
@@ -218,6 +223,5 @@ impl MicrofacetBasedBrdfFittingModel for BeckmannBrdfModel {
         ior_i: &RefractiveIndex,
         ior_t: &RefractiveIndex,
     ) -> Box<[f64]> {
-        todo!()
     }
 }

@@ -25,8 +25,8 @@ pub use mdf::*;
 
 use base::Isotropy;
 use bxdf::{
-    MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistributionModel,
-    MicrofacetDistributionModelKind,
+    MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistribution,
+    MicrofacetDistributionKind,
 };
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
 use std::{fmt::Debug, ops::Bound};
@@ -37,7 +37,7 @@ pub enum FittingProblemKind {
     /// Fitting the microfacet area distribution function.
     Mdf {
         /// The target microfacet distribution model.
-        model: MicrofacetDistributionModelKind,
+        model: MicrofacetDistributionKind,
         /// The fitting variant.
         variant: MicrofacetDistributionFittingVariant,
     },
@@ -55,9 +55,9 @@ pub enum FittedModel {
     Bsdf(Box<dyn MicrofacetBasedBrdfModel>),
     /// Microfacet area distribution function with the scaling factor applied to
     /// the measured data.
-    Adf(Box<dyn MicrofacetDistributionModel>, f32),
+    Adf(Box<dyn MicrofacetDistribution>, f32),
     /// Microfacet Masking-shadowing function.
-    Msf(Box<dyn MicrofacetDistributionModel>),
+    Msf(Box<dyn MicrofacetDistribution>),
 }
 
 impl FittedModel {

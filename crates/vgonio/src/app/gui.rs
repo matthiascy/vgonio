@@ -45,7 +45,6 @@ use crate::{
     measure, RangeByStepSizeInclusive,
 };
 use base::{error::VgonioError, input::InputState};
-use bxdf::brdf::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel};
 use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};
 use winit::{
     dpi::PhysicalSize,

@@ -26,7 +26,7 @@ use base::{
 };
 use bxdf::{
     dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    MicrofacetDistributionModel,
+    MicrofacetDistribution,
 };
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
@@ -125,7 +125,7 @@ pub struct PlotInspector {
     variant: Option<Box<dyn VariantData>>,
     new_curve_kind: CurveKind,
     // (model, uuid)
-    adf_models: Vec<(Box<dyn MicrofacetDistributionModel>, Uuid)>,
+    adf_models: Vec<(Box<dyn MicrofacetDistribution>, Uuid)>,
     // mmsf_models: Vec<Box<dyn MicrofacetGeometricalAttenuationModel>>, TODO: implement
     /// The event loop.
     event_loop: EventLoopProxy,

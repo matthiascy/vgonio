@@ -13,7 +13,7 @@ use crate::{
     RangeByStepSizeInclusive,
 };
 use base::units::{rad, Radians};
-use bxdf::MicrofacetDistributionModel;
+use bxdf::MicrofacetDistribution;
 use egui::{Align, Ui};
 use std::any::Any;
 
@@ -37,7 +37,7 @@ pub struct MaskingShadowingExtra {
     /// incident/outgoing direction v.
     pub curves: Vec<Curve>,
     // /// The fitted curves together with the fitted model.
-    pub fitted: Vec<(Box<dyn MicrofacetDistributionModel>, Curve)>,
+    pub fitted: Vec<(Box<dyn MicrofacetDistribution>, Curve)>,
 }
 
 impl Default for MaskingShadowingExtra {

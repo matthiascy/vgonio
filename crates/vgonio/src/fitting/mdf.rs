@@ -1,5 +1,5 @@
 use crate::{
-    fitting::{FittingProblem, FittingReport, MicrofacetDistributionModel},
+    fitting::{FittingProblem, FittingReport, MicrofacetDistribution},
     measure::{
         microfacet::{MeasuredAdfData, MeasuredMsfData},
         params::AdfMeasurementMode,
@@ -9,7 +9,7 @@ use crate::{
 use base::units::Radians;
 use bxdf::{
     dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    MicrofacetDistributionFittingModel, MicrofacetDistributionModelKind,
+    MicrofacetDistributionFittingModel, MicrofacetDistributionKind,
 };
 use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
@@ -53,7 +53,7 @@ pub struct MicrofacetDistributionFittingProblem<'a> {
     /// The measured data to fit to.
     measured: MeasuredMdfData<'a>,
     /// The target model.
-    target: MicrofacetDistributionModelKind,
+    target: MicrofacetDistributionKind,
 }
 
 impl<'a> Display for MicrofacetDistributionFittingProblem<'a> {
@@ -74,7 +74,7 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
     /// * `target` - The target model.
     pub fn new_adf_fitting(
         measured: &'a MeasuredAdfData,
-        target: MicrofacetDistributionModelKind,
+        target: MicrofacetDistributionKind,
         scale: f32,
     ) -> Self {
         Self {
@@ -92,7 +92,7 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
     /// * `target` - The target model.
     pub fn new_msf_fitting(
         measured: &'a MeasuredMsfData,
-        target: MicrofacetDistributionModelKind,
+        target: MicrofacetDistributionKind,
         scale: f32,
     ) -> Self {
         Self {
@@ -106,7 +106,7 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
     pub fn new(
         measured: MeasuredMdfData<'a>,
         method: MicrofacetDistributionFittingVariant,
-        target: MicrofacetDistributionModelKind,
+        target: MicrofacetDistributionKind,
         scale: f32,
     ) -> Self {
         debug_assert_matches!(
@@ -129,15 +129,12 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
 }
 
 impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
-    type Model = Box<dyn MicrofacetDistributionModel>;
+    type Model = Box<dyn MicrofacetDistribution>;
 
     fn lsq_lm_fit(self) -> FittingReport<Self::Model> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
-        let mut result: Vec<(
-            Box<dyn MicrofacetDistributionModel>,
-            MinimizationReport<f64>,
-        )> = {
+        let mut result: Vec<(Box<dyn MicrofacetDistribution>, MinimizationReport<f64>)> = {
             match self.measured {
                 MeasuredMdfData::Adf(measured) => {
                     initialise_microfacet_mdf_models(0.001, 2.0, 32, self.target)
@@ -210,11 +207,11 @@ fn initialise_microfacet_mdf_models(
     min: f64,
     max: f64,
     num: u32,
-    target: MicrofacetDistributionModelKind,
+    target: MicrofacetDistributionKind,
 ) -> Vec<Box<dyn MicrofacetDistributionFittingModel>> {
     let step = (max - min) / (num as f64);
     match target {
-        MicrofacetDistributionModelKind::Beckmann => (0..num)
+        MicrofacetDistributionKind::Beckmann => (0..num)
             .map(|i| {
                 Box::new(BeckmannDistribution::new(
                     (i + 1) as f64 * step,
@@ -222,7 +219,7 @@ fn initialise_microfacet_mdf_models(
                 )) as _
             })
             .collect(),
-        MicrofacetDistributionModelKind::TrowbridgeReitz => (0..num)
+        MicrofacetDistributionKind::TrowbridgeReitz => (0..num)
             .map(|i| {
                 Box::new(TrowbridgeReitzDistribution::new(
                     (i + 1) as f64 * step,

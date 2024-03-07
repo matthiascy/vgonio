@@ -1,14 +1,11 @@
 use base::math::Vec3;
 
-mod beckmann;
 mod lambert;
 mod merl;
-mod microfacet;
-mod trowbridge_reitz;
+pub mod microfacet;
 mod utia;
 
-pub use beckmann::*;
-pub use trowbridge_reitz::*;
+use crate::MicrofacetDistribution;
 
 /// Common interface for BRDFs.
 pub trait Brdf {
@@ -112,8 +109,3 @@ pub fn io2hd(wi: &Vec3, wo: &Vec3) -> (Vec3, Vec3) {
 /// * `wh` - The half vector.
 /// * `wd` - The difference vector.
 pub fn hd2io(wh: &Vec3, wd: &Vec3) -> (Vec3, Vec3) { todo!("hd2io") }
-
-pub trait MicrofacetBrdf {
-    /// Parameters of the microfacet BRDF.
-    type Params;
-}

@@ -5,9 +5,14 @@ use base::{
 use std::fmt::{Debug, Formatter};
 
 use crate::{
-    dist::TrowbridgeReitzDistribution, impl_common_methods, MicrofacetBasedBrdfFittingModel,
-    MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistributionModel,
+    brdf::microfacet::MicrofacetBrdf, dist::TrowbridgeReitzDistribution, impl_common_methods,
+    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
+    MicrofacetDistribution,
 };
+
+// TODO: remove TrowbridgeReitzBrdfModel and use MicrofacetBrdf instead
+
+pub type TrowbridgeReitzBrdf = MicrofacetBrdf<TrowbridgeReitzDistribution>;
 
 /// Trowbridge-Reitz(GGX) microfacet BRDF model.
 /// See [Trowbridge-Reitz

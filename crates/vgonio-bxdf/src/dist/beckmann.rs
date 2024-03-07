@@ -1,6 +1,6 @@
 use crate::{
-    impl_common_methods, MicrofacetDistributionFittingModel, MicrofacetDistributionModel,
-    MicrofacetDistributionModelKind,
+    impl_common_methods, MicrofacetDistribution, MicrofacetDistributionFittingModel,
+    MicrofacetDistributionKind,
 };
 use base::math::{rcp_f64, sqr, Vec3};
 
@@ -34,8 +34,8 @@ impl BeckmannDistribution {
     }
 }
 
-impl MicrofacetDistributionModel for BeckmannDistribution {
-    fn kind(&self) -> MicrofacetDistributionModelKind { MicrofacetDistributionModelKind::Beckmann }
+impl MicrofacetDistribution for BeckmannDistribution {
+    fn kind(&self) -> MicrofacetDistributionKind { MicrofacetDistributionKind::Beckmann }
 
     impl_common_methods!();
 
@@ -86,7 +86,7 @@ impl MicrofacetDistributionModel for BeckmannDistribution {
         }
     }
 
-    fn clone_box(&self) -> Box<dyn MicrofacetDistributionModel> { Box::new(*self) }
+    fn clone_box(&self) -> Box<dyn MicrofacetDistribution> { Box::new(*self) }
 }
 
 impl MicrofacetDistributionFittingModel for BeckmannDistribution {
