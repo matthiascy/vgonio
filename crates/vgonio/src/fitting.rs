@@ -17,8 +17,8 @@ macro_rules! impl_least_squares_problem_common_methods {
 
 mod brdf;
 mod ceres;
+pub mod err;
 mod mdf;
-pub mod mse;
 
 pub use brdf::*;
 pub use mdf::*;
@@ -127,20 +127,26 @@ pub struct FittingReport<M> {
 impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
     pub fn new(results: Vec<(M, MinimizationReport<f64>)>, cond: impl Fn(&M) -> bool) -> Self {
-        let reports = results
+        let mut reports = results
             .into_iter()
             .filter(|(_, r)| matches!(r.termination, TerminationReason::Converged { .. }))
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let mut lowest_obj_func = f64::INFINITY;
-        let mut best = None;
-        for (i, (m, r)) in reports.iter().enumerate() {
-            if r.objective_function < lowest_obj_func && cond(m) {
-                lowest_obj_func = r.objective_function;
-                best = Some(i);
-            }
+        reports.sort_by(|(_, r1), (_, r2)| {
+            r1.objective_function
+                .partial_cmp(&r2.objective_function)
+                .unwrap()
+        });
+        if reports.is_empty() {
+            return FittingReport {
+                best: None,
+                reports,
+            };
         }
-        FittingReport { best, reports }
+        FittingReport {
+            best: Some(0),
+            reports,
+        }
     }
 
     /// Returns the best model found.

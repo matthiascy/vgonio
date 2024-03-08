@@ -238,4 +238,6 @@ pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
         ior_i: &RefractiveIndex,
         ior_t: &RefractiveIndex,
     ) -> Box<[f64]>;
+
+    fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel;
 }

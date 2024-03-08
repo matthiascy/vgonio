@@ -6,7 +6,7 @@ use crate::{
         cli::ansi,
         Config,
     },
-    fitting::mse::{compute_iso_brdf_mse, generate_analytical_brdf},
+    fitting::err::{compute_iso_brdf_err, generate_analytical_brdf, ErrorMetric},
     measure::{
         bsdf::{
             emitter::EmitterParams,
@@ -22,7 +22,7 @@ use base::{
     error::VgonioError,
     math::{sph_to_cart, Sph2, Vec3},
     medium::Medium,
-    units::{nm, Rads},
+    units::{deg, nm, Degs, Rads},
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
@@ -100,7 +100,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             };
             for model in models.iter() {
                 let (mut brdf, max_values) =
-                    generate_analytical_brdf(&params, model, &cache.iors, opts.normalize);
+                    generate_analytical_brdf(&params, &**model, &cache.iors, opts.normalize);
                 let output =
                     config
                         .output_dir()
@@ -119,9 +119,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .measured
                     .as_bsdf()
                     .unwrap();
-                let mses = compute_iso_brdf_mse(
+                let mses = compute_iso_brdf_err(
                     &measured_brdf,
-                    opts.max_theta_o,
+                    opts.max_theta_o.map(|t| deg!(t as f32)),
                     opts.model,
                     RangeByStepSizeInclusive::new(
                         opts.alpha_start.unwrap(),
@@ -130,6 +130,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     ),
                     &cache,
                     opts.normalize,
+                    opts.error_metric.unwrap_or(ErrorMetric::Mse),
                 );
                 println!(
                     "    {}>{} MSE ({}) {:?}",
@@ -190,6 +191,12 @@ pub struct FitOptions {
     pub alpha_end: Option<f64>,
     #[clap(long, help = "Roughness step size.", default_value = "0.01")]
     pub alpha_step: Option<f64>,
+    #[clap(
+        short,
+        help = "Error metric to use for the fitting.",
+        default_value = "mse"
+    )]
+    pub error_metric: Option<ErrorMetric>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

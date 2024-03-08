@@ -74,7 +74,7 @@ use crate::{
         },
         Config,
     },
-    fitting::mse::compute_iso_brdf_mse,
+    fitting::err::compute_iso_brdf_err,
     io::OutputOptions,
     measure::{
         data::{MeasuredData, MeasurementData},

@@ -223,5 +223,8 @@ impl MicrofacetBasedBrdfFittingModel for BeckmannBrdfModel {
         ior_i: &RefractiveIndex,
         ior_t: &RefractiveIndex,
     ) -> Box<[f64]> {
+        todo!()
     }
+
+    fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel { self }
 }

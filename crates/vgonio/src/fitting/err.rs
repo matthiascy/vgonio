@@ -13,22 +13,31 @@ use crate::{
 use base::{
     math::{sph_to_cart, sqr, Vec3, Vec3A},
     optics::fresnel,
+    units::{deg, Degrees, Radians},
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
     MicrofacetBasedBrdfModel,
 };
-use rand::seq::index::sample;
-use rayon::{
-    iter::{
-        IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-        IntoParallelRefMutIterator, ParallelBridge, ParallelIterator,
-    },
-    slice::ParallelSliceMut,
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
-use std::{mem::MaybeUninit, sync::atomic::AtomicU64};
+use std::sync::atomic::AtomicU64;
+use wgpu::naga::TypeInner::Atomic;
 
-/// Compute the mean squared error between the measured data and the model.
+/// Metrics to use for the error computation.
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorMetric {
+    /// Mean squared error.
+    Mse,
+    /// Most commonly used error metrics in non-linear least squares fitting.
+    /// Which is the half of the sum of the squares of the differences between
+    /// the measured data and the model.
+    #[default]
+    Nlls,
+}
+
+/// Compute the distance (error) between the measured data and the model.
 ///
 /// # Arguments
 ///
@@ -38,13 +47,14 @@ use std::{mem::MaybeUninit, sync::atomic::AtomicU64};
 ///   directions. If set, the samples with the outgoing directions with the
 ///   colatitude angle greater than `max_theta_o` will be ignored.
 /// * `cache` - The cache to use for loading the IOR database.
-pub fn compute_iso_brdf_mse(
+pub fn compute_iso_brdf_err(
     measured: &MeasuredBsdfData,
-    max_theta_o: Option<f64>,
+    max_theta_o: Option<Degrees>,
     model: BrdfModel,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
     normalize: bool,
+    metric: ErrorMetric,
 ) -> Box<[f64]> {
     // TODO: remove max_theta_o
     let count = alpha.step_count();
@@ -70,7 +80,7 @@ pub fn compute_iso_brdf_mse(
                         }
                     };
                     let (model_brdf, _) =
-                        generate_analytical_brdf(&measured.params, &m, &cache.iors, normalize);
+                        generate_analytical_brdf(&measured.params, &*m, &cache.iors, normalize);
                     brdf_data[j].write(model_brdf);
                 }
             });
@@ -79,7 +89,7 @@ pub fn compute_iso_brdf_mse(
 
     println!(" Finished generating analytical BRDFs");
 
-    let max_theta_o = max_theta_o.unwrap_or(95.0).to_radians();
+    let max_theta_o = max_theta_o.unwrap_or(deg!(90.0)).to_radians();
     // Maximum values of the measured samples for each snapshot. Only the first
     // spectral sample is considered.
     let max_measured = if normalize {
@@ -100,28 +110,38 @@ pub fn compute_iso_brdf_mse(
 
     let mses = brdfs
         .par_iter()
-        .map(|(model)| compute_mse(model, measured, &max_measured, &partition, max_theta_o))
+        .map(|(model)| {
+            compute_distance(
+                model,
+                measured,
+                &max_measured,
+                &partition,
+                max_theta_o,
+                metric,
+            )
+        })
         .collect::<Vec<_>>()
         .into_boxed_slice();
     mses
 }
 
-fn compute_mse(
-    model: &MeasuredBsdfData,
+fn compute_distance(
+    normalized_model: &MeasuredBsdfData,
     measured: &MeasuredBsdfData,
     measured_max_per_snapshot: &[f64],
     partition: &SphericalPartition,
-    max_theta_o: f64,
+    max_theta_o: Radians,
+    metric: ErrorMetric,
 ) -> f64 {
     let count = AtomicU64::new(0);
     let patches = &partition.patches;
-    let mse_sum = model
+    let sqr_err_sum = normalized_model
         .snapshots
         .par_iter()
         .zip(measured.snapshots.par_iter())
         .zip(measured_max_per_snapshot.par_iter())
         .map(|((model_snapshot, measured_snapshot), measured_max)| {
-            if model_snapshot.wi.theta.as_f64() > max_theta_o {
+            if model_snapshot.wi.theta > max_theta_o {
                 return 0.0;
             }
             model_snapshot
@@ -130,7 +150,7 @@ fn compute_mse(
                 .zip(measured_snapshot.samples.iter())
                 .zip(patches.iter())
                 .map(|((model_samples, measured_samples), patch)| {
-                    if patch.center().theta.as_f64() > max_theta_o {
+                    if patch.center().theta > max_theta_o {
                         0.0
                     } else {
                         count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -140,14 +160,29 @@ fn compute_mse(
                 .sum::<f64>()
         })
         .sum::<f64>();
-    let n = count.load(std::sync::atomic::Ordering::Relaxed);
-    mse_sum / n as f64
+    match metric {
+        ErrorMetric::Mse => {
+            let n = patches
+                .iter()
+                .map(|p| p.center().theta <= max_theta_o)
+                .count()
+                * measured.snapshots.len();
+            sqr_err_sum / n as f64
+        }
+        ErrorMetric::Nlls => sqr_err_sum * 0.5,
+    }
 }
 
 // TODO: use specific container instead of MeasuredBsdfData
+/// Generate the analytical BRDFs for the given model.
+///
+/// # Returns
+///
+/// The generated BRDFs and the maximum values of the spectral samples for each
+/// snapshot.
 pub(crate) fn generate_analytical_brdf(
     params: &BsdfMeasurementParams,
-    target: &Box<dyn MicrofacetBasedBrdfModel>,
+    target: &dyn MicrofacetBasedBrdfModel,
     iors: &RefractiveIndexRegistry,
     normalize: bool,
 ) -> (MeasuredBsdfData, Box<[Box<[f64]>]>) {
@@ -198,10 +233,15 @@ pub(crate) fn generate_analytical_brdf(
                 samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
             }
             if normalize {
+                // let wo = fresnel::reflect(Vec3A::from(-wi), Vec3A::Z).into();
+                // let maxes = target.eval_spectrum(wi, wo, &iors_i, &iors_t);
                 for sample in samples.iter_mut() {
                     for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
                         *s /= *max as f32;
                     }
+                    // for (s, max) in sample.iter_mut().zip(maxes.iter()) {
+                    //     *s /= *max as f32;
+                    // }
                 }
             }
             *snap_max_values = max_values_per_snapshot.into_boxed_slice();

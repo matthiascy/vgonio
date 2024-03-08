@@ -368,4 +368,6 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
         }
         unsafe { result.assume_init() }
     }
+
+    fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel { self }
 }
