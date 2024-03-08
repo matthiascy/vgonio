@@ -175,7 +175,10 @@ struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// Per snapshot maximum value of the modelled samples with the
     /// corresponding roughness. (alpha, max_modelled_per_snapshot)
     max_modelled: Vec<(f64, Box<[f64]>)>, /* Memory inefficient, but it's a temporary solution.
-                                           * TODO: sharing the max_modelled between threads */
+                                           * TODO: sharing the max_modelled between threads
+                                           * for one fitting problem there is no need to
+                                           * store the maximum modelled values for each
+                                           * roughness. */
     /// The actual partition (not the params) of the measured BSDF data.
     partition: SphericalPartition,
     /// The refractive index registry.
@@ -190,54 +193,6 @@ struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     wis: Box<[Vec3]>,
     /// Outgoing directions
     wos: Box<[Vec3]>,
-}
-
-fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy<I>) -> Box<[f64]> {
-    // The number of residuals is the number of patches times the number of
-    // snapshots.
-    let n_patches = problem.partition.num_patches();
-    let residuals_count = n_patches * problem.measured.snapshots.len();
-    let mut rs = Box::new_uninit_slice(residuals_count);
-    let max_modelled = problem
-        .max_modelled
-        .iter()
-        .find(|(alpha, _)| *alpha == problem.model.alpha_x())
-        .unwrap()
-        .1
-        .as_ref();
-    problem
-        .measured
-        .snapshots
-        .iter()
-        .enumerate()
-        .for_each(|(i, snapshot)| {
-            let wi = {
-                let sph = snapshot.wi;
-                sph_to_cart(sph.theta, sph.phi)
-            };
-            let max_measured = problem.max_measured[i];
-            let max_modelled = max_modelled[i];
-            problem
-                .partition
-                .patches
-                .iter()
-                .enumerate()
-                .for_each(|(j, patch)| {
-                    let wo = {
-                        let c = patch.center();
-                        sph_to_cart(c.theta, c.phi)
-                    };
-                    // Only the first wavelength is used. TODO: Use all
-                    let measured = snapshot.samples[j][0] as f64 / max_measured;
-                    let modelled =
-                        problem
-                            .model
-                            .eval(wi, wo, &problem.iors_i[0], &problem.iors_t[0])
-                            / max_modelled;
-                    rs[i * n_patches + j].write(modelled - measured);
-                });
-        });
-    unsafe { rs.assume_init() }
 }
 
 impl<'a> MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
@@ -290,6 +245,54 @@ impl<'a> MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
         problem.set_params(&Vector::<f64, U1, Owned<f64, U1, U1>>::new(ax));
         problem
     }
+}
+
+fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy<I>) -> Box<[f64]> {
+    // The number of residuals is the number of patches times the number of
+    // snapshots.
+    let n_patches = problem.partition.num_patches();
+    let residuals_count = n_patches * problem.measured.snapshots.len();
+    let mut rs = Box::new_uninit_slice(residuals_count);
+    let max_modelled = problem
+        .max_modelled
+        .iter()
+        .find(|(alpha, _)| *alpha == problem.model.alpha_x())
+        .unwrap()
+        .1
+        .as_ref();
+    problem
+        .measured
+        .snapshots
+        .iter()
+        .enumerate()
+        .for_each(|(i, snapshot)| {
+            let wi = {
+                let sph = snapshot.wi;
+                sph_to_cart(sph.theta, sph.phi)
+            };
+            let max_measured = problem.max_measured[i];
+            let max_modelled = max_modelled[i];
+            problem
+                .partition
+                .patches
+                .iter()
+                .enumerate()
+                .for_each(|(j, patch)| {
+                    let wo = {
+                        let c = patch.center();
+                        sph_to_cart(c.theta, c.phi)
+                    };
+                    // Only the first wavelength is used. TODO: Use all
+                    let measured = snapshot.samples[j][0] as f64 / max_measured;
+                    let modelled =
+                        problem
+                            .model
+                            .eval(wi, wo, &problem.iors_i[0], &problem.iors_t[0])
+                            / max_modelled;
+                    rs[i * n_patches + j].write(modelled - measured);
+                });
+        });
+    unsafe { rs.assume_init() }
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
@@ -358,7 +361,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(eval_residuals(
             self,
         )))
     }

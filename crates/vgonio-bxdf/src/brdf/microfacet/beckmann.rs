@@ -223,7 +223,69 @@ impl MicrofacetBasedBrdfFittingModel for BeckmannBrdfModel {
         ior_i: &RefractiveIndex,
         ior_t: &RefractiveIndex,
     ) -> Box<[f64]> {
-        todo!()
+        let mut result = Box::new_uninit_slice(wis.len() * wos.len());
+        // TODO: test medium type to decide fresnel
+        for i in 0..wis.len() {
+            let wi = wis[i];
+            for j in 0..wos.len() {
+                let wo = wos[j];
+                debug_assert!(wi.is_normalized(), "incident direction is not normalized");
+                debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
+                let wh = (wi + wo).normalize();
+                let cos_theta_h = cos_theta(&wh).abs();
+                let cos_theta_h2 = sqr(cos_theta_h as f64);
+                let cos_theta_h4 = sqr(cos_theta_h2);
+                let cos_theta_i = cos_theta(&wi).abs();
+                let cos_theta_o = cos_theta(&wo).abs();
+                if cos_theta_h4 < 1e-16 || cos_theta_i < 1e-16 || cos_theta_o < 1e-16 {
+                    result[i * wos.len() + j].write(0.0);
+                    continue;
+                }
+                let cos_theta_h4_i_o = cos_theta_h4 * cos_theta_i as f64 * cos_theta_o as f64;
+                let tan_theta_h2 = (1.0 - cos_theta_h2).max(0.0) / cos_theta_h2;
+                if tan_theta_h2 < 1e-16 {
+                    result[i * wos.len() + j].write(0.0);
+                    continue;
+                }
+
+                let f = fresnel::reflectance_dielectric_conductor(
+                    cos_theta_i,
+                    ior_i.eta,
+                    ior_t.eta,
+                    ior_t.k,
+                ) as f64;
+
+                let alpha = self.alpha_x;
+                let alpha2 = sqr(alpha);
+                let alpha3 = alpha2 * alpha;
+                let alpha5 = alpha2 * alpha3;
+
+                let tan_theta_h2 = (1.0 - cos_theta_h2) / cos_theta_h2;
+                let cos_theta_hi = wi.dot(wh).abs() as f64;
+                let cos_theta_ho = wo.dot(wh).abs() as f64;
+                let tan_theta_hi =
+                    (1.0 - cos_theta_hi * cos_theta_hi).max(0.0).sqrt() / cos_theta_hi;
+                let tan_theta_ho =
+                    (1.0 - cos_theta_ho * cos_theta_ho).max(0.0).sqrt() / cos_theta_ho;
+
+                let sqrt_pi = std::f64::consts::PI.sqrt();
+                let alpha_over_sqrt_pi = alpha * rcp_f64(sqrt_pi);
+                let ahi = rcp_f64(alpha * tan_theta_hi);
+                let aho = rcp_f64(alpha * tan_theta_ho);
+                let ehi = tan_theta_hi * (-sqr(ahi)).exp();
+                let eho = tan_theta_ho * (-sqr(aho)).exp();
+                let bhi = 1.0 + erf(ahi) + alpha_over_sqrt_pi * ehi;
+                let bho = 1.0 + erf(aho) + alpha_over_sqrt_pi * eho;
+
+                let nominator_part1 = 2.0 * sqrt_pi * bhi * bho * (tan_theta_h2 - alpha2);
+                let nominator_part2 = alpha3 * (eho * bhi + ehi * bho);
+                let nominator =
+                    f * (nominator_part1 - nominator_part2) * (-tan_theta_h2 / alpha2).exp();
+                let denominator = sqrt_pi.powi(3) * alpha5 * sqr(bhi) * sqr(bho) * cos_theta_h4_i_o;
+                result[i * wos.len() + j].write(nominator * rcp_f64(denominator));
+            }
+        }
+        unsafe { result.assume_init() }
     }
 
     fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel { self }

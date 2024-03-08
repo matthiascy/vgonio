@@ -307,8 +307,7 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
                 let cos_theta_i = wi.z.abs();
                 let cos_theta_o = wo.z.abs();
 
-                if cos_theta_h4 < 1.0e-6 || cos_theta_i.abs() < 1.0e-6 || cos_theta_o.abs() < 1.0e-6
-                {
+                if cos_theta_h4 < 1e-16 || cos_theta_i.abs() < 1e-16 || cos_theta_o.abs() < 1e-16 {
                     result[i * wos.len() + j].write(0.0);
                     continue;
                 }
