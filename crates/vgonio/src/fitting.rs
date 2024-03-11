@@ -127,11 +127,7 @@ pub struct FittingReport<M> {
 impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
     pub fn new(results: Vec<(M, MinimizationReport<f64>)>, cond: impl Fn(&M) -> bool) -> Self {
-        let mut reports = results
-            .into_iter()
-            .filter(|(_, r)| matches!(r.termination, TerminationReason::Converged { .. }))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+        let mut reports = results.into_boxed_slice();
         reports.sort_by(|(_, r1), (_, r2)| {
             r1.objective_function
                 .partial_cmp(&r2.objective_function)

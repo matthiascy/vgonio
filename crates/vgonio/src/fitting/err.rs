@@ -67,10 +67,8 @@ pub fn compute_iso_brdf_err(
             .enumerate()
             .for_each(|(i, brdf_data)| {
                 for j in 0..brdf_data.len() {
-                    let alpha_x =
-                        (i * CHUNK_SIZE + j) as f64 / count as f64 * alpha.span() + alpha.start;
-                    let alpha_y =
-                        (i * CHUNK_SIZE + j) as f64 / count as f64 * alpha.span() + alpha.start;
+                    let alpha_x = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
+                    let alpha_y = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
                     let m = match model {
                         BrdfModel::Beckmann => Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
                             as Box<dyn MicrofacetBasedBrdfModel>,
@@ -212,48 +210,81 @@ pub(crate) fn generate_analytical_brdf(
         .par_iter()
         .zip(max_values.par_iter_mut())
         .zip(snapshots.par_iter_mut())
-        .enumerate()
-        .for_each(|(i, ((wi_sph, snap_max_values), snapshot))| {
-            let wi = wi_sph.to_cartesian();
-            let mut samples = vec![];
-            let mut max_values_per_snapshot = vec![-1.0; wavelengths.len()];
-            for patch in partition.patches.iter() {
-                let wo_sph = patch.center();
-                let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
-                let mut spectral_samples = target
-                    .eval_spectrum(wi, wo, &iors_i, &iors_t)
-                    .iter()
-                    .map(|&x| x as f32)
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-                for (i, sample) in spectral_samples.iter().enumerate() {
-                    max_values_per_snapshot[i] =
-                        f64::max(max_values_per_snapshot[i], *sample as f64);
-                }
-                samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
-            }
-            if normalize {
-                // let wo = fresnel::reflect(Vec3A::from(-wi), Vec3A::Z).into();
-                // let maxes = target.eval_spectrum(wi, wo, &iors_i, &iors_t);
-                for sample in samples.iter_mut() {
-                    for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
-                        *s /= *max as f32;
+        .chunks(32)
+        .for_each(|chunk| {
+            for ((wi_sph, snap_max_values), snapshot) in chunk {
+                let wi = wi_sph.to_cartesian();
+                let mut samples = vec![];
+                let mut max_values_per_snapshot = vec![-1.0; wavelengths.len()];
+                for patch in partition.patches.iter() {
+                    let wo_sph = patch.center();
+                    let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
+                    let mut spectral_samples = target
+                        .eval_spectrum(wi, wo, &iors_i, &iors_t)
+                        .iter()
+                        .map(|&x| x as f32)
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice();
+                    for (i, sample) in spectral_samples.iter().enumerate() {
+                        max_values_per_snapshot[i] =
+                            f64::max(max_values_per_snapshot[i], *sample as f64);
                     }
-                    // for (s, max) in sample.iter_mut().zip(maxes.iter()) {
-                    //     *s /= *max as f32;
-                    // }
+                    samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
                 }
+                if normalize {
+                    for sample in samples.iter_mut() {
+                        for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
+                            *s /= *max as f32;
+                        }
+                    }
+                }
+                *snap_max_values = max_values_per_snapshot.into_boxed_slice();
+                snapshot.write(BsdfSnapshot {
+                    wi: *wi_sph,
+                    samples: samples.into_boxed_slice(),
+                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                    trajectories: vec![],
+                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                    hit_points: vec![],
+                });
             }
-            *snap_max_values = max_values_per_snapshot.into_boxed_slice();
-            snapshot.write(BsdfSnapshot {
-                wi: *wi_sph,
-                samples: samples.into_boxed_slice(),
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                trajectories: vec![],
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                hit_points: vec![],
-            });
         });
+    // .for_each(|((wi_sph, snap_max_values), snapshot)| {
+    //     let wi = wi_sph.to_cartesian();
+    //     let mut samples = vec![];
+    //     let mut max_values_per_snapshot = vec![-1.0; wavelengths.len()];
+    //     for patch in partition.patches.iter() {
+    //         let wo_sph = patch.center();
+    //         let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
+    //         let mut spectral_samples = target
+    //             .eval_spectrum(wi, wo, &iors_i, &iors_t)
+    //             .iter()
+    //             .map(|&x| x as f32)
+    //             .collect::<Vec<_>>()
+    //             .into_boxed_slice();
+    //         for (i, sample) in spectral_samples.iter().enumerate() {
+    //             max_values_per_snapshot[i] =
+    //                 f64::max(max_values_per_snapshot[i], *sample as f64);
+    //         }
+    //         samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
+    //     }
+    //     if normalize {
+    //         for sample in samples.iter_mut() {
+    //             for (s, max) in
+    // sample.iter_mut().zip(max_values_per_snapshot.iter()) {
+    // *s /= *max as f32;             }
+    //         }
+    //     }
+    //     *snap_max_values = max_values_per_snapshot.into_boxed_slice();
+    //     snapshot.write(BsdfSnapshot {
+    //         wi: *wi_sph,
+    //         samples: samples.into_boxed_slice(),
+    //         #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    //         trajectories: vec![],
+    //         #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    //         hit_points: vec![],
+    //     });
+    // });
     brdf.snapshots = unsafe { snapshots.assume_init() };
     (brdf, max_values)
 }

@@ -15,6 +15,7 @@ use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
 };
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
+use rayon::slice::ParallelSlice;
 use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
 
 // TODO: Would MDF = ADF + MSF be more appropriate?

@@ -53,7 +53,7 @@ impl MicrofacetBasedBrdfModelKind {
     }
 }
 
-pub trait MicrofacetDistribution: Debug + Send {
+pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// Returns the kind of the distribution.
     fn kind(&self) -> MicrofacetDistributionKind;
 

@@ -1,26 +1,29 @@
-use crate::array::mem::{Data, Sealed};
-use std::fmt::Debug;
+use crate::array::mem::{print_slice, Data, Sealed};
+use std::{
+    fmt::{Debug, Display},
+    ops::Deref,
+};
 
-pub struct DynSized<T>(pub(crate) Vec<T>);
+pub struct DynSized<A>(pub(crate) Vec<A>);
 
-impl<T> Sealed for DynSized<T> {}
-impl<'a, T> Sealed for &'a DynSized<T> {}
-impl<'a, T> Sealed for &'a mut DynSized<T> {}
+impl<A> Sealed for DynSized<A> {}
+impl<'a, A> Sealed for &'a DynSized<A> {}
+impl<'a, A> Sealed for &'a mut DynSized<A> {}
 
-impl<T: Clone> Clone for DynSized<T> {
+impl<A: Clone> Clone for DynSized<A> {
     fn clone(&self) -> Self { Self(self.0.clone()) }
 }
 
-impl<T: PartialEq> PartialEq for DynSized<T> {
+impl<A: PartialEq> PartialEq for DynSized<A> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
-impl<T: Eq> Eq for DynSized<T> {}
+impl<A: Eq> Eq for DynSized<A> {}
 
-unsafe impl<T> Data for DynSized<T> {
-    type Elem = T;
+unsafe impl<A> Data for DynSized<A> {
+    type Elem = A;
 
-    fn as_ptr(&self) -> *const T { self.0.as_ptr() }
+    fn as_ptr(&self) -> *const A { self.0.as_ptr() }
 
     fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.0.as_mut_ptr() }
 
@@ -31,8 +34,37 @@ unsafe impl<T> Data for DynSized<T> {
     unsafe fn alloc_uninit(n: usize) -> Self { Self(Vec::with_capacity(n)) }
 }
 
-impl<T: Debug> Debug for DynSized<T> {
+impl<A: Debug> Debug for DynSized<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self.0.iter()).finish()
+        f.write_fmt(format_args!("DynSized({:?})", &self.0))
+    }
+}
+
+impl<A: Display> Display for DynSized<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { print_slice(f, &self.0) }
+}
+
+impl<A> Deref for DynSized<A> {
+    type Target = [A];
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<A> From<&[A]> for DynSized<A>
+where
+    A: Clone,
+{
+    fn from(slice: &[A]) -> Self { Self(slice.to_vec()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dyn_sized_display() {
+        let a = DynSized(vec![1, 2, 3]);
+        assert_eq!(format!("{:?}", a), "DynSized([1, 2, 3])");
+        assert_eq!(format!("{}", a), "[1, 2, 3]");
     }
 }

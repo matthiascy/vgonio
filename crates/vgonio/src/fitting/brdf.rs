@@ -14,8 +14,11 @@ use bxdf::{
     MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
 };
 use jabr::optics::reflect;
-use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
+use levenberg_marquardt::{
+    LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
+};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
+use rayon::{iter::IndexedParallelIterator, slice::ParallelSlice};
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
@@ -129,38 +132,55 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
-            initialise_microfacet_bsdf_models(0.2, 0.3, 100, self.target)
+            initialise_microfacet_bsdf_models(0.001, 0.5, 100, self.target)
                 .into_par_iter()
-                .filter_map(|model| {
-                    log::debug!(
-                        "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
-                        model.kind(),
-                        model.alpha_x(),
-                        model.alpha_y()
-                    );
-                    let problem = MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
-                        &self.measured,
-                        model,
-                        self.iors,
-                        &self.iors_i,
-                        &self.iors_t,
-                    );
-                    let (result, report) = solver.minimize(problem);
-                    log::debug!(
-                        "Fitted αx = {} αy = {}, report: {:?}",
-                        result.model.alpha_x(),
-                        result.model.alpha_y(),
-                        report
-                    );
-                    match report.termination {
-                        TerminationReason::Converged { .. } => Some((result.model as _, report)),
-                        _ => None,
-                    }
+                .chunks(8)
+                .flat_map(|models| {
+                    models
+                        .into_iter()
+                        .filter_map(|model| {
+                            let init_guess = (model.alpha_x(), model.alpha_y());
+                            log::debug!(
+                                "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
+                                model.kind(),
+                                init_guess.0,
+                                init_guess.1
+                            );
+                            let kind = model.kind();
+                            let problem =
+                                MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                                    &self.measured,
+                                    model,
+                                    self.iors,
+                                    &self.iors_i,
+                                    &self.iors_t,
+                                );
+                            let (result, report) = solver.minimize(problem);
+                            log::debug!(
+                                "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}\n    - \
+                                 fitted αx = {} αy = {}\n    - report: {:?}",
+                                kind,
+                                init_guess.0,
+                                init_guess.1,
+                                result.model.alpha_x(),
+                                result.model.alpha_y(),
+                                report
+                            );
+                            match report.termination {
+                                TerminationReason::Converged { .. } | TerminationReason::LostPatience => {
+                                    Some((result.model as _, report))
+                                }
+                                _ => None,
+                            }
+                        })
+                        .collect::<Vec<(Box<dyn MicrofacetBasedBrdfModel>, MinimizationReport<f64>)>>()
                 })
                 .collect::<Vec<_>>()
         };
         results.shrink_to_fit();
-        FittingReport::new(results, |m| m.alpha_x() > 0.0 && m.alpha_y() > 0.0)
+        FittingReport::new(results, |m: &Box<dyn MicrofacetBasedBrdfModel>| {
+            m.alpha_x() > 0.0 && m.alpha_y() > 0.0
+        })
     }
 }
 
@@ -361,7 +381,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     impl_least_squares_problem_common_methods!(self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(eval_residuals(
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
             self,
         )))
     }

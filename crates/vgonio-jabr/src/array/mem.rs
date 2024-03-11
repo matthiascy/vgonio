@@ -4,6 +4,11 @@ mod fixed_sized;
 use core::{fmt::Write, marker::ConstParamTy};
 
 /// Memory layout of a multidimensional array.
+///
+/// The memory layout determines how the elements of the array are stored in
+/// memory. The elements of the array are stored in a contiguous block of
+/// memory, and the memory layout determines how the elements are ordered in
+/// this block.
 #[derive(ConstParamTy, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MemLayout {
     /// Row-major layout (or C layout). The data is stored row by row in memory;
@@ -57,18 +62,15 @@ pub unsafe trait Data: Sized + Sealed {
 
 pub trait DataClone: Data + Clone {}
 
-impl<T: Clone> DataClone for T where T: Data {}
+impl<A: Clone> DataClone for A where A: Data {}
 
 pub trait DataCopy: DataClone + Copy {}
 
-impl<T: Copy> DataCopy for T where T: DataClone {}
+impl<A: Copy> DataCopy for A where A: DataClone {}
 
-pub(crate) fn print_slice<T, F, R>(
-    f: &mut ::core::fmt::Formatter<'_>,
-    seq: &[T],
-) -> ::core::fmt::Result
+pub(crate) fn print_slice<A>(f: &mut ::core::fmt::Formatter<'_>, seq: &[A]) -> ::core::fmt::Result
 where
-    T: ::core::fmt::Display,
+    A: ::core::fmt::Display,
 {
     f.write_char('[')?;
     for (i, x) in seq.iter().enumerate() {
