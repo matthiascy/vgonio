@@ -3086,6 +3086,7 @@ dependencies = [
 name = "vgonio-bxdf"
 version = "0.3.0"
 dependencies = [
+ "clap",
  "libm",
  "log",
  "num-traits",

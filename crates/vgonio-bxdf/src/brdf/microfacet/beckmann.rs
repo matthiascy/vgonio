@@ -5,14 +5,30 @@ use base::{
 use libm::erf;
 
 use crate::{
-    brdf::microfacet::MicrofacetBrdf, dist::BeckmannDistribution, impl_common_methods,
-    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
-    MicrofacetDistribution,
+    brdf::{microfacet::MicrofacetBrdf, Brdf},
+    dist::BeckmannDistribution,
+    impl_common_methods, MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel,
+    MicrofacetBrdfKind, MicrofacetDistribution,
 };
 
-// TODO: remove BeckmannBrdfModel and use MicrofacetBrdf instead
-
+/// Microfacet BRDF model based on Beckmann distribution.
 pub type BeckmannBrdf = MicrofacetBrdf<BeckmannDistribution>;
+
+impl Brdf for BeckmannBrdf {
+    fn eval(&self, wi: &Vec3, wo: &Vec3) -> f32 { todo!() }
+
+    fn eval_hd(&self, wh: &Vec3, wd: &Vec3) -> Vec3 { todo!() }
+
+    fn evalp(&self, wi: &Vec3, wo: &Vec3) -> Vec3 { todo!() }
+
+    fn evalp_hd(&self, wh: &Vec3, wd: &Vec3) -> Vec3 { todo!() }
+
+    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> Vec3 { todo!() }
+
+    fn sample(&self, u: f32, v: f32, wo: &Vec3) -> Vec3 { todo!() }
+
+    fn pdf(&self, wi: &Vec3, wo: &Vec3) -> f32 { todo!() }
+}
 
 /// Beckmann microfacet BRDF model.
 /// See [Beckmann Distribution](crate::dist::BeckmannDistribution).
@@ -35,7 +51,7 @@ impl BeckmannBrdfModel {
 }
 
 impl MicrofacetBasedBrdfModel for BeckmannBrdfModel {
-    fn kind(&self) -> MicrofacetBrdfModelKind { MicrofacetBrdfModelKind::Beckmann }
+    fn kind(&self) -> MicrofacetBrdfKind { MicrofacetBrdfKind::Beckmann }
 
     impl_common_methods!();
 

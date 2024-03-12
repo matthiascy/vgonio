@@ -7,7 +7,8 @@ use std::fmt::Debug;
 pub mod brdf;
 pub mod dist;
 
-use base::{math::Vec3, optics::ior::RefractiveIndex};
+use crate::brdf::Brdf;
+use base::{math::Vec3, medium::Medium, optics::ior::RefractiveIndex};
 
 /// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -36,19 +37,20 @@ impl MicrofacetDistributionKind {
     }
 }
 
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MicrofacetBrdfModelKind {
-    /// BRDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
-    TrowbridgeReitz,
+pub enum MicrofacetBrdfKind {
     /// BRDF model based on Beckmann microfacet distribution.
     Beckmann,
+    /// BRDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
+    TrowbridgeReitz,
 }
 
-impl MicrofacetBrdfModelKind {
+impl MicrofacetBrdfKind {
     pub fn to_str(&self) -> &'static str {
         match self {
-            MicrofacetBrdfModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
-            MicrofacetBrdfModelKind::Beckmann => "Beckmann",
+            MicrofacetBrdfKind::TrowbridgeReitz => "Trowbridge-Reitz",
+            MicrofacetBrdfKind::Beckmann => "Beckmann",
         }
     }
 }
@@ -164,7 +166,7 @@ macro impl_common_methods() {
 
 pub trait MicrofacetBasedBrdfModel: Debug + Send + Sync {
     /// Returns the kind of the BSDF model.
-    fn kind(&self) -> MicrofacetBrdfModelKind;
+    fn kind(&self) -> MicrofacetBrdfKind;
 
     /// Returns the isotropy of the model.
     fn isotropy(&self) -> Isotropy;
@@ -240,4 +242,32 @@ pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
     ) -> Box<[f64]>;
 
     fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel;
+}
+
+pub struct Scattering;
+
+impl Scattering {
+    pub fn eval_reflectance(
+        brdf: &dyn Brdf,
+        wi: &Vec3,
+        wo: &Vec3,
+        medium_i: &RefractiveIndex,
+        medium_t: &RefractiveIndex,
+        ior_i: &RefractiveIndex,
+        ior_t: &RefractiveIndex,
+    ) -> f32 {
+        todo!()
+    }
+
+    pub fn eval_reflectance_spectrum(
+        brdf: &dyn Brdf,
+        wi: &Vec3,
+        wo: &Vec3,
+        medium_i: &RefractiveIndex,
+        medium_t: &RefractiveIndex,
+        ior_i: &[RefractiveIndex],
+        ior_t: &[RefractiveIndex],
+    ) -> Box<[f32]> {
+        todo!()
+    }
 }

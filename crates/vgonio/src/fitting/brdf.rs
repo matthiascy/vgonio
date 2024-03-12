@@ -12,7 +12,7 @@ use base::{
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
+    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBrdfKind,
 };
 use jabr::optics::reflect;
 use levenberg_marquardt::{
@@ -32,7 +32,7 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     /// The measured BSDF data.
     pub measured: Cow<'a, MeasuredBsdfData>,
     /// The target BSDF model.
-    pub target: MicrofacetBrdfModelKind,
+    pub target: MicrofacetBrdfKind,
     /// The refractive indices of the incident medium at the measured
     /// wavelengths.
     pub iors_i: Box<[RefractiveIndex]>,
@@ -64,7 +64,7 @@ impl<'a> MicrofacetBrdfFittingProblem<'a> {
     /// * `target` - The target BSDF model.
     pub fn new(
         measured: &'a MeasuredBsdfData,
-        target: MicrofacetBrdfModelKind,
+        target: MicrofacetBrdfKind,
         initial: RangeByStepSizeInclusive<f64>,
         cache: &'a RawCache,
     ) -> Self {
@@ -110,17 +110,17 @@ fn initialise_microfacet_bsdf_models(
     min: f64,
     max: f64,
     num: u32,
-    target: MicrofacetBrdfModelKind,
+    target: MicrofacetBrdfKind,
 ) -> Vec<Box<dyn MicrofacetBasedBrdfFittingModel>> {
     let step = (max - min) / num as f64;
     match target {
-        MicrofacetBrdfModelKind::TrowbridgeReitz => (0..=num)
+        MicrofacetBrdfKind::TrowbridgeReitz => (0..=num)
             .map(|i| {
                 let alpha = min + step * i as f64;
                 Box::new(TrowbridgeReitzBrdfModel::new(alpha, alpha)) as _
             })
             .collect(),
-        MicrofacetBrdfModelKind::Beckmann => (0..=num)
+        MicrofacetBrdfKind::Beckmann => (0..=num)
             .map(|i| {
                 let alpha = min + step * i as f64;
                 Box::new(BeckmannBrdfModel::new(alpha, alpha)) as _

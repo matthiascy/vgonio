@@ -27,7 +27,7 @@ use crate::{
     RangeByStepSizeInclusive,
 };
 use base::io::{CompressionScheme, FileEncoding};
-use bxdf::MicrofacetBrdfModelKind;
+use bxdf::MicrofacetBrdfKind;
 use egui::NumExt;
 use gfxkit::context::GpuContext;
 use std::{
@@ -251,7 +251,7 @@ impl VgonioGui {
                     FittingProblemKind::Mdf { model, variant } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        log::debug!("Fitting MDF with {:?}", model);
+                        log::debug!("Fitting MDF with {:?} through {:?}", model, variant);
                         if fitted.contains(kind, Some(*scale)) {
                             log::debug!("Already fitted, skipping");
                             return EventResponse::Handled;

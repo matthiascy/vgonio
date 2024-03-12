@@ -1,8 +1,5 @@
 use crate::{
-    app::{
-        cache::{RawCache, RefractiveIndexRegistry},
-        cli::BrdfModel,
-    },
+    app::cache::{RawCache, RefractiveIndexRegistry},
     measure::{
         bsdf::{BsdfSnapshot, MeasuredBsdfData, SpectralSamples},
         params::BsdfMeasurementParams,
@@ -17,7 +14,7 @@ use base::{
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfModel,
+    MicrofacetBasedBrdfModel, MicrofacetBrdfKind,
 };
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
@@ -50,7 +47,7 @@ pub enum ErrorMetric {
 pub fn compute_iso_brdf_err(
     measured: &MeasuredBsdfData,
     max_theta_o: Option<Degrees>,
-    model: BrdfModel,
+    model: MicrofacetBrdfKind,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
     normalize: bool,
@@ -70,9 +67,11 @@ pub fn compute_iso_brdf_err(
                     let alpha_x = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
                     let alpha_y = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
                     let m = match model {
-                        BrdfModel::Beckmann => Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
-                            as Box<dyn MicrofacetBasedBrdfModel>,
-                        BrdfModel::TrowbridgeReitz => {
+                        MicrofacetBrdfKind::Beckmann => {
+                            Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
+                                as Box<dyn MicrofacetBasedBrdfModel>
+                        }
+                        MicrofacetBrdfKind::TrowbridgeReitz => {
                             Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
                                 as Box<dyn MicrofacetBasedBrdfModel>
                         }

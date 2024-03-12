@@ -64,7 +64,6 @@ use self::tools::SamplingInspector;
 use crate::{
     app::{
         cache::Cache,
-        cli::BrdfModel,
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},

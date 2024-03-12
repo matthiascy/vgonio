@@ -16,7 +16,7 @@ pub trait Brdf {
     ///
     /// * `wi` - The incident direction (normalized).
     /// * `wo` - The outgoing direction (normalized).
-    fn eval(&self, wi: &Vec3, wo: &Vec3) -> Vec3;
+    fn eval(&self, wi: &Vec3, wo: &Vec3) -> f32;
 
     #[rustfmt::skip]
     /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parameterization.
@@ -32,7 +32,7 @@ pub trait Brdf {
     ///
     /// * `wh` - The half vector.
     /// * `wd` - The difference vector.
-    fn eval_hd(&self, wh: &Vec3, wd: &Vec3) -> Vec3;
+    fn eval_hd(&self, wh: &Vec3, wd: &Vec3) -> f32;
 
     /// Evaluates the projected BRDF with the classical parameterization.
     ///
@@ -40,9 +40,9 @@ pub trait Brdf {
     ///
     /// # Arguments
     ///
-    /// * `i` - The incident direction.
-    /// * `o` - The outgoing direction.
-    fn evalp(&self, wi: &Vec3, wo: &Vec3) -> Vec3;
+    /// * `wi` - The incident direction.
+    /// * `wo` - The outgoing direction.
+    fn evalp(&self, wi: &Vec3, wo: &Vec3) -> f32;
 
     /// Evaluates the projected BRDF with the Rusinkiewicz parameterization.
     ///
@@ -50,12 +50,12 @@ pub trait Brdf {
     ///
     /// # Arguments
     ///
-    /// * `h` - The half vector.
-    /// * `d` - The difference vector.
-    fn evalp_hd(&self, wh: &Vec3, wd: &Vec3) -> Vec3;
+    /// * `wh` - The half vector.
+    /// * `wd` - The difference vector.
+    fn evalp_hd(&self, wh: &Vec3, wd: &Vec3) -> f32;
 
     /// Evaluates the projected BRDF with importance sampling.
-    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> Vec3;
+    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f32;
 
     /// Importance sample f_r * cos_theta_i using two uniform variates.
     ///
@@ -64,7 +64,7 @@ pub trait Brdf {
     /// * `u` - The first uniform variate.
     /// * `v` - The second uniform variate.
     /// * `wo` - The outgoing direction.
-    fn sample(&self, u: f32, v: f32, wo: &Vec3) -> Vec3;
+    fn sample(&self, u: f32, v: f32, wo: &Vec3) -> f32;
 
     /// Evaluates the PDF of a sample.
     fn pdf(&self, wi: &Vec3, wo: &Vec3) -> f32;

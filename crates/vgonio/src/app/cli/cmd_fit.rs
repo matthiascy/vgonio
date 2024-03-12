@@ -29,7 +29,7 @@ use base::{
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
+    MicrofacetBasedBrdfModel, MicrofacetBrdfKind,
 };
 use core::slice::SlicePattern;
 use rayon::iter::ParallelIterator;
@@ -50,7 +50,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             let roughness = RangeByStepSizeInclusive::<f64>::new(0.1, 1.0, 0.1);
             let count = roughness.step_count();
             let models = match opts.model {
-                BrdfModel::Beckmann => {
+                MicrofacetBrdfKind::Beckmann => {
                     let mut models = Vec::with_capacity(count);
                     for i in 0..count {
                         let alpha = i as f64 / count as f64 * roughness.span() + roughness.start;
@@ -59,7 +59,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     }
                     models.into_boxed_slice()
                 }
-                BrdfModel::TrowbridgeReitz => {
+                MicrofacetBrdfKind::TrowbridgeReitz => {
                     let mut models = Vec::with_capacity(count);
                     for i in 0..count {
                         let alpha = i as f64 / count as f64 * roughness.span() + roughness.start;
@@ -149,12 +149,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
                         let problem = MicrofacetBrdfFittingProblem::new(
                             measured_brdf,
-                            match opts.model {
-                                BrdfModel::Beckmann => MicrofacetBrdfModelKind::Beckmann,
-                                BrdfModel::TrowbridgeReitz => {
-                                    MicrofacetBrdfModelKind::TrowbridgeReitz
-                                }
-                            },
+                            opts.model,
                             RangeByStepSizeInclusive::new(
                                 opts.alpha_start.unwrap(),
                                 opts.alpha_stop.unwrap(),
@@ -192,7 +187,7 @@ pub struct FitOptions {
         short,
         help = "Model to fit the measurement to. If not specified, the default model will be used."
     )]
-    pub model: BrdfModel,
+    pub model: MicrofacetBrdfKind,
     #[clap(
         long,
         help = "Maximum colatitude angle in degrees for outgoing directions."
@@ -236,10 +231,4 @@ pub struct FitOptions {
 pub enum FittingMethod {
     Bruteforce,
     Nlls,
-}
-
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BrdfModel {
-    Beckmann,
-    TrowbridgeReitz,
 }
