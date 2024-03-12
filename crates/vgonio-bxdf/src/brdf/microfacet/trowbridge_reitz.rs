@@ -6,7 +6,7 @@ use std::fmt::{Debug, Formatter};
 
 use crate::{
     brdf::microfacet::MicrofacetBrdf, dist::TrowbridgeReitzDistribution, impl_common_methods,
-    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
+    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
     MicrofacetDistribution,
 };
 
@@ -35,7 +35,7 @@ impl TrowbridgeReitzBrdfModel {
 }
 
 impl MicrofacetBasedBrdfModel for TrowbridgeReitzBrdfModel {
-    fn kind(&self) -> MicrofacetBasedBrdfModelKind { MicrofacetBasedBrdfModelKind::TrowbridgeReitz }
+    fn kind(&self) -> MicrofacetBrdfModelKind { MicrofacetBrdfModelKind::TrowbridgeReitz }
 
     impl_common_methods!();
 

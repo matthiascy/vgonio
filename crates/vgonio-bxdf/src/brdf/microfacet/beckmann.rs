@@ -6,7 +6,7 @@ use libm::erf;
 
 use crate::{
     brdf::microfacet::MicrofacetBrdf, dist::BeckmannDistribution, impl_common_methods,
-    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
+    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
     MicrofacetDistribution,
 };
 
@@ -35,7 +35,7 @@ impl BeckmannBrdfModel {
 }
 
 impl MicrofacetBasedBrdfModel for BeckmannBrdfModel {
-    fn kind(&self) -> MicrofacetBasedBrdfModelKind { MicrofacetBasedBrdfModelKind::Beckmann }
+    fn kind(&self) -> MicrofacetBrdfModelKind { MicrofacetBrdfModelKind::Beckmann }
 
     impl_common_methods!();
 

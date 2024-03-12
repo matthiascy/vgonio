@@ -6,7 +6,10 @@ use crate::{
         cli::ansi,
         Config,
     },
-    fitting::err::{compute_iso_brdf_err, generate_analytical_brdf, ErrorMetric},
+    fitting::{
+        err::{compute_iso_brdf_err, generate_analytical_brdf, ErrorMetric},
+        FittingProblem, MicrofacetBrdfFittingProblem,
+    },
     measure::{
         bsdf::{
             emitter::EmitterParams,
@@ -26,7 +29,7 @@ use base::{
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfModel,
+    MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
 };
 use core::slice::SlicePattern;
 use rayon::iter::ParallelIterator;
@@ -119,26 +122,50 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .measured
                     .as_bsdf()
                     .unwrap();
-                let mses = compute_iso_brdf_err(
-                    &measured_brdf,
-                    opts.max_theta_o.map(|t| deg!(t as f32)),
-                    opts.model,
-                    RangeByStepSizeInclusive::new(
-                        opts.alpha_start.unwrap(),
-                        opts.alpha_end.unwrap(),
-                        opts.alpha_step.unwrap(),
-                    ),
-                    &cache,
-                    opts.normalize,
-                    opts.error_metric.unwrap_or(ErrorMetric::Mse),
-                );
-                println!(
-                    "    {}>{} MSE ({}) {:?}",
-                    ansi::BRIGHT_YELLOW,
-                    ansi::RESET,
-                    input.file_name().unwrap().display(),
-                    mses.as_slice()
-                );
+                match opts.method {
+                    FittingMethod::Bruteforce => {
+                        let mses = compute_iso_brdf_err(
+                            &measured_brdf,
+                            opts.max_theta_o.map(|t| deg!(t as f32)),
+                            opts.model,
+                            RangeByStepSizeInclusive::new(
+                                opts.alpha_start.unwrap(),
+                                opts.alpha_stop.unwrap(),
+                                opts.alpha_step.unwrap(),
+                            ),
+                            &cache,
+                            opts.normalize,
+                            opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                        );
+                        println!(
+                            "    {}>{} MSE ({}) {:?}",
+                            ansi::BRIGHT_YELLOW,
+                            ansi::RESET,
+                            input.file_name().unwrap().display(),
+                            mses.as_slice()
+                        );
+                    }
+                    FittingMethod::Nlls => {
+                        // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
+                        let problem = MicrofacetBrdfFittingProblem::new(
+                            measured_brdf,
+                            match opts.model {
+                                BrdfModel::Beckmann => MicrofacetBrdfModelKind::Beckmann,
+                                BrdfModel::TrowbridgeReitz => {
+                                    MicrofacetBrdfModelKind::TrowbridgeReitz
+                                }
+                            },
+                            RangeByStepSizeInclusive::new(
+                                opts.alpha_start.unwrap(),
+                                opts.alpha_stop.unwrap(),
+                                opts.alpha_step.unwrap(),
+                            ),
+                            cache,
+                        );
+                        let report = problem.lsq_lm_fit();
+                        report.log_fitting_reports();
+                    }
+                }
             }
         }
     });
@@ -185,18 +212,30 @@ pub struct FitOptions {
         default_value = "false"
     )]
     pub normalize: bool,
-    #[clap(long, help = "Start roughness.", default_value = "0.01")]
+    #[clap(long = "astart", help = "Start roughness.", default_value = "0.01")]
     pub alpha_start: Option<f64>,
-    #[clap(long, help = "End roughness.", default_value = "1.0")]
-    pub alpha_end: Option<f64>,
-    #[clap(long, help = "Roughness step size.", default_value = "0.01")]
+    #[clap(long = "astop", help = "End roughness.", default_value = "1.0")]
+    pub alpha_stop: Option<f64>,
+    #[clap(long = "astep", help = "Roughness step size.", default_value = "0.01")]
     pub alpha_step: Option<f64>,
+    #[clap(
+        long,
+        help = "Method to use for the fitting.",
+        default_value = "bruteforce"
+    )]
+    pub method: FittingMethod,
     #[clap(
         short,
         help = "Error metric to use for the fitting.",
         default_value = "mse"
     )]
     pub error_metric: Option<ErrorMetric>,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FittingMethod {
+    Bruteforce,
+    Nlls,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

@@ -3,6 +3,7 @@ use crate::{
     fitting::{err::generate_analytical_brdf, FittingProblem, FittingReport},
     measure::bsdf::MeasuredBsdfData,
     partition::SphericalPartition,
+    RangeByStepCountInclusive, RangeByStepSizeInclusive,
 };
 use base::{
     math::{sph_to_cart, Vec3, Vec3A},
@@ -11,7 +12,7 @@ use base::{
 };
 use bxdf::{
     brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind,
+    MicrofacetBasedBrdfFittingModel, MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind,
 };
 use jabr::optics::reflect;
 use levenberg_marquardt::{
@@ -31,7 +32,7 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     /// The measured BSDF data.
     pub measured: Cow<'a, MeasuredBsdfData>,
     /// The target BSDF model.
-    pub target: MicrofacetBasedBrdfModelKind,
+    pub target: MicrofacetBrdfModelKind,
     /// The refractive indices of the incident medium at the measured
     /// wavelengths.
     pub iors_i: Box<[RefractiveIndex]>,
@@ -42,6 +43,8 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     // Used to retrieve the refractive indices of the incident and transmitted
     // mediums while calculating the modelled BSDF maxiumum values.
     pub iors: &'a RefractiveIndexRegistry,
+    /// The initial guess for the roughness parameter.
+    pub initial_guess: RangeByStepSizeInclusive<f64>,
 }
 
 impl<'a> Display for MicrofacetBrdfFittingProblem<'a> {
@@ -61,7 +64,8 @@ impl<'a> MicrofacetBrdfFittingProblem<'a> {
     /// * `target` - The target BSDF model.
     pub fn new(
         measured: &'a MeasuredBsdfData,
-        target: MicrofacetBasedBrdfModelKind,
+        target: MicrofacetBrdfModelKind,
+        initial: RangeByStepSizeInclusive<f64>,
         cache: &'a RawCache,
     ) -> Self {
         let wavelengths = measured
@@ -95,6 +99,7 @@ impl<'a> MicrofacetBrdfFittingProblem<'a> {
             iors_i,
             iors_t,
             iors: &cache.iors,
+            initial_guess: initial,
         }
     }
 }
@@ -105,17 +110,17 @@ fn initialise_microfacet_bsdf_models(
     min: f64,
     max: f64,
     num: u32,
-    target: MicrofacetBasedBrdfModelKind,
+    target: MicrofacetBrdfModelKind,
 ) -> Vec<Box<dyn MicrofacetBasedBrdfFittingModel>> {
     let step = (max - min) / num as f64;
     match target {
-        MicrofacetBasedBrdfModelKind::TrowbridgeReitz => (0..num)
+        MicrofacetBrdfModelKind::TrowbridgeReitz => (0..=num)
             .map(|i| {
                 let alpha = min + step * i as f64;
                 Box::new(TrowbridgeReitzBrdfModel::new(alpha, alpha)) as _
             })
             .collect(),
-        MicrofacetBasedBrdfModelKind::Beckmann => (0..num)
+        MicrofacetBrdfModelKind::Beckmann => (0..=num)
             .map(|i| {
                 let alpha = min + step * i as f64;
                 Box::new(BeckmannBrdfModel::new(alpha, alpha)) as _
@@ -132,50 +137,48 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
-            initialise_microfacet_bsdf_models(0.001, 0.5, 100, self.target)
-                .into_par_iter()
-                .chunks(8)
-                .flat_map(|models| {
-                    models
-                        .into_iter()
-                        .filter_map(|model| {
-                            let init_guess = (model.alpha_x(), model.alpha_y());
-                            log::debug!(
-                                "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
-                                model.kind(),
-                                init_guess.0,
-                                init_guess.1
-                            );
-                            let kind = model.kind();
-                            let problem =
-                                MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
-                                    &self.measured,
-                                    model,
-                                    self.iors,
-                                    &self.iors_i,
-                                    &self.iors_t,
-                                );
-                            let (result, report) = solver.minimize(problem);
-                            log::debug!(
-                                "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}\n    - \
-                                 fitted αx = {} αy = {}\n    - report: {:?}",
-                                kind,
-                                init_guess.0,
-                                init_guess.1,
-                                result.model.alpha_x(),
-                                result.model.alpha_y(),
-                                report
-                            );
-                            match report.termination {
-                                TerminationReason::Converged { .. } | TerminationReason::LostPatience => {
-                                    Some((result.model as _, report))
-                                }
-                                _ => None,
-                            }
-                        })
-                        .collect::<Vec<(Box<dyn MicrofacetBasedBrdfModel>, MinimizationReport<f64>)>>()
-                })
-                .collect::<Vec<_>>()
+            initialise_microfacet_bsdf_models(
+                self.initial_guess.start,
+                self.initial_guess.stop,
+                self.initial_guess.step_count() as u32 - 1,
+                self.target,
+            )
+            .into_par_iter()
+            .filter_map(|model| {
+                let init_guess = (model.alpha_x(), model.alpha_y());
+                log::debug!(
+                    "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}",
+                    model.kind(),
+                    init_guess.0,
+                    init_guess.1
+                );
+                let kind = model.kind();
+                let problem = MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                    &self.measured,
+                    model,
+                    self.iors,
+                    &self.iors_i,
+                    &self.iors_t,
+                );
+                let (result, report) = solver.minimize(problem);
+                log::debug!(
+                    "Fitting Isotropic BRDF model: {:?} with αx = {} αy = {}\n    - fitted αx = \
+                     {} αy = {}\n    - report: {:?}",
+                    kind,
+                    init_guess.0,
+                    init_guess.1,
+                    result.model.alpha_x(),
+                    result.model.alpha_y(),
+                    report
+                );
+                match report.termination {
+                    TerminationReason::Converged { .. } | TerminationReason::LostPatience => {
+                        Some((result.model as _, report))
+                    }
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>()
         };
         results.shrink_to_fit();
         FittingReport::new(results, |m: &Box<dyn MicrofacetBasedBrdfModel>| {

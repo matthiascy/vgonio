@@ -25,7 +25,7 @@ pub use mdf::*;
 
 use base::Isotropy;
 use bxdf::{
-    MicrofacetBasedBrdfModel, MicrofacetBasedBrdfModelKind, MicrofacetDistribution,
+    MicrofacetBasedBrdfModel, MicrofacetBrdfModelKind, MicrofacetDistribution,
     MicrofacetDistributionKind,
 };
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
@@ -44,7 +44,7 @@ pub enum FittingProblemKind {
     /// Fitting the bidirectional scattering distribution function.
     Bsdf {
         /// The target BSDF model.
-        model: MicrofacetBasedBrdfModelKind,
+        model: MicrofacetBrdfModelKind,
     },
 }
 

@@ -37,18 +37,18 @@ impl MicrofacetDistributionKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MicrofacetBasedBrdfModelKind {
+pub enum MicrofacetBrdfModelKind {
     /// BRDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
     TrowbridgeReitz,
     /// BRDF model based on Beckmann microfacet distribution.
     Beckmann,
 }
 
-impl MicrofacetBasedBrdfModelKind {
+impl MicrofacetBrdfModelKind {
     pub fn to_str(&self) -> &'static str {
         match self {
-            MicrofacetBasedBrdfModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
-            MicrofacetBasedBrdfModelKind::Beckmann => "Beckmann",
+            MicrofacetBrdfModelKind::TrowbridgeReitz => "Trowbridge-Reitz",
+            MicrofacetBrdfModelKind::Beckmann => "Beckmann",
         }
     }
 }
@@ -164,7 +164,7 @@ macro impl_common_methods() {
 
 pub trait MicrofacetBasedBrdfModel: Debug + Send + Sync {
     /// Returns the kind of the BSDF model.
-    fn kind(&self) -> MicrofacetBasedBrdfModelKind;
+    fn kind(&self) -> MicrofacetBrdfModelKind;
 
     /// Returns the isotropy of the model.
     fn isotropy(&self) -> Isotropy;

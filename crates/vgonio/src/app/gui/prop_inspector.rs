@@ -284,7 +284,7 @@ impl PropertyInspector {
                                 if ui.button("Fit Beckmann").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bsdf {
-                                            model: bxdf::MicrofacetBasedBrdfModelKind::Beckmann,
+                                            model: bxdf::MicrofacetBrdfModelKind::Beckmann,
                                         },
                                         data: meas,
                                         scale: 1.0,
@@ -293,8 +293,7 @@ impl PropertyInspector {
                                 if ui.button("Fit GGX").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bsdf {
-                                            model:
-                                                bxdf::MicrofacetBasedBrdfModelKind::TrowbridgeReitz,
+                                            model: bxdf::MicrofacetBrdfModelKind::TrowbridgeReitz,
                                         },
                                         data: meas,
                                         scale: 1.0,

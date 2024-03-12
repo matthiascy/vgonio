@@ -24,9 +24,10 @@ use crate::{
         MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
     },
     measure::{data::MeasurementData, params::MeasurementKind},
+    RangeByStepSizeInclusive,
 };
 use base::io::{CompressionScheme, FileEncoding};
-use bxdf::MicrofacetBasedBrdfModelKind;
+use bxdf::MicrofacetBrdfModelKind;
 use egui::NumExt;
 use gfxkit::context::GpuContext;
 use std::{
@@ -239,6 +240,7 @@ impl VgonioGui {
                             let problem = MicrofacetBrdfFittingProblem::new(
                                 measurement.measured.as_bsdf().unwrap(),
                                 *model,
+                                RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
                                 cache,
                             );
                             problem.lsq_lm_fit()
