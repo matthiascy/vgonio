@@ -7,7 +7,7 @@ use crate::{
 };
 use base::{
     math::{sph_to_cart, Vec3, Vec3A},
-    optics::{fresnel, ior::RefractiveIndex},
+    optics::{fresnel, ior::RefractiveIndexRecord},
     Isotropy,
 };
 use bxdf::{
@@ -35,10 +35,10 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     pub target: MicrofacetBrdfKind,
     /// The refractive indices of the incident medium at the measured
     /// wavelengths.
-    pub iors_i: Box<[RefractiveIndex]>,
+    pub iors_i: Box<[RefractiveIndexRecord]>,
     /// The refractive indices of the transmitted medium at the measured
     /// wavelengths.
-    pub iors_t: Box<[RefractiveIndex]>,
+    pub iors_t: Box<[RefractiveIndexRecord]>,
     /// The refractive index registry.
     // Used to retrieve the refractive indices of the incident and transmitted
     // mediums while calculating the modelled BSDF maxiumum values.
@@ -208,10 +208,10 @@ struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     iors: &'a RefractiveIndexRegistry,
     /// The refractive indices of the incident medium at the measured
     /// wavelengths.
-    iors_i: &'a [RefractiveIndex],
+    iors_i: &'a [RefractiveIndexRecord],
     /// The refractive indices of the transmitted medium at the measured
     /// wavelengths.
-    iors_t: &'a [RefractiveIndex],
+    iors_t: &'a [RefractiveIndexRecord],
     /// Incident directions
     wis: Box<[Vec3]>,
     /// Outgoing directions
@@ -223,8 +223,8 @@ impl<'a> MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
         measured: &'a MeasuredBsdfData,
         model: Box<dyn MicrofacetBasedBrdfFittingModel>,
         iors: &'a RefractiveIndexRegistry,
-        iors_i: &'a [RefractiveIndex],
-        iors_t: &'a [RefractiveIndex],
+        iors_i: &'a [RefractiveIndexRecord],
+        iors_t: &'a [RefractiveIndexRecord],
     ) -> Self {
         let partition = measured.params.receiver.partitioning();
         let max_measured = measured

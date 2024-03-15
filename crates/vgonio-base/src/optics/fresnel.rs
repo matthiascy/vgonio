@@ -160,7 +160,7 @@
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::{math::rcp_f32, optics::ior::RefractiveIndex};
+use crate::{math::rcp_f32, optics::ior::RefractiveIndexRecord};
 use glam::Vec3A;
 
 /// Reflects a vector `wi` with respect to surface normal `n`.
@@ -542,7 +542,7 @@ pub fn reflectance_dielectric_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, 
 ///
 /// Because reflectance from a conductor to a dielectric is not implemented yet,
 /// thus `cos_i` must be positive in case from a dielectric to a conductor.
-pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -> f32 {
+pub fn reflectance(cos_i: f32, ior_i: RefractiveIndexRecord, ior_t: RefractiveIndexRecord) -> f32 {
     debug_assert!(
         (-1.0 - f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i),
         "cos_i must be in [-1, 1]"
@@ -574,7 +574,7 @@ pub fn reflectance(cos_i: f32, ior_i: RefractiveIndex, ior_t: RefractiveIndex) -
 pub fn reflectance_dielectric_conductor_spectrum(
     cos: f32,
     eta_i: f32,
-    ior_t: &[RefractiveIndex],
+    ior_t: &[RefractiveIndexRecord],
 ) -> Vec<f32> {
     assert!(
         (0.0..=1.0).contains(&cos),
@@ -589,7 +589,7 @@ pub fn reflectance_dielectric_conductor_spectrum(
 
 #[cfg(test)]
 mod tests {
-    use crate::optics::ior::RefractiveIndex;
+    use crate::optics::ior::RefractiveIndexRecord;
     use base::units::nm;
     use std::{fs::OpenOptions, io::Write};
 
@@ -691,9 +691,9 @@ mod tests {
 
     #[test]
     fn reflectance_no_output() {
-        let ior_vacuum = RefractiveIndex::VACUUM;
-        let ior_al = RefractiveIndex::new(nm!(600.0), 1.1893, 6.9762);
-        let ior_glass = RefractiveIndex::new(nm!(600.0), 1.5, 0.0);
+        let ior_vacuum = RefractiveIndexRecord::VACUUM;
+        let ior_al = RefractiveIndexRecord::new(nm!(600.0), 1.1893, 6.9762);
+        let ior_glass = RefractiveIndexRecord::new(nm!(600.0), 1.5, 0.0);
         for i in 0..1000 {
             let cos_i = (1000 - i) as f32 / 1000.0;
             let angle = cos_i.acos();

@@ -1,6 +1,6 @@
 use base::{
     math::{cart_to_sph, cos_theta, rcp_f64, sqr, Vec3},
-    optics::{fresnel, ior::RefractiveIndex},
+    optics::{fresnel, ior::RefractiveIndexRecord},
 };
 use std::fmt::{Debug, Formatter};
 
@@ -39,7 +39,13 @@ impl MicrofacetBasedBrdfModel for TrowbridgeReitzBrdfModel {
 
     impl_common_methods!();
 
-    fn eval(&self, wi: Vec3, wo: Vec3, ior_i: &RefractiveIndex, ior_t: &RefractiveIndex) -> f64 {
+    fn eval(
+        &self,
+        wi: Vec3,
+        wo: Vec3,
+        ior_i: &RefractiveIndexRecord,
+        ior_t: &RefractiveIndexRecord,
+    ) -> f64 {
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
         let cos_theta_i = wi.z;
@@ -67,8 +73,8 @@ impl MicrofacetBasedBrdfModel for TrowbridgeReitzBrdfModel {
         &self,
         wi: Vec3,
         wo: Vec3,
-        iors_i: &[RefractiveIndex],
-        iors_t: &[RefractiveIndex],
+        iors_i: &[RefractiveIndexRecord],
+        iors_t: &[RefractiveIndexRecord],
     ) -> Box<[f64]> {
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
@@ -94,8 +100,8 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
         &self,
         wis: &[Vec3],
         wos: &[Vec3],
-        ior_i: &RefractiveIndex,
-        ior_t: &RefractiveIndex,
+        ior_i: &RefractiveIndexRecord,
+        ior_t: &RefractiveIndexRecord,
     ) -> Box<[f64]> {
         let mut result = Box::new_uninit_slice(wis.len() * wos.len() * 2);
         // TODO: test medium type
@@ -289,8 +295,8 @@ impl MicrofacetBasedBrdfFittingModel for TrowbridgeReitzBrdfModel {
         &self,
         wis: &[Vec3],
         wos: &[Vec3],
-        ior_i: &RefractiveIndex,
-        ior_t: &RefractiveIndex,
+        ior_i: &RefractiveIndexRecord,
+        ior_t: &RefractiveIndexRecord,
     ) -> Box<[f64]> {
         let mut result = Box::new_uninit_slice(wis.len() * wos.len());
         // TODO: test medium type

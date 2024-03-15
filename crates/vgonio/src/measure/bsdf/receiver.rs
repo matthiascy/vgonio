@@ -14,7 +14,7 @@ use crate::{
 };
 use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
-    optics::{fresnel, ior::RefractiveIndex},
+    optics::{fresnel, ior::RefractiveIndexRecord},
     units::{Nanometres, Radians},
 };
 use rayon::prelude::*;
@@ -120,9 +120,9 @@ pub struct Receiver {
     /// Wavelengths of the measurement.
     pub spectrum: Vec<Nanometres>,
     /// Incident medium's refractive indices.
-    pub iors_i: Box<[RefractiveIndex]>,
+    pub iors_i: Box<[RefractiveIndexRecord]>,
     /// Transmitted medium's refractive indices.
-    pub iors_t: Box<[RefractiveIndex]>,
+    pub iors_t: Box<[RefractiveIndexRecord]>,
     /// The partitioned patches of the receiver.
     pub patches: SphericalPartition,
 }

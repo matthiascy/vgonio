@@ -6,7 +6,7 @@ use base::{
     error::VgonioError,
     math,
     medium::Medium,
-    optics::ior::RefractiveIndex,
+    optics::ior::{Ior, RefractiveIndexRecord},
     units::{Length, LengthMeasurement, Nanometres},
     Asset,
 };
@@ -659,14 +659,14 @@ impl RawCache {
 
 /// Refractive index database.
 #[derive(Debug)]
-pub struct RefractiveIndexRegistry(pub(crate) HashMap<Medium, Vec<RefractiveIndex>>);
+pub struct RefractiveIndexRegistry(pub(crate) HashMap<Medium, Vec<RefractiveIndexRecord>>);
 
 impl Default for RefractiveIndexRegistry {
     fn default() -> Self { Self::new() }
 }
 
 impl Deref for RefractiveIndexRegistry {
-    type Target = HashMap<Medium, Vec<RefractiveIndex>>;
+    type Target = HashMap<Medium, Vec<RefractiveIndexRecord>>;
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
@@ -676,7 +676,7 @@ impl RefractiveIndexRegistry {
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
-    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndex> {
+    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndexRecord> {
         let refractive_indices = self
             .get(&medium)
             .unwrap_or_else(|| panic!("unknown medium {:?}", medium));
@@ -701,10 +701,12 @@ impl RefractiveIndexRegistry {
             let diff_k = ior_after.k - ior_before.k;
             let t = (wavelength - ior_before.wavelength)
                 / (ior_after.wavelength - ior_before.wavelength);
-            Some(RefractiveIndex {
+            Some(RefractiveIndexRecord {
                 wavelength,
-                eta: ior_before.eta + t * diff_eta,
-                k: ior_before.k + t * diff_k,
+                ior: Ior {
+                    eta: ior_before.eta + t * diff_eta,
+                    k: ior_before.k + t * diff_k,
+                },
             })
         }
     }
@@ -715,7 +717,7 @@ impl RefractiveIndexRegistry {
         &self,
         medium: Medium,
         wavelengths: &[Length<A>],
-    ) -> Option<Box<[RefractiveIndex]>> {
+    ) -> Option<Box<[RefractiveIndexRecord]>> {
         wavelengths
             .iter()
             .map(|wavelength| self.ior_of(medium, wavelength.in_nanometres()))
@@ -725,7 +727,7 @@ impl RefractiveIndexRegistry {
 
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"
-    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Box<[RefractiveIndex]>> {
+    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Box<[RefractiveIndexRecord]>> {
         std::fs::File::open(path)
             .map(|f| {
                 let mut rdr = csv::Reader::from_reader(f);
@@ -752,7 +754,7 @@ impl RefractiveIndexRegistry {
                                 let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                                 let eta = record[1].parse::<f32>().unwrap();
                                 let k = record[2].parse::<f32>().unwrap();
-                                Some(RefractiveIndex::new(wavelength.into(), eta, k))
+                                Some(RefractiveIndexRecord::new(wavelength.into(), eta, k))
                             }
                             Err(_) => None,
                         })
@@ -764,7 +766,7 @@ impl RefractiveIndexRegistry {
                             Ok(record) => {
                                 let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                                 let eta = record[1].parse::<f32>().unwrap();
-                                Some(RefractiveIndex::new(wavelength.into(), eta, 0.0))
+                                Some(RefractiveIndexRecord::new(wavelength.into(), eta, 0.0))
                             }
                             Err(_) => None,
                         })

@@ -8,7 +8,14 @@ pub mod brdf;
 pub mod dist;
 
 use crate::brdf::Brdf;
-use base::{math::Vec3, medium::Medium, optics::ior::RefractiveIndex};
+use base::{
+    math::{cos_theta, Vec3},
+    medium::Medium,
+    optics::{
+        fresnel,
+        ior::{Ior, RefractiveIndexRecord},
+    },
+};
 
 /// Family of reflection models.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -184,15 +191,21 @@ pub trait MicrofacetBasedBrdfModel: Debug + Send + Sync {
     fn set_alpha_y(&mut self, alpha_y: f64);
 
     /// Evaluates the BRDF model.
-    fn eval(&self, wi: Vec3, wo: Vec3, ior_i: &RefractiveIndex, ior_t: &RefractiveIndex) -> f64;
+    fn eval(
+        &self,
+        wi: Vec3,
+        wo: Vec3,
+        ior_i: &RefractiveIndexRecord,
+        ior_t: &RefractiveIndexRecord,
+    ) -> f64;
 
     /// Evaluates the BRDF model with the given spectrum.
     fn eval_spectrum(
         &self,
         wi: Vec3,
         wo: Vec3,
-        iors_i: &[RefractiveIndex],
-        iors_t: &[RefractiveIndex],
+        iors_i: &[RefractiveIndexRecord],
+        iors_t: &[RefractiveIndexRecord],
     ) -> Box<[f64]>;
 
     // TODO: eval with spherical coordinates?
@@ -229,21 +242,23 @@ pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
         &self,
         wis: &[Vec3],
         wos: &[Vec3],
-        ior_i: &RefractiveIndex,
-        ior_t: &RefractiveIndex,
+        ior_i: &RefractiveIndexRecord,
+        ior_t: &RefractiveIndexRecord,
     ) -> Box<[f64]>;
 
     fn partial_derivatives_isotropic(
         &self,
         wis: &[Vec3],
         wos: &[Vec3],
-        ior_i: &RefractiveIndex,
-        ior_t: &RefractiveIndex,
+        ior_i: &RefractiveIndexRecord,
+        ior_t: &RefractiveIndexRecord,
     ) -> Box<[f64]>;
 
     fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel;
 }
 
+/// Structure for evaluating the reflectance combining the BRDF evaluation and
+/// Fresnel term.
 pub struct Scattering;
 
 impl Scattering {
@@ -251,23 +266,43 @@ impl Scattering {
         brdf: &dyn Brdf,
         wi: &Vec3,
         wo: &Vec3,
-        medium_i: &RefractiveIndex,
-        medium_t: &RefractiveIndex,
-        ior_i: &RefractiveIndex,
-        ior_t: &RefractiveIndex,
+        ior_i: &Ior,
+        ior_t: &Ior,
     ) -> f32 {
-        todo!()
+        let f = match (ior_i.is_conductor(), ior_t.is_conductor()) {
+            (true, true) => {
+                todo!("conductor-conductor not implemented")
+            }
+            (true, false) => {
+                todo!("conductor-dielectric not implemented")
+            }
+            (false, true) => fresnel::reflectance_dielectric_conductor(
+                cos_theta(wi).abs(),
+                ior_i.eta,
+                ior_t.eta,
+                ior_t.k,
+            ),
+            (false, false) => {
+                fresnel::reflectance_dielectric(cos_theta(wi).abs(), ior_i.eta, ior_t.eta)
+            }
+        };
+
+        f * brdf.eval(wi, wo)
     }
 
     pub fn eval_reflectance_spectrum(
         brdf: &dyn Brdf,
         wi: &Vec3,
         wo: &Vec3,
-        medium_i: &RefractiveIndex,
-        medium_t: &RefractiveIndex,
-        ior_i: &[RefractiveIndex],
-        ior_t: &[RefractiveIndex],
+        ior_i: &[Ior],
+        ior_t: &[Ior],
     ) -> Box<[f32]> {
-        todo!()
+        debug_assert_eq!(ior_i.len(), ior_t.len(), "IOR pair count mismatch");
+        let mut reflectances = Box::new_uninit_slice(ior_i.len());
+        for (((ior_i, ior_t), refl)) in ior_i.iter().zip(ior_t.iter()).zip(reflectances.iter_mut())
+        {
+            refl.write(Scattering::eval_reflectance(brdf, wi, wo, ior_t, ior_t));
+        }
+        unsafe { reflectances.assume_init() }
     }
 }
