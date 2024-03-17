@@ -91,6 +91,7 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
             return 0.0;
         }
         let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
+
         // // aniostropic case
         // let (_, _, phi_m) = cartesian_to_spherical(m, 1.0);
         // let cos_phi_m2 = sqr(phi_m.cos()) as f64;

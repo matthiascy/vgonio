@@ -47,6 +47,9 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// Returns whether the distribution is isotropic or anisotropic.
     fn isotropy(&self) -> Isotropy;
 
+    /// Evaluates the lambda auxiliary function.
+    fn eval_lambda(&self, w: Vec3) -> f64;
+
     /// Evaluates the microfacet area distribution function with the given
     /// interested microfacet normal. m is assumed to be normalised and
     /// defined in the right-handed Y-up coordinate system.
@@ -62,11 +65,13 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     // fn eval_sdf(&self, x: f64, y: f64) -> f64;
 
     /// Evaluates the Smith masking-shadowing function with the incident and
-    /// outgoing directions.
+    /// outgoing directions. This assumes that masking and shadowing are
+    /// statistically independent.
     fn eval_msf(&self, m: &Vec3, i: &Vec3, o: &Vec3) -> f64 {
         self.eval_msf1(m, i) * self.eval_msf1(m, o)
     }
 
+    /// TODO: evaluate msf with lambda
     /// Evaluates the Smith masking-shadowing function with either the incident
     /// or outgoing direction.
     fn eval_msf1(&self, m: &Vec3, v: &Vec3) -> f64;
