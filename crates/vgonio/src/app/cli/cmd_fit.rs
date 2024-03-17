@@ -7,7 +7,7 @@ use crate::{
         Config,
     },
     fitting::{
-        err::{compute_iso_brdf_err, generate_analytical_brdf, ErrorMetric},
+        err::{compute_iso_microfacet_brdf_err, generate_analytical_brdf, ErrorMetric},
         FittingProblem, MicrofacetBrdfFittingProblem,
     },
     measure::{
@@ -26,10 +26,14 @@ use base::{
     math::{sph_to_cart, Sph2, Vec3},
     medium::Medium,
     units::{deg, nm, Degs, Rads},
+    Isotropy,
 };
 use bxdf::{
-    brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfModel, MicrofacetBrdfKind,
+    brdf::{
+        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf, TrowbridgeReitzBrdfModel},
+        Bxdf, BxdfFamily,
+    },
+    distro::MicrofacetDistroKind,
 };
 use core::slice::SlicePattern;
 use rayon::iter::ParallelIterator;
@@ -40,7 +44,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         "  {}>{} Fitting to model: {:?}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
-        opts.model,
+        opts.family,
     );
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
@@ -49,25 +53,35 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         if opts.generate {
             let roughness = RangeByStepSizeInclusive::<f64>::new(0.1, 1.0, 0.1);
             let count = roughness.step_count();
-            let models = match opts.model {
-                MicrofacetBrdfKind::Beckmann => {
-                    let mut models = Vec::with_capacity(count);
-                    for i in 0..count {
-                        let alpha = i as f64 / count as f64 * roughness.span() + roughness.start;
-                        models.push(Box::new(BeckmannBrdfModel::new(alpha, alpha))
-                            as Box<dyn MicrofacetBasedBrdfModel>);
+            let models = match opts.family {
+                BxdfFamily::Microfacet => {
+                    match opts
+                        .distro
+                        .expect("Distribution must be specified for microfacet family")
+                    {
+                        MicrofacetDistroKind::Beckmann => {
+                            let mut models = Vec::with_capacity(count);
+                            for i in 0..count {
+                                let alpha =
+                                    i as f64 / count as f64 * roughness.span() + roughness.start;
+                                models.push(Box::new(BeckmannBrdf::new(alpha, alpha))
+                                    as Box<dyn Bxdf<Params = [f64; 2]>>);
+                            }
+                            models.into_boxed_slice()
+                        }
+                        MicrofacetDistroKind::TrowbridgeReitz => {
+                            let mut models = Vec::with_capacity(count);
+                            for i in 0..count {
+                                let alpha =
+                                    i as f64 / count as f64 * roughness.span() + roughness.start;
+                                models.push(Box::new(TrowbridgeReitzBrdf::new(alpha, alpha))
+                                    as Box<dyn Bxdf<Params = [f64; 2]>>);
+                            }
+                            models.into_boxed_slice()
+                        }
                     }
-                    models.into_boxed_slice()
                 }
-                MicrofacetBrdfKind::TrowbridgeReitz => {
-                    let mut models = Vec::with_capacity(count);
-                    for i in 0..count {
-                        let alpha = i as f64 / count as f64 * roughness.span() + roughness.start;
-                        models.push(Box::new(TrowbridgeReitzBrdfModel::new(alpha, alpha))
-                            as Box<dyn MicrofacetBasedBrdfModel>);
-                    }
-                    models.into_boxed_slice()
-                }
+                _ => unimplemented!("Only microfacet-based BxDFs are supported."),
             };
             let params = BsdfMeasurementParams {
                 kind: BsdfKind::Brdf,
@@ -104,10 +118,11 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             for model in models.iter() {
                 let (mut brdf, max_values) =
                     generate_analytical_brdf(&params, &**model, &cache.iors, opts.normalize);
-                let output =
-                    config
-                        .output_dir()
-                        .join(format!("{:?}_{}.exr", model.kind(), model.alpha_x()));
+                let output = config.output_dir().join(format!(
+                    "{:?}_{}.exr",
+                    model.family(),
+                    model.params()[0],
+                ));
                 brdf.write_as_exr(&output, &chrono::Local::now(), 512)
                     .unwrap();
             }
@@ -124,10 +139,11 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .unwrap();
                 match opts.method {
                     FittingMethod::Bruteforce => {
-                        let mses = compute_iso_brdf_err(
+                        let mses = compute_iso_microfacet_brdf_err(
                             &measured_brdf,
                             opts.max_theta_o.map(|t| deg!(t as f32)),
-                            opts.model,
+                            opts.distro
+                                .expect("Distribution must be specified for microfacet family"),
                             RangeByStepSizeInclusive::new(
                                 opts.alpha_start.unwrap(),
                                 opts.alpha_stop.unwrap(),
@@ -149,7 +165,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
                         let problem = MicrofacetBrdfFittingProblem::new(
                             measured_brdf,
-                            opts.model,
+                            opts.distro
+                                .expect("Distribution must be specified for microfacet family"),
                             RangeByStepSizeInclusive::new(
                                 opts.alpha_start.unwrap(),
                                 opts.alpha_stop.unwrap(),
@@ -157,7 +174,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             ),
                             cache,
                         );
-                        let report = problem.lsq_lm_fit();
+                        let report = problem.lsq_lm_fit(opts.isotropy);
                         report.log_fitting_reports();
                     }
                 }
@@ -187,7 +204,16 @@ pub struct FitOptions {
         short,
         help = "Model to fit the measurement to. If not specified, the default model will be used."
     )]
-    pub model: MicrofacetBrdfKind,
+    pub family: BxdfFamily,
+
+    pub isotropy: Isotropy,
+    #[clap(
+        long,
+        help = "Distribution to use for the microfacet model. If not specified, the default \
+                distribution will be used.",
+        required_if_eq("family", "microfacet")
+    )]
+    pub distro: Option<MicrofacetDistroKind>,
     #[clap(
         long,
         help = "Maximum colatitude angle in degrees for outgoing directions."

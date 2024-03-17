@@ -13,14 +13,17 @@ use base::{
     units::{deg, Degrees, Radians},
 };
 use bxdf::{
-    brdf::microfacet::{BeckmannBrdfModel, TrowbridgeReitzBrdfModel},
-    MicrofacetBasedBrdfModel, MicrofacetBrdfKind,
+    brdf::{
+        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf, TrowbridgeReitzBrdfModel},
+        Bxdf,
+    },
+    distro::{BeckmannDistribution, MicrofacetDistroKind},
+    Scattering,
 };
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use std::sync::atomic::AtomicU64;
-use wgpu::naga::TypeInner::Atomic;
 
 /// Metrics to use for the error computation.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -44,10 +47,10 @@ pub enum ErrorMetric {
 ///   directions. If set, the samples with the outgoing directions with the
 ///   colatitude angle greater than `max_theta_o` will be ignored.
 /// * `cache` - The cache to use for loading the IOR database.
-pub fn compute_iso_brdf_err(
+pub fn compute_iso_microfacet_brdf_err(
     measured: &MeasuredBsdfData,
     max_theta_o: Option<Degrees>,
-    model: MicrofacetBrdfKind,
+    distro: MicrofacetDistroKind,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
     normalize: bool,
@@ -66,14 +69,14 @@ pub fn compute_iso_brdf_err(
                 for j in 0..brdf_data.len() {
                     let alpha_x = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
                     let alpha_y = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
-                    let m = match model {
-                        MicrofacetBrdfKind::Beckmann => {
-                            Box::new(BeckmannBrdfModel::new(alpha_x, alpha_y))
-                                as Box<dyn MicrofacetBasedBrdfModel>
+                    let m = match distro {
+                        MicrofacetDistroKind::Beckmann => {
+                            Box::new(BeckmannBrdf::new(alpha_x, alpha_y))
+                                as Box<dyn Bxdf<Params = [f64; 2]>>
                         }
-                        MicrofacetBrdfKind::TrowbridgeReitz => {
-                            Box::new(TrowbridgeReitzBrdfModel::new(alpha_x, alpha_y))
-                                as Box<dyn MicrofacetBasedBrdfModel>
+                        MicrofacetDistroKind::TrowbridgeReitz => {
+                            Box::new(TrowbridgeReitzBrdf::new(alpha_x, alpha_y))
+                                as Box<dyn Bxdf<Params = [f64; 2]>>
                         }
                     };
                     let (model_brdf, _) =
@@ -179,7 +182,7 @@ fn compute_distance(
 /// snapshot.
 pub(crate) fn generate_analytical_brdf(
     params: &BsdfMeasurementParams,
-    target: &dyn MicrofacetBasedBrdfModel,
+    target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
     normalize: bool,
 ) -> (MeasuredBsdfData, Box<[Box<[f64]>]>) {
@@ -218,12 +221,18 @@ pub(crate) fn generate_analytical_brdf(
                 for patch in partition.patches.iter() {
                     let wo_sph = patch.center();
                     let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
-                    let mut spectral_samples = target
-                        .eval_spectrum(wi, wo, &iors_i, &iors_t)
-                        .iter()
-                        .map(|&x| x as f32)
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice();
+                    let mut spectral_samples =
+                        Scattering::eval_reflectance_spectrum(target, &wi, &wo, &iors_i, &iors_t)
+                            .iter()
+                            .map(|&x| x as f32)
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice();
+                    // let mut spectral_samples = target
+                    //     .eval_spectrum(wi, wo, &iors_i, &iors_t)
+                    //     .iter()
+                    //     .map(|&x| x as f32)
+                    //     .collect::<Vec<_>>()
+                    //     .into_boxed_slice();
                     for (i, sample) in spectral_samples.iter().enumerate() {
                         max_values_per_snapshot[i] =
                             f64::max(max_values_per_snapshot[i], *sample as f64);

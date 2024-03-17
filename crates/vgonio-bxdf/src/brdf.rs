@@ -1,14 +1,50 @@
-use base::math::Vec3;
+use crate::distro::MicrofacetDistroKind;
+use base::{math::Vec3, optics::ior::Ior, Isotropy};
+use num_traits::Float;
+use std::fmt::Debug;
 
-mod lambert;
-mod merl;
+pub mod lambert;
+pub mod merl;
 pub mod microfacet;
-mod utia;
+pub mod utia;
 
-use crate::MicrofacetDistribution;
+/// Different kinds of BRDFs.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BxdfFamily {
+    /// Microfacet-based BxDF.
+    Microfacet,
+    /// Lambertian BRDF.
+    Lambert,
+    /// MERL BRDF.
+    Merl,
+    /// UTIA BRDF.
+    Utia,
+}
 
-/// Common interface for BRDFs.
-pub trait Brdf {
+/// Common interface for BxDFs.
+pub trait Bxdf: Send + Sync + Debug + 'static {
+    /// The type of the parameters of the BRDF model.
+    type Params;
+
+    /// Returns the kind of the BRDF.
+    fn family(&self) -> BxdfFamily;
+    /// Returns the kind of the microfacet distribution function.
+    fn distro(&self) -> Option<MicrofacetDistroKind> { None }
+    /// Tells whether the BRDF model is isotropic or not.
+    fn isotropic(&self) -> bool;
+    /// Returns the isotropy of the BRDF model.
+    fn isotropy(&self) -> Isotropy {
+        if self.isotropic() {
+            Isotropy::Isotropic
+        } else {
+            Isotropy::Anisotropic
+        }
+    }
+    /// Returns the parameters of the BRDF model.
+    fn params(&self) -> Self::Params;
+    /// Sets the parameters of the BRDF model.
+    fn set_params(&mut self, params: &Self::Params);
     /// Evaluates the BRDF ($f_r$) with the classical parameterization for any
     /// incident and outgoing direction located on the hemisphere.
     ///
@@ -16,7 +52,7 @@ pub trait Brdf {
     ///
     /// * `wi` - The incident direction (normalized).
     /// * `wo` - The outgoing direction (normalized).
-    fn eval(&self, wi: &Vec3, wo: &Vec3) -> f32;
+    fn eval(&self, wi: &Vec3, wo: &Vec3) -> f64;
 
     #[rustfmt::skip]
     /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parameterization.
@@ -32,7 +68,7 @@ pub trait Brdf {
     ///
     /// * `wh` - The half vector.
     /// * `wd` - The difference vector.
-    fn eval_hd(&self, wh: &Vec3, wd: &Vec3) -> f32;
+    fn eval_hd(&self, wh: &Vec3, wd: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with the classical parameterization.
     ///
@@ -42,7 +78,7 @@ pub trait Brdf {
     ///
     /// * `wi` - The incident direction.
     /// * `wo` - The outgoing direction.
-    fn evalp(&self, wi: &Vec3, wo: &Vec3) -> f32;
+    fn evalp(&self, wi: &Vec3, wo: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with the Rusinkiewicz parameterization.
     ///
@@ -52,10 +88,10 @@ pub trait Brdf {
     ///
     /// * `wh` - The half vector.
     /// * `wd` - The difference vector.
-    fn evalp_hd(&self, wh: &Vec3, wd: &Vec3) -> f32;
+    fn evalp_hd(&self, wh: &Vec3, wd: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with importance sampling.
-    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f32;
+    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f64;
 
     /// Importance sample f_r * cos_theta_i using two uniform variates.
     ///
@@ -64,10 +100,58 @@ pub trait Brdf {
     /// * `u` - The first uniform variate.
     /// * `v` - The second uniform variate.
     /// * `wo` - The outgoing direction.
-    fn sample(&self, u: f32, v: f32, wo: &Vec3) -> f32;
+    fn sample(&self, u: f32, v: f32, wo: &Vec3) -> f64;
 
     /// Evaluates the PDF of a sample.
-    fn pdf(&self, wi: &Vec3, wo: &Vec3) -> f32;
+    fn pdf(&self, wi: &Vec3, wo: &Vec3) -> f64;
+
+    #[cfg(feature = "fitting")]
+    /// Computes the partial derivatives of the BRDF model with respect to the
+    /// roughness parameters of the model.
+    ///
+    /// # Arguments
+    ///
+    /// * `wis` - The incident directions.
+    /// * `wos` - The outgoing directions.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the BRDF model with respect to the roughness
+    /// parameters of the model for each incident and outgoing direction pair.
+    ///
+    /// # Note
+    ///
+    /// The returned vector has the length of the number of parameters times the
+    /// length of `wis` times the length of `wos`. For each incident direction
+    /// `wi`, the derivatives with respect to params are evaluated for each
+    /// outgoing direction `wo`.
+    fn pd(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+
+    #[cfg(feature = "fitting")]
+    /// Computes the partial derivatives of the BRDF model with respect to the
+    /// roughness parameters of the model for isotropic materials.
+    ///
+    /// # Arguments
+    ///
+    /// * `wis` - The incident directions.
+    /// * `wos` - The outgoing directions.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the BRDF model with respect to the roughness
+    /// parameters of the model for each incident and outgoing direction pair.
+    ///
+    /// # Note
+    ///
+    /// For each incident direction wi, the derivatives with respect to params
+    /// are evaluated for each outgoing direction wo.
+    /// The returned vector has the length of number of parameters times the
+    /// length of `wis` times the length of `wos`.
+    fn pd_iso(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+}
+
+impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {
+    fn clone(&self) -> Box<dyn Bxdf<Params = P>> { self.clone() }
 }
 
 #[rustfmt::skip]
@@ -109,3 +193,9 @@ pub fn io2hd(wi: &Vec3, wo: &Vec3) -> (Vec3, Vec3) {
 /// * `wh` - The half vector.
 /// * `wd` - The difference vector.
 pub fn hd2io(wh: &Vec3, wd: &Vec3) -> (Vec3, Vec3) { todo!("hd2io") }
+
+/// The data generated by the analytical BxDF.
+pub struct AnalyticalBxdfData<F: Float> {
+    pub family: BxdfFamily,
+    pub samples: Box<[F]>,
+}

@@ -8,6 +8,7 @@ version.workspace = true
 [features]
 default = []
 use_f64 = []
+cli = ["dep:clap"]
 winit = ["dep:winit"]
 
 
@@ -16,7 +17,7 @@ approx.workspace = true
 byteorder.workspace = true
 cfg-if.workspace = true
 chrono.workspace = true
-clap.workspace = true
+clap = { workspace = true, optional = true }
 flate2.workspace = true
 glam.workspace = true
 log.workspace = true

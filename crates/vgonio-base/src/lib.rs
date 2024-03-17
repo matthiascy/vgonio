@@ -20,7 +20,7 @@
 #![feature(effects)]
 
 use std::{
-    fmt::Display,
+    fmt::{Display, Formatter},
     marker::{ConstParamTy, StructuralPartialEq},
 };
 
@@ -38,12 +38,28 @@ pub mod medium;
 pub mod optics;
 
 /// Indicates whether something is uniform in all directions or not.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, Hash)]
 pub enum Isotropy {
     /// Uniformity in all directions.
+    #[cfg_attr(feature = "cli", clap(alias = "iso"))]
     Isotropic,
     /// Non-uniformity in some directions.
+    #[cfg_attr(feature = "cli", clap(alias = "aniso"))]
     Anisotropic,
+}
+
+impl Display for Isotropy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Isotropy::Isotropic => "Isotropic",
+                Isotropy::Anisotropic => "Anisotropic",
+            }
+        )
+    }
 }
 
 impl StructuralPartialEq for Isotropy {}

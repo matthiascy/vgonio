@@ -126,7 +126,7 @@ impl MeasuredData {
     /// Returns the MDF data.
     pub fn as_mdf(&self) -> Option<MeasuredMdfData> {
         match self {
-            MeasuredData::Adf(adf) => Some(MeasuredMdfData::Adf(Cow::Borrowed(adf))),
+            MeasuredData::Adf(adf) => Some(MeasuredMdfData::Ndf(Cow::Borrowed(adf))),
             MeasuredData::Msf(msf) => Some(MeasuredMdfData::Msf(Cow::Borrowed(msf))),
             _ => None,
         }

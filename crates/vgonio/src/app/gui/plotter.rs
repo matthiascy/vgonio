@@ -1,9 +1,9 @@
-mod adf;
 mod msf;
+mod ndf;
 mod sdf;
 
-pub use adf::*;
 pub use msf::*;
+pub use ndf::*;
 
 use crate::{
     app::{
@@ -24,10 +24,7 @@ use base::{
     math,
     units::{deg, rad, Radians},
 };
-use bxdf::{
-    dist::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    MicrofacetDistribution,
-};
+use bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution};
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
 use std::{
@@ -125,7 +122,7 @@ pub struct PlotInspector {
     variant: Option<Box<dyn VariantData>>,
     new_curve_kind: CurveKind,
     // (model, uuid)
-    adf_models: Vec<(Box<dyn MicrofacetDistribution>, Uuid)>,
+    ndf_models: Vec<(Box<dyn MicrofacetDistribution<Params = [f64; 2]>>, Uuid)>,
     // mmsf_models: Vec<Box<dyn MicrofacetGeometricalAttenuationModel>>, TODO: implement
     /// The event loop.
     event_loop: EventLoopProxy,
@@ -336,7 +333,7 @@ impl PlotInspector {
             event_loop,
             variant: None,
             new_curve_kind: CurveKind::None,
-            adf_models: vec![],
+            ndf_models: vec![],
             uuid: Uuid::new_v4(),
             // mmsf_models: vec![],
             azimuth_m: rad!(0.0),
@@ -363,7 +360,7 @@ impl PlotInspector {
                 .position(Corner::RightTop),
             variant: extra,
             new_curve_kind: CurveKind::None,
-            adf_models: vec![],
+            ndf_models: vec![],
             event_loop,
             azimuth_m: rad!(0.0),
         }
@@ -373,8 +370,8 @@ impl PlotInspector {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CurveKind {
     None,
-    TrowbridgeReitzADF,
-    BeckmannADF,
+    TrowbridgeReitzNdf,
+    BeckmannNdf,
 }
 
 /// Inspector for microfacet distribution function.
@@ -394,25 +391,25 @@ impl PlottingWidget for PlotInspector {
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::TrowbridgeReitzADF,
+                            CurveKind::TrowbridgeReitzNdf,
                             "Trowbridge-Reitz",
                         );
                         ui.selectable_value(
                             &mut self.new_curve_kind,
-                            CurveKind::BeckmannADF,
+                            CurveKind::BeckmannNdf,
                             "Beckmann",
                         );
                     });
                 if ui.button("Graph").clicked() {
                     match self.new_curve_kind {
                         CurveKind::None => {}
-                        CurveKind::BeckmannADF => {
-                            self.adf_models.push((
+                        CurveKind::BeckmannNdf => {
+                            self.ndf_models.push((
                                 Box::new(BeckmannDistribution::new(0.5, 0.5)),
                                 Uuid::new_v4(),
                             ));
                         }
-                        CurveKind::TrowbridgeReitzADF => self.adf_models.push((
+                        CurveKind::TrowbridgeReitzNdf => self.ndf_models.push((
                             Box::new(TrowbridgeReitzDistribution::new(0.5, 0.5)),
                             Uuid::new_v4(),
                         )),
@@ -423,15 +420,14 @@ impl PlottingWidget for PlotInspector {
 
         {
             let mut to_be_removed = vec![];
-            for (i, (model, uuid)) in self.adf_models.iter_mut().enumerate() {
+            for (i, (model, uuid)) in self.ndf_models.iter_mut().enumerate() {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!(
                         "Model: {}#{}",
                         model.kind().to_str(),
                         &uuid.to_string().as_str()[..6]
                     ));
-                    let mut alpha_x = model.alpha_x();
-                    let mut alpha_y = model.alpha_y();
+                    let [mut alpha_x, mut alpha_y] = model.params();
                     let alpha_x_changed = ui
                         .add(
                             egui::Slider::new(&mut alpha_x, 0.00001..=2.0)
@@ -447,7 +443,7 @@ impl PlottingWidget for PlotInspector {
                         )
                         .changed();
 
-                    let mut alpha = model.alpha_x();
+                    let mut alpha = alpha_x;
                     let alpha_changed = ui
                         .add(
                             egui::Slider::new(&mut alpha, 0.00001..=2.0)
@@ -457,13 +453,11 @@ impl PlottingWidget for PlotInspector {
                         .changed();
 
                     if alpha_x_changed || alpha_y_changed {
-                        model.set_alpha_x(alpha_x);
-                        model.set_alpha_y(alpha_y);
+                        model.set_params(&[alpha_x, alpha_y])
                     }
 
                     if alpha_changed {
-                        model.set_alpha_x(alpha);
-                        model.set_alpha_y(alpha);
+                        model.set_params(&[alpha, alpha]);
                     }
 
                     if ui.button("Remove").clicked() {
@@ -472,7 +466,7 @@ impl PlottingWidget for PlotInspector {
                 });
             }
             for i in to_be_removed {
-                self.adf_models.remove(i);
+                self.ndf_models.remove(i);
             }
         }
 
@@ -497,7 +491,7 @@ impl PlottingWidget for PlotInspector {
                 |v| format!("φ = {:>6.2}°", v.to_degrees()),
             );
             plot.show(ui, |plot_ui| {
-                for (i, (model, uuid)) in self.adf_models.iter().enumerate() {
+                for (i, (model, uuid)) in self.ndf_models.iter().enumerate() {
                     let points: Vec<_> = (0..=180)
                         .map(|x| {
                             let theta = x as f64 * std::f64::consts::PI / 180.0
@@ -508,7 +502,7 @@ impl PlottingWidget for PlotInspector {
                             } else {
                                 current_phi.opposite()
                             };
-                            let value = model.eval_adf(theta.cos(), phi.cos() as f64);
+                            let value = model.eval_ndf(theta.cos(), phi.cos() as f64);
                             [theta, value]
                         })
                         .collect();
@@ -641,16 +635,17 @@ impl PlottingWidget for PlotInspector {
                                             ))
                                             .name(
                                                 format!(
-                                                    "{} (x {:.4})",
+                                                    "{} (x {:.4}) {}",
                                                     model.kind().to_str(),
-                                                    scale
+                                                    scale,
+                                                    model.isotropy().to_string().to_lowercase(),
                                                 ),
                                             ),
                                         )
                                     }
                                     color_idx_base += extra.fitted.len() + 1;
                                 }
-                                for (i, (model, uuid)) in self.adf_models.iter().enumerate() {
+                                for (i, (model, uuid)) in self.ndf_models.iter().enumerate() {
                                     let points: Vec<_> = (0..=180)
                                         .map(|x| {
                                             let theta = x as f64 * std::f64::consts::PI / 180.0
@@ -662,7 +657,7 @@ impl PlottingWidget for PlotInspector {
                                                 current_phi.opposite()
                                             };
                                             let value =
-                                                model.eval_adf(theta.cos(), phi.cos() as f64);
+                                                model.eval_ndf(theta.cos(), phi.cos() as f64);
                                             [theta, value]
                                         })
                                         .collect();

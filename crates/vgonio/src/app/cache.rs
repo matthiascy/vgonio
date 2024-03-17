@@ -717,10 +717,13 @@ impl RefractiveIndexRegistry {
         &self,
         medium: Medium,
         wavelengths: &[Length<A>],
-    ) -> Option<Box<[RefractiveIndexRecord]>> {
+    ) -> Option<Box<[Ior]>> {
         wavelengths
             .iter()
-            .map(|wavelength| self.ior_of(medium, wavelength.in_nanometres()))
+            .map(|wavelength| {
+                self.ior_of(medium, wavelength.in_nanometres())
+                    .map(|ior| ior.ior)
+            })
             .collect::<Option<Vec<_>>>()
             .map(|iors| iors.into_boxed_slice())
     }

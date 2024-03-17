@@ -1,3 +1,5 @@
+use base::Isotropy;
+use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
@@ -281,19 +283,45 @@ impl PropertyInspector {
                                         .send_event(VgonioEvent::ExportMeasurement(meas));
                                 }
                                 // Temporary fitting button.
-                                if ui.button("Fit Beckmann").clicked() {
+                                if ui.button("Fit Beckmann(iso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
-                                        kind: FittingProblemKind::Bsdf {
-                                            model: bxdf::MicrofacetBrdfKind::Beckmann,
+                                        kind: FittingProblemKind::Bxdf {
+                                            family: BxdfFamily::Microfacet,
+                                            distro: Some(MicrofacetDistroKind::Beckmann),
+                                            isotropy: Isotropy::Isotropic,
                                         },
                                         data: meas,
                                         scale: 1.0,
                                     });
                                 }
-                                if ui.button("Fit GGX").clicked() {
+                                if ui.button("Fit Beckmann(aniso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
-                                        kind: FittingProblemKind::Bsdf {
-                                            model: bxdf::MicrofacetBrdfKind::TrowbridgeReitz,
+                                        kind: FittingProblemKind::Bxdf {
+                                            family: BxdfFamily::Microfacet,
+                                            distro: Some(MicrofacetDistroKind::Beckmann),
+                                            isotropy: Isotropy::Anisotropic,
+                                        },
+                                        data: meas,
+                                        scale: 1.0,
+                                    });
+                                }
+                                if ui.button("Fit GGX(iso)").clicked() {
+                                    self.event_loop.send_event(VgonioEvent::Fitting {
+                                        kind: FittingProblemKind::Bxdf {
+                                            family: BxdfFamily::Microfacet,
+                                            distro: Some(MicrofacetDistroKind::TrowbridgeReitz),
+                                            isotropy: Isotropy::Isotropic,
+                                        },
+                                        data: meas,
+                                        scale: 1.0,
+                                    });
+                                }
+                                if ui.button("Fit GGX(aniso)").clicked() {
+                                    self.event_loop.send_event(VgonioEvent::Fitting {
+                                        kind: FittingProblemKind::Bxdf {
+                                            family: BxdfFamily::Microfacet,
+                                            distro: Some(MicrofacetDistroKind::TrowbridgeReitz),
+                                            isotropy: Isotropy::Isotropic,
                                         },
                                         data: meas,
                                         scale: 1.0,

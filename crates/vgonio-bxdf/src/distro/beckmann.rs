@@ -1,8 +1,8 @@
-use crate::{
-    impl_common_methods, MicrofacetDistribution, MicrofacetDistributionFittingModel,
-    MicrofacetDistributionKind,
+use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
+use base::{
+    math::{cbr, cos_theta, rcp_f64, sqr, Vec3},
+    Isotropy,
 };
-use base::math::{rcp_f64, sqr, Vec3};
 
 /// Beckmann microfacet distribution function.
 ///
@@ -19,6 +19,7 @@ pub struct BeckmannDistribution {
 }
 
 impl BeckmannDistribution {
+    /// Creates a new Beckmann distribution with the given roughness parameters.
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         BeckmannDistribution {
             alpha_x: alpha_x.max(1.0e-6),
@@ -26,20 +27,38 @@ impl BeckmannDistribution {
         }
     }
 
+    /// Creates a new isotropic Beckmann distribution with the given roughness.
     pub fn new_isotropic(alpha: f64) -> Self {
         BeckmannDistribution {
             alpha_x: alpha.max(1.0e-6),
             alpha_y: alpha.max(1.0e-6),
         }
     }
+
+    /// Returns whether the distribution is isotropic or anisotropic.
+    #[inline]
+    pub fn is_isotropic(&self) -> bool { (self.alpha_x - self.alpha_y).abs() < 1.0e-6 }
 }
 
 impl MicrofacetDistribution for BeckmannDistribution {
-    fn kind(&self) -> MicrofacetDistributionKind { MicrofacetDistributionKind::Beckmann }
+    fn params(&self) -> Self::Params { [self.alpha_x, self.alpha_y] }
 
-    impl_common_methods!();
+    fn set_params(&mut self, params: &Self::Params) {
+        self.alpha_x = params[0];
+        self.alpha_y = params[1];
+    }
 
-    fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
+    fn kind(&self) -> MicrofacetDistroKind { MicrofacetDistroKind::Beckmann }
+
+    fn isotropy(&self) -> Isotropy {
+        if self.is_isotropic() {
+            Isotropy::Isotropic
+        } else {
+            Isotropy::Anisotropic
+        }
+    }
+
+    fn eval_ndf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
         let cos_theta2 = sqr(cos_theta);
         let e = if cos_theta2 < 1.0e-16 {
             1.0
@@ -58,12 +77,12 @@ impl MicrofacetDistribution for BeckmannDistribution {
         e * rcp_f64(std::f64::consts::PI * cos_theta4 * self.alpha_x * self.alpha_y)
     }
 
-    fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64 {
+    fn eval_msf1(&self, m: &Vec3, v: &Vec3) -> f64 {
         // TODO: anisotropic
-        if m.dot(v) <= 0.0 {
+        if m.dot(*v) <= 0.0 {
             0.0
         } else {
-            let cos_theta_v2 = sqr(v.z as f64);
+            let cos_theta_v2 = sqr(cos_theta(v) as f64);
             if cos_theta_v2 < 1.0e-8 {
                 return 0.0;
             }
@@ -86,11 +105,12 @@ impl MicrofacetDistribution for BeckmannDistribution {
         }
     }
 
-    fn clone_box(&self) -> Box<dyn MicrofacetDistribution> { Box::new(*self) }
-}
+    fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>> {
+        Box::new(*self)
+    }
 
-impl MicrofacetDistributionFittingModel for BeckmannDistribution {
-    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]> {
+    #[cfg(feature = "fitting")]
+    fn pd_ndf(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]> {
         debug_assert!(
             cos_thetas.len() == cos_phis.len(),
             "The number of cosines of the zenith angle and the number of cosines of the azimuth \
@@ -130,12 +150,40 @@ impl MicrofacetDistributionFittingModel for BeckmannDistribution {
             .into_boxed_slice()
     }
 
+    #[cfg(feature = "fitting")]
+    fn pd_ndf_iso(&self, cos_thetas: &[f64]) -> Box<[f64]> {
+        let mut results = Box::new_uninit_slice(cos_thetas.len());
+        let alpha2 = sqr(self.alpha_x);
+        let alpha5 = cbr(self.alpha_x) * alpha2;
+        for (pd, cos_theta) in results.iter_mut().zip(cos_thetas.iter()) {
+            if cos_theta.abs() < 1.0e-6 {
+                pd.write(0.0);
+                continue;
+            }
+            let cos_theta2 = sqr(*cos_theta);
+            let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
+            if tan_theta2.is_infinite() {
+                pd.write(0.0);
+                continue;
+            }
+            let sec_theta4 = rcp_f64(sqr(cos_theta2));
+            let exp = (-tan_theta2 * rcp_f64(alpha2)).exp();
+            let d_alpha = {
+                let numerator = 2.0 * exp * sec_theta4 * (tan_theta2 - alpha2);
+                numerator * rcp_f64(std::f64::consts::PI * alpha5)
+            };
+            pd.write(d_alpha);
+        }
+        unsafe { results.assume_init() }
+    }
+
+    #[cfg(feature = "fitting")]
     /// Compute the partial derivative of the masking-shadowing function with
     /// respect to the roughness parameters, αx and αy.
     ///
     /// NOTE: Currently, it's using isotropic Beckmann masking-shadowing
     /// function.
-    fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
+    fn pd_msf(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
         if m.dot(i) <= 0.0 || m.dot(o) <= 0.0 {
             return 0.0;
         }

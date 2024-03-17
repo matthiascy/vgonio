@@ -59,8 +59,8 @@ type-map.workspace = true
 winit.workspace = true
 wgpu.workspace = true
 surf = { package = "vgonio-surf", path = "../vgonio-surf" }
-base = { package = "vgonio-base", path = "../vgonio-base", features = ["winit"] }
-bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli"] }
+base = { package = "vgonio-base", path = "../vgonio-base", features = ["cli", "winit"] }
+bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli", "fitting"] }
 jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
 gfxkit = { package = "vgonio-gfxkit", path = "../vgonio-gfxkit" }
 

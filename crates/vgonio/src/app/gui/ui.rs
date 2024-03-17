@@ -27,7 +27,7 @@ use crate::{
     RangeByStepSizeInclusive,
 };
 use base::io::{CompressionScheme, FileEncoding};
-use bxdf::MicrofacetBrdfKind;
+use bxdf::brdf::BxdfFamily;
 use egui::NumExt;
 use gfxkit::context::GpuContext;
 use std::{
@@ -234,33 +234,46 @@ impl VgonioGui {
             }
             VgonioEvent::Fitting { kind, data, scale } => {
                 match kind {
-                    FittingProblemKind::Bsdf { model } => {
-                        let report = self.cache.read(|cache| {
-                            let measurement = cache.get_measurement_data(*data).unwrap();
-                            let problem = MicrofacetBrdfFittingProblem::new(
-                                measurement.measured.as_bsdf().unwrap(),
-                                *model,
-                                RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
-                                cache,
-                            );
-                            problem.lsq_lm_fit()
-                        });
-                        report.log_fitting_reports();
-                        // TODO: update the fitted models
+                    FittingProblemKind::Bxdf {
+                        family,
+                        distro,
+                        isotropy,
+                    } => {
+                        match family {
+                            BxdfFamily::Microfacet => {
+                                let report = self.cache.read(|cache| {
+                                    let measurement = cache.get_measurement_data(*data).unwrap();
+                                    let problem = MicrofacetBrdfFittingProblem::new(
+                                        measurement.measured.as_bsdf().unwrap(),
+                                        distro.unwrap(),
+                                        RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
+                                        cache,
+                                    );
+                                    problem.lsq_lm_fit(*isotropy)
+                                });
+                                report.log_fitting_reports();
+                                // TODO: update the fitted models
+                            }
+                            _ => unimplemented!("Fitting BxDF family: {:?}", family),
+                        }
                     }
-                    FittingProblemKind::Mdf { model, variant } => {
+                    FittingProblemKind::Mdf {
+                        model,
+                        variant,
+                        isotropy,
+                    } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
                         log::debug!("Fitting MDF with {:?} through {:?}", model, variant);
-                        if fitted.contains(kind, Some(*scale)) {
+                        if fitted.contains(kind, Some(*scale), *isotropy) {
                             log::debug!("Already fitted, skipping");
                             return EventResponse::Handled;
                         }
                         let report = self.cache.read(|cache| {
                             let measurement = cache.get_measurement_data(*data).unwrap();
                             let data = match variant {
-                                MicrofacetDistributionFittingVariant::Adf => {
-                                    MeasuredMdfData::Adf(Cow::Borrowed(
+                                MicrofacetDistributionFittingVariant::Ndf => {
+                                    MeasuredMdfData::Ndf(Cow::Borrowed(
                                         measurement
                                             .measured
                                             .as_adf()
@@ -279,11 +292,11 @@ impl VgonioGui {
                             let problem = MicrofacetDistributionFittingProblem::new(
                                 data, *variant, *model, *scale,
                             );
-                            problem.lsq_lm_fit()
+                            problem.lsq_lm_fit(*isotropy)
                         });
                         report.log_fitting_reports();
                         if let Some(model) = report.best_model() {
-                            fitted.push(FittedModel::Adf(model.clone_box(), *scale));
+                            fitted.push(FittedModel::Ndf(model.clone_box(), *scale));
                         } else {
                             log::warn!("No model fitted");
                         }

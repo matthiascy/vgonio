@@ -3,14 +3,24 @@
 
 /// Common method when implementing [`LeastSquaresProblem`] for a fitting
 macro_rules! impl_least_squares_problem_common_methods {
-    ($self:ident, $params_ty:ty) => {
+    (@aniso => $self:ident, $params_ty:ty) => {
         fn set_params(&mut $self, params: &$params_ty) {
-            $self.model.set_alpha_x(params[0]);
-            $self.model.set_alpha_y(params[1]);
+            $self.model.set_params(params.as_ref());
         }
 
-        fn params(&self) -> $params_ty {
-            <$params_ty>::new(self.model.alpha_x(), self.model.alpha_y())
+        fn params(&$self) -> $params_ty {
+            let [x, y] = $self.model.params();
+            <$params_ty>::new(x, y)
+        }
+    };
+    (@iso2 => $self:ident, $params_ty:ty) => {
+        fn set_params(&mut $self, params: &$params_ty) {
+            $self.model.set_params(&[params[0], params[0]]);
+        }
+
+        fn params(&$self) -> $params_ty {
+            let [x, _] = $self.model.params();
+            <$params_ty>::new(x)
         }
     }
 }
@@ -25,8 +35,8 @@ pub use mdf::*;
 
 use base::Isotropy;
 use bxdf::{
-    MicrofacetBasedBrdfModel, MicrofacetBrdfKind, MicrofacetDistribution,
-    MicrofacetDistributionKind,
+    brdf::{Bxdf, BxdfFamily},
+    distro::{MicrofacetDistribution, MicrofacetDistroKind},
 };
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
 use std::{fmt::Debug, ops::Bound};
@@ -37,14 +47,21 @@ pub enum FittingProblemKind {
     /// Fitting the microfacet area distribution function.
     Mdf {
         /// The target microfacet distribution model.
-        model: MicrofacetDistributionKind,
+        model: MicrofacetDistroKind,
         /// The fitting variant.
         variant: MicrofacetDistributionFittingVariant,
+        /// The isotropy of the model.
+        isotropy: Isotropy,
     },
     /// Fitting the bidirectional scattering distribution function.
-    Bsdf {
-        /// The target BSDF model.
-        model: MicrofacetBrdfKind,
+    Bxdf {
+        /// The target BxDF model family.
+        family: BxdfFamily,
+        /// The target microfacet distribution model in case of microfacet-based
+        /// BxDFs.
+        distro: Option<MicrofacetDistroKind>,
+        /// The isotropy of the model.
+        isotropy: Isotropy,
     },
 }
 
@@ -52,12 +69,12 @@ pub enum FittingProblemKind {
 #[derive(Debug, Clone)]
 pub enum FittedModel {
     /// Bidirectional scattering distribution function.
-    Bsdf(Box<dyn MicrofacetBasedBrdfModel>),
+    Bsdf(Box<dyn Bxdf<Params = [f64; 2]>>),
     /// Microfacet area distribution function with the scaling factor applied to
     /// the measured data.
-    Adf(Box<dyn MicrofacetDistribution>, f32),
+    Ndf(Box<dyn MicrofacetDistribution<Params = [f64; 2]>>, f32),
     /// Microfacet Masking-shadowing function.
-    Msf(Box<dyn MicrofacetDistribution>),
+    Msf(Box<dyn MicrofacetDistribution<Params = [f64; 2]>>),
 }
 
 impl FittedModel {
@@ -65,30 +82,34 @@ impl FittedModel {
     pub fn isotropy(&self) -> Isotropy {
         match self {
             FittedModel::Bsdf(model) => model.isotropy(),
-            FittedModel::Msf(model) | FittedModel::Adf(model, _) => model.isotropy(),
+            FittedModel::Msf(model) | FittedModel::Ndf(model, _) => model.isotropy(),
         }
     }
 
     /// Returns the kind of fitting problem.
     pub fn kind(&self) -> FittingProblemKind {
         match self {
-            FittedModel::Bsdf(model) => FittingProblemKind::Bsdf {
-                model: model.kind(),
+            FittedModel::Bsdf(model) => FittingProblemKind::Bxdf {
+                family: model.family(),
+                distro: model.distro(),
+                isotropy: model.isotropy(),
             },
             FittedModel::Msf(model) => FittingProblemKind::Mdf {
                 model: model.kind(),
                 variant: MicrofacetDistributionFittingVariant::Msf,
+                isotropy: model.isotropy(),
             },
-            FittedModel::Adf(model, _) => FittingProblemKind::Mdf {
+            FittedModel::Ndf(model, _) => FittingProblemKind::Mdf {
                 model: model.kind(),
-                variant: MicrofacetDistributionFittingVariant::Adf,
+                variant: MicrofacetDistributionFittingVariant::Ndf,
+                isotropy: model.isotropy(),
             },
         }
     }
 
     pub fn scale(&self) -> Option<f32> {
         match self {
-            FittedModel::Adf(_, scale) => Some(*scale),
+            FittedModel::Ndf(_, scale) => Some(*scale),
             _ => None,
         }
     }
@@ -101,10 +122,15 @@ pub struct FittedModels(Vec<FittedModel>);
 impl FittedModels {
     /// Checks if the collection already contains a model with the same kind and
     /// isotropy.
-    pub fn contains(&self, kind: &FittingProblemKind, scale: Option<f32>) -> bool {
+    pub fn contains(
+        &self,
+        kind: &FittingProblemKind,
+        scale: Option<f32>,
+        isotropy: Isotropy,
+    ) -> bool {
         self.0
             .iter()
-            .any(|f| f.kind() == *kind && f.scale() == scale)
+            .any(|f| f.kind() == *kind && f.scale() == scale && f.isotropy() == isotropy)
     }
 
     /// Push a new model to the collection.
@@ -177,5 +203,5 @@ pub trait FittingProblem {
     type Model;
 
     /// Non-linear least squares fitting using Levenberg-Marquardt algorithm.
-    fn lsq_lm_fit(self) -> FittingReport<Self::Model>;
+    fn lsq_lm_fit(self, isotropy: Isotropy) -> FittingReport<Self::Model>;
 }

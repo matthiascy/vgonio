@@ -1,4 +1,4 @@
-use crate::brdf::Brdf;
+use crate::brdf::Bxdf;
 use std::{error::Error, path::Path};
 
 /// BRDF from the MERL database: http://www.merl.com/brdf/

@@ -1,8 +1,8 @@
-use crate::{
-    impl_common_methods, MicrofacetDistribution, MicrofacetDistributionFittingModel,
-    MicrofacetDistributionKind,
+use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
+use base::{
+    math::{cbr, rcp_f64, sqr, Vec3},
+    Isotropy,
 };
-use base::math::{cart_to_sph, cbr, rcp_f64, sqr, Vec3};
 use std::fmt::Debug;
 
 /// Trowbridge-Reitz(GGX) microfacet distribution function.
@@ -28,6 +28,7 @@ pub struct TrowbridgeReitzDistribution {
 }
 
 impl TrowbridgeReitzDistribution {
+    /// Creates a new Trowbridge-Reitz distribution with the given roughness.
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         TrowbridgeReitzDistribution {
             alpha_x: alpha_x.max(1.0e-6),
@@ -35,21 +36,38 @@ impl TrowbridgeReitzDistribution {
         }
     }
 
+    /// Creates a new isotropic Trowbridge-Reitz distribution with the given
+    /// roughness.
     pub fn new_isotropic(alpha: f64) -> Self {
         TrowbridgeReitzDistribution {
             alpha_x: alpha.max(1.0e-6),
             alpha_y: alpha.max(1.0e-6),
         }
     }
+
+    /// Returns whether the distribution is isotropic or anisotropic.
+    pub fn is_isotropic(&self) -> bool { (self.alpha_x - self.alpha_y).abs() < 1.0e-6 }
 }
 
 impl MicrofacetDistribution for TrowbridgeReitzDistribution {
-    fn kind(&self) -> MicrofacetDistributionKind { MicrofacetDistributionKind::TrowbridgeReitz }
+    fn params(&self) -> Self::Params { [self.alpha_x, self.alpha_y] }
 
-    impl_common_methods!();
+    fn set_params(&mut self, params: &Self::Params) {
+        self.alpha_x = params[0];
+        self.alpha_y = params[1];
+    }
 
-    fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
-        // TODO: recheck the implementation
+    fn kind(&self) -> MicrofacetDistroKind { MicrofacetDistroKind::TrowbridgeReitz }
+
+    fn isotropy(&self) -> Isotropy {
+        if self.is_isotropic() {
+            Isotropy::Isotropic
+        } else {
+            Isotropy::Anisotropic
+        }
+    }
+
+    fn eval_ndf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
         let cos_theta2 = sqr(cos_theta);
         let tan_theta2 = (1.0 - cos_theta2) / cos_theta2;
         if tan_theta2.is_infinite() {
@@ -63,9 +81,9 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         rcp_f64(alpha_xy * std::f64::consts::PI * cos_theta4 * sqr(1.0 + e))
     }
 
-    fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64 {
+    fn eval_msf1(&self, m: &Vec3, v: &Vec3) -> f64 {
         // TODO: recheck the implementation, especially the anisotropic case
-        if m.dot(v) <= 0.0 {
+        if m.dot(*v) <= 0.0 {
             return 0.0;
         }
         let cos_theta_v2 = sqr(v.z as f64);
@@ -85,11 +103,12 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * alpha2).sqrt())
     }
 
-    fn clone_box(&self) -> Box<dyn MicrofacetDistribution> { Box::new(*self) }
-}
+    fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>> {
+        Box::new(*self)
+    }
 
-impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
-    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]> {
+    #[cfg(feature = "fitting")]
+    fn pd_ndf(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]> {
         debug_assert!(
             cos_thetas.len() == cos_phis.len(),
             "The number of cos_thetas and cos_phis must be the same."
@@ -137,7 +156,27 @@ impl MicrofacetDistributionFittingModel for TrowbridgeReitzDistribution {
             .into_boxed_slice()
     }
 
-    fn msf_partial_derivative(&self, _m: Vec3, i: Vec3, o: Vec3) -> f64 {
+    #[cfg(feature = "fitting")]
+    fn pd_ndf_iso(&self, cos_thetas: &[f64]) -> Box<[f64]> {
+        let mut results = Box::new_uninit_slice(cos_thetas.len());
+        let (alpha, alpha2, alpha3) = (self.alpha_x, sqr(self.alpha_x), cbr(self.alpha_x));
+        for (pd, cos_theta) in results.iter_mut().zip(cos_thetas.iter()) {
+            if cos_theta.abs() < 1.0e-6 {
+                pd.write(0.0);
+                continue;
+            }
+            let cos_theta2 = sqr(*cos_theta);
+            let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
+            let sec_theta4 = rcp_f64(sqr(cos_theta2));
+            let numerator = -2.0 * (alpha3 - alpha * tan_theta2) * sec_theta4;
+            let denominator = std::f64::consts::PI * cbr(alpha2 + tan_theta2);
+            pd.write(numerator * rcp_f64(denominator));
+        }
+        unsafe { results.assume_init() }
+    }
+
+    #[cfg(feature = "fitting")]
+    fn pd_msf(&self, _m: Vec3, i: Vec3, o: Vec3) -> f64 {
         let cos_theta_i2 = sqr(i.y as f64);
         let tan_theta_i2 = (1.0 - cos_theta_i2) * rcp_f64(cos_theta_i2);
         let cos_theta_o2 = sqr(o.y as f64);

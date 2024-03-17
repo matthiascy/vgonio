@@ -73,7 +73,7 @@ use crate::{
         },
         Config,
     },
-    fitting::err::compute_iso_brdf_err,
+    fitting::err::compute_iso_microfacet_brdf_err,
     io::OutputOptions,
     measure::{
         data::{MeasuredData, MeasurementData},

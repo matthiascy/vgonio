@@ -160,7 +160,10 @@
 
 // TODO: unify fresnel calculation (using complex refractive index).
 
-use crate::{math::rcp_f32, optics::ior::RefractiveIndexRecord};
+use crate::{
+    math::rcp_f32,
+    optics::ior::{Ior, RefractiveIndexRecord},
+};
 use glam::Vec3A;
 
 /// Reflects a vector `wi` with respect to surface normal `n`.
@@ -542,7 +545,8 @@ pub fn reflectance_dielectric_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, 
 ///
 /// Because reflectance from a conductor to a dielectric is not implemented yet,
 /// thus `cos_i` must be positive in case from a dielectric to a conductor.
-pub fn reflectance(cos_i: f32, ior_i: RefractiveIndexRecord, ior_t: RefractiveIndexRecord) -> f32 {
+#[track_caller]
+pub fn reflectance(cos_i: f32, ior_i: &Ior, ior_t: &Ior) -> f32 {
     debug_assert!(
         (-1.0 - f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i),
         "cos_i must be in [-1, 1]"
@@ -703,7 +707,7 @@ mod tests {
                 ior_al.eta,
                 ior_al.k,
             );
-            let r1 = super::reflectance(cos_i, ior_vacuum, ior_al);
+            let r1 = super::reflectance(cos_i, &ior_vacuum.ior, &ior_al.ior);
             assert!(
                 (r0 - r1).abs() < 0.0001,
                 "angle: {}, r0: {}, r1: {}",
@@ -712,7 +716,7 @@ mod tests {
                 r1
             );
 
-            let r2 = super::reflectance(cos_i, ior_vacuum, ior_glass);
+            let r2 = super::reflectance(cos_i, &ior_vacuum.ior, &ior_glass.ior);
             let r3 = super::reflectance_dielectric(cos_i, ior_vacuum.eta, ior_glass.eta);
             assert!(
                 (r2 - r3).abs() < 0.0001,

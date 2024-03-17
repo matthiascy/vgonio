@@ -1,4 +1,4 @@
-use crate::brdf::Brdf;
+use crate::brdf::Bxdf;
 use base::math::Vec3;
 
 pub struct LambertianBrdf {

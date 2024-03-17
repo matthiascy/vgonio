@@ -9,8 +9,11 @@ use crate::{
     fitting::FittedModel,
     RangeByStepSizeInclusive,
 };
-use base::units::{rad, Radians};
-use bxdf::{MicrofacetDistribution, MicrofacetDistributionKind};
+use base::{
+    units::{rad, Radians},
+    Isotropy,
+};
+use bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use egui::{Align, Ui};
 use std::any::Any;
 
@@ -23,21 +26,17 @@ use crate::{
 };
 
 struct ModelSelector {
-    model: MicrofacetDistributionKind,
+    model: MicrofacetDistroKind,
 }
 
 impl ModelSelector {
     fn ui(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.label("Model: ");
+            ui.selectable_value(&mut self.model, MicrofacetDistroKind::Beckmann, "Beckmann");
             ui.selectable_value(
                 &mut self.model,
-                MicrofacetDistributionKind::Beckmann,
-                "Beckmann",
-            );
-            ui.selectable_value(
-                &mut self.model,
-                MicrofacetDistributionKind::TrowbridgeReitz,
+                MicrofacetDistroKind::TrowbridgeReitz,
                 "Trowbridge-Reitz",
             );
         });
@@ -63,7 +62,7 @@ pub struct AreaDistributionExtra {
     pub show_slope_distribution: bool,
     /// The fitted curves together with the fitted model.
     pub fitted: Vec<(
-        Box<dyn MicrofacetDistribution>,
+        Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
         f32,
         Vec<Curve>, // Only one curve for isotropic model, otherwise one for each azimuthal angle.
     )>,
@@ -90,7 +89,7 @@ impl Default for AreaDistributionExtra {
             show_slope_distribution: false,
             fitted: vec![],
             selected: ModelSelector {
-                model: MicrofacetDistributionKind::Beckmann,
+                model: MicrofacetDistroKind::Beckmann,
             },
         }
     }
@@ -136,9 +135,11 @@ impl VariantData for AreaDistributionExtra {
             .iter()
             .filter(|fitted_model| match fitted_model {
                 FittedModel::Bsdf(_) | FittedModel::Msf(_) => todo!("Not implemented yet!"),
-                FittedModel::Adf(model, scale) => {
+                FittedModel::Ndf(model, scale) => {
                     !self.fitted.iter().any(|(existing, existing_scale, _)| {
-                        model.kind() == existing.kind() && *scale == *existing_scale
+                        model.kind() == existing.kind()
+                            && *scale == *existing_scale
+                            && model.isotropy() == existing.isotropy()
                     })
                 }
             })
@@ -166,7 +167,7 @@ impl VariantData for AreaDistributionExtra {
 
         for fitted in to_add {
             match fitted {
-                FittedModel::Adf(model, scale) => {
+                FittedModel::Ndf(model, scale) => {
                     // Generate the curve for this model.
                     let curves = phi_values
                         .iter()
@@ -176,7 +177,7 @@ impl VariantData for AreaDistributionExtra {
                                     .iter()
                                     .zip(theta_values.iter().map(|theta| {
                                         let phi = if theta < &0.0 { *phi_l } else { *phi_r };
-                                        model.eval_adf(theta.cos(), phi.cos())
+                                        model.eval_ndf(theta.cos(), phi.cos())
                                     }))
                                     .map(|(x, y)| [*x, y])
                             };
@@ -274,18 +275,41 @@ impl VariantData for AreaDistributionExtra {
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .button(
-                            egui::WidgetText::RichText(egui::RichText::from("Fit with scale"))
-                                .text_style(egui::TextStyle::Monospace),
+                            egui::WidgetText::RichText(egui::RichText::from(
+                                "Fit with scale (iso)",
+                            ))
+                            .text_style(egui::TextStyle::Monospace),
                         )
                         .clicked()
                     {
                         event_loop.send_event(VgonioEvent::Fitting {
                             kind: FittingProblemKind::Mdf {
                                 model: self.selected.model,
-                                variant: MicrofacetDistributionFittingVariant::Adf,
+                                variant: MicrofacetDistributionFittingVariant::Ndf,
+                                isotropy: Isotropy::Isotropic,
                             },
                             data,
                             scale: self.scale_factor,
+                        });
+                    }
+
+                    if ui
+                        .button(
+                            egui::WidgetText::RichText(egui::RichText::from(
+                                "Fit with scale (aniso)",
+                            ))
+                            .text_style(egui::TextStyle::Monospace),
+                        )
+                        .clicked()
+                    {
+                        event_loop.send_event(VgonioEvent::Fitting {
+                            kind: FittingProblemKind::Mdf {
+                                model: self.selected.model,
+                                variant: MicrofacetDistributionFittingVariant::Ndf,
+                                isotropy: Isotropy::Anisotropic,
+                            },
+                            data,
+                            scale: 1.0,
                         });
                     }
                 });
@@ -301,10 +325,11 @@ impl VariantData for AreaDistributionExtra {
                                     .text_style(egui::TextStyle::Monospace),
                             );
                             ui.label(egui::RichText::from(format!(
-                                "αx = {:.4}, αy = {:.4}, scale = {:.4}",
-                                model.alpha_x(),
-                                model.alpha_y(),
-                                scale
+                                "αx = {:.4}, αy = {:.4}, scale = {:.4}, {}",
+                                model.params()[0],
+                                model.params()[1],
+                                scale,
+                                model.isotropy().to_string().to_lowercase()
                             )));
                         });
                     }

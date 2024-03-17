@@ -14,7 +14,10 @@ use crate::{
 };
 use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
-    optics::{fresnel, ior::RefractiveIndexRecord},
+    optics::{
+        fresnel,
+        ior::{Ior, RefractiveIndexRecord},
+    },
     units::{Nanometres, Radians},
 };
 use rayon::prelude::*;
@@ -120,9 +123,9 @@ pub struct Receiver {
     /// Wavelengths of the measurement.
     pub spectrum: Vec<Nanometres>,
     /// Incident medium's refractive indices.
-    pub iors_i: Box<[RefractiveIndexRecord]>,
+    pub iors_i: Box<[Ior]>,
     /// Transmitted medium's refractive indices.
-    pub iors_t: Box<[RefractiveIndexRecord]>,
+    pub iors_t: Box<[Ior]>,
     /// The partitioned patches of the receiver.
     pub patches: SphericalPartition,
 }
@@ -233,8 +236,8 @@ impl Receiver {
                                                 if fresnel {
                                                     *e *= fresnel::reflectance(
                                                         node.cos.unwrap_or(1.0),
-                                                        self.iors_i[i],
-                                                        self.iors_t[i],
+                                                        &self.iors_i[i],
+                                                        &self.iors_t[i],
                                                     );
                                                     if *e <= 0.0 {
                                                         energy[i] = Energy::Absorbed;

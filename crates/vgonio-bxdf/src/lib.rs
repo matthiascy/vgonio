@@ -1,13 +1,15 @@
 #![feature(decl_macro)]
 #![feature(new_uninit)]
+#![feature(associated_type_defaults)]
 
 use base::Isotropy;
+use log::log;
 use std::fmt::Debug;
 
 pub mod brdf;
-pub mod dist;
+pub mod distro;
 
-use crate::brdf::Brdf;
+use crate::{brdf::Bxdf, distro::MicrofacetDistroKind};
 use base::{
     math::{cos_theta, Vec3},
     medium::Medium,
@@ -17,291 +19,133 @@ use base::{
     },
 };
 
-/// Family of reflection models.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum ReflectionModelFamily {
-    /// Microfacet based reflection model.
-    Microfacet,
-}
-
-// TODO: merge microfacet distribution modle kind and microfacet based bsdf
-// model kind into a single enum.
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MicrofacetDistributionKind {
-    /// Beckmann microfacet distribution.
-    Beckmann,
-    /// Trowbridge-Reitz microfacet distribution.
-    TrowbridgeReitz,
-}
-
-impl MicrofacetDistributionKind {
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            MicrofacetDistributionKind::Beckmann => "Beckmann",
-            MicrofacetDistributionKind::TrowbridgeReitz => "Trowbridge-Reitz",
-        }
-    }
-}
-
-#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MicrofacetBrdfKind {
-    /// BRDF model based on Beckmann microfacet distribution.
-    Beckmann,
-    /// BRDF model based on Trowbridge-Reitz(GGX) microfacet distribution.
-    TrowbridgeReitz,
-}
-
-impl MicrofacetBrdfKind {
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            MicrofacetBrdfKind::TrowbridgeReitz => "Trowbridge-Reitz",
-            MicrofacetBrdfKind::Beckmann => "Beckmann",
-        }
-    }
-}
-
-pub trait MicrofacetDistribution: Debug + Send + Sync {
-    /// Returns the kind of the distribution.
-    fn kind(&self) -> MicrofacetDistributionKind;
-
-    /// Returns whether the distribution is isotropic or anisotropic.
-    fn isotropy(&self) -> Isotropy;
-
-    /// Returns the roughness parameter αx of the distribution model.
-    fn alpha_x(&self) -> f64;
-
-    /// Sets the roughness parameter αx of the distribution model.
-    fn set_alpha_x(&mut self, alpha_x: f64);
-
-    /// Returns the roughness parameter αy of the distribution model.
-    fn alpha_y(&self) -> f64;
-
-    /// Sets the roughness parameter αy of the distribution model.
-    fn set_alpha_y(&mut self, alpha_y: f64);
-
-    /// Evaluates the microfacet area distribution function with the given
-    /// interested microfacet normal. m is assumed to be normalised and
-    /// defined in the right-handed Y-up coordinate system.
-    ///
-    /// # Arguments
-    ///
-    /// * `cos_theta` - The cosine of the polar angle of the microfacet normal.
-    /// * `cos_phi` - The cosine of the azimuthal angle of the microfacet
-    ///   normal.
-    fn eval_adf(&self, cos_theta: f64, cos_phi: f64) -> f64;
-
-    // /// Evaluates the slop distribution function. TODO
-    // fn eval_sdf(&self, x: f64, y: f64) -> f64;
-
-    /// Evaluates the Smith masking-shadowing function with the incident and
-    /// outgoing directions.
-    fn eval_msf(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
-        self.eval_msf1(m, i) * self.eval_msf1(m, o)
-    }
-
-    /// Evaluates the Smith masking-shadowing function with either the incident
-    /// or outgoing direction.
-    fn eval_msf1(&self, m: Vec3, v: Vec3) -> f64;
-
-    /// Clones the distribution model into a boxed trait object.
-    fn clone_box(&self) -> Box<dyn MicrofacetDistribution>;
-}
-
-impl Clone for Box<dyn MicrofacetDistribution> {
-    fn clone(&self) -> Self { self.clone_box() }
-}
-
-pub trait MicrofacetDistributionFittingModel: MicrofacetDistribution {
-    /// Computes the partial derivatives of the microfacet area distribution
-    /// function with respect to the roughness parameters of the distribution
-    /// model. The derivatives are evaluated with the Microfacet Area
-    /// Distribution Function, for derivatives evaluated with the Microfacet
-    /// Masking-Shadowing Function, see `params_partial_derivatives_msf`.
-    ///
-    /// # Arguments
-    ///
-    /// * `cos_thetas` - The cosines of the polar angles of the microfacet
-    ///  normals.
-    /// * `cos_phis` - The cosines of the azimuthal angles of the microfacet
-    ///  normals.
-    ///
-    /// # Returns
-    ///
-    /// The partial derivatives of the microfacet area distribution function
-    /// with respect to the roughness parameters of the distribution model.
-    /// If the distribution is isotropic, the returned vector contains the
-    /// partial derivatives with respect to the single roughness parameter
-    /// ∂f/∂α for microfacet normals with the given polar angles and
-    /// azimuthal angles. If the distribution is anisotropic, the returned
-    /// vector contains the partial derivatives with respect to the roughness
-    /// parameters: ∂f/∂αx and ∂f/∂αy for microfacet normals with the given
-    /// the polar angles and azimuthal angles.
-    fn adf_partial_derivatives(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]>;
-
-    /// Computes the partial derivatives of the masking-shadowing function G1
-    /// term with respect to the roughness parameters of the distribution
-    /// model. For derivatives evaluated with the Microfacet Area
-    /// Dipstribution Function, see `params_partial_derivatives_adf`.
-    ///
-    /// # Arguments
-    ///
-    /// * `m` - The microfacet normal.
-    /// * `i` - The incident direction.
-    /// * `o` - The outgoing direction.
-    fn msf_partial_derivative(&self, m: Vec3, i: Vec3, o: Vec3) -> f64;
-}
-
-macro impl_common_methods() {
-    fn isotropy(&self) -> Isotropy {
-        if (self.alpha_x - self.alpha_y).abs() < 1.0e-6 {
-            Isotropy::Isotropic
-        } else {
-            Isotropy::Anisotropic
-        }
-    }
-
-    fn alpha_x(&self) -> f64 { self.alpha_x }
-
-    fn set_alpha_x(&mut self, alpha_x: f64) { self.alpha_x = alpha_x; }
-
-    fn alpha_y(&self) -> f64 { self.alpha_y }
-
-    fn set_alpha_y(&mut self, alpha_y: f64) { self.alpha_y = alpha_y; }
-}
-
-pub trait MicrofacetBasedBrdfModel: Debug + Send + Sync {
-    /// Returns the kind of the BSDF model.
-    fn kind(&self) -> MicrofacetBrdfKind;
-
-    /// Returns the isotropy of the model.
-    fn isotropy(&self) -> Isotropy;
-
-    /// Returns the roughness parameter αx of the model.
-    fn alpha_x(&self) -> f64;
-
-    /// Sets the roughness parameter αx of the model.
-    fn set_alpha_x(&mut self, alpha_x: f64);
-
-    /// Returns the roughness parameter αy of the model.
-    fn alpha_y(&self) -> f64;
-
-    /// Sets the roughness parameter αy of the model.
-    fn set_alpha_y(&mut self, alpha_y: f64);
-
-    /// Evaluates the BRDF model.
-    fn eval(
-        &self,
-        wi: Vec3,
-        wo: Vec3,
-        ior_i: &RefractiveIndexRecord,
-        ior_t: &RefractiveIndexRecord,
-    ) -> f64;
-
-    /// Evaluates the BRDF model with the given spectrum.
-    fn eval_spectrum(
-        &self,
-        wi: Vec3,
-        wo: Vec3,
-        iors_i: &[RefractiveIndexRecord],
-        iors_t: &[RefractiveIndexRecord],
-    ) -> Box<[f64]>;
-
-    // TODO: eval with spherical coordinates?
-
-    /// Clones the model into a boxed trait object.
-    fn clone_box(&self) -> Box<dyn MicrofacetBasedBrdfModel>;
-}
-
-impl Clone for Box<dyn MicrofacetBasedBrdfModel> {
-    fn clone(&self) -> Box<dyn MicrofacetBasedBrdfModel> { self.clone_box() }
-}
-
-pub trait MicrofacetBasedBrdfFittingModel: MicrofacetBasedBrdfModel {
-    /// Computes the partial derivatives of the BRDF model with respect to the
-    /// roughness parameters of the model.
-    ///
-    /// # Arguments
-    ///
-    /// * `wis` - The incident directions.
-    /// * `wos` - The outgoing directions.
-    ///
-    /// # Returns
-    ///
-    /// The partial derivatives of the BRDF model with respect to the roughness
-    /// parameters of the model in the order of αx and αy for each incident and
-    /// outgoing direction pair.
-    ///
-    /// # Note
-    ///
-    /// The returned vector has the length of 2 times the length of `wis` times
-    /// the length of `wos`. For each incident direction wi, the derivatives
-    /// with respect to αx and αy are evaluated for each outgoing direction wo.
-    fn partial_derivatives(
-        &self,
-        wis: &[Vec3],
-        wos: &[Vec3],
-        ior_i: &RefractiveIndexRecord,
-        ior_t: &RefractiveIndexRecord,
-    ) -> Box<[f64]>;
-
-    fn partial_derivatives_isotropic(
-        &self,
-        wis: &[Vec3],
-        wos: &[Vec3],
-        ior_i: &RefractiveIndexRecord,
-        ior_t: &RefractiveIndexRecord,
-    ) -> Box<[f64]>;
-
-    fn as_ref(&self) -> &dyn MicrofacetBasedBrdfModel;
-}
+// pub trait MicrofacetBrdfModel: Debug + Send + Sync {
+//     /// Returns the kind of the BSDF model.
+//     fn kind(&self) -> MicrofacetDistroKind;
+//
+//     /// Returns the isotropy of the model.
+//     fn isotropy(&self) -> Isotropy;
+//
+//     /// Returns the roughness parameter αx of the model.
+//     fn alpha_x(&self) -> f64;
+//
+//     /// Sets the roughness parameter αx of the model.
+//     fn set_alpha_x(&mut self, alpha_x: f64);
+//
+//     /// Returns the roughness parameter αy of the model.
+//     fn alpha_y(&self) -> f64;
+//
+//     /// Sets the roughness parameter αy of the model.
+//     fn set_alpha_y(&mut self, alpha_y: f64);
+//
+//     /// Evaluates the BRDF model.
+//     fn eval(
+//         &self,
+//         wi: Vec3,
+//         wo: Vec3,
+//         ior_i: &RefractiveIndexRecord,
+//         ior_t: &RefractiveIndexRecord,
+//     ) -> f64;
+//
+//     /// Evaluates the BRDF model with the given spectrum.
+//     fn eval_spectrum(
+//         &self,
+//         wi: Vec3,
+//         wo: Vec3,
+//         iors_i: &[RefractiveIndexRecord],
+//         iors_t: &[RefractiveIndexRecord],
+//     ) -> Box<[f64]>;
+//
+//     // TODO: eval with spherical coordinates?
+//
+//     /// Clones the model into a boxed trait object.
+//     fn clone_box(&self) -> Box<dyn MicrofacetBrdfModel>;
+// }
+//
+// impl Clone for Box<dyn MicrofacetBrdfModel> {
+//     fn clone(&self) -> Box<dyn MicrofacetBrdfModel> { self.clone_box() }
+// }
+//
+// pub trait MicrofacetBrdfFittingModel: MicrofacetBrdfModel {
+//     /// Computes the partial derivatives of the BRDF model with respect to
+// the     /// roughness parameters of the model.
+//     ///
+//     /// # Arguments
+//     ///
+//     /// * `wis` - The incident directions.
+//     /// * `wos` - The outgoing directions.
+//     ///
+//     /// # Returns
+//     ///
+//     /// The partial derivatives of the BRDF model with respect to the
+// roughness     /// parameters of the model in the order of αx and αy for each
+// incident and     /// outgoing direction pair.
+//     ///
+//     /// # Note
+//     ///
+//     /// The returned vector has the length of 2 times the length of `wis`
+// times     /// the length of `wos`. For each incident direction wi, the
+// derivatives     /// with respect to αx and αy are evaluated for each outgoing
+// direction wo.     fn partial_derivatives(
+//         &self,
+//         wis: &[Vec3],
+//         wos: &[Vec3],
+//         ior_i: &RefractiveIndexRecord,
+//         ior_t: &RefractiveIndexRecord,
+//     ) -> Box<[f64]>;
+//
+//     fn partial_derivatives_isotropic(
+//         &self,
+//         wis: &[Vec3],
+//         wos: &[Vec3],
+//         ior_i: &RefractiveIndexRecord,
+//         ior_t: &RefractiveIndexRecord,
+//     ) -> Box<[f64]>;
+//
+//     fn as_ref(&self) -> &dyn MicrofacetBrdfModel;
+// }
 
 /// Structure for evaluating the reflectance combining the BRDF evaluation and
 /// Fresnel term.
 pub struct Scattering;
 
 impl Scattering {
-    pub fn eval_reflectance(
-        brdf: &dyn Brdf,
+    /// Evaluates the reflectance of the given BRDF model.
+    ///
+    /// # Arguments
+    ///
+    /// * `brdf` - The BRDF model.
+    /// * `wi` - The incident direction, assumed to be normalized, pointing away
+    /// from the surface.
+    /// * `wo` - The outgoing direction, assumed to be normalized, pointing away
+    /// from the surface.
+    /// * `ior_i` - The refractive index of the incident medium.
+    /// * `ior_t` - The refractive index of the transmitted medium.
+    pub fn eval_reflectance<P: 'static>(
+        brdf: &dyn Bxdf<Params = P>,
         wi: &Vec3,
         wo: &Vec3,
         ior_i: &Ior,
         ior_t: &Ior,
-    ) -> f32 {
-        let f = match (ior_i.is_conductor(), ior_t.is_conductor()) {
-            (true, true) => {
-                todo!("conductor-conductor not implemented")
-            }
-            (true, false) => {
-                todo!("conductor-dielectric not implemented")
-            }
-            (false, true) => fresnel::reflectance_dielectric_conductor(
-                cos_theta(wi).abs(),
-                ior_i.eta,
-                ior_t.eta,
-                ior_t.k,
-            ),
-            (false, false) => {
-                fresnel::reflectance_dielectric(cos_theta(wi).abs(), ior_i.eta, ior_t.eta)
-            }
-        };
-
-        f * brdf.eval(wi, wo)
+    ) -> f64 {
+        fresnel::reflectance(cos_theta(&(-*wi)), ior_i, ior_t) as f64 * brdf.eval(wi, wo)
     }
 
-    pub fn eval_reflectance_spectrum(
-        brdf: &dyn Brdf,
+    pub fn eval_reflectance_spectrum<P: 'static>(
+        brdf: &dyn Bxdf<Params = P>,
         wi: &Vec3,
         wo: &Vec3,
-        ior_i: &[Ior],
-        ior_t: &[Ior],
-    ) -> Box<[f32]> {
-        debug_assert_eq!(ior_i.len(), ior_t.len(), "IOR pair count mismatch");
-        let mut reflectances = Box::new_uninit_slice(ior_i.len());
-        for (((ior_i, ior_t), refl)) in ior_i.iter().zip(ior_t.iter()).zip(reflectances.iter_mut())
+        iors_i: &[Ior],
+        iors_t: &[Ior],
+    ) -> Box<[f64]> {
+        debug_assert_eq!(iors_i.len(), iors_t.len(), "IOR pair count mismatch");
+        let mut reflectances = Box::new_uninit_slice(iors_i.len());
+        for (((ior_i, ior_t), refl)) in iors_i
+            .iter()
+            .zip(iors_t.iter())
+            .zip(reflectances.iter_mut())
         {
-            refl.write(Scattering::eval_reflectance(brdf, wi, wo, ior_t, ior_t));
+            refl.write(Scattering::eval_reflectance(brdf, wi, wo, ior_i, ior_t));
         }
         unsafe { reflectances.assume_init() }
     }
