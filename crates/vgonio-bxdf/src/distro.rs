@@ -67,24 +67,36 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// Evaluates the Smith masking-shadowing function with the incident and
     /// outgoing directions. This assumes that masking and shadowing are
     /// statistically independent.
-    fn eval_msf(&self, m: &Vec3, i: &Vec3, o: &Vec3) -> f64 {
-        self.eval_msf1(m, i) * self.eval_msf1(m, o)
+    fn eval_msf(&self, wm: Vec3, wi: Vec3, wo: Vec3) -> f64 {
+        self.eval_msf1(wm, wi) * self.eval_msf1(wm, wo)
     }
 
     /// TODO: evaluate msf with lambda
     /// Evaluates the Smith masking-shadowing function with either the incident
     /// or outgoing direction.
-    fn eval_msf1(&self, m: &Vec3, v: &Vec3) -> f64;
+    ///
+    /// $ G_1(\mathbf{\omega}) = \frac{1}{1 + \Lambda(\mathbf{\omega})} $
+    fn eval_msf1(&self, wm: Vec3, w: Vec3) -> f64 {
+        if wm.dot(w) <= 1.0e-6 {
+            return 0.0;
+        }
+        let lambda = self.eval_lambda(w);
+        if lambda.is_infinite() {
+            return 0.0;
+        }
+        1.0 / (1.0 + lambda)
+    }
 
     /// Clones the distribution model into a boxed trait object.
     fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>>;
 
+    // TODO: do not need provide full pair of directions
     #[cfg(feature = "fitting")]
     /// Computes the partial derivatives of the microfacet area distribution
     /// function with respect to the roughness parameters of the distribution
     /// model. The derivatives are evaluated with the Microfacet Area
     /// Distribution Function, for derivatives evaluated with the Microfacet
-    /// Masking-Shadowing Function, see `params_partial_derivatives_msf`.
+    /// Masking-Shadowing Function, see `pd_msf`.
     ///
     /// # Arguments
     ///
@@ -123,20 +135,31 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// Computes the partial derivatives of the masking-shadowing function G1
     /// term with respect to the roughness parameters of the distribution
     /// model. For derivatives evaluated with the Microfacet Area
-    /// Dipstribution Function, see `params_partial_derivatives_adf`.
+    /// Distribution Function, see `pd_ndf`.
     ///
     /// # Arguments
     ///
-    /// * `m` - The microfacet normal.
-    /// * `i` - The incident direction.
-    /// * `o` - The outgoing direction.
+    /// * `wms` - The microfacet normals.
+    /// * `ws` - The incident or outgoing directions.
     ///
     /// # Note
     ///
     /// The partial derivatives are evaluated WITHOUT Fresnel factor. You may
     /// need to multiply the partial derivatives by the Fresnel factor if you
     /// want to use them in the fitting process.
-    fn pd_msf(&self, m: Vec3, i: Vec3, o: Vec3) -> f64;
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the masking-shadowing function G1 term with
+    /// respect to the roughness parameters of the distribution model. The
+    /// derivatives are evaluated first with the αx and then αy for each
+    /// microfacet normal and the incident or outgoing direction.
+    ///
+    /// To calculate the partial derivatives, `wms` is iterated first, then
+    /// `ws` is iterated. The size of the returned vector is `wms.len() *
+    /// ws.len() * 2` if the distribution is anisotropic, and `wms.len() *
+    /// ws.len()` if the distribution is isotropic.
+    fn pd_msf1(&self, wms: &[Vec3], w: &[Vec3]) -> Box<[f64]>;
 }
 
 impl<P: Clone> Clone for Box<dyn MicrofacetDistribution<Params = P>> {

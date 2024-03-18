@@ -1,6 +1,6 @@
 use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use base::{
-    math::{cbr, rcp_f64, sqr, Vec3},
+    math::{cbr, cos_phi, cos_theta, cos_theta2, rcp_f64, sin_phi, sqr, tan_theta2, Vec3},
     Isotropy,
 };
 use std::fmt::Debug;
@@ -67,6 +67,32 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         }
     }
 
+    #[rustfmt::skip]
+    /// Under the uncorrelated height assumption, the lambda function for the
+    /// Trowbridge-Reitz distribution has the analytical form:
+    ///
+    /// $$\Lambda(\mathbf{\omega})=\frac{\sqrt{1+\alpha^2\tan^2\theta}-1}{2}$$
+    ///
+    /// where $\alpha$ is the roughness parameter of the distribution in case of
+    /// isotropic distribution. In case of anisotropic distribution, the $\alpha$
+    /// parameter is replaced by $\sqrt{\alpha_x^2\cos^2\phi +
+    /// \alpha_y^2\sin^2\phi}$.
+    fn eval_lambda(&self, w: Vec3) -> f64 {
+        let cos_theta2 = cos_theta2(&w) as f64;
+        let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
+        if tan_theta2.is_infinite() {
+            return f64::INFINITY;
+        }
+        let alpha2 = if self.is_isotropic() {
+            sqr(self.alpha_x)
+        } else {
+            let cos_phi2 = sqr(cos_phi(&w)) as f64;
+            let sin_phi2 = 1.0 - cos_phi2;
+            sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2
+        };
+        0.5 * ((1.0 + tan_theta2 * alpha2).sqrt() - 1.0)
+    }
+
     fn eval_ndf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
         let cos_theta2 = sqr(cos_theta);
         let tan_theta2 = (1.0 - cos_theta2) / cos_theta2;
@@ -79,29 +105,6 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         let sin_phi2 = 1.0 - cos_phi2;
         let e = tan_theta2 * (cos_phi2 / sqr(self.alpha_x) + sin_phi2 / sqr(self.alpha_y));
         rcp_f64(alpha_xy * std::f64::consts::PI * cos_theta4 * sqr(1.0 + e))
-    }
-
-    fn eval_msf1(&self, m: &Vec3, v: &Vec3) -> f64 {
-        // TODO: recheck the implementation, especially the anisotropic case
-        if m.dot(*v) <= 0.0 {
-            return 0.0;
-        }
-        let cos_theta_v2 = sqr(v.z as f64);
-        if cos_theta_v2 < 1.0e-16 {
-            return 0.0;
-        }
-        let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
-
-        // // aniostropic case
-        // let (_, _, phi_m) = cartesian_to_spherical(m, 1.0);
-        // let cos_phi_m2 = sqr(phi_m.cos()) as f64;
-        // let sin_phi_m2 = 1.0 - cos_phi_m2;
-        // let alpha2 = sqr(self.alpha_x) * cos_phi_m2 + sqr(self.alpha_y) * sin_phi_m2;
-
-        // isotropic case
-        let alpha2 = sqr(self.alpha_x);
-
-        2.0 * rcp_f64(1.0 + (1.0 + tan_theta_v2 * alpha2).sqrt())
     }
 
     fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>> {
@@ -177,19 +180,39 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
     }
 
     #[cfg(feature = "fitting")]
-    fn pd_msf(&self, _m: Vec3, i: Vec3, o: Vec3) -> f64 {
-        let cos_theta_i2 = sqr(i.y as f64);
-        let tan_theta_i2 = (1.0 - cos_theta_i2) * rcp_f64(cos_theta_i2);
-        let cos_theta_o2 = sqr(o.y as f64);
-        let tan_theta_o2 = (1.0 - cos_theta_o2) * rcp_f64(cos_theta_o2);
-        let denominator = sqr(1.0 + (1.0 + tan_theta_i2 * sqr(self.alpha_x)).sqrt())
-            * sqr(1.0 + (1.0 + tan_theta_o2 * sqr(self.alpha_x)).sqrt());
-        let numerator = -4.0
-            * self.alpha_x
-            * ((1.0 + (1.0 + tan_theta_i2 * sqr(self.alpha_x)).sqrt()) * tan_theta_o2
-                / sqr(1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_o2).sqrt())
-                + (1.0 + (1.0 + tan_theta_o2 * sqr(self.alpha_x)).sqrt()) * tan_theta_i2
-                    / sqr(1.0 + (1.0 + sqr(self.alpha_x) * tan_theta_i2).sqrt()));
-        numerator * rcp_f64(denominator)
+    fn pd_msf1(&self, wms: &[Vec3], ws: &[Vec3]) -> Box<[f64]> {
+        let (count, idx_mul) = if self.is_isotropic() {
+            (wms.len() * ws.len(), 1)
+        } else {
+            (wms.len() * ws.len() * 2, 2)
+        };
+        let mut results = Box::new_uninit_slice(count);
+        if self.is_isotropic() {
+            for (i, _) in wms.iter().enumerate() {
+                for (j, w) in ws.iter().enumerate() {
+                    let idx = (i * ws.len() + j) * idx_mul;
+                    let tan_theta2 = tan_theta2(&w) as f64;
+                    let a = (1.0 + sqr(self.alpha_x) * tan_theta2).sqrt();
+                    results[idx].write(-2.0 * self.alpha_x / sqr(1.0 + a));
+                }
+            }
+        } else {
+            for (i, wm) in wms.iter().enumerate() {
+                for (j, w) in ws.iter().enumerate() {
+                    let idx = (i * ws.len() + j) * idx_mul;
+                    let tan_theta2 = tan_theta2(&w) as f64;
+                    let cos_phi2 = sqr(cos_phi(&wm)) as f64;
+                    let sin_phi2 = sqr(sin_phi(&wm)) as f64;
+                    let a = 1.0
+                        + (sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2)
+                            * tan_theta2;
+                    results[idx]
+                        .write(-2.0 * cos_phi2 * self.alpha_x * tan_theta2 / (sqr(1.0 + a) * a));
+                    results[idx + 1]
+                        .write(-2.0 * sin_phi2 * self.alpha_y * tan_theta2 / (sqr(1.0 + a) * a));
+                }
+            }
+        }
+        unsafe { results.assume_init() }
     }
 }

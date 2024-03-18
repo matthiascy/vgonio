@@ -1,13 +1,14 @@
 use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use base::{
-    math::{cbr, cos_theta, rcp_f64, sqr, Vec3},
+    math::{cbr, cos_phi, cos_theta, rcp_f64, sin_phi, sqr, tan_theta, tan_theta2, Vec3},
     Isotropy,
 };
+use libm::{erf, sqrt};
 
 /// Beckmann microfacet distribution function.
 ///
-/// Beckman distribution is based on the Gaussian distribution of microfacet
-/// slopes. If σ is the RMS slope of the microfacets, then the alpha
+/// Beckman-Spizzichino distribution is based on the Gaussian distribution of
+/// microfacet slopes. If σ is the RMS slope of the microfacets, then the alpha
 /// parameter of the Beckmann distribution is given by: $\alpha = \sqrt{2}
 /// \sigma$.
 #[derive(Debug, Copy, Clone)]
@@ -37,7 +38,7 @@ impl BeckmannDistribution {
 
     /// Returns whether the distribution is isotropic or anisotropic.
     #[inline]
-    pub fn is_isotropic(&self) -> bool { (self.alpha_x - self.alpha_y).abs() < 1.0e-6 }
+    pub fn is_isotropic(&self) -> bool { (self.alpha_x - self.alpha_y).abs() < 1.0e-8 }
 }
 
 impl MicrofacetDistribution for BeckmannDistribution {
@@ -58,6 +59,30 @@ impl MicrofacetDistribution for BeckmannDistribution {
         }
     }
 
+    #[rustfmt::skip]
+    /// Under the assumption that there is no correlation of heights of the
+    /// nearby points on the surface, the lambda function for the
+    /// Beckmann-Spizzichino distribution has the analytical form:
+    ///
+    /// $$\Lambda(\mathbf{\omega})=\frac{erf(a)-1+\frac{e^{-a^2}}{a\sqrt{\pi}}}{2}$$
+    fn eval_lambda(&self, w: Vec3) -> f64 {
+        let (alpha, alpha2) = if self.is_isotropic() {
+            (self.alpha_x, sqr(self.alpha_x))
+        } else {
+            let cos_phi2 = sqr(cos_phi(&w) as f64);
+            let sin_phi2 = 1.0 - cos_phi2;
+            let alpha2 = sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2;
+            (alpha2.sqrt(), alpha2)
+        };
+        let a = 1.0 / (tan_theta(&w) as f64 * alpha);
+        if a.is_infinite() {
+            return f64::INFINITY;
+        }
+        let erf_a = libm::erf(a);
+        let exp_a2 = (-sqr(a)).exp();
+        (erf_a - 1.0 + exp_a2 * rcp_f64(a * std::f64::consts::PI.sqrt())) * 0.5
+    }
+
     fn eval_ndf(&self, cos_theta: f64, cos_phi: f64) -> f64 {
         let cos_theta2 = sqr(cos_theta);
         let e = if cos_theta2 < 1.0e-16 {
@@ -75,34 +100,6 @@ impl MicrofacetDistribution for BeckmannDistribution {
             return 0.0;
         }
         e * rcp_f64(std::f64::consts::PI * cos_theta4 * self.alpha_x * self.alpha_y)
-    }
-
-    fn eval_msf1(&self, m: &Vec3, v: &Vec3) -> f64 {
-        // TODO: anisotropic
-        if m.dot(*v) <= 0.0 {
-            0.0
-        } else {
-            let cos_theta_v2 = sqr(cos_theta(v) as f64);
-            if cos_theta_v2 < 1.0e-8 {
-                return 0.0;
-            }
-            let tan_theta_v2 = (1.0 - cos_theta_v2) * rcp_f64(cos_theta_v2);
-            let tan_theta_v = if tan_theta_v2 < 1.0e-8 {
-                0.0
-            } else {
-                tan_theta_v2.sqrt()
-            };
-            let alpha_tan_theta_v = self.alpha_x * tan_theta_v;
-            let a = if alpha_tan_theta_v < 1.0e-8 {
-                0.0
-            } else {
-                rcp_f64(alpha_tan_theta_v)
-            };
-            2.0 * rcp_f64(
-                1.0 + libm::erf(a)
-                    + (-sqr(a)).exp() * alpha_tan_theta_v * rcp_f64(std::f64::consts::PI.sqrt()),
-            )
-        }
     }
 
     fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>> {
@@ -178,52 +175,62 @@ impl MicrofacetDistribution for BeckmannDistribution {
     }
 
     #[cfg(feature = "fitting")]
-    /// Compute the partial derivative of the masking-shadowing function with
-    /// respect to the roughness parameters, αx and αy.
-    ///
-    /// NOTE: Currently, it's using isotropic Beckmann masking-shadowing
-    /// function.
-    fn pd_msf(&self, m: Vec3, i: Vec3, o: Vec3) -> f64 {
-        if m.dot(i) <= 0.0 || m.dot(o) <= 0.0 {
-            return 0.0;
+    fn pd_msf1(&self, wms: &[Vec3], ws: &[Vec3]) -> Box<[f64]> {
+        let (count, idx_mul) = if self.is_isotropic() {
+            (wms.len() * ws.len(), 1)
+        } else {
+            (wms.len() * ws.len() * 2, 2)
+        };
+        let mut results = Box::new_uninit_slice(count);
+        if self.is_isotropic() {
+            for (i, _) in wms.iter().enumerate() {
+                for (j, w) in ws.iter().enumerate() {
+                    let idx = (i * ws.len() + j) * idx_mul;
+                    let tan_theta2 = tan_theta2(&w) as f64;
+                    if tan_theta2.is_infinite() {
+                        results[idx].write(0.0);
+                    } else if tan_theta2 < 1.0e-8 {
+                        results[idx].write(0.0);
+                    } else {
+                        let cot_theta2 = rcp_f64(tan_theta2);
+                        let cot_theta = cot_theta2.sqrt();
+                        let e = (cot_theta2 * rcp_f64(self.alpha_x)).exp();
+                        let p = e * sqrt(std::f64::consts::PI) * cot_theta;
+                        results[idx].write(
+                            -2.0 * p
+                                * rcp_f64(sqr(
+                                    self.alpha_x + p * (1.0 + erf(cot_theta / self.alpha_x))
+                                )),
+                        );
+                    }
+                }
+            }
+        } else {
+            for (i, wm) in wms.iter().enumerate() {
+                for (j, w) in ws.iter().enumerate() {
+                    let idx = (i * ws.len() + j) * idx_mul;
+                    let tan_theta2 = tan_theta2(&w) as f64;
+                    if tan_theta2.is_infinite() {
+                        results[idx].write(0.0);
+                    } else if tan_theta2 < 1.0e-8 {
+                        results[idx].write(0.0);
+                    } else {
+                        let cot_theta2 = rcp_f64(tan_theta2);
+                        let cot_theta = cot_theta2.sqrt();
+                        let cos_phi2 = sqr(cos_phi(wm)) as f64;
+                        let sin_phi2 = sqr(sin_phi(wm)) as f64;
+                        let alpha2 = sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2;
+                        let alpha = alpha2.sqrt();
+                        let e = (cot_theta2 * rcp_f64(alpha2)).exp();
+                        let p = e * sqrt(std::f64::consts::PI) * cot_theta;
+                        let denom =
+                            rcp_f64(alpha * sqr(p * (1.0 + erf(cot_theta / alpha)) + alpha));
+                        results[idx].write(-2.0 * p * cos_phi2 * self.alpha_x * denom);
+                        results[idx + 1].write(-2.0 * p * sin_phi2 * self.alpha_y * denom);
+                    }
+                }
+            }
         }
-        // TODO
-        let cos_theta_i = i.y as f64;
-        let cos_theta_o = o.y as f64;
-        let cos_theta_i2 = sqr(cos_theta_i);
-        let cos_theta_o2 = sqr(cos_theta_o);
-        let cot_theta_i2 = cos_theta_i2 * rcp_f64(1.0 - cos_theta_i2);
-        let cot_theta_i = cot_theta_i2.sqrt();
-        let cot_theta_o2 = cos_theta_o2 * rcp_f64(1.0 - cos_theta_o2);
-        let cot_theta_o = cot_theta_o2.sqrt();
-        let sqrt_pi = std::f64::consts::PI.sqrt();
-        let cot_theta_i_over_alpha = cot_theta_i * rcp_f64(self.alpha_x);
-        let cot_theta_o_over_alpha = cot_theta_o * rcp_f64(self.alpha_x);
-        let nominator = -4.0
-            * std::f64::consts::PI
-            * cot_theta_i
-            * cot_theta_o
-            * ((cot_theta_i2 + cot_theta_o2) / sqr(self.alpha_x)).exp()
-            * (2.0 * self.alpha_x
-                + sqrt_pi
-                    * cot_theta_i
-                    * sqr(cot_theta_i_over_alpha).exp()
-                    * libm::erf(cot_theta_i_over_alpha)
-                + sqrt_pi
-                    * cot_theta_o
-                    * sqr(cot_theta_o_over_alpha).exp()
-                    * (libm::erf(cot_theta_o_over_alpha) + 1.0)
-                + sqrt_pi * cot_theta_i * sqr(cot_theta_i_over_alpha).exp());
-        let denominator = sqr(self.alpha_x
-            + sqrt_pi
-                * cot_theta_i
-                * sqr(cot_theta_i_over_alpha).exp()
-                * (libm::erf(cot_theta_i_over_alpha) + 1.0))
-            * sqr(self.alpha_x
-                + sqrt_pi
-                    * cot_theta_o
-                    * sqr(cot_theta_o_over_alpha).exp()
-                    * (libm::erf(cot_theta_o_over_alpha) + 1.0));
-        nominator / denominator
+        unsafe { results.assume_init() }
     }
 }

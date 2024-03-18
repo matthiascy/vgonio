@@ -49,7 +49,7 @@ impl Bxdf for BeckmannBrdf {
         let d = self
             .distro
             .eval_ndf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
-        let g = self.distro.eval_msf1(&wh, wi) * self.distro.eval_msf1(&wh, wo);
+        let g = self.distro.eval_msf1(wh, *wi) * self.distro.eval_msf1(wh, *wo);
         (d * g) / (4.0 * cos_theta_io)
     }
 
