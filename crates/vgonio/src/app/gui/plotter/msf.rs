@@ -10,9 +10,11 @@ use crate::{
     },
     fitting::FittedModel,
     measure::data::MeasurementData,
-    RangeByStepSizeInclusive,
 };
-use base::units::{rad, Radians};
+use base::{
+    range::RangeByStepSizeInclusive,
+    units::{rad, Radians},
+};
 use bxdf::distro::MicrofacetDistribution;
 use egui::{Align, Ui};
 use std::any::Any;

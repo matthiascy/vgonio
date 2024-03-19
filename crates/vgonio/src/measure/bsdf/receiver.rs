@@ -10,7 +10,7 @@ use crate::{
         params::BsdfMeasurementParams,
     },
     partition::{PartitionScheme, SphericalPartition},
-    RangeByStepSizeInclusive, SphericalDomain,
+    SphericalDomain,
 };
 use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
@@ -18,6 +18,7 @@ use base::{
         fresnel,
         ior::{Ior, RefractiveIndexRecord},
     },
+    range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
 use rayon::prelude::*;

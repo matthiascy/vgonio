@@ -1,4 +1,7 @@
-use crate::{app::gui::event::EventLoopProxy, measure::params::MsfMeasurementParams};
+use crate::{
+    app::gui::{event::EventLoopProxy, misc::range_step_size_inclusive_angle_ui},
+    measure::params::MsfMeasurementParams,
+};
 
 pub struct MsfMeasurementTab {
     pub params: MsfMeasurementParams,
@@ -18,10 +21,10 @@ impl MsfMeasurementTab {
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Zenith angle θ:");
-                self.params.zenith.ui(ui);
+                range_step_size_inclusive_angle_ui(&mut self.params.zenith, ui);
                 ui.end_row();
                 ui.label("Azimuthal angle φ:");
-                self.params.azimuth.ui(ui);
+                range_step_size_inclusive_angle_ui(&mut self.params.azimuth, ui);
                 ui.end_row();
                 ui.label("GPU Texture resolution:");
                 ui.add(

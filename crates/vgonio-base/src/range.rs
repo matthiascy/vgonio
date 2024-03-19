@@ -1,9 +1,11 @@
-use approx::AbsDiffEq;
-use base::{
+#[cfg(feature = "io")]
+use crate::units::Nanometres;
+use crate::{
     math,
     math::NumericCast,
     units::{Angle, AngleUnit, Radians},
 };
+use approx::AbsDiffEq;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -1055,6 +1057,89 @@ where
 {
     fn from(value: RangeByStepSizeInclusive<T>) -> Self {
         Self::new(value.start, value.stop, value.step_count())
+    }
+}
+
+#[cfg(feature = "io")]
+macro_rules! impl_range_by_step_size_inclusive_read_write {
+    ($($T:ty, $step_count:ident);*) => {
+        $(paste::paste! {
+            impl RangeByStepSizeInclusive<$T> {
+                #[doc = "Writes the RangeByStepSizeInclusive<`" $T "`> into the given buffer, following the order: start, stop, step_size, step_count."]
+                pub fn write_to_buf(&self, buf: &mut [u8]) {
+                    debug_assert!(buf.len() >= 16, "RangeByStepSizeInclusive needs at least 16 bytes of space");
+                    buf[0..4].copy_from_slice(&self.start.value().to_le_bytes());
+                    buf[4..8].copy_from_slice(&self.stop.value().to_le_bytes());
+                    buf[8..12].copy_from_slice(&self.step_size.value().to_le_bytes());
+                    buf[12..16].copy_from_slice(&(self.$step_count() as u32).to_le_bytes());
+                }
+
+                #[doc = "Reads the RangeByStepSizeInclusive<`" $T "`> from the given buffer, checking that the step count matches the expected value."]
+                pub fn read_from_buf(buf: &[u8]) -> Self {
+                    debug_assert!(
+                        buf.len() >= 16,
+                        "RangeByStepSizeInclusive needs at least 16 bytes of space"
+                    );
+                    let start = <$T>::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+                    let end = <$T>::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+                    let step_size = <$T>::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+                    let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+                    let range = Self::new(start, end, step_size);
+                    assert_eq!(
+                        step_count,
+                        range.$step_count() as u32,
+                        "RangeByStepSizeInclusive: step count mismatch"
+                    );
+                    range
+                }
+            }
+        })*
+    };
+}
+
+#[cfg(feature = "io")]
+impl_range_by_step_size_inclusive_read_write!(
+    Radians, step_count_wrapped;
+    Nanometres, step_count
+);
+
+#[cfg(feature = "io")]
+impl RangeByStepCountInclusive<Radians> {
+    /// Writes the `RangeByStepCountInclusive<Radians>` into the given
+    /// buffer, following the order: start, stop, step_size,
+    /// step_count.
+    pub fn write_to_buf(&self, buf: &mut [u8]) {
+        debug_assert!(
+            buf.len() >= 16,
+            "RangeByStepCountInclusive<Radians> needs at least 16 bytes of space"
+        );
+        buf[0..4].copy_from_slice(&self.start.value().to_le_bytes());
+        buf[4..8].copy_from_slice(&self.stop.value().to_le_bytes());
+
+        buf[8..12].copy_from_slice(&self.step_size().value().to_le_bytes());
+        buf[12..16].copy_from_slice(&(self.step_count as u32).to_le_bytes());
+    }
+
+    /// Reads the `RangeByStepCountInclusive<Radians>` from the given
+    /// buffer, checking that the step size matches the expected
+    /// value.
+    pub fn read_from_buf(buf: &[u8]) -> Self {
+        debug_assert!(
+            buf.len() >= 16,
+            "RangeByStepCountInclusive needs at least 16 bytes of space"
+        );
+        let start = Radians::new(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
+        let end = Radians::new(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
+        let step_size = Radians::new(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+        let step_count = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+        let range = Self::new(start, end, step_count as usize);
+        assert!(
+            math::ulp_eq(range.step_size().value(), step_size.value()),
+            "RangeByStepCountInclusive<Radians> step size mismatch: expected {}, got {}",
+            range.step_size().value(),
+            step_size.value()
+        );
+        range
     }
 }
 

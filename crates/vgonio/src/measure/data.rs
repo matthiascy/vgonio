@@ -10,7 +10,6 @@ use crate::{
         params::{AdfMeasurementMode, MeasurementKind},
     },
     partition::SphericalPartition,
-    RangeByStepSizeInclusive,
 };
 use base::{
     error::VgonioError,
@@ -18,6 +17,7 @@ use base::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::Sph2,
+    range::RangeByStepSizeInclusive,
     units::Radians,
     Asset, Version,
 };
@@ -133,7 +133,7 @@ impl MeasuredData {
     }
 
     /// Returns the azimuthal angle range of the measurement data only if
-    /// it is a ADF or MSF measurement.
+    /// it is an ADF or MSF measurement.
     pub fn adf_or_msf_azimuth(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
         match self {
             MeasuredData::Adf(adf) => match adf.params.mode {

@@ -1,15 +1,11 @@
-use crate::{
-    error::RuntimeError,
-    partition::{PartitionScheme, SphericalPartition},
-    RangeByStepSizeInclusive,
-};
+use crate::{error::RuntimeError, partition::PartitionScheme};
 use base::{
     error::VgonioError,
     math::Sph2,
+    range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::num::ParseFloatError;
 
 /// Default azimuth angle range for the measurement: [0°, 360°] with 5° step
 /// size.

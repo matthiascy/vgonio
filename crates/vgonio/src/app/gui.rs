@@ -42,7 +42,7 @@ use crate::{
         },
     },
     error::RuntimeError,
-    measure, RangeByStepSizeInclusive,
+    measure,
 };
 use base::{error::VgonioError, input::InputState};
 use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};

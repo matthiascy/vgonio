@@ -36,6 +36,7 @@ pub use asset::*;
 pub mod input;
 pub mod medium;
 pub mod optics;
+pub mod range;
 
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]

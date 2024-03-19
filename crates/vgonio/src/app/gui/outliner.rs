@@ -15,7 +15,7 @@ use surf::MicroSurface;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
-/// It will reads the micro-surfaces from the cache and display them in a tree
+/// It will read the micro-surfaces from the cache and display them in a tree
 /// structure. The user can toggle the visibility of the micro surfaces.
 pub struct Outliner {
     /// The unique id of the outliner.
@@ -110,6 +110,17 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                         "Scales the surface visually. Doest not affect the actual surface.",
                     );
                     ui.add(egui::Slider::new(scale, 0.005..=1.5).trailing_fill(true));
+                    ui.end_row();
+
+                    let mut lod = 2;
+                    ui.add(egui::DragValue::new(&mut lod).speed(1))
+                        .on_hover_text("LOD");
+                    if ui.button("Smooth").clicked() {
+                        event_loop.send_event(VgonioEvent::SmoothSurface {
+                            surf: self.item,
+                            lod: lod as u32,
+                        });
+                    }
                     ui.end_row();
                 });
         });

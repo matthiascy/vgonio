@@ -3,7 +3,6 @@ use crate::{
     fitting::{err::generate_analytical_brdf, FittingProblem, FittingReport},
     measure::bsdf::MeasuredBsdfData,
     partition::SphericalPartition,
-    RangeByStepCountInclusive, RangeByStepSizeInclusive,
 };
 use base::{
     math::{sph_to_cart, Vec3, Vec3A},
@@ -11,6 +10,7 @@ use base::{
         fresnel,
         ior::{Ior, RefractiveIndexRecord},
     },
+    range::RangeByStepSizeInclusive,
     Isotropy,
     Isotropy::Anisotropic,
 };

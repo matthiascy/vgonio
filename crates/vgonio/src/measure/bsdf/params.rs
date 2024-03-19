@@ -7,12 +7,13 @@ use crate::{
         BsdfKind,
     },
     partition::PartitionScheme,
-    RangeByStepSizeInclusive, SphericalDomain,
+    SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math::Sph2,
     medium::Medium,
+    range::RangeByStepSizeInclusive,
     units::{deg, nm, rad},
 };
 use serde::{Deserialize, Serialize};
@@ -45,7 +46,7 @@ impl TryFrom<u8> for SimulationKind {
 }
 
 impl SimulationKind {
-    /// Returns the value as a u8. The verse of `TryFrom<u8>`.
+    /// Returns the value as an u8. The verse of `TryFrom<u8>`.
     pub fn as_u8(&self) -> u8 {
         match self {
             Self::GeomOptics(RtcMethod::Grid) => 0x00,

@@ -4,9 +4,8 @@ use crate::{
         microfacet::{MeasuredAdfData, MeasuredMsfData},
         params::{AdfMeasurementMode, MsfMeasurementParams},
     },
-    RangeByStepSizeInclusive,
 };
-use base::{math::sph_to_cart, units::Radians, Isotropy};
+use base::{math::sph_to_cart, range::RangeByStepSizeInclusive, units::Radians, Isotropy};
 use bxdf::distro::{
     BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution,
 };

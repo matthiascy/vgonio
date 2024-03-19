@@ -1,7 +1,10 @@
 #[cfg(feature = "visu-dbg")]
 use crate::app::gui::{widgets::ToggleSwitch, DebuggingEvent, VgonioEvent};
 use crate::{
-    app::gui::event::EventLoopProxy,
+    app::gui::{
+        event::EventLoopProxy,
+        misc::{range_step_size_inclusive_angle_ui, range_step_size_inclusive_length_ui},
+    },
     measure::{
         bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
@@ -69,15 +72,15 @@ impl EmitterParams {
                         ui.end_row();
 
                         ui.label("Azimuthal range φ: ");
-                        self.azimuth.ui(ui);
+                        range_step_size_inclusive_angle_ui(&mut self.azimuth, ui);
                         ui.end_row();
 
                         ui.label("Zenith range θ: ");
-                        self.zenith.ui(ui);
+                        range_step_size_inclusive_angle_ui(&mut self.zenith, ui);
                         ui.end_row();
 
                         ui.label("Wavelength range: ");
-                        self.spectrum.ui(ui);
+                        range_step_size_inclusive_length_ui(&mut self.spectrum, ui);
                         ui.end_row();
 
                         add_contents(self, ui);

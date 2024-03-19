@@ -5,11 +5,11 @@ use crate::{
         params::BsdfMeasurementParams,
     },
     partition::SphericalPartition,
-    RangeByStepSizeInclusive,
 };
 use base::{
     math::{sph_to_cart, sqr, Vec3, Vec3A},
     optics::fresnel,
+    range::RangeByStepSizeInclusive,
     units::{deg, Degrees, Radians},
 };
 use bxdf::{

@@ -1,6 +1,7 @@
-use crate::{RangeByStepSizeInclusive, SphericalDomain};
+use crate::SphericalDomain;
 use base::{
     math::{Sph2, Vec3},
+    range::RangeByStepSizeInclusive,
     units::{rad, Radians, Rads, SolidAngle},
 };
 use serde::{Deserialize, Serialize};

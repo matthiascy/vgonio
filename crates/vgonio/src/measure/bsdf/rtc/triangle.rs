@@ -7,16 +7,6 @@ use std::borrow::Cow;
 
 const TOLERANCE: f32 = f32::EPSILON * 2.0;
 
-pub struct Triangle<'a>(Cow<'a, [Vec3]>);
-
-impl<'a> From<&'a [Vec3; 3]> for Triangle<'a> {
-    fn from(value: &'a [Vec3; 3]) -> Self { Self(Cow::Borrowed(value)) }
-}
-
-impl<'a> From<[Vec3; 3]> for Triangle<'a> {
-    fn from(value: [Vec3; 3]) -> Self { Self(Cow::Owned(value.to_vec())) }
-}
-
 /// Permutes the given vector according to the given permutation.
 ///
 /// A permutation is a vector of three indices that map to the original vector.
@@ -42,8 +32,8 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///
 /// As an improvement over the original algorithm (1), the algorithm is
 /// implemented in a way that some factors are precalculated and the
-/// calculations are differently factorized to allow precalculating the cross
-/// product e1 x e2 which is similar to the algorithm in (2).
+/// calculations are differently factorized to allow precalculating the 
+/// cross-product e1 x e2 which is similar to the algorithm in (2).
 ///
 /// # Algorithm
 /// Möller and Trumbore solve the ray-triangle intersection problem by directly
@@ -63,11 +53,11 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///
 /// $O - A = \begin{bmatrix}-D & B-A & C-A\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$
 ///
-/// with $E0 = B - A,  E1 = C - A, O - A = T$.
+/// with $E0 = B - A, E1 = C - A, O - A = T$.
 ///
 /// $T = \begin{bmatrix}-D & E0 & E1\end{bmatrix} \begin{bmatrix}t \\\ u \\\ v\end{bmatrix}$
 ///
-/// Apply Cramer's rule,
+/// Apply Cramer's rule.
 ///
 /// $\begin{vmatrix}A & B & C\end{vmatrix} = -(A \times C) \cdot B = -(C \times B) \cdot A$
 ///

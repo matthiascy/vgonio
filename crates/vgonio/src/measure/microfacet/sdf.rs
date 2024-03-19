@@ -4,12 +4,12 @@ use crate::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::SdfMeasurementParams,
     },
-    RangeByStepSizeInclusive,
 };
 use base::{
     error::VgonioError,
     math,
     math::{IVec2, Vec2},
+    range::RangeByStepSizeInclusive,
     units::{rad, Radians},
 };
 use std::{borrow::Cow, path::Path};

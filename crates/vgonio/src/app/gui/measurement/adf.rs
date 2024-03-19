@@ -1,5 +1,5 @@
 use crate::{
-    app::gui::{event::EventLoopProxy, misc},
+    app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui},
     measure::params::{AdfMeasurementMode, AdfMeasurementParams},
     partition::PartitionScheme,
 };
@@ -51,10 +51,10 @@ impl AdfMeasurementTab {
                 match &mut self.params.mode {
                     AdfMeasurementMode::ByPoints { azimuth, zenith } => {
                         ui.label("Zenith angle θ:");
-                        zenith.ui(ui);
+                        range_step_size_inclusive_angle_ui(zenith, ui);
                         ui.end_row();
                         ui.label("Azimuthal angle φ:");
-                        azimuth.ui(ui);
+                        range_step_size_inclusive_angle_ui(azimuth, ui);
                         ui.end_row();
                     }
                     AdfMeasurementMode::ByPartition { scheme, precision } => {

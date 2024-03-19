@@ -470,7 +470,7 @@ impl RawCache {
         Ok(())
     }
 
-    /// Adds a micro-surface measurement data to the cache.
+    /// Adds micro-surface measurement data to the cache.
     pub fn add_micro_surface_measurement(
         &mut self,
         data: MeasurementData,

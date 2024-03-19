@@ -1,6 +1,6 @@
 use egui::DragValue;
 
-use crate::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
+use base::range::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
 
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
     DragValue::new(angle.value_mut())
@@ -18,65 +18,65 @@ pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> Dr
         .speed(A::FACTOR_FROM_DEG as f64)
 }
 
-impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
-    /// Creates the UI for the range.
-    pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.add(drag_angle(&mut self.start, ""));
-            ui.label("..=");
-            let start_val = self.start.value() as f64;
-            ui.add(
-                DragValue::new(self.stop.value_mut())
-                    .custom_formatter(move |val, _| {
-                        format!("{:6.2}°", val as f32 * A::FACTOR_TO_DEG)
-                    })
-                    .custom_parser(move |val_str| {
-                        if val_str == "pi" {
-                            return Some(A::PI as f64);
-                        } else if val_str == "tau" || val_str == "2pi" {
-                            return Some(A::TAU as f64);
-                        }
-                        let val = val_str.parse::<f64>().unwrap_or(0.0);
-                        let wrapped = (val * A::FACTOR_FROM_DEG as f64) % A::TAU as f64;
-                        if approx::relative_eq!(wrapped, start_val, epsilon = 1e-6) {
-                            Some(val * A::FACTOR_FROM_DEG as f64)
-                        } else {
-                            Some(wrapped)
-                        }
-                    })
-                    .speed(A::FACTOR_FROM_DEG as f64),
-            );
-            ui.label("per");
-            ui.add(drag_angle(&mut self.step_size, ""));
-        })
-        .response
-    }
+pub fn range_step_size_inclusive_angle_ui<A: AngleUnit>(
+    range: &mut RangeByStepSizeInclusive<Angle<A>>,
+    ui: &mut egui::Ui,
+) -> egui::Response {
+    ui.horizontal(|ui| {
+        ui.add(drag_angle(&mut range.start, ""));
+        ui.label("..=");
+        let start_val = range.start.value() as f64;
+        ui.add(
+            DragValue::new(range.stop.value_mut())
+                .custom_formatter(move |val, _| format!("{:6.2}°", val as f32 * A::FACTOR_TO_DEG))
+                .custom_parser(move |val_str| {
+                    if val_str == "pi" {
+                        return Some(A::PI as f64);
+                    } else if val_str == "tau" || val_str == "2pi" {
+                        return Some(A::TAU as f64);
+                    }
+                    let val = val_str.parse::<f64>().unwrap_or(0.0);
+                    let wrapped = (val * A::FACTOR_FROM_DEG as f64) % A::TAU as f64;
+                    if approx::relative_eq!(wrapped, start_val, epsilon = 1e-6) {
+                        Some(val * A::FACTOR_FROM_DEG as f64)
+                    } else {
+                        Some(wrapped)
+                    }
+                })
+                .speed(A::FACTOR_FROM_DEG as f64),
+        );
+        ui.label("per");
+        ui.add(drag_angle(&mut range.step_size, ""));
+    })
+    .response
 }
 
-impl<A: AngleUnit> RangeByStepCountInclusive<Angle<A>> {
+pub fn range_step_count_inclusive_angle_ui<A: AngleUnit>(
+    range: &mut RangeByStepCountInclusive<Angle<A>>,
+    ui: &mut egui::Ui,
+) -> egui::Response {
     /// Creates the UI for the range.
-    pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.add(drag_angle(&mut self.start, "start: "));
-            ui.add(drag_angle(&mut self.stop, "stop: "));
-            ui.add(DragValue::new(&mut self.step_count).prefix("steps: "));
-        })
-        .response
-    }
+    ui.horizontal(|ui| {
+        ui.add(drag_angle(&mut range.start, "start: "));
+        ui.add(drag_angle(&mut range.stop, "stop: "));
+        ui.add(DragValue::new(&mut range.step_count).prefix("steps: "));
+    })
+    .response
 }
 
-impl<L: LengthMeasurement> RangeByStepSizeInclusive<Length<L>> {
+pub fn range_step_size_inclusive_length_ui<L: LengthMeasurement>(
+    range: &mut RangeByStepSizeInclusive<Length<L>>,
+    ui: &mut egui::Ui,
+) -> egui::Response {
     /// Creates the UI for the range.
-    pub fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.add(DragValue::new(self.start.value_mut()).suffix(L::SYMBOL));
-            ui.label("..=");
-            ui.add(DragValue::new(self.stop.value_mut()).suffix(L::SYMBOL));
-            ui.label("per");
-            ui.add(DragValue::new(self.step_size.value_mut()).suffix(L::SYMBOL));
-        })
-        .response
-    }
+    ui.horizontal(|ui| {
+        ui.add(DragValue::new(range.start.value_mut()).suffix(L::SYMBOL));
+        ui.label("..=");
+        ui.add(DragValue::new(range.stop.value_mut()).suffix(L::SYMBOL));
+        ui.label("per");
+        ui.add(DragValue::new(range.step_size.value_mut()).suffix(L::SYMBOL));
+    })
+    .response
 }
 
 use base::{

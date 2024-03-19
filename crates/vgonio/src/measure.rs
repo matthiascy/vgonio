@@ -35,8 +35,8 @@ impl SphericalTransform {
     ///
     /// # Arguments
     ///
-    /// * `dest` - The desired position in spherical coordinates. Should always
-    ///   be defined in the unit sphere.
+    /// * `dest` - The desired position in spherical coordinates; it should
+    ///   always be defined in the unit sphere.
     ///
     /// # Returns
     ///

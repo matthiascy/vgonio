@@ -14,17 +14,18 @@ use crate::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
-            BsdfKind, BsdfSnapshot, MeasuredBsdfData, SpectralSamples,
+            BsdfKind,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     },
     partition::PartitionScheme,
-    RangeByStepSizeInclusive, SphericalDomain,
+    SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math::{sph_to_cart, Sph2, Vec3},
     medium::Medium,
+    range::RangeByStepSizeInclusive,
     units::{deg, nm, Degs, Rads},
     Isotropy,
 };

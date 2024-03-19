@@ -40,11 +40,11 @@ pub struct MicroSurfaceProp {
     pub macro_area: f32,
     /// Micro surface area.
     pub micro_area: f32,
-    /// Root mean square of the height.
+    /// Root-mean-square of the height.
     pub rms_height: f32,
-    /// Root mean square of the slope along the x-axis.
+    /// Root-mean-square of the slope along the x-axis.
     pub rms_slope_x: f32,
-    /// Root mean square of the slope along the y-axis.
+    /// Root-mean-square of the slope along the y-axis.
     pub rms_slope_y: f32,
 }
 

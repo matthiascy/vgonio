@@ -18,10 +18,10 @@ use crate::{
     },
     fitting::FittedModel,
     measure::{data::MeasurementData, params::MeasurementKind},
-    RangeByStepSizeInclusive,
 };
 use base::{
     math,
+    range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
 };
 use bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution};

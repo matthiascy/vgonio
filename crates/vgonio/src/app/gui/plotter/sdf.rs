@@ -9,9 +9,11 @@ use crate::{
     },
     fitting::FittedModel,
     measure::data::MeasurementData,
-    RangeByStepSizeInclusive,
 };
-use base::units::{deg, rad, Radians};
+use base::{
+    range::RangeByStepSizeInclusive,
+    units::{deg, rad, Radians},
+};
 use egui::{Align, Ui};
 use std::any::Any;
 

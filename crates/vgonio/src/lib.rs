@@ -25,10 +25,8 @@ pub mod fitting;
 mod io;
 pub mod measure;
 mod partition;
-mod range;
 
 use base::{error::VgonioError, units::Radians};
-pub use range::*;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},

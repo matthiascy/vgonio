@@ -118,8 +118,8 @@ impl Hit {
 ///
 /// The parameterization of a triangle uses the first vertex p0 as base point,
 /// the vector p1 - p0 as u-direction and the vector p2 - p0 as v-direction.
-/// Thus vertex attributes can be interpolated using the barycentric coordinates
-/// u and v: t_uv = (1 - u - v) * t0 + u * t1 + v * t2.
+/// Thus, vertex attributes can be interpolated using the barycentric
+/// coordinates u and v: t_uv = (1 - u - v) * t0 + u * t1 + v * t2.
 #[derive(Debug)]
 pub struct RayTriIsect {
     /// Barycentric coordinates of the intersection point.

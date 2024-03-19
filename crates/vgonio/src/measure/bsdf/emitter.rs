@@ -1,11 +1,9 @@
 //! Light source of the measurement system.
 
-use crate::{
-    measure::{bsdf::rtc::Ray, SphericalTransform},
-    RangeByStepSizeInclusive,
-};
+use crate::measure::{bsdf::rtc::Ray, SphericalTransform};
 use base::{
     math::{Sph2, Vec3},
+    range::RangeByStepSizeInclusive,
     units::{deg, nm, rad, Nanometres, Radians},
 };
 use rayon::prelude::*;

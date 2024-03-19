@@ -7,9 +7,9 @@ use crate::{
         },
     },
     fitting::FittedModel,
-    RangeByStepSizeInclusive,
 };
 use base::{
+    range::RangeByStepSizeInclusive,
     units::{rad, Radians},
     Isotropy,
 };

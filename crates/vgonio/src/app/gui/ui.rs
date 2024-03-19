@@ -24,9 +24,11 @@ use crate::{
         MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
     },
     measure::{data::MeasurementData, params::MeasurementKind},
-    RangeByStepSizeInclusive,
 };
-use base::io::{CompressionScheme, FileEncoding};
+use base::{
+    io::{CompressionScheme, FileEncoding},
+    range::RangeByStepSizeInclusive,
+};
 use bxdf::brdf::BxdfFamily;
 use egui::NumExt;
 use gfxkit::context::GpuContext;
@@ -304,6 +306,7 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
+            VgonioEvent::SmoothSurface { surf, lod } => EventResponse::Handled,
             _ => EventResponse::Ignored(event),
         }
     }

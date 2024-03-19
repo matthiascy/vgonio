@@ -1,5 +1,6 @@
 #![feature(byte_slice_trim_ascii)]
 #![feature(seek_stream_len)]
+#![feature(new_uninit)]
 //! Heightfield
 #![warn(missing_docs)]
 
@@ -10,20 +11,24 @@ mod gen;
 #[cfg(feature = "surf-gen")]
 pub use gen::*;
 pub mod io;
+pub mod smooth;
 
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
+use crate::smooth::cpnt;
 use base::{
     error::VgonioError,
     io::{
         CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError,
         WriteFileErrorKind,
     },
-    math::{rcp_f32, Aabb, Vec3},
+    math::{rcp_f32, sqr, Aabb, Vec3},
+    range::RangeByStepCountInclusive,
     units::LengthUnit,
     Asset, Version,
 };
+use glam::Vec2;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -490,7 +495,7 @@ impl MicroSurface {
         (self.cols - 1) as f32 * (self.rows - 1) as f32 * self.du * self.dv
     }
 
-    /// Computes the root mean square height of the height field.
+    /// Computes the root-mean-square height of the height field.
     pub fn rms_height(&self) -> f32 {
         let rcp_n = rcp_f32(self.samples.len() as f32);
         self.samples
@@ -500,7 +505,7 @@ impl MicroSurface {
     }
 
     /// Triangulate the heightfield into a [`MicroSurfaceMesh`].
-    /// The triangulation is done in the XZ plane.
+    /// The triangulation is done on the XZ plane.
     pub fn as_micro_surface_mesh(
         &self,
         offset: HeightOffset,
@@ -516,18 +521,45 @@ impl MicroSurface {
         let tri_faces = regular_grid_triangulation(self.rows, self.cols, pattern);
         let num_faces = tri_faces.len() / 3;
 
-        let mut normals = vec![Vec3::ZERO; num_faces];
-        let mut areas = vec![0.0; num_faces];
+        let mut facet_normals = vec![Vec3::ZERO; num_faces].into_boxed_slice();
+        let mut areas = vec![0.0; num_faces].into_boxed_slice();
         let mut total_area = 0.0;
+
+        // Records the index of the facet that shares a vertex.
+        let mut topology = vec![[-1; 6]; verts.len()];
 
         for i in 0..num_faces {
             let p0 = verts[tri_faces[i * 3] as usize];
             let p1 = verts[tri_faces[i * 3 + 1] as usize];
             let p2 = verts[tri_faces[i * 3 + 2] as usize];
+            // Fill the topology
+            // For each vertex of the triangle
+            for j in 0..3 {
+                let vert_topology = &mut topology[tri_faces[i * 3 + j] as usize];
+                for k in 0..6 {
+                    if vert_topology[k] == -1 {
+                        vert_topology[k] = i as i32;
+                        break;
+                    }
+                }
+            }
             let cross = (p1 - p0).cross(p2 - p0);
-            normals[i] = cross.normalize();
+            facet_normals[i] = cross.normalize();
             areas[i] = 0.5 * cross.length();
             total_area += areas[i];
+        }
+
+        // Compute the vertex normals
+        let mut vert_normals = Box::new_uninit_slice(verts.len());
+        for i in 0..verts.len() {
+            let mut normal = Vec3::ZERO;
+            let vert_topology = &topology[i];
+            for j in 0..6 {
+                if vert_topology[j] != -1 {
+                    normal += facet_normals[vert_topology[j] as usize];
+                }
+            }
+            vert_normals[i].write(normal.normalize());
         }
 
         MicroSurfaceMesh {
@@ -537,7 +569,8 @@ impl MicroSurface {
             bounds: extent,
             verts,
             facets: tri_faces,
-            facet_normals: normals,
+            facet_normals,
+            vert_normals: unsafe { vert_normals.assume_init() },
             facet_areas: areas,
             msurf: self.uuid,
             unit: self.unit,
@@ -554,7 +587,7 @@ impl MicroSurface {
     /// The generated vertices are aligned to the xy plane of the right-handed,
     /// Z-up coordinate system.
     #[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../misc/imgs/heightfield.svg"))]
-    pub fn generate_vertices(&self, height_offset: f32) -> (Vec<Vec3>, Aabb) {
+    pub fn generate_vertices(&self, height_offset: f32) -> (Box<[Vec3]>, Aabb) {
         log::info!(
             "Generating height field vertices with {} rows and {} cols",
             self.rows,
@@ -568,8 +601,7 @@ impl MicroSurface {
             self.du,
             self.dv,
         );
-        let mut positions: Vec<Vec3> = vec![Vec3::ZERO; rows * cols];
-
+        let mut positions = Box::new_uninit_slice(rows * cols);
         #[cfg(feature = "bench")]
         let t = std::time::Instant::now();
 
@@ -589,6 +621,8 @@ impl MicroSurface {
                         self.samples[idx] + height_offset,
                     );
 
+                    pos.write(p);
+
                     for k in 0..3 {
                         if p[k] > extent.max[k] {
                             extent.max[k] = p[k];
@@ -597,8 +631,6 @@ impl MicroSurface {
                             extent.min[k] = p[k];
                         }
                     }
-
-                    *pos = p;
                 }
                 extent
             })
@@ -610,7 +642,7 @@ impl MicroSurface {
             t.elapsed().as_millis()
         );
 
-        (positions, extent)
+        (unsafe { positions.assume_init() }, extent)
     }
 
     /// Resize the heightfield.
@@ -718,7 +750,7 @@ pub fn regular_grid_triangulation(
     rows: usize,
     cols: usize,
     pattern: TriangulationPattern,
-) -> Vec<u32> {
+) -> Box<[u32]> {
     let mut triangulate: Box<dyn FnMut(usize, usize, &mut usize, &mut [u32])> = match pattern {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
@@ -768,7 +800,7 @@ pub fn regular_grid_triangulation(
         ),
     };
 
-    let mut indices: Vec<u32> = vec![0; 2 * (cols - 1) * (rows - 1) * 3];
+    let mut indices = vec![0; 2 * (cols - 1) * (rows - 1) * 3].into_boxed_slice();
     let mut tri = 0;
     for i in 0..cols * rows {
         let row = i / cols;
@@ -813,7 +845,7 @@ pub struct MicroSurfaceMesh {
     /// Axis-aligned bounding box of the mesh.
     pub bounds: Aabb,
 
-    /// Height offset applied to original heightfield.
+    /// Height offset applied to the original heightfield.
     pub height_offset: f32,
 
     /// Number of triangles in the mesh.
@@ -823,16 +855,20 @@ pub struct MicroSurfaceMesh {
     pub num_verts: usize,
 
     /// Vertices of the mesh.
-    pub verts: Vec<Vec3>,
+    pub verts: Box<[Vec3]>,
 
     /// Vertex indices forming the facets which are triangles.
-    pub facets: Vec<u32>,
+    pub facets: Box<[u32]>,
 
     /// Normal vectors of each facet.
-    pub facet_normals: Vec<Vec3>,
+    pub facet_normals: Box<[Vec3]>,
+
+    /// Normal vectors of each vertex (average of the normals of the facets
+    /// sharing the vertex).
+    pub vert_normals: Box<[Vec3]>,
 
     /// Surface area of each facet.
-    pub facet_areas: Vec<f32>,
+    pub facet_areas: Box<[f32]>,
 
     /// Total surface area of the triangles.
     pub facet_total_area: f32,
@@ -891,6 +927,65 @@ impl MicroSurfaceMesh {
             .copy_from_slice(&self.facets);
         geom.commit();
         geom
+    }
+
+    /// Smooth the mesh by subdividing the triangles into curved surfaces.
+    pub fn curved_smooth(&mut self, lod: u32) {
+        if lod == 0 {
+            return;
+        }
+        fn nvert(lod: u32) -> u32 {
+            if lod == 0 {
+                3
+            } else {
+                nvert(lod - 1) + lod + 2
+            }
+        }
+        let n_pts_per_facet = nvert(lod);
+        let n_tris_per_facet = (lod + 1) * (lod + 1);
+        let n_ctrl_pts_per_edge = lod + 2;
+        let mut new_verts = Vec::with_capacity(self.num_facets * n_pts_per_facet as usize);
+        let new_num_facets = self.num_facets * n_tris_per_facet as usize;
+        let new_facets = Vec::with_capacity(new_num_facets * 3);
+        let new_facet_normals = Box::new_uninit_slice(new_num_facets);
+        let new_facet_areas = Box::new_uninit_slice(new_num_facets);
+        let mut new_pts = vec![Vec3::ZERO; n_pts_per_facet as usize - 3].into_boxed_slice();
+        let mut new_nrs = vec![Vec3::ZERO; n_pts_per_facet as usize - 3].into_boxed_slice();
+        let uv_range = RangeByStepCountInclusive::new(0.0, 1.0, n_ctrl_pts_per_edge as usize);
+        let uvs = {
+            let mut uvs = Box::new_uninit_slice(n_pts_per_facet as usize);
+            let mut i = 0;
+            for u in uv_range.values() {
+                for v in uv_range.values() {
+                    if u + v > 1 {
+                        continue;
+                    }
+                    uvs[i].write(Vec2::new(u as f32, v as f32));
+                    i += 1;
+                }
+            }
+            assert_eq!(i, n_pts_per_facet);
+            unsafe { uvs.assume_init() }
+        };
+        for facet in self.facets.chunks(3) {
+            // Get the original vertices of the facet (triangle)
+            let tri_verts = [
+                self.verts[facet[0] as usize],
+                self.verts[facet[1] as usize],
+                self.verts[facet[2] as usize],
+            ];
+            let tri_norms = [
+                self.facet_normals[facet[0] as usize],
+                self.facet_normals[facet[1] as usize],
+                self.facet_normals[facet[2] as usize],
+            ];
+            // Get subdivided points
+            cpnt::subdivide_triangle(&tri_verts, &tri_norms, &uvs, &mut new_pts, &mut new_nrs);
+            let vert_idx_offset = new_verts.len();
+            // TODO: remove redundant vertices
+            new_verts.extend_from_slice(&new_pts);
+            // Triangulation
+        }
     }
 }
 

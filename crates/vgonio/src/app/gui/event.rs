@@ -88,6 +88,11 @@ pub enum VgonioEvent {
         data: Handle<MeasurementData>,
         scale: f32,
     },
+    // TODO
+    SmoothSurface {
+        surf: Handle<MicroSurface>,
+        lod: u32,
+    },
 }
 
 /// Events used by [`SurfaceViewer`].
