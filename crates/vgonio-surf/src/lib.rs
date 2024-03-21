@@ -32,8 +32,10 @@ use glam::Vec2;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::max,
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
+    mem::MaybeUninit,
     path::{Path, PathBuf},
 };
 
@@ -329,7 +331,7 @@ impl MicroSurface {
     /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.samples_count(), 9);
     /// ```
     pub fn samples_count(&self) -> usize { self.cols * self.rows }
@@ -342,7 +344,7 @@ impl MicroSurface {
     /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::UM, samples, None, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.cells_count(), 4);
     /// ```
     pub fn cells_count(&self) -> usize {
@@ -366,7 +368,7 @@ impl MicroSurface {
     /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.2, LengthUnit::MM, samples, None, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::MM, samples, None, None);
     /// assert_eq!(msurf.sample_at(2, 2), 0.1);
     /// ```
     ///
@@ -374,7 +376,7 @@ impl MicroSurface {
     /// # use base::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
-    /// let msurf = MicroSurface::from_samples(3, 3, 0.2, 0.3, LengthUnit::MM, samples, None, None);
+    /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.3), LengthUnit::MM, samples, None, None);
     /// let h = msurf.sample_at(4, 4);
     /// ```
     pub fn sample_at(&self, row: usize, col: usize) -> f32 {
@@ -562,7 +564,7 @@ impl MicroSurface {
             vert_normals[i].write(normal.normalize());
         }
 
-        MicroSurfaceMesh {
+        let mut mesh = MicroSurfaceMesh {
             uuid: uuid::Uuid::new_v4(),
             num_facets: num_faces,
             num_verts: verts.len(),
@@ -576,7 +578,14 @@ impl MicroSurface {
             unit: self.unit,
             height_offset,
             facet_total_area: total_area,
+        };
+        let lod = std::env::var("LOD")
+            .map(|s| s.parse().unwrap_or(0))
+            .unwrap_or(0);
+        if lod > 0 {
+            mesh.curved_smooth(lod);
         }
+        mesh
     }
 
     /// Generate vertices from the height values.
@@ -754,6 +763,15 @@ pub fn regular_grid_triangulation(
     let mut triangulate: Box<dyn FnMut(usize, usize, &mut usize, &mut [u32])> = match pattern {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
+                // if col != 0 {
+                //     indices[*tri] = i as u32;
+                //     indices[*tri + 1] = (i - 1) as u32;
+                //     indices[*tri + 2] = (i + cols - 1) as u32;
+                //     indices[*tri + 3] = i as u32;
+                //     indices[*tri + 4] = (i + cols - 1) as u32;
+                //     indices[*tri + 5] = (i + cols) as u32;
+                //     *tri += 6;
+                // }
                 if col == 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
@@ -777,6 +795,15 @@ pub fn regular_grid_triangulation(
         ),
         TriangulationPattern::TopLeftToBottomRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
+                // if col != cols - 1 {
+                //     indices[*tri] = i as u32;
+                //     indices[*tri + 1] = (i + cols) as u32;
+                //     indices[*tri + 2] = (i + cols + 1) as u32;
+                //     indices[*tri + 3] = i as u32;
+                //     indices[*tri + 5] = (i + cols + 1) as u32;
+                //     indices[*tri + 4] = (i + 1) as u32;
+                //     *tri += 6;
+                // }
                 if col == 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
@@ -941,51 +968,166 @@ impl MicroSurfaceMesh {
                 nvert(lod - 1) + lod + 2
             }
         }
-        let n_pts_per_facet = nvert(lod);
-        let n_tris_per_facet = (lod + 1) * (lod + 1);
+        let n_pts_per_facet = nvert(lod) as usize;
+        let n_tris_per_facet = ((lod + 1) * (lod + 1)) as usize;
         let n_ctrl_pts_per_edge = lod + 2;
-        let mut new_verts = Vec::with_capacity(self.num_facets * n_pts_per_facet as usize);
-        let new_num_facets = self.num_facets * n_tris_per_facet as usize;
-        let new_facets = Vec::with_capacity(new_num_facets * 3);
-        let new_facet_normals = Box::new_uninit_slice(new_num_facets);
-        let new_facet_areas = Box::new_uninit_slice(new_num_facets);
-        let mut new_pts = vec![Vec3::ZERO; n_pts_per_facet as usize - 3].into_boxed_slice();
-        let mut new_nrs = vec![Vec3::ZERO; n_pts_per_facet as usize - 3].into_boxed_slice();
-        let uv_range = RangeByStepCountInclusive::new(0.0, 1.0, n_ctrl_pts_per_edge as usize);
+
+        let new_num_verts = self.num_facets * n_pts_per_facet;
+        let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
+        let mut new_vert_normals = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
+        let new_num_facets = self.num_facets * n_tris_per_facet;
+        let mut new_facets = vec![0u32; new_num_facets * 3].into_boxed_slice();
+        let mut new_facet_normals = vec![Vec3::ZERO; new_num_facets].into_boxed_slice();
+        let mut new_facet_areas = vec![0.0f32; new_num_facets].into_boxed_slice();
         let uvs = {
-            let mut uvs = Box::new_uninit_slice(n_pts_per_facet as usize);
+            let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pts_per_edge as usize)
+                .values()
+                .map(|x| x.min(1.0))
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let mut uvs = Box::new_uninit_slice(n_pts_per_facet);
             let mut i = 0;
-            for u in uv_range.values() {
-                for v in uv_range.values() {
-                    if u + v > 1 {
+            for u in uv_vals.iter() {
+                for v in uv_vals.iter() {
+                    if u + v > 1.0 {
                         continue;
                     }
-                    uvs[i].write(Vec2::new(u as f32, v as f32));
+                    uvs[i].write(Vec2::new(*u, *v));
                     i += 1;
                 }
             }
             assert_eq!(i, n_pts_per_facet);
             unsafe { uvs.assume_init() }
         };
-        for facet in self.facets.chunks(3) {
-            // Get the original vertices of the facet (triangle)
-            let tri_verts = [
-                self.verts[facet[0] as usize],
-                self.verts[facet[1] as usize],
-                self.verts[facet[2] as usize],
-            ];
-            let tri_norms = [
-                self.facet_normals[facet[0] as usize],
-                self.facet_normals[facet[1] as usize],
-                self.facet_normals[facet[2] as usize],
-            ];
-            // Get subdivided points
-            cpnt::subdivide_triangle(&tri_verts, &tri_norms, &uvs, &mut new_pts, &mut new_nrs);
-            let vert_idx_offset = new_verts.len();
-            // TODO: remove redundant vertices
-            new_verts.extend_from_slice(&new_pts);
-            // Triangulation
+
+        fn triangulate(lod: u32, base: u32, tris: &mut [u32]) {
+            let num_ctrl_pts = lod + 2;
+            let mut offset = 0;
+            let mut tris_idx = 0;
+            for l in 0..num_ctrl_pts {
+                let nl = num_ctrl_pts - l;
+                for i in 0..nl - 1 {
+                    if i < nl - 2 {
+                        tris[tris_idx..tris_idx + 6].copy_from_slice(&[
+                            // 1st
+                            base + offset + i,
+                            base + offset + i + 1,
+                            base + offset + i + nl,
+                            // 2nd
+                            base + offset + i + 1,
+                            base + offset + i + nl,
+                            base + offset + i + nl + 1,
+                        ]);
+                        tris_idx += 6;
+                    } else {
+                        tris[tris_idx..tris_idx + 3].copy_from_slice(&[
+                            // 1st
+                            base + offset + i,
+                            base + offset + i + 1,
+                            base + offset + i + nl,
+                        ]);
+                        tris_idx += 3;
+                    };
+                }
+                offset += nl;
+            }
         }
+
+        self.facets
+            .par_chunks(3 * 64)
+            .zip(new_verts.par_chunks_mut(64 * n_pts_per_facet))
+            .zip(new_vert_normals.par_chunks_mut(64 * n_pts_per_facet))
+            .zip(new_facets.par_chunks_mut(64 * 3 * n_tris_per_facet))
+            .zip(new_facet_normals.par_chunks_mut(64 * n_tris_per_facet))
+            .zip(new_facet_areas.par_chunks_mut(64 * n_tris_per_facet))
+            .enumerate()
+            .for_each(
+                |(
+                    chunk_idx,
+                    (
+                        (
+                            (
+                                ((facets_chunk, new_verts_chunk), new_vert_normals_chunk),
+                                new_facets_chunk,
+                            ),
+                            new_facets_normal_chunk,
+                        ),
+                        new_facets_area_chunk,
+                    ),
+                )| {
+                    facets_chunk
+                        .chunks(3)
+                        .zip(new_verts_chunk.chunks_mut(n_pts_per_facet))
+                        .zip(new_vert_normals_chunk.chunks_mut(n_pts_per_facet))
+                        .zip(new_facets_chunk.chunks_mut(3 * n_tris_per_facet))
+                        .zip(new_facets_normal_chunk.chunks_mut(n_tris_per_facet))
+                        .zip(new_facets_area_chunk.chunks_mut(n_tris_per_facet))
+                        .enumerate()
+                        .for_each(
+                            |(
+                                i,
+                                (
+                                    (
+                                        (((facet, new_verts), new_vert_normals), new_facets),
+                                        new_facet_normals,
+                                    ),
+                                    new_area,
+                                ),
+                            )| {
+                                let tri_verts = [
+                                    self.verts[facet[0] as usize],
+                                    self.verts[facet[1] as usize],
+                                    self.verts[facet[2] as usize],
+                                ];
+                                let tri_norms = [
+                                    self.vert_normals[facet[0] as usize],
+                                    self.vert_normals[facet[1] as usize],
+                                    self.vert_normals[facet[2] as usize],
+                                ];
+                                // Get interpolated points and normals
+                                cpnt::subdivide_triangle(
+                                    &tri_verts,
+                                    &tri_norms,
+                                    &uvs,
+                                    new_verts,
+                                    new_vert_normals,
+                                );
+                                // Triangulate the new points
+                                let vert_base =
+                                    (chunk_idx * 64 * n_pts_per_facet + i * n_pts_per_facet) as u32;
+                                triangulate(lod, vert_base, new_facets);
+                                // Compute the per-facet normals and areas
+                                for ((new_facet, new_normal), new_area) in new_facets
+                                    .chunks_mut(3)
+                                    .zip(new_facet_normals.iter_mut())
+                                    .zip(new_area.iter_mut())
+                                {
+                                    let p0 = new_verts[new_facet[0] as usize - vert_base as usize];
+                                    let p1 = new_verts[new_facet[1] as usize - vert_base as usize];
+                                    let p2 = new_verts[new_facet[2] as usize - vert_base as usize];
+                                    let cross = (p1 - p0).cross(p2 - p0);
+                                    *new_area = 0.5 * cross.length();
+                                    if cross.dot(Vec3::Z) < 0.0 {
+                                        *new_normal = -cross.normalize();
+                                        let a = new_facet[1];
+                                        new_facet[1] = new_facet[2];
+                                        new_facet[2] = a;
+                                    } else {
+                                        *new_normal = cross.normalize();
+                                    }
+                                }
+                            },
+                        );
+                },
+            );
+        self.facet_total_area = new_facet_areas.iter().sum();
+        self.facet_normals = new_facet_normals;
+        self.facet_areas = new_facet_areas;
+        self.facets = new_facets;
+        self.verts = new_verts;
+        self.num_facets = new_num_facets;
+        self.num_verts = new_num_verts;
+        self.vert_normals = new_vert_normals;
     }
 }
 

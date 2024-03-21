@@ -165,7 +165,7 @@ impl MeasurementDialog {
                 surface_viewers: vec![],
                 focused_viewer: None,
             },
-            #[cfg(feature = "visu-dbg")]
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
             cache,
         }
     }

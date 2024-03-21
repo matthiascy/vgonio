@@ -157,6 +157,7 @@ impl DebugDrawingState {
     pub const RAY_TRAJECTORIES_REFLECTED_COLOR: [f32; 4] = [0.45, 0.5, 0.4, 0.3];
     pub const SURFACE_PRIMITIVE_COLOR: [f32; 4] = [0.12, 0.23, 0.9, 0.8];
     pub const SURFACE_NORMAL_COLOR: [f32; 4] = [0.7, 0.23, 0.92, 0.8];
+    pub const VERTEX_NORMAL_COLOR: [f32; 4] = [0.7, 0.33, 0.82, 0.8];
 
     pub fn new(
         ctx: &GpuContext,

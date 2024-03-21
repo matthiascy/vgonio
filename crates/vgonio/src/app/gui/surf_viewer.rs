@@ -38,7 +38,8 @@ pub enum ShadingMode {
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OverlayFlags {
-    pub normals: bool,
+    pub facet_normals: bool,
+    pub vertex_normals: bool,
     pub tangents: bool,
     pub bitangents: bool,
     pub uvs: bool,
@@ -358,9 +359,6 @@ impl SurfaceViewerStates {
                 MicroSurfaceUniforms::aligned_size(&gpu.device);
 
             if !surfaces.is_empty() {
-                render_pass.set_pipeline(&self.surf_pipeline.pipeline);
-                render_pass.set_bind_group(0, &state.surface.globals_bind_group, &[]);
-
                 for (hdl, _) in surfaces.iter() {
                     let renderable = cache.get_micro_surface_renderable_mesh_by_surface_id(**hdl);
                     if renderable.is_none() {
@@ -377,6 +375,8 @@ impl SurfaceViewerStates {
                         .position(|x| x == *hdl)
                         .unwrap();
                     let renderable = renderable.unwrap();
+                    render_pass.set_pipeline(&self.surf_pipeline.pipeline);
+                    render_pass.set_bind_group(0, &state.surface.globals_bind_group, &[]);
                     render_pass.set_bind_group(
                         1,
                         &state.surface.locals_bind_group,
@@ -389,13 +389,28 @@ impl SurfaceViewerStates {
                     );
                     render_pass.draw_indexed(0..renderable.indices_count, 0, 0..1);
 
-                    if state.overlay.normals {
-                        let buffer = renderable.normal_buffer.as_ref().unwrap();
+                    if state.overlay.facet_normals {
+                        let buffer = renderable.facet_normal_buffer.as_ref().unwrap();
                         render_pass.set_pipeline(&self.surf_pipeline.normals_pipeline);
                         render_pass.set_vertex_buffer(0, buffer.slice(..));
                         let mut constants = [0.0; 16 + 4];
                         constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
                         constants[16..20].copy_from_slice(&DebugDrawingState::SURFACE_NORMAL_COLOR);
+                        render_pass.set_push_constants(
+                            wgpu::ShaderStages::VERTEX_FRAGMENT,
+                            0,
+                            bytemuck::cast_slice(&constants),
+                        );
+                        render_pass.draw(0..buffer.size() as u32 / 12, 0..1);
+                    }
+
+                    if state.overlay.vertex_normals {
+                        let buffer = renderable.vertex_normal_buffer.as_ref().unwrap();
+                        render_pass.set_pipeline(&self.surf_pipeline.normals_pipeline);
+                        render_pass.set_vertex_buffer(0, buffer.slice(..));
+                        let mut constants = [0.0; 16 + 4];
+                        constants[0..16].copy_from_slice(&Mat4::IDENTITY.to_cols_array());
+                        constants[16..20].copy_from_slice(&DebugDrawingState::VERTEX_NORMAL_COLOR);
                         render_pass.set_push_constants(
                             wgpu::ShaderStages::VERTEX_FRAGMENT,
                             0,
@@ -510,7 +525,7 @@ impl MicroSurfaceState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
+                    cull_mode: Some(wgpu::Face::Back),
                     unclipped_depth: false,
                     polygon_mode: wgpu::PolygonMode::Line,
                     conservative: false,
@@ -811,15 +826,20 @@ impl Dockable for SurfaceViewer {
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     ui.menu_button("Overlay", |ui| {
-                        let a = ui.checkbox(&mut self.overlay.normals, "Normals").changed();
+                        let a = ui
+                            .checkbox(&mut self.overlay.facet_normals, "Facet Normals")
+                            .changed();
                         let b = ui
-                            .checkbox(&mut self.overlay.tangents, "Tangents")
+                            .checkbox(&mut self.overlay.vertex_normals, "Vertex Normals")
                             .changed();
                         let c = ui
+                            .checkbox(&mut self.overlay.tangents, "Tangents")
+                            .changed();
+                        let d = ui
                             .checkbox(&mut self.overlay.bitangents, "Bitangents")
                             .changed();
-                        let d = ui.checkbox(&mut self.overlay.uvs, "UVs").changed();
-                        if a || b || c || d {
+                        let e = ui.checkbox(&mut self.overlay.uvs, "UVs").changed();
+                        if a || b || c || d || e {
                             self.event_loop.send_event(VgonioEvent::SurfaceViewer(
                                 SurfaceViewerEvent::UpdateOverlay {
                                     uuid: self.uuid,

@@ -5,6 +5,7 @@ use base::{
 };
 use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 use uuid::Uuid;
+use wgpu::util::DeviceExt;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]
@@ -17,7 +18,8 @@ pub struct RenderableMesh {
     pub vertex_layout: VertexLayout,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub normal_buffer: Option<wgpu::Buffer>,
+    pub facet_normal_buffer: Option<wgpu::Buffer>,
+    pub vertex_normal_buffer: Option<wgpu::Buffer>,
     pub index_format: wgpu::IndexFormat,
     pub topology: wgpu::PrimitiveTopology,
 }
@@ -76,7 +78,7 @@ impl RenderableMesh {
 
         let vertex_layout = VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None);
 
-        let normals = mesh
+        let facet_normals = mesh
             .facet_normals
             .iter()
             .zip(mesh.facets.chunks(3))
@@ -86,12 +88,29 @@ impl RenderableMesh {
                     .fold(Vec3::ZERO, |acc, v| acc + mesh.verts[*v as usize] / 3.0);
                 [center, center + *n * 0.35]
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
 
-        let normal_buffer = Some(ctx.device.create_buffer_init(
+        let facet_normal_buffer = Some(ctx.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("mesh_view_normal_buffer"),
-                contents: bytemuck::cast_slice(&normals),
+                contents: bytemuck::cast_slice(&facet_normals),
+                usage: wgpu::BufferUsages::VERTEX,
+            },
+        ));
+
+        let vertex_normals = mesh
+            .vert_normals
+            .iter()
+            .zip(mesh.verts.iter())
+            .flat_map(|(n, v)| [*v, *v + *n * 0.35])
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        let vertex_normal_buffer = Some(ctx.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("mesh_view_normal_buffer"),
+                contents: bytemuck::cast_slice(&vertex_normals),
                 usage: wgpu::BufferUsages::VERTEX,
             },
         ));
@@ -112,7 +131,8 @@ impl RenderableMesh {
             vertex_layout,
             vertex_buffer,
             index_buffer,
-            normal_buffer,
+            facet_normal_buffer,
+            vertex_normal_buffer,
             index_format: wgpu::IndexFormat::Uint32,
             topology: wgpu::PrimitiveTopology::TriangleList,
         }
