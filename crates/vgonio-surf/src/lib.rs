@@ -28,7 +28,8 @@ use base::{
     units::LengthUnit,
     Asset, Version,
 };
-use glam::{DVec2, Vec2};
+use glam::{DVec2, DVec3, Vec2};
+use log::log;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -54,7 +55,7 @@ fn gen_micro_surface_name() -> String {
 
 /// Offset used when generating [`MicroSurfaceMesh`].
 pub enum HeightOffset {
-    /// Offset the height field by a arbitrary value.
+    /// Offset the height field by an arbitrary value.
     Arbitrary(f32),
     /// Offset the height field so that its minimum height is zero.
     Grounded,
@@ -233,7 +234,7 @@ impl MicroSurface {
         }
     }
 
-    /// Create a micro-surface from a array of elevation values.
+    /// Create a micro-surface from an array of elevation values.
     ///
     /// # Arguments
     ///
@@ -526,7 +527,7 @@ impl MicroSurface {
 
         let mut facet_normals = vec![Vec3::ZERO; num_faces].into_boxed_slice();
         let mut areas = vec![0.0; num_faces].into_boxed_slice();
-        let mut total_area = 0.0;
+        let mut facet_total_area = 0.0;
 
         // Records the index of the facet that shares a vertex.
         let mut topology = vec![[-1; 6]; verts.len()];
@@ -549,7 +550,7 @@ impl MicroSurface {
             let cross = (p1 - p0).cross(p2 - p0);
             facet_normals[i] = cross.normalize();
             areas[i] = 0.5 * cross.length();
-            total_area += areas[i];
+            facet_total_area += areas[i];
         }
 
         // Compute the vertex normals
@@ -578,13 +579,15 @@ impl MicroSurface {
             msurf: self.uuid,
             unit: self.unit,
             height_offset,
-            facet_total_area: total_area,
+            facet_total_area,
         };
         let lod = std::env::var("LOD")
             .map(|s| s.parse().unwrap_or(0))
             .unwrap_or(0);
+        log::debug!("Microfacet Area: {}", facet_total_area,);
         if lod > 0 {
             mesh.curved_smooth(lod);
+            log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
         }
         mesh
     }
@@ -751,7 +754,7 @@ pub enum TriangulationPattern {
 ///
 /// Triangle winding is counter-clockwise.
 ///
-/// Pattern is specified by `TriangulationPattern`.
+/// The Pattern is specified by `TriangulationPattern`.
 ///
 /// # Returns
 ///
@@ -941,7 +944,7 @@ impl MicroSurfaceMesh {
         let new_num_facets = self.num_facets * n_tris_per_facet;
         let mut new_facets = vec![0u32; new_num_facets * 3].into_boxed_slice();
         let mut new_facet_normals = vec![Vec3::ZERO; new_num_facets].into_boxed_slice();
-        let mut new_facet_areas = vec![0.0f32; new_num_facets].into_boxed_slice();
+        let mut new_facet_areas = vec![0.0f64; new_num_facets].into_boxed_slice();
         let uvs = {
             let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pts_per_edge as usize)
                 .values()
@@ -997,14 +1000,14 @@ impl MicroSurfaceMesh {
                 offset += nl;
             }
         }
-
+        const FACET_CHUNK_SIZE: usize = 128;
         self.facets
-            .par_chunks(3 * 64)
-            .zip(new_verts.par_chunks_mut(64 * n_pts_per_facet))
-            .zip(new_vert_normals.par_chunks_mut(64 * n_pts_per_facet))
-            .zip(new_facets.par_chunks_mut(64 * 3 * n_tris_per_facet))
-            .zip(new_facet_normals.par_chunks_mut(64 * n_tris_per_facet))
-            .zip(new_facet_areas.par_chunks_mut(64 * n_tris_per_facet))
+            .par_chunks(3 * FACET_CHUNK_SIZE)
+            .zip(new_verts.par_chunks_mut(FACET_CHUNK_SIZE * n_pts_per_facet))
+            .zip(new_vert_normals.par_chunks_mut(FACET_CHUNK_SIZE * n_pts_per_facet))
+            .zip(new_facets.par_chunks_mut(FACET_CHUNK_SIZE * 3 * n_tris_per_facet))
+            .zip(new_facet_normals.par_chunks_mut(FACET_CHUNK_SIZE * n_tris_per_facet))
+            .zip(new_facet_areas.par_chunks_mut(FACET_CHUNK_SIZE * n_tris_per_facet))
             .enumerate()
             .for_each(
                 |(
@@ -1067,25 +1070,41 @@ impl MicroSurfaceMesh {
                                     .zip(new_facet_normals.iter_mut())
                                     .zip(new_area.iter_mut())
                                 {
-                                    let p0 = new_verts[new_facet[0] as usize - vert_base as usize];
-                                    let p1 = new_verts[new_facet[1] as usize - vert_base as usize];
-                                    let p2 = new_verts[new_facet[2] as usize - vert_base as usize];
+                                    let p0: DVec3 = new_verts
+                                        [new_facet[0] as usize - vert_base as usize]
+                                        .into();
+                                    let p1: DVec3 = new_verts
+                                        [new_facet[1] as usize - vert_base as usize]
+                                        .into();
+                                    let p2: DVec3 = new_verts
+                                        [new_facet[2] as usize - vert_base as usize]
+                                        .into();
                                     let cross = (p1 - p0).cross(p2 - p0);
                                     *new_area = 0.5 * cross.length();
-                                    if cross.dot(Vec3::Z) < 0.0 {
-                                        *new_normal = -cross.normalize();
+                                    let mut normal = cross.normalize();
+                                    if cross.dot(DVec3::Z) < 0.0 {
+                                        normal = -normal;
+                                        *new_normal =
+                                            (normal.x as f32, normal.y as f32, normal.z as f32)
+                                                .into();
                                         new_facet.swap(1, 2);
                                     } else {
-                                        *new_normal = cross.normalize();
+                                        *new_normal =
+                                            (normal.x as f32, normal.y as f32, normal.z as f32)
+                                                .into();
                                     }
                                 }
                             },
                         );
                 },
             );
-        self.facet_total_area = new_facet_areas.iter().sum();
+        self.facet_total_area = new_facet_areas.iter().sum::<f64>() as f32;
         self.facet_normals = new_facet_normals;
-        self.facet_areas = new_facet_areas;
+        self.facet_areas = new_facet_areas
+            .into_iter()
+            .map(|x| *x as f32)
+            .collect::<Vec<f32>>()
+            .into_boxed_slice();
         self.facets = new_facets;
         self.verts = new_verts;
         self.num_facets = new_num_facets;
@@ -1101,7 +1120,7 @@ pub enum MicroSurfaceOrigin {
     /// "Predicting Appearance from the Measured Micro-geometry of Metal
     /// Surfaces".
     Dong2015,
-    /// Micro-geometry height field from µsurf confocal microscope system.
+    /// Micro-geometry height field from a µsurf confocal microscope system.
     Usurf,
     /// Micro-geometry height field from OmniSurf3D.
     OmniSurf3D,
@@ -1113,9 +1132,9 @@ impl MicroSurface {
     /// different file format. Supported formats are
     ///
     /// 1. Ascii Matrix file (plain text) coming from Predicting Appearance from
-    ///    Measured Microgeometry of Metal Surfaces.
+    ///    Measured Micro-geometry of Metal Surfaces.
     ///
-    /// 2. Plain text data coming from µsurf confocal microscope system.
+    /// 2. Plain text data coming from a µsurf confocal microscope system.
     ///
     /// 3. Micro-surface height field file (binary format, ends with *.vgms).
     ///
@@ -1133,14 +1152,14 @@ impl MicroSurface {
         let mut reader = BufReader::new(file);
 
         if let Some(origin) = origin {
-            // If origin is specified, call directly corresponding loading function.
+            // If the origin is specified, call directly corresponding loading function.
             match origin {
                 MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(&mut reader, filepath),
                 MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(&mut reader, filepath),
                 MicroSurfaceOrigin::OmniSurf3D => io::read_omni_surf_3d(&mut reader, filepath),
             }
         } else {
-            // Otherwise, try to figure out the file format by reading first several bytes.
+            // Otherwise, try to figure out the file format by reading the first several bytes.
             let mut buf = [0_u8; 4];
             reader.read_exact(&mut buf).map_err(|err| {
                 VgonioError::from_io_error(
