@@ -37,6 +37,7 @@ use std::{
     io::{BufReader, BufWriter, Read, Seek, Write},
     mem::MaybeUninit,
     path::{Path, PathBuf},
+    sync::atomic::AtomicU64,
 };
 
 /// Static variable used to generate height field name.
@@ -763,7 +764,7 @@ pub fn regular_grid_triangulation(
     let mut triangulate: Box<dyn FnMut(usize, usize, &mut usize, &mut [u32])> = match pattern {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
-                if col != 0 {
+                if col > 0 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i - 1) as u32;
                     indices[*tri + 2] = (i + cols - 1) as u32;
@@ -781,8 +782,8 @@ pub fn regular_grid_triangulation(
                     indices[*tri + 1] = (i + cols) as u32;
                     indices[*tri + 2] = (i + cols + 1) as u32;
                     indices[*tri + 3] = i as u32;
-                    indices[*tri + 5] = (i + cols + 1) as u32;
-                    indices[*tri + 4] = (i + 1) as u32;
+                    indices[*tri + 4] = (i + cols + 1) as u32;
+                    indices[*tri + 5] = (i + 1) as u32;
                     *tri += 6;
                 }
             },
@@ -958,7 +959,10 @@ impl MicroSurfaceMesh {
                     i += 1;
                 }
             }
-            assert_eq!(i, n_pts_per_facet);
+            assert_eq!(
+                i, n_pts_per_facet,
+                "Number of UVs does not match the number of points"
+            );
             unsafe { uvs.assume_init() }
         };
 
@@ -1071,9 +1075,7 @@ impl MicroSurfaceMesh {
                                     *new_area = 0.5 * cross.length();
                                     if cross.dot(Vec3::Z) < 0.0 {
                                         *new_normal = -cross.normalize();
-                                        let a = new_facet[1];
-                                        new_facet[1] = new_facet[2];
-                                        new_facet[2] = a;
+                                        new_facet.swap(1, 2);
                                     } else {
                                         *new_normal = cross.normalize();
                                     }
