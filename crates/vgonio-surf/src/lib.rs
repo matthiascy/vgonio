@@ -28,7 +28,7 @@ use base::{
     units::LengthUnit,
     Asset, Version,
 };
-use glam::Vec2;
+use glam::{DVec2, Vec2};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -952,11 +952,10 @@ impl MicroSurfaceMesh {
             let mut i = 0;
             for u in uv_vals.iter() {
                 for v in uv_vals.iter() {
-                    if u + v > 1.0 {
-                        continue;
+                    if u + v <= 1.0 || (u + v - 1.0).abs() <= 1e-6 {
+                        uvs[i].write(Vec2::new(*u, *v));
+                        i += 1;
                     }
-                    uvs[i].write(Vec2::new(*u, *v));
-                    i += 1;
                 }
             }
             assert_eq!(
