@@ -20,35 +20,35 @@ use surf::TriangulationPattern;
 #[derive(Debug)]
 pub struct Config {
     /// Path to the configuration directory.
-    sys_config_dir: std::path::PathBuf,
+    sys_config_dir: PathBuf,
 
     /// Path to the cache directory.
-    sys_cache_dir: std::path::PathBuf,
+    sys_cache_dir: PathBuf,
 
     /// Path to the data files.
-    sys_data_dir: std::path::PathBuf,
+    sys_data_dir: PathBuf,
 
     /// Current working directory (where the user started the program).
     /// CWD will be used in case [`UserConfig::output_dir`] is not defined.
-    cwd: std::path::PathBuf,
+    cwd: PathBuf,
 
     /// User-defined configuration.
     user: UserConfig,
 }
 
-/// Options can be configured by user.
+/// Options configured by user.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserConfig {
     /// Path to user-defined cache directory.
     /// If not set, the default cache directory is used.
-    pub cache_dir: Option<std::path::PathBuf>,
+    pub cache_dir: Option<PathBuf>,
 
     /// Path to the user-defined output directory.
     /// If not set, the default output directory is used.
-    pub output_dir: Option<std::path::PathBuf>,
+    pub output_dir: Option<PathBuf>,
 
     /// Path to the user-defined data files directory.
-    pub data_dir: Option<std::path::PathBuf>,
+    pub data_dir: Option<PathBuf>,
 
     /// Triangulation pattern for heightfield.
     #[serde(default = "TriangulationPattern::default")]
@@ -375,7 +375,7 @@ impl Config {
 /// # Returns
 ///
 /// A `PathBuf` indicating the resolved path. It differs according to the
-/// base path and patterns inside of `path`.
+/// base path and patterns inside `path`.
 ///
 ///   1. `path` is `None`
 ///

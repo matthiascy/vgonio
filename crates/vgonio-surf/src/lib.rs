@@ -754,7 +754,7 @@ pub enum TriangulationPattern {
 ///
 /// # Returns
 ///
-/// Vec<u32>: An array of vertex indices forming triangles.
+/// Box<[u32]>: An array of vertex indices forming triangles.
 pub fn regular_grid_triangulation(
     rows: usize,
     cols: usize,
@@ -763,64 +763,26 @@ pub fn regular_grid_triangulation(
     let mut triangulate: Box<dyn FnMut(usize, usize, &mut usize, &mut [u32])> = match pattern {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
-                // if col != 0 {
-                //     indices[*tri] = i as u32;
-                //     indices[*tri + 1] = (i - 1) as u32;
-                //     indices[*tri + 2] = (i + cols - 1) as u32;
-                //     indices[*tri + 3] = i as u32;
-                //     indices[*tri + 4] = (i + cols - 1) as u32;
-                //     indices[*tri + 5] = (i + cols) as u32;
-                //     *tri += 6;
-                // }
-                if col == 0 {
+                if col != 0 {
                     indices[*tri] = i as u32;
-                    indices[*tri + 1] = (i + cols) as u32;
-                    indices[*tri + 2] = (i + 1) as u32;
-                    *tri += 3;
-                } else if col == cols - 1 {
-                    indices[*tri] = i as u32;
-                    indices[*tri + 1] = (i + cols - 1) as u32;
-                    indices[*tri + 2] = (i + cols) as u32;
-                    *tri += 3;
-                } else {
-                    indices[*tri] = i as u32;
-                    indices[*tri + 1] = (i + cols - 1) as u32;
-                    indices[*tri + 2] = (i + cols) as u32;
+                    indices[*tri + 1] = (i - 1) as u32;
+                    indices[*tri + 2] = (i + cols - 1) as u32;
                     indices[*tri + 3] = i as u32;
-                    indices[*tri + 4] = (i + cols) as u32;
-                    indices[*tri + 5] = (i + 1) as u32;
+                    indices[*tri + 4] = (i + cols - 1) as u32;
+                    indices[*tri + 5] = (i + cols) as u32;
                     *tri += 6;
                 }
             },
         ),
         TriangulationPattern::TopLeftToBottomRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
-                // if col != cols - 1 {
-                //     indices[*tri] = i as u32;
-                //     indices[*tri + 1] = (i + cols) as u32;
-                //     indices[*tri + 2] = (i + cols + 1) as u32;
-                //     indices[*tri + 3] = i as u32;
-                //     indices[*tri + 5] = (i + cols + 1) as u32;
-                //     indices[*tri + 4] = (i + 1) as u32;
-                //     *tri += 6;
-                // }
-                if col == 0 {
+                if col != cols - 1 {
                     indices[*tri] = i as u32;
                     indices[*tri + 1] = (i + cols) as u32;
                     indices[*tri + 2] = (i + cols + 1) as u32;
-                    *tri += 3;
-                } else if col == cols - 1 {
-                    indices[*tri] = i as u32;
-                    indices[*tri + 1] = (i - 1) as u32;
-                    indices[*tri + 2] = (i + cols) as u32;
-                    *tri += 3;
-                } else {
-                    indices[*tri] = i as u32;
-                    indices[*tri + 1] = (i - 1) as u32;
-                    indices[*tri + 2] = (i + cols) as u32;
                     indices[*tri + 3] = i as u32;
-                    indices[*tri + 4] = (i + cols) as u32;
                     indices[*tri + 5] = (i + cols + 1) as u32;
+                    indices[*tri + 4] = (i + 1) as u32;
                     *tri += 6;
                 }
             },

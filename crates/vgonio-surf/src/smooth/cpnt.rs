@@ -10,11 +10,12 @@ use std::mem::MaybeUninit;
 ///
 /// # Arguments
 ///
-/// * `Vs` - The vertices of the triangle.
-/// * `ns` - The normals of the triangle.
-/// * `Uvs` - The uv coordinates of the desired interpolation points on the
+/// * `vs` - The vertices of the triangle.
+/// * `ns` - The normals of triangle vertices.
+/// * `uvs` - The uv coordinates of the desired interpolation points on the
 ///   triangle.
-/// * `ps` - The output points of the sub-triangulation.
+/// * `ovs` - The output points of the sub-triangulation.
+/// * `ons` - The output normals of trianglulated points.
 pub fn subdivide_triangle(
     vs: &[Vec3],
     ns: &[Vec3],

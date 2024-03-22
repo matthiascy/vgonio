@@ -1,3 +1,4 @@
 triangulation = "top-left-to-bottom-right"
+# triangulation = "bottom-left-to-top-right"
 output_dir = "../../virtual-gonio/output"
 data_dir = "../../virtual-gonio/datafiles"
