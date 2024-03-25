@@ -197,8 +197,9 @@ fn measure_area_distribution_by_points<'a>(
             log::trace!("  -- micro facet total area: {}", mesh.facet_total_area);
             log::trace!("  -- micro facet count: {}", mesh.facet_normals.len());
 
+            let zenith_step_count = zenith.step_count_wrapped();
             // Sort the facets into bins according to their normal direction's zenith angle.
-            let mut facets_bins = vec![vec![]; zenith.step_count_wrapped()];
+            let mut facets_bins = vec![vec![]; zenith_step_count].into_boxed_slice();
             let macro_area = if !params.crop_to_disk {
                 for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
                     let zen = math::theta(normal);
@@ -311,6 +312,62 @@ fn measure_area_distribution_by_points<'a>(
                 }
             }
 
+            // let mut samples =
+            //     vec![0.0f32; azimuth.step_count_wrapped() *
+            // zenith_step_count].into_boxed_slice(); const SAMPLE_CHUNK_SIZE:
+            // usize = 1024; samples
+            //     .par_chunks_mut(SAMPLE_CHUNK_SIZE)
+            //     .enumerate()
+            //     .for_each(|(chunk_idx, spls)| {
+            //         spls.iter_mut().enumerate().for_each(|(i, s)| {
+            //             let sample_idx = chunk_idx * SAMPLE_CHUNK_SIZE + i;
+            //             let azi_idx = sample_idx / zenith_step_count;
+            //             let zen_idx = sample_idx % zenith_step_count;
+            //             let azimuth = azi_idx as f32 * azimuth.step_size;
+            //             let zen = zen_idx as f32 * zenith.step_size;
+            //             let dir = math::sph_to_cart(zen, azimuth);
+            //             let facets = &facets_bins[zen_idx];
+            //             let facets_area = if params.use_facet_area {
+            //                 facets
+            //                     .par_chunks(FACET_CHUNK_SIZE)
+            //                     .map(|idxs| {
+            //                         idxs.iter().fold(0.0, |sum, idx| {
+            //                             let n = &mesh.facet_normals[*idx];
+            //                             let a = mesh.facet_areas[*idx];
+            //                             if n.dot(dir) <= half_zenith_bin_width_cos {
+            //                                 sum
+            //                             } else {
+            //                                 sum + a
+            //                             }
+            //                         })
+            //                     })
+            //                     .sum::<f32>()
+            //             } else {
+            //                 facets
+            //                     .par_chunks(FACET_CHUNK_SIZE)
+            //                     .map(|idxs| {
+            //                         idxs.iter().fold(0, |sum, idx| {
+            //                             let n = &mesh.facet_normals[*idx];
+            //                             if n.dot(dir) <= half_zenith_bin_width_cos {
+            //                                 sum
+            //                             } else {
+            //                                 sum + 1
+            //                             }
+            //                         })
+            //                     })
+            //                     .sum::<u32>() as f32
+            //             };
+            //             *s = facets_area * denom_rcp;
+            //             log::trace!(
+            //                 "-- φ: {}, θ: {}  | facet area: {} => {}",
+            //                 azimuth.prettified(),
+            //                 zen.prettified(),
+            //                 facets_area,
+            //                 *s
+            //             );
+            //         });
+            //     });
+
             Some(MeasurementData {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
@@ -339,9 +396,8 @@ fn measure_area_distribution_by_partition<'a>(
         "  -- Partitioning the hemisphere into {} patches.",
         partition.num_patches()
     );
-    // TODO: Boxed slice
     // Data buffer for data of each patch.
-    let mut samples = vec![0.0; partition.num_patches()];
+    let mut samples = vec![0.0; partition.num_patches()].into_boxed_slice();
     surfaces
         .filter_map(|((hdl, surf), mesh)| {
             if surf.is_none() || mesh.is_none() {
