@@ -6,11 +6,11 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 1000000
+    num_rays: 10000000
     max_bounces: 10
-    zenith: 0deg .. =0deg / 5deg
+    zenith: 0deg .. =90deg / 5deg
     azimuth: 0deg .. =0deg / 60deg
-    spectrum: 380 nm .. =780 nm / 400 nm
+    spectrum: 400 nm .. =700 nm / 300 nm
   receiver:
     domain: upper_hemisphere
     precision:

@@ -1,6 +1,6 @@
 #[cfg(feature = "surf-gen")]
 use crate::app::cli::GenerateOptions;
-use crate::app::cli::{ConvertOptions, FitOptions, MeasureOptions};
+use crate::app::cli::{ConvertOptions, DiffOptions, FitOptions, MeasureOptions};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -88,6 +88,9 @@ pub enum SubCommand {
 
     /// Fits a measured data to a model.
     Fit(FitOptions),
+
+    /// Computes the difference between measured data.
+    Diff(DiffOptions),
 }
 
 /// Arguments for the `convert --resize` command.

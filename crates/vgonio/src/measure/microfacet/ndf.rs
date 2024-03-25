@@ -203,7 +203,7 @@ fn measure_area_distribution_by_points<'a>(
             let macro_area = if !params.crop_to_disk {
                 for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {
                     let zen = math::theta(normal);
-                    let idxs = classify_normal_by_zenith(zen, zenith, 1.2);
+                    let idxs = classify_normal_by_zenith(zen, zenith, 1.0);
                     for idx in idxs {
                         if idx == 0xFF {
                             continue;
@@ -235,7 +235,7 @@ fn measure_area_distribution_by_points<'a>(
                     macro_area += mesh.facet_areas[facet_idx];
                     num_normals += 1;
                     let zen = math::theta(normal);
-                    for idx in classify_normal_by_zenith(zen, zenith, 1.2) {
+                    for idx in classify_normal_by_zenith(zen, zenith, 1.0) {
                         if idx == 0xFF {
                             continue;
                         }
@@ -397,7 +397,8 @@ fn measure_area_distribution_by_partition<'a>(
         partition.num_patches()
     );
     // Data buffer for data of each patch.
-    let mut samples = vec![0.0; partition.num_patches()].into_boxed_slice();
+    let mut samples = vec![0.0; partition.num_patches()];
+    samples.shrink_to_fit();
     surfaces
         .filter_map(|((hdl, surf), mesh)| {
             if surf.is_none() || mesh.is_none() {

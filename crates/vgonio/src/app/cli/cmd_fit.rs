@@ -207,6 +207,11 @@ pub struct FitOptions {
     )]
     pub family: BxdfFamily,
 
+    #[clap(
+        long,
+        help = "Isotropy of the microfacet model. If not specified, the default isotropy will be \
+                used."
+    )]
     pub isotropy: Isotropy,
     #[clap(
         long,

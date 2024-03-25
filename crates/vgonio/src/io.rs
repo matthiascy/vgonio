@@ -701,7 +701,7 @@ pub mod vgmo {
                         sim_kind,
                         emitter,
                         receiver,
-                        fresnel: false, // TODO: read from file
+                        fresnel: false, // TODO: read/write from file
                     })
                 }
                 _ => Err(std::io::Error::new(
