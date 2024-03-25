@@ -1023,6 +1023,7 @@ impl MicroSurfaceMesh {
                         new_facets_area_chunk,
                     ),
                 )| {
+                    let mut new_verts_f64 = vec![DVec3::ZERO; n_pts_per_facet].into_boxed_slice();
                     facets_chunk
                         .chunks(3)
                         .zip(new_verts_chunk.chunks_mut(n_pts_per_facet))
@@ -1057,12 +1058,13 @@ impl MicroSurfaceMesh {
                                     &tri_verts,
                                     &tri_norms,
                                     &uvs,
-                                    new_verts,
+                                    &mut new_verts_f64,
                                     new_vert_normals,
                                 );
                                 // Triangulate the new points
-                                let vert_base =
-                                    (chunk_idx * 64 * n_pts_per_facet + i * n_pts_per_facet) as u32;
+                                let vert_base = (chunk_idx * FACET_CHUNK_SIZE * n_pts_per_facet
+                                    + i * n_pts_per_facet)
+                                    as u32;
                                 triangulate(lod, vert_base, new_facets);
                                 // Compute the per-facet normals and areas
                                 for ((new_facet, new_normal), new_area) in new_facets
@@ -1070,15 +1072,12 @@ impl MicroSurfaceMesh {
                                     .zip(new_facet_normals.iter_mut())
                                     .zip(new_area.iter_mut())
                                 {
-                                    let p0: DVec3 = new_verts
-                                        [new_facet[0] as usize - vert_base as usize]
-                                        .into();
-                                    let p1: DVec3 = new_verts
-                                        [new_facet[1] as usize - vert_base as usize]
-                                        .into();
-                                    let p2: DVec3 = new_verts
-                                        [new_facet[2] as usize - vert_base as usize]
-                                        .into();
+                                    let p0 =
+                                        new_verts_f64[new_facet[0] as usize - vert_base as usize];
+                                    let p1 =
+                                        new_verts_f64[new_facet[1] as usize - vert_base as usize];
+                                    let p2 =
+                                        new_verts_f64[new_facet[2] as usize - vert_base as usize];
                                     let cross = (p1 - p0).cross(p2 - p0);
                                     *new_area = 0.5 * cross.length();
                                     let mut normal = cross.normalize();
@@ -1094,6 +1093,13 @@ impl MicroSurfaceMesh {
                                                 .into();
                                     }
                                 }
+                                new_verts_f64.iter().zip(new_verts.iter_mut()).for_each(
+                                    |(vertf64, vert)| {
+                                        vert.x = vertf64.x as f32;
+                                        vert.y = vertf64.y as f32;
+                                        vert.z = vertf64.z as f32;
+                                    },
+                                );
                             },
                         );
                 },

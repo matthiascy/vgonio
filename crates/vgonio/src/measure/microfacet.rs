@@ -4,11 +4,11 @@
 //! (NDF, normal distribution function) and the shadowing-masking function (G,
 //! geometric attenuation function).
 
-mod adf;
 mod msf;
+mod ndf;
 pub(crate) mod params;
 mod sdf;
 
-pub use adf::*;
 pub use msf::*;
+pub use ndf::*;
 pub use sdf::*;

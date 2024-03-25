@@ -19,7 +19,7 @@ pub fn subdivide_triangle(
     vs: &[Vec3],
     ns: &[Vec3],
     uvs: &[Vec2],
-    ovs: &mut [Vec3],
+    ovs: &mut [DVec3],
     ons: &mut [Vec3],
 ) {
     debug_assert!(vs.len() >= 3, "The input vertices must be a triangle.");
@@ -34,12 +34,11 @@ pub fn subdivide_triangle(
     );
     let vs: [DVec3; 3] = [vs[0].into(), vs[1].into(), vs[2].into()];
     let ns: [DVec3; 3] = [ns[0].into(), ns[1].into(), ns[2].into()];
-    let mut ws = [[DVec3::ZERO; 3]; 3];
+    let mut ws = [[0.0f64; 3]; 3];
     for i in 0..3 {
         for j in 0..3 {
             if i != j {
-                let pj_pi = vs[j] - vs[i];
-                ws[i][j] = pj_pi * ns[i];
+                ws[i][j] = (vs[j] - vs[i]).dot(ns[i]);
             }
         }
     }
@@ -63,13 +62,6 @@ pub fn subdivide_triangle(
     let n011 = h011.normalize();
     let n101 = h101.normalize();
 
-    // let b300 = vs[0];
-    // let b030 = vs[1];
-    // let b003 = vs[2];
-    // let n200 = ns[0];
-    // let n020 = ns[1];
-    // let n002 = ns[2];
-
     ovs.iter_mut()
         .zip(ons.iter_mut())
         .zip(uvs.iter())
@@ -79,9 +71,12 @@ pub fn subdivide_triangle(
             let w2 = w * w;
             let u2 = u * u;
             let v2 = v * v;
-            let v = vs[0] * cbr(w)
-                + vs[1] * cbr(u)
-                + vs[2] * cbr(v)
+            let w3 = cbr(w);
+            let u3 = cbr(u);
+            let v3 = cbr(v);
+            *ov = vs[0] * w3
+                + vs[1] * u3
+                + vs[2] * v3
                 + b210 * 3.0 * w2 * u
                 + b120 * 3.0 * w * u2
                 + b201 * 3.0 * w2 * v
@@ -89,7 +84,6 @@ pub fn subdivide_triangle(
                 + b102 * 3.0 * w * v2
                 + b012 * 3.0 * u * v2
                 + b111 * 6.0 * w * u * v;
-            *ov = Vec3::new(v.x as f32, v.y as f32, v.z as f32);
             let n =
                 ns[0] * w2 + ns[1] * u2 + ns[2] * v2 + n110 * w * u + n011 * u * v + n101 * w * v;
             *on = Vec3::new(n.x as f32, n.y as f32, n.z as f32);

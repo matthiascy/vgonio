@@ -212,6 +212,7 @@ fn measure_area_distribution_by_points<'a>(
                 }
                 if params.use_facet_area {
                     log::debug!("  -- macro surface area: {}", mesh.macro_surface_area());
+                    log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
                     mesh.macro_surface_area()
                 } else {
                     log::debug!(
@@ -257,9 +258,9 @@ fn measure_area_distribution_by_points<'a>(
             log::debug!("  -- solid angle: {}", solid_angle);
             log::debug!("  -- denom_rcp: {}", denom_rcp);
 
-            // TODO: allocate exactly the needed size for the samples. Boxed slice
             let mut samples =
-                vec![0.0f32; azimuth.step_count_wrapped() * zenith.step_count_wrapped()];
+                vec![0.0f32; azimuth.step_count_wrapped() * zenith.step_count_wrapped()]
+                    .into_boxed_slice();
             for azi_idx in 0..azimuth.step_count_wrapped() {
                 for zen_idx in 0..zenith.step_count_wrapped() {
                     let azimuth = azi_idx as f32 * azimuth.step_size;
@@ -314,10 +315,7 @@ fn measure_area_distribution_by_points<'a>(
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementDataSource::Measured(*hdl),
                 timestamp: chrono::Local::now(),
-                measured: MeasuredData::Adf(MeasuredAdfData {
-                    params,
-                    samples: samples.into_boxed_slice(),
-                }),
+                measured: MeasuredData::Adf(MeasuredAdfData { params, samples }),
             })
         })
         .collect()
