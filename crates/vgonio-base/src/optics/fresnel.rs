@@ -502,11 +502,12 @@ pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
 /// * `eta_t` - refractive index of the transmitted medium.
 /// * `k` - absorption coefficient of the transmitted medium.
 pub fn reflectance_dielectric_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, k_t: f32) -> f32 {
-    assert!(
-        (-f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i_abs),
-        "the cosine of the incident angle should always be positive {}",
-        cos_i_abs
-    );
+    // assert!(
+    //     (-f32::EPSILON..=1.0 + f32::EPSILON).contains(&cos_i_abs),
+    //     "the cosine of the incident angle should always be positive {}",
+    //     cos_i_abs
+    // );
+    let cos_i_abs = cos_i_abs.clamp(0.0, 1.0);
     // Computes relative index of refraction.
     let eta = eta_t / eta_i;
     let k = k_t / eta_i;

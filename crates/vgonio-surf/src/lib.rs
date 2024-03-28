@@ -584,8 +584,9 @@ impl MicroSurface {
         let lod = std::env::var("LOD")
             .map(|s| s.parse().unwrap_or(0))
             .unwrap_or(0);
-        log::debug!("Microfacet Area: {}", facet_total_area,);
+        log::debug!("Microfacet Area: {}", facet_total_area);
         if lod > 0 {
+            log::debug!("Subdividing the mesh with LOD: {}", lod);
             mesh.curved_smooth(lod);
             log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
         }
@@ -1008,6 +1009,7 @@ impl MicroSurfaceMesh {
             .zip(new_facets.par_chunks_mut(FACET_CHUNK_SIZE * 3 * n_tris_per_facet))
             .zip(new_facet_normals.par_chunks_mut(FACET_CHUNK_SIZE * n_tris_per_facet))
             .zip(new_facet_areas.par_chunks_mut(FACET_CHUNK_SIZE * n_tris_per_facet))
+            .zip(self.facet_normals.par_chunks(FACET_CHUNK_SIZE))
             .enumerate()
             .for_each(
                 |(
@@ -1015,12 +1017,15 @@ impl MicroSurfaceMesh {
                     (
                         (
                             (
-                                ((facets_chunk, new_verts_chunk), new_vert_normals_chunk),
-                                new_facets_chunk,
+                                (
+                                    ((facets_chunk, new_verts_chunk), new_vert_normals_chunk),
+                                    new_facets_chunk,
+                                ),
+                                new_facets_normal_chunk,
                             ),
-                            new_facets_normal_chunk,
+                            new_facets_area_chunk,
                         ),
-                        new_facets_area_chunk,
+                        facet_normals_chunk,
                     ),
                 )| {
                     let mut new_verts_f64 = vec![DVec3::ZERO; n_pts_per_facet].into_boxed_slice();
@@ -1031,18 +1036,27 @@ impl MicroSurfaceMesh {
                         .zip(new_facets_chunk.chunks_mut(3 * n_tris_per_facet))
                         .zip(new_facets_normal_chunk.chunks_mut(n_tris_per_facet))
                         .zip(new_facets_area_chunk.chunks_mut(n_tris_per_facet))
+                        .zip(facet_normals_chunk.iter())
                         .enumerate()
                         .for_each(
                             |(
                                 i,
                                 (
                                     (
-                                        (((facet, new_verts), new_vert_normals), new_facets),
-                                        new_facet_normals,
+                                        (
+                                            (((facet, new_verts), new_vert_normals), new_facets),
+                                            new_facet_normals,
+                                        ),
+                                        new_area,
                                     ),
-                                    new_area,
+                                    facet_normal,
                                 ),
                             )| {
+                                let original_facet_normal = DVec3::new(
+                                    facet_normal.x as f64,
+                                    facet_normal.y as f64,
+                                    facet_normal.z as f64,
+                                );
                                 let tri_verts = [
                                     self.verts[facet[0] as usize],
                                     self.verts[facet[1] as usize],
@@ -1081,7 +1095,7 @@ impl MicroSurfaceMesh {
                                     let cross = (p1 - p0).cross(p2 - p0);
                                     *new_area = 0.5 * cross.length();
                                     let mut normal = cross.normalize();
-                                    if cross.dot(DVec3::Z) < 0.0 {
+                                    if normal.dot(original_facet_normal) < 0.0 {
                                         normal = -normal;
                                         *new_normal =
                                             (normal.x as f32, normal.y as f32, normal.z as f32)
