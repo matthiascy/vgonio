@@ -1,5 +1,5 @@
-mod dyn_sized;
-mod fixed_sized;
+pub mod heap;
+pub mod stack;
 
 use core::{fmt::Write, marker::ConstParamTy};
 
@@ -40,24 +40,24 @@ pub unsafe trait Data: Sized + Sealed {
     /// Returns a mutable slice of the data.
     fn as_mut_slice(&mut self) -> &mut [Self::Elem];
 
-    /// Allocates a new storage for given number of elements, without
-    /// initializing the memory.
-    ///
-    /// The storage may be allocated on the heap or on the stack depending
-    /// on the concrete data container. The required size of the storage must
-    /// match the shape of array.
-    ///
-    /// Unsafe because the caller must ensure that the storage is properly
-    /// initialized after the call. Then, the storage will be dropped
-    /// automatically when it goes out of scope.
-    ///
-    /// # Safety
-    ///
-    /// The storage is uninitialized [`MaybeUninit`]. The caller must initialize
-    /// it before using it. Please use `ptr::write` or `ptr::copy` to
-    /// initialize the storage elements without dropping the uninitialized
-    /// values.
-    unsafe fn alloc_uninit(n: usize) -> Self;
+    // /// Allocates a new storage for given number of elements, without
+    // /// initializing the memory.
+    // ///
+    // /// The storage may be allocated on the heap or on the stack depending
+    // /// on the concrete data container. The required size of the storage must
+    // /// match the shape of array.
+    // ///
+    // /// Unsafe because the caller must ensure that the storage is properly
+    // /// initialized after the call. Then, the storage will be dropped
+    // /// automatically when it goes out of scope.
+    // ///
+    // /// # Safety
+    // ///
+    // /// The storage is uninitialized [`MaybeUninit`]. The caller must initialize
+    // /// it before using it. Please use `ptr::write` or `ptr::copy` to
+    // /// initialize the storage elements without dropping the uninitialized
+    // /// values.
+    // unsafe fn alloc_uninit(n: usize) -> Self;
 }
 
 pub trait DataClone: Data + Clone {}

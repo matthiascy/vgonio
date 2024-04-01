@@ -1,10 +1,21 @@
-#![feature(const_fn_floating_point_arithmetic)]
-#![feature(const_trait_impl)]
-#![feature(effects)]
 #![feature(adt_const_params)]
+#![feature(const_fn_floating_point_arithmetic)]
+#![feature(const_mut_refs)]
+#![feature(const_trait_impl)]
+#![feature(decl_macro)]
+#![feature(effects)]
+#![feature(generic_const_exprs)]
+#![feature(allocator_api)]
+#![feature(thin_box)]
+#![feature(new_uninit)]
+#![feature(associated_type_defaults)]
+
+extern crate core;
 
 mod array;
+mod expr;
 pub mod optics;
+mod prelude;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
