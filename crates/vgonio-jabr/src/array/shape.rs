@@ -2,16 +2,22 @@ use crate::array::{dim::DimSeq, mem::MemLayout};
 
 /// Common trait for types that can be used to represent the shape of an array.
 #[const_trait]
-pub trait Shape {
+pub trait Shape<const L: MemLayout> {
     /// The underlying type used to store the shape.
     type Underlying: DimSeq;
-    type Metadata;
+    type Metadata: ShapeMetadata<L>;
     /// Creates a new metadata object for the shape.
-    fn new_metadata(dim_seq: &Self::Underlying, layout: MemLayout) -> Self::Metadata;
+    fn new_metadata(dim_seq: &Self::Underlying) -> Self::Metadata;
+}
+
+pub trait ShapeMetadata<const L: MemLayout> {
+    fn shape(&self) -> &[usize];
+    fn strides(&self) -> &[usize];
 }
 
 /// Metadata for dynamically-sized shapes.
-pub struct ShapeMetadata<T>
+#[derive(Clone, Debug)]
+pub struct DynShapeMetadata<T>
 where
     T: DimSeq,
 {
@@ -23,29 +29,56 @@ where
     pub strides: T,
 }
 
-/// Shape for fixed-size dimension sequences.
-impl<const N: usize> Shape for [usize; N] {
-    type Underlying = [usize; N];
-    type Metadata = ShapeMetadata<[usize; N]>;
+impl<T, const L: MemLayout> ShapeMetadata<L> for DynShapeMetadata<T>
+where
+    T: DimSeq,
+{
+    fn shape(&self) -> &[usize] { self.shape.as_slice() }
 
-    fn new_metadata(dim_seq: &Self::Underlying, layout: MemLayout) -> Self::Metadata {
-        let shape = dim_seq.clone();
+    fn strides(&self) -> &[usize] { self.strides.as_slice() }
+}
+
+/// Metadata for fixed-size shapes.
+pub struct FixedShapeMetadata<T: ConstShape, const L: MemLayout>(::core::marker::PhantomData<T>);
+
+impl<T, const N: usize, const L: MemLayout> ShapeMetadata<L> for FixedShapeMetadata<T, L>
+where
+    T: ConstShape<Underlying = [usize; N]>,
+{
+    fn shape(&self) -> &[usize] { &T::SHAPE }
+
+    fn strides(&self) -> &[usize] {
+        if L == MemLayout::RowMajor {
+            &T::ROW_MAJOR_STRIDES
+        } else {
+            &T::COL_MAJOR_STRIDES
+        }
+    }
+}
+
+/// Shape for fixed-size dimension sequences.
+impl<const N: usize, const L: MemLayout> Shape<L> for [usize; N] {
+    type Underlying = [usize; N];
+    type Metadata = DynShapeMetadata<[usize; N]>;
+
+    fn new_metadata(dim_seq: &Self::Underlying) -> Self::Metadata {
+        let shape = *dim_seq;
         let mut strides = [0usize; N];
-        compute_strides(dim_seq.as_slice(), &mut strides, layout);
-        ShapeMetadata { shape, strides }
+        compute_strides(dim_seq.as_slice(), &mut strides, L);
+        DynShapeMetadata { shape, strides }
     }
 }
 
 /// Shape for dynamically-sized dimension sequences.
-impl Shape for Vec<usize> {
+impl<const L: MemLayout> Shape<L> for Vec<usize> {
     type Underlying = Vec<usize>;
-    type Metadata = ShapeMetadata<Vec<usize>>;
+    type Metadata = DynShapeMetadata<Vec<usize>>;
 
-    fn new_metadata(dim_seq: &Self::Underlying, layout: MemLayout) -> Self::Metadata {
+    fn new_metadata(dim_seq: &Self::Underlying) -> Self::Metadata {
         let shape = dim_seq.clone();
         let mut strides = dim_seq.to_vec();
-        compute_strides(shape.as_slice(), &mut strides, layout);
-        ShapeMetadata { shape, strides }
+        compute_strides(shape.as_slice(), &mut strides, L);
+        DynShapeMetadata { shape, strides }
     }
 }
 
@@ -72,14 +105,16 @@ pub trait ConstShape {
     const COL_MAJOR_STRIDES: Self::Underlying;
 }
 
-impl<T> const Shape for T
+impl<T, const N: usize, const L: MemLayout> const Shape<L> for T
 where
-    T: ConstShape,
+    T: ConstShape<Underlying = [usize; N]>,
 {
     type Underlying = <T as ConstShape>::Underlying;
-    type Metadata = ();
+    type Metadata = FixedShapeMetadata<T, L>;
 
-    fn new_metadata(_: &Self::Underlying, _: MemLayout) -> Self::Metadata { () }
+    fn new_metadata(_: &Self::Underlying) -> Self::Metadata {
+        FixedShapeMetadata(::core::marker::PhantomData)
+    }
 }
 
 mod const_shape {

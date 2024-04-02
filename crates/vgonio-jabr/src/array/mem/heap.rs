@@ -217,7 +217,10 @@ impl<T, const N: usize> DynFixSized<T, N, Global> {
     where
         T: Clone,
     {
-        assert!(slice.len() > N, "slice length must greater than array size");
+        assert!(
+            slice.len() >= N,
+            "slice length must greater than array size"
+        );
         Self {
             inner: slice.to_vec().into_boxed_slice(),
             marker: std::marker::PhantomData,
