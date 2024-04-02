@@ -6,7 +6,7 @@ use crate::array::{
         MemLayout,
         MemLayout::ColMajor,
     },
-    shape::ConstShape,
+    shape::{ConstShape, Shape},
 };
 
 mod core;

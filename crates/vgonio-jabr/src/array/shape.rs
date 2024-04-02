@@ -2,17 +2,17 @@ use crate::array::{dim::DimSeq, mem::MemLayout};
 
 /// Common trait for types that can be used to represent the shape of an array.
 #[const_trait]
-pub trait Shape<const L: MemLayout> {
+pub trait Shape {
     /// The underlying type used to store the shape.
     type Underlying: DimSeq;
-    type Metadata: ShapeMetadata<L>;
+    type Metadata: ShapeMetadata;
     /// Creates a new metadata object for the shape.
-    fn new_metadata(dim_seq: &Self::Underlying) -> Self::Metadata;
+    fn new_metadata(dims: &Self::Underlying, layout: MemLayout) -> Self::Metadata;
 }
 
-pub trait ShapeMetadata<const L: MemLayout> {
+pub(crate) trait ShapeMetadata {
     fn shape(&self) -> &[usize];
-    fn strides(&self) -> &[usize];
+    fn strides<const L: MemLayout>(&self) -> &[usize];
 }
 
 /// Metadata for dynamically-sized shapes.
@@ -29,25 +29,23 @@ where
     pub strides: T,
 }
 
-impl<T, const L: MemLayout> ShapeMetadata<L> for DynShapeMetadata<T>
+impl<T> ShapeMetadata for DynShapeMetadata<T>
 where
     T: DimSeq,
 {
     fn shape(&self) -> &[usize] { self.shape.as_slice() }
 
-    fn strides(&self) -> &[usize] { self.strides.as_slice() }
+    fn strides<const L: MemLayout>(&self) -> &[usize] { self.strides.as_slice() }
 }
+pub struct FixedShapeMetadata<T: ConstShape>(::core::marker::PhantomData<T>);
 
-/// Metadata for fixed-size shapes.
-pub struct FixedShapeMetadata<T: ConstShape, const L: MemLayout>(::core::marker::PhantomData<T>);
-
-impl<T, const N: usize, const L: MemLayout> ShapeMetadata<L> for FixedShapeMetadata<T, L>
+impl<T, const N: usize> ShapeMetadata for FixedShapeMetadata<T>
 where
     T: ConstShape<Underlying = [usize; N]>,
 {
     fn shape(&self) -> &[usize] { &T::SHAPE }
 
-    fn strides(&self) -> &[usize] {
+    fn strides<const L: MemLayout>(&self) -> &[usize] {
         if L == MemLayout::RowMajor {
             &T::ROW_MAJOR_STRIDES
         } else {
@@ -57,27 +55,27 @@ where
 }
 
 /// Shape for fixed-size dimension sequences.
-impl<const N: usize, const L: MemLayout> Shape<L> for [usize; N] {
+impl<const N: usize> Shape for [usize; N] {
     type Underlying = [usize; N];
     type Metadata = DynShapeMetadata<[usize; N]>;
 
-    fn new_metadata(dim_seq: &Self::Underlying) -> Self::Metadata {
-        let shape = *dim_seq;
+    fn new_metadata(dims: &Self::Underlying, layout: MemLayout) -> Self::Metadata {
+        let shape = dims.clone();
         let mut strides = [0usize; N];
-        compute_strides(dim_seq.as_slice(), &mut strides, L);
+        compute_strides(dims.as_slice(), &mut strides, layout);
         DynShapeMetadata { shape, strides }
     }
 }
 
 /// Shape for dynamically-sized dimension sequences.
-impl<const L: MemLayout> Shape<L> for Vec<usize> {
+impl Shape for Vec<usize> {
     type Underlying = Vec<usize>;
     type Metadata = DynShapeMetadata<Vec<usize>>;
 
-    fn new_metadata(dim_seq: &Self::Underlying) -> Self::Metadata {
-        let shape = dim_seq.clone();
-        let mut strides = dim_seq.to_vec();
-        compute_strides(shape.as_slice(), &mut strides, L);
+    fn new_metadata(dims: &Self::Underlying, layout: MemLayout) -> Self::Metadata {
+        let shape = dims.clone();
+        let mut strides = dims.to_vec();
+        compute_strides(shape.as_slice(), &mut strides, layout);
         DynShapeMetadata { shape, strides }
     }
 }
@@ -105,14 +103,14 @@ pub trait ConstShape {
     const COL_MAJOR_STRIDES: Self::Underlying;
 }
 
-impl<T, const N: usize, const L: MemLayout> const Shape<L> for T
+impl<T, const N: usize> const Shape for T
 where
     T: ConstShape<Underlying = [usize; N]>,
 {
     type Underlying = <T as ConstShape>::Underlying;
-    type Metadata = FixedShapeMetadata<T, L>;
+    type Metadata = FixedShapeMetadata<T>;
 
-    fn new_metadata(_: &Self::Underlying) -> Self::Metadata {
+    fn new_metadata(_: &Self::Underlying, _: MemLayout) -> Self::Metadata {
         FixedShapeMetadata(::core::marker::PhantomData)
     }
 }
@@ -194,22 +192,21 @@ mod const_shape {
         }
     }
 
-    impl_const_shape!(N0);
-    impl_const_shape!(N0, N1);
-    impl_const_shape!(N0, N1, N2);
-    impl_const_shape!(N0, N1, N2, N3);
-    impl_const_shape!(N0, N1, N2, N3, N4);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13, N14);
-    impl_const_shape!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13, N14, N15);
+    /// Recursive macro generating the implementation of `ConstShape` for a
+    /// sequence of shapes.
+    macro impl_const_shapes {
+        (@inner $n:tt) => {  },
+        (@inner $n:tt, $($ns:tt),*) => {
+            impl_const_shape!($($ns),*);
+            impl_const_shapes!(@inner $($ns),*);
+        },
+        ($($ns:tt),*) => {
+            impl_const_shape!($($ns),*);
+            impl_const_shapes!(@inner $($ns),*);
+        }
+    }
+
+    impl_const_shapes!(N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13, N14, N15);
 
     /// Macro generating a type alias for a shape with a given number of
     /// dimensions.

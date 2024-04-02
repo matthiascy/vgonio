@@ -12,10 +12,10 @@
 
 extern crate core;
 
-mod array;
+pub mod array;
 mod expr;
 pub mod optics;
-mod prelude;
+pub mod prelude;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
