@@ -41,6 +41,8 @@ where
 
     /// Returns the layout of the array.
     pub fn order(&self) -> MemLayout { L }
+    
+    pub fn 
 }
 
 #[cfg(test)]

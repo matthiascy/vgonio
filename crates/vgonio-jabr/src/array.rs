@@ -4,6 +4,7 @@ mod arr_s;
 mod core;
 mod dim;
 mod mem;
+mod ops;
 mod shape;
 
 pub use arr_d::*;
