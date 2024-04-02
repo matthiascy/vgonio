@@ -5,7 +5,7 @@ use crate::array::{
 };
 
 /// Base struct for all arrays.
-pub struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
+pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
 where
     D: Data,
     S: Shape,
@@ -26,12 +26,6 @@ where
     ///
     /// Rarely used directly. Only used inside the crate.
     pub fn new(shape: S::Underlying, data: D) -> Self {
-        // Make sure the data is the right size.
-        debug_assert_eq!(
-            data.as_slice().len(),
-            compute_n_elems(shape.as_slice()),
-            "data size doesn't match shape"
-        );
         Self {
             data,
             meta: S::new_metadata(&shape, L),

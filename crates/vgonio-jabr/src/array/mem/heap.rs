@@ -37,11 +37,23 @@ where
             inner: slice.to_vec_in(alloc),
         }
     }
+
+    pub fn with_capacity_in(cap: usize, alloc: A) -> Self {
+        Self {
+            inner: Vec::with_capacity_in(cap, alloc),
+        }
+    }
 }
 
 impl<T> DynSized<T, Global> {
     /// Creates a new empty array with the global allocator.
     pub fn new() -> Self { Self { inner: Vec::new() } }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            inner: Vec::with_capacity(cap),
+        }
+    }
 
     /// Creates a new empty array with the global allocator.
     pub fn from_slice(slice: &[T]) -> Self

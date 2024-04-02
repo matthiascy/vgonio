@@ -43,8 +43,10 @@ impl<T, const N: usize> ShapeMetadata for FixedShapeMetadata<T>
 where
     T: ConstShape<Underlying = [usize; N]>,
 {
+    #[inline]
     fn shape(&self) -> &[usize] { &T::SHAPE }
 
+    #[inline]
     fn strides<const L: MemLayout>(&self) -> &[usize] {
         if L == MemLayout::RowMajor {
             &T::ROW_MAJOR_STRIDES

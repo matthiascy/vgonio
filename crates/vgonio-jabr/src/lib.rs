@@ -14,6 +14,7 @@ extern crate core;
 
 pub mod array;
 mod expr;
+mod linalg;
 pub mod optics;
 pub mod prelude;
 
