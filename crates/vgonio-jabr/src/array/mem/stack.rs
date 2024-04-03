@@ -1,4 +1,4 @@
-use crate::array::mem::{Data, Sealed};
+use crate::array::mem::{Data, DataCopy, Sealed};
 use std::ops::Deref;
 
 /// A fixed-sized array that is allocated on the stack.

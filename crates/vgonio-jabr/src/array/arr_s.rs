@@ -3,6 +3,7 @@ use crate::array::{
     mem::{stack::FixedSized, MemLayout},
     shape::ConstShape,
 };
+use std::ops::Deref;
 
 /// A fixed-size multidimensional array on the stack with type level fixed
 /// shape (dimensions and size of each dimension).
@@ -21,18 +22,33 @@ where
 {
     /// Creates a new array with the given data and shape.
     pub fn new(data: [T; S::N_ELEMS]) -> Self { Self(ArrCore::new(S::SHAPE, FixedSized(data))) }
+}
 
-    /// Returns the shape of the array.
-    #[inline]
-    pub fn shape(&self) -> &[usize] { self.0.shape() }
+impl<T, S, const L: MemLayout> Deref for Arr<T, S, L>
+where
+    S: ConstShape<Underlying = [usize; S::N_DIMS]>,
+    [(); S::N_ELEMS]:,
+{
+    type Target = ArrCore<FixedSized<T, { S::N_ELEMS }>, S, L>;
 
-    /// Returns the strides of the array.
-    #[inline]
-    pub fn strides(&self) -> &[usize] { self.0.strides() }
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
 
-    /// Returns the layout of the array.
-    #[inline]
-    pub fn order(&self) -> MemLayout { self.0.order() }
+impl<T, S, const L: MemLayout> Clone for Arr<T, S, L>
+where
+    T: Clone,
+    S: ConstShape<Underlying = [usize; S::N_DIMS]>,
+    [(); S::N_ELEMS]:,
+{
+    fn clone(&self) -> Self { Self(self.0.clone()) }
+}
+
+impl<T, S, const L: MemLayout> Copy for Arr<T, S, L>
+where
+    T: Copy,
+    S: ConstShape<Underlying = [usize; S::N_DIMS]>,
+    [(); S::N_ELEMS]:,
+{
 }
 
 #[cfg(test)]
@@ -46,5 +62,12 @@ mod tests {
         assert_eq!(arr.shape(), &[2, 3]);
         assert_eq!(arr.strides(), &[1, 2]);
         assert_eq!(arr.order(), MemLayout::ColMajor);
+    }
+
+    #[test]
+    fn test_deref() {
+        let arr: Arr<i32, s![2, 3], { MemLayout::ColMajor }> = Arr::new([1, 2, 3, 4, 5, 6]);
+        assert_eq!(arr.shape(), &[2, 3]);
+        assert_eq!(arr.strides(), &[1, 2]);
     }
 }

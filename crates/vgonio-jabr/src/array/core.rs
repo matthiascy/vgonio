@@ -1,11 +1,11 @@
 use crate::array::{
     dim::DimSeq,
-    mem::{Data, MemLayout},
+    mem::{Data, DataClone, DataCopy, MemLayout},
     shape::{compute_n_elems, Shape, ShapeMetadata},
 };
 
 /// Base struct for all arrays.
-pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
+pub struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
 where
     D: Data,
     S: Shape,
@@ -34,13 +34,38 @@ where
     }
 
     /// Returns the shape of the array.
-    pub fn shape(&self) -> &[usize] { self.meta.shape() }
+    #[inline]
+    pub const fn shape(&self) -> &[usize] { self.meta.shape() }
 
     /// Returns the strides of the array.
-    pub fn strides(&self) -> &[usize] { self.meta.strides::<L>() }
+    #[inline]
+    pub const fn strides(&self) -> &[usize] { self.meta.strides::<L>() }
 
     /// Returns the layout of the array.
-    pub fn order(&self) -> MemLayout { L }
+    #[inline]
+    pub const fn order(&self) -> MemLayout { L }
+}
+
+impl<D, S, const L: MemLayout> Clone for ArrCore<D, S, L>
+where
+    D: DataClone,
+    S: Shape,
+{
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            meta: self.meta.clone(),
+            marker: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<D, S, const L: MemLayout> Copy for ArrCore<D, S, L>
+where
+    D: DataCopy,
+    S: Shape,
+    S::Metadata: Copy,
+{
 }
 
 #[cfg(test)]
