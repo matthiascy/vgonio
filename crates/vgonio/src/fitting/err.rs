@@ -2,12 +2,13 @@ use crate::{
     app::cache::{RawCache, RefractiveIndexRegistry},
     measure::{
         bsdf::{BsdfSnapshot, MeasuredBsdfData, SpectralSamples},
+        data::SampledBrdf,
         params::BsdfMeasurementParams,
     },
     partition::SphericalPartition,
 };
 use base::{
-    math::{sph_to_cart, sqr, Vec3, Vec3A},
+    math::{sph_to_cart, sqr, Sph2, Vec3, Vec3A},
     optics::fresnel,
     range::RangeByStepSizeInclusive,
     units::{deg, Degrees, Radians},
@@ -173,6 +174,15 @@ fn compute_distance(
     }
 }
 
+pub(crate) fn generate_analytical_brdf_with_wi_wo_pairs(
+    pairs: &[(Sph2, Sph2)],
+    target: &dyn Bxdf<Params = [f64; 2]>,
+    iors: &RefractiveIndexRegistry,
+    normalize: bool,
+) -> SampledBrdf {
+    todo!()
+}
+
 // TODO: use specific container instead of MeasuredBsdfData
 /// Generate the analytical BRDFs for the given model.
 ///
@@ -227,12 +237,6 @@ pub(crate) fn generate_analytical_brdf(
                             .map(|&x| x as f32)
                             .collect::<Vec<_>>()
                             .into_boxed_slice();
-                    // let mut spectral_samples = target
-                    //     .eval_spectrum(wi, wo, &iors_i, &iors_t)
-                    //     .iter()
-                    //     .map(|&x| x as f32)
-                    //     .collect::<Vec<_>>()
-                    //     .into_boxed_slice();
                     for (i, sample) in spectral_samples.iter().enumerate() {
                         max_values_per_snapshot[i] =
                             f64::max(max_values_per_snapshot[i], *sample as f64);
@@ -257,42 +261,6 @@ pub(crate) fn generate_analytical_brdf(
                 });
             }
         });
-    // .for_each(|((wi_sph, snap_max_values), snapshot)| {
-    //     let wi = wi_sph.to_cartesian();
-    //     let mut samples = vec![];
-    //     let mut max_values_per_snapshot = vec![-1.0; wavelengths.len()];
-    //     for patch in partition.patches.iter() {
-    //         let wo_sph = patch.center();
-    //         let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
-    //         let mut spectral_samples = target
-    //             .eval_spectrum(wi, wo, &iors_i, &iors_t)
-    //             .iter()
-    //             .map(|&x| x as f32)
-    //             .collect::<Vec<_>>()
-    //             .into_boxed_slice();
-    //         for (i, sample) in spectral_samples.iter().enumerate() {
-    //             max_values_per_snapshot[i] =
-    //                 f64::max(max_values_per_snapshot[i], *sample as f64);
-    //         }
-    //         samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
-    //     }
-    //     if normalize {
-    //         for sample in samples.iter_mut() {
-    //             for (s, max) in
-    // sample.iter_mut().zip(max_values_per_snapshot.iter()) {
-    // *s /= *max as f32;             }
-    //         }
-    //     }
-    //     *snap_max_values = max_values_per_snapshot.into_boxed_slice();
-    //     snapshot.write(BsdfSnapshot {
-    //         wi: *wi_sph,
-    //         samples: samples.into_boxed_slice(),
-    //         #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    //         trajectories: vec![],
-    //         #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    //         hit_points: vec![],
-    //     });
-    // });
     brdf.snapshots = unsafe { snapshots.assume_init() };
     (brdf, max_values)
 }

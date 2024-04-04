@@ -180,18 +180,17 @@ impl<M> FittingReport<M> {
     }
 
     /// Log the fitting report.
-    pub fn log_fitting_reports(&self)
+    pub fn print_fitting_report(&self)
     where
         M: Debug,
     {
-        log::info!("Fitting report:");
-        log::info!("  Best model: {:?}", self.best_model());
-        log::info!("  Reports:");
+        println!("Fitting report:");
+        println!("  Best model: {:?}", self.best_model());
+        println!("  Reports:");
         for (m, r) in self.reports.iter() {
-            log::info!(
+            println!(
                 "    - Model: {:?}, objective_function: {}",
-                m,
-                r.objective_function
+                m, r.objective_function
             );
         }
     }

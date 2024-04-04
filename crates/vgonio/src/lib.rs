@@ -15,6 +15,7 @@
 #![feature(portable_simd)]
 #![feature(slice_pattern)]
 #![feature(os_str_display)]
+#![feature(let_chains)]
 #![warn(missing_docs)]
 
 extern crate core;

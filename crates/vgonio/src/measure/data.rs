@@ -5,11 +5,12 @@ use crate::{
     fitting::MeasuredMdfData,
     io::{vgmo::VgmoHeaderExt, OutputFileFormatOption},
     measure::{
-        bsdf::MeasuredBsdfData,
+        bsdf::{emitter::EmitterParams, receiver::ReceiverParams, BsdfKind, MeasuredBsdfData},
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
-        params::{AdfMeasurementMode, MeasurementKind},
+        params::{AdfMeasurementMode, BsdfMeasurementParams, MeasurementKind, SimulationKind},
     },
-    partition::SphericalPartition,
+    partition::{PartitionScheme, SphericalPartition},
+    SphericalDomain,
 };
 use base::{
     error::VgonioError,
@@ -17,14 +18,18 @@ use base::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::Sph2,
+    medium::Medium,
     range::RangeByStepSizeInclusive,
-    units::Radians,
+    units::{deg, nm, rad, Length, Nanometres, Radians},
     Asset, Version,
 };
 use chrono::{DateTime, Local};
 use std::{
     borrow::Cow,
+    collections::HashMap,
+    ffi::OsStr,
     fs::File,
+    hash::{Hash, Hasher},
     io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
 };
@@ -68,6 +73,38 @@ pub enum MeasuredData {
     Msf(MeasuredMsfData),
     /// Microfacet slope distribution function.
     Sdf(MeasuredSdfData),
+    /// TODO: remove this.
+    Sampled(SampledBrdf),
+}
+
+#[derive(Debug, Clone)]
+pub struct SampledBrdf {
+    /// Wavelengths in nanometers.
+    pub spectrum: Box<[Nanometres]>,
+    /// Samples of each wi-wo pair for each wavelength.
+    pub samples: Box<[f32]>,
+    /// Maximum values of the spectral samples for each snapshot (wi direction).
+    pub max_values: Box<[f32]>,
+    /// All pairs of incident and outgoing directions. The first element of the
+    /// tuple is the incident direction and the second element is the list of
+    /// outgoing directions, and the third element is the offset in the samples
+    /// array(offset of pairs, the sample offset is offset of pairs x number of
+    /// wavelengths in the spectrum).
+    pub wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>, u32)]>,
+    /// Total number of wi-wo pairs. Because the number of outgoing directions
+    /// can be different for each incident direction, we need to store the total
+    /// number of pairs apart from the pairs themselves.
+    pub num_pairs: usize,
+}
+
+impl SampledBrdf {
+    pub fn wios(&self) -> Box<[(Sph2, Sph2)]> {
+        self.wi_wo_pairs
+            .iter()
+            .flat_map(|(wi, wo, offset)| wo.iter().map(move |o| (*wi, *o)))
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
 }
 
 impl MeasuredData {
@@ -78,6 +115,14 @@ impl MeasuredData {
             MeasuredData::Adf(_) => MeasurementKind::Adf,
             MeasuredData::Msf(_) => MeasurementKind::Msf,
             MeasuredData::Sdf(_) => MeasurementKind::Sdf,
+            MeasuredData::Sampled(_) => MeasurementKind::Bsdf,
+        }
+    }
+
+    pub fn as_sampled_brdf(&self) -> Option<&SampledBrdf> {
+        match self {
+            MeasuredData::Sampled(brdf) => Some(brdf),
+            _ => None,
         }
     }
 
@@ -444,6 +489,7 @@ impl MeasurementData {
                     MeasuredData::Sdf(sdf) => {
                         sdf.write_histogram_as_exr(&filepath, &self.timestamp, *resolution)?;
                     }
+                    _ => {}
                 }
             }
         }
@@ -459,6 +505,102 @@ impl MeasurementData {
             )
         })?;
         let mut reader = BufReader::new(file);
+        // TODO: encapsulate into a function.
+        // Ad-hoc solution for loading the measurement data from json files.
+        if let Some(extension) = filepath.extension()
+            && extension == OsStr::new("json")
+        {
+            use serde_json::Value;
+            let content: Value = serde_json::from_reader(reader).map_err(|err| {
+                VgonioError::new(
+                    format!("Failed to parse JSON file: {}", filepath.display()),
+                    Some(Box::new(err)),
+                )
+            })?;
+            let data_array = content.as_array().unwrap();
+            let wavelengths = data_array[0]["wavelengths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| nm!(v.as_f64().unwrap() as f32))
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let mut samples = Vec::new();
+            let mut wi_wo_pairs: Vec<(Sph2, Vec<Sph2>, u32)> = Vec::new();
+            let mut i = 1;
+            let mut total_samples = 0;
+            while i < data_array.len() {
+                let measurement = &data_array[i];
+                let wi = {
+                    let phi_i = measurement["phiIn"].as_f64().unwrap() as f32;
+                    let theta_i = measurement["thetaIn"].as_f64().unwrap() as f32;
+                    Sph2::new(Radians::from_degrees(theta_i), Radians::from_degrees(phi_i))
+                };
+                let wo = {
+                    let phi_o = measurement["phiOut"].as_f64().unwrap() as f32;
+                    let theta_o = measurement["thetaOut"].as_f64().unwrap() as f32;
+                    Sph2::new(Radians::from_degrees(theta_o), Radians::from_degrees(phi_o))
+                };
+                let spectrum = measurement["spectrum"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_f64().unwrap() as f32)
+                    .collect::<Vec<f32>>()
+                    .into_boxed_slice();
+                assert!(spectrum.len() == wavelengths.len());
+                samples.extend_from_slice(&spectrum);
+                total_samples += spectrum.len();
+                match wi_wo_pairs.iter().position(|(s, _, _)| *s == wi) {
+                    None => {
+                        wi_wo_pairs.push((wi, vec![wo], 0u32));
+                    }
+                    Some(index) => {
+                        wi_wo_pairs[index].1.push(wo);
+                    }
+                }
+                i += 1;
+            }
+            // Update the offset of the pairs.
+            let mut offset = 0;
+            for (_, wos, pair_offset) in wi_wo_pairs.iter_mut() {
+                *pair_offset = offset;
+                offset += wos.len() as u32;
+            }
+            assert!(samples.len() == offset as usize * wavelengths.len());
+            // Calculate the maximum values of the spectral samples for each snapshot.
+            let mut max_values = vec![-1.0f32; wi_wo_pairs.len() * wavelengths.len()];
+            let wavelengths_len = wavelengths.len();
+            for (i, (_, wos, pair_offset)) in wi_wo_pairs.iter().enumerate() {
+                let max_values_per_snapshot =
+                    &mut max_values[i * wavelengths_len..(i + 1) * wavelengths_len];
+                let offset = *pair_offset as usize * wavelengths_len;
+                for (j, _) in wos.iter().enumerate() {
+                    let snapshot_offset = offset + j * wavelengths_len;
+                    let snapshot = &samples[snapshot_offset..snapshot_offset + wavelengths_len];
+                    for (j, sample) in snapshot.iter().enumerate() {
+                        max_values_per_snapshot[j] = f32::max(max_values_per_snapshot[j], *sample);
+                    }
+                }
+            }
+
+            return Ok(MeasurementData {
+                name: "temp".to_string(),
+                source: MeasurementDataSource::Loaded(filepath.to_path_buf()),
+                timestamp: Local::now(),
+                measured: MeasuredData::Sampled(SampledBrdf {
+                    spectrum: wavelengths,
+                    samples: samples.into_boxed_slice(),
+                    max_values: max_values.into_boxed_slice(),
+                    wi_wo_pairs: wi_wo_pairs
+                        .into_iter()
+                        .map(|(wi, wo, offset)| (wi, wo.into_boxed_slice(), offset))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    num_pairs: i - 1,
+                }),
+            });
+        }
         let header = Header::<VgmoHeaderExt>::read(&mut reader).map_err(|err| {
             VgonioError::from_read_file_error(
                 ReadFileError {

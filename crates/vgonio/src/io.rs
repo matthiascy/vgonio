@@ -80,6 +80,9 @@ pub mod vgmo {
                 MeasuredData::Adf(adf) => VgmoHeaderExt::Adf { params: adf.params },
                 MeasuredData::Msf(msf) => VgmoHeaderExt::Msf { params: msf.params },
                 MeasuredData::Sdf(_) => VgmoHeaderExt::Sdf,
+                _ => {
+                    unimplemented!("Unsupported VGMO measurement data variant")
+                }
             }
         }
     }
@@ -292,6 +295,7 @@ pub mod vgmo {
                 base::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
                     .map_err(WriteFileErrorKind::Write)?;
             }
+            _ => {}
         }
 
         #[cfg(feature = "bench")]

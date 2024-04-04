@@ -6,13 +6,13 @@ use crate::array::{
 /// A dynamically-sized array with a known number of dimensions at compile-time.
 ///
 /// The dimension is set at compilation time and cannot be changed, but the size
-/// of each dimension can be changed at runtime.
+/// of each dimension can be changed at runtime (non-growable).
 pub struct DyArr<T, const N: usize, const L: MemLayout = { MemLayout::ColMajor }>(
     ArrCore<DynSized<T>, [usize; N], L>,
 );
 
 /// A dynamically-sized array with dynamical number of dimensions
-/// and size of each dimension at runtime.
+/// and size of each dimension at runtime (growable).
 pub struct DynArr<T, const L: MemLayout = { MemLayout::ColMajor }>(
     ArrCore<DynSized<T>, Vec<usize>, L>,
 );

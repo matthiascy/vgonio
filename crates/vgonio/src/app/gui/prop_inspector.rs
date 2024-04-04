@@ -260,6 +260,7 @@ impl PropertyInspector {
                                         }
                                         MeasuredData::Bsdf(_) => {}
                                         MeasuredData::Sdf(_) => {}
+                                        MeasuredData::Sampled(_) => {}
                                     }
                                 })
                             });

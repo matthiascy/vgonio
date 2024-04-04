@@ -253,7 +253,7 @@ impl VgonioGui {
                                     );
                                     problem.lsq_lm_fit(*isotropy)
                                 });
-                                report.log_fitting_reports();
+                                report.print_fitting_report();
                                 // TODO: update the fitted models
                             }
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
@@ -296,7 +296,7 @@ impl VgonioGui {
                             );
                             problem.lsq_lm_fit(*isotropy)
                         });
-                        report.log_fitting_reports();
+                        report.print_fitting_report();
                         if let Some(model) = report.best_model() {
                             fitted.push(FittedModel::Ndf(model.clone_box(), *scale));
                         } else {

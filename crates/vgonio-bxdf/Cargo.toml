@@ -15,3 +15,4 @@ num-traits.workspace = true
 log.workspace = true
 base = { package = "vgonio-base", path = "../vgonio-base" }
 clap = { workspace = true, optional = true }
+jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }

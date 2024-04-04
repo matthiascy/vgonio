@@ -4,6 +4,7 @@ use num_traits::Float;
 use std::fmt::Debug;
 
 pub mod lambert;
+mod measured;
 pub mod merl;
 pub mod microfacet;
 pub mod utia;
@@ -125,7 +126,13 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// length of `wis` times the length of `wos`. For each incident direction
     /// `wi`, the derivatives with respect to params are evaluated for each
     /// outgoing direction `wo`.
-    fn pd(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+    fn pds(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+
+    /// Computes the partial derivatives of the BRDF model with respect to the
+    /// roughness parameters of the model for a single incident and outgoing
+    /// direction pair.
+    #[cfg(feature = "fitting")]
+    fn pd(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
 
     #[cfg(feature = "fitting")]
     /// Computes the partial derivatives of the BRDF model with respect to the
@@ -147,7 +154,13 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// are evaluated for each outgoing direction wo.
     /// The returned vector has the length of number of parameters times the
     /// length of `wis` times the length of `wos`.
-    fn pd_iso(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+    fn pds_iso(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+
+    /// Computes the partial derivatives of the BRDF model with respect to the
+    /// roughness parameters of the model for a single incident and outgoing
+    /// direction pair for isotropic materials.
+    #[cfg(feature = "fitting")]
+    fn pd_iso(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
 }
 
 impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {

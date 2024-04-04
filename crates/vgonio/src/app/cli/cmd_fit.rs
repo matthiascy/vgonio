@@ -8,13 +8,13 @@ use crate::{
     },
     fitting::{
         err::{compute_iso_microfacet_brdf_err, generate_analytical_brdf, ErrorMetric},
-        FittingProblem, MicrofacetBrdfFittingProblem,
+        FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
     },
     measure::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
-            BsdfKind,
+            BsdfKind, MeasuredBsdfData,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     },
@@ -132,51 +132,77 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 let measurement = cache
                     .load_micro_surface_measurement(&config, &input)
                     .unwrap();
-                let measured_brdf = cache
-                    .get_measurement_data(measurement)
-                    .unwrap()
-                    .measured
-                    .as_bsdf()
-                    .unwrap();
-                match opts.method {
-                    FittingMethod::Bruteforce => {
-                        let mses = compute_iso_microfacet_brdf_err(
-                            &measured_brdf,
-                            opts.max_theta_o.map(|t| deg!(t as f32)),
-                            opts.distro
-                                .expect("Distribution must be specified for microfacet family"),
-                            RangeByStepSizeInclusive::new(
-                                opts.alpha_start.unwrap(),
-                                opts.alpha_stop.unwrap(),
-                                opts.alpha_step.unwrap(),
-                            ),
-                            &cache,
-                            opts.normalize,
-                            opts.error_metric.unwrap_or(ErrorMetric::Mse),
-                        );
-                        println!(
-                            "    {}>{} MSE ({}) {:?}",
-                            ansi::BRIGHT_YELLOW,
-                            ansi::RESET,
-                            input.file_name().unwrap().display(),
-                            mses.as_slice()
-                        );
+                let measured = &cache.get_measurement_data(measurement).unwrap().measured;
+                match measured.as_bsdf() {
+                    None => {
+                        let measured_brdf = measured.as_sampled_brdf().unwrap();
+                        match opts.method {
+                            FittingMethod::Bruteforce => {
+                                // TODO: unify SampledBrdfModel and MeasuredBrdfModel
+                                todo!("Bruteforce fitting for sampled BRDFs")
+                            }
+                            FittingMethod::Nlls => {
+                                let problem = SampledBrdfFittingProblem::new(
+                                    measured_brdf,
+                                    opts.distro.expect(
+                                        "Distribution must be specified for microfacet family",
+                                    ),
+                                    RangeByStepSizeInclusive::new(
+                                        opts.alpha_start.unwrap(),
+                                        opts.alpha_stop.unwrap(),
+                                        opts.alpha_step.unwrap(),
+                                    ),
+                                    cache,
+                                );
+                                let report = problem.lsq_lm_fit(opts.isotropy);
+                                report.print_fitting_report();
+                            }
+                        }
                     }
-                    FittingMethod::Nlls => {
-                        // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
-                        let problem = MicrofacetBrdfFittingProblem::new(
-                            measured_brdf,
-                            opts.distro
-                                .expect("Distribution must be specified for microfacet family"),
-                            RangeByStepSizeInclusive::new(
-                                opts.alpha_start.unwrap(),
-                                opts.alpha_stop.unwrap(),
-                                opts.alpha_step.unwrap(),
-                            ),
-                            cache,
-                        );
-                        let report = problem.lsq_lm_fit(opts.isotropy);
-                        report.log_fitting_reports();
+                    Some(measured_brdf) => {
+                        match opts.method {
+                            FittingMethod::Bruteforce => {
+                                let mses = compute_iso_microfacet_brdf_err(
+                                    &measured_brdf,
+                                    opts.max_theta_o.map(|t| deg!(t as f32)),
+                                    opts.distro.expect(
+                                        "Distribution must be specified for microfacet family",
+                                    ),
+                                    RangeByStepSizeInclusive::new(
+                                        opts.alpha_start.unwrap(),
+                                        opts.alpha_stop.unwrap(),
+                                        opts.alpha_step.unwrap(),
+                                    ),
+                                    &cache,
+                                    opts.normalize,
+                                    opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                                );
+                                println!(
+                                    "    {}>{} MSE ({}) {:?}",
+                                    ansi::BRIGHT_YELLOW,
+                                    ansi::RESET,
+                                    input.file_name().unwrap().display(),
+                                    mses.as_slice()
+                                );
+                            }
+                            FittingMethod::Nlls => {
+                                // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
+                                let problem = MicrofacetBrdfFittingProblem::new(
+                                    measured_brdf,
+                                    opts.distro.expect(
+                                        "Distribution must be specified for microfacet family",
+                                    ),
+                                    RangeByStepSizeInclusive::new(
+                                        opts.alpha_start.unwrap(),
+                                        opts.alpha_stop.unwrap(),
+                                        opts.alpha_step.unwrap(),
+                                    ),
+                                    cache,
+                                );
+                                let report = problem.lsq_lm_fit(opts.isotropy);
+                                report.print_fitting_report();
+                            }
+                        }
                     }
                 }
             }
