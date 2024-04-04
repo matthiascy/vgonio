@@ -52,8 +52,12 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         if opts.generate {
-            let roughness = RangeByStepSizeInclusive::<f64>::new(0.1, 1.0, 0.1);
-            let count = roughness.step_count();
+            let roughness = RangeByStepSizeInclusive::new(
+                opts.alpha_start.unwrap(),
+                opts.alpha_stop.unwrap(),
+                opts.alpha_step.unwrap(),
+            );
+            let alphas = roughness.values();
             let models = match opts.family {
                 BxdfFamily::Microfacet => {
                     match opts
@@ -61,20 +65,16 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         .expect("Distribution must be specified for microfacet family")
                     {
                         MicrofacetDistroKind::Beckmann => {
-                            let mut models = Vec::with_capacity(count);
-                            for i in 0..count {
-                                let alpha =
-                                    i as f64 / count as f64 * roughness.span() + roughness.start;
+                            let mut models = vec![];
+                            for alpha in alphas {
                                 models.push(Box::new(BeckmannBrdf::new(alpha, alpha))
                                     as Box<dyn Bxdf<Params = [f64; 2]>>);
                             }
                             models.into_boxed_slice()
                         }
                         MicrofacetDistroKind::TrowbridgeReitz => {
-                            let mut models = Vec::with_capacity(count);
-                            for i in 0..count {
-                                let alpha =
-                                    i as f64 / count as f64 * roughness.span() + roughness.start;
+                            let mut models = vec![];
+                            for alpha in alphas {
                                 models.push(Box::new(TrowbridgeReitzBrdf::new(alpha, alpha))
                                     as Box<dyn Bxdf<Params = [f64; 2]>>);
                             }
@@ -124,7 +124,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     model.family(),
                     model.params()[0],
                 ));
-                brdf.write_as_exr(&output, &chrono::Local::now(), 512)
+                brdf.write_as_exr(&output, &chrono::Local::now(), 512, opts.normalize)
                     .unwrap();
             }
         } else {
@@ -243,7 +243,7 @@ pub struct FitOptions {
         long,
         help = "Distribution to use for the microfacet model. If not specified, the default \
                 distribution will be used.",
-        required_if_eq("family", "microfacet")
+        required_if_eq_all([("family", "microfacet"), ("generate", "false")])
     )]
     pub distro: Option<MicrofacetDistroKind>,
     #[clap(

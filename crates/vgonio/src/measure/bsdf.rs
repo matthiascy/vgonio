@@ -76,6 +76,7 @@ impl MeasuredBsdfData {
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
         resolution: u32,
+        normalize: bool,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         let (w, h) = (resolution as usize, resolution as usize);
@@ -88,7 +89,7 @@ impl MeasuredBsdfData {
             .into_boxed_slice();
         // Compute maximum value of the BSDF samples for each wavelength per snapshot.
         let mut max_samples = vec![0.0; wavelengths.len() * self.snapshots.len()];
-        if std::env::var("NORM").is_ok() {
+        if normalize {
             for (i, snapshot) in self.snapshots.iter().enumerate() {
                 for spectral_samples in snapshot.samples.iter() {
                     for (wavelength_idx, sample) in spectral_samples.iter().enumerate() {
@@ -102,7 +103,11 @@ impl MeasuredBsdfData {
                 *sample = 1.0;
             }
         }
-        log::debug!("max_bsdf_samples: {:?}", max_samples);
+        log::debug!(
+            "normalized ? {} - max_bsdf_samples: {:?}",
+            normalize,
+            max_samples
+        );
 
         // The BSDF data are stored in a single flat array, with the order of
         // the dimensions as follows:

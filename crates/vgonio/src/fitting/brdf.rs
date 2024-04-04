@@ -8,7 +8,7 @@ use crate::{
     partition::SphericalPartition,
 };
 use base::{
-    math::{sph_to_cart, Vec3, Vec3A},
+    math::{cart_to_sph, sph_to_cart, Vec3, Vec3A},
     medium::Medium,
     optics::{
         fresnel,
@@ -538,10 +538,7 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
         .iter()
         .enumerate()
         .for_each(|(i, snapshot)| {
-            let wi = {
-                let sph = snapshot.wi;
-                sph_to_cart(sph.theta, sph.phi)
-            };
+            let wi = snapshot.wi.to_cartesian();
             let max_measured = problem.max_measured[i];
             let max_modelled = max_modelled[i];
             problem
@@ -550,10 +547,7 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
                 .iter()
                 .enumerate()
                 .for_each(|(j, patch)| {
-                    let wo = {
-                        let c = patch.center();
-                        sph_to_cart(c.theta, c.phi)
-                    };
+                    let wo = patch.center().to_cartesian();
                     // Only the first wavelength is used. TODO: Use all
                     let measured = snapshot.samples[j][0] as f64 / max_measured;
                     let modelled = Scattering::eval_reflectance(
@@ -563,6 +557,16 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
                         &problem.iors_i[0],
                         &problem.iors_t[0],
                     ) / max_modelled;
+                    if measured.is_nan() || modelled.is_nan() {
+                        panic!(
+                            "measured: {}, modelled: {}, max_modelled: {}, wi: {:?}, wo: {:?}",
+                            measured,
+                            modelled,
+                            max_modelled,
+                            cart_to_sph(wi),
+                            cart_to_sph(wo)
+                        );
+                    }
                     rs[i * n_patches + j].write(modelled - measured);
                 });
         });
@@ -624,6 +628,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
             .find(|((ax, _), _)| *ax == alpha)
             .is_none()
         {
+            log::debug!("Not found: alpha = {}, generating...", alpha);
             let (_, maxes) = generate_analytical_brdf(
                 &self.measured.params,
                 self.model.as_ref(),
@@ -633,9 +638,10 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
             // currently only the first wavelength is used
             let first_wavelength_maxes = maxes
                 .iter()
-                .map(|s| s[0] as f64)
+                .map(|s| s[0])
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
+            log::debug!("Generated maxes: {:?}", first_wavelength_maxes);
             self.max_modelled
                 .push(((alpha, alpha), first_wavelength_maxes));
         }

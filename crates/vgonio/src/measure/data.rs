@@ -478,7 +478,7 @@ impl MeasurementData {
                 let filepath = filepath.with_extension("exr");
                 match &self.measured {
                     MeasuredData::Bsdf(bsdf) => {
-                        bsdf.write_as_exr(&filepath, &self.timestamp, *resolution)?
+                        bsdf.write_as_exr(&filepath, &self.timestamp, *resolution, false)?
                     }
                     MeasuredData::Adf(adf) => {
                         adf.write_as_exr(&filepath, &self.timestamp, *resolution)?
