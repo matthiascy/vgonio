@@ -249,6 +249,7 @@ impl VgonioGui {
                                         measurement.measured.as_bsdf().unwrap(),
                                         distro.unwrap(),
                                         RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
+                                        true, // TODO: allow to change this
                                         cache,
                                     );
                                     problem.lsq_lm_fit(*isotropy)

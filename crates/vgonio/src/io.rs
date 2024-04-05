@@ -18,7 +18,6 @@ use base::{
 };
 use std::{
     io::{BufReader, Read, Write},
-    mem::MaybeUninit,
     path::{Path, PathBuf},
 };
 use surf::MicroSurface;

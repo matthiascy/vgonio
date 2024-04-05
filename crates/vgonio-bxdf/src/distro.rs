@@ -13,11 +13,11 @@ pub use trowbridge_reitz::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MicrofacetDistroKind {
     /// Beckmann microfacet distribution.
-    #[cfg_attr(feature = "cli", clap(alias = "bk"))]
+    #[cfg_attr(feature = "cli", clap(alias = "bk", name = "beckmann"))]
     #[default]
     Beckmann,
     /// Trowbridge-Reitz microfacet distribution.
-    #[cfg_attr(feature = "cli", clap(alias = "tr"))]
+    #[cfg_attr(feature = "cli", clap(alias = "tr", name = "trowbridge"))]
     TrowbridgeReitz,
 }
 

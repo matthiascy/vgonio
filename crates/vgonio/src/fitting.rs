@@ -186,8 +186,8 @@ impl<M> FittingReport<M> {
     {
         println!("Fitting report:");
         println!("  Best model: {:?}", self.best_model());
-        println!("  Reports:");
-        for (m, r) in self.reports.iter() {
+        println!("  Reports (first 16):");
+        for (m, r) in self.reports.iter().take(16) {
             println!(
                 "    - Model: {:?}, objective_function: {}",
                 m, r.objective_function

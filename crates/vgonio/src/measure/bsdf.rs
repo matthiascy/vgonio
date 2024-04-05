@@ -46,7 +46,7 @@ pub mod rtc;
 
 /// BSDF measurement data.
 ///
-/// Number of emitted rays, wavelengths, and bounces are invariant over
+/// The Number of emitted rays, wavelengths, and bounces are invariant over
 /// emitter's position.
 ///
 /// At each emitter's position, each emitted ray carries an initial energy
@@ -87,7 +87,8 @@ impl MeasuredBsdfData {
             .values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        // Compute maximum value of the BSDF samples for each wavelength per snapshot.
+        // Compute the maximum value of the BSDF samples for each wavelength per
+        // snapshot.
         let mut max_samples = vec![0.0; wavelengths.len() * self.snapshots.len()];
         if normalize {
             for (i, snapshot) in self.snapshots.iter().enumerate() {

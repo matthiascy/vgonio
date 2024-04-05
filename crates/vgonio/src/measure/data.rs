@@ -85,10 +85,10 @@ pub struct SampledBrdf {
     pub samples: Box<[f32]>,
     /// Maximum values of the spectral samples for each snapshot (wi direction).
     pub max_values: Box<[f32]>,
-    /// All pairs of incident and outgoing directions. The first element of the
-    /// tuple is the incident direction and the second element is the list of
+    /// All pairs of incidents and outgoing directions. The first element of the
+    /// tuple is the incident direction. The second element is the list of
     /// outgoing directions, and the third element is the offset in the samples
-    /// array(offset of pairs, the sample offset is offset of pairs x number of
+    /// array (offset of pairs, the sample offset is offset of pairs x number of
     /// wavelengths in the spectrum).
     pub wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>, u32)]>,
     /// Total number of wi-wo pairs. Because the number of outgoing directions

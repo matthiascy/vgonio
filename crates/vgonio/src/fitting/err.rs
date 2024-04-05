@@ -9,6 +9,7 @@ use crate::{
 };
 use base::{
     math::{sph_to_cart, sqr, Sph2, Vec3, Vec3A},
+    medium::Medium,
     optics::fresnel,
     range::RangeByStepSizeInclusive,
     units::{deg, Degrees, Radians},
@@ -174,13 +175,125 @@ fn compute_distance(
     }
 }
 
-pub(crate) fn generate_analytical_brdf_with_wi_wo_pairs(
-    pairs: &[(Sph2, Sph2)],
+/// Returns the maximum values of each snapshot for the target BRDF.
+pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
+    sampled_brdf: &SampledBrdf,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
-    normalize: bool,
+    normalise: bool,
 ) -> SampledBrdf {
-    todo!()
+    let iors_i = iors
+        .ior_of_spectrum(Medium::Air, &sampled_brdf.spectrum)
+        .unwrap();
+    let iors_t = iors
+        .ior_of_spectrum(Medium::Aluminium, &sampled_brdf.spectrum)
+        .unwrap();
+    let mut samples = vec![0.0f32; sampled_brdf.samples.len()].into_boxed_slice();
+    let mut max_values =
+        vec![-1.0f32; sampled_brdf.spectrum.len() * sampled_brdf.wi_wo_pairs.len()]
+            .into_boxed_slice();
+    sampled_brdf
+        .wi_wo_pairs
+        .iter()
+        .zip(max_values.chunks_mut(sampled_brdf.spectrum.len()))
+        .for_each(|((wi, wos, offset), max_values)| {
+            let offset = *offset as usize * sampled_brdf.spectrum.len();
+            wos.iter().enumerate().for_each(|(i, wo)| {
+                let samples_offset = offset + i * sampled_brdf.spectrum.len();
+                let samples =
+                    &mut samples[samples_offset..samples_offset + sampled_brdf.spectrum.len()];
+                let wi = wi.to_cartesian();
+                let wo = wo.to_cartesian();
+                let spectral_samples =
+                    Scattering::eval_reflectance_spectrum(target, &wi, &wo, &iors_i, &iors_t);
+                samples
+                    .iter_mut()
+                    .zip(spectral_samples.iter())
+                    .zip(max_values.iter_mut())
+                    .for_each(|((sample, value), max)| {
+                        *sample = *value as f32;
+                        *max = f32::max(*max, *sample);
+                    });
+            })
+        });
+    if normalise {
+        for (i, (_, wos, offset)) in sampled_brdf.wi_wo_pairs.iter().enumerate() {
+            let offset = *offset as usize * sampled_brdf.spectrum.len();
+            let max_values =
+                &max_values[i * sampled_brdf.spectrum.len()..(i + 1) * sampled_brdf.spectrum.len()];
+            for (sample, max) in samples[offset..offset + sampled_brdf.spectrum.len() * wos.len()]
+                .iter_mut()
+                .zip(max_values.iter())
+            {
+                *sample /= *max;
+            }
+        }
+    }
+    SampledBrdf {
+        spectrum: sampled_brdf.spectrum.clone(),
+        samples,
+        max_values,
+        wi_wo_pairs: sampled_brdf.wi_wo_pairs.clone(),
+        num_pairs: sampled_brdf.num_pairs,
+    }
+}
+
+pub fn compute_iso_sampled_brdf_err(
+    sampled: &SampledBrdf,
+    distro: MicrofacetDistroKind,
+    alpha: RangeByStepSizeInclusive<f64>,
+    cache: &RawCache,
+    normalise: bool,
+    metric: ErrorMetric,
+) -> Box<[f64]> {
+    let mut brdfs = {
+        let mut brdfs = Box::new_uninit_slice(alpha.step_count());
+        brdfs.iter_mut().enumerate().for_each(|(i, brdf)| {
+            let alpha_x = i as f64 * alpha.step_size + alpha.start;
+            let alpha_y = i as f64 * alpha.step_size + alpha.start;
+            let m = match distro {
+                MicrofacetDistroKind::Beckmann => Box::new(BeckmannBrdf::new(alpha_x, alpha_y))
+                    as Box<dyn Bxdf<Params = [f64; 2]>>,
+                MicrofacetDistroKind::TrowbridgeReitz => {
+                    Box::new(TrowbridgeReitzBrdf::new(alpha_x, alpha_y))
+                        as Box<dyn Bxdf<Params = [f64; 2]>>
+                }
+            };
+            let model_brdf =
+                generate_analytical_brdf_from_sampled_brdf(sampled, &*m, &cache.iors, normalise);
+            brdf.write(model_brdf);
+        });
+        unsafe { brdfs.assume_init() }
+    };
+
+    brdfs
+        .par_iter()
+        .map(|model| compute_distance_from_sampled_brdf(model, sampled, metric))
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn compute_distance_from_sampled_brdf(
+    normalised: &SampledBrdf,
+    measured: &SampledBrdf,
+    error_metric: ErrorMetric,
+) -> f64 {
+    let sqr_err_sum = normalised
+        .samples
+        .iter()
+        .step_by(normalised.spectrum.len())
+        .zip(measured.samples.iter().step_by(measured.spectrum.len()))
+        .map(|(model_samples, measured_samples)| {
+            sqr(*model_samples as f64 - *measured_samples as f64)
+        })
+        .sum::<f64>();
+    match error_metric {
+        ErrorMetric::Mse => {
+            let n = normalised.wi_wo_pairs.len() * normalised.spectrum.len();
+            sqr_err_sum / n as f64
+        }
+        ErrorMetric::Nlls => sqr_err_sum * 0.5,
+    }
 }
 
 // TODO: use specific container instead of MeasuredBsdfData

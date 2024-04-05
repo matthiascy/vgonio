@@ -9,7 +9,6 @@ use base::{math::sph_to_cart, range::RangeByStepSizeInclusive, units::Radians, I
 use bxdf::distro::{
     BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution,
 };
-use jabr::Vec3;
 use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
 };
