@@ -77,6 +77,7 @@ impl Bxdf for TrowbridgeReitzBrdf {
         unsafe { result.assume_init() }
     }
 
+    #[cfg(feature = "fitting")]
     fn pd(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2] {
         debug_assert!(wi.is_normalized(), "Incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "Outgoing direction is not normalized");
@@ -197,6 +198,7 @@ impl Bxdf for TrowbridgeReitzBrdf {
         unsafe { result.assume_init() }
     }
 
+    #[cfg(feature = "fitting")]
     fn pd_iso(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64 {
         debug_assert!(wi.is_normalized(), "Incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "Outgoing direction is not normalized");

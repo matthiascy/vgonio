@@ -1,20 +1,20 @@
 //! Axis enum for indexing 3D structures.
 use crate::math::Vec3;
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 
-/// An helper struct used to indexing element related to 3D axis.
+/// A helper struct used to indexing element related to 3D axis.
 ///
 /// # Examples
 /// ```
-/// # use vgonio_core::math::Axis;
+/// # use vgonio_base::math::Axis;
 /// let mut pos = [0.1, 0.4, 0.6];
 /// pos[Axis::X] -= 0.1;
 ///
 /// assert_eq!(pos[Axis::X], 0.0);
 /// ```
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ValueEnum)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Axis {
     /// X-axis.
     X = 0,

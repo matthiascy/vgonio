@@ -1,11 +1,7 @@
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
-    app::{
-        cache::{Cache, RefractiveIndexRegistry},
-        cli::ansi,
-        Config,
-    },
+    app::{cache::Cache, cli::ansi, Config},
     fitting::{
         err::{compute_iso_microfacet_brdf_err, generate_analytical_brdf, ErrorMetric},
         FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
@@ -14,7 +10,7 @@ use crate::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
-            BsdfKind, MeasuredBsdfData,
+            BsdfKind,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     },
@@ -23,10 +19,10 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math::{sph_to_cart, Sph2, Vec3},
+    math::Sph2,
     medium::Medium,
     range::RangeByStepSizeInclusive,
-    units::{deg, nm, Degs, Rads},
+    units::{deg, nm, Rads},
     Isotropy,
 };
 use bxdf::{

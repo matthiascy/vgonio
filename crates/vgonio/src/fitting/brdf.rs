@@ -628,7 +628,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
             .find(|((ax, _), _)| *ax == alpha)
             .is_none()
         {
-            log::debug!("Not found: alpha = {}, generating...", alpha);
             let (_, maxes) = generate_analytical_brdf(
                 &self.measured.params,
                 self.model.as_ref(),
@@ -641,7 +640,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
                 .map(|s| s[0])
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            log::debug!("Generated maxes: {:?}", first_wavelength_maxes);
             self.max_modelled
                 .push(((alpha, alpha), first_wavelength_maxes));
         }

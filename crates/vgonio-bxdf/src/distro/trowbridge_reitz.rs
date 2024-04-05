@@ -216,3 +216,29 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         unsafe { results.assume_init() }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use base::{
+        math::sph_to_cart,
+        units::{Degs, Rads},
+    };
+
+    #[test]
+    fn test_msf1_trowbridge_reitz() {
+        use super::*;
+        use base::math::Vec3;
+
+        let distro = TrowbridgeReitzDistribution::new(0.75, 0.75);
+        let wm = Vec3::new(0.0, 0.0, 1.0);
+        let evaluated = (0..90)
+            .into_iter()
+            .map(|i| {
+                let w = sph_to_cart(Degs::new(i as f32).to_radians(), Rads::new(0.0));
+                distro.eval_msf1(wm, w)
+                // distro.eval_g1(&wm, &w)
+            })
+            .collect::<Vec<_>>();
+        println!("{:?}", evaluated);
+    }
+}

@@ -50,6 +50,9 @@ impl Bxdf for BeckmannBrdf {
             .distro
             .eval_ndf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
         let g = self.distro.eval_msf1(wh, *wi) * self.distro.eval_msf1(wh, *wo);
+        if g <= 1e-16 {
+            log::error!("g = 0.0, wi = {:?}, wo = {:?}", wi, wo,);
+        }
         (d * g) / (4.0 * cos_theta_io)
     }
 
@@ -81,6 +84,7 @@ impl Bxdf for BeckmannBrdf {
         unsafe { result.assume_init() }
     }
 
+    #[cfg(feature = "fitting")]
     fn pd(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2] {
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");
@@ -185,6 +189,7 @@ impl Bxdf for BeckmannBrdf {
         unsafe { result.assume_init() }
     }
 
+    #[cfg(feature = "fitting")]
     fn pd_iso(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64 {
         debug_assert!(wi.is_normalized(), "incident direction is not normalized");
         debug_assert!(wo.is_normalized(), "outgoing direction is not normalized");

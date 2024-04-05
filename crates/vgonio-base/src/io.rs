@@ -5,7 +5,6 @@
 
 use crate::Version;
 use byteorder::{LittleEndian, ReadBytesExt};
-use clap::ValueEnum;
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -201,7 +200,8 @@ impl From<std::io::Error> for WriteFileErrorKind {
 }
 
 /// Data encoding while storing the data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum, Serialize, Deserialize)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum FileEncoding {
     /// The data is encoded as ascii text (plain text).
@@ -249,9 +249,10 @@ impl FileEncoding {
 }
 
 /// Data compression scheme while storing the data.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CompressionScheme {
     /// No compression.
     None = 0x00,

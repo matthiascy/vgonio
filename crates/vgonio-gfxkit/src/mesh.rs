@@ -54,7 +54,6 @@ impl RenderableMesh {
         mesh: &MicroSurfaceMesh,
         id: Uuid,
     ) -> Self {
-        use wgpu::util::DeviceExt;
         log::debug!(
             "Creating mesh view with vertex count: {}, expected size: {} bytes",
             mesh.num_verts,

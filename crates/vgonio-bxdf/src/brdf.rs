@@ -42,10 +42,13 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
             Isotropy::Anisotropic
         }
     }
+
     /// Returns the parameters of the BRDF model.
     fn params(&self) -> Self::Params;
+
     /// Sets the parameters of the BRDF model.
     fn set_params(&mut self, params: &Self::Params);
+
     /// Evaluates the BRDF ($f_r$) with the classical parameterization for any
     /// incident and outgoing direction located on the hemisphere.
     ///

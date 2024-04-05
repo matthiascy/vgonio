@@ -1,6 +1,6 @@
 use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use base::{
-    math::{cbr, cos_phi, cos_theta, rcp_f64, sin_phi, sqr, tan_theta, tan_theta2, Vec3},
+    math::{cbr, cos_phi, rcp_f64, sin_phi, sqr, tan_theta, tan_theta2, Vec3},
     Isotropy,
 };
 use libm::{erf, sqrt};
@@ -66,15 +66,22 @@ impl MicrofacetDistribution for BeckmannDistribution {
     ///
     /// $$\Lambda(\mathbf{\omega})=\frac{erf(a)-1+\frac{e^{-a^2}}{a\sqrt{\pi}}}{2}$$
     fn eval_lambda(&self, w: Vec3) -> f64 {
-        let (alpha, alpha2) = if self.is_isotropic() {
-            (self.alpha_x, sqr(self.alpha_x))
+        let alpha = if self.is_isotropic() {
+            self.alpha_x
         } else {
             let cos_phi2 = sqr(cos_phi(&w) as f64);
             let sin_phi2 = 1.0 - cos_phi2;
             let alpha2 = sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2;
-            (alpha2.sqrt(), alpha2)
+            alpha2.sqrt()
         };
-        let a = 1.0 / (tan_theta(&w) as f64 * alpha);
+        let tan_theta = tan_theta(&w) as f64;
+        if tan_theta.is_infinite() {
+            return f64::INFINITY;
+        }
+        if tan_theta.abs() < 1.0e-8 {
+            return 0.0;
+        }
+        let a = 1.0 / (tan_theta * alpha);
         if a.is_infinite() {
             return f64::INFINITY;
         }
@@ -232,5 +239,30 @@ impl MicrofacetDistribution for BeckmannDistribution {
             }
         }
         unsafe { results.assume_init() }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use base::{
+        math::sph_to_cart,
+        units::{Degs, Rads},
+    };
+
+    #[test]
+    fn test_msf1_beckmann() {
+        use super::*;
+        use base::math::Vec3;
+
+        let distro = BeckmannDistribution::new(0.75, 0.75);
+        let wm = Vec3::new(0.0, 0.0, 1.0);
+        let evaluated = (0..90)
+            .into_iter()
+            .map(|i| {
+                let w = sph_to_cart(Degs::new(i as f32).to_radians(), Rads::new(0.0));
+                distro.eval_msf1(wm, w)
+            })
+            .collect::<Vec<_>>();
+        println!("{:?}", evaluated);
     }
 }
