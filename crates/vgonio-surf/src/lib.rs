@@ -502,9 +502,10 @@ impl MicroSurface {
     /// Computes the root-mean-square height of the height field.
     pub fn rms_height(&self) -> f32 {
         let rcp_n = rcp_f32(self.samples.len() as f32);
+        let mean = self.samples.iter().sum::<f32>() * rcp_n;
         self.samples
             .iter()
-            .fold(0.0, |acc, x| acc + x * x * rcp_n)
+            .fold(0.0, |acc, x| acc + sqr(x - mean) * rcp_n)
             .sqrt()
     }
 
