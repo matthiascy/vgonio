@@ -5,7 +5,7 @@ use crate::array::{
 };
 
 /// Base struct for all arrays.
-pub struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
+pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
 where
     D: Data,
     S: Shape,
@@ -40,6 +40,10 @@ where
     /// Returns the strides of the array.
     #[inline]
     pub const fn strides(&self) -> &[usize] { self.meta.strides::<L>() }
+
+    /// Returns the number of dimensions of the array.
+    #[inline]
+    pub const fn dimension(&self) -> usize { self.meta.dimension() }
 
     /// Returns the layout of the array.
     #[inline]

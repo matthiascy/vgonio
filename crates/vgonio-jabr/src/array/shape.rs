@@ -13,6 +13,7 @@ pub trait Shape {
 pub(crate) trait ShapeMetadata: Clone {
     fn shape(&self) -> &[usize];
     fn strides<const L: MemLayout>(&self) -> &[usize];
+    fn dimension(&self) -> usize;
 }
 
 /// Metadata for dynamically-sized shapes.
@@ -36,6 +37,8 @@ where
     fn shape(&self) -> &[usize] { self.shape.as_slice() }
 
     fn strides<const L: MemLayout>(&self) -> &[usize] { self.strides.as_slice() }
+
+    fn dimension(&self) -> usize { self.shape.len() }
 }
 
 #[derive(Copy, Clone)]
@@ -56,6 +59,8 @@ where
             &T::COL_MAJOR_STRIDES
         }
     }
+
+    fn dimension(&self) -> usize { T::N_DIMS }
 }
 
 /// Shape for fixed-size dimension sequences.

@@ -21,6 +21,8 @@ where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
     [(); S::N_ELEMS]:,
 {
+    super::forward_const_core_array_methods!();
+
     /// Creates a new array with the given data and shape.
     pub fn new(data: [T; S::N_ELEMS]) -> Self
     where
@@ -28,12 +30,6 @@ where
     {
         Self(ArrCore::new(S::SHAPE, DynFixSized::from_slice(&data)))
     }
-
-    /// Returns the shape of the array.
-    pub fn shape(&self) -> &[usize] { self.0.shape() }
-
-    /// Returns the strides of the array.
-    pub fn strides(&self) -> &[usize] { self.0.strides() }
 }
 
 #[cfg(test)]
