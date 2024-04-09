@@ -5,7 +5,7 @@ use std::ops::Index;
 ///
 /// The dimension is set at compilation time and cannot be changed, but the size
 /// of each dimension can be changed at runtime (non-growable).
-pub struct DyArr<T, const N: usize, const L: MemLayout = { MemLayout::ColMajor }>(
+pub struct DyArr<T, const N: usize, const L: MemLayout = { MemLayout::RowMajor }>(
     pub(crate) ArrCore<DynSized<T>, [usize; N], L>,
 );
 
@@ -23,6 +23,12 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
             shape,
             DynSized::with_capacity(shape.iter().product()),
         ))
+    }
+
+    /// Creates a new array with the given data and shape.
+    pub fn with_data(shape: [usize; N], data: Vec<T>) -> Self {
+        assert_eq!(shape.iter().product::<usize>(), data.len());
+        Self(ArrCore::new(shape, DynSized::from_vec(data)))
     }
 
     /// Reshapes the array to the given shape.
@@ -56,7 +62,7 @@ mod tests {
 
     #[test]
     fn test_dyarr_creation() {
-        let arr: DyArr<i32, 3, { MemLayout::RowMajor }> = DyArr::new([2, 3, 2]);
+        let arr: DyArr<i32, 3> = DyArr::new([2, 3, 2]);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
     }

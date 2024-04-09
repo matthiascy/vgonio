@@ -5,7 +5,7 @@ use crate::array::{
 
 /// A dynamically-sized array with dynamical number of dimensions
 /// and size of each dimension at runtime (growable).
-pub struct DynArr<T, const L: MemLayout = { MemLayout::ColMajor }>(
+pub struct DynArr<T, const L: MemLayout = { MemLayout::RowMajor }>(
     pub(crate) ArrCore<DynSized<T>, Vec<usize>, L>,
 );
 

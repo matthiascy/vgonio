@@ -1,12 +1,11 @@
 use crate::array::{
-    dim::DimSeq,
     mem::{Data, DataClone, DataCopy, MemLayout},
-    shape::{compute_index, compute_n_elems, Shape, ShapeMetadata},
+    shape::{self, Shape, ShapeMetadata},
 };
 use std::ops::Index;
 
 /// Base struct for all arrays.
-pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
+pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::RowMajor }>
 where
     D: Data,
     S: Shape,
@@ -90,7 +89,7 @@ where
                     .all(|(&i, &s)| i < s),
             "Index out of bounds"
         );
-        let idx = compute_index::<_, L>(&self.meta, &index);
+        let idx = shape::compute_index::<_, L>(&self.meta, &index);
         &self.data.as_slice()[idx]
     }
 }
@@ -112,21 +111,16 @@ mod tests {
             ArrCore::new([3, 2, 4], FixedSized([0.0f32; 24]));
         let darr: ArrCore<DynFixSized<f32, 9>, s![3, 3]> =
             ArrCore::new([3, 3], DynFixSized::from_slice(&[3.0f32; 9]));
-        let dyarr: ArrCore<DynSized<f32>, [usize; 3], { MemLayout::RowMajor }> =
+        let dyarr: ArrCore<DynSized<f32>, [usize; 3], { MemLayout::ColMajor }> =
             ArrCore::new([4, 6, 2], DynSized::from(vec![3.0f32; 48]));
-        let dynarr: ArrCore<DynSized<f32>, Vec<usize>, { MemLayout::RowMajor }> =
-            ArrCore::new(vec![4, 6, 2], DynSized::from(vec![3.0f32; 48]));
         assert_eq!(arr.shape(), [3, 2, 4]);
-        assert_eq!(arr.strides(), [1, 3, 6]);
+        assert_eq!(arr.strides(), [8, 4, 1]);
 
         assert_eq!(darr.shape(), [3, 3]);
-        assert_eq!(darr.strides(), [1, 3]);
+        assert_eq!(darr.strides(), [3, 1]);
 
         assert_eq!(dyarr.shape(), [4, 6, 2]);
-        assert_eq!(dyarr.strides(), [12, 2, 1]);
-
-        assert_eq!(dynarr.shape(), dynarr.shape());
-        assert_eq!(dynarr.strides(), dynarr.strides());
+        assert_eq!(dyarr.strides(), [1, 4, 24]);
     }
 
     #[test]

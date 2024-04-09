@@ -6,6 +6,7 @@ use std::{
     ops::Deref,
 };
 
+// TODO: avoid using Vec here as it will over allocate memory
 /// Dynamic-sized array on the heap.
 pub struct DynSized<T, A = Global>
 where
@@ -307,7 +308,7 @@ mod tests {
     #[test]
     fn fixed_sized_display() {
         let a = DynFixSized::from([1u32, 2, 3]);
-        assert_eq!(format!("{:?}", a), "FixedSized([1, 2, 3])");
+        assert_eq!(format!("{:?}", a), "FixSized([1, 2, 3])");
         assert_eq!(format!("{}", a), "[1, 2, 3]");
     }
 }
