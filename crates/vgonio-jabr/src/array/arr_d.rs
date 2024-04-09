@@ -10,7 +10,7 @@ use crate::array::{
 /// The number of dimensions and the size of each dimension are set at
 /// compilation time and cannot be changed.
 pub struct DArr<T, S, const L: MemLayout = { MemLayout::ColMajor }>(
-    ArrCore<DynFixSized<T, { S::N_ELEMS }>, S, L>,
+    pub(crate) ArrCore<DynFixSized<T, { S::N_ELEMS }>, S, L>,
 )
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,

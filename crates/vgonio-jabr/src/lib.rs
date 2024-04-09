@@ -17,6 +17,7 @@ mod expr;
 pub mod linalg;
 pub mod optics;
 pub mod prelude;
+mod utils;
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 

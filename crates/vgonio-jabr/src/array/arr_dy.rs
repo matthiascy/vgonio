@@ -5,7 +5,7 @@ use crate::array::{core::ArrCore, mem::heap::DynSized, MemLayout};
 /// The dimension is set at compilation time and cannot be changed, but the size
 /// of each dimension can be changed at runtime (non-growable).
 pub struct DyArr<T, const N: usize, const L: MemLayout = { MemLayout::ColMajor }>(
-    ArrCore<DynSized<T>, [usize; N], L>,
+    pub(crate) ArrCore<DynSized<T>, [usize; N], L>,
 );
 
 impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
@@ -33,6 +33,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
             shape.iter().filter(|&&x| x == -1).count() <= 1,
             "Only one dimension size can be -1"
         );
+        todo!()
     }
 }
 

@@ -11,9 +11,9 @@ where
     S: Shape,
 {
     /// The data of the array.
-    data: D,
+    pub data: D,
     /// The extra shape info of the array.
-    meta: S::Metadata,
+    pub meta: S::Metadata,
     marker: core::marker::PhantomData<(D, S)>,
 }
 

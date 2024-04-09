@@ -6,7 +6,7 @@ use crate::array::{
 /// A dynamically-sized array with dynamical number of dimensions
 /// and size of each dimension at runtime (growable).
 pub struct DynArr<T, const L: MemLayout = { MemLayout::ColMajor }>(
-    ArrCore<DynSized<T>, Vec<usize>, L>,
+    pub(crate) ArrCore<DynSized<T>, Vec<usize>, L>,
 );
 
 impl<T, const L: MemLayout> DynArr<T, L> {
@@ -19,7 +19,8 @@ impl<T, const L: MemLayout> DynArr<T, L> {
         Self(ArrCore::new(shape, DynSized::with_capacity(n_elems)))
     }
 
-    pub fn reshape<const M: usize>(&self, shape: [usize; M]) -> DyArr<T, M, L> { todo!() }
+    // pub fn reshape<const M: usize>(&self, shape: [usize; M]) -> DyArr<T, M, L> {
+    // todo!() }
 }
 
 #[cfg(test)]

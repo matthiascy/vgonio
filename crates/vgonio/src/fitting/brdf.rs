@@ -55,7 +55,7 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     pub iors_t: Box<[Ior]>,
     /// The refractive index registry.
     // Used to retrieve the refractive indices of the incident and transmitted
-    // mediums while calculating the modelled BSDF maxiumum values.
+    // mediums while calculating the modelled BSDF maximum values.
     pub iors: &'a RefractiveIndexRegistry,
     /// The initial guess for the roughness parameter.
     pub initial_guess: RangeByStepSizeInclusive<f64>,

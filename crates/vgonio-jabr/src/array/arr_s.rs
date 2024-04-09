@@ -1,16 +1,17 @@
-use crate::array::{
-    core::ArrCore,
-    forward_core_array_methods,
-    mem::{stack::FixedSized, MemLayout},
-    shape::ConstShape,
+use crate::{
+    array::{
+        core::ArrCore,
+        mem::{stack::FixedSized, MemLayout},
+        shape::ConstShape,
+    },
+    utils::{Assert, IsTrue},
 };
-use std::ops::Deref;
 
 /// A fixed-size multidimensional array on the stack with type level fixed
 /// shape (dimensions and size of each dimension).
 /// There is no extra metadata associated with the array.
 pub struct Arr<T, S, const L: MemLayout = { MemLayout::ColMajor }>(
-    ArrCore<FixedSized<T, { S::N_ELEMS }>, S, L>,
+    pub(crate) ArrCore<FixedSized<T, { S::N_ELEMS }>, S, L>,
 )
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
@@ -25,6 +26,15 @@ where
 
     /// Creates a new array with the given data and shape.
     pub fn new(data: [T; S::N_ELEMS]) -> Self { Self(ArrCore::new(S::SHAPE, FixedSized(data))) }
+
+    pub fn reshape<S0>(self) -> Arr<T, S0, L>
+    where
+        S0: ConstShape<Underlying = [usize; S0::N_DIMS]>,
+        [(); S0::N_ELEMS]:,
+        Assert<{ S::N_ELEMS == S0::N_ELEMS }>: IsTrue,
+    {
+        todo!("Implement reshape for Arr")
+    }
 }
 
 impl<T, S, const L: MemLayout> Clone for Arr<T, S, L>
