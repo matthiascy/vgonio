@@ -22,7 +22,12 @@ where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
     [(); S::N_ELEMS]:,
 {
-    super::forward_const_core_array_methods!();
+    super::forward_core_array_methods!(@const
+        shape -> &[usize], #[doc = "Returns the shape of the array."];
+        strides -> &[usize], #[doc = "Returns the strides of the array."];
+        order -> MemLayout, #[doc = "Returns the layout of the array."];
+        dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
+    );
 
     /// Creates a new array with the given data and shape.
     pub fn new(data: [T; S::N_ELEMS]) -> Self { Self(ArrCore::new(S::SHAPE, FixedSized(data))) }

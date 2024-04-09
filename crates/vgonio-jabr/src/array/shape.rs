@@ -16,6 +16,22 @@ pub(crate) trait ShapeMetadata: Clone {
     fn dimension(&self) -> usize;
 }
 
+/// Computes the index of an element in a multidimensional array given its
+/// coordinates and the layout of the array.
+pub const fn compute_index<M, const L: MemLayout>(meta: &M, index: &[usize]) -> usize
+where
+    M: ShapeMetadata,
+{
+    let strides = meta.strides::<L>();
+    let mut i = 0;
+    let mut idx = 0;
+    while i < meta.dimension() {
+        idx += index[i] * strides[i];
+        i += 1;
+    }
+    idx
+}
+
 /// Metadata for dynamically-sized shapes.
 #[derive(Clone, Debug)]
 pub struct DynShapeMetadata<T>

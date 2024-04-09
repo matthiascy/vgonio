@@ -1,8 +1,9 @@
 use crate::array::{
     dim::DimSeq,
     mem::{Data, DataClone, DataCopy, MemLayout},
-    shape::{compute_n_elems, Shape, ShapeMetadata},
+    shape::{compute_index, compute_n_elems, Shape, ShapeMetadata},
 };
+use std::ops::Index;
 
 /// Base struct for all arrays.
 pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::ColMajor }>
@@ -72,6 +73,28 @@ where
 {
 }
 
+impl<D, S, const L: MemLayout, const N: usize> Index<[usize; N]> for ArrCore<D, S, L>
+where
+    D: Data,
+    S: Shape,
+{
+    type Output = D::Elem;
+
+    #[track_caller]
+    fn index(&self, index: [usize; N]) -> &Self::Output {
+        debug_assert!(
+            N <= self.meta.dimension()
+                && index
+                    .iter()
+                    .zip(self.meta.shape().iter())
+                    .all(|(&i, &s)| i < s),
+            "Index out of bounds"
+        );
+        let idx = compute_index::<_, L>(&self.meta, &index);
+        &self.data.as_slice()[idx]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,5 +152,34 @@ mod tests {
             std::mem::size_of_val(&dynarr),
             std::mem::size_of::<DynSized<f32>>() + std::mem::size_of::<Vec<usize>>() * 2
         );
+    }
+
+    #[test]
+    fn test_arr_core_index() {
+        let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
+        let dyarr: ArrCore<DynSized<f32>, [usize; 3], { MemLayout::ColMajor }> =
+            ArrCore::new([4, 6, 2], DynSized::from(data));
+        assert_eq!(dyarr[[0, 0, 0]], 0.0);
+        assert_eq!(dyarr[[1, 2, 1]], 33.0);
+        assert_eq!(dyarr[[3, 5, 1]], 47.0);
+        // TODO: test with other layouts
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_arr_core_index_panic_dimension_mismatch() {
+        let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
+        let dynarr: ArrCore<DynSized<f32>, Vec<usize>, { MemLayout::RowMajor }> =
+            ArrCore::new(vec![2, 3, 4, 2], DynSized::from(data));
+        assert_eq!(dynarr[[0, 0, 0, 0, 0]], 0.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_arr_core_index_panic_size_mismatch() {
+        let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
+        let dynarr: ArrCore<DynSized<f32>, Vec<usize>, { MemLayout::RowMajor }> =
+            ArrCore::new(vec![2, 3, 4, 2], DynSized::from(data));
+        assert_eq!(dynarr[[1, 2, 4, 0]], 0.0);
     }
 }

@@ -24,6 +24,7 @@ use base::{
     Asset, Version,
 };
 use chrono::{DateTime, Local};
+use jabr::array::{DArr, DyArr};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -82,7 +83,7 @@ pub struct SampledBrdf {
     /// Wavelengths in nanometers.
     pub spectrum: Box<[Nanometres]>,
     /// Samples of each wi-wo pair for each wavelength.
-    pub samples: Box<[f32]>,
+    pub samples: DyArr<f32, 2>,
     /// Maximum values of the spectral samples for each snapshot (wi direction).
     pub max_values: Box<[f32]>,
     /// All pairs of incidents and outgoing directions. The first element of the

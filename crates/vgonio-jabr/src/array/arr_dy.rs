@@ -1,4 +1,5 @@
 use crate::array::{core::ArrCore, mem::heap::DynSized, MemLayout};
+use std::ops::Index;
 
 /// A dynamically-sized array with a known number of dimensions at compile-time.
 ///
@@ -9,7 +10,12 @@ pub struct DyArr<T, const N: usize, const L: MemLayout = { MemLayout::ColMajor }
 );
 
 impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
-    super::forward_const_core_array_methods!();
+    super::forward_core_array_methods!(@const
+        shape -> &[usize], #[doc = "Returns the shape of the array."];
+        strides -> &[usize], #[doc = "Returns the strides of the array."];
+        order -> MemLayout, #[doc = "Returns the layout of the array."];
+        dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
+    );
 
     /// Creates a new array with the given data and shape.
     pub fn new(shape: [usize; N]) -> Self {
@@ -35,6 +41,13 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         );
         todo!()
     }
+}
+
+impl<T, const L: MemLayout, const N: usize> Index<[usize; N]> for DyArr<T, N, L> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, index: [usize; N]) -> &Self::Output { &self.0[index] }
 }
 
 #[cfg(test)]
