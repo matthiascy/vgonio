@@ -22,8 +22,12 @@ use bxdf::{
     distro::{BeckmannDistribution, MicrofacetDistroKind},
     Scattering,
 };
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
+use rayon::{
+    iter::{
+        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
+    slice::ParallelSliceMut,
 };
 use std::sync::atomic::AtomicU64;
 
@@ -155,8 +159,18 @@ fn compute_distance(
                     if patch.center().theta > max_theta_o {
                         0.0
                     } else {
-                        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        sqr(model_samples[0] as f64 - measured_samples[0] as f64 / *measured_max)
+                        count.fetch_add(
+                            model_samples.len() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                        let mut sum = 0.0;
+                        for (model_sample, measured_sample) in
+                            model_samples.iter().zip(measured_samples.iter())
+                        {
+                            sum +=
+                                sqr(*model_sample as f64 - *measured_sample as f64 / *measured_max);
+                        }
+                        sum
                     }
                 })
                 .sum::<f64>()
@@ -175,6 +189,7 @@ fn compute_distance(
     }
 }
 
+// TODO: all wavelengths are considered for the error computation
 /// Returns the maximum values of each snapshot for the target BRDF.
 pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
     sampled_brdf: &SampledBrdf,
@@ -302,13 +317,15 @@ fn compute_distance_from_sampled_brdf(
 /// # Returns
 ///
 /// The generated BRDFs and the maximum values of the spectral samples for each
-/// snapshot.
+/// snapshot and each wavelength. The first dimension of the returned array
+/// corresponds to the snapshot index, the second dimension corresponds to the
+/// wavelength index (Row-major order).
 pub(crate) fn generate_analytical_brdf(
     params: &BsdfMeasurementParams,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
     normalize: bool,
-) -> (MeasuredBsdfData, Box<[Box<[f64]>]>) {
+) -> (MeasuredBsdfData, Box<[f64]>) {
     let mut brdf = MeasuredBsdfData {
         params: params.clone(),
         snapshots: Box::new([]),
@@ -328,19 +345,17 @@ pub(crate) fn generate_analytical_brdf(
     let iors_t = iors
         .ior_of_spectrum(params.transmitted_medium, &wavelengths)
         .unwrap();
-    let mut max_values = vec![vec![-1.0f64; wavelengths.len()].into_boxed_slice(); meas_pts.len()]
-        .into_boxed_slice();
+    let mut max_values = vec![-1.0f64; wavelengths.len() * meas_pts.len()].into_boxed_slice();
     let mut snapshots = Box::new_uninit_slice(meas_pts.len());
     meas_pts
         .par_iter()
-        .zip(max_values.par_iter_mut())
+        .zip(max_values.par_chunks_mut(wavelengths.len()))
         .zip(snapshots.par_iter_mut())
         .chunks(32)
         .for_each(|chunk| {
-            for ((wi_sph, snap_max_values), snapshot) in chunk {
+            for ((wi_sph, max_values_per_snapshot), snapshot) in chunk {
                 let wi = wi_sph.to_cartesian();
                 let mut samples = vec![];
-                let mut max_values_per_snapshot = vec![-1.0; wavelengths.len()];
                 for patch in partition.patches.iter() {
                     let wo_sph = patch.center();
                     let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
@@ -363,7 +378,6 @@ pub(crate) fn generate_analytical_brdf(
                         }
                     }
                 }
-                *snap_max_values = max_values_per_snapshot.into_boxed_slice();
                 snapshot.write(BsdfSnapshot {
                     wi: *wi_sph,
                     samples: samples.into_boxed_slice(),

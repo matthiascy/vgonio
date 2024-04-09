@@ -405,6 +405,7 @@ impl From<u8> for BsdfKind {
     }
 }
 
+/// TODO: remove this.
 /// Stores the sample data per wavelength for a spectrum.
 #[derive(Debug, Default)]
 pub struct SpectralSamples<T>(Box<[T]>);
