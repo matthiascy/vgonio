@@ -84,7 +84,8 @@ pub struct SampledBrdf {
     pub spectrum: Box<[Nanometres]>,
     /// Samples of each wi-wo pair for each wavelength.
     pub samples: Box<[f32]>,
-    /// Maximum values of the spectral samples for each snapshot (wi direction).
+    /// Maximum values of the spectral samples for each snapshot (wi direction) and
+    /// each wavelength. Row-major [snapshot x wavelength] array.
     pub max_values: Box<[f32]>,
     /// All pairs of incidents and outgoing directions. The first element of the
     /// tuple is the incident direction. The second element is the list of

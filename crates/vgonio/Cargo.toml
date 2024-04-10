@@ -12,6 +12,7 @@ default = []
 embree = ["dep:embree", "surf/embree"]
 optix = []
 bench = ["surf/bench"]
+fitting = ["bxdf/fitting"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
 visu-dbg = []
@@ -61,7 +62,7 @@ winit.workspace = true
 wgpu.workspace = true
 surf = { package = "vgonio-surf", path = "../vgonio-surf" }
 base = { package = "vgonio-base", path = "../vgonio-base", features = ["cli", "winit", "io"] }
-bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli", "fitting"] }
+bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli"] }
 jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
 gfxkit = { package = "vgonio-gfxkit", path = "../vgonio-gfxkit" }
 

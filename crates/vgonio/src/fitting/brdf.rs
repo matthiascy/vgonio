@@ -37,7 +37,7 @@ use rayon::{
 };
 use std::{
     borrow::Cow,
-    fmt::{Debug, Display},
+    fmt::{Display},
 };
 
 /// The fitting problem for the microfacet based BSDF model.
@@ -706,55 +706,13 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     }
 }
 
-fn eval_sampled_brdf_residuals<const I: Isotropy>(
-    problem: &SampledBrdfFittingProblemProxy<I>,
-) -> Box<[f64]> {
-    let max_modelled = problem.max_modelled.as_ref().map(|maxes| {
-        maxes
-            .iter()
-            .find(|((ax, ay), _)| [*ax, *ay] == problem.model.params())
-            .unwrap()
-            .1
-            .as_ref()
-    });
-    let max_measured = problem.max_measured.as_ref().map(|m| m.as_ref());
-    let spectrum_len = problem.measured.spectrum.len();
-    problem
-        .measured
-        .wi_wo_pairs
-        .iter()
-        .enumerate()
-        .flat_map(|(i, (wi, wos, offset))| {
-            let max_modelled = max_modelled.map_or(1.0, |m| m[i]);
-            // Only the first spectral sample is considered.
-            let max_measured = max_measured.map_or(1.0, |m| m[i]);
-            let wi = wi.to_cartesian();
-            wos.iter().enumerate().map(move |(i, wo)| {
-                let wo = wo.to_cartesian();
-                let modelled = Scattering::eval_reflectance(
-                    problem.model.as_ref(),
-                    &wi,
-                    &wo,
-                    &problem.iors_i[0],
-                    &problem.iors_t[0],
-                ) / max_modelled;
-                let measured = problem.measured.samples[(*offset as usize + i) * spectrum_len]
-                    as f64
-                    / max_measured;
-                measured - modelled
-            })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
-}
-
 struct SampledBrdfFittingProblemProxy<'a, const I: Isotropy> {
     measured: &'a SampledBrdf,
     max_measured: Option<Box<[f64]>>,
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
-    /// Maximum value of the modelled samples for each snapshot(incident
-    /// direction). Only the first spectral sample is considered.
-    max_modelled: Option<Vec<((f64, f64), Box<[f64]>)>>,
+    /// Maximum value of the modelled samples for each snapshot(incident direction)
+    /// and wavelength. The array is stored as major array [snapshot, wavelength].
+    max_modelled: Option<Vec<((f64, f64), Box<[f32]>)>>,
     normalise: bool,
     iors: &'a RefractiveIndexRegistry,
     iors_i: &'a [Ior],
@@ -828,6 +786,92 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
     }
 }
 
+fn eval_sampled_brdf_residuals<const I: Isotropy>(
+    problem: &SampledBrdfFittingProblemProxy<I>,
+) -> Box<[f64]> {
+    let max_modelled = problem.max_modelled.as_ref().map(|maxes| {
+        maxes
+            .iter()
+            .find(|((ax, ay), _)| [*ax, *ay] == problem.model.params())
+            .unwrap()
+            .1
+            .as_ref()
+    });
+    let max_measured = problem.max_measured.as_ref().map(|m| m.as_ref());
+    let spectrum_len = problem.measured.spectrum.len();
+    problem
+        .measured
+        .wi_wo_pairs
+        .iter()
+        .enumerate()
+        .flat_map(|(i, (wi, wos, offset))| {
+            let wi = wi.to_cartesian();
+            wos.iter().enumerate().flat_map(move |(i, wo)| {
+                let wo = wo.to_cartesian();
+                // Reuse the memory of the modelled samples to store the residuals.
+                let mut modelled = Scattering::eval_reflectance_spectrum(
+                    problem.model.as_ref(),
+                    &wi,
+                    &wo,
+                    &problem.iors_i,
+                    &problem.iors_t,
+                ).into_vec();
+                let measured = &problem.measured.samples[(*offset as usize + i) * spectrum_len..(*offset as usize + i + 1) * spectrum_len];
+                match (max_modelled, max_measured) {
+                    (Some(max_modelled), Some(max_measured)) => {
+                        let max_modelled = &max_modelled[i * spectrum_len..(i + 1) * spectrum_len];
+                        modelled.iter_mut().zip(measured.iter()).zip(max_modelled).zip(max_measured).for_each(|(((modelled, measured), max_modelled), max_measured)| {
+                            *modelled = *measured as f64 / *max_measured as f64 - *modelled / *max_modelled as f64;
+                        });
+                    }
+                    (None, None) => {
+                        modelled.iter_mut().zip(measured.iter()).for_each(|(modelled, measured)| {
+                            *modelled = *measured as f64 - *modelled;
+                        });
+                    }
+                    _ => {unreachable!()}
+                }
+                modelled.into_iter()
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn update_modelled_maximum_values<const I: Isotropy>(problem: &mut SampledBrdfFittingProblemProxy<I>, isotropy: Isotropy, alphax: f64, alphay: f64) {
+    let max_modelled_found = match isotropy {
+        Isotropy::Isotropic => {
+            problem.max_modelled.as_ref()
+                .unwrap()
+                .iter()
+                .find(|((ax, ay), _)| *ax == alphax)
+                .is_none()
+        }
+        Isotropy::Anisotropic => {
+            problem.max_modelled.as_ref()
+                .unwrap()
+                .iter()
+                .find(|((ax, ay), _)| *ax == alphax && *ay == alphay)
+                .is_none()
+        }
+    };
+    if problem.normalise {
+        if max_modelled_found {
+            let maxes = generate_analytical_brdf_from_sampled_brdf(
+                &problem.measured,
+                problem.model.as_ref(),
+                problem.iors,
+                problem.normalise,
+            )
+                .max_values;
+            problem.max_modelled
+                .as_mut()
+                .unwrap()
+                .push(((alphax, alphay), maxes));
+        }
+    }
+}
+
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
     for SampledBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
 {
@@ -837,36 +881,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 
     fn set_params(&mut self, params: &Vector<f64, U1, Self::ParameterStorage>) {
         self.model.set_params(&[params[0], params[0]]);
-        let alpha = self.model.params()[0];
-        if self.normalise {
-            if self
-                .max_modelled
-                .as_ref()
-                .unwrap()
-                .iter()
-                .find(|(a, _)| a.0 == alpha)
-                .is_none()
-            {
-                let maxes = generate_analytical_brdf_from_sampled_brdf(
-                    &self.measured,
-                    self.model.as_ref(),
-                    self.iors,
-                    self.normalise,
-                )
-                .max_values;
-                // currently only the first wavelength is used
-                let first_wavelength_maxes = maxes
-                    .iter()
-                    .step_by(self.measured.spectrum.len())
-                    .map(|s| *s as f64)
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-                self.max_modelled
-                    .as_mut()
-                    .unwrap()
-                    .push(((alpha, alpha), first_wavelength_maxes));
-            }
-        }
+        update_modelled_maximum_values(self, Isotropy::Isotropic, params[0], params[0]);
     }
 
     fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
@@ -884,11 +899,12 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
             .measured
             .wios()
             .iter()
-            .map(|(wi_sph, wo_sph)| {
+            .flat_map(|(wi_sph, wo_sph)| {
                 let wi = wi_sph.to_cartesian();
                 let wo = wo_sph.to_cartesian();
-                self.model
-                    .pd_iso(&wi, &wo, &self.iors_i[0], &self.iors_t[0])
+                self.iors_i.iter().zip(self.iors_t).map(move |(ior_i, ior_t)| {
+                    self.model.pd_iso(&wi, &wo, ior_i, ior_t)
+                })
             })
             .collect::<Vec<_>>();
         Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&pds))
@@ -904,38 +920,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
 
     fn set_params(&mut self, params: &Vector<f64, U2, Self::ParameterStorage>) {
         self.model.set_params(&[params[0], params[1]]);
-        let [alpha_x, alpha_y] = self.model.params();
-        if self.normalise {
-            if self
-                .max_modelled
-                .as_ref()
-                .unwrap()
-                .iter()
-                .find(|((ax, ay), _)| *ax == alpha_x && *ay == alpha_y)
-                .is_none()
-            {
-                // TODO: REFACTOR we normalize the analytical brdf once here, only get the
-                // maximum values and then normalize it again in the residuals
-                let maxes = generate_analytical_brdf_from_sampled_brdf(
-                    &self.measured,
-                    self.model.as_ref(),
-                    self.iors,
-                    self.normalise,
-                )
-                .max_values;
-                // currently only the first wavelength is used
-                let first_wavelength_maxes = maxes
-                    .iter()
-                    .step_by(self.measured.spectrum.len())
-                    .map(|s| *s as f64)
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-                self.max_modelled
-                    .as_mut()
-                    .unwrap()
-                    .push(((alpha_x, alpha_y), first_wavelength_maxes));
-            }
-        }
+        update_modelled_maximum_values(self, Isotropy::Anisotropic, params[0], params[1]);
     }
 
     fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
@@ -956,7 +941,9 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
             .flat_map(|(wi_sph, wo_sph)| {
                 let wi = wi_sph.to_cartesian();
                 let wo = wo_sph.to_cartesian();
-                self.model.pd(&wi, &wo, &self.iors_i[0], &self.iors_t[0])
+                self.iors_i.iter().zip(self.iors_t).flat_map(move |(ior_i, ior_t)| {
+                    self.model.pd(&wi, &wo, ior_i, ior_t)
+                })
             })
             .collect::<Vec<_>>();
         Some(OMatrix::<f64, Dyn, U2>::from_row_slice(&pds))

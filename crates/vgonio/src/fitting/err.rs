@@ -289,14 +289,14 @@ pub fn compute_iso_sampled_brdf_err(
 }
 
 fn compute_distance_from_sampled_brdf(
-    normalised: &SampledBrdf,
+    modelled: &SampledBrdf,
     measured: &SampledBrdf,
     error_metric: ErrorMetric,
 ) -> f64 {
-    let sqr_err_sum = normalised
+    let sqr_err_sum = modelled
         .samples
         .iter()
-        .step_by(normalised.spectrum.len())
+        .step_by(modelled.spectrum.len())
         .zip(measured.samples.iter().step_by(measured.spectrum.len()))
         .map(|(model_samples, measured_samples)| {
             sqr(*model_samples as f64 - *measured_samples as f64)
@@ -304,7 +304,7 @@ fn compute_distance_from_sampled_brdf(
         .sum::<f64>();
     match error_metric {
         ErrorMetric::Mse => {
-            let n = normalised.wi_wo_pairs.len() * normalised.spectrum.len();
+            let n = modelled.wi_wo_pairs.len() * modelled.spectrum.len();
             sqr_err_sum / n as f64
         }
         ErrorMetric::Nlls => sqr_err_sum * 0.5,
