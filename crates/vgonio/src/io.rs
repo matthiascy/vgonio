@@ -1278,16 +1278,16 @@ mod tests {
             n_captured: SpectralSamples::from_vec(vec![9, 10, 11, 12]),
             e_captured: SpectralSamples::from_vec(vec![13.0, 14.0, 15.0, 16.0]),
             num_rays_per_bounce: SpectralSamples::from_vec(vec![
-                vec![17, 18, 19],
-                vec![22, 23, 24],
-                vec![26, 27, 28],
-                vec![30, 31, 32],
+                Box::new([17, 18, 19]),
+                Box::new([22, 23, 24]),
+                Box::new([26, 27, 28]),
+                Box::new([30, 31, 32]),
             ]),
             energy_per_bounce: SpectralSamples::from_vec(vec![
-                vec![1.0, 2.0, 4.0],
-                vec![5.0, 6.0, 7.0],
-                vec![8.0, 9.0, 10.0],
-                vec![11.0, 12.0, 13.0],
+                Box::new([1.0, 2.0, 4.0]),
+                Box::new([5.0, 6.0, 7.0]),
+                Box::new([8.0, 9.0, 10.0]),
+                Box::new([11.0, 12.0, 13.0]),
             ]),
         };
         let size = BsdfMeasurementStatsPoint::size_in_bytes(4, 3);
@@ -1334,16 +1334,16 @@ mod tests {
                 n_captured: SpectralSamples::from_vec(vec![9, 10, 11, 12]),
                 e_captured: SpectralSamples::from_vec(vec![13.0, 14.0, 15.0, 16.0]),
                 num_rays_per_bounce: SpectralSamples::from_vec(vec![
-                    vec![17, 18, 19],
-                    vec![22, 23, 24],
-                    vec![26, 27, 28],
-                    vec![30, 31, 32],
+                    Box::new([17, 18, 19]),
+                    Box::new([22, 23, 24]),
+                    Box::new([26, 27, 28]),
+                    Box::new([30, 31, 32]),
                 ]),
                 energy_per_bounce: SpectralSamples::from_vec(vec![
-                    vec![1.0, 2.0, 4.0],
-                    vec![5.0, 6.0, 7.0],
-                    vec![8.0, 9.0, 10.0],
-                    vec![11.0, 12.0, 13.0],
+                    Box::new([1.0, 2.0, 4.0]),
+                    Box::new([5.0, 6.0, 7.0]),
+                    Box::new([8.0, 9.0, 10.0]),
+                    Box::new([11.0, 12.0, 13.0]),
                 ]),
             },
             records: vec![
@@ -1430,7 +1430,8 @@ mod tests {
         let n_patches = 4;
         let snapshot = BsdfSnapshot {
             wi: Sph2::zero(),
-            samples: vec![SpectralSamples::splat(11.0, n_wavelengths); n_patches],
+            samples: vec![SpectralSamples::splat(11.0, n_wavelengths); n_patches]
+                .into_boxed_slice(),
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: vec![],
             #[cfg(any(feature = "visu-dbg", debug_assertions))]

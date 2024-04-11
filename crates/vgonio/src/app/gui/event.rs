@@ -1,3 +1,5 @@
+#[cfg(feature = "fitting")]
+use crate::fitting::FittingProblemKind;
 use crate::{
     app::{
         cache::Handle,
@@ -7,7 +9,6 @@ use crate::{
             theme::ThemeKind,
         },
     },
-    fitting::FittingProblemKind,
     io::OutputOptions,
     measure::{
         bsdf::emitter::{EmitterSamples, MeasurementPoints},

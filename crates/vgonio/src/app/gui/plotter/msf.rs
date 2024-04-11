@@ -1,5 +1,7 @@
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
+#[cfg(feature = "fitting")]
+use crate::fitting::FittedModel;
 use crate::{
     app::{
         cache::{Cache, Handle, RawCache},
@@ -8,7 +10,6 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    fitting::FittedModel,
     measure::data::MeasurementData,
 };
 use base::{

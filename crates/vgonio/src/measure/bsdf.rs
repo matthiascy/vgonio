@@ -111,7 +111,7 @@ impl MeasuredBsdfData {
             }
         }
         log::debug!(
-            "pre-noamalised? {} to normalise ? {} - max_bsdf_samples: {:?}",
+            "pre-normalised? {} to normalise ? {} - max_bsdf_samples: {:?}",
             self.normalised,
             normalize,
             max_samples
@@ -357,7 +357,12 @@ impl MeasuredBsdfData {
     /// Retrieves the BSDF sample data at the given position.
     ///
     /// The position is given in the unit spherical coordinates. The returned
-    /// data is the BSDF values for each wavelength at the given position.
+    /// data is the BSDF values for each snapshot and each wavelength at the
+    /// given position.
+    ///
+    /// The BSDF values are stored in a flat array in row-major order.
+    /// The first dimension is the snapshot index, the second dimension is the
+    /// wavelength index.
     pub fn sample_at(&self, pos: Sph2) -> Box<[f32]> {
         match self.params.receiver.scheme {
             PartitionScheme::Beckers => {
@@ -367,8 +372,11 @@ impl MeasuredBsdfData {
                     self.params.receiver.precision,
                 );
                 let theta_step = partition.precision.theta.as_f32();
-                // 1. Find the upper and lower ring where the position is located. The Upper
-                //    ring is the ring with the smallest zenith angle.
+                let n_snapshots = self.snapshots.len();
+                let n_wavelengths = self.params.emitter.spectrum.len();
+                let mut interpolated = vec![0.0; n_snapshots * n_wavelengths].into_boxed_slice();
+                // 1. Find the upper and lower ring where the position is located.
+                // The Upper ring is the ring with the smallest zenith angle.
                 let (upper_ring_idx, lower_ring_idx) = {
                     let (q, r) = pos.theta.as_f32().div_rem_euclid(&theta_step);
                     if r < theta_step * 0.5 {
@@ -382,6 +390,8 @@ impl MeasuredBsdfData {
                 if upper_ring_idx == lower_ring_idx {
                     if lower_ring_idx == 0 {
                         // Interpolate inside a triangle.
+                        let upper_ring = partition.rings[0];
+                        let lower_ring = partition.rings[1];
                     }
                     if upper_ring_idx == partition.num_rings() - 1 {
                         // This should be the last ring.
@@ -402,15 +412,21 @@ impl MeasuredBsdfData {
                                 (q, q + 1)
                             }
                         };
-                        let patch0 = partition.patches[ring.base_index + patch_idx.0];
-                        let patch1 = partition.patches[ring.base_index + patch_idx.1];
+                        let patch0_idx = ring.base_index + patch_idx.0;
+                        let patch1_idx = ring.base_index + patch_idx.1;
+                        let patch0 = partition.patches[patch0_idx];
+                        let patch1 = partition.patches[patch1_idx];
                         let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
                             / (patch1.center().phi.as_f32() - patch0.center().phi.as_f32());
-                        let mut samples =
-                            vec![0.0; self.params.emitter.spectrum.len()].into_boxed_slice();
-                        for (wavelength, sample) in samples.iter_mut().enumerate() {
-                            *sample = (1.0 - t) * self.snapshots.patch0[wavelength]
-                                + t * patch1[wavelength];
+                        for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
+                            let patch0_samples = snapshot.samples
+                                [patch0_idx * n_wavelengths..(patch0_idx + 1) * n_wavelengths];
+                            let patch1_samples = snapshot.samples
+                                [patch1_idx * n_wavelengths..(patch1_idx + 1) * n_wavelengths];
+                            for i in 0..n_wavelengths {
+                                interpolated[snap_idx * n_wavelengths + i] =
+                                    (1.0 - t) * patch0_samples[i] + t * patch1_samples[i];
+                            }
                         }
                     };
                 } else {

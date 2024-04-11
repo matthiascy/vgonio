@@ -1,18 +1,20 @@
+#[cfg(feature = "fitting")]
+use crate::fitting::{
+    err::{
+        compute_iso_microfacet_brdf_err, compute_iso_sampled_brdf_err, generate_analytical_brdf,
+        ErrorMetric,
+    },
+    FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
+};
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{
-        err::{
-            compute_iso_microfacet_brdf_err, compute_iso_sampled_brdf_err,
-            generate_analytical_brdf, ErrorMetric,
-        },
-        FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
-    },
     measure::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
+            rtc::RtcMethod,
             BsdfKind,
         },
         params::{BsdfMeasurementParams, SimulationKind},
@@ -80,7 +82,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             };
             let params = BsdfMeasurementParams {
                 kind: BsdfKind::Brdf,
+                #[cfg(feature = "embree")]
                 sim_kind: SimulationKind::GeomOptics(Embree),
+                #[cfg(not(feature = "embree"))]
+                sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
                 incident_medium: Medium::Air,
                 transmitted_medium: Medium::Aluminium,
                 emitter: EmitterParams {

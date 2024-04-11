@@ -269,7 +269,7 @@ impl Patch {
     }
 }
 
-/// A segment in form of an annulus of the collector.
+/// A segment in the form of an annulus on the collector hemisphere.
 #[derive(Debug, Copy, Clone)]
 pub struct Ring {
     /// Minimum theta angle of the annulus.
@@ -282,6 +282,18 @@ pub struct Ring {
     pub patch_count: usize,
     /// Base index of the annulus in the patches buffer.
     pub base_index: usize,
+}
+
+impl Ring {
+    /// Given a phi angle, returns the indices of the patches where the phi
+    /// angle falls in between (the patch where the phi resides and the closest
+    /// adjacent patch).
+    pub fn find_patch_indices(&self, phi: f32) -> (usize, usize) {
+        let phi = phi.wrap_to_tau();
+        let phi_min = (phi / self.phi_step).floor() as usize;
+        let phi_max = (phi / self.phi_step).ceil() as usize;
+        (phi_min, phi_max)
+    }
 }
 
 /// Beckers partitioning scheme helper functions.
@@ -382,6 +394,38 @@ impl SphericalPartition {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ring_find_patches() {
+        let ring = Ring {
+            theta_inner: 0.0,
+            theta_outer: 3.0.to_radians(),
+            phi_step: std::f32::consts::PI,
+            patch_count: 1,
+            base_index: 0,
+        };
+
+        let (phi_min, phi_max) = ring.find_patch_indices(0.0);
+        assert_eq!(phi_min, phi_max);
+        assert_eq!(phi_min, 0);
+        let (phi_min, phi_max) = ring.find_patch_indices(std::f32::consts::PI);
+        assert_eq!(phi_min, phi_max);
+        assert_eq!(phi_min, 0);
+
+        for i in 0..360 {
+            let phi = (i as f32).to_radians();
+            let (phi_min, phi_max) = ring.find_patch_indices(phi);
+            println!(
+                "phi = {}, phi_min = {}, phi_max = {}",
+                phi, phi_min, phi_max
+            );
         }
     }
 }

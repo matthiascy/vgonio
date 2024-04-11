@@ -4,9 +4,11 @@ use std::collections::HashMap;
 use base::units::LengthUnit;
 use surf::MicroSurface;
 
+#[cfg(feature = "fitting")]
+use crate::fitting::FittedModels;
+
 use crate::{
     app::cache::{Handle, RawCache},
-    fitting::FittedModels,
     measure::{
         data::{MeasurementData, MeasurementDataSource},
         params::MeasurementKind,
