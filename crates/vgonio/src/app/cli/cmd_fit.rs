@@ -30,7 +30,7 @@ use base::{
 };
 use bxdf::{
     brdf::{
-        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf, TrowbridgeReitzBrdfModel},
+        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         Bxdf, BxdfFamily,
     },
     distro::MicrofacetDistroKind,
@@ -122,102 +122,112 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .unwrap();
             }
         } else {
-            for input in opts.inputs {
-                let measurement = cache
-                    .load_micro_surface_measurement(&config, &input)
-                    .unwrap();
-                let measured = &cache.get_measurement_data(measurement).unwrap().measured;
-                match measured.as_bsdf() {
-                    None => {
-                        let measured_brdf = measured.as_sampled_brdf().unwrap();
-                        match opts.method {
-                            FittingMethod::Bruteforce => {
-                                let errs = compute_iso_sampled_brdf_err(
-                                    &measured_brdf,
-                                    opts.distro,
-                                    RangeByStepSizeInclusive::new(
-                                        opts.alpha_start.unwrap(),
-                                        opts.alpha_stop.unwrap(),
-                                        opts.alpha_step.unwrap(),
-                                    ),
-                                    &cache,
-                                    opts.normalise,
-                                    opts.error_metric.unwrap_or(ErrorMetric::Mse),
-                                );
-                                println!(
-                                    "    {}>{} MSE ({}) {:?}",
-                                    ansi::BRIGHT_YELLOW,
-                                    ansi::RESET,
-                                    input.file_name().unwrap().display(),
-                                    errs.as_slice()
-                                );
-                            }
-                            FittingMethod::Nlls => {
-                                let problem = SampledBrdfFittingProblem::new(
-                                    measured_brdf,
-                                    opts.distro,
-                                    RangeByStepSizeInclusive::new(
-                                        opts.alpha_start.unwrap(),
-                                        opts.alpha_stop.unwrap(),
-                                        opts.alpha_step.unwrap(),
-                                    ),
-                                    opts.normalise,
-                                    cache,
-                                );
-                                let report = problem.lsq_lm_fit(opts.isotropy);
-                                report.print_fitting_report();
+            if opts.olaf {
+                // opts.inputs.iter().map(|input| {
+                //     let measurement = cache
+                //         .load_micro_surface_measurement(&config, &input)
+                //         .unwrap();
+                //     &cache.get_measurement_data(measurement).unwrap().measured
+                // });
+                todo!()
+            } else {
+                for input in opts.inputs {
+                    let measurement = cache
+                        .load_micro_surface_measurement(&config, &input)
+                        .unwrap();
+                    let measured = &cache.get_measurement_data(measurement).unwrap().measured;
+                    match measured.as_bsdf() {
+                        None => {
+                            let measured_brdf = measured.as_sampled_brdf().unwrap();
+                            match opts.method {
+                                FittingMethod::Bruteforce => {
+                                    let errs = compute_iso_sampled_brdf_err(
+                                        &measured_brdf,
+                                        opts.distro,
+                                        RangeByStepSizeInclusive::new(
+                                            opts.alpha_start.unwrap(),
+                                            opts.alpha_stop.unwrap(),
+                                            opts.alpha_step.unwrap(),
+                                        ),
+                                        &cache,
+                                        opts.normalise,
+                                        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                                    );
+                                    println!(
+                                        "    {}>{} MSE ({}) {:?}",
+                                        ansi::BRIGHT_YELLOW,
+                                        ansi::RESET,
+                                        input.file_name().unwrap().display(),
+                                        errs.as_slice()
+                                    );
+                                }
+                                FittingMethod::Nlls => {
+                                    let problem = SampledBrdfFittingProblem::new(
+                                        measured_brdf,
+                                        opts.distro,
+                                        RangeByStepSizeInclusive::new(
+                                            opts.alpha_start.unwrap(),
+                                            opts.alpha_stop.unwrap(),
+                                            opts.alpha_step.unwrap(),
+                                        ),
+                                        opts.normalise,
+                                        cache,
+                                    );
+                                    let report = problem.lsq_lm_fit(opts.isotropy);
+                                    report.print_fitting_report();
+                                }
                             }
                         }
-                    }
-                    Some(measured_brdf) => {
-                        match opts.method {
-                            FittingMethod::Bruteforce => {
-                                let errs = compute_iso_microfacet_brdf_err(
-                                    &measured_brdf,
-                                    opts.max_theta_o.map(|t| deg!(t as f32)),
-                                    opts.distro,
-                                    RangeByStepSizeInclusive::new(
-                                        opts.alpha_start.unwrap(),
-                                        opts.alpha_stop.unwrap(),
-                                        opts.alpha_step.unwrap(),
-                                    ),
-                                    &cache,
-                                    opts.normalise,
-                                    opts.error_metric.unwrap_or(ErrorMetric::Mse),
-                                );
-                                println!(
-                                    "    {}>{} MSE ({}) {:?}",
-                                    ansi::BRIGHT_YELLOW,
-                                    ansi::RESET,
-                                    input.file_name().unwrap().display(),
-                                    errs.as_slice()
-                                );
-                            }
-                            FittingMethod::Nlls => {
-                                // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
-                                let problem = MicrofacetBrdfFittingProblem::new(
-                                    measured_brdf,
-                                    opts.distro,
-                                    RangeByStepSizeInclusive::new(
-                                        opts.alpha_start.unwrap(),
-                                        opts.alpha_stop.unwrap(),
-                                        opts.alpha_step.unwrap(),
-                                    ),
-                                    opts.normalise,
-                                    cache,
-                                );
-                                println!(
-                                    "    {}>{} Fitting to model: {:?} , distro: {:?}, normalise: \
-                                     {}, isotropy: {}",
-                                    ansi::BRIGHT_YELLOW,
-                                    ansi::RESET,
-                                    opts.family,
-                                    opts.distro,
-                                    opts.normalise,
-                                    opts.isotropy,
-                                );
-                                let report = problem.lsq_lm_fit(opts.isotropy);
-                                report.print_fitting_report();
+                        Some(measured_brdf) => {
+                            match opts.method {
+                                FittingMethod::Bruteforce => {
+                                    let errs = compute_iso_microfacet_brdf_err(
+                                        &measured_brdf,
+                                        opts.max_theta_o.map(|t| deg!(t as f32)),
+                                        opts.distro,
+                                        RangeByStepSizeInclusive::new(
+                                            opts.alpha_start.unwrap(),
+                                            opts.alpha_stop.unwrap(),
+                                            opts.alpha_step.unwrap(),
+                                        ),
+                                        &cache,
+                                        opts.normalise,
+                                        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                                    );
+                                    println!(
+                                        "    {}>{} MSE ({}) {:?}",
+                                        ansi::BRIGHT_YELLOW,
+                                        ansi::RESET,
+                                        input.file_name().unwrap().display(),
+                                        errs.as_slice()
+                                    );
+                                }
+                                FittingMethod::Nlls => {
+                                    // TODO: unify BrdfModel and MicrofacetBasedBrdfModel
+                                    let problem = MicrofacetBrdfFittingProblem::new(
+                                        measured_brdf,
+                                        opts.distro,
+                                        RangeByStepSizeInclusive::new(
+                                            opts.alpha_start.unwrap(),
+                                            opts.alpha_stop.unwrap(),
+                                            opts.alpha_step.unwrap(),
+                                        ),
+                                        opts.normalise,
+                                        cache,
+                                    );
+                                    println!(
+                                        "    {}>{} Fitting to model: {:?} , distro: {:?}, \
+                                         normalise: {}, isotropy: {}",
+                                        ansi::BRIGHT_YELLOW,
+                                        ansi::RESET,
+                                        opts.family,
+                                        opts.distro,
+                                        opts.normalise,
+                                        opts.isotropy,
+                                    );
+                                    let report = problem.lsq_lm_fit(opts.isotropy);
+                                    report.print_fitting_report();
+                                }
                             }
                         }
                     }
@@ -235,7 +245,18 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 #[derive(clap::Args, Debug, Clone)]
 #[clap(about = "Fits a micro-surface related measurement to a given model.")]
 pub struct FitOptions {
+    #[clap(long, short, help = "Input files to fit the measurement to.")]
     pub inputs: Vec<PathBuf>,
+
+    #[clap(
+        long,
+        help = "Whether to match the measured BRDF data to physically measured in-plane \
+                BRDF\ndata by Olaf. If true, the inputs should be in pairs of measured data and \
+                Olaf data.",
+        default_value = "false"
+    )]
+    pub olaf: bool,
+
     #[clap(
         long,
         short,
@@ -243,6 +264,7 @@ pub struct FitOptions {
                 written to the standard output."
     )]
     pub output: Option<String>,
+
     #[clap(
         long,
         short,
@@ -257,6 +279,7 @@ pub struct FitOptions {
         default_value = "isotropic"
     )]
     pub isotropy: Isotropy,
+
     #[clap(
         long,
         help = "Distribution to use for the microfacet model. If not specified, the default \
@@ -265,29 +288,51 @@ pub struct FitOptions {
         required_if_eq_all([("family", "microfacet"), ("generate", "false")])
     )]
     pub distro: MicrofacetDistroKind,
+
     #[clap(
         long,
         help = "Maximum colatitude angle in degrees for outgoing directions."
     )]
     pub max_theta_o: Option<f64>,
+
     #[clap(
         long,
         help = "Generate the analytical model for the given family and distribution.",
         default_value = "false"
     )]
     pub generate: bool,
+
     #[clap(
         long,
         help = "Whether to normalize the generated analytical model. The BRDF snapshot will be \
                 normalized to 1.0 by its maximum values of each snapshot."
     )]
     pub normalise: bool,
-    #[clap(long = "astart", help = "Start roughness.", default_value = "0.01")]
+
+    #[clap(
+        short = 's',
+        long = "alpha_start",
+        help = "Start roughness.",
+        default_value = "0.01"
+    )]
     pub alpha_start: Option<f64>,
-    #[clap(long = "astop", help = "End roughness.", default_value = "1.0")]
+
+    #[clap(
+        short = 'e',
+        long = "alpha_stop",
+        help = "End roughness.",
+        default_value = "1.0"
+    )]
     pub alpha_stop: Option<f64>,
-    #[clap(long = "astep", help = "Roughness step size.", default_value = "0.01")]
+
+    #[clap(
+        short = 'p',
+        long = "alpha_step",
+        help = "Roughness step size.",
+        default_value = "0.01"
+    )]
     pub alpha_step: Option<f64>,
+
     #[clap(
         short,
         long,
@@ -295,6 +340,7 @@ pub struct FitOptions {
         default_value = "bruteforce"
     )]
     pub method: FittingMethod,
+
     #[clap(
         short,
         long,

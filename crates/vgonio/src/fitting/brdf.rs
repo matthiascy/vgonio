@@ -399,8 +399,8 @@ fn new_microfacet_brdf_fitting_problem_proxy_common(
             .zip(max.chunks_mut(n_wavelengths))
             .par_bridge()
             .for_each(|(snapshot, max)| {
-                for s in snapshot.samples.iter() {
-                    for (j, s) in s.iter().enumerate() {
+                for spectral_samples in snapshot.samples.iter() {
+                    for (j, s) in spectral_samples.iter().enumerate() {
                         max[j] = f64::max(max[j], *s as f64);
                     }
                 }
@@ -495,7 +495,7 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
     let n_patches = problem.partition.num_patches();
     let residuals_count = problem.measured.snapshots.len() * n_patches * problem.n_wavelengths;
     let mut rs = Box::new_uninit_slice(residuals_count); // Row-major [snapshot, patch, wavelength]
-    let max_modelled = problem.max_modelled.as_ref().map(|maxes| {
+    let max_modelled_values = problem.max_modelled.as_ref().map(|maxes| {
         maxes
             .iter()
             .find(|((ax, _), _)| *ax == problem.model.params()[0])
@@ -503,8 +503,7 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
             .1
             .as_ref()
     });
-    let max_measured = problem.max_measured.as_ref().map(|m| m.as_ref());
-    let default_max = vec![1.0; problem.n_wavelengths].into_boxed_slice();
+    let max_measured_values = problem.max_measured.as_ref().map(|m| m.as_ref());
     let n_wavelengths = problem.n_wavelengths;
     problem
         .measured
@@ -513,11 +512,9 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
         .enumerate()
         .for_each(|(i, snapshot)| {
             let wi = snapshot.wi.to_cartesian();
-            let max_values_range = i * problem.n_wavelengths..(i + 1) * problem.n_wavelengths;
-            let max_measured =
-                max_measured.map_or(&default_max[..], |m| &m[max_values_range.clone()]);
-            let max_modelled =
-                max_modelled.map_or(&default_max[..], |m| &m[max_values_range.clone()]);
+            let max_values_range = i * n_wavelengths..(i + 1) * n_wavelengths;
+            let max_measured = max_measured_values.map(|m| &m[max_values_range.clone()]);
+            let max_modelled = max_modelled_values.map(|m| &m[max_values_range.clone()]);
             problem
                 .partition
                 .patches
@@ -525,28 +522,44 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
                 .enumerate()
                 .for_each(|(j, patch)| {
                     let wo = patch.center().to_cartesian();
-                    for k in 0..problem.n_wavelengths {
-                        let measured = snapshot.samples[j][k] as f64 / max_measured[k];
-                        let modelled = Scattering::eval_reflectance(
-                            problem.model.as_ref(),
-                            &wi,
-                            &wo,
-                            &problem.iors_i[k],
-                            &problem.iors_t[k],
-                        ) / max_modelled[k];
-                        if measured.is_nan() || modelled.is_nan() {
-                            panic!(
-                                "measured: {:?}, modelled: {:?}, max_modelled: {:?}, wi: {:?}, \
-                                 wo: {:?}",
-                                measured,
-                                modelled,
-                                max_modelled,
-                                cart_to_sph(wi),
-                                cart_to_sph(wo)
-                            );
+                    let modelled_values = Scattering::eval_reflectance_spectrum(
+                        problem.model.as_ref(),
+                        &wi,
+                        &wo,
+                        &problem.iors_i,
+                        &problem.iors_t,
+                    );
+                    let measured_values = &snapshot.samples[j];
+                    match (max_measured, max_modelled) {
+                        (Some(max_measured), Some(max_modelled)) => {
+                            for k in 0..n_wavelengths {
+                                let max_measured_value = if max_measured[k] == 0.0 {
+                                    1.0
+                                } else {
+                                    max_measured[k]
+                                };
+                                let max_modelled_value = if max_modelled[k] == 0.0 {
+                                    1.0
+                                } else {
+                                    max_modelled[k]
+                                };
+                                let measured = measured_values[k] as f64 / max_measured_value;
+                                let modelled = modelled_values[k] / max_modelled_value;
+                                rs[i * n_patches * n_wavelengths + j * n_wavelengths + k]
+                                    .write(modelled - measured);
+                            }
                         }
-                        rs[i * n_patches * n_wavelengths + j * n_wavelengths + k]
-                            .write(modelled - measured);
+                        (None, None) => {
+                            for k in 0..n_wavelengths {
+                                let measured = measured_values[k] as f64;
+                                let modelled = modelled_values[k];
+                                rs[i * n_patches * n_wavelengths + j * n_wavelengths + k]
+                                    .write(modelled - measured);
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
                     }
                 });
         });

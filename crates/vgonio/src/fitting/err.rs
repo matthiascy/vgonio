@@ -324,12 +324,13 @@ pub(crate) fn generate_analytical_brdf(
     params: &BsdfMeasurementParams,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
-    normalize: bool,
+    normalise: bool,
 ) -> (MeasuredBsdfData, Box<[f64]>) {
     let mut brdf = MeasuredBsdfData {
         params: params.clone(),
         snapshots: Box::new([]),
         raw_snapshots: None,
+        normalised: normalise,
     };
     let partition = brdf.params.receiver.partitioning();
     let meas_pts = brdf.params.emitter.generate_measurement_points();
@@ -371,7 +372,7 @@ pub(crate) fn generate_analytical_brdf(
                     }
                     samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
                 }
-                if normalize {
+                if normalise {
                     for sample in samples.iter_mut() {
                         for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
                             *s /= *max as f32;

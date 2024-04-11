@@ -1200,10 +1200,13 @@ pub mod vgmo {
                         raw_snapshots = Some(snapshots);
                     };
 
+                    // TODO: as we don't save the normalisation state, we can't be sure if the data
+                    // is normalised or not.
                     Ok(Self {
                         params: *params,
                         snapshots,
                         raw_snapshots,
+                        normalised: false,
                     })
                 }
             }

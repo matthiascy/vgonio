@@ -20,13 +20,14 @@ use crate::{
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
-    partition::{Patch, SphericalPartition},
+    partition::{PartitionScheme, Patch, SphericalPartition},
 };
 use base::{
     error::VgonioError,
     math,
     math::{Sph2, Vec3},
 };
+use rand_distr::num_traits::Euclid;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -64,6 +65,9 @@ pub struct MeasuredBsdfData {
     /// `FullData`.
     /// See [`BsdfSnapshotRaw`] for more details.
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
+    /// Tells whether the BSDF data are normalized for each snapshot.
+    /// TODO: refactor this.
+    pub normalised: bool,
 }
 
 impl MeasuredBsdfData {
@@ -87,15 +91,17 @@ impl MeasuredBsdfData {
             .values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        let n_snapshots = self.snapshots.len();
+        let n_wavelengths = wavelengths.len();
         // Compute the maximum value of the BSDF samples for each wavelength per
         // snapshot.
-        let mut max_samples = vec![0.0; wavelengths.len() * self.snapshots.len()];
-        if normalize {
+        let mut max_samples = vec![-1.0; n_snapshots * n_wavelengths];
+        if normalize && !self.normalised {
             for (i, snapshot) in self.snapshots.iter().enumerate() {
                 for spectral_samples in snapshot.samples.iter() {
                     for (wavelength_idx, sample) in spectral_samples.iter().enumerate() {
-                        max_samples[i * wavelengths.len() + wavelength_idx] =
-                            f32::max(max_samples[i * wavelengths.len() + wavelength_idx], *sample);
+                        max_samples[i * n_wavelengths + wavelength_idx] =
+                            f32::max(max_samples[i * n_wavelengths + wavelength_idx], *sample);
                     }
                 }
             }
@@ -105,7 +111,8 @@ impl MeasuredBsdfData {
             }
         }
         log::debug!(
-            "normalized ? {} - max_bsdf_samples: {:?}",
+            "pre-noamalised? {} to normalise ? {} - max_bsdf_samples: {:?}",
+            self.normalised,
             normalize,
             max_samples
         );
@@ -116,8 +123,7 @@ impl MeasuredBsdfData {
         // - y: height
         // - z: wavelength
         // - w: snapshot
-        let mut bsdf_samples_per_wavelength =
-            vec![0.0; w * h * wavelengths.len() * self.snapshots.len()];
+        let mut bsdf_samples_per_wavelength = vec![0.0; w * h * n_wavelengths * n_snapshots];
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         let partition = self.params.receiver.partitioning();
@@ -126,18 +132,18 @@ impl MeasuredBsdfData {
             // Each snapshot is saved as a separate layer of the image.
             // Each channel of the layer stores the BSDF data for a single wavelength.
             for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
-                let offset = snap_idx * w * h * wavelengths.len();
+                let offset = snap_idx * w * h * n_wavelengths;
                 for i in 0..w {
                     for j in 0..h {
                         let idx = patch_indices[i + j * w];
                         if idx < 0 {
                             continue;
                         }
-                        for wavelength_idx in 0..wavelengths.len() {
+                        for wavelength_idx in 0..n_wavelengths {
                             bsdf_samples_per_wavelength
                                 [offset + i + j * w + wavelength_idx * w * h] = snapshot.samples
                                 [idx as usize][wavelength_idx]
-                                / max_samples[snap_idx * wavelengths.len() + wavelength_idx];
+                                / max_samples[snap_idx * n_wavelengths + wavelength_idx];
                         }
                     }
                 }
@@ -346,6 +352,76 @@ impl MeasuredBsdfData {
         //     }
         // }
         // ndf
+    }
+
+    /// Retrieves the BSDF sample data at the given position.
+    ///
+    /// The position is given in the unit spherical coordinates. The returned
+    /// data is the BSDF values for each wavelength at the given position.
+    pub fn sample_at(&self, pos: Sph2) -> Box<[f32]> {
+        match self.params.receiver.scheme {
+            PartitionScheme::Beckers => {
+                let partition = SphericalPartition::new(
+                    self.params.receiver.scheme,
+                    self.params.receiver.domain,
+                    self.params.receiver.precision,
+                );
+                let theta_step = partition.precision.theta.as_f32();
+                // 1. Find the upper and lower ring where the position is located. The Upper
+                //    ring is the ring with the smallest zenith angle.
+                let (upper_ring_idx, lower_ring_idx) = {
+                    let (q, r) = pos.theta.as_f32().div_rem_euclid(&theta_step);
+                    if r < theta_step * 0.5 {
+                        ((q as usize - 1).max(0), q as usize)
+                    } else {
+                        (q as usize, (q as usize + 1).min(partition.num_rings() - 1))
+                    }
+                };
+
+                // 2. Find the patch where the position is located inside the ring.
+                if upper_ring_idx == lower_ring_idx {
+                    if lower_ring_idx == 0 {
+                        // Interpolate inside a triangle.
+                    }
+                    if upper_ring_idx == partition.num_rings() - 1 {
+                        // This should be the last ring.
+                        // Interpolate between two patches.
+                        let ring = partition.rings[upper_ring_idx];
+                        let (q, r) = pos.phi.as_f32().div_rem_euclid(&ring.phi_step);
+                        let q = q as usize;
+                        let patch_idx: (usize, usize) = if r < ring.phi_step * 0.5 {
+                            if q == 0 {
+                                (ring.num_patches() - 1, 0)
+                            } else {
+                                (q - 1, q)
+                            }
+                        } else {
+                            if q == ring.num_patches() - 1 {
+                                (q, 0)
+                            } else {
+                                (q, q + 1)
+                            }
+                        };
+                        let patch0 = partition.patches[ring.base_index + patch_idx.0];
+                        let patch1 = partition.patches[ring.base_index + patch_idx.1];
+                        let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
+                            / (patch1.center().phi.as_f32() - patch0.center().phi.as_f32());
+                        let mut samples =
+                            vec![0.0; self.params.emitter.spectrum.len()].into_boxed_slice();
+                        for (wavelength, sample) in samples.iter_mut().enumerate() {
+                            *sample = (1.0 - t) * self.snapshots.patch0[wavelength]
+                                + t * patch1[wavelength];
+                        }
+                    };
+                } else {
+                    // Interpolate inside a quadrilateral.
+                }
+            }
+            PartitionScheme::EqualAngle => {
+                unimplemented!()
+            }
+        }
+        todo!()
     }
 }
 
@@ -620,6 +696,10 @@ impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
 pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.
     pub wi: Sph2,
+    /// BSDF values for each patch of the collector and each wavelength.
+    /// Two-dimensional data (patch, wavelength) stored in a flat array in
+    /// row-major order.
+    // pub samples: Box<[f32]>,
     /// BSDF values for each patch of the collector.
     pub samples: Box<[SpectralSamples<f32>]>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -736,6 +816,7 @@ pub fn measure_bsdf_rt(
                 params,
                 snapshots,
                 raw_snapshots,
+                normalised: false,
             }),
         })
     }
