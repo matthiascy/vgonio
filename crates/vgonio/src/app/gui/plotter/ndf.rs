@@ -1,12 +1,12 @@
-use crate::{
-    app::{
-        cache::{Handle, RawCache},
-        gui::{
-            event::{EventLoopProxy, VgonioEvent},
-            plotter::{angle_knob, Curve, VariantData},
-        },
+#[cfg(feature = "fitting")]
+use crate::fitting::{FittedModel, FittingProblemKind, MicrofacetDistributionFittingVariant};
+
+use crate::app::{
+    cache::{Handle, RawCache},
+    gui::{
+        event::{EventLoopProxy, VgonioEvent},
+        plotter::{angle_knob, Curve, VariantData},
     },
-    fitting::FittedModel,
 };
 use base::{
     range::RangeByStepSizeInclusive,
@@ -19,11 +19,7 @@ use std::any::Any;
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
-use crate::{
-    app::cache::Cache,
-    fitting::{FittingProblemKind, MicrofacetDistributionFittingVariant},
-    measure::data::MeasurementData,
-};
+use crate::{app::cache::Cache, measure::data::MeasurementData};
 
 struct ModelSelector {
     model: MicrofacetDistroKind,
@@ -130,6 +126,7 @@ impl VariantData for AreaDistributionExtra {
 
     fn scale_factor(&self) -> f32 { self.scale_factor }
 
+    #[cfg(feature = "fitting")]
     fn update_fitted_curves(&mut self, models: &[FittedModel]) {
         let to_add = models
             .iter()
@@ -268,6 +265,7 @@ impl VariantData for AreaDistributionExtra {
             ui.toggle_value(&mut self.show_slope_distribution, "Show slope distribution");
         });
 
+        #[cfg(feature = "fitting")]
         egui::CollapsingHeader::new("Fitting")
             .default_open(true)
             .show(ui, |ui| {

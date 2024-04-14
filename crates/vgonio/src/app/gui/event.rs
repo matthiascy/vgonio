@@ -84,6 +84,7 @@ pub enum VgonioEvent {
         data: Handle<MeasurementData>,
         independent: bool,
     },
+    #[cfg(feature = "fitting")]
     Fitting {
         kind: FittingProblemKind,
         data: Handle<MeasurementData>,

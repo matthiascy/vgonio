@@ -1,15 +1,14 @@
-#[cfg(feature = "fitting")]
-use crate::fitting::{
-    err::{
-        compute_iso_microfacet_brdf_err, compute_iso_sampled_brdf_err, generate_analytical_brdf,
-        ErrorMetric,
-    },
-    FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
-};
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
+    fitting::{
+        err::{
+            compute_iso_microfacet_brdf_err, compute_iso_sampled_brdf_err,
+            generate_analytical_brdf, ErrorMetric,
+        },
+        FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
+    },
     measure::{
         bsdf::{
             emitter::EmitterParams,

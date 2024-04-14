@@ -16,19 +16,6 @@ use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use rayon::slice::ParallelSlice;
 use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
 
-// TODO: Would MDF = ADF + MSF be more appropriate?
-/// The measured microfacet distribution data (MDF).
-///
-/// The measured data can be either the normal (area) distribution function
-/// (NDF) or the masking-shadowing function (MSF).
-#[derive(Debug, Clone)]
-pub enum MeasuredMdfData<'a> {
-    /// The measured area distribution function (ADF).
-    Ndf(Cow<'a, MeasuredAdfData>),
-    /// The measured masking-shadowing function (MSF).
-    Msf(Cow<'a, MeasuredMsfData>),
-}
-
 /// Fitting variant for the microfacet distribution function (MDF).
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum MicrofacetDistributionFittingVariant {

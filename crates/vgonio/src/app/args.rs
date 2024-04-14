@@ -1,6 +1,8 @@
+#[cfg(feature = "fitting")]
+use crate::app::cli::FitOptions;
 #[cfg(feature = "surf-gen")]
 use crate::app::cli::GenerateOptions;
-use crate::app::cli::{ConvertOptions, DiffOptions, FitOptions, MeasureOptions};
+use crate::app::cli::{ConvertOptions, DiffOptions, MeasureOptions};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -86,6 +88,7 @@ pub enum SubCommand {
     /// Converts non-vgonio files to vgonio files.
     Convert(ConvertOptions),
 
+    #[cfg(feature = "fitting")]
     /// Fits a measured data to a model.
     Fit(FitOptions),
 

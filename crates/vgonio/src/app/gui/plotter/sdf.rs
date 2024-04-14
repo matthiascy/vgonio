@@ -1,3 +1,5 @@
+#[cfg(feature = "fitting")]
+use crate::fitting::FittedModel;
 use crate::{
     app::{
         cache::{Cache, Handle, RawCache},
@@ -7,7 +9,6 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    fitting::FittedModel,
     measure::data::MeasurementData,
 };
 use base::{
@@ -109,6 +110,7 @@ impl VariantData for SlopeDistributionExtra {
 
     fn current_curve(&self) -> Option<&Curve> { self.curves.get(self.current_azimuth_idx()) }
 
+    #[cfg(feature = "fitting")]
     fn update_fitted_curves(&mut self, _fitted: &[FittedModel]) {
         // TODO: update fitted curves
     }

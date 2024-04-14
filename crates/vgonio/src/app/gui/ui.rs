@@ -1,4 +1,9 @@
-use crate::fitting::MicrofacetBrdfFittingProblem;
+#[cfg(feature = "fitting")]
+use crate::fitting::{
+    FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData, MicrofacetBrdfFittingProblem,
+    MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
+};
+use crate::measure::data::MeasuredMdfData;
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -18,10 +23,6 @@ use crate::{
             DebuggingInspector,
         },
         Config,
-    },
-    fitting::{
-        FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData,
-        MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
     },
     measure::{data::MeasurementData, params::MeasurementKind},
 };
@@ -234,6 +235,7 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
+            #[cfg(feature = "fitting")]
             VgonioEvent::Fitting { kind, data, scale } => {
                 match kind {
                     FittingProblemKind::Bxdf {

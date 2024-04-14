@@ -354,91 +354,93 @@ impl MeasuredBsdfData {
         // ndf
     }
 
-    /// Retrieves the BSDF sample data at the given position.
-    ///
-    /// The position is given in the unit spherical coordinates. The returned
-    /// data is the BSDF values for each snapshot and each wavelength at the
-    /// given position.
-    ///
-    /// The BSDF values are stored in a flat array in row-major order.
-    /// The first dimension is the snapshot index, the second dimension is the
-    /// wavelength index.
-    pub fn sample_at(&self, pos: Sph2) -> Box<[f32]> {
-        match self.params.receiver.scheme {
-            PartitionScheme::Beckers => {
-                let partition = SphericalPartition::new(
-                    self.params.receiver.scheme,
-                    self.params.receiver.domain,
-                    self.params.receiver.precision,
-                );
-                let theta_step = partition.precision.theta.as_f32();
-                let n_snapshots = self.snapshots.len();
-                let n_wavelengths = self.params.emitter.spectrum.len();
-                let mut interpolated = vec![0.0; n_snapshots * n_wavelengths].into_boxed_slice();
-                // 1. Find the upper and lower ring where the position is located.
-                // The Upper ring is the ring with the smallest zenith angle.
-                let (upper_ring_idx, lower_ring_idx) = {
-                    let (q, r) = pos.theta.as_f32().div_rem_euclid(&theta_step);
-                    if r < theta_step * 0.5 {
-                        ((q as usize - 1).max(0), q as usize)
-                    } else {
-                        (q as usize, (q as usize + 1).min(partition.num_rings() - 1))
-                    }
-                };
-
-                // 2. Find the patch where the position is located inside the ring.
-                if upper_ring_idx == lower_ring_idx {
-                    if lower_ring_idx == 0 {
-                        // Interpolate inside a triangle.
-                        let upper_ring = partition.rings[0];
-                        let lower_ring = partition.rings[1];
-                    }
-                    if upper_ring_idx == partition.num_rings() - 1 {
-                        // This should be the last ring.
-                        // Interpolate between two patches.
-                        let ring = partition.rings[upper_ring_idx];
-                        let (q, r) = pos.phi.as_f32().div_rem_euclid(&ring.phi_step);
-                        let q = q as usize;
-                        let patch_idx: (usize, usize) = if r < ring.phi_step * 0.5 {
-                            if q == 0 {
-                                (ring.num_patches() - 1, 0)
-                            } else {
-                                (q - 1, q)
-                            }
-                        } else {
-                            if q == ring.num_patches() - 1 {
-                                (q, 0)
-                            } else {
-                                (q, q + 1)
-                            }
-                        };
-                        let patch0_idx = ring.base_index + patch_idx.0;
-                        let patch1_idx = ring.base_index + patch_idx.1;
-                        let patch0 = partition.patches[patch0_idx];
-                        let patch1 = partition.patches[patch1_idx];
-                        let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
-                            / (patch1.center().phi.as_f32() - patch0.center().phi.as_f32());
-                        for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
-                            let patch0_samples = snapshot.samples
-                                [patch0_idx * n_wavelengths..(patch0_idx + 1) * n_wavelengths];
-                            let patch1_samples = snapshot.samples
-                                [patch1_idx * n_wavelengths..(patch1_idx + 1) * n_wavelengths];
-                            for i in 0..n_wavelengths {
-                                interpolated[snap_idx * n_wavelengths + i] =
-                                    (1.0 - t) * patch0_samples[i] + t * patch1_samples[i];
-                            }
-                        }
-                    };
-                } else {
-                    // Interpolate inside a quadrilateral.
-                }
-            }
-            PartitionScheme::EqualAngle => {
-                unimplemented!()
-            }
-        }
-        todo!()
-    }
+    //
+    // /// Retrieves the BSDF sample data at the given position.
+    // ///
+    // /// The position is given in the unit spherical coordinates. The returned
+    // /// data is the BSDF values for each snapshot and each wavelength at the
+    // /// given position.
+    // ///
+    // /// The BSDF values are stored in a flat array in row-major order.
+    // /// The first dimension is the snapshot index, the second dimension is the
+    // /// wavelength index.
+    // pub fn sample_at(&self, pos: Sph2) -> Box<[f32]> {
+    //     match self.params.receiver.scheme {
+    //         PartitionScheme::Beckers => {
+    //             let partition = SphericalPartition::new(
+    //                 self.params.receiver.scheme,
+    //                 self.params.receiver.domain,
+    //                 self.params.receiver.precision,
+    //             );
+    //             let theta_step = partition.precision.theta.as_f32();
+    //             let n_snapshots = self.snapshots.len();
+    //             let n_wavelengths = self.params.emitter.spectrum.step_count();
+    //             let mut interpolated = vec![0.0; n_snapshots *
+    // n_wavelengths].into_boxed_slice();             // 1. Find the upper and
+    // lower ring where the position is located.             // The Upper ring
+    // is the ring with the smallest zenith angle.             let
+    // (upper_ring_idx, lower_ring_idx) = {                 let (q, r) =
+    // pos.theta.as_f32().div_rem_euclid(&theta_step);                 if r <
+    // theta_step * 0.5 {                     ((q as usize - 1).max(0), q as
+    // usize)                 } else {
+    //                     (q as usize, (q as usize + 1).min(partition.num_rings() -
+    // 1))                 }
+    //             };
+    //
+    //             // 2. Find the patch where the position is located inside the
+    // ring.             if upper_ring_idx == lower_ring_idx {
+    //                 if lower_ring_idx == 0 {
+    //                     // Interpolate inside a triangle.
+    //                     let upper_ring = partition.rings[0];
+    //                     let lower_ring = partition.rings[1];
+    //                 }
+    //                 if upper_ring_idx == partition.num_rings() - 1 {
+    //                     // This should be the last ring.
+    //                     // Interpolate between two patches.
+    //                     let ring = partition.rings[upper_ring_idx];
+    //                     let (q, r) =
+    // pos.phi.as_f32().div_rem_euclid(&ring.phi_step);                     let
+    // q = q as usize;                     let patch_idx: (usize, usize) = if r
+    // < ring.phi_step * 0.5 {                         if q == 0 {
+    //                             (ring.num_patches() - 1, 0)
+    //                         } else {
+    //                             (q - 1, q)
+    //                         }
+    //                     } else {
+    //                         if q == ring.num_patches() - 1 {
+    //                             (q, 0)
+    //                         } else {
+    //                             (q, q + 1)
+    //                         }
+    //                     };
+    //                     let patch0_idx = ring.base_index + patch_idx.0;
+    //                     let patch1_idx = ring.base_index + patch_idx.1;
+    //                     let patch0 = partition.patches[patch0_idx];
+    //                     let patch1 = partition.patches[patch1_idx];
+    //                     let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
+    //                         / (patch1.center().phi.as_f32() -
+    // patch0.center().phi.as_f32());                     for (snap_idx,
+    // snapshot) in self.snapshots.iter().enumerate() {
+    // let patch0_samples = snapshot.samples
+    // [patch0_idx * n_wavelengths..(patch0_idx + 1) * n_wavelengths];
+    //                         let patch1_samples = snapshot.samples
+    //                             [patch1_idx * n_wavelengths..(patch1_idx + 1) *
+    // n_wavelengths];                         for i in 0..n_wavelengths {
+    //                             interpolated[snap_idx * n_wavelengths + i] =
+    //                                 (1.0 - t) * patch0_samples[i] + t *
+    // patch1_samples[i];                         }
+    //                     }
+    //                 };
+    //             } else {
+    //                 // Interpolate inside a quadrilateral.
+    //             }
+    //         }
+    //         PartitionScheme::EqualAngle => {
+    //             unimplemented!()
+    //         }
+    //     }
+    //     todo!()
+    // }
 }
 
 /// Type of the BSDF to be measured.

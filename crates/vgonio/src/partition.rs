@@ -4,6 +4,7 @@ use base::{
     range::RangeByStepSizeInclusive,
     units::{rad, Radians, Rads, SolidAngle},
 };
+use rand_distr::num_traits::Euclid;
 use serde::{Deserialize, Serialize};
 
 /// Scheme of the spherical partition.
@@ -288,11 +289,20 @@ impl Ring {
     /// Given a phi angle, returns the indices of the patches where the phi
     /// angle falls in between (the patch where the phi resides and the closest
     /// adjacent patch).
-    pub fn find_patch_indices(&self, phi: f32) -> (usize, usize) {
+    pub fn find_patch_indices(&self, phi: Rads) -> (usize, usize) {
         let phi = phi.wrap_to_tau();
-        let phi_min = (phi / self.phi_step).floor() as usize;
-        let phi_max = (phi / self.phi_step).ceil() as usize;
-        (phi_min, phi_max)
+        let (q, r) = phi.as_f32().div_rem_euclid(&self.phi_step);
+        let a = q as isize;
+        if r >= 0.5 * self.phi_step {
+            (a as usize, (a + 1) as usize % self.patch_count)
+        } else {
+            let prev = a - 1;
+            if prev < 0 {
+                (self.patch_count - 1, 0)
+            } else {
+                (prev as usize, a as usize)
+            }
+        }
     }
 }
 
@@ -403,29 +413,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ring_find_patches() {
+    fn test_ring_find_patches_single_patch() {
         let ring = Ring {
             theta_inner: 0.0,
-            theta_outer: 3.0.to_radians(),
-            phi_step: std::f32::consts::PI,
+            theta_outer: 3.0f32.to_radians(),
+            phi_step: std::f32::consts::TAU,
             patch_count: 1,
             base_index: 0,
         };
 
-        let (phi_min, phi_max) = ring.find_patch_indices(0.0);
-        assert_eq!(phi_min, phi_max);
-        assert_eq!(phi_min, 0);
-        let (phi_min, phi_max) = ring.find_patch_indices(std::f32::consts::PI);
-        assert_eq!(phi_min, phi_max);
-        assert_eq!(phi_min, 0);
+        {
+            let (a, b) = ring.find_patch_indices(Rads::ZERO);
+            assert_eq!(a, b);
+            assert_eq!(a, 0);
+        }
+        {
+            let (a, b) = ring.find_patch_indices(Rads::PI);
+            assert_eq!(a, b);
+            assert_eq!(a, 0);
+        }
+    }
+
+    #[test]
+    fn test_ring_find_patches() {
+        let ring = Ring {
+            theta_inner: 0.0,
+            theta_outer: 3.0f32.to_radians(),
+            phi_step: std::f32::consts::FRAC_PI_6,
+            patch_count: 12,
+            base_index: 0,
+        };
 
         for i in 0..360 {
-            let phi = (i as f32).to_radians();
-            let (phi_min, phi_max) = ring.find_patch_indices(phi);
-            println!(
-                "phi = {}, phi_min = {}, phi_max = {}",
-                phi, phi_min, phi_max
-            );
+            let phi = Rads::from_degrees(i as f32);
+            let (a, b) = ring.find_patch_indices(phi);
+            println!("phi = {}, a = {}, b = {}", phi, a, b);
         }
     }
 }

@@ -61,6 +61,7 @@ pub struct MeasurementDataProp {
     pub timestamp: DateTime<Local>,
     /// Source of the measured data.
     pub source: MeasurementDataSource,
+    #[cfg(feature = "fitting")]
     /// Fitted model.
     pub fitted: FittedModels,
 }
@@ -154,6 +155,7 @@ impl PropertyData {
                     source: data.source.clone(),
                     timestamp: data.timestamp,
                     name: data.name.clone(),
+                    #[cfg(feature = "fitting")]
                     fitted: FittedModels::default(),
                 });
             }

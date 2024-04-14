@@ -5,6 +5,9 @@ mod sdf;
 pub use msf::*;
 pub use ndf::*;
 
+#[cfg(feature = "fitting")]
+use crate::fitting::FittedModel;
+
 use crate::{
     app::{
         cache::{Cache, Handle, RawCache},
@@ -16,7 +19,6 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    fitting::FittedModel,
     measure::{data::MeasurementData, params::MeasurementKind},
 };
 use base::{
@@ -89,6 +91,7 @@ pub trait VariantData {
     /// Returns the scale factor for the curve.
     fn scale_factor(&self) -> f32 { 1.0 }
 
+    #[cfg(feature = "fitting")]
     /// Updates the fitted curves according to the given fitted models.
     fn update_fitted_curves(&mut self, fitted: &[FittedModel]);
 
@@ -231,6 +234,7 @@ impl VariantData for BsdfPlotExtraData {
 
     fn current_curve(&self) -> Option<&Curve> { todo!("bsdf current curve") }
 
+    #[cfg(feature = "fitting")]
     fn update_fitted_curves(&mut self, _fitted: &[FittedModel]) { todo!() }
 
     fn as_any(&self) -> &dyn Any { self }
@@ -522,6 +526,7 @@ impl PlottingWidget for PlotInspector {
             {
                 let props = self.props.read().unwrap();
                 let prop = props.measured.get(&self.data_handle).unwrap();
+                #[cfg(feature = "fitting")]
                 if let Some(extra) = &mut self.variant {
                     extra.update_fitted_curves(prop.fitted.as_ref());
                 }
@@ -728,6 +733,7 @@ impl PlottingWidget for PlotInspector {
                                         ))
                                         .name("Microfacet masking shadowing"),
                                 );
+                                #[cfg(feature = "fitting")]
                                 {
                                     let concrete_extra = variant
                                         .as_any()

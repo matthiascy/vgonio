@@ -1407,7 +1407,8 @@ mod tests {
                         energy_per_bounce: vec![0.0, 3.0],
                     },
                 ]),
-            ],
+            ]
+            .into_boxed_slice(),
             #[cfg(debug_assertions)]
             trajectories: vec![],
             #[cfg(debug_assertions)]
@@ -1462,7 +1463,7 @@ mod tests {
             snapshots.len(),
         )
         .unwrap();
-        assert_eq!(snapshots, snapshots2);
+        assert_eq!(snapshots.as_slice(), snapshots2.as_ref());
     }
 }
 

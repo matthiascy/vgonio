@@ -39,6 +39,7 @@ pub struct MaskingShadowingExtra {
     /// angle of microfacet normal m, the third index is the azimuthal angle of
     /// incident/outgoing direction v.
     pub curves: Vec<Curve>,
+    #[cfg(feature = "fitting")]
     // /// The fitted curves together with the fitted model.
     pub fitted: Vec<(Box<dyn MicrofacetDistribution<Params = [f64; 2]>>, Curve)>,
 }
@@ -60,6 +61,7 @@ impl Default for MaskingShadowingExtra {
                 step_size: rad!(0.0),
             },
             curves: vec![],
+            #[cfg(feature = "fitting")]
             fitted: vec![],
         }
     }
@@ -103,6 +105,7 @@ impl VariantData for MaskingShadowingExtra {
         self.curves.get(index)
     }
 
+    #[cfg(feature = "fitting")]
     fn update_fitted_curves(&mut self, _models: &[FittedModel]) {
         // let theta_values = self
         //     .zenith_range

@@ -61,6 +61,9 @@ const WIN_INITIAL_HEIGHT: u32 = 900;
 
 use self::tools::SamplingInspector;
 
+#[cfg(feature = "fitting")]
+use crate::fitting::err;
+
 use crate::{
     app::{
         cache::Cache,
@@ -73,7 +76,6 @@ use crate::{
         },
         Config,
     },
-    fitting::err::compute_iso_microfacet_brdf_err,
     io::OutputOptions,
     measure::{
         data::{MeasuredData, MeasurementData},

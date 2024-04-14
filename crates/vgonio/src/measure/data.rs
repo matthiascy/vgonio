@@ -1,8 +1,10 @@
 //! Measurement data description.
 
+#[cfg(feature = "fitting")]
+use crate::fitting::MeasuredMdfData;
+
 use crate::{
     app::cache::Handle,
-    fitting::MeasuredMdfData,
     io::{vgmo::VgmoHeaderExt, OutputFileFormatOption},
     measure::{
         bsdf::{emitter::EmitterParams, receiver::ReceiverParams, BsdfKind, MeasuredBsdfData},
@@ -84,8 +86,8 @@ pub struct SampledBrdf {
     pub spectrum: Box<[Nanometres]>,
     /// Samples of each wi-wo pair for each wavelength.
     pub samples: Box<[f32]>,
-    /// Maximum values of the spectral samples for each snapshot (wi direction) and
-    /// each wavelength. Row-major [snapshot x wavelength] array.
+    /// Maximum values of the spectral samples for each snapshot (wi direction)
+    /// and each wavelength. Row-major [snapshot x wavelength] array.
     pub max_values: Box<[f32]>,
     /// All pairs of incidents and outgoing directions. The first element of the
     /// tuple is the incident direction. The second element is the list of
@@ -107,6 +109,19 @@ impl SampledBrdf {
             .collect::<Vec<_>>()
             .into_boxed_slice()
     }
+}
+
+// TODO: Would MDF = ADF + MSF be more appropriate?
+/// The measured microfacet distribution data (MDF).
+///
+/// The measured data can be either the normal (area) distribution function
+/// (NDF) or the masking-shadowing function (MSF).
+#[derive(Debug, Clone)]
+pub enum MeasuredMdfData<'a> {
+    /// The measured area distribution function (ADF).
+    Ndf(Cow<'a, MeasuredAdfData>),
+    /// The measured masking-shadowing function (MSF).
+    Msf(Cow<'a, MeasuredMsfData>),
 }
 
 impl MeasuredData {

@@ -5,6 +5,9 @@ use uuid::Uuid;
 
 use crate::app::gui::docking::{Dockable, WidgetKind};
 
+#[cfg(feature = "fitting")]
+use crate::fitting::FittingProblemKind;
+
 use crate::{
     app::{
         cache::Cache,
@@ -14,7 +17,6 @@ use crate::{
             outliner::OutlinerItem,
         },
     },
-    fitting::FittingProblemKind,
     measure::{
         data::{MeasuredData, MeasurementDataSource},
         params::AdfMeasurementMode,
@@ -283,7 +285,8 @@ impl PropertyInspector {
                                     self.event_loop
                                         .send_event(VgonioEvent::ExportMeasurement(meas));
                                 }
-                                // Temporary fitting button.
+                                #[cfg(feature = "fitting")]
+                                // Temporary fitting button. TODO: Remove.
                                 if ui.button("Fit Beckmann(iso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
@@ -295,6 +298,8 @@ impl PropertyInspector {
                                         scale: 1.0,
                                     });
                                 }
+                                #[cfg(feature = "fitting")]
+                                // Temporary fitting button. TODO: Remove.
                                 if ui.button("Fit Beckmann(aniso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
@@ -306,6 +311,8 @@ impl PropertyInspector {
                                         scale: 1.0,
                                     });
                                 }
+                                #[cfg(feature = "fitting")]
+                                // Temporary fitting button. TODO: Remove.
                                 if ui.button("Fit GGX(iso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
@@ -317,6 +324,8 @@ impl PropertyInspector {
                                         scale: 1.0,
                                     });
                                 }
+                                #[cfg(feature = "fitting")]
+                                // Temporary fitting button. TODO: Remove.
                                 if ui.button("Fit GGX(aniso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
