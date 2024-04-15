@@ -82,9 +82,10 @@ pub struct SampledBrdf {
     /// Wavelengths in nanometers.
     pub spectrum: Box<[Nanometres]>,
     /// Samples of each wi-wo pair for each wavelength.
+    /// Row-major [wi, wo, wavelength] array.
     pub samples: Box<[f32]>,
     /// Maximum values of the spectral samples for each snapshot (wi direction)
-    /// and each wavelength. Row-major [snapshot x wavelength] array.
+    /// and each wavelength. Row-major [wi x wo x wavelength] array.
     pub max_values: Box<[f32]>,
     /// All pairs of incidents and outgoing directions. The first element of the
     /// tuple is the incident direction. The second element is the list of
@@ -562,7 +563,7 @@ impl MeasurementData {
                     .map(|v| v.as_f64().unwrap() as f32)
                     .collect::<Vec<f32>>()
                     .into_boxed_slice();
-                assert!(spectrum.len() == wavelengths.len());
+                assert_eq!(spectrum.len(), wavelengths.len());
                 samples.extend_from_slice(&spectrum);
                 total_samples += spectrum.len();
                 match wi_wo_pairs.iter().position(|(s, _, _)| *s == wi) {
@@ -581,8 +582,9 @@ impl MeasurementData {
                 *pair_offset = offset;
                 offset += wos.len() as u32;
             }
-            assert!(samples.len() == offset as usize * wavelengths.len());
+            assert_eq!(samples.len(), offset as usize * wavelengths.len());
             // Calculate the maximum values of the spectral samples for each snapshot.
+            // [wi, wo, lambda]
             let mut max_values = vec![-1.0f32; wi_wo_pairs.len() * wavelengths.len()];
             let wavelengths_len = wavelengths.len();
             for (i, (_, wos, pair_offset)) in wi_wo_pairs.iter().enumerate() {

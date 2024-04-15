@@ -188,6 +188,11 @@ impl Sph2 {
         }
     }
 
+    pub fn approx_eq(&self, other: &Self) -> bool {
+        approx::abs_diff_eq!(self.theta.value, other.theta.value)
+            && approx::abs_diff_eq!(self.phi.value, other.phi.value)
+    }
+
     /// Converts to a cartesian coordinate.
     pub fn to_cartesian(&self) -> Vec3 { sph_to_cart(self.theta, self.phi) }
 

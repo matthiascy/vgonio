@@ -127,6 +127,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             }
         } else {
             if opts.olaf {
+                println!("Fitting to Olaf data.");
                 if opts.inputs.len() % 2 != 0 {
                     return Err(VgonioError::new(
                         "The input files should be in pairs of measured data and corresponding \
@@ -135,6 +136,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     ));
                 }
                 for input in opts.inputs.chunks(2) {
+                    println!("inputs: {:?}, {:?}", input[0], input[1]);
                     let measured = cache
                         .load_micro_surface_measurement(&config, &input[0])
                         .unwrap();
@@ -153,19 +155,45 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         .as_bsdf()
                         .unwrap()
                         .sampled_brdf(&olaf_brdf);
-                    let problem = SampledBrdfFittingProblem::new(
-                        &measured_brdf,
-                        opts.distro,
-                        RangeByStepSizeInclusive::new(
-                            opts.alpha_start.unwrap(),
-                            opts.alpha_stop.unwrap(),
-                            opts.alpha_step.unwrap(),
-                        ),
-                        opts.normalise,
-                        cache,
-                    );
-                    let report = problem.lsq_lm_fit(opts.isotropy);
-                    report.print_fitting_report();
+                    log::debug!("BRDF extraction done, starting fitting.");
+                    match opts.method {
+                        FittingMethod::Bruteforce => {
+                            let errs = compute_iso_sampled_brdf_err(
+                                &measured_brdf,
+                                opts.distro,
+                                RangeByStepSizeInclusive::new(
+                                    opts.alpha_start.unwrap(),
+                                    opts.alpha_stop.unwrap(),
+                                    opts.alpha_step.unwrap(),
+                                ),
+                                &cache,
+                                opts.normalise,
+                                opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                            );
+                            println!(
+                                "    {}>{} MSE ({}) {:?}",
+                                ansi::BRIGHT_YELLOW,
+                                ansi::RESET,
+                                input[0].file_name().unwrap().display(),
+                                errs.as_slice()
+                            );
+                        }
+                        FittingMethod::Nlls => {
+                            let problem = SampledBrdfFittingProblem::new(
+                                &measured_brdf,
+                                opts.distro,
+                                RangeByStepSizeInclusive::new(
+                                    opts.alpha_start.unwrap(),
+                                    opts.alpha_stop.unwrap(),
+                                    opts.alpha_step.unwrap(),
+                                ),
+                                opts.normalise,
+                                cache,
+                            );
+                            let report = problem.lsq_lm_fit(opts.isotropy);
+                            report.print_fitting_report();
+                        }
+                    }
                 }
             } else {
                 for input in opts.inputs {
@@ -378,8 +406,7 @@ pub struct FitOptions {
     pub method: FittingMethod,
 
     #[clap(
-        short,
-        long,
+        long = "err",
         help = "Error metric to use ONLY for the brute force fitting.",
         default_value = "mse",
         required_if_eq_all([("method", "bruteforce"), ("generate", "false")])
