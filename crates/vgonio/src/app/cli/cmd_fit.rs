@@ -7,13 +7,13 @@ use crate::{
             compute_iso_microfacet_brdf_err, compute_iso_sampled_brdf_err,
             generate_analytical_brdf, ErrorMetric,
         },
-        FittingProblem, MicrofacetBrdfFittingProblem, SampledBrdfFittingProblem,
+        sampled::SampledBrdfFittingProblem,
+        FittingProblem, MicrofacetBrdfFittingProblem,
     },
     measure::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
-            rtc::RtcMethod,
             BsdfKind,
         },
         params::{BsdfMeasurementParams, SimulationKind},
@@ -127,13 +127,46 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             }
         } else {
             if opts.olaf {
-                // opts.inputs.iter().map(|input| {
-                //     let measurement = cache
-                //         .load_micro_surface_measurement(&config, &input)
-                //         .unwrap();
-                //     &cache.get_measurement_data(measurement).unwrap().measured
-                // });
-                todo!()
+                if opts.inputs.len() % 2 != 0 {
+                    return Err(VgonioError::new(
+                        "The input files should be in pairs of measured data and corresponding \
+                         Olaf data.",
+                        None,
+                    ));
+                }
+                for input in opts.inputs.chunks(2) {
+                    let measured = cache
+                        .load_micro_surface_measurement(&config, &input[0])
+                        .unwrap();
+                    let olaf = cache
+                        .load_micro_surface_measurement(&config, &input[1])
+                        .unwrap();
+                    let measured_data = cache.get_measurement_data(measured).unwrap();
+                    let olaf_brdf = cache
+                        .get_measurement_data(olaf)
+                        .unwrap()
+                        .measured
+                        .as_sampled_brdf()
+                        .unwrap();
+                    let measured_brdf = measured_data
+                        .measured
+                        .as_bsdf()
+                        .unwrap()
+                        .sampled_brdf(&olaf_brdf);
+                    let problem = SampledBrdfFittingProblem::new(
+                        &measured_brdf,
+                        opts.distro,
+                        RangeByStepSizeInclusive::new(
+                            opts.alpha_start.unwrap(),
+                            opts.alpha_stop.unwrap(),
+                            opts.alpha_step.unwrap(),
+                        ),
+                        opts.normalise,
+                        cache,
+                    );
+                    let report = problem.lsq_lm_fit(opts.isotropy);
+                    report.print_fitting_report();
+                }
             } else {
                 for input in opts.inputs {
                     let measurement = cache
@@ -238,9 +271,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 }
             }
         }
-    });
-
-    Ok(())
+        Ok(())
+    })
 }
 
 // TODO: complete fit kind

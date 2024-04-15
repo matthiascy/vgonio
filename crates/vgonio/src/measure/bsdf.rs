@@ -19,7 +19,7 @@ use crate::{
             },
             rtc::{RayTrajectory, RtcMethod, RtcMethod::Grid},
         },
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
@@ -359,6 +359,27 @@ impl MeasuredBsdfData {
         //     }
         // }
         // ndf
+    }
+
+    /// Extracts the BRDF from the measured BSDF data.
+    pub fn sampled_brdf(&self, s: &SampledBrdf) -> SampledBrdf {
+        // let spectrum = self
+        //     .params
+        //     .emitter
+        //     .spectrum
+        //     .values()
+        //     .collect::<Vec<_>>()
+        //     .into_boxed_slice();
+        // let spectrum_len = spectrum.len();
+        // let mut samples =
+        // SampledBrdf {
+        //     spectrum,
+        //     samples: Box::new([]),
+        //     max_values: Box::new([]),
+        //     wi_wo_pairs: s.wi_wo_pairs.clone(),
+        //     num_pairs: s.num_pairs,
+        // }
+        todo!()
     }
 
     /// Retrieves the BSDF sample data at the given position.
