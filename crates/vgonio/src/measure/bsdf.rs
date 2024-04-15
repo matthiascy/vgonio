@@ -5,23 +5,34 @@
 
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
-use crate::{app::{
-    cache::{Handle, RawCache},
-    cli::ansi,
-}, measure::{
-    bsdf::{
-        emitter::Emitter,
-        receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
-        rtc::{RayTrajectory, RtcMethod},
+use crate::{
+    app::{
+        cache::{Handle, RawCache},
+        cli::ansi,
     },
-    data::{MeasuredData, MeasurementData, MeasurementDataSource},
-    microfacet::MeasuredAdfData,
-    params::SimulationKind,
-}, partition::{PartitionScheme, Patch, SphericalPartition}, SphericalDomain};
+    measure::{
+        bsdf::{
+            emitter::{Emitter, EmitterParams},
+            receiver::{
+                BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver,
+                ReceiverParams,
+            },
+            rtc::{RayTrajectory, RtcMethod, RtcMethod::Grid},
+        },
+        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        microfacet::MeasuredAdfData,
+        params::SimulationKind,
+    },
+    partition::{PartitionScheme, Patch, SphericalPartition},
+    SphericalDomain,
+};
 use base::{
     error::VgonioError,
     math,
-    math::{Sph2, Vec3},
+    math::{cart_to_sph, projected_barycentric_coords, Sph2, Vec3},
+    medium::Medium,
+    range::RangeByStepSizeInclusive,
+    units::{nm, Rads},
 };
 use rand_distr::num_traits::Euclid;
 use serde::{Deserialize, Serialize};
@@ -32,14 +43,7 @@ use std::{
     ops::{Deref, DerefMut, Index, IndexMut},
     path::Path,
 };
-use base::math::{projected_barycentric_coords, cart_to_sph};
-use base::medium::Medium;
-use base::range::RangeByStepSizeInclusive;
-use base::units::{nm, Rads};
 use surf::{MicroSurface, MicroSurfaceMesh};
-use crate::measure::bsdf::emitter::EmitterParams;
-use crate::measure::bsdf::receiver::ReceiverParams;
-use crate::measure::bsdf::rtc::RtcMethod::{Grid};
 
 use super::params::BsdfMeasurementParams;
 
@@ -388,7 +392,10 @@ impl MeasuredBsdfData {
                         (q as usize, (q as usize + 1).min(partition.num_rings() - 1))
                     }
                 };
-                println!("Upper ring: {}, Lower ring: {}", upper_ring_idx, lower_ring_idx);
+                println!(
+                    "Upper ring: {}, Lower ring: {}",
+                    upper_ring_idx, lower_ring_idx
+                );
 
                 // 2. Find the patch where the position is located inside the ring.
                 if lower_ring_idx == 0 || lower_ring_idx == 1 {
@@ -396,27 +403,52 @@ impl MeasuredBsdfData {
                     let lower_ring = partition.rings[1];
                     let patch_idx = {
                         let patch_idx = lower_ring.find_patch_indices(pos.phi);
-                        (0, lower_ring.base_index + patch_idx.0, lower_ring.base_index + patch_idx.1)
+                        (
+                            0,
+                            lower_ring.base_index + patch_idx.0,
+                            lower_ring.base_index + patch_idx.1,
+                        )
                     };
                     let center0 = partition.patches[patch_idx.0].center();
                     let center1 = partition.patches[patch_idx.1].center();
                     let center2 = partition.patches[patch_idx.2].center();
-                    println!("Interpolating inside a triangle between patches #{} ({}, {}, <{}>), #{} ({}, {}, <{}>), and #{} ({}, {}, <{}>)",
-                             patch_idx.0, center0.theta.to_degrees().as_f32(), center0.phi.to_degrees().as_f32(), center0.to_cartesian(),
-                             patch_idx.1, center1.theta.to_degrees().as_f32(), center1.phi.to_degrees().as_f32(), center1.to_cartesian(),
-                             patch_idx.2, center2.theta.to_degrees().as_f32(), center2.phi.to_degrees().as_f32(), center2.to_cartesian());
-                    let (u, v, w) = projected_barycentric_coords(pos.to_cartesian(), center0.to_cartesian(), center1.to_cartesian(), center2.to_cartesian());
+                    println!(
+                        "Interpolating inside a triangle between patches #{} ({}, {}, <{}>), #{} \
+                         ({}, {}, <{}>), and #{} ({}, {}, <{}>)",
+                        patch_idx.0,
+                        center0.theta.to_degrees().as_f32(),
+                        center0.phi.to_degrees().as_f32(),
+                        center0.to_cartesian(),
+                        patch_idx.1,
+                        center1.theta.to_degrees().as_f32(),
+                        center1.phi.to_degrees().as_f32(),
+                        center1.to_cartesian(),
+                        patch_idx.2,
+                        center2.theta.to_degrees().as_f32(),
+                        center2.phi.to_degrees().as_f32(),
+                        center2.to_cartesian()
+                    );
+                    let (u, v, w) = projected_barycentric_coords(
+                        pos.to_cartesian(),
+                        center0.to_cartesian(),
+                        center1.to_cartesian(),
+                        center2.to_cartesian(),
+                    );
+                    #[cfg(test)]
                     println!("Barycentric coordinates: ({}, {}, {})", u, v, w);
                     for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
                         let patch0_samples = &snapshot.samples[patch_idx.0];
                         let patch1_samples = &snapshot.samples[patch_idx.1];
                         let patch2_samples = &snapshot.samples[patch_idx.2];
                         for i in 0..n_wavelengths {
-                            interpolated[snap_idx * n_wavelengths + i] =
-                                u * patch0_samples[i] + v * patch1_samples[i] + w * patch2_samples[i];
+                            interpolated[snap_idx * n_wavelengths + i] = u * patch0_samples[i]
+                                + v * patch1_samples[i]
+                                + w * patch2_samples[i];
                         }
                     }
-                } else if upper_ring_idx == lower_ring_idx && upper_ring_idx == partition.num_rings() - 1{
+                } else if upper_ring_idx == lower_ring_idx
+                    && upper_ring_idx == partition.num_rings() - 1
+                {
                     // This should be the last ring.
                     // Interpolate between two patches.
                     let ring = partition.rings[upper_ring_idx];
@@ -425,7 +457,11 @@ impl MeasuredBsdfData {
                     let patch1_idx = ring.base_index + patch_idx.1;
                     let patch0 = partition.patches[patch0_idx];
                     let patch1 = partition.patches[patch1_idx];
-                    println!("Interpolating between two patches: {} and {} at ring #{}", patch0_idx, patch1_idx, upper_ring_idx);
+                    #[cfg(test)]
+                    println!(
+                        "Interpolating between two patches: {} and {} at ring #{}",
+                        patch0_idx, patch1_idx, upper_ring_idx
+                    );
                     let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
                         / (patch1.center().phi.as_f32() - patch0.center().phi.as_f32());
                     for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
@@ -446,7 +482,6 @@ impl MeasuredBsdfData {
                     let upper_patch1_idx = upper_ring.base_index + upper_patch_idx.1;
                     let lower_patch0_idx = lower_ring.base_index + lower_patch_idx.0;
                     let lower_patch1_idx = lower_ring.base_index + lower_patch_idx.1;
-                    println!("Interpolating inside a quadrilateral between rings #{} ({}, {}) and #{} ({}, {})", upper_ring_idx, upper_patch0_idx, upper_patch1_idx, lower_ring_idx, lower_patch0_idx, lower_patch1_idx);
                     let upper_patch0_center = partition.patches[upper_patch0_idx].center();
                     let upper_patch1_center = partition.patches[upper_patch1_idx].center();
                     let lower_patch0_center = partition.patches[lower_patch0_idx].center();
@@ -457,6 +492,19 @@ impl MeasuredBsdfData {
                         / (lower_patch1_center.phi.as_f32() - lower_patch0_center.phi.as_f32());
                     let v = (pos.theta.as_f32() - upper_patch0_center.theta.as_f32())
                         / (lower_patch1_center.theta.as_f32() - upper_patch0_center.theta.as_f32());
+                    #[cfg(test)]
+                    println!(
+                        "Interpolating inside a quadrilateral between rings #{} ({}, {} | u = \
+                         {}), and #{} ({}, {} | u = {})",
+                        upper_ring_idx,
+                        upper_patch0_idx,
+                        upper_patch1_idx,
+                        u_upper,
+                        lower_ring_idx,
+                        lower_patch0_idx,
+                        lower_patch1_idx,
+                        u_lower
+                    );
                     // Bilateral interpolation.
                     for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
                         let upper_patch0_samples = &snapshot.samples[upper_patch0_idx];
@@ -485,11 +533,22 @@ impl MeasuredBsdfData {
 
 #[test]
 fn test_measured_bsdf_sample() {
-    let precision = Sph2 { theta: Rads::from_degrees(30.0), phi: Rads::from_degrees(2.0) };
-    let partition = SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
-    let samples = (0..partition.num_patches()).into_iter().map(|_| SpectralSamples::splat(1.0, 4)).collect::<Vec<_>>().into_boxed_slice();
+    let precision = Sph2 {
+        theta: Rads::from_degrees(30.0),
+        phi: Rads::from_degrees(2.0),
+    };
+    let partition =
+        SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
+    let samples = (0..partition.num_patches())
+        .into_iter()
+        .map(|_| SpectralSamples::splat(1.0, 4))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     let snapshots = Box::new([BsdfSnapshot {
-        wi: Sph2 { theta: Rads::ZERO, phi: Rads::ZERO },
+        wi: Sph2 {
+            theta: Rads::ZERO,
+            phi: Rads::ZERO,
+        },
         samples,
         trajectories: Vec::new(),
         hit_points: Vec::new(),
@@ -519,19 +578,31 @@ fn test_measured_bsdf_sample() {
         raw_snapshots: None,
         normalised: false,
     };
-    let sample = measured.sample_at(Sph2 { theta: Rads::ZERO, phi: Rads::ZERO });
+    let sample = measured.sample_at(Sph2 {
+        theta: Rads::ZERO,
+        phi: Rads::ZERO,
+    });
     assert_eq!(sample.len(), 4);
     assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
 
-    let sample = measured.sample_at(Sph2 { theta: Rads::from_degrees(80.0), phi: Rads::from_degrees(30.0) });
+    let sample = measured.sample_at(Sph2 {
+        theta: Rads::from_degrees(80.0),
+        phi: Rads::from_degrees(30.0),
+    });
     assert_eq!(sample.len(), 4);
     assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
 
-    let sample = measured.sample_at(Sph2 { theta: Rads::from_degrees(40.0), phi: Rads::from_degrees(30.0) });
+    let sample = measured.sample_at(Sph2 {
+        theta: Rads::from_degrees(40.0),
+        phi: Rads::from_degrees(30.0),
+    });
     assert_eq!(sample.len(), 4);
     assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
 
-    let sample = measured.sample_at(Sph2 { theta: Rads::from_degrees(55.0), phi: Rads::from_degrees(30.0) });
+    let sample = measured.sample_at(Sph2 {
+        theta: Rads::from_degrees(55.0),
+        phi: Rads::from_degrees(30.0),
+    });
     assert_eq!(sample.len(), 4);
     assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
 }

@@ -289,10 +289,17 @@ pub fn cart_to_sph(v: Vec3) -> Sph3 {
 /// triangle defined by the given vertices. The barycentric coordinates are
 /// clamped to the range [0, 1].
 pub fn projected_barycentric_coords(p: Vec3, v0: Vec3, v1: Vec3, v2: Vec3) -> (f32, f32, f32) {
-    let p =
-    let e0 = DVec3::from(v1) - DVec3::from(v0);
-    let e1 = DVec3::from(v2) - DVec3::from(v0);
-    let e = DVec3::from(p) - DVec3::from(v0);
+    let v0 = DVec3::from(v0);
+    let e0 = DVec3::from(v1) - v0;
+    let e1 = DVec3::from(v2) - v0;
+    // Project the point onto the triangle plane
+    let pp = {
+        let p = DVec3::from(p);
+        let n = e0.cross(e1).normalize();
+        let v = p - v0;
+        p - n * n.dot(v)
+    };
+    let e = pp - v0;
     let d00 = e0.dot(e0);
     let d01 = e0.dot(e1);
     let d11 = e1.dot(e1);
@@ -300,10 +307,15 @@ pub fn projected_barycentric_coords(p: Vec3, v0: Vec3, v1: Vec3, v2: Vec3) -> (f
     let d21 = e.dot(e1);
     let inv_denom = rcp_f64(d00 * d11 - d01 * d01);
     let v = ((d11 * d20 - d01 * d21) * inv_denom).clamp(0.0, 1.0);
+    if v == 1.0 {
+        return (0.0, 1.0, 0.0);
+    }
     let w = ((d00 * d21 - d01 * d20) * inv_denom).clamp(0.0, 1.0);
+    if w == 1.0 {
+        return (0.0, 0.0, 1.0);
+    }
     ((1.0 - v - w).clamp(0.0, 1.0) as f32, v as f32, w as f32)
 }
-
 
 // TODO: generalise rcp to f32 and f64
 
