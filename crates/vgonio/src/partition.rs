@@ -243,13 +243,12 @@ impl Patch {
     /// Returns the center of the patch.
     pub fn center(&self) -> Sph2 {
         // For the patch at the center of the top of the hemisphere
-        let phi =
-            if self.min.phi.as_f32() <= 1e-6 && (self.max.phi - Rads::TAU).as_f32().abs() <= 1e-6 {
-                Rads::ZERO
-            } else {
-                (self.min.phi + self.max.phi) * 0.5
-            };
-        Sph2::new((self.min.theta + self.max.theta) * 0.5, phi)
+        if self.min.phi.as_f32() <= 1e-6 && (self.max.phi - Rads::TAU).as_f32().abs() <= 1e-6 {
+            // If the patch covers the entire hemisphere, then it must be the top patch.
+            Sph2::new(Rads::ZERO, Rads::ZERO)
+        } else {
+            Sph2::new((self.min.theta + self.max.theta) * 0.5, (self.min.phi + self.max.phi) * 0.5)
+        }
     }
 
     /// Returns the solid angle of the patch.
@@ -288,7 +287,7 @@ pub struct Ring {
 impl Ring {
     /// Given a phi angle, returns the indices of the patches where the phi
     /// angle falls in between (the patch where the phi resides and the closest
-    /// adjacent patch).
+    /// adjacent patch) in the ring.
     pub fn find_patch_indices(&self, phi: Rads) -> (usize, usize) {
         let phi = phi.wrap_to_tau();
         let (q, r) = phi.as_f32().div_rem_euclid(&self.phi_step);
@@ -447,7 +446,7 @@ mod tests {
         for i in 0..360 {
             let phi = Rads::from_degrees(i as f32);
             let (a, b) = ring.find_patch_indices(phi);
-            println!("phi = {}, a = {}, b = {}", phi, a, b);
+            println!("i = {}, phi = {}, a = {}, b = {}", i, phi, a, b);
         }
     }
 }

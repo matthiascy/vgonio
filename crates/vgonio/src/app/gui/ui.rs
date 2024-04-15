@@ -1,6 +1,6 @@
 #[cfg(feature = "fitting")]
 use crate::fitting::{
-    FittedModel, FittingProblem, FittingProblemKind, MeasuredMdfData, MicrofacetBrdfFittingProblem,
+    FittedModel, FittingProblem, FittingProblemKind, MicrofacetBrdfFittingProblem,
     MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
 };
 use crate::measure::data::MeasuredMdfData;

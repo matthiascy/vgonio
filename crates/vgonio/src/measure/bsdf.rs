@@ -5,23 +5,19 @@
 
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
-use crate::{
-    app::{
-        cache::{Handle, RawCache},
-        cli::ansi,
+use crate::{app::{
+    cache::{Handle, RawCache},
+    cli::ansi,
+}, measure::{
+    bsdf::{
+        emitter::Emitter,
+        receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
+        rtc::{RayTrajectory, RtcMethod},
     },
-    measure::{
-        bsdf::{
-            emitter::Emitter,
-            receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
-            rtc::{RayTrajectory, RtcMethod},
-        },
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        microfacet::MeasuredAdfData,
-        params::SimulationKind,
-    },
-    partition::{PartitionScheme, Patch, SphericalPartition},
-};
+    data::{MeasuredData, MeasurementData, MeasurementDataSource},
+    microfacet::MeasuredAdfData,
+    params::SimulationKind,
+}, partition::{PartitionScheme, Patch, SphericalPartition}, SphericalDomain};
 use base::{
     error::VgonioError,
     math,
@@ -36,7 +32,14 @@ use std::{
     ops::{Deref, DerefMut, Index, IndexMut},
     path::Path,
 };
+use base::math::{projected_barycentric_coords, cart_to_sph};
+use base::medium::Medium;
+use base::range::RangeByStepSizeInclusive;
+use base::units::{nm, Rads};
 use surf::{MicroSurface, MicroSurfaceMesh};
+use crate::measure::bsdf::emitter::EmitterParams;
+use crate::measure::bsdf::receiver::ReceiverParams;
+use crate::measure::bsdf::rtc::RtcMethod::{Grid};
 
 use super::params::BsdfMeasurementParams;
 
@@ -354,93 +357,183 @@ impl MeasuredBsdfData {
         // ndf
     }
 
-    //
-    // /// Retrieves the BSDF sample data at the given position.
-    // ///
-    // /// The position is given in the unit spherical coordinates. The returned
-    // /// data is the BSDF values for each snapshot and each wavelength at the
-    // /// given position.
-    // ///
-    // /// The BSDF values are stored in a flat array in row-major order.
-    // /// The first dimension is the snapshot index, the second dimension is the
-    // /// wavelength index.
-    // pub fn sample_at(&self, pos: Sph2) -> Box<[f32]> {
-    //     match self.params.receiver.scheme {
-    //         PartitionScheme::Beckers => {
-    //             let partition = SphericalPartition::new(
-    //                 self.params.receiver.scheme,
-    //                 self.params.receiver.domain,
-    //                 self.params.receiver.precision,
-    //             );
-    //             let theta_step = partition.precision.theta.as_f32();
-    //             let n_snapshots = self.snapshots.len();
-    //             let n_wavelengths = self.params.emitter.spectrum.step_count();
-    //             let mut interpolated = vec![0.0; n_snapshots *
-    // n_wavelengths].into_boxed_slice();             // 1. Find the upper and
-    // lower ring where the position is located.             // The Upper ring
-    // is the ring with the smallest zenith angle.             let
-    // (upper_ring_idx, lower_ring_idx) = {                 let (q, r) =
-    // pos.theta.as_f32().div_rem_euclid(&theta_step);                 if r <
-    // theta_step * 0.5 {                     ((q as usize - 1).max(0), q as
-    // usize)                 } else {
-    //                     (q as usize, (q as usize + 1).min(partition.num_rings() -
-    // 1))                 }
-    //             };
-    //
-    //             // 2. Find the patch where the position is located inside the
-    // ring.             if upper_ring_idx == lower_ring_idx {
-    //                 if lower_ring_idx == 0 {
-    //                     // Interpolate inside a triangle.
-    //                     let upper_ring = partition.rings[0];
-    //                     let lower_ring = partition.rings[1];
-    //                 }
-    //                 if upper_ring_idx == partition.num_rings() - 1 {
-    //                     // This should be the last ring.
-    //                     // Interpolate between two patches.
-    //                     let ring = partition.rings[upper_ring_idx];
-    //                     let (q, r) =
-    // pos.phi.as_f32().div_rem_euclid(&ring.phi_step);                     let
-    // q = q as usize;                     let patch_idx: (usize, usize) = if r
-    // < ring.phi_step * 0.5 {                         if q == 0 {
-    //                             (ring.num_patches() - 1, 0)
-    //                         } else {
-    //                             (q - 1, q)
-    //                         }
-    //                     } else {
-    //                         if q == ring.num_patches() - 1 {
-    //                             (q, 0)
-    //                         } else {
-    //                             (q, q + 1)
-    //                         }
-    //                     };
-    //                     let patch0_idx = ring.base_index + patch_idx.0;
-    //                     let patch1_idx = ring.base_index + patch_idx.1;
-    //                     let patch0 = partition.patches[patch0_idx];
-    //                     let patch1 = partition.patches[patch1_idx];
-    //                     let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
-    //                         / (patch1.center().phi.as_f32() -
-    // patch0.center().phi.as_f32());                     for (snap_idx,
-    // snapshot) in self.snapshots.iter().enumerate() {
-    // let patch0_samples = snapshot.samples
-    // [patch0_idx * n_wavelengths..(patch0_idx + 1) * n_wavelengths];
-    //                         let patch1_samples = snapshot.samples
-    //                             [patch1_idx * n_wavelengths..(patch1_idx + 1) *
-    // n_wavelengths];                         for i in 0..n_wavelengths {
-    //                             interpolated[snap_idx * n_wavelengths + i] =
-    //                                 (1.0 - t) * patch0_samples[i] + t *
-    // patch1_samples[i];                         }
-    //                     }
-    //                 };
-    //             } else {
-    //                 // Interpolate inside a quadrilateral.
-    //             }
-    //         }
-    //         PartitionScheme::EqualAngle => {
-    //             unimplemented!()
-    //         }
-    //     }
-    //     todo!()
-    // }
+    /// Retrieves the BSDF sample data at the given position.
+    ///
+    /// The position is given in the unit spherical coordinates. The returned
+    /// data is the BSDF values for each snapshot and each wavelength at the
+    /// given position.
+    ///
+    /// The BSDF values are stored in a flat array in row-major order.
+    /// The first dimension is the snapshot index, the second dimension is the
+    /// wavelength index.
+    pub fn sample_at(&self, pos: Sph2) -> Box<[f32]> {
+        match self.params.receiver.scheme {
+            PartitionScheme::Beckers => {
+                let partition = SphericalPartition::new(
+                    self.params.receiver.scheme,
+                    self.params.receiver.domain,
+                    self.params.receiver.precision,
+                );
+                let theta_step = partition.precision.theta.as_f32();
+                let n_snapshots = self.snapshots.len();
+                let n_wavelengths = self.params.emitter.spectrum.step_count();
+                let mut interpolated = vec![0.0; n_snapshots * n_wavelengths].into_boxed_slice();
+                // 1. Find the upper and lower ring where the position is located.
+                // The Upper ring is the ring with the smallest zenith angle.
+                let (upper_ring_idx, lower_ring_idx) = {
+                    let (q, r) = pos.theta.as_f32().div_rem_euclid(&theta_step);
+                    if r < theta_step * 0.5 {
+                        ((q as isize - 1).max(0) as usize, q as usize)
+                    } else {
+                        (q as usize, (q as usize + 1).min(partition.num_rings() - 1))
+                    }
+                };
+                println!("Upper ring: {}, Lower ring: {}", upper_ring_idx, lower_ring_idx);
+
+                // 2. Find the patch where the position is located inside the ring.
+                if lower_ring_idx == 0 || lower_ring_idx == 1 {
+                    // Interpolate inside a triangle.
+                    let lower_ring = partition.rings[1];
+                    let patch_idx = {
+                        let patch_idx = lower_ring.find_patch_indices(pos.phi);
+                        (0, lower_ring.base_index + patch_idx.0, lower_ring.base_index + patch_idx.1)
+                    };
+                    let center0 = partition.patches[patch_idx.0].center();
+                    let center1 = partition.patches[patch_idx.1].center();
+                    let center2 = partition.patches[patch_idx.2].center();
+                    println!("Interpolating inside a triangle between patches #{} ({}, {}, <{}>), #{} ({}, {}, <{}>), and #{} ({}, {}, <{}>)",
+                             patch_idx.0, center0.theta.to_degrees().as_f32(), center0.phi.to_degrees().as_f32(), center0.to_cartesian(),
+                             patch_idx.1, center1.theta.to_degrees().as_f32(), center1.phi.to_degrees().as_f32(), center1.to_cartesian(),
+                             patch_idx.2, center2.theta.to_degrees().as_f32(), center2.phi.to_degrees().as_f32(), center2.to_cartesian());
+                    let (u, v, w) = projected_barycentric_coords(pos.to_cartesian(), center0.to_cartesian(), center1.to_cartesian(), center2.to_cartesian());
+                    println!("Barycentric coordinates: ({}, {}, {})", u, v, w);
+                    for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
+                        let patch0_samples = &snapshot.samples[patch_idx.0];
+                        let patch1_samples = &snapshot.samples[patch_idx.1];
+                        let patch2_samples = &snapshot.samples[patch_idx.2];
+                        for i in 0..n_wavelengths {
+                            interpolated[snap_idx * n_wavelengths + i] =
+                                u * patch0_samples[i] + v * patch1_samples[i] + w * patch2_samples[i];
+                        }
+                    }
+                } else if upper_ring_idx == lower_ring_idx && upper_ring_idx == partition.num_rings() - 1{
+                    // This should be the last ring.
+                    // Interpolate between two patches.
+                    let ring = partition.rings[upper_ring_idx];
+                    let patch_idx = ring.find_patch_indices(pos.phi);
+                    let patch0_idx = ring.base_index + patch_idx.0;
+                    let patch1_idx = ring.base_index + patch_idx.1;
+                    let patch0 = partition.patches[patch0_idx];
+                    let patch1 = partition.patches[patch1_idx];
+                    println!("Interpolating between two patches: {} and {} at ring #{}", patch0_idx, patch1_idx, upper_ring_idx);
+                    let t = (pos.phi.as_f32() - patch0.center().phi.as_f32())
+                        / (patch1.center().phi.as_f32() - patch0.center().phi.as_f32());
+                    for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
+                        let patch0_samples = &snapshot.samples[patch0_idx];
+                        let patch1_samples = &snapshot.samples[patch1_idx];
+                        for i in 0..n_wavelengths {
+                            interpolated[snap_idx * n_wavelengths + i] =
+                                (1.0 - t) * patch0_samples[i] + t * patch1_samples[i];
+                        }
+                    }
+                } else {
+                    // Interpolate inside a quadrilateral.
+                    let upper_ring = partition.rings[upper_ring_idx];
+                    let lower_ring = partition.rings[lower_ring_idx];
+                    let upper_patch_idx = upper_ring.find_patch_indices(pos.phi);
+                    let lower_patch_idx = lower_ring.find_patch_indices(pos.phi);
+                    let upper_patch0_idx = upper_ring.base_index + upper_patch_idx.0;
+                    let upper_patch1_idx = upper_ring.base_index + upper_patch_idx.1;
+                    let lower_patch0_idx = lower_ring.base_index + lower_patch_idx.0;
+                    let lower_patch1_idx = lower_ring.base_index + lower_patch_idx.1;
+                    println!("Interpolating inside a quadrilateral between rings #{} ({}, {}) and #{} ({}, {})", upper_ring_idx, upper_patch0_idx, upper_patch1_idx, lower_ring_idx, lower_patch0_idx, lower_patch1_idx);
+                    let upper_patch0_center = partition.patches[upper_patch0_idx].center();
+                    let upper_patch1_center = partition.patches[upper_patch1_idx].center();
+                    let lower_patch0_center = partition.patches[lower_patch0_idx].center();
+                    let lower_patch1_center = partition.patches[lower_patch1_idx].center();
+                    let u_upper = (pos.phi.as_f32() - upper_patch0_center.phi.as_f32())
+                        / (upper_patch1_center.phi.as_f32() - upper_patch0_center.phi.as_f32());
+                    let u_lower = (pos.phi.as_f32() - lower_patch0_center.phi.as_f32())
+                        / (lower_patch1_center.phi.as_f32() - lower_patch0_center.phi.as_f32());
+                    let v = (pos.theta.as_f32() - upper_patch0_center.theta.as_f32())
+                        / (lower_patch1_center.theta.as_f32() - upper_patch0_center.theta.as_f32());
+                    // Bilateral interpolation.
+                    for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
+                        let upper_patch0_samples = &snapshot.samples[upper_patch0_idx];
+                        let upper_patch1_samples = &snapshot.samples[upper_patch1_idx];
+                        let lower_patch0_samples = &snapshot.samples[lower_patch0_idx];
+                        let lower_patch1_samples = &snapshot.samples[lower_patch1_idx];
+                        for i in 0..n_wavelengths {
+                            let upper_interp = (1.0 - u_upper) * upper_patch0_samples[i]
+                                + u_upper * upper_patch1_samples[i];
+                            let lower_interp = (1.0 - u_lower) * lower_patch0_samples[i]
+                                + u_lower * lower_patch1_samples[i];
+                            interpolated[snap_idx * n_wavelengths + i] =
+                                (1.0 - v) * upper_interp + v * lower_interp;
+                        }
+                    }
+                }
+
+                interpolated
+            }
+            PartitionScheme::EqualAngle => {
+                unimplemented!()
+            }
+        }
+    }
+}
+
+#[test]
+fn test_measured_bsdf_sample() {
+    let precision = Sph2 { theta: Rads::from_degrees(30.0), phi: Rads::from_degrees(2.0) };
+    let partition = SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
+    let samples = (0..partition.num_patches()).into_iter().map(|_| SpectralSamples::splat(1.0, 4)).collect::<Vec<_>>().into_boxed_slice();
+    let snapshots = Box::new([BsdfSnapshot {
+        wi: Sph2 { theta: Rads::ZERO, phi: Rads::ZERO },
+        samples,
+        trajectories: Vec::new(),
+        hit_points: Vec::new(),
+    }]);
+    let measured = MeasuredBsdfData {
+        params: BsdfMeasurementParams {
+            emitter: EmitterParams {
+                num_rays: 0,
+                max_bounces: 0,
+                zenith: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
+                azimuth: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
+                spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
+            },
+            receiver: ReceiverParams {
+                domain: SphericalDomain::Upper,
+                precision,
+                scheme: PartitionScheme::Beckers,
+                retrieval: Default::default(),
+            },
+            kind: BsdfKind::Brdf,
+            sim_kind: SimulationKind::GeomOptics(Grid),
+            incident_medium: Medium::Vacuum,
+            fresnel: Default::default(),
+            transmitted_medium: Medium::Vacuum,
+        },
+        snapshots,
+        raw_snapshots: None,
+        normalised: false,
+    };
+    let sample = measured.sample_at(Sph2 { theta: Rads::ZERO, phi: Rads::ZERO });
+    assert_eq!(sample.len(), 4);
+    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+
+    let sample = measured.sample_at(Sph2 { theta: Rads::from_degrees(80.0), phi: Rads::from_degrees(30.0) });
+    assert_eq!(sample.len(), 4);
+    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+
+    let sample = measured.sample_at(Sph2 { theta: Rads::from_degrees(40.0), phi: Rads::from_degrees(30.0) });
+    assert_eq!(sample.len(), 4);
+    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+
+    let sample = measured.sample_at(Sph2 { theta: Rads::from_degrees(55.0), phi: Rads::from_degrees(30.0) });
+    assert_eq!(sample.len(), 4);
+    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
 }
 
 /// Type of the BSDF to be measured.

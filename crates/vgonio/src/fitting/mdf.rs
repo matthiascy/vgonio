@@ -15,6 +15,7 @@ use levenberg_marquardt::{
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use rayon::slice::ParallelSlice;
 use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
+use crate::measure::data::MeasuredMdfData;
 
 /// Fitting variant for the microfacet distribution function (MDF).
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

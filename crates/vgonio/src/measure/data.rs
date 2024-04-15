@@ -1,8 +1,5 @@
 //! Measurement data description.
 
-#[cfg(feature = "fitting")]
-use crate::fitting::MeasuredMdfData;
-
 use crate::{
     app::cache::Handle,
     io::{vgmo::VgmoHeaderExt, OutputFileFormatOption},
