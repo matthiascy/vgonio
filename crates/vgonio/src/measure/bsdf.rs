@@ -375,39 +375,27 @@ impl MeasuredBsdfData {
         let n_wo = s.wi_wo_pairs[0].1.len();
         // row-major [wi, wo, spectrum]
         let mut samples = vec![0.0; s.num_pairs * n_lambda].into_boxed_slice();
-        // // The wi of the sampled BRDF and the measured BSDF must match.
-        // assert_eq!(
-        //     s.wi_wo_pairs.len(),
-        //     self.snapshots.len(),
-        //     "Mismatch in the number of snapshots."
-        // );
-        // row-major [wo, wi, spectrum]
-        let mut samples_per_snapshot = vec![0.0; s.num_pairs * n_lambda].into_boxed_slice();
+        // row-major [wi, spectrum]
         let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
+        // Get the interpolated samples for wi, wo, and spectrum.
         s.wi_wo_pairs
             .iter()
             .enumerate()
             .for_each(|(i, (wi, wos, _))| {
-                for wo in wos.iter() {
+                let max_offset = i * n_lambda;
+                for (j, wo) in wos.iter().enumerate() {
+                    let sample_offset = i * n_wo * n_lambda + j * n_lambda;
                     self.sample_at(
                         *wi,
                         *wo,
-                        &mut samples_per_snapshot[i * n_lambda..(i + 1) * n_lambda],
+                        &mut samples[sample_offset..sample_offset + n_lambda],
                     );
+                    for k in 0..n_lambda {
+                        max_values[max_offset + k] =
+                            f32::max(max_values[max_offset + k], samples[sample_offset + k]);
+                    }
                 }
             });
-        // Transpose the samples.
-        for i in 0..n_wi {
-            for j in 0..n_wo {
-                for k in 0..n_lambda {
-                    let idx = i * n_wo * n_lambda + j * n_lambda + k;
-                    let idx_transposed = j * n_wi * n_lambda + i * n_lambda + k;
-                    samples[idx] = samples_per_snapshot[idx_transposed];
-                    let max_idx = i * n_lambda + k;
-                    max_values[max_idx] = f32::max(max_values[max_idx], samples[idx]);
-                }
-            }
-        }
 
         SampledBrdf {
             spectrum,
@@ -450,8 +438,6 @@ impl MeasuredBsdfData {
                     self.params.receiver.precision,
                 );
                 let theta_step = partition.precision.theta.as_f32();
-                let n_snapshots = self.snapshots.len();
-                let n_wavelengths = self.params.emitter.spectrum.step_count();
                 // 1. Find the upper and lower ring where the position is located.
                 // The Upper ring is the ring with the smallest zenith angle.
                 let (upper_ring_idx, lower_ring_idx) = {
@@ -480,31 +466,33 @@ impl MeasuredBsdfData {
                             lower_ring.base_index + patch_idx.1,
                         )
                     };
-                    let center0 = partition.patches[patch_idx.0].center();
-                    let center1 = partition.patches[patch_idx.1].center();
-                    let center2 = partition.patches[patch_idx.2].center();
+                    let center = (
+                        partition.patches[patch_idx.0].center(),
+                        partition.patches[patch_idx.1].center(),
+                        partition.patches[patch_idx.2].center(),
+                    );
                     #[cfg(test)]
                     println!(
                         "Interpolating inside a triangle between patches #{} ({}, {}, <{}>), #{} \
                          ({}, {}, <{}>), and #{} ({}, {}, <{}>)",
                         patch_idx.0,
-                        center0.theta.to_degrees().as_f32(),
-                        center0.phi.to_degrees().as_f32(),
-                        center0.to_cartesian(),
+                        center.0.theta.to_degrees().as_f32(),
+                        center.0.phi.to_degrees().as_f32(),
+                        center.0.to_cartesian(),
                         patch_idx.1,
-                        center1.theta.to_degrees().as_f32(),
-                        center1.phi.to_degrees().as_f32(),
-                        center1.to_cartesian(),
+                        center.1.theta.to_degrees().as_f32(),
+                        center.1.phi.to_degrees().as_f32(),
+                        center.1.to_cartesian(),
                         patch_idx.2,
-                        center2.theta.to_degrees().as_f32(),
-                        center2.phi.to_degrees().as_f32(),
-                        center2.to_cartesian()
+                        center.2.theta.to_degrees().as_f32(),
+                        center.2.phi.to_degrees().as_f32(),
+                        center.2.to_cartesian()
                     );
                     let (u, v, w) = projected_barycentric_coords(
                         wo.to_cartesian(),
-                        center0.to_cartesian(),
-                        center1.to_cartesian(),
-                        center2.to_cartesian(),
+                        center.0.to_cartesian(),
+                        center.1.to_cartesian(),
+                        center.2.to_cartesian(),
                     );
                     #[cfg(test)]
                     println!("Barycentric coordinates: ({}, {}, {})", u, v, w);
@@ -561,7 +549,7 @@ impl MeasuredBsdfData {
                     #[cfg(test)]
                     println!(
                         "Interpolating inside a quadrilateral between rings #{} ({}, {} | u = \
-                         {}), and #{} ({}, {} | u = {})",
+                         {}), and #{} ({}, {} | u = {}), v = {}",
                         upper_ring_idx,
                         upper_patch0_idx,
                         upper_patch1_idx,
@@ -569,7 +557,8 @@ impl MeasuredBsdfData {
                         lower_ring_idx,
                         lower_patch0_idx,
                         lower_patch1_idx,
-                        u_lower
+                        u_lower,
+                        v
                     );
                     // Bilateral interpolation.
                     let upper_patch0_samples = &snapshot.samples[upper_patch0_idx];
@@ -639,33 +628,51 @@ fn test_measured_bsdf_sample() {
         raw_snapshots: None,
         normalised: false,
     };
-    let sample = measured.sample_at(Sph2 {
+    let mut interpolated = vec![0.0, 0.0, 0.0, 0.0];
+    let wi = Sph2 {
         theta: Rads::ZERO,
         phi: Rads::ZERO,
-    });
-    assert_eq!(sample.len(), 4);
-    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+    };
+    measured.sample_at(
+        wi,
+        Sph2 {
+            theta: Rads::ZERO,
+            phi: Rads::ZERO,
+        },
+        &mut interpolated,
+    );
+    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
-    let sample = measured.sample_at(Sph2 {
-        theta: Rads::from_degrees(80.0),
-        phi: Rads::from_degrees(30.0),
-    });
-    assert_eq!(sample.len(), 4);
-    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+    interpolated.iter_mut().for_each(|spl| *spl = 0.0);
+    measured.sample_at(
+        wi,
+        Sph2 {
+            theta: Rads::from_degrees(80.0),
+            phi: Rads::from_degrees(30.0),
+        },
+        &mut interpolated,
+    );
+    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
-    let sample = measured.sample_at(Sph2 {
-        theta: Rads::from_degrees(40.0),
-        phi: Rads::from_degrees(30.0),
-    });
-    assert_eq!(sample.len(), 4);
-    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+    measured.sample_at(
+        wi,
+        Sph2 {
+            theta: Rads::from_degrees(40.0),
+            phi: Rads::from_degrees(30.0),
+        },
+        &mut interpolated,
+    );
+    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
-    let sample = measured.sample_at(Sph2 {
-        theta: Rads::from_degrees(55.0),
-        phi: Rads::from_degrees(30.0),
-    });
-    assert_eq!(sample.len(), 4);
-    assert_eq!(sample, vec![1.0, 1.0, 1.0, 1.0].into_boxed_slice());
+    measured.sample_at(
+        wi,
+        Sph2 {
+            theta: Rads::from_degrees(55.0),
+            phi: Rads::from_degrees(30.0),
+        },
+        &mut interpolated,
+    );
+    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 }
 
 /// Type of the BSDF to be measured.
