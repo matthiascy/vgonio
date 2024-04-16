@@ -1,20 +1,22 @@
-use crate::error::RuntimeError;
-use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     io::Write,
     path::{Path, PathBuf},
 };
 
+use serde::{Deserialize, Serialize};
+
+use args::CliArgs;
+use base::error::VgonioError;
+use surf::TriangulationPattern;
+
+use crate::error::RuntimeError;
+
 pub(crate) mod args;
 
 pub mod cache;
 pub mod cli;
 pub(crate) mod gui;
-
-use args::CliArgs;
-use base::error::VgonioError;
-use surf::TriangulationPattern;
 
 /// Vgonio configuration.
 #[derive(Debug)]
@@ -83,10 +85,10 @@ impl UserConfig {
         if let Some(data_dir) = config.data_dir {
             config.data_dir = Some(canonicalize_path(base, Some(&data_dir)));
         }
-        log::trace!("  - User cache directory: {:?}", config.cache_dir);
-        log::trace!("  - User output directory: {:?}", config.output_dir);
-        log::trace!("  - User data directory: {:?}", config.data_dir);
-        log::trace!("  - Triangulation pattern: {:?}", config.triangulation);
+        log::info!("    - User cache directory: {:?}", config.cache_dir);
+        log::info!("    - User output directory: {:?}", config.output_dir);
+        log::info!("    - User data directory: {:?}", config.data_dir);
+        log::info!("    - Triangulation pattern: {:?}", config.triangulation);
         Ok(config)
     }
 }
@@ -383,18 +385,43 @@ impl Config {
 ///
 ///   2. `path` is relative
 ///
-///      Returns the a path which is relative to `base` path, with
+///      Returns the path which is relative to `base` path, with
 ///      the remaining of the `path` appended.
 ///
 ///   3. `path` is absolute
 ///
 ///      Returns the `path` as is.
 pub(crate) fn canonicalize_path(base: &Path, path: Option<&Path>) -> PathBuf {
+    log::trace!(
+        "Canonicalizing path: base={}, path={:?}",
+        base.display(),
+        path
+    );
+    const HOME: [&str; 6] = [
+        "~/",
+        "~\\",
+        "$HOME",
+        "%USERPROFILE%/",
+        "%HOMEPATH%/",
+        "%HOME%/",
+    ];
     path.map_or(base.to_path_buf(), |path| {
         let resolved = if base.is_relative() {
             base.join(path)
         } else {
-            path.to_path_buf()
+            let mut i = 0;
+            loop {
+                if i == HOME.len() {
+                    break path.to_path_buf();
+                }
+
+                if path.starts_with(HOME[i]) {
+                    break dirs::home_dir()
+                        .unwrap()
+                        .join(path.strip_prefix(HOME[i]).unwrap());
+                }
+                i += 1;
+            }
         };
 
         if !resolved.exists() {

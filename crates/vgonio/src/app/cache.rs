@@ -1,16 +1,3 @@
-use crate::{
-    app::{cli::ansi, Config},
-    measure::data::MeasurementData,
-};
-use base::{
-    error::VgonioError,
-    math,
-    medium::Medium,
-    optics::ior::{Ior, RefractiveIndexRecord},
-    units::{Length, LengthMeasurement, Nanometres},
-    Asset,
-};
-use gfxkit::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     any::TypeId,
     collections::HashMap,
@@ -20,8 +7,24 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
+
 use uuid::Uuid;
+
+use base::{
+    Asset,
+    error::VgonioError,
+    math,
+    medium::Medium,
+    optics::ior::{Ior, RefractiveIndexRecord},
+    units::{Length, LengthMeasurement, Nanometres},
+};
+use gfxkit::{context::GpuContext, mesh::RenderableMesh};
+use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
+
+use crate::{
+    app::{cli::ansi, Config},
+    measure::data::MeasurementData,
+};
 
 /// Handle referencing loaded assets.
 pub struct Handle<T>
@@ -605,18 +608,21 @@ impl RawCache {
             .map(|path| path.to_path_buf().join("ior"));
         log::debug!("  -- sys_path: {:?}", sys_path);
         log::debug!("  -- user_path: {:?}", user_path);
-        // First load refractive indices from `VgonioConfig::sys_data_dir()`.
-        if sys_path.exists() {
-            // Load one by one the files in the directory.
-            let n = Self::load_refractive_indices(&mut self.iors, &sys_path);
-            log::debug!("Loaded {} ior files from {:?}", n, sys_path);
+
+        if !sys_path.exists() {
+            log::warn!("  Refractive index database not found at {:?}", sys_path);
         }
 
-        // Second load refractive indices from `VgonioConfig::user_data_dir()`.
-        if user_path.as_ref().is_some_and(|p| p.exists()) {
-            let n = Self::load_refractive_indices(&mut self.iors, user_path.as_ref().unwrap());
-            log::debug!("Loaded {} ior files from {:?}", n, user_path);
+        // First load refractive indices from `VgonioConfig::sys_data_dir()`.
+        let n = Self::load_refractive_indices(&mut self.iors, &sys_path);
+        log::debug!("  Loaded {} ior files from {:?}", n, sys_path);
+
+        if !user_path.as_ref().is_some_and(|p| p.exists()) {
+            log::warn!("  Refractive index database not found at {:?}", user_path);
         }
+
+        let n = Self::load_refractive_indices(&mut self.iors, user_path.as_ref().unwrap());
+        log::debug!("  Loaded {} ior files from {:?}", n, user_path);
     }
 
     /// Load the refractive index database from the given path.
