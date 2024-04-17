@@ -594,8 +594,7 @@ pub fn reflectance_dielectric_conductor_spectrum(
 
 #[cfg(test)]
 mod tests {
-    use crate::optics::ior::RefractiveIndexRecord;
-    use base::units::nm;
+    use crate::{optics::ior::RefractiveIndexRecord, units::nm};
     use std::{fs::OpenOptions, io::Write};
 
     #[test]

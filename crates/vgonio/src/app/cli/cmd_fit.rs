@@ -170,12 +170,21 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             for snap in measured_data.snapshots.iter() {
                                 log::debug!("  = snapshot | wi: {}", snap.wi);
                                 for (i, ring) in partition.rings.iter().enumerate() {
-                                    log::debug!("    - ring[{}]", i);
+                                    log::debug!(
+                                        "    - ring[{}], center: (min {}, max {})",
+                                        i,
+                                        ring.theta_min.to_degrees(),
+                                        ring.theta_max.to_degrees()
+                                    );
                                     for pid in 0..ring.patch_count {
                                         let patch_idx = pid + ring.base_index;
                                         log::debug!(
-                                            "      - patch[{}]: {:?}",
+                                            "      - patch[{}] (min: {}, max: {}, center: {}): \
+                                             {:?}",
                                             patch_idx,
+                                            partition.patches[patch_idx].min,
+                                            partition.patches[patch_idx].max,
+                                            partition.patches[patch_idx].center(),
                                             snap.samples[patch_idx]
                                         );
                                     }

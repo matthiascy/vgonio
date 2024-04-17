@@ -468,8 +468,8 @@ pub mod vgmo {
                 buf.len() >= Self::REQUIRED_SIZE,
                 "Ring needs at least 20 bytes of space"
             );
-            buf[0..4].copy_from_slice(&(self.theta_inner).to_le_bytes());
-            buf[4..8].copy_from_slice(&(self.theta_outer).to_le_bytes());
+            buf[0..4].copy_from_slice(&(self.theta_min).to_le_bytes());
+            buf[4..8].copy_from_slice(&(self.theta_max).to_le_bytes());
             buf[8..12].copy_from_slice(&(self.phi_step).to_le_bytes());
             buf[12..16].copy_from_slice(&(self.patch_count as u32).to_le_bytes());
             buf[16..20].copy_from_slice(&(self.base_index as u32).to_le_bytes());
@@ -487,8 +487,8 @@ pub mod vgmo {
             let patch_count = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
             let base_index = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
             Self {
-                theta_inner,
-                theta_outer,
+                theta_min: theta_inner,
+                theta_max: theta_outer,
                 phi_step,
                 patch_count,
                 base_index,

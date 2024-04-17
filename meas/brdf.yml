@@ -9,12 +9,12 @@ type: !bsdf
     num_rays: 10000000
     max_bounces: 10
     zenith: 0deg .. =90deg / 5deg
-    azimuth: 0deg .. =0deg / 60deg
-    spectrum: 400 nm .. = 700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
+    azimuth: 0deg .. =360deg / 30deg
+    spectrum: 379.71 nm .. =799.55 nm / 0.774612546 nm # 400 nm .. = 700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receiver:
     domain: upper_hemisphere
     precision:
-      theta: 30.0 deg
+      theta: 10.0 deg
       phi: 0.5 deg # only for equal-angle scheme
     scheme: beckers
     retrieval: bsdf-only # full-data / bsdf-only

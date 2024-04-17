@@ -608,10 +608,10 @@ impl DebugDrawingState {
             })
             .unzip();
         for ring in partition.rings.iter() {
-            let inner_radius = ring.theta_inner.sin();
-            let outer_radius = ring.theta_outer.sin();
-            let inner_height = ring.theta_inner.cos();
-            let outer_height = ring.theta_outer.cos();
+            let inner_radius = ring.theta_min.sin();
+            let outer_radius = ring.theta_max.sin();
+            let inner_height = ring.theta_min.cos();
+            let outer_height = ring.theta_max.cos();
             // Generate the outer border of the ring
             for (j, (x, y)) in disc_xs.iter().zip(disc_ys.iter()).enumerate() {
                 vertices.push(Vec3::new(

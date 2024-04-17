@@ -1,6 +1,6 @@
 //! Math utilities.
 
-use crate::units::{rad, radians, Radians};
+use crate::units::{rad, radians, Angle, AngleUnit, Radians};
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -284,6 +284,20 @@ pub fn cart_to_sph(v: Vec3) -> Sph3 {
         phi += Radians::TAU;
     }
     Sph3::new(rho, theta, phi)
+}
+
+/// Compute the circular distance between two angles.
+///
+/// The circular distance is the shortest distance between two angles on a
+/// circle.
+#[inline(always)]
+pub fn circular_angle_dist<A: AngleUnit>(a: Angle<A>, b: Angle<A>) -> Angle<A> {
+    let diff = (a - b).abs();
+    if diff > Angle::<A>::PI {
+        Angle::<A>::TAU - diff
+    } else {
+        diff
+    }
 }
 
 /// Comptues the barycentric coordinates of the given point projected onto the
@@ -723,8 +737,8 @@ pub fn calc_aligned_size(size: u32, alignment: u32) -> u32 {
 mod tests {
     use crate::{
         math::{
-            cart_to_sph, madd, msub, nmadd, nmsub, rcp_f32, rsqrt, solve_quadratic, sph_to_cart,
-            ulp_eq, QuadraticSolution, MACHINE_EPSILON_F32,
+            cart_to_sph, circular_angle_dist, madd, msub, nmadd, nmsub, rcp_f32, rsqrt,
+            solve_quadratic, sph_to_cart, ulp_eq, QuadraticSolution, MACHINE_EPSILON_F32,
         },
         units::{degrees, radians},
     };
@@ -740,30 +754,45 @@ mod tests {
         assert!(!ulp_eq(1.0, 1.0 - 1e-6));
     }
 
+    #[test]
+    fn test_circular_angle_distance() {
+        let a = degrees!(0.0);
+        for i in 0..=360 {
+            let b = degrees!(i as f32);
+            if (a - b).abs() < degrees!(180.0) {
+                assert!(ulp_eq(circular_angle_dist(a, b).value, (a - b).abs().value));
+            } else {
+                assert!(ulp_eq(
+                    circular_angle_dist(a, b).value,
+                    (degrees!(360.0) - (a - b).abs()).value
+                ));
+            }
+        }
+    }
+
     // TODO: improve accuracy
     #[test]
     fn spherical_cartesian_conversion() {
-        println!("{:?}", sph_to_cart(1.0, radians!(0.0), radians!(0.0)));
-        println!("{:?}", cart_to_sph(Vec3::new(0.0, 1.0, 0.0), 1.0));
+        println!("{:?}", sph_to_cart(radians!(0.0), radians!(0.0)));
+        println!("{:?}", cart_to_sph(Vec3::new(0.0, 1.0, 0.0)));
 
         let r = 1.0;
         let zenith = radians!(0.0);
         let azimuth = radians!(0.0);
-        let v = sph_to_cart(r, zenith, azimuth);
-        let (radius, sph_zenith, sph_azimuth) = cart_to_sph(v, r);
-        assert!(ulp_eq(r, radius));
-        println!("{:.20} {:.20}", zenith.value, sph_zenith.value);
-        assert!(ulp_eq(zenith.value, sph_zenith.value));
-        assert!(ulp_eq(azimuth.value, sph_azimuth.value));
+        let v = sph_to_cart(zenith, azimuth) * r;
+        let sph3 = cart_to_sph(v);
+        assert!(ulp_eq(r, sph3.rho));
+        assert!(ulp_eq(zenith.value, sph3.theta.value));
+        assert!(ulp_eq(azimuth.value, sph3.phi.value));
 
         let r = 2.0;
         let zenith = degrees!(45.0).into();
         let azimuth = degrees!(120.0).into();
-        let v = sph_to_cart(r, zenith, azimuth);
-        let (radius, sph_zenith, sph_azimuth) = cart_to_sph(v, r);
-        assert!(ulp_eq(r, radius));
-        assert!(ulp_eq(zenith.value, sph_zenith.value));
-        assert!(ulp_eq(azimuth.value, sph_azimuth.value));
+        let v = sph_to_cart(zenith, azimuth) * r;
+        let sph3 = cart_to_sph(v);
+        assert!(ulp_eq(r, sph3.rho));
+        assert!(ulp_eq(zenith.value, sph3.theta.value));
+        assert!(ulp_eq(azimuth.value, sph3.phi.value));
     }
 
     #[test]

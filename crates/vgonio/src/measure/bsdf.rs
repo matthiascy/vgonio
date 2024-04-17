@@ -29,7 +29,7 @@ use crate::{
 use base::{
     error::VgonioError,
     math,
-    math::{cart_to_sph, projected_barycentric_coords, Sph2, Vec3},
+    math::{cart_to_sph, circular_angle_dist, projected_barycentric_coords, Sph2, Vec3},
     medium::Medium,
     range::RangeByStepSizeInclusive,
     units::{nm, Rads},
@@ -454,17 +454,9 @@ impl MeasuredBsdfData {
                     self.params.receiver.domain,
                     self.params.receiver.precision,
                 );
-                let theta_step = partition.precision.theta.as_f32();
                 // 1. Find the upper and lower ring where the position is located.
                 // The Upper ring is the ring with the smallest zenith angle.
-                let (upper_ring_idx, lower_ring_idx) = {
-                    let (q, r) = wo.theta.as_f32().div_rem_euclid(&theta_step);
-                    if r < theta_step * 0.5 {
-                        ((q as isize - 1).max(0) as usize, q as usize)
-                    } else {
-                        (q as usize, (q as usize + 1).min(partition.num_rings() - 1))
-                    }
-                };
+                let (upper_ring_idx, lower_ring_idx) = partition.find_rings(wo);
                 log::trace!(
                     "  - Upper ring: {}, Lower ring: {}",
                     upper_ring_idx,
@@ -545,59 +537,114 @@ impl MeasuredBsdfData {
                         patch1_samples,
                         upper_ring_idx
                     );
-                    let t = ((wo.phi.as_f64() - center.0.phi.as_f64())
-                        / (center.1.phi.as_f64() - center.0.phi.as_f64()))
-                    .clamp(0.0, 1.0) as f32;
+                    let t = (circular_angle_dist(wo.phi, center.0.phi)
+                        / circular_angle_dist(center.1.phi, center.0.phi))
+                    .clamp(0.0, 1.0);
                     interpolated.iter_mut().enumerate().for_each(|(i, spl)| {
                         *spl = (1.0 - t) * patch0_samples[i] + t * patch1_samples[i];
                     });
                 } else {
                     // Interpolate inside a quadrilateral.
-                    let upper_ring = partition.rings[upper_ring_idx];
-                    let lower_ring = partition.rings[lower_ring_idx];
-                    let upper_patch_idx = upper_ring.find_patch_indices(wo.phi);
-                    let lower_patch_idx = lower_ring.find_patch_indices(wo.phi);
-                    let upper_patch0_idx = upper_ring.base_index + upper_patch_idx.0;
-                    let upper_patch1_idx = upper_ring.base_index + upper_patch_idx.1;
-                    let lower_patch0_idx = lower_ring.base_index + lower_patch_idx.0;
-                    let lower_patch1_idx = lower_ring.base_index + lower_patch_idx.1;
-                    let upper_patch0_center = partition.patches[upper_patch0_idx].center();
-                    let upper_patch1_center = partition.patches[upper_patch1_idx].center();
-                    let lower_patch0_center = partition.patches[lower_patch0_idx].center();
-                    let lower_patch1_center = partition.patches[lower_patch1_idx].center();
-                    let u_upper = ((wo.phi.as_f64() - upper_patch0_center.phi.as_f64())
-                        / (upper_patch1_center.phi.as_f64() - upper_patch0_center.phi.as_f64()))
-                    .clamp(0.0, 1.0) as f32;
-                    let u_lower = ((wo.phi.as_f64() - lower_patch0_center.phi.as_f64())
-                        / (lower_patch1_center.phi.as_f64() - lower_patch0_center.phi.as_f64()))
-                    .clamp(0.0, 1.0) as f32;
-                    let v = ((wo.theta.as_f64() - upper_patch0_center.theta.as_f64())
-                        / (lower_patch1_center.theta.as_f64() - upper_patch0_center.theta.as_f64()))
-                    .clamp(0.0, 1.0) as f32;
-                    log::trace!(
-                        "  - Interpolating inside a quadrilateral between rings #{} (#{}, #{} | t \
-                         = {}), and #{} (#{}, #{} | t = {}), v = {}",
-                        upper_ring_idx,
-                        upper_patch0_idx,
-                        upper_patch1_idx,
-                        u_upper,
-                        lower_ring_idx,
-                        lower_patch0_idx,
-                        lower_patch1_idx,
-                        u_lower,
-                        v
-                    );
+                    let (upper_t, upper_patch_center, upper_patch_idx) = {
+                        let upper_ring = partition.rings[upper_ring_idx];
+                        let upper_patch_idx = {
+                            let patches = upper_ring.find_patch_indices(wo.phi);
+                            (
+                                upper_ring.base_index + patches.0,
+                                upper_ring.base_index + patches.1,
+                            )
+                        };
+                        let upper_patch_center = (
+                            partition.patches[upper_patch_idx.0].center(),
+                            partition.patches[upper_patch_idx.1].center(),
+                        );
+                        log::trace!(
+                            "        - upper_#{} center: {}",
+                            upper_patch_idx.0,
+                            upper_patch_center.0
+                        );
+                        log::trace!(
+                            "        - upper_#{} center: {}",
+                            upper_patch_idx.1,
+                            upper_patch_center.1
+                        );
+                        let upper_t = (circular_angle_dist(wo.phi, upper_patch_center.0.phi)
+                            / circular_angle_dist(
+                                upper_patch_center.1.phi,
+                                upper_patch_center.0.phi,
+                            ))
+                        .clamp(0.0, 1.0);
+                        log::trace!("          - upper_t: {}", upper_t);
+                        (upper_t, upper_patch_center, upper_patch_idx)
+                    };
+
+                    let (lower_t, lower_patch_center, lower_patch_idx) = {
+                        let lower_ring = partition.rings[lower_ring_idx];
+                        let lower_patch_idx = {
+                            let patches = lower_ring.find_patch_indices(wo.phi);
+                            (
+                                lower_ring.base_index + patches.0,
+                                lower_ring.base_index + patches.1,
+                            )
+                        };
+                        let lower_patch_center = (
+                            partition.patches[lower_patch_idx.0].center(),
+                            partition.patches[lower_patch_idx.1].center(),
+                        );
+                        log::trace!(
+                            "        - lower_#{} center: {}",
+                            lower_patch_idx.0,
+                            lower_patch_center.0,
+                        );
+                        log::trace!(
+                            "        - lower_#{} center: {}",
+                            lower_patch_idx.1,
+                            lower_patch_center.1
+                        );
+                        let lower_t = (circular_angle_dist(wo.phi, lower_patch_center.0.phi)
+                            / circular_angle_dist(
+                                lower_patch_center.1.phi,
+                                lower_patch_center.0.phi,
+                            ))
+                        .clamp(0.0, 1.0);
+                        log::trace!("          - lower_t: {}", lower_t);
+                        (lower_t, lower_patch_center, lower_patch_idx)
+                    };
+                    let s = (circular_angle_dist(wo.theta, upper_patch_center.0.theta)
+                        / circular_angle_dist(
+                            lower_patch_center.0.theta,
+                            upper_patch_center.0.theta,
+                        ))
+                    .clamp(0.0, 1.0);
                     // Bilateral interpolation.
-                    let upper_patch0_samples = &snapshot.samples[upper_patch0_idx];
-                    let upper_patch1_samples = &snapshot.samples[upper_patch1_idx];
-                    let lower_patch0_samples = &snapshot.samples[lower_patch0_idx];
-                    let lower_patch1_samples = &snapshot.samples[lower_patch1_idx];
+                    let upper_patch0_samples = &snapshot.samples[upper_patch_idx.0];
+                    let upper_patch1_samples = &snapshot.samples[upper_patch_idx.1];
+                    let lower_patch0_samples = &snapshot.samples[lower_patch_idx.0];
+                    let lower_patch1_samples = &snapshot.samples[lower_patch_idx.1];
+                    log::trace!(
+                        "  - Interpolating inside a quadrilateral between rings #{} (#{} vals \
+                         {:?}, #{} vals {:?} | t = {}), and #{} (#{} vals {:?}, #{} vals {:?} | t \
+                         = {}), v = {}",
+                        upper_ring_idx,
+                        upper_patch_idx.0,
+                        upper_patch0_samples,
+                        upper_patch_idx.1,
+                        upper_patch1_samples,
+                        upper_t,
+                        lower_ring_idx,
+                        lower_patch_idx.0,
+                        lower_patch0_samples,
+                        lower_patch_idx.1,
+                        lower_patch1_samples,
+                        lower_t,
+                        s
+                    );
                     interpolated.iter_mut().enumerate().for_each(|(i, spl)| {
-                        let upper_interp = (1.0 - u_upper) * upper_patch0_samples[i]
-                            + u_upper * upper_patch1_samples[i];
-                        let lower_interp = (1.0 - u_lower) * lower_patch0_samples[i]
-                            + u_lower * lower_patch1_samples[i];
-                        *spl = (1.0 - v) * upper_interp + v * lower_interp;
+                        let upper_interp = (1.0 - upper_t) * upper_patch0_samples[i]
+                            + upper_t * upper_patch1_samples[i];
+                        let lower_interp = (1.0 - lower_t) * lower_patch0_samples[i]
+                            + lower_t * lower_patch1_samples[i];
+                        *spl = (1.0 - s) * upper_interp + s * lower_interp;
                     });
                 }
                 log::trace!("  - Sampled: {:?}", &interpolated);

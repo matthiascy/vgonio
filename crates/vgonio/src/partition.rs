@@ -87,8 +87,8 @@ impl SphericalPartition {
             let t_prev = if i == 0 { 0.0 } else { ts[i - 1] };
             let phi_step = Radians::TWO_PI / n as f32;
             rings.push(Ring {
-                theta_inner: t_prev,
-                theta_outer: *t,
+                theta_min: t_prev,
+                theta_max: *t,
                 phi_step: phi_step.as_f32(),
                 patch_count: n as usize,
                 base_index: patches.len(),
@@ -142,8 +142,8 @@ impl SphericalPartition {
                 patches.push(Patch::new(theta_min, theta_max, phi_min, phi_max));
             }
             rings.push(Ring {
-                theta_inner: theta_min.as_f32(),
-                theta_outer: theta_max.as_f32(),
+                theta_min: theta_min.as_f32(),
+                theta_max: theta_max.as_f32(),
                 phi_step: precision.phi.as_f32(),
                 patch_count: num_patches_per_ring,
                 base_index: i * num_patches_per_ring,
@@ -178,7 +178,7 @@ impl SphericalPartition {
     /// Returns the index of the patch containing the direction.
     pub fn contains(&self, sph: Sph2) -> Option<usize> {
         for ring in self.rings.iter() {
-            if ring.theta_inner <= sph.theta.as_f32() && sph.theta.as_f32() <= ring.theta_outer {
+            if ring.theta_min <= sph.theta.as_f32() && sph.theta.as_f32() <= ring.theta_max {
                 for (i, patch) in self.patches.iter().skip(ring.base_index).enumerate() {
                     // The patch starts at the minus phi.
                     if patch.min.phi > patch.max.phi {
@@ -198,12 +198,50 @@ impl SphericalPartition {
         None
     }
 
+    /// Find the index of the ring containing the direction and the index of the
+    /// nearest ring to the direction, which could be the next or the previous.
+    ///
+    /// # Arguments
+    ///
+    /// * `sph` - The direction in spherical coordinates.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of the upper bound ring index and the lower bound ring index.
+    pub fn find_rings(&self, sph: Sph2) -> (usize, usize) {
+        let mut ring_idx = 0;
+        let mut min_dist = Rads::TAU;
+        for (i, ring) in self.rings.iter().enumerate() {
+            let dist = (ring.zenith_center() - sph.theta).abs();
+            if dist < min_dist {
+                min_dist = dist;
+                ring_idx = i;
+            }
+        }
+        let dist = (sph.theta.as_f32() - self.rings[ring_idx].theta_min)
+            / (self.rings[ring_idx].theta_max - self.rings[ring_idx].theta_min);
+
+        if dist < 0.5 {
+            if ring_idx == 0 {
+                (ring_idx, ring_idx)
+            } else {
+                (ring_idx - 1, ring_idx)
+            }
+        } else {
+            if ring_idx == self.rings.len() - 1 {
+                (ring_idx, ring_idx)
+            } else {
+                (ring_idx, ring_idx + 1)
+            }
+        }
+    }
+
     /// Mirror the patches and rings of the upper hemisphere to the lower
     /// hemisphere.
     fn mirror_partition(patches: &mut Vec<Patch>, rings: &mut Vec<Ring>) {
         for ring in rings.iter_mut() {
-            ring.theta_inner = std::f32::consts::PI - ring.theta_inner;
-            ring.theta_outer = std::f32::consts::PI - ring.theta_outer;
+            ring.theta_min = std::f32::consts::PI - ring.theta_min;
+            ring.theta_max = std::f32::consts::PI - ring.theta_max;
         }
         for patch in patches.iter_mut() {
             patch.min.theta = Radians::PI - patch.min.theta;
@@ -276,9 +314,9 @@ impl Patch {
 #[derive(Debug, Copy, Clone)]
 pub struct Ring {
     /// Minimum theta angle of the annulus.
-    pub theta_inner: f32,
+    pub theta_min: f32,
     /// Maximum theta angle of the annulus.
-    pub theta_outer: f32,
+    pub theta_max: f32,
     /// Step size of the phi angle inside the annulus.
     pub phi_step: f32,
     /// Number of patches in the annulus: 2 * pi / phi_step == patch_count.
@@ -304,6 +342,16 @@ impl Ring {
             } else {
                 (prev as usize, a as usize)
             }
+        }
+    }
+
+    /// Return the centor of the ring in terms of zenith angle.
+    pub fn zenith_center(&self) -> Radians {
+        if self.theta_min == 0.0 {
+            // The ring at the top of the hemisphere.
+            Radians::ZERO
+        } else {
+            Radians::from(self.theta_min + self.theta_max) * 0.5
         }
     }
 }
@@ -417,8 +465,8 @@ mod tests {
     #[test]
     fn test_ring_find_patches_single_patch() {
         let ring = Ring {
-            theta_inner: 0.0,
-            theta_outer: 3.0f32.to_radians(),
+            theta_min: 0.0,
+            theta_max: 3.0f32.to_radians(),
             phi_step: std::f32::consts::TAU,
             patch_count: 1,
             base_index: 0,
@@ -439,8 +487,8 @@ mod tests {
     #[test]
     fn test_ring_find_patches() {
         let ring = Ring {
-            theta_inner: 0.0,
-            theta_outer: 3.0f32.to_radians(),
+            theta_min: 0.0,
+            theta_max: 3.0f32.to_radians(),
             phi_step: std::f32::consts::FRAC_PI_6,
             patch_count: 12,
             base_index: 0,
