@@ -23,8 +23,12 @@ use base::{
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic;
+use std::sync::{
+    atomic,
+    atomic::{AtomicU32, AtomicUsize},
+};
 use surf::MicroSurface;
+use wgpu::naga::TypeInner::Atomic;
 
 /// Data collected by the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
@@ -293,6 +297,14 @@ impl Receiver {
 
         let mut stats = BsdfMeasurementStatsPoint::new(spectrum_len, max_bounces);
         stats.n_received = n_received.load(atomic::Ordering::Relaxed);
+        let mut n_absorbed = Vec::with_capacity(spectrum_len);
+        let mut n_reflected = Vec::with_capacity(spectrum_len);
+        for _ in 0..spectrum_len {
+            n_absorbed.push(AtomicU32::new(0));
+            n_reflected.push(AtomicU32::new(0));
+        }
+        n_absorbed.shrink_to_fit();
+        n_reflected.shrink_to_fit();
 
         // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
         // log::debug!("process dirs: {:?}", dirs);
@@ -302,13 +314,22 @@ impl Receiver {
         #[cfg(feature = "bench")]
         log::info!("Collector::collect: dirs: {} ms", dirs_proc_time);
 
-        for dir in dirs.iter() {
+        dirs.par_iter().for_each(|dir| {
             for i in 0..spectrum_len {
                 match dir.energy[i] {
-                    Energy::Absorbed => stats.n_absorbed[i] += 1,
-                    Energy::Reflected(_) => stats.n_reflected[i] += 1,
+                    Energy::Absorbed => {
+                        n_absorbed[i].fetch_add(1, atomic::Ordering::Relaxed);
+                    }
+                    Energy::Reflected(_) => {
+                        n_reflected[i].fetch_add(1, atomic::Ordering::Relaxed);
+                    }
                 }
             }
+        });
+
+        for i in 0..spectrum_len {
+            stats.n_absorbed[i] = n_absorbed[i].load(atomic::Ordering::Relaxed);
+            stats.n_reflected[i] = n_reflected[i].load(atomic::Ordering::Relaxed);
         }
 
         log::debug!("stats.n_absorbed: {:?}", stats.n_absorbed);

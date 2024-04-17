@@ -35,6 +35,7 @@ use base::{
     units::{nm, Rads},
 };
 use rand_distr::num_traits::Euclid;
+use rayon::iter::{IntoParallelIterator, ParallelBridge};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -383,16 +384,17 @@ impl MeasuredBsdfData {
             .enumerate()
             .for_each(|(i, (wi, wos, _))| {
                 let max_offset = i * n_lambda;
+                let samples_offset_wi = i * n_wo * n_lambda;
                 for (j, wo) in wos.iter().enumerate() {
-                    let sample_offset = i * n_wo * n_lambda + j * n_lambda;
+                    let samples_offset = samples_offset_wi + j * n_lambda;
                     self.sample_at(
                         *wi,
                         *wo,
-                        &mut samples[sample_offset..sample_offset + n_lambda],
+                        &mut samples[samples_offset..samples_offset + n_lambda],
                     );
                     for k in 0..n_lambda {
                         max_values[max_offset + k] =
-                            f32::max(max_values[max_offset + k], samples[sample_offset + k]);
+                            f32::max(max_values[max_offset + k], samples[samples_offset + k]);
                     }
                 }
             });
@@ -407,16 +409,30 @@ impl MeasuredBsdfData {
     }
 
     // TODO: merge this method to [`MeasuredDataSampler`]
-    /// Retrieves the BSDF sample data at the given position.
+    /// Retrieve the BSDF sample data (full wavelength) at the given position.
     ///
     /// The position is given in the unit spherical coordinates. The returned
     /// data is the BSDF values for each snapshot and each wavelength at the
     /// given position.
     ///
-    /// The BSDF values are stored in a flat array in row-major order.
-    /// The first dimension is the snapshot index, the second dimension is the
-    /// wavelength index.
+    /// # Arguments
+    ///
+    /// * `wi` - The incident direction.
+    /// * `wo` - The outgoing direction.
+    /// * `interpolated` - The interpolated BSDF values at the given position.
+    ///
+    /// # Panics
+    ///
+    /// Panic if the number of wavelengths in the interpolated data does not
+    /// match the number of wavelengths in the BSDF data.
     pub fn sample_at(&self, wi: Sph2, wo: Sph2, interpolated: &mut [f32]) {
+        log::trace!(
+            "Sampling at wi: ({}, {}), wo: ({} {})",
+            wi.theta.to_degrees().prettified(),
+            wi.phi.to_degrees().prettified(),
+            wo.theta.to_degrees().prettified(),
+            wo.phi.to_degrees().prettified()
+        );
         assert_eq!(
             interpolated.len(),
             self.params.emitter.spectrum.step_count(),
@@ -448,10 +464,10 @@ impl MeasuredBsdfData {
                         (q as usize, (q as usize + 1).min(partition.num_rings() - 1))
                     }
                 };
-                #[cfg(test)]
-                println!(
-                    "Upper ring: {}, Lower ring: {}",
-                    upper_ring_idx, lower_ring_idx
+                log::trace!(
+                    "  - Upper ring: {}, Lower ring: {}",
+                    upper_ring_idx,
+                    lower_ring_idx
                 );
 
                 // 2. Find the patch where the position is located inside the ring.
@@ -471,21 +487,20 @@ impl MeasuredBsdfData {
                         partition.patches[patch_idx.1].center(),
                         partition.patches[patch_idx.2].center(),
                     );
-                    #[cfg(test)]
-                    println!(
-                        "Interpolating inside a triangle between patches #{} ({}, {}, <{}>), #{} \
-                         ({}, {}, <{}>), and #{} ({}, {}, <{}>)",
+                    log::trace!(
+                        "  - Interpolating inside a triangle between patches #{} ({}, {}, <{}>), \
+                         #{} ({}, {}, <{}>), and #{} ({}, {}, <{}>)",
                         patch_idx.0,
-                        center.0.theta.to_degrees().as_f32(),
-                        center.0.phi.to_degrees().as_f32(),
+                        center.0.theta.to_degrees().prettified(),
+                        center.0.phi.to_degrees().prettified(),
                         center.0.to_cartesian(),
                         patch_idx.1,
-                        center.1.theta.to_degrees().as_f32(),
-                        center.1.phi.to_degrees().as_f32(),
+                        center.1.theta.to_degrees().prettified(),
+                        center.1.phi.to_degrees().prettified(),
                         center.1.to_cartesian(),
                         patch_idx.2,
-                        center.2.theta.to_degrees().as_f32(),
-                        center.2.phi.to_degrees().as_f32(),
+                        center.2.theta.to_degrees().prettified(),
+                        center.2.phi.to_degrees().prettified(),
                         center.2.to_cartesian()
                     );
                     let (u, v, w) = projected_barycentric_coords(
@@ -494,8 +509,7 @@ impl MeasuredBsdfData {
                         center.1.to_cartesian(),
                         center.2.to_cartesian(),
                     );
-                    #[cfg(test)]
-                    println!("Barycentric coordinates: ({}, {}, {})", u, v, w);
+                    log::trace!("  - Barycentric coordinates: ({}, {}, {})", u, v, w);
                     let patch0_samples = &snapshot.samples[patch_idx.0];
                     let patch1_samples = &snapshot.samples[patch_idx.1];
                     let patch2_samples = &snapshot.samples[patch_idx.2];
@@ -514,13 +528,15 @@ impl MeasuredBsdfData {
                     let patch1_idx = ring.base_index + patch_idx.1;
                     let patch0 = partition.patches[patch0_idx];
                     let patch1 = partition.patches[patch1_idx];
-                    #[cfg(test)]
-                    println!(
-                        "Interpolating between two patches: {} and {} at ring #{}",
-                        patch0_idx, patch1_idx, upper_ring_idx
+                    log::trace!(
+                        "  - Interpolating between two patches: {} and {} at ring #{}",
+                        patch0_idx,
+                        patch1_idx,
+                        upper_ring_idx
                     );
-                    let t = (wo.phi.as_f32() - patch0.center().phi.as_f32())
-                        / (patch1.center().phi.as_f32() - patch0.center().phi.as_f32());
+                    let t = ((wo.phi.as_f64() - patch0.center().phi.as_f64())
+                        / (patch1.center().phi.as_f64() - patch0.center().phi.as_f64()))
+                    .clamp(0.0, 1.0) as f32;
                     let patch0_samples = &snapshot.samples[patch0_idx];
                     let patch1_samples = &snapshot.samples[patch1_idx];
                     interpolated.iter_mut().enumerate().for_each(|(i, spl)| {
@@ -540,15 +556,17 @@ impl MeasuredBsdfData {
                     let upper_patch1_center = partition.patches[upper_patch1_idx].center();
                     let lower_patch0_center = partition.patches[lower_patch0_idx].center();
                     let lower_patch1_center = partition.patches[lower_patch1_idx].center();
-                    let u_upper = (wo.phi.as_f32() - upper_patch0_center.phi.as_f32())
-                        / (upper_patch1_center.phi.as_f32() - upper_patch0_center.phi.as_f32());
-                    let u_lower = (wo.phi.as_f32() - lower_patch0_center.phi.as_f32())
-                        / (lower_patch1_center.phi.as_f32() - lower_patch0_center.phi.as_f32());
-                    let v = (wo.theta.as_f32() - upper_patch0_center.theta.as_f32())
-                        / (lower_patch1_center.theta.as_f32() - upper_patch0_center.theta.as_f32());
-                    #[cfg(test)]
-                    println!(
-                        "Interpolating inside a quadrilateral between rings #{} ({}, {} | u = \
+                    let u_upper = ((wo.phi.as_f64() - upper_patch0_center.phi.as_f64())
+                        / (upper_patch1_center.phi.as_f64() - upper_patch0_center.phi.as_f64()))
+                    .clamp(0.0, 1.0) as f32;
+                    let u_lower = ((wo.phi.as_f64() - lower_patch0_center.phi.as_f64())
+                        / (lower_patch1_center.phi.as_f64() - lower_patch0_center.phi.as_f64()))
+                    .clamp(0.0, 1.0) as f32;
+                    let v = ((wo.theta.as_f64() - upper_patch0_center.theta.as_f64())
+                        / (lower_patch1_center.theta.as_f64() - upper_patch0_center.theta.as_f64()))
+                    .clamp(0.0, 1.0) as f32;
+                    log::trace!(
+                        "  - Interpolating inside a quadrilateral between rings #{} ({}, {} | u = \
                          {}), and #{} ({}, {} | u = {}), v = {}",
                         upper_ring_idx,
                         upper_patch0_idx,
@@ -573,6 +591,7 @@ impl MeasuredBsdfData {
                         *spl = (1.0 - v) * upper_interp + v * lower_interp;
                     });
                 }
+                log::trace!("  - Sampled: {:?}", &interpolated);
             }
             PartitionScheme::EqualAngle => {
                 unimplemented!()

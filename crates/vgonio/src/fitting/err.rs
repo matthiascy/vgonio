@@ -203,7 +203,9 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
     let iors_t = iors
         .ior_of_spectrum(Medium::Aluminium, &sampled_brdf.spectrum)
         .unwrap();
-    let mut samples = vec![0.0f32; sampled_brdf.samples.len()].into_boxed_slice();
+    let n_samples = sampled_brdf.samples.len();
+    let n_lambdas = sampled_brdf.spectrum.len();
+    let mut samples = vec![0.0f32; n_samples].into_boxed_slice();
     let mut max_values =
         vec![-1.0f32; sampled_brdf.spectrum.len() * sampled_brdf.wi_wo_pairs.len()]
             .into_boxed_slice();
@@ -214,9 +216,8 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         .for_each(|((wi, wos, offset), max_values)| {
             let offset = *offset as usize * sampled_brdf.spectrum.len();
             wos.iter().enumerate().for_each(|(i, wo)| {
-                let samples_offset = offset + i * sampled_brdf.spectrum.len();
-                let samples =
-                    &mut samples[samples_offset..samples_offset + sampled_brdf.spectrum.len()];
+                let samples_offset = offset + i * n_lambdas;
+                let samples = &mut samples[samples_offset..samples_offset + n_lambdas];
                 let wi = wi.to_cartesian();
                 let wo = wo.to_cartesian();
                 let spectral_samples =
@@ -233,10 +234,9 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         });
     if normalise {
         for (i, (_, wos, offset)) in sampled_brdf.wi_wo_pairs.iter().enumerate() {
-            let offset = *offset as usize * sampled_brdf.spectrum.len();
-            let max_values =
-                &max_values[i * sampled_brdf.spectrum.len()..(i + 1) * sampled_brdf.spectrum.len()];
-            for (sample, max) in samples[offset..offset + sampled_brdf.spectrum.len() * wos.len()]
+            let offset = *offset as usize * n_lambdas;
+            let max_values = &max_values[i * n_lambdas..(i + 1) * n_lambdas];
+            for (sample, max) in samples[offset..offset + n_lambdas * wos.len()]
                 .iter_mut()
                 .zip(max_values.iter())
             {

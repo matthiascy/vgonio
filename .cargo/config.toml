@@ -1,4 +1,4 @@
 [build]
 rustc-wrapper = "sccache"
 rustdocflags = ["--html-in-header", "./misc/docs-header.html"]
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+rustflags = ["-C", "link-arg=-fuse-ld=mold", "-Z", "threads=12"]

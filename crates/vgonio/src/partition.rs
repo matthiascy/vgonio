@@ -81,7 +81,7 @@ impl SphericalPartition {
         let mut rings = Vec::with_capacity(num_rings as usize);
         // Patches are generated in the order of rings.
         for (i, (t, k)) in ts.iter().zip(ks.iter()).enumerate() {
-            log::trace!("Ring {}: t = {}, k = {}", i, t.to_degrees(), k);
+            // log::trace!("Ring {}: t = {}, k = {}", i, t.to_degrees(), k);
             let k_prev = if i == 0 { 0 } else { ks[i - 1] };
             let n = k - k_prev;
             let t_prev = if i == 0 { 0.0 } else { ts[i - 1] };
@@ -247,7 +247,10 @@ impl Patch {
             // If the patch covers the entire hemisphere, then it must be the top patch.
             Sph2::new(Rads::ZERO, Rads::ZERO)
         } else {
-            Sph2::new((self.min.theta + self.max.theta) * 0.5, (self.min.phi + self.max.phi) * 0.5)
+            Sph2::new(
+                (self.min.theta + self.max.theta) * 0.5,
+                (self.min.phi + self.max.phi) * 0.5,
+            )
         }
     }
 

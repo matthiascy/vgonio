@@ -1,3 +1,5 @@
+//! Medium of the surface.
+
 use crate::error::VgonioError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;

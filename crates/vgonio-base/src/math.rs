@@ -4,10 +4,6 @@ use crate::units::{rad, radians, Radians};
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use std::{
-    arch::x86_64::{
-        _mm_add_ss, _mm_cvtsd_f64, _mm_cvtss_f32, _mm_mul_sd, _mm_mul_ss, _mm_rcp_ss, _mm_rsqrt_ss,
-        _mm_set_sd, _mm_set_ss, _mm_sub_sd,
-    },
     fmt::{Debug, Display, Formatter},
     ops::{Add, Mul},
 };
