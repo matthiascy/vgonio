@@ -29,7 +29,7 @@ use crate::{
 use base::{
     error::VgonioError,
     math,
-    math::{cart_to_sph, circular_angle_dist, projected_barycentric_coords, Sph2, Vec3},
+    math::{cart_to_sph, circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
     medium::Medium,
     range::RangeByStepSizeInclusive,
     units::{nm, Rads},
@@ -67,15 +67,19 @@ pub struct MeasuredBsdfData {
     /// Snapshot of the BSDF at each incident direction of the emitter.
     /// See [`BsdfSnapshot`] for more details.
     pub snapshots: Box<[BsdfSnapshot]>,
+    // TODO: write the max_values and normalised fields to the vgmo file.
+    /// Maximum values of the BSDF samples for each incident direction and each
+    /// wavelength; stored in 1D row major order array [ωi, λ].
+    pub max_values: Box<[f32]>,
+    /// Tells whether the BSDF data are normalized for each snapshot, i.e., the
+    /// samples are divided by the maximum value of each snapshot.
+    pub normalised: bool,
     /// Raw snapshots of the BSDF containing the full measurement data.
     /// This field is only available when the
     /// [`crate::measure::bsdf::params::DataRetrievalMode`] is set to
     /// `FullData`.
     /// See [`BsdfSnapshotRaw`] for more details.
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
-    /// Tells whether the BSDF data are normalized for each snapshot.
-    /// TODO: refactor this.
-    pub normalised: bool,
 }
 
 impl MeasuredBsdfData {
@@ -83,12 +87,20 @@ impl MeasuredBsdfData {
     ///
     /// Only BSDF data are written to the images. The full measurement data
     /// are not written.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - The path to the directory where the images will be saved.
+    /// * `timestamp` - The timestamp of the measurement.
+    /// * `resolution` - The resolution of the images.
+    /// * `normalise` - Whether to normalise the BSDF data before writing them
+    ///   to the images.
     pub fn write_as_exr(
         &self,
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
         resolution: u32,
-        normalize: bool,
+        normalise: bool,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         let (w, h) = (resolution as usize, resolution as usize);
@@ -99,30 +111,34 @@ impl MeasuredBsdfData {
             .values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let n_snapshots = self.snapshots.len();
-        let n_wavelengths = wavelengths.len();
-        // Compute the maximum value of the BSDF samples for each wavelength per
-        // snapshot.
-        let mut max_samples = vec![-1.0; n_snapshots * n_wavelengths];
-        if normalize && !self.normalised {
-            for (i, snapshot) in self.snapshots.iter().enumerate() {
-                for spectral_samples in snapshot.samples.iter() {
-                    for (wavelength_idx, sample) in spectral_samples.iter().enumerate() {
-                        max_samples[i * n_wavelengths + wavelength_idx] =
-                            f32::max(max_samples[i * n_wavelengths + wavelength_idx], *sample);
-                    }
-                }
-            }
-        } else {
-            for sample in max_samples.iter_mut() {
-                *sample = 1.0;
-            }
+        let n_wi = self.snapshots.len();
+        let n_lambda = wavelengths.len();
+
+        // Compute the correction factor for normalisation.
+        //
+        // Set to 1 the correction factor for normalisation
+        //   - if the BSDF data are NOT normalised and the user does NOT want to
+        //     normalise it
+        //   - if the BSDF data are normalised and the user wants to normalise it
+        let mut factor = vec![1.0; n_wi * n_lambda].into_boxed_slice();
+
+        if normalise && !self.normalised {
+            // Set to the reciprocal of the maximum values the correction factor for
+            // normalisation if the BSDF data are NOT normalised and the user wants
+            // to normalise it
+            factor.copy_from_slice(&self.max_values);
+            factor.iter_mut().for_each(|val| *val = rcp_f32(*val));
+        } else if !normalise && self.normalised {
+            // Set the correction factor to the maximum values if the BSDF data are
+            // normalised and the user does NOT want to normalise it
+            factor.copy_from_slice(&self.max_values);
         }
+
         log::debug!(
             "pre-normalised? {} to normalise ? {} - max_bsdf_samples: {:?}",
             self.normalised,
-            normalize,
-            max_samples
+            normalise,
+            factor
         );
 
         // The BSDF data are stored in a single flat array, with the order of
@@ -131,7 +147,7 @@ impl MeasuredBsdfData {
         // - y: height
         // - z: wavelength
         // - w: snapshot
-        let mut bsdf_samples_per_wavelength = vec![0.0; w * h * n_wavelengths * n_snapshots];
+        let mut bsdf_samples_per_wavelength = vec![0.0; w * h * n_lambda * n_wi];
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         let partition = self.params.receiver.partitioning();
@@ -139,19 +155,19 @@ impl MeasuredBsdfData {
         {
             // Each snapshot is saved as a separate layer of the image.
             // Each channel of the layer stores the BSDF data for a single wavelength.
-            for (snap_idx, snapshot) in self.snapshots.iter().enumerate() {
-                let offset = snap_idx * w * h * n_wavelengths;
+            for (wi_idx, snapshot) in self.snapshots.iter().enumerate() {
+                let offset = wi_idx * w * h * n_lambda;
                 for i in 0..w {
                     for j in 0..h {
                         let idx = patch_indices[i + j * w];
                         if idx < 0 {
                             continue;
                         }
-                        for wavelength_idx in 0..n_wavelengths {
+                        for wavelength_idx in 0..n_lambda {
                             bsdf_samples_per_wavelength
                                 [offset + i + j * w + wavelength_idx * w * h] = snapshot.samples
                                 [idx as usize][wavelength_idx]
-                                / max_samples[snap_idx * n_wavelengths + wavelength_idx];
+                                * factor[wi_idx * n_lambda + wavelength_idx];
                         }
                     }
                 }
@@ -656,6 +672,21 @@ impl MeasuredBsdfData {
     }
 }
 
+pub(crate) fn compute_bsdf_snapshots_max_values(snapshots: &[BsdfSnapshot]) -> Box<[f32]> {
+    let n_lambda = snapshots[0].samples[0].len();
+    let n_wi = snapshots.len();
+    let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
+    snapshots.iter().enumerate().for_each(|(i, snapshot)| {
+        let offset = i * n_lambda;
+        snapshot.samples.iter().for_each(|patch| {
+            patch.iter().enumerate().for_each(|(j, val)| {
+                max_values[offset + j] = f32::max(max_values[offset + j], *val);
+            });
+        });
+    });
+    max_values
+}
+
 #[test]
 fn test_measured_bsdf_sample() {
     let precision = Sph2 {
@@ -702,6 +733,7 @@ fn test_measured_bsdf_sample() {
         snapshots,
         raw_snapshots: None,
         normalised: false,
+        max_values: vec![1.0; 4].into_boxed_slice(),
     };
     let mut interpolated = vec![0.0, 0.0, 0.0, 0.0];
     let wi = Sph2 {
@@ -1133,6 +1165,7 @@ pub fn measure_bsdf_rt(
             DataRetrieval::FullData => Some(collected.snapshots.into_boxed_slice()),
             DataRetrieval::BsdfOnly => None,
         };
+        let max_values = compute_bsdf_snapshots_max_values(&snapshots);
         measurements.push(MeasurementData {
             name: surf.file_stem().unwrap().to_owned(),
             source: MeasurementDataSource::Measured(collected.surface),
@@ -1142,6 +1175,7 @@ pub fn measure_bsdf_rt(
                 snapshots,
                 raw_snapshots,
                 normalised: false,
+                max_values,
             }),
         })
     }

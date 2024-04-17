@@ -472,12 +472,17 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
             {
                 // TODO: we are repeating the calculation of the brdf, maybe we can
                 // reuse not only the maximum values but also the brdf itself.
-                let (_, maxes) = generate_analytical_brdf(
+                let maxes = generate_analytical_brdf(
                     &self.measured.params,
                     self.model.as_ref(),
                     self.iors,
                     true,
-                );
+                )
+                .max_values
+                .iter()
+                .map(|m| *m as f64)
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
                 self.max_modelled
                     .as_mut()
                     .unwrap()
@@ -545,12 +550,17 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
                 .find(|((ax, ay), _)| *ax == alpha_x && *ay == alpha_y)
                 .is_none()
             {
-                let (_, maxes) = generate_analytical_brdf(
+                let maxes = generate_analytical_brdf(
                     &self.measured.params,
                     self.model.as_ref(),
                     self.iors,
                     true,
-                );
+                )
+                .max_values
+                .iter()
+                .map(|m| *m as f64)
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
                 self.max_modelled
                     .as_mut()
                     .unwrap()

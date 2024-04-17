@@ -129,8 +129,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 fresnel: true,
             };
             for model in models.iter() {
-                let (mut brdf, max_values) =
-                    generate_analytical_brdf(&params, &**model, &cache.iors, opts.normalise);
+                let brdf = generate_analytical_brdf(&params, &**model, &cache.iors, opts.normalise);
                 let output = config.output_dir().join(format!(
                     "{:?}_{}.exr",
                     model.family(),
