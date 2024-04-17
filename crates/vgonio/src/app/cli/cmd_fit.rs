@@ -45,7 +45,7 @@ use crate::{
         data::SampledBrdf,
         params::{BsdfMeasurementParams, SimulationKind},
     },
-    partition::PartitionScheme,
+    partition::{PartitionScheme, SphericalPartition},
     SphericalDomain,
 };
 
@@ -150,7 +150,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     ));
                 }
                 for input in opts.inputs.chunks(2) {
-                    println!("inputs: {:?}, {:?}", input[0], input[1]);
+                    log::debug!("inputs: {:?}, {:?}", input[0], input[1]);
                     let brdf = {
                         let measured = cache
                             .load_micro_surface_measurement(&config, &input[0])
@@ -158,18 +158,37 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         let olaf = cache
                             .load_micro_surface_measurement(&config, &input[1])
                             .unwrap();
-                        let measured_data = cache.get_measurement_data(measured).unwrap();
+                        let measured_data = cache
+                            .get_measurement_data(measured)
+                            .unwrap()
+                            .measured
+                            .as_bsdf()
+                            .unwrap();
+                        #[cfg(debug_assertions)]
+                        {
+                            let partition = measured_data.params.receiver.partitioning();
+                            for snap in measured_data.snapshots.iter() {
+                                log::debug!("  = snapshot | wi: {}", snap.wi);
+                                for (i, ring) in partition.rings.iter().enumerate() {
+                                    log::debug!("    - ring[{}]", i);
+                                    for pid in 0..ring.patch_count {
+                                        let patch_idx = pid + ring.base_index;
+                                        log::debug!(
+                                            "      - patch[{}]: {:?}",
+                                            patch_idx,
+                                            snap.samples[patch_idx]
+                                        );
+                                    }
+                                }
+                            }
+                        }
                         let olaf_data = cache
                             .get_measurement_data(olaf)
                             .unwrap()
                             .measured
                             .as_sampled_brdf()
                             .unwrap();
-                        measured_data
-                            .measured
-                            .as_bsdf()
-                            .unwrap()
-                            .sampled_brdf(&olaf_data)
+                        measured_data.sampled_brdf(&olaf_data)
                     };
 
                     log::debug!("BRDF extraction done, starting fitting.");
