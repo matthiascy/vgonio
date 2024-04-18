@@ -399,8 +399,26 @@ impl MeasuredBsdfData {
             .iter()
             .enumerate()
             .for_each(|(i, (wi, wos, _))| {
-                let max_offset = i * n_lambda;
                 let samples_offset_wi = i * n_wo * n_lambda;
+                let snap_idx = self
+                    .snapshots
+                    .iter()
+                    .position(|snap| snap.wi.approx_eq(&wi))
+                    .expect(
+                        "The incident direction is not found in the BSDF snapshots. The incident \
+                         direction must be one of the directions of the emitter.",
+                    );
+                let max_offset = i * n_lambda;
+                let use_original_max = std::env::var("ORIGINAL_MAX").is_ok();
+                if use_original_max {
+                    max_values[max_offset..max_offset + n_lambda].copy_from_slice(
+                        &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda],
+                    );
+                    log::debug!(
+                        "Original max values: {:?}",
+                        &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda]
+                    );
+                }
                 for (j, wo) in wos.iter().enumerate() {
                     let samples_offset = samples_offset_wi + j * n_lambda;
                     self.sample_at(
@@ -408,10 +426,18 @@ impl MeasuredBsdfData {
                         *wo,
                         &mut samples[samples_offset..samples_offset + n_lambda],
                     );
-                    for k in 0..n_lambda {
-                        max_values[max_offset + k] =
-                            f32::max(max_values[max_offset + k], samples[samples_offset + k]);
+                    if !use_original_max {
+                        for k in 0..n_lambda {
+                            max_values[max_offset + k] =
+                                f32::max(max_values[max_offset + k], samples[samples_offset + k]);
+                        }
                     }
+                }
+                if !use_original_max {
+                    log::debug!(
+                        "Max values: {:?}",
+                        &max_values[max_offset..max_offset + n_lambda]
+                    );
                 }
             });
 

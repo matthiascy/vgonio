@@ -8,18 +8,17 @@ use crate::{
     partition::SphericalPartition,
 };
 use base::{
-    math::{rcp_f32, sph_to_cart, sqr, Sph2, Vec3, Vec3A},
+    math::{rcp_f32, sph_to_cart, sqr},
     medium::Medium,
-    optics::fresnel,
     range::RangeByStepSizeInclusive,
     units::{deg, Degrees, Radians},
 };
 use bxdf::{
     brdf::{
-        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf, TrowbridgeReitzBrdfModel},
+        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         Bxdf,
     },
-    distro::{BeckmannDistribution, MicrofacetDistroKind},
+    distro::MicrofacetDistroKind,
     Scattering,
 };
 use rayon::{

@@ -16,6 +16,7 @@ For more information, see cargo issue [#331](https://github.com/rust-lang/cargo/
 and rust pull request [#95691](https://github.com/rust-lang/rust/pull/95691).
 
 ## Building
+
 `sccache`
 `mold`
 
@@ -26,3 +27,7 @@ and rust pull request [#95691](https://github.com/rust-lang/rust/pull/95691).
 ```shell
 fit ~/Documents/virtual-gonio/output/test-data-d2/bsdf_aluminium3bar100_2024-02-28T21-58-41.vgmo --normalize --astart 0.175 --astop 0.225 --astep 0.001 -e nlls --model beckmann
 ```
+
+## Environment Variables
+
+* `ORIGINAL_MAX`
