@@ -1,25 +1,3 @@
-use core::slice::SlicePattern;
-use egui::color_picker::Alpha;
-use std::path::PathBuf;
-
-use rayon::iter::ParallelIterator;
-
-use base::{
-    error::VgonioError,
-    math::Sph2,
-    medium::Medium,
-    range::RangeByStepSizeInclusive,
-    units::{deg, nm, Rads},
-    Isotropy,
-};
-use bxdf::{
-    brdf::{
-        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        Bxdf, BxdfFamily,
-    },
-    distro::MicrofacetDistroKind,
-};
-
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
@@ -46,8 +24,27 @@ use crate::{
         params::{BsdfMeasurementParams, SimulationKind},
     },
     partition::{PartitionScheme, SphericalPartition},
+    plotting::plot_err,
     SphericalDomain,
 };
+use base::{
+    error::VgonioError,
+    math::Sph2,
+    medium::Medium,
+    range::RangeByStepSizeInclusive,
+    units::{deg, nm, Rads},
+    Isotropy,
+};
+use bxdf::{
+    brdf::{
+        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        Bxdf, BxdfFamily,
+    },
+    distro::MicrofacetDistroKind,
+};
+use core::slice::SlicePattern;
+use rayon::iter::ParallelIterator;
+use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -198,7 +195,6 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .unwrap();
                         measured_data.sampled_brdf(&olaf_data)
                     };
-
                     log::debug!("BRDF extraction done, starting fitting.");
                     sampled_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache);
                 }
@@ -274,6 +270,15 @@ fn brute_force_fitting_sampled_brdf(
         filepath.file_name().unwrap().display(),
         errs.as_slice()
     );
+    if opts.plot {
+        plot_err(
+            errs.as_slice(),
+            opts.alpha_start.unwrap_or(0.01),
+            opts.alpha_stop.unwrap_or(1.0),
+            opts.alpha_step.unwrap_or(0.01),
+        )
+        .expect("Failed to plot the error.");
+    }
 }
 
 fn nlls_fitting_sampled_brdf(
@@ -460,6 +465,13 @@ pub struct FitOptions {
         required_if_eq_all([("method", "bruteforce"), ("generate", "false")])
     )]
     pub error_metric: Option<ErrorMetric>,
+
+    #[clap(
+        long,
+        help = "Whether to plot the fitted data.",
+        default_value = "false"
+    )]
+    pub plot: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

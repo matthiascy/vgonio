@@ -27,6 +27,7 @@ pub mod fitting;
 mod io;
 pub mod measure;
 mod partition;
+pub(crate) mod plotting;
 
 use base::{error::VgonioError, units::Radians};
 use serde::{Deserialize, Serialize};
