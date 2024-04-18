@@ -233,6 +233,7 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         spectrum: sampled_brdf.spectrum.clone(),
         samples,
         max_values,
+        normalised: normalise,
         wi_wo_pairs: sampled_brdf.wi_wo_pairs.clone(),
         num_pairs: sampled_brdf.num_pairs,
     }
@@ -246,6 +247,10 @@ pub fn compute_iso_sampled_brdf_err(
     normalise: bool,
     metric: ErrorMetric,
 ) -> Box<[f64]> {
+    assert!(
+        !sampled.normalised,
+        "The sampled BRDF must not be normalised."
+    );
     let mut brdfs = {
         let mut brdfs = Box::new_uninit_slice(alpha.step_count());
         brdfs.iter_mut().enumerate().for_each(|(i, brdf)| {
@@ -266,9 +271,20 @@ pub fn compute_iso_sampled_brdf_err(
         unsafe { brdfs.assume_init() }
     };
 
+    let factor = if normalise && !sampled.normalised {
+        sampled
+            .max_values
+            .iter()
+            .map(|&x| rcp_f32(x))
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    } else {
+        vec![1.0; sampled.wi_wo_pairs.len() * sampled.spectrum.len()].into_boxed_slice()
+    };
+
     brdfs
         .par_iter()
-        .map(|model| compute_distance_from_sampled_brdf(model, sampled, metric))
+        .map(|model| compute_distance_from_sampled_brdf(model, sampled, &factor, metric))
         .collect::<Vec<_>>()
         .into_boxed_slice()
 }
@@ -276,17 +292,30 @@ pub fn compute_iso_sampled_brdf_err(
 fn compute_distance_from_sampled_brdf(
     modelled: &SampledBrdf,
     measured: &SampledBrdf,
+    factor: &[f32],
     error_metric: ErrorMetric,
 ) -> f64 {
-    let sqr_err_sum = modelled
-        .samples
-        .iter()
-        .step_by(modelled.spectrum.len())
-        .zip(measured.samples.iter().step_by(measured.spectrum.len()))
-        .map(|(model_samples, measured_samples)| {
-            sqr(*model_samples as f64 - *measured_samples as f64)
-        })
-        .sum::<f64>();
+    assert_eq!(
+        modelled.spectrum.len(),
+        measured.spectrum.len(),
+        "The number of wavelengths in the modelled and measured data must be the same."
+    );
+    let n_lambda = modelled.spectrum.len();
+    let n_wo = modelled.wi_wo_pairs[0].1.len();
+    let mut sqr_err_sum = 0.0;
+    for (i, (wi, wos, _)) in modelled.wi_wo_pairs.iter().enumerate() {
+        let max_offset = i * n_lambda;
+        let factors = &factor[max_offset..max_offset + n_lambda];
+        for (j, wo) in wos.iter().enumerate() {
+            let offset = i * n_lambda * n_wo + j * n_lambda;
+            let model_samples = &modelled.samples[offset..offset + n_lambda];
+            let measured_samples = &measured.samples[offset..offset + n_lambda];
+            for k in 0..n_lambda {
+                sqr_err_sum +=
+                    sqr(model_samples[k] as f64 - measured_samples[k] as f64 * factors[k] as f64);
+            }
+        }
+    }
     match error_metric {
         ErrorMetric::Mse => {
             let n = modelled.wi_wo_pairs.len() * modelled.spectrum.len();

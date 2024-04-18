@@ -409,12 +409,14 @@ impl MeasuredBsdfData {
                          direction must be one of the directions of the emitter.",
                     );
                 let max_offset = i * n_lambda;
-                let use_original_max = std::env::var("ORIGINAL_MAX").is_ok();
+                let use_original_max = std::env::var("ORIGINAL_MAX")
+                    .map(|v| v == "1")
+                    .unwrap_or(false);
                 if use_original_max {
                     max_values[max_offset..max_offset + n_lambda].copy_from_slice(
                         &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda],
                     );
-                    log::debug!(
+                    log::trace!(
                         "Original max values: {:?}",
                         &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda]
                     );
@@ -434,7 +436,7 @@ impl MeasuredBsdfData {
                     }
                 }
                 if !use_original_max {
-                    log::debug!(
+                    log::trace!(
                         "Max values: {:?}",
                         &max_values[max_offset..max_offset + n_lambda]
                     );
@@ -445,6 +447,7 @@ impl MeasuredBsdfData {
             spectrum,
             samples,
             max_values,
+            normalised: self.normalised,
             wi_wo_pairs: s.wi_wo_pairs.clone(),
             num_pairs: s.num_pairs,
         }

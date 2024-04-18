@@ -82,11 +82,13 @@ pub struct SampledBrdf {
     /// Wavelengths in nanometers.
     pub spectrum: Box<[Nanometres]>,
     /// Samples of each wi-wo pair for each wavelength.
-    /// Row-major [wi, wo, wavelength] array.
+    /// Row-major [ωi, ωo, λ] array.
     pub samples: Box<[f32]>,
     /// Maximum values of the spectral samples for each snapshot (wi direction)
-    /// and each wavelength. Row-major [wi x wo x wavelength] array.
+    /// and each wavelength. Row-major [ωi, λ] array.
     pub max_values: Box<[f32]>,
+    /// Indicates whether the samples are normalised or not.
+    pub normalised: bool,
     /// All pairs of incidents and outgoing directions. The first element of the
     /// tuple is the incident direction. The second element is the list of
     /// outgoing directions, and the third element is the offset in the samples
@@ -608,6 +610,7 @@ impl MeasurementData {
                     spectrum: wavelengths,
                     samples: samples.into_boxed_slice(),
                     max_values: max_values.into_boxed_slice(),
+                    normalised: false,
                     wi_wo_pairs: wi_wo_pairs
                         .into_iter()
                         .map(|(wi, wo, offset)| (wi, wo.into_boxed_slice(), offset))

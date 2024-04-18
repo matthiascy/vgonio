@@ -232,6 +232,16 @@ fn sampled_brdf_fitting(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
+    println!(
+        "    {}>{} Fitting to model: {:?} , distro: {:?}, normalise: {}, isotropy: {}, olaf: {}",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET,
+        opts.family,
+        opts.distro,
+        opts.normalise,
+        opts.isotropy,
+        opts.olaf,
+    );
     match method {
         FittingMethod::Bruteforce => {
             brute_force_fitting_sampled_brdf(brdf, filepath, opts, alpha, cache)
@@ -284,6 +294,17 @@ fn measured_brdf_fitting(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
+    println!(
+        "    {}>{} Fitting to model: {:?} , distro: {:?}, normalise: {}, isotropy: {}, method: \
+         {:?}",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET,
+        opts.family,
+        opts.distro,
+        opts.normalise,
+        opts.isotropy,
+        opts.method,
+    );
     match method {
         FittingMethod::Bruteforce => {
             brute_force_fitting_measured_brdf(brdf, filepath, opts, alpha, cache)
@@ -302,15 +323,6 @@ fn nlls_fitting_measured_brdf(
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
     let problem =
         MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, opts.normalise, cache);
-    println!(
-        "    {}>{} Fitting to model: {:?} , distro: {:?}, normalise: {}, isotropy: {}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
-        opts.family,
-        opts.distro,
-        opts.normalise,
-        opts.isotropy,
-    );
     problem.lsq_lm_fit(opts.isotropy)
 }
 
