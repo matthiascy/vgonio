@@ -47,18 +47,6 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
             }
         }
         let wi_wo_pairs = measured
-            .wios()
-            .iter()
-            .flat_map(|(wi, wo)| {
-                [
-                    wi.theta.as_f32(),
-                    wi.phi.as_f32(),
-                    wo.theta.as_f32(),
-                    wo.phi.as_f32(),
-                ]
-            })
-            .collect::<Vec<_>>();
-        let wi_wo_pairs = measured
             .wi_wo_pairs
             .iter()
             .map(|(wi, wos)| {
@@ -83,6 +71,12 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
             .iter()
             .map(|w| w.as_f32())
             .collect::<Vec<_>>();
+        let interpolated_max = interpolated
+            .max_values
+            .iter()
+            .map(|v| *v)
+            .collect::<Vec<_>>();
+        let measured_max = measured.max_values.iter().map(|v| *v).collect::<Vec<_>>();
         let args = (
             n_wi,
             n_wo,
@@ -90,9 +84,11 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
             interpolated_data,
             interpolated_wavelengths,
             n_lambda_interpolated,
+            interpolated_max,
             measured_data,
             measured_wavelengths,
             n_lambda_measured,
+            measured_max,
         );
         fun.call1(py, args)?;
         Ok(())

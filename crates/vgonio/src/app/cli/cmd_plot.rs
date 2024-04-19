@@ -3,7 +3,6 @@ use crate::{
     plotting::plot_brdf,
 };
 use base::error::VgonioError;
-use pyo3::types::PyList;
 use std::path::PathBuf;
 
 /// Kind of plot to generate.

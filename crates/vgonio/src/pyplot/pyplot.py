@@ -1,6 +1,11 @@
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button, RadioButtons, TextBox
+from matplotlib.widgets import Button, TextBox
 import numpy as np
+
+# Use this to avoid GUI
+# mpl.use('Agg')
+mpl.use('qtagg')
 
 
 def plot_err(xstart, xend, xstep, errs):
@@ -17,8 +22,8 @@ def format_angle_pair(t):
 
 
 def plot_brdf_comparison(n_wi, n_wo, wi_wo_pairs,
-                         interpolated_brdf, interpolated_wavelengths, n_lambda_interpolated,
-                         measured_brdf_olaf, measured_wavelengths, n_lambda_measured):
+                         interpolated_brdf, interpolated_wavelengths, n_lambda_interpolated, max_interpolated_brdf,
+                         measured_brdf_olaf, measured_wavelengths, n_lambda_measured, max_measured_brdf):
     fig, ax = plt.subplots(1, 3)
     fig.suptitle('BRDF')
     fig.set_figwidth(13)
@@ -105,9 +110,15 @@ def plot_brdf_comparison(n_wi, n_wo, wi_wo_pairs,
         ax_itrp.autoscale_view()
         fig.canvas.draw_idle()
 
-    def update_comp(olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx):
-        olaf_curve_comp[0].set_ydata(olaf_arranged[olaf_lambda_idx, olaf_wi_idx, :])
-        itrp_curve_comp[0].set_ydata(itrp_arranged[itrp_lambda_idx, itrp_wi_idx, :])
+    def update_comp(olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False):
+        if normalize:
+            max_measured = max_measured_brdf[olaf_wi_idx * n_lambda_measured + olaf_lambda_idx]
+            olaf_curve_comp[0].set_ydata(olaf_arranged[olaf_lambda_idx, olaf_wi_idx, :] / max_measured)
+            max_interpolated = max_interpolated_brdf[itrp_wi_idx * n_lambda_interpolated + itrp_lambda_idx]
+            itrp_curve_comp[0].set_ydata(itrp_arranged[itrp_lambda_idx, itrp_wi_idx, :] / max_interpolated)
+        else:
+            olaf_curve_comp[0].set_ydata(olaf_arranged[olaf_lambda_idx, olaf_wi_idx, :])
+            itrp_curve_comp[0].set_ydata(itrp_arranged[itrp_lambda_idx, itrp_wi_idx, :])
         ax_comp.relim()
         ax_comp.autoscale_view()
         fig.canvas.draw_idle()
@@ -128,7 +139,10 @@ def plot_brdf_comparison(n_wi, n_wo, wi_wo_pairs,
         update(olaf_cur_lambda_idx, cur_wi_idx, itrp_cur_lambda_idx, cur_wi_idx)
 
     def on_compare(event):
-        update_comp(olaf_cur_lambda_idx, cur_wi_idx, itrp_cur_lambda_idx, cur_wi_idx)
+        update_comp(olaf_cur_lambda_idx, cur_wi_idx, itrp_cur_lambda_idx, cur_wi_idx, False)
+
+    def on_compare_norm(event):
+        update_comp(olaf_cur_lambda_idx, cur_wi_idx, itrp_cur_lambda_idx, cur_wi_idx, True)
 
     def on_btn_prev_wi(event):
         nonlocal cur_wi_idx
@@ -146,6 +160,7 @@ def plot_brdf_comparison(n_wi, n_wo, wi_wo_pairs,
     button_prev_olaf_lambda.on_clicked(on_btn_prev_olaf_lambda)
     button_next_itrp_lambda.on_clicked(on_btn_next_itrp_lambda)
     compare_button.on_clicked(on_compare)
+    compare_norm_button.on_clicked(on_compare_norm)
     prev_wi_button.on_clicked(on_btn_prev_wi)
     next_wi_button.on_clicked(on_btn_next_wi)
 
