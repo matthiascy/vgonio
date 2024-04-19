@@ -255,6 +255,7 @@ fn brute_force_fitting_sampled_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
+    assert!(!brdf.normalised, "The BRDF should not be normalised.");
     let mut errs = compute_iso_sampled_brdf_err(
         &brdf,
         opts.distro,

@@ -135,7 +135,7 @@ struct SampledBrdfFittingProblemProxy<'a, const I: Isotropy> {
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
     /// Maximum value of the modelled samples for each snapshot(incident
     /// direction) and wavelength. The array is stored as row major array
-    /// [snapshot, wavelength].
+    /// [ωι, λ].
     max_modelled: Option<Vec<((f64, f64), Box<[f32]>)>>,
     normalise: bool,
     iors: &'a RefractiveIndexRegistry,
@@ -153,6 +153,11 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
         iors_t: &'a [Ior],
     ) -> Self {
         let max_modelled = normalise.then_some(vec![]);
+        log::debug!(
+            "Initialising isotropic BRDF fitting problem. Normalise: {}, Max Modelled: {:?}",
+            normalise,
+            max_modelled
+        );
         let mut problem = Self {
             measured,
             model,
@@ -238,18 +243,22 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
                         .zip(max_measured)
                         .for_each(|(((modelled, measured), max_modelled), max_measured)| {
                             let measured_norm = if { *max_measured == 0.0 } {
-                                *max_measured as f64
+                                *measured as f64
                             } else {
                                 *measured as f64 / *max_measured as f64
                             };
                             let modelled_norm = if { *max_modelled == 0.0 } {
-                                *max_modelled as f64
+                                *modelled as f64
                             } else {
                                 *modelled / *max_modelled as f64
                             };
                             *modelled = modelled_norm - measured_norm;
                         }),
                     None => {
+                        log::debug!(
+                            "No max modelled values found, calculating residuals without \
+                             normalisation."
+                        );
                         modelled.iter_mut().zip(measured.iter()).for_each(
                             |(modelled, measured)| {
                                 *modelled = *measured as f64 - *modelled;

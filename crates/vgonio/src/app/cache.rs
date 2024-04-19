@@ -11,12 +11,12 @@ use std::{
 use uuid::Uuid;
 
 use base::{
-    Asset,
     error::VgonioError,
     math,
     medium::Medium,
     optics::ior::{Ior, RefractiveIndexRecord},
     units::{Length, LengthMeasurement, Nanometres},
+    Asset,
 };
 use gfxkit::{context::GpuContext, mesh::RenderableMesh};
 use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
@@ -610,7 +610,7 @@ impl RawCache {
         log::debug!("  -- user_path: {:?}", user_path);
 
         if !sys_path.exists() {
-            log::warn!("  Refractive index database not found at {:?}", sys_path);
+            log::debug!("  Refractive index database not found at {:?}", sys_path);
         }
 
         // First load refractive indices from `VgonioConfig::sys_data_dir()`.
@@ -618,7 +618,7 @@ impl RawCache {
         log::debug!("  Loaded {} ior files from {:?}", n, sys_path);
 
         if !user_path.as_ref().is_some_and(|p| p.exists()) {
-            log::warn!("  Refractive index database not found at {:?}", user_path);
+            log::debug!("  Refractive index database not found at {:?}", user_path);
         }
 
         let n = Self::load_refractive_indices(&mut self.iors, user_path.as_ref().unwrap());

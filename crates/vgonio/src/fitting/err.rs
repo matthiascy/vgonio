@@ -174,8 +174,6 @@ fn compute_distance(
     }
 }
 
-// TODO: all wavelengths are considered for the error computation
-/// Returns the maximum values of each snapshot for the target BRDF.
 pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
     sampled_brdf: &SampledBrdf,
     target: &dyn Bxdf<Params = [f64; 2]>,
@@ -199,7 +197,7 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         .wi_wo_pairs
         .iter()
         .enumerate()
-        .zip(max_values.chunks_mut(sampled_brdf.spectrum.len()))
+        .zip(max_values.chunks_mut(n_lambda))
         .for_each(|((i, (wi, wos)), max_values)| {
             let offset = i * n_wo * n_lambda;
             wos.iter().enumerate().for_each(|(j, wo)| {
@@ -223,11 +221,12 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         for (i, (_, wos)) in sampled_brdf.wi_wo_pairs.iter().enumerate() {
             let offset = i * n_wo * n_lambda;
             let max_values = &max_values[i * n_lambda..(i + 1) * n_lambda];
-            for (sample, max) in samples[offset..offset + n_lambda * wos.len()]
-                .iter_mut()
-                .zip(max_values.iter())
-            {
-                *sample /= *max;
+            for (j, _) in wos.iter().enumerate() {
+                let samples_offset = offset + j * n_lambda;
+                let samples = &mut samples[samples_offset..samples_offset + n_lambda];
+                for (sample, max) in samples.iter_mut().zip(max_values.iter()) {
+                    *sample /= *max;
+                }
             }
         }
     }
@@ -253,7 +252,7 @@ pub fn compute_iso_sampled_brdf_err(
         !sampled.normalised,
         "The sampled BRDF must not be normalised."
     );
-    let mut brdfs = {
+    let mut modelled_brdfs = {
         let mut brdfs = Box::new_uninit_slice(alpha.step_count());
         brdfs.iter_mut().enumerate().for_each(|(i, brdf)| {
             let alpha_x = i as f64 * alpha.step_size + alpha.start;
@@ -273,7 +272,8 @@ pub fn compute_iso_sampled_brdf_err(
         unsafe { brdfs.assume_init() }
     };
 
-    let factor = if normalise && !sampled.normalised {
+    let measured_factor = if normalise && !sampled.normalised {
+        log::debug!("Normalising the samples");
         sampled
             .max_values
             .iter()
@@ -281,12 +281,13 @@ pub fn compute_iso_sampled_brdf_err(
             .collect::<Vec<_>>()
             .into_boxed_slice()
     } else {
+        log::debug!("Not normalising the samples");
         vec![1.0; sampled.wi_wo_pairs.len() * sampled.spectrum.len()].into_boxed_slice()
     };
 
-    brdfs
+    modelled_brdfs
         .par_iter()
-        .map(|model| compute_distance_from_sampled_brdf(model, sampled, &factor, metric))
+        .map(|model| compute_distance_from_sampled_brdf(model, sampled, &measured_factor, metric))
         .collect::<Vec<_>>()
         .into_boxed_slice()
 }
@@ -294,7 +295,7 @@ pub fn compute_iso_sampled_brdf_err(
 fn compute_distance_from_sampled_brdf(
     modelled: &SampledBrdf,
     measured: &SampledBrdf,
-    factor: &[f32],
+    measured_factor: &[f32],
     error_metric: ErrorMetric,
 ) -> f64 {
     assert_eq!(
@@ -302,12 +303,11 @@ fn compute_distance_from_sampled_brdf(
         measured.spectrum.len(),
         "The number of wavelengths in the modelled and measured data must be the same."
     );
-    let n_lambda = modelled.spectrum.len();
-    let n_wo = modelled.wi_wo_pairs[0].1.len();
+    let n_lambda = modelled.n_lambda();
+    let n_wo = modelled.n_wo();
     let mut sqr_err_sum = 0.0;
     for (i, (wi, wos)) in modelled.wi_wo_pairs.iter().enumerate() {
-        let max_offset = i * n_lambda;
-        let factors = &factor[max_offset..max_offset + n_lambda];
+        let factors = &measured_factor[i * n_lambda..i * n_lambda + n_lambda];
         for (j, wo) in wos.iter().enumerate() {
             let offset = i * n_lambda * n_wo + j * n_lambda;
             let model_samples = &modelled.samples[offset..offset + n_lambda];
@@ -320,7 +320,7 @@ fn compute_distance_from_sampled_brdf(
     }
     match error_metric {
         ErrorMetric::Mse => {
-            let n = modelled.wi_wo_pairs.len() * modelled.spectrum.len();
+            let n = modelled.n_wi() * modelled.n_wo() * modelled.n_lambda();
             sqr_err_sum / n as f64
         }
         ErrorMetric::Nlls => sqr_err_sum * 0.5,
