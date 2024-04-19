@@ -206,18 +206,18 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
             .1
             .as_ref()
     });
-    let spectrum_len = problem.measured.spectrum.len();
+    let n_lambda = problem.measured.n_lambda();
+    let n_wo = problem.measured.n_wo();
     problem
         .measured
         .wi_wo_pairs
         .iter()
         .enumerate()
-        .flat_map(|(i, (wi, wos, offset))| {
+        .flat_map(|(i, (wi, wos))| {
             let wi = wi.to_cartesian();
-            let max_modelled = max_modelled.map(|m| &m[i * spectrum_len..(i + 1) * spectrum_len]);
-            let max_measured =
-                &problem.measured.max_values[i * spectrum_len..(i + 1) * spectrum_len];
-            wos.iter().enumerate().flat_map(move |(i, wo)| {
+            let max_modelled = max_modelled.map(|m| &m[i * n_lambda..(i + 1) * n_lambda]);
+            let max_measured = &problem.measured.max_values[i * n_lambda..(i + 1) * n_lambda];
+            wos.iter().enumerate().flat_map(move |(j, wo)| {
                 let wo = wo.to_cartesian();
                 // Reuse the memory of the modelled samples to store the residuals.
                 let mut modelled = Scattering::eval_reflectance_spectrum(
@@ -228,8 +228,8 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
                     &problem.iors_t,
                 )
                 .into_vec();
-                let measured = &problem.measured.samples[(*offset as usize + i) * spectrum_len
-                    ..(*offset as usize + i + 1) * spectrum_len];
+                let offset = i * n_wo * n_lambda + j * n_lambda;
+                let measured = &problem.measured.samples[offset..offset + n_lambda];
                 match max_modelled {
                     Some(max_modelled) => modelled
                         .iter_mut()

@@ -255,7 +255,7 @@ fn brute_force_fitting_sampled_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
-    let errs = compute_iso_sampled_brdf_err(
+    let mut errs = compute_iso_sampled_brdf_err(
         &brdf,
         opts.distro,
         alpha,
@@ -270,6 +270,7 @@ fn brute_force_fitting_sampled_brdf(
         filepath.file_name().unwrap().display(),
         errs.as_slice()
     );
+    errs.iter_mut().for_each(|err| *err = err.log10());
     if opts.plot {
         plot_err(
             errs.as_slice(),
@@ -338,7 +339,7 @@ fn brute_force_fitting_measured_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
-    let errs = compute_iso_microfacet_brdf_err(
+    let mut errs = compute_iso_microfacet_brdf_err(
         &brdf,
         opts.max_theta_o.map(|t| deg!(t as f32)),
         opts.distro,
@@ -354,6 +355,16 @@ fn brute_force_fitting_measured_brdf(
         filepath.file_name().unwrap().display(),
         errs.as_slice()
     );
+    errs.iter_mut().for_each(|err| *err = err.log10());
+    if opts.plot {
+        plot_err(
+            errs.as_slice(),
+            opts.alpha_start.unwrap_or(0.01),
+            opts.alpha_stop.unwrap_or(1.0),
+            opts.alpha_step.unwrap_or(0.01),
+        )
+        .expect("Failed to plot the error.");
+    }
 }
 
 // TODO: complete fit kind

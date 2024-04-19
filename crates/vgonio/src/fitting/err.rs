@@ -189,20 +189,22 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         .ior_of_spectrum(Medium::Aluminium, &sampled_brdf.spectrum)
         .unwrap();
     let n_samples = sampled_brdf.samples.len();
-    let n_lambdas = sampled_brdf.spectrum.len();
+    let n_lambda = sampled_brdf.n_lambda();
     let mut samples = vec![0.0f32; n_samples].into_boxed_slice();
     let mut max_values =
         vec![-1.0f32; sampled_brdf.spectrum.len() * sampled_brdf.wi_wo_pairs.len()]
             .into_boxed_slice();
+    let n_wo = sampled_brdf.n_wo();
     sampled_brdf
         .wi_wo_pairs
         .iter()
+        .enumerate()
         .zip(max_values.chunks_mut(sampled_brdf.spectrum.len()))
-        .for_each(|((wi, wos, offset), max_values)| {
-            let offset = *offset as usize * sampled_brdf.spectrum.len();
-            wos.iter().enumerate().for_each(|(i, wo)| {
-                let samples_offset = offset + i * n_lambdas;
-                let samples = &mut samples[samples_offset..samples_offset + n_lambdas];
+        .for_each(|((i, (wi, wos)), max_values)| {
+            let offset = i * n_wo * n_lambda;
+            wos.iter().enumerate().for_each(|(j, wo)| {
+                let samples_offset = offset + j * n_lambda;
+                let samples = &mut samples[samples_offset..samples_offset + n_lambda];
                 let wi = wi.to_cartesian();
                 let wo = wo.to_cartesian();
                 let spectral_samples =
@@ -218,10 +220,10 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
             })
         });
     if normalise {
-        for (i, (_, wos, offset)) in sampled_brdf.wi_wo_pairs.iter().enumerate() {
-            let offset = *offset as usize * n_lambdas;
-            let max_values = &max_values[i * n_lambdas..(i + 1) * n_lambdas];
-            for (sample, max) in samples[offset..offset + n_lambdas * wos.len()]
+        for (i, (_, wos)) in sampled_brdf.wi_wo_pairs.iter().enumerate() {
+            let offset = i * n_wo * n_lambda;
+            let max_values = &max_values[i * n_lambda..(i + 1) * n_lambda];
+            for (sample, max) in samples[offset..offset + n_lambda * wos.len()]
                 .iter_mut()
                 .zip(max_values.iter())
             {
@@ -303,7 +305,7 @@ fn compute_distance_from_sampled_brdf(
     let n_lambda = modelled.spectrum.len();
     let n_wo = modelled.wi_wo_pairs[0].1.len();
     let mut sqr_err_sum = 0.0;
-    for (i, (wi, wos, _)) in modelled.wi_wo_pairs.iter().enumerate() {
+    for (i, (wi, wos)) in modelled.wi_wo_pairs.iter().enumerate() {
         let max_offset = i * n_lambda;
         let factors = &factor[max_offset..max_offset + n_lambda];
         for (j, wo) in wos.iter().enumerate() {

@@ -91,10 +91,8 @@ pub struct SampledBrdf {
     pub normalised: bool,
     /// All pairs of incidents and outgoing directions. The first element of the
     /// tuple is the incident direction. The second element is the list of
-    /// outgoing directions, and the third element is the offset in the samples
-    /// array (offset of pairs, the sample offset is offset of pairs x number of
-    /// wavelengths in the spectrum).
-    pub wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>, u32)]>,
+    /// outgoing directions.
+    pub wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>)]>,
     /// Total number of wi-wo pairs. Because the number of outgoing directions
     /// can be different for each incident direction, we need to store the total
     /// number of pairs apart from the pairs themselves.
@@ -105,10 +103,19 @@ impl SampledBrdf {
     pub fn wios(&self) -> Box<[(Sph2, Sph2)]> {
         self.wi_wo_pairs
             .iter()
-            .flat_map(|(wi, wo, offset)| wo.iter().map(move |o| (*wi, *o)))
+            .flat_map(|(wi, wo)| wo.iter().map(move |o| (*wi, *o)))
             .collect::<Vec<_>>()
             .into_boxed_slice()
     }
+
+    #[inline(always)]
+    pub fn n_wi(&self) -> usize { self.wi_wo_pairs.len() }
+
+    #[inline(always)]
+    pub fn n_wo(&self) -> usize { self.wi_wo_pairs[0].1.len() }
+
+    #[inline(always)]
+    pub fn n_lambda(&self) -> usize { self.spectrum.len() }
 }
 
 // TODO: Would MDF = ADF + MSF be more appropriate?
@@ -542,10 +549,10 @@ impl MeasurementData {
                 .map(|v| nm!(v.as_f64().unwrap() as f32))
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            let mut samples = Vec::new();
-            let mut wi_wo_pairs: Vec<(Sph2, Vec<Sph2>, u32)> = Vec::new();
-            let mut i = 1;
+            let n_wavelengths = wavelengths.len();
             let mut total_samples = 0;
+            let mut unordered_samples = Vec::new();
+            let mut i = 1;
             while i < data_array.len() {
                 let measurement = &data_array[i];
                 let wi = {
@@ -565,39 +572,91 @@ impl MeasurementData {
                     .map(|v| v.as_f64().unwrap() as f32)
                     .collect::<Vec<f32>>()
                     .into_boxed_slice();
-                assert_eq!(spectrum.len(), wavelengths.len());
-                samples.extend_from_slice(&spectrum);
-                total_samples += spectrum.len();
-                match wi_wo_pairs.iter().position(|(s, _, _)| *s == wi) {
-                    None => {
-                        wi_wo_pairs.push((wi, vec![wo], 0u32));
-                    }
-                    Some(index) => {
-                        wi_wo_pairs[index].1.push(wo);
-                    }
-                }
+                assert_eq!(spectrum.len(), n_wavelengths);
+                unordered_samples.push((wi, wo, spectrum));
+                total_samples += n_wavelengths;
+                // match wi_wo_pairs.iter().position(|(s, _, _)| *s == wi) {
+                //     None => {
+                //         wi_wo_pairs.push((wi, vec![wo], 0u32));
+                //     }
+                //     Some(index) => {
+                //         wi_wo_pairs[index].1.push(wo);
+                //     }
+                // }
                 i += 1;
             }
             // Update the offset of the pairs.
-            let mut offset = 0;
-            for (_, wos, pair_offset) in wi_wo_pairs.iter_mut() {
-                *pair_offset = offset;
-                offset += wos.len() as u32;
-            }
-            assert_eq!(samples.len(), offset as usize * wavelengths.len());
+            // let mut offset = 0;
+            // for (_, wos, pair_offset) in wi_wo_pairs.iter_mut() {
+            //     *pair_offset = offset;
+            //     offset += wos.len() as u32;
+            // }
+            // assert_eq!(samples.len(), offset as usize * wavelengths.len());
+            unordered_samples.sort_by(|(wi_a, wo_a, _), (wi_b, wo_b, _)| {
+                // first sort by theta_i
+                if wi_a.theta < wi_b.theta {
+                    return std::cmp::Ordering::Less;
+                } else if wi_a.theta > wi_b.theta {
+                    return std::cmp::Ordering::Greater;
+                }
+
+                // then sort by phi_i
+                if wi_a.phi < wi_b.phi {
+                    return std::cmp::Ordering::Less;
+                } else if wi_a.phi > wi_b.phi {
+                    return std::cmp::Ordering::Greater;
+                }
+
+                // then sort by theta_o
+                if wo_a.theta < wo_b.theta {
+                    return std::cmp::Ordering::Less;
+                } else if wo_a.theta > wo_b.theta {
+                    return std::cmp::Ordering::Greater;
+                }
+
+                // then sort by phi_o
+                if wo_a.phi < wo_b.phi {
+                    return std::cmp::Ordering::Less;
+                } else if wo_a.phi > wo_b.phi {
+                    return std::cmp::Ordering::Greater;
+                } else {
+                    return std::cmp::Ordering::Equal;
+                }
+            });
+
+            let samples = unordered_samples
+                .iter()
+                .flat_map(|(_, _, s)| s.iter())
+                .cloned()
+                .collect::<Vec<f32>>();
+
+            let mut wi_wo_pairs: Vec<(Sph2, Vec<Sph2>)> = Vec::new();
+            unordered_samples.iter().for_each(|(wi, wo, _)| {
+                if let Some((acc_wi, acc_wos)) = wi_wo_pairs.last_mut() {
+                    if *acc_wi == *wi {
+                        acc_wos.push(*wo);
+                    } else {
+                        wi_wo_pairs.push((*wi, vec![*wo]));
+                    }
+                } else {
+                    wi_wo_pairs.push((*wi, vec![*wo]));
+                }
+            });
+            let n_wi = wi_wo_pairs.len();
+            let n_wo = wi_wo_pairs[0].1.len();
+
             // Calculate the maximum values of the spectral samples for each snapshot.
             // [wi, wo, lambda]
-            let mut max_values = vec![-1.0f32; wi_wo_pairs.len() * wavelengths.len()];
-            let wavelengths_len = wavelengths.len();
-            for (i, (_, wos, pair_offset)) in wi_wo_pairs.iter().enumerate() {
+            let mut max_values = vec![-1.0f32; n_wi * wavelengths.len()];
+            for (i, (_, wos)) in wi_wo_pairs.iter().enumerate() {
                 let max_values_per_snapshot =
-                    &mut max_values[i * wavelengths_len..(i + 1) * wavelengths_len];
-                let offset = *pair_offset as usize * wavelengths_len;
+                    &mut max_values[i * n_wavelengths..(i + 1) * n_wavelengths];
+                let offset = i * n_wo * n_wavelengths;
                 for (j, _) in wos.iter().enumerate() {
-                    let snapshot_offset = offset + j * wavelengths_len;
-                    let snapshot = &samples[snapshot_offset..snapshot_offset + wavelengths_len];
-                    for (j, sample) in snapshot.iter().enumerate() {
-                        max_values_per_snapshot[j] = f32::max(max_values_per_snapshot[j], *sample);
+                    let snapshot_offset = offset + j * n_wavelengths;
+                    let snapshot = &samples[snapshot_offset..snapshot_offset + n_wavelengths];
+                    for (k, sample) in snapshot.iter().enumerate() {
+                        max_values_per_snapshot[k] = f32::max(max_values_per_snapshot[k], *sample);
                     }
                 }
             }
@@ -613,7 +672,7 @@ impl MeasurementData {
                     normalised: false,
                     wi_wo_pairs: wi_wo_pairs
                         .into_iter()
-                        .map(|(wi, wo, offset)| (wi, wo.into_boxed_slice(), offset))
+                        .map(|(wi, wo)| (wi, wo.into_boxed_slice()))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                     num_pairs: i - 1,

@@ -43,17 +43,17 @@ glam = { version = "~0.24", features = ["serde", "bytemuck"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 levenberg-marquardt = "0.13"
 nalgebra = "0.32"
-numpy = "0.20"
+numpy = "0.21"
 libm = "0.2"
 log = "0.4"
 num-traits = "0.2"
 paste = "1.0"
 pollster = "0.3"
 proptest = "1.0"
-pyo3 = { version = "0.20", features = ["auto-initialize"] }
+pyo3 = { version = "0.21", features = ["auto-initialize"] }
 rand = "0.8"
 rayon = "1.9"
-rfd = { version = "0.12", features = ["file-handle-inner"] }
+rfd = { version = "0.14", features = ["file-handle-inner"] }
 rand_distr = "0.4"
 rand_chacha = "0.3"
 serde = { version = "1", features = ["derive"] }

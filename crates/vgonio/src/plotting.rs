@@ -31,7 +31,7 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
         let n_wo = interpolated.wi_wo_pairs[0].1.len();
         let n_lambda_interpolated = interpolated.spectrum.len();
         let n_lambda_measured = measured.spectrum.len();
-        for (i, (wi, wos, _)) in interpolated.wi_wo_pairs.iter().enumerate() {
+        for (i, (wi, wos)) in interpolated.wi_wo_pairs.iter().enumerate() {
             for (j, _) in wos.iter().enumerate() {
                 for (k, _) in interpolated.spectrum.iter().enumerate() {
                     let original_offset =
@@ -61,7 +61,7 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
         let wi_wo_pairs = measured
             .wi_wo_pairs
             .iter()
-            .map(|(wi, wos, _)| {
+            .map(|(wi, wos)| {
                 (
                     (wi.theta.as_f32(), wi.phi.as_f32()),
                     PyList::new_bound(
@@ -73,7 +73,6 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
                 )
             })
             .collect::<Vec<_>>();
-        // assert_eq!(wi_wo_pairs.len(), n_wi * n_wo * 4);
         let interpolated_wavelengths = interpolated
             .spectrum
             .iter()

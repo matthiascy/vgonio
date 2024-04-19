@@ -6,7 +6,9 @@ import numpy as np
 def plot_err(xstart, xend, xstep, errs):
     # Plot the error, with x-axis from xstart to xend (inclusive) with xstep.
     xs = np.arange(xstart, xend + xstep, xstep)
+    x_min = np.argmin(errs)
     plt.plot(xs, errs)
+    plt.annotate(f"Min: {xs[x_min]:.4f}", (xs[x_min], errs[x_min]))
     plt.show()
 
 
