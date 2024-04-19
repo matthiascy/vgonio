@@ -23,14 +23,13 @@ use crate::{
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
-    partition::{PartitionScheme, Patch, SphericalPartition},
-    SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math,
     math::{cart_to_sph, circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
     medium::Medium,
+    partition::{PartitionScheme, Patch, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{nm, Rads},
 };
@@ -948,9 +947,9 @@ pub struct BsdfMeasurementStatsPoint {
     pub n_bounces: u32,
     /// Number of emitted rays that hit the surface; invariant over wavelength.
     pub n_received: u32,
-    /// Number of emitted rays that hit the surface and were absorbed;
+    /// Number of emitted rays that hit the surface and were absorbed.
     pub n_absorbed: SpectralSamples<u32>,
-    /// Number of emitted rays that hit the surface and were reflected.
+    /// The Number of emitted rays that hit the surface and were reflected.
     pub n_reflected: SpectralSamples<u32>,
     /// Number of emitted rays captured by the collector.
     pub n_captured: SpectralSamples<u32>,

@@ -9,11 +9,10 @@ use crate::{
         bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
     },
-    SphericalDomain,
 };
 #[cfg(feature = "visu-dbg")]
 use base::math::Sph2;
-use base::medium::Medium;
+use base::{medium::Medium, partition::SphericalDomain};
 use std::hash::Hash;
 
 impl BsdfKind {
@@ -89,35 +88,32 @@ impl EmitterParams {
     }
 }
 
-impl SphericalDomain {
-    /// Creates the UI for parameterizing the spherical domain.
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui
-                .selectable_label(*self == SphericalDomain::Upper, "Upper")
-                .on_hover_text("The upper hemisphere.")
-                .clicked()
-            {
-                *self = SphericalDomain::Upper;
-            }
+pub fn spherical_domain_ui(domain: &mut SphericalDomain, ui: &mut egui::Ui) {
+    ui.horizontal(|ui| {
+        if ui
+            .selectable_label(*domain == SphericalDomain::Upper, "Upper")
+            .on_hover_text("The upper hemisphere.")
+            .clicked()
+        {
+            *domain = SphericalDomain::Upper;
+        }
 
-            if ui
-                .selectable_label(*self == SphericalDomain::Lower, "Lower")
-                .on_hover_text("The lower hemisphere.")
-                .clicked()
-            {
-                *self = SphericalDomain::Lower;
-            }
+        if ui
+            .selectable_label(*domain == SphericalDomain::Lower, "Lower")
+            .on_hover_text("The lower hemisphere.")
+            .clicked()
+        {
+            *domain = SphericalDomain::Lower;
+        }
 
-            if ui
-                .selectable_label(*self == SphericalDomain::Whole, "Whole")
-                .on_hover_text("The whole sphere.")
-                .clicked()
-            {
-                *self = SphericalDomain::Whole;
-            }
-        });
-    }
+        if ui
+            .selectable_label(*domain == SphericalDomain::Whole, "Whole")
+            .on_hover_text("The whole sphere.")
+            .clicked()
+        {
+            *domain = SphericalDomain::Whole;
+        }
+    });
 }
 
 pub struct BsdfMeasurementTab {

@@ -7,9 +7,8 @@ use crate::{
         AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, Measurement,
         MeasurementParams, MsfMeasurementParams,
     },
-    partition::PartitionScheme,
 };
-use base::error::VgonioError;
+use base::{error::VgonioError, partition::PartitionScheme};
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,

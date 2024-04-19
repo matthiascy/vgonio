@@ -3,11 +3,11 @@ use crate::{
     io::{OutputFileFormatOption, OutputOptions},
     measure,
     measure::params::{AdfMeasurementMode, Measurement, MeasurementParams},
-    partition::PartitionScheme,
 };
 use base::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
+    partition::PartitionScheme,
 };
 use std::{path::PathBuf, time::Instant};
 

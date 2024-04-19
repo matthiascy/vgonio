@@ -25,10 +25,11 @@ use crate::{
         bsdf::receiver::{DataRetrieval, ReceiverParams},
         params::{MeasurementKind, MeasurementParams},
     },
-    partition::PartitionScheme,
-    SphericalDomain,
 };
-use base::io::{CompressionScheme, FileEncoding};
+use base::{
+    io::{CompressionScheme, FileEncoding},
+    partition::{PartitionScheme, SphericalDomain},
+};
 use egui::Widget;
 use surf::MicroSurface;
 

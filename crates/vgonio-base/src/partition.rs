@@ -1,11 +1,107 @@
-use crate::SphericalDomain;
-use base::{
+//! Spherical partitioning.
+use crate::{
     math::{Sph2, Vec3},
     range::RangeByStepSizeInclusive,
     units::{rad, Radians, Rads, SolidAngle},
 };
-use rand_distr::num_traits::Euclid;
+use num_traits::Euclid;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+
+/// The domain of the spherical coordinate.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SphericalDomain {
+    /// Simulation happens only on the upper part of the sphere.
+    #[default]
+    #[serde(rename = "upper_hemisphere")]
+    Upper = 0x01,
+
+    /// Simulation happens only on the lower part of the sphere.
+    #[serde(rename = "lower_hemisphere")]
+    Lower = 0x02,
+
+    /// Simulation happens on the whole sphere.
+    #[serde(rename = "whole_sphere")]
+    Whole = 0x00,
+}
+
+impl Display for SphericalDomain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Upper => write!(f, "upper hemisphere"),
+            Self::Lower => write!(f, "lower hemisphere"),
+            Self::Whole => write!(f, "whole sphere"),
+        }
+    }
+}
+
+impl SphericalDomain {
+    /// Range of the zenith angle in radians of the upper hemisphere.
+    pub const ZENITH_RANGE_UPPER_DOMAIN: (Radians, Radians) = (Radians::ZERO, Radians::HALF_PI);
+    /// Range of the zenith angle in radians of the lower hemisphere.
+    pub const ZENITH_RANGE_LOWER_DOMAIN: (Radians, Radians) = (Radians::HALF_PI, Radians::PI);
+    /// Range of the zenith angle in radians of the whole sphere.
+    pub const ZENITH_RANGE_WHOLE_DOMAIN: (Radians, Radians) = (Radians::ZERO, Radians::TWO_PI);
+
+    /// Returns the zenith range of the domain.
+    pub const fn zenith_range(&self) -> (Radians, Radians) {
+        match self {
+            Self::Upper => Self::ZENITH_RANGE_UPPER_DOMAIN,
+            Self::Lower => Self::ZENITH_RANGE_LOWER_DOMAIN,
+            Self::Whole => Self::ZENITH_RANGE_WHOLE_DOMAIN,
+        }
+    }
+
+    /// Returns the azimuth range of the domain.
+    pub const fn azimuth_range(&self) -> (Radians, Radians) { (Radians::ZERO, Radians::TWO_PI) }
+
+    /// Returns the zenith angle difference between the maximum and minimum
+    /// zenith angle.
+    pub const fn zenith_angle_diff(&self) -> Radians {
+        match self {
+            SphericalDomain::Upper | SphericalDomain::Lower => Radians::HALF_PI,
+            SphericalDomain::Whole => Radians::PI,
+        }
+    }
+
+    /// Clamps the given azimuthal and zenith angle to shape's boundaries.
+    ///
+    /// # Arguments
+    ///
+    /// `zenith` - zenith angle in radians.
+    /// `azimuth` - azimuthal angle in radians.
+    ///
+    /// # Returns
+    ///
+    /// `(zenith, azimuth)` - clamped zenith and azimuth angles in radians.
+    #[inline]
+    pub fn clamp(&self, zenith: Radians, azimuth: Radians) -> (Radians, Radians) {
+        (self.clamp_zenith(zenith), self.clamp_azimuth(azimuth))
+    }
+
+    /// Clamps the given zenith angle to shape's boundaries.
+    #[inline]
+    pub fn clamp_zenith(&self, zenith: Radians) -> Radians {
+        let (zenith_min, zenith_max) = self.zenith_range();
+        zenith.clamp(zenith_min, zenith_max)
+    }
+
+    /// Clamps the given azimuthal angle to shape's boundaries.
+    #[inline]
+    pub fn clamp_azimuth(&self, azimuth: Radians) -> Radians {
+        azimuth.clamp(Radians::ZERO, Radians::TWO_PI)
+    }
+
+    /// Returns true if the domain is the upper hemisphere.
+    pub fn is_upper_hemisphere(&self) -> bool { matches!(self, SphericalDomain::Upper) }
+
+    /// Returns true if the domain is the lower hemisphere.
+    pub fn is_lower_hemisphere(&self) -> bool { matches!(self, SphericalDomain::Lower) }
+
+    /// Returns true if the domain is the full sphere.
+    pub fn is_full_sphere(&self) -> bool { matches!(self, SphericalDomain::Whole) }
+}
 
 /// Scheme of the spherical partition.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -59,21 +155,25 @@ pub struct SphericalPartition {
 }
 
 impl SphericalPartition {
-    /// Creates a new spherical partition.
+    /// Create a new spherical partition.
+    ///
+    /// The partition is based on the given partitioning scheme, domain, and
+    /// precision. In the case of the Beckers partitioning scheme, only the
+    /// theta precision is used.
     pub fn new(scheme: PartitionScheme, domain: SphericalDomain, precision: Sph2) -> Self {
         match scheme {
-            PartitionScheme::Beckers => Self::new_beckers(domain, precision),
+            PartitionScheme::Beckers => Self::new_beckers(domain, precision.theta),
             PartitionScheme::EqualAngle => Self::new_equal_angle(domain, precision),
         }
     }
 
     /// Creates a new partition based on the Beckers partitioning scheme.
-    pub fn new_beckers(domain: SphericalDomain, precision: Sph2) -> Self {
+    pub fn new_beckers(domain: SphericalDomain, theta_precision: Radians) -> Self {
         debug_assert!(
-            precision.theta > Radians::ZERO,
+            theta_precision > Radians::ZERO,
             "theta precision must be greater than zero"
         );
-        let num_rings = (Radians::HALF_PI / precision.theta).round() as u32;
+        let num_rings = (Radians::HALF_PI / theta_precision).round() as u32;
         let ks = beckers::compute_ks(1, num_rings);
         let rs = beckers::compute_rs(&ks, num_rings, std::f32::consts::SQRT_2);
         let ts = beckers::compute_ts(&rs);
@@ -111,7 +211,7 @@ impl SphericalPartition {
         }
 
         Self {
-            precision,
+            precision: Sph2::new(theta_precision, Radians::ZERO),
             scheme: PartitionScheme::Beckers,
             domain,
             rings: rings.into_boxed_slice(),
@@ -358,7 +458,7 @@ impl Ring {
 
 /// Beckers partitioning scheme helper functions.
 pub mod beckers {
-    use base::math::sqr;
+    use crate::math::sqr;
 
     /// Computes the number of cells inside the external circle of the ring.
     pub fn compute_ks(k0: u32, num_rings: u32) -> Box<[u32]> {
@@ -454,6 +554,45 @@ impl SphericalPartition {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(feature = "io")]
+impl Ring {
+    /// The size of the buffer required to read or write the parameters.
+    pub const REQUIRED_SIZE: usize = 20;
+
+    /// Writes the ring to the given buffer.
+    pub fn write_to_buf(&self, buf: &mut [u8]) {
+        debug_assert!(
+            buf.len() >= Self::REQUIRED_SIZE,
+            "Ring needs at least 20 bytes of space"
+        );
+        buf[0..4].copy_from_slice(&(self.theta_min).to_le_bytes());
+        buf[4..8].copy_from_slice(&(self.theta_max).to_le_bytes());
+        buf[8..12].copy_from_slice(&(self.phi_step).to_le_bytes());
+        buf[12..16].copy_from_slice(&(self.patch_count as u32).to_le_bytes());
+        buf[16..20].copy_from_slice(&(self.base_index as u32).to_le_bytes());
+    }
+
+    /// Reads the ring from the given buffer.
+    pub fn read_from_buf(buf: &[u8]) -> Self {
+        debug_assert!(
+            buf.len() >= Self::REQUIRED_SIZE,
+            "Ring needs at least 20 bytes of space"
+        );
+        let theta_inner = f32::from_le_bytes(buf[0..4].try_into().unwrap());
+        let theta_outer = f32::from_le_bytes(buf[4..8].try_into().unwrap());
+        let phi_step = f32::from_le_bytes(buf[8..12].try_into().unwrap());
+        let patch_count = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
+        let base_index = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
+        Self {
+            theta_min: theta_inner,
+            theta_max: theta_outer,
+            phi_step,
+            patch_count,
+            base_index,
         }
     }
 }

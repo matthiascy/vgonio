@@ -1,8 +1,8 @@
 use crate::{
     app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui},
     measure::params::{AdfMeasurementMode, AdfMeasurementParams},
-    partition::PartitionScheme,
 };
+use base::partition::PartitionScheme;
 use egui::Widget;
 
 #[derive(Debug)]

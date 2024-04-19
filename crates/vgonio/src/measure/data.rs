@@ -8,8 +8,6 @@ use crate::{
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
         params::{AdfMeasurementMode, BsdfMeasurementParams, MeasurementKind, SimulationKind},
     },
-    partition::{PartitionScheme, SphericalPartition},
-    SphericalDomain,
 };
 use base::{
     error::VgonioError,
@@ -18,6 +16,7 @@ use base::{
     },
     math::Sph2,
     medium::Medium,
+    partition::{PartitionScheme, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{deg, nm, rad, Length, Nanometres, Radians},
     Asset, Version,

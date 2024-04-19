@@ -24,24 +24,19 @@ use surf::MicroSurface;
 
 pub mod vgmo {
     use super::*;
-    use crate::{
-        measure::{
-            bsdf::{
-                compute_bsdf_snapshots_max_values,
-                emitter::EmitterParams,
-                receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
-                BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
-                SpectralSamples,
-            },
-            data::MeasuredData,
-            microfacet::MeasuredSdfData,
-            params::{
-                AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind,
-                MsfMeasurementParams, SdfMeasurementParams, SimulationKind,
-            },
+    use crate::measure::{
+        bsdf::{
+            compute_bsdf_snapshots_max_values,
+            emitter::EmitterParams,
+            receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
+            BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SpectralSamples,
         },
-        partition::{PartitionScheme, Ring},
-        SphericalDomain,
+        data::MeasuredData,
+        microfacet::MeasuredSdfData,
+        params::{
+            AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind,
+            MsfMeasurementParams, SdfMeasurementParams, SimulationKind,
+        },
     };
     use base::{
         io::{
@@ -50,6 +45,7 @@ pub mod vgmo {
         },
         math::Sph2,
         medium::Medium,
+        partition::{PartitionScheme, Ring, SphericalDomain},
         range::{RangeByStepCountInclusive, RangeByStepSizeInclusive},
         units::{rad, Nanometres, Radians},
         Version,
@@ -455,44 +451,6 @@ pub mod vgmo {
                 _ => {
                     panic!("Unsupported VGMO[EmitterParams] version: {}", version);
                 }
-            }
-        }
-    }
-
-    impl Ring {
-        /// The size of the buffer required to read or write the parameters.
-        const REQUIRED_SIZE: usize = 20;
-
-        /// Writes the ring to the given buffer.
-        pub fn write_to_buf(&self, buf: &mut [u8]) {
-            debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "Ring needs at least 20 bytes of space"
-            );
-            buf[0..4].copy_from_slice(&(self.theta_min).to_le_bytes());
-            buf[4..8].copy_from_slice(&(self.theta_max).to_le_bytes());
-            buf[8..12].copy_from_slice(&(self.phi_step).to_le_bytes());
-            buf[12..16].copy_from_slice(&(self.patch_count as u32).to_le_bytes());
-            buf[16..20].copy_from_slice(&(self.base_index as u32).to_le_bytes());
-        }
-
-        /// Reads the ring from the given buffer.
-        pub fn read_from_buf(buf: &[u8]) -> Self {
-            debug_assert!(
-                buf.len() >= Self::REQUIRED_SIZE,
-                "Ring needs at least 20 bytes of space"
-            );
-            let theta_inner = f32::from_le_bytes(buf[0..4].try_into().unwrap());
-            let theta_outer = f32::from_le_bytes(buf[4..8].try_into().unwrap());
-            let phi_step = f32::from_le_bytes(buf[8..12].try_into().unwrap());
-            let patch_count = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
-            let base_index = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
-            Self {
-                theta_min: theta_inner,
-                theta_max: theta_outer,
-                phi_step,
-                patch_count,
-                base_index,
             }
         }
     }

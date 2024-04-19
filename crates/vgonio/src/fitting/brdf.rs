@@ -7,7 +7,6 @@ use crate::{
         FittingProblem, FittingReport,
     },
     measure::{bsdf::MeasuredBsdfData, data::SampledBrdf},
-    partition::SphericalPartition,
 };
 use base::{
     math::{cart_to_sph, sph_to_cart, Vec3, Vec3A},
@@ -16,6 +15,7 @@ use base::{
         fresnel,
         ior::{Ior, RefractiveIndexRecord},
     },
+    partition::SphericalPartition,
     range::RangeByStepSizeInclusive,
     units::rad,
     Isotropy,

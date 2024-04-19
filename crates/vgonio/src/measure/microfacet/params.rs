@@ -1,7 +1,8 @@
-use crate::{error::RuntimeError, partition::PartitionScheme};
+use crate::error::RuntimeError;
 use base::{
     error::VgonioError,
     math::Sph2,
+    partition::PartitionScheme,
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
 };

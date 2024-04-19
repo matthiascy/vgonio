@@ -6,13 +6,12 @@ use crate::{
         rtc::RtcMethod,
         BsdfKind,
     },
-    partition::PartitionScheme,
-    SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math::Sph2,
     medium::Medium,
+    partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{deg, nm, rad},
 };

@@ -303,7 +303,7 @@ pub enum VgonioFileVariant {
     Vgms,
 }
 
-/// Meta information of a VG file.
+/// Meta-information of a VG file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeaderMeta {
     /// Version of the file.

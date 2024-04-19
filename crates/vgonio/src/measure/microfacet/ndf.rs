@@ -4,13 +4,12 @@ use crate::{
         data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::{AdfMeasurementMode, AdfMeasurementParams},
     },
-    partition::SphericalPartition,
-    SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math,
     math::{Sph2, Vec3Swizzles},
+    partition::{SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units,
     units::{rad, Radians},

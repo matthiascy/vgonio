@@ -56,6 +56,13 @@ impl<T, const L: MemLayout, const N: usize> Index<[usize; N]> for DyArr<T, N, L>
     fn index(&self, index: [usize; N]) -> &Self::Output { &self.0[index] }
 }
 
+impl<T, const L: MemLayout, const N: usize> Clone for DyArr<T, N, L>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self { Self(self.0.clone()) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

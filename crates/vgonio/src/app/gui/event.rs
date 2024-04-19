@@ -15,10 +15,10 @@ use crate::{
         data::MeasurementData,
         params::{MeasurementKind, MeasurementParams},
     },
-    partition::SphericalPartition,
 };
 use base::{
     math::{IVec2, Sph2},
+    partition::SphericalPartition,
     units::Degrees,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};

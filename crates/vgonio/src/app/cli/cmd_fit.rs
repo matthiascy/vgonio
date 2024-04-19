@@ -23,14 +23,13 @@ use crate::{
         data::SampledBrdf,
         params::{BsdfMeasurementParams, SimulationKind},
     },
-    partition::{PartitionScheme, SphericalPartition},
     plotting::plot_err,
-    SphericalDomain,
 };
 use base::{
     error::VgonioError,
     math::Sph2,
     medium::Medium,
+    partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{deg, nm, Rads},
     Isotropy,

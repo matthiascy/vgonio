@@ -38,6 +38,8 @@ pub mod medium;
 pub mod optics;
 pub mod range;
 
+pub mod partition;
+
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, Hash)]

@@ -9,8 +9,6 @@ use crate::{
         },
         params::BsdfMeasurementParams,
     },
-    partition::{PartitionScheme, SphericalPartition},
-    SphericalDomain,
 };
 use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
@@ -18,6 +16,7 @@ use base::{
         fresnel,
         ior::{Ior, RefractiveIndexRecord},
     },
+    partition::{PartitionScheme, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
@@ -79,7 +78,7 @@ impl ReceiverParams {
         let num_patches_hemi = match self.scheme {
             PartitionScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
-                let ks = crate::partition::beckers::compute_ks(1, num_rings);
+                let ks = base::partition::beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             }
             PartitionScheme::EqualAngle => {
