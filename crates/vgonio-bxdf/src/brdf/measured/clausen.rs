@@ -14,6 +14,7 @@ pub struct ClausenBrdfParameterisation {
     /// The incident directions of the BRDF.
     incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF for each incident direction.
+    /// Directions are stored in a 2D array with dimensions: ωi, ωo.
     outgoing: DyArr<Sph2, 2>,
     /// The number of outgoing directions per incident direction.
     num_outgoing_per_incoming: usize,

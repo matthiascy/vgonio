@@ -49,7 +49,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .measured
                         .as_sampled_brdf()
                         .expect("Expected BSDF measured by Olaf");
-                    let interpolated = simulated.sampled_brdf(&measured);
+                    let interpolated = simulated.sampled_brdf(&measured, false);
                     plot_brdf(&interpolated, measured).unwrap();
                 }
                 Ok(())

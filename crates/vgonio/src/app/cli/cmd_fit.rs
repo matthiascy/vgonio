@@ -192,7 +192,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .measured
                             .as_sampled_brdf()
                             .unwrap();
-                        measured_data.sampled_brdf(&olaf_data)
+                        measured_data.sampled_brdf(&olaf_data, false)
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
                     sampled_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache);

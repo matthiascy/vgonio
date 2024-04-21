@@ -367,7 +367,7 @@ impl MeasuredBsdfData {
     }
 
     /// Extracts the BRDF from the measured BSDF data.
-    pub fn sampled_brdf(&self, s: &SampledBrdf) -> SampledBrdf {
+    pub fn sampled_brdf(&self, s: &SampledBrdf, dense: bool) -> SampledBrdf {
         let spectrum = self
             .params
             .emitter
@@ -376,15 +376,25 @@ impl MeasuredBsdfData {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let n_lambda = spectrum.len();
-        let n_wi = s.wi_wo_pairs.len();
-        let n_wo = s.wi_wo_pairs[0].1.len();
+        let n_wi = s.n_wi();
+        let n_wo = s.n_wo();
+        let n_wo_dense = if dense { n_wo * 4 } else { n_wo };
+
         // row-major [wi, wo, spectrum]
-        let mut samples = vec![0.0; s.num_pairs * n_lambda].into_boxed_slice();
+        let mut samples = vec![0.0; n_wi * n_wo_dense * n_lambda].into_boxed_slice();
         // row-major [wi, spectrum]
         let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
+
+        let wi_wo_pairs = s.wi_wo_pairs();
+
         // Get the interpolated samples for wi, wo, and spectrum.
         s.wi_wo_pairs.iter().enumerate().for_each(|(i, (wi, wos))| {
-            let samples_offset_wi = i * n_wo * n_lambda;
+            let wo_step = if dense {
+                (wos[0].theta - wos[1].theta) * 0.25
+            } else {
+                wos[0].theta - wos[1].theta
+            };
+            let samples_offset_wi = i * n_wo_dense * n_lambda;
             let snap_idx = self
                 .snapshots
                 .iter()

@@ -570,22 +570,8 @@ impl MeasurementData {
                 assert_eq!(spectrum.len(), n_wavelengths);
                 unordered_samples.push((wi, wo, spectrum));
                 total_samples += n_wavelengths;
-                // match wi_wo_pairs.iter().position(|(s, _, _)| *s == wi) {
-                //     None => {
-                //         wi_wo_pairs.push((wi, vec![wo], 0u32));
-                //     }
-                //     Some(index) => {
-                //         wi_wo_pairs[index].1.push(wo);
-                //     }
-                // }
                 i += 1;
             }
-            // Update the offset of the pairs.
-            // let mut offset = 0;
-            // for (_, wos, pair_offset) in wi_wo_pairs.iter_mut() {
-            //     *pair_offset = offset;
-            //     offset += wos.len() as u32;
-            // }
             // assert_eq!(samples.len(), offset as usize * wavelengths.len());
             unordered_samples.sort_by(|(wi_a, wo_a, _), (wi_b, wo_b, _)| {
                 // first sort by theta_i
