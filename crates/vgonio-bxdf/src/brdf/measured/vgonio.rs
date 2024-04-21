@@ -3,7 +3,7 @@ use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, ParametrisationK
 use base::{math::Sph2, partition::SphericalPartition};
 use jabr::array::DyArr;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VgonioBrdfParameterisation {
     /// The incident directions of the BRDF.
     incoming: DyArr<Sph2>,

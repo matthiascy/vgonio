@@ -236,7 +236,7 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
         max_values,
         normalised: normalise,
         wi_wo_pairs: sampled_brdf.wi_wo_pairs.clone(),
-        num_pairs: sampled_brdf.num_pairs,
+        // num_pairs: sampled_brdf.num_pairs,
     }
 }
 

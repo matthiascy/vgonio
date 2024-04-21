@@ -88,10 +88,10 @@ pub struct SampledBrdf {
     /// tuple is the incident direction. The second element is the list of
     /// outgoing directions.
     pub wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>)]>,
-    /// Total number of wi-wo pairs. Because the number of outgoing directions
-    /// can be different for each incident direction, we need to store the total
-    /// number of pairs apart from the pairs themselves.
-    pub num_pairs: usize,
+    // /// Total number of wi-wo pairs. Because the number of outgoing directions
+    // /// can be different for each incident direction, we need to store the total
+    // /// number of pairs apart from the pairs themselves.
+    // pub num_pairs: usize,
 }
 
 impl SampledBrdf {
@@ -656,7 +656,7 @@ impl MeasurementData {
                         .map(|(wi, wo)| (wi, wo.into_boxed_slice()))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                    num_pairs: i - 1,
+                    // num_pairs: i - 1,
                 }),
             });
         }

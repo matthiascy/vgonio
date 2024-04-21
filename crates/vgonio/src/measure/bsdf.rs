@@ -385,15 +385,35 @@ impl MeasuredBsdfData {
         // row-major [wi, spectrum]
         let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
 
-        let wi_wo_pairs = s.wi_wo_pairs();
+        let wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>)]> = if dense {
+            s.wi_wo_pairs
+                .iter()
+                .map(|(wi, wos)| {
+                    let wo_step = (wos[0].theta - wos[1].theta) * 0.25;
+                    let wos_new = wos
+                        .iter()
+                        .flat_map(|wo| {
+                            let mut wos_out = [*wo; 4];
+                            for i in 0..4 {
+                                wos_out[i] = Sph2 {
+                                    theta: wo.theta + wo_step * i as f32,
+                                    phi: wo.phi,
+                                };
+                            }
+                            wos_out
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice();
+                    (wi, wos_new)
+                })
+                .collect::<Vec<(Sph2, Box<[Sph2]>)>>()
+                .into_boxed_slice()
+        } else {
+            s.wi_wo_pairs.clone()
+        };
 
         // Get the interpolated samples for wi, wo, and spectrum.
         s.wi_wo_pairs.iter().enumerate().for_each(|(i, (wi, wos))| {
-            let wo_step = if dense {
-                (wos[0].theta - wos[1].theta) * 0.25
-            } else {
-                wos[0].theta - wos[1].theta
-            };
             let samples_offset_wi = i * n_wo_dense * n_lambda;
             let snap_idx = self
                 .snapshots
@@ -443,8 +463,8 @@ impl MeasuredBsdfData {
             samples,
             max_values,
             normalised: self.normalised,
-            wi_wo_pairs: s.wi_wo_pairs.clone(),
-            num_pairs: s.num_pairs,
+            wi_wo_pairs,
+            // num_pairs: s.num_pairs,
         }
     }
 

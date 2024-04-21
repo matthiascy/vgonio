@@ -9,7 +9,7 @@ use jabr::array::DyArr;
 /// outgoing direction are in the same plane. Moreover, there are no
 /// measurements at the positions where the incident and outgoing directions are
 /// the same.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct ClausenBrdfParameterisation {
     /// The incident directions of the BRDF.
     incoming: DyArr<Sph2>,
