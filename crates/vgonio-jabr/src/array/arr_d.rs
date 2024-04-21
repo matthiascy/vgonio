@@ -4,11 +4,11 @@ use crate::array::{
     shape::ConstShape,
 };
 
-/// A fixed-size multidimensional array on the heap with type level fixed shape
-/// (dimensions and size of each dimension).
+/// A fixed-size multidimensional array on the heap with type level fixed shape,
+/// in other words with fixed dimensions and size of each dimension.
 ///
 /// The number of dimensions and the size of each dimension are set at
-/// compilation time and cannot be changed.
+/// compilation time and can't be changed.
 pub struct DArr<T, S, const L: MemLayout = { MemLayout::RowMajor }>(
     pub(crate) ArrCore<DynFixSized<T, { S::N_ELEMS }>, S, L>,
 )

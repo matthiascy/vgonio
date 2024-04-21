@@ -109,7 +109,7 @@ pub struct Sph3 {
 }
 
 impl Sph3 {
-    /// Creates a new spherical coordinate.
+    /// Create a new spherical coordinate.
     pub fn new(radius: f32, zenith: Radians, azimuth: Radians) -> Self {
         Self {
             rho: radius,
@@ -118,7 +118,7 @@ impl Sph3 {
         }
     }
 
-    /// Creates a new spherical coordinate with radius 1.
+    /// Create a new spherical coordinate with radius 1.
     pub fn unit(zenith: Radians, azimuth: Radians) -> Self {
         Self {
             rho: 1.0,
@@ -168,7 +168,7 @@ pub struct Sph2 {
 }
 
 impl Sph2 {
-    /// Creates a new spherical coordinate.
+    /// Create a new spherical coordinate.
     pub const fn new(zenith: Radians, azimuth: Radians) -> Self {
         Self {
             theta: zenith,
@@ -176,7 +176,7 @@ impl Sph2 {
         }
     }
 
-    /// Creates a new coordinate with zenith and azimuth angles set to 0.
+    /// Create a new coordinate with zenith and azimuth angles set to 0.
     pub const fn zero() -> Self {
         Self {
             theta: Radians::ZERO,
@@ -184,18 +184,19 @@ impl Sph2 {
         }
     }
 
+    /// Test if the two spherical coordinates are approximately equal.
     pub fn approx_eq(&self, other: &Self) -> bool {
         approx::abs_diff_eq!(self.theta.value, other.theta.value)
             && approx::abs_diff_eq!(self.phi.value, other.phi.value)
     }
 
-    /// Converts to a cartesian coordinate.
+    /// Convert to a cartesian coordinate.
     pub fn to_cartesian(&self) -> Vec3 { sph_to_cart(self.theta, self.phi) }
 
     /// Returns true if the zenith angle and azimuth angle are both positive.
     pub fn is_positive(&self) -> bool { self.theta.is_positive() && self.phi.is_positive() }
 
-    /// Converts from a cartesian coordinate.
+    /// Convert from a cartesian coordinate.
     #[track_caller]
     pub fn from_cartesian(cartesian: Vec3) -> Self {
         debug_assert!(

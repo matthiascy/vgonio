@@ -65,7 +65,7 @@ impl SphericalDomain {
         }
     }
 
-    /// Clamps the given azimuthal and zenith angle to shape's boundaries.
+    /// Clamp the given azimuthal and zenith angle to shape's boundaries.
     ///
     /// # Arguments
     ///
@@ -110,7 +110,7 @@ pub enum PartitionScheme {
     /// Partition scheme based on "A general rule for disk and hemisphere
     /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.
     Beckers = 0x00,
-    /// Simple partition scheme which divides uniformly the hemisphere into
+    /// Simple partition scheme which uniformly divides the hemisphere into
     /// equal angle patches.
     EqualAngle = 0x01,
 }
@@ -370,7 +370,7 @@ pub struct Patch {
 }
 
 impl Patch {
-    /// Creates a new patch.
+    /// Create a new patch.
     pub fn new(theta_min: Radians, theta_max: Radians, phi_min: Radians, phi_max: Radians) -> Self {
         Self {
             min: Sph2::new(theta_min, phi_min),
@@ -378,9 +378,9 @@ impl Patch {
         }
     }
 
-    /// Returns the center of the patch.
+    /// Return the center of the patch.
     pub fn center(&self) -> Sph2 {
-        // For the patch at the center of the top of the hemisphere
+        // For the patch at the top of the hemisphere.
         if self.min.phi.as_f32() <= 1e-6 && (self.max.phi - Rads::TAU).as_f32().abs() <= 1e-6 {
             // If the patch covers the entire hemisphere, then it must be the top patch.
             Sph2::new(Rads::ZERO, Rads::ZERO)
@@ -419,7 +419,7 @@ pub struct Ring {
     pub theta_max: f32,
     /// Step size of the phi angle inside the annulus.
     pub phi_step: f32,
-    /// Number of patches in the annulus: 2 * pi / phi_step == patch_count.
+    /// Number of patches in the annulus: 2 * pi / phi_step.
     pub patch_count: usize,
     /// Base index of the annulus in the patches buffer.
     pub base_index: usize,
@@ -445,7 +445,7 @@ impl Ring {
         }
     }
 
-    /// Return the centor of the ring in terms of zenith angle.
+    /// Return the center of the ring in terms of zenith angle.
     pub fn zenith_center(&self) -> Radians {
         if self.theta_min == 0.0 {
             // The ring at the top of the hemisphere.
@@ -518,7 +518,7 @@ impl SphericalPartition {
                         let r_disc = (x * x + y * y).sqrt();
                         let theta = 2.0 * (r_disc / 2.0).asin();
                         let phi = {
-                            let phi = (y).atan2(x);
+                            let phi = y.atan2(x);
                             if phi < 0.0 {
                                 phi + std::f32::consts::TAU
                             } else {
@@ -545,7 +545,7 @@ impl SphericalPartition {
                         let y = -((2 * j) as f32 / h as f32 - 1.0) * std::f32::consts::SQRT_2;
                         let r_disc = (x * x + y * y).sqrt();
                         let theta = 2.0 * (r_disc / 2.0).asin();
-                        let phi = (rad!((y).atan2(x)) + half_phi_bin_width).wrap_to_tau();
+                        let phi = (rad!(y.atan2(x)) + half_phi_bin_width).wrap_to_tau();
                         indices[(i + j * w) as usize] =
                             match self.contains(Sph2::new(rad!(theta), phi)) {
                                 None => -1,
@@ -569,9 +569,9 @@ impl Ring {
             buf.len() >= Self::REQUIRED_SIZE,
             "Ring needs at least 20 bytes of space"
         );
-        buf[0..4].copy_from_slice(&(self.theta_min).to_le_bytes());
-        buf[4..8].copy_from_slice(&(self.theta_max).to_le_bytes());
-        buf[8..12].copy_from_slice(&(self.phi_step).to_le_bytes());
+        buf[0..4].copy_from_slice(&self.theta_min.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.theta_max.to_le_bytes());
+        buf[8..12].copy_from_slice(&self.phi_step.to_le_bytes());
         buf[12..16].copy_from_slice(&(self.patch_count as u32).to_le_bytes());
         buf[16..20].copy_from_slice(&(self.base_index as u32).to_le_bytes());
     }
@@ -600,6 +600,20 @@ impl Ring {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::units::deg;
+
+    #[test]
+    fn test_spherical_domain_clamp() {
+        let domain = SphericalDomain::Upper;
+        let angle = deg!(91.0);
+        let clamped = domain.clamp_zenith(angle.into());
+        assert_eq!(clamped, deg!(90.0));
+
+        let domain = SphericalDomain::Lower;
+        let angle = deg!(191.0);
+        let clamped = domain.clamp_zenith(angle.into());
+        assert_eq!(clamped, deg!(180.0));
+    }
 
     #[test]
     fn test_ring_find_patches_single_patch() {

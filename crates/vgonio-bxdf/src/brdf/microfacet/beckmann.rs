@@ -1,9 +1,6 @@
 use base::{
     math::{cart_to_sph, cbr, cos_theta, rcp_f64, sqr, Vec3},
-    optics::{
-        fresnel,
-        ior::{Ior, RefractiveIndexRecord},
-    },
+    optics::{fresnel, ior::Ior},
 };
 use libm::erf;
 

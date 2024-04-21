@@ -5,10 +5,9 @@ use crate::{
         Config,
     },
     measure::{
-        bsdf::{BsdfSnapshot, MeasuredBsdfData},
-        data::{MeasuredData, MeasurementData},
+        bsdf::MeasuredBsdfData,
+        data::MeasurementData,
         microfacet::{MeasuredAdfData, MeasuredMsfData},
-        params::MeasurementKind,
     },
 };
 use base::{
@@ -46,15 +45,11 @@ pub mod vgmo {
         math::Sph2,
         medium::Medium,
         partition::{PartitionScheme, Ring, SphericalDomain},
-        range::{RangeByStepCountInclusive, RangeByStepSizeInclusive},
+        range::RangeByStepSizeInclusive,
         units::{rad, Nanometres, Radians},
         Version,
     };
-    use numpy::ndarray::AssignElem;
-    use std::{
-        io::{BufWriter, Seek},
-        mem::MaybeUninit,
-    };
+    use std::io::{BufWriter, Seek};
 
     /// The VGMO header extension.
     #[derive(Debug, Clone, Copy, PartialEq)]
@@ -206,7 +201,7 @@ pub mod vgmo {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
                 let num_slopes = u32::from_le_bytes(buf);
-                let mut samples = base::io::read_f32_data_samples(
+                let samples = base::io::read_f32_data_samples(
                     reader,
                     num_slopes as usize * 2,
                     header.meta.encoding,
@@ -470,7 +465,7 @@ pub mod vgmo {
 
         /// Reads the receiver.
         ///
-        /// Because the receiver's partition is dependent on the precision, the
+        /// Because the receiver's partition is dependent on the precision,
         /// we need to know read the precision to know the actual size of the
         /// receiver.
         pub fn read<R: Read + Seek>(version: Version, reader: &mut BufReader<R>) -> Self {

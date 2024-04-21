@@ -1,3 +1,5 @@
+//! Defines types for ranges of values with a given step size or step count.
+
 #[cfg(feature = "io")]
 use crate::units::Nanometres;
 use crate::{

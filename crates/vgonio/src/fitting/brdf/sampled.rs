@@ -242,12 +242,12 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
                         .zip(max_modelled)
                         .zip(max_measured)
                         .for_each(|(((modelled, measured), max_modelled), max_measured)| {
-                            let measured_norm = if { *max_measured == 0.0 } {
+                            let measured_norm = if *max_measured == 0.0 {
                                 *measured as f64
                             } else {
                                 *measured as f64 / *max_measured as f64
                             };
-                            let modelled_norm = if { *max_modelled == 0.0 } {
+                            let modelled_norm = if *max_modelled == 0.0 {
                                 *modelled as f64
                             } else {
                                 *modelled / *max_modelled as f64

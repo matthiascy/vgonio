@@ -2,21 +2,13 @@
 #![feature(new_uninit)]
 #![feature(associated_type_defaults)]
 
-use base::Isotropy;
-use log::log;
-use std::fmt::Debug;
-
 pub mod brdf;
 pub mod distro;
 
-use crate::{brdf::Bxdf, distro::MicrofacetDistroKind};
+use crate::brdf::Bxdf;
 use base::{
     math::{cos_theta, Vec3},
-    medium::Medium,
-    optics::{
-        fresnel,
-        ior::{Ior, RefractiveIndexRecord},
-    },
+    optics::{fresnel, ior::Ior},
 };
 
 // pub trait MicrofacetBrdfModel: Debug + Send + Sync {
@@ -140,7 +132,7 @@ impl Scattering {
     ) -> Box<[f64]> {
         debug_assert_eq!(iors_i.len(), iors_t.len(), "IOR pair count mismatch");
         let mut reflectances = Box::new_uninit_slice(iors_i.len());
-        for (((ior_i, ior_t), refl)) in iors_i
+        for ((ior_i, ior_t), refl) in iors_i
             .iter()
             .zip(iors_t.iter())
             .zip(reflectances.iter_mut())

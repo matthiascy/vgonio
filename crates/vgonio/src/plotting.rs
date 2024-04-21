@@ -1,9 +1,5 @@
 use crate::measure::data::SampledBrdf;
-use core::slice::SlicePattern;
-use pyo3::{
-    prelude::*,
-    types::{IntoPyDict, PyList},
-};
+use pyo3::{prelude::*, types::PyList};
 
 pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {
     Python::with_gil(|py| {
@@ -31,7 +27,7 @@ pub fn plot_brdf(interpolated: &SampledBrdf, measured: &SampledBrdf) -> PyResult
         let n_wo = interpolated.wi_wo_pairs[0].1.len();
         let n_lambda_interpolated = interpolated.spectrum.len();
         let n_lambda_measured = measured.spectrum.len();
-        for (i, (wi, wos)) in interpolated.wi_wo_pairs.iter().enumerate() {
+        for (i, (_, wos)) in interpolated.wi_wo_pairs.iter().enumerate() {
             for (j, _) in wos.iter().enumerate() {
                 for (k, _) in interpolated.spectrum.iter().enumerate() {
                     let original_offset =

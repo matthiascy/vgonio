@@ -1,23 +1,12 @@
 pub mod sampled;
 
 use crate::{
-    app::cache::{Cache, RawCache, RefractiveIndexRegistry},
-    fitting::{
-        err::{generate_analytical_brdf, generate_analytical_brdf_from_sampled_brdf},
-        FittingProblem, FittingReport,
-    },
-    measure::{bsdf::MeasuredBsdfData, data::SampledBrdf},
+    app::cache::{RawCache, RefractiveIndexRegistry},
+    fitting::{err::generate_analytical_brdf, FittingProblem, FittingReport},
+    measure::bsdf::MeasuredBsdfData,
 };
 use base::{
-    math::{cart_to_sph, sph_to_cart, Vec3, Vec3A},
-    medium::Medium,
-    optics::{
-        fresnel,
-        ior::{Ior, RefractiveIndexRecord},
-    },
-    partition::SphericalPartition,
-    range::RangeByStepSizeInclusive,
-    units::rad,
+    math::Vec3, optics::ior::Ior, partition::SphericalPartition, range::RangeByStepSizeInclusive,
     Isotropy,
 };
 use bxdf::{

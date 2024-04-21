@@ -28,17 +28,13 @@ use base::{
     units::LengthUnit,
     Asset, Version,
 };
-use glam::{DVec2, DVec3, Vec2};
-use log::log;
+use glam::{DVec3, Vec2};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
-    cmp::max,
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
-    mem::MaybeUninit,
     path::{Path, PathBuf},
-    sync::atomic::AtomicU64,
 };
 
 /// Static variable used to generate height field name.

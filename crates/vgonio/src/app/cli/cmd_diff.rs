@@ -1,6 +1,5 @@
 use crate::app::Config;
 use base::error::VgonioError;
-use exr::{image::Image, prelude::AttributeValue::Text};
 use std::{borrow::Cow, path::PathBuf};
 
 /// Options for the `diff` subcommand.

@@ -4,9 +4,9 @@ use crate::{
     app::cache::Handle,
     io::{vgmo::VgmoHeaderExt, OutputFileFormatOption},
     measure::{
-        bsdf::{emitter::EmitterParams, receiver::ReceiverParams, BsdfKind, MeasuredBsdfData},
+        bsdf::MeasuredBsdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData, MeasuredSdfData},
-        params::{AdfMeasurementMode, BsdfMeasurementParams, MeasurementKind, SimulationKind},
+        params::{AdfMeasurementMode, MeasurementKind},
     },
 };
 use base::{
@@ -15,20 +15,16 @@ use base::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::Sph2,
-    medium::Medium,
-    partition::{PartitionScheme, SphericalDomain, SphericalPartition},
+    partition::SphericalPartition,
     range::RangeByStepSizeInclusive,
-    units::{deg, nm, rad, Length, Nanometres, Radians},
+    units::{nm, Nanometres, Radians},
     Asset, Version,
 };
 use chrono::{DateTime, Local};
-use jabr::array::{DArr, DyArr, MemLayout};
 use std::{
     borrow::Cow,
-    collections::HashMap,
     ffi::OsStr,
     fs::File,
-    hash::{Hash, Hasher},
     io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
 };

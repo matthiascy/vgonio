@@ -48,6 +48,10 @@ where
     /// Returns the layout of the array.
     #[inline]
     pub const fn order(&self) -> MemLayout { L }
+
+    /// Returns the total number of elements in the array.
+    #[inline]
+    pub const fn len(&self) -> usize { shape::compute_n_elems(self.meta.shape()) }
 }
 
 impl<D, S, const L: MemLayout> Clone for ArrCore<D, S, L>
@@ -172,8 +176,21 @@ mod tests {
     #[should_panic]
     fn test_arr_core_index_panic_size_mismatch() {
         let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
-        let dynarr: ArrCore<DynSized<f32>, Vec<usize>, { MemLayout::RowMajor }> =
+        let dynarr: ArrCore<DynSized<f32>, Vec<usize>> =
             ArrCore::new(vec![2, 3, 4, 2], DynSized::from(data));
         assert_eq!(dynarr[[1, 2, 4, 0]], 0.0);
+    }
+
+    #[test]
+    fn test_arr_num_elems() {
+        let arr: ArrCore<FixedSized<f32, 24>, s![3, 2, 4]> =
+            ArrCore::new([3, 2, 4], FixedSized([0.0f32; 24]));
+        let darr: ArrCore<DynFixSized<f32, 9>, s![3, 3]> =
+            ArrCore::new([3, 3], DynFixSized::from_slice(&[3.0f32; 9]));
+        let dyarr: ArrCore<DynSized<f32>, [usize; 3], { MemLayout::ColMajor }> =
+            ArrCore::new([4, 6, 2], DynSized::from(vec![3.0f32; 48]));
+        assert_eq!(arr.len(), 24);
+        assert_eq!(darr.len(), 9);
+        assert_eq!(dyarr.len(), 48);
     }
 }

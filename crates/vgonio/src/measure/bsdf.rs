@@ -1,8 +1,7 @@
 //! Measurement of the BSDF (bidirectional scattering distribution function) of
 //! micro-surfaces.
 
-// TODO: use Box<[T]> instead of Vec<T> for fixed-size arrays on the heap.
-
+use super::params::BsdfMeasurementParams;
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
 use crate::{
@@ -12,12 +11,9 @@ use crate::{
     },
     measure::{
         bsdf::{
-            emitter::{Emitter, EmitterParams},
-            receiver::{
-                BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver,
-                ReceiverParams,
-            },
-            rtc::{RayTrajectory, RtcMethod, RtcMethod::Grid},
+            emitter::Emitter,
+            receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
+            rtc::{RayTrajectory, RtcMethod},
         },
         data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
         microfacet::MeasuredAdfData,
@@ -27,14 +23,9 @@ use crate::{
 use base::{
     error::VgonioError,
     math,
-    math::{cart_to_sph, circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
-    medium::Medium,
-    partition::{PartitionScheme, Patch, SphericalDomain, SphericalPartition},
-    range::RangeByStepSizeInclusive,
-    units::{nm, Rads},
+    math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
+    partition::{PartitionScheme, SphericalPartition},
 };
-use rand_distr::num_traits::Euclid;
-use rayon::iter::{IntoParallelIterator, ParallelBridge};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -44,8 +35,6 @@ use std::{
     path::Path,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
-
-use super::params::BsdfMeasurementParams;
 
 pub mod emitter;
 pub(crate) mod params;
@@ -273,7 +262,7 @@ impl MeasuredBsdfData {
                 .iter()
                 .enumerate()
                 .filter_map(|(snap_idx, snapshot)| {
-                    let mut layer_attrib = LayerAttributes {
+                    let layer_attrib = LayerAttributes {
                         owner: Text::new_or_none("vgonio"),
                         capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
                             timestamp,

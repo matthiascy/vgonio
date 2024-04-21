@@ -10,7 +10,7 @@ pub trait Shape {
     fn new_metadata(dims: &Self::Underlying, layout: MemLayout) -> Self::Metadata;
 }
 
-pub(crate) trait ShapeMetadata: Clone {
+pub trait ShapeMetadata: Clone {
     fn shape(&self) -> &[usize];
     fn strides<const L: MemLayout>(&self) -> &[usize];
     fn dimension(&self) -> usize;

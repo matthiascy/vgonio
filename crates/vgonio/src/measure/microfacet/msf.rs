@@ -22,9 +22,10 @@ use std::path::Path;
 use surf::MicroSurface;
 use wgpu::{util::DeviceExt, ColorTargetState};
 
-/// Render pass computing the shadowing/masking (caused by occlusion of
-/// micro-facets) function of a micro-surface. For a certain viewing direction,
-/// this is done in two steps:
+/// Render pass computing the shadowing/masking (caused by microfacets
+/// occlusion) function of a micro-surface.
+///
+/// For a certain viewing direction, this is done in two steps:
 ///
 /// 1. Depth pass
 ///
@@ -40,7 +41,7 @@ use wgpu::{util::DeviceExt, ColorTargetState};
 ///
 /// Render all visible facets. Each fragment outputs value of 1/ 256 or 1/1024
 /// depending on the format of the color attachment used. At the blending
-/// stage, values will be summed up; later stores inside of a texture.
+/// stage, values will be summed up; later stores inside a texture.
 pub struct VisibilityEstimator {
     /// Depth pass to generate depth buffer for the entire micro-surface.
     depth_pass: RenderPass,
@@ -59,7 +60,7 @@ pub struct VisibilityEstimator {
     num_measurement_points: u32,
 
     /// Color attachments used to compute the ratio of visible projected area
-    /// over whole area of all visible facets at each measurement point.
+    /// over the whole area of all visible facets at each measurement point.
     /// Each color attachment is a 2D texture array with one layer per
     /// measurement point. 1st color attachment is used to store the visible
     /// projected area (area of visible facets respecting each other), 2nd
@@ -77,7 +78,7 @@ pub struct VisibilityEstimator {
 struct Uniforms {
     proj_view_matrix: [f32; 16],
     meas_point_index: [u32; 2],
-    /// Number of measurement stored inside of one layered texture.
+    /// Number of measurements stored inside one layered texture.
     /// Same as number of [`DepthAttachment::layers_per_texture`].
     /// Each layer is a depth buffer of the micro-facets at one measurement
     /// point.
@@ -107,7 +108,7 @@ pub struct VisibilityEstimation {
     /// channel).
     total_area: u32,
     /// Micro-facets area with occlusion. This is the total area of all visible
-    /// micro-facets minus the occluded area; calculated by summing up the
+    /// microfacets minus the occluded area; calculated by summing up the
     /// number of fragments that are covered by other micro-facets.
     visible_area: u32,
 }
@@ -807,7 +808,7 @@ impl LayeredTexture {
                 array_layer_count: Some(1),
             }));
         }
-        let layer_size_in_bytes = (width * height * format.block_size(None).unwrap()) as u64;
+        let layer_size_in_bytes = (width * height * format.block_copy_size(None).unwrap()) as u64;
         Self {
             format,
             texture,
@@ -871,12 +872,12 @@ struct DepthAttachment {
     sampler: wgpu::Sampler,
     /// The storage of the texture data in case the data need to be saved.
     /// Each texture is stored in a separate buffer. It has the same length
-    /// as the textures array.
+    /// as the textures' array.
     storage_buffers: Vec<wgpu::Buffer>,
 }
 
 impl DepthAttachment {
-    /// Creates a new depth attachment.
+    /// Create a new depth attachment.
     ///
     /// # Arguments
     ///
@@ -907,7 +908,8 @@ impl DepthAttachment {
         let max_buffer_size = device.limits().max_buffer_size;
 
         let layers_per_texture = max_layers_per_texture.min(
-            (max_buffer_size / ((width * height * format.block_size(None).unwrap()) as u64)) as u32,
+            (max_buffer_size / ((width * height * format.block_copy_size(None).unwrap()) as u64))
+                as u32,
         );
 
         let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
@@ -1052,12 +1054,12 @@ impl DepthAttachment {
 
 /// Color attachment used for occlusion estimation, which is a texture with the
 /// same size as the depth attachment. The number of non-zero pixels is the area
-/// of micro-facets together with the occlusion. The sum of values of all pixels
-/// is the area of micro-facets in total without occlusion.
+/// of micro-facets together with the occlusion. The sum of all pixel values
+/// is the area of micro-facets in total without the occlusion.
 ///
 /// Because of underlying hardware's limitation of maximum image array layers of
-/// a single texture, the color attachment may contain multipl layered textures.
-/// Each layer of the texture is a color map of the micro-surface at a
+/// a single texture, the color attachment may contain multiple layered
+/// textures. Each layer of the texture is a color map of the micro-surface at a
 /// specific angle.
 struct ColorAttachment {
     /// The texture used for the color attachment.
@@ -1098,7 +1100,8 @@ impl ColorAttachment {
         let max_buffer_size = device.limits().max_buffer_size;
 
         let layers_per_texture = max_layers_per_texture.min(
-            (max_buffer_size / ((width * height * format.block_size(None).unwrap()) as u64)) as u32,
+            (max_buffer_size / ((width * height * format.block_copy_size(None).unwrap()) as u64))
+                as u32,
         );
 
         let textures_count = (layers as f32 / layers_per_texture as f32).ceil() as u32;
@@ -1238,7 +1241,7 @@ impl ColorAttachment {
                             }
                         }
                     } else {
-                        // Only write R channel.
+                        // Only write the R channel.
                         use std::io::Write;
                         for (i, layer) in buffer_view
                             .chunks_exact(texture.layer_size_in_bytes as usize)

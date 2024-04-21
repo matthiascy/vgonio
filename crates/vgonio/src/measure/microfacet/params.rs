@@ -6,7 +6,7 @@ use base::{
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
 };
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Default azimuth angle range for the measurement: [0°, 360°] with 5° step
 /// size.
@@ -344,6 +344,7 @@ where
 }
 
 impl SdfMeasurementParams {
+    /// Validate the parameters.
     pub fn validate(self) -> Result<Self, VgonioError> {
         if self.max_slope <= 0.0 {
             return Err(VgonioError::new(

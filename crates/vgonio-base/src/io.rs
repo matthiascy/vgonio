@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     fmt,
-    fmt::{Debug, Display, Formatter},
     io::{BufRead, BufReader, BufWriter, Read, Seek, Write},
     path::Path,
 };
@@ -24,7 +23,7 @@ pub struct ReadFileError {
     pub kind: ReadFileErrorKind,
 }
 
-impl Display for ReadFileError {
+impl fmt::Display for ReadFileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "error while reading file: {}", self.path.display())
     }
@@ -93,7 +92,7 @@ pub struct ParseError {
     pub encoding: FileEncoding,
 }
 
-impl Display for ParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.encoding {
             FileEncoding::Ascii => {
@@ -156,7 +155,7 @@ pub struct WriteFileError {
     pub kind: WriteFileErrorKind,
 }
 
-impl Display for WriteFileError {
+impl fmt::Display for WriteFileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "error while writing file: {}", self.path.display())
     }
@@ -221,7 +220,7 @@ impl From<u8> for FileEncoding {
     }
 }
 
-impl Display for FileEncoding {
+impl fmt::Display for FileEncoding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FileEncoding::Ascii => write!(f, "ascii"),
@@ -273,7 +272,7 @@ impl From<u8> for CompressionScheme {
     }
 }
 
-impl Display for CompressionScheme {
+impl fmt::Display for CompressionScheme {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CompressionScheme::None => write!(f, "none"),
@@ -349,9 +348,9 @@ impl<E: HeaderExt> Header<E> {
 
     /// Writes the header to a writer.
     ///
-    /// Note: the length of the whole file is not known at this point. Therefore
-    /// the length field is set to 0. The length field is updated after the
-    /// whole file is written.
+    /// Note: the length of the whole file is not known at this point,
+    /// therefore, the length field is set to 0; it will be updated
+    /// once the whole file is written.
     pub fn write<W: Write + Seek>(
         &self,
         writer: &mut BufWriter<W>,
@@ -434,8 +433,8 @@ impl<E: HeaderExt> Header<E> {
     }
 }
 
-impl<E: HeaderExt + Debug> Debug for Header<E> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl<E: HeaderExt + fmt::Debug> fmt::Debug for Header<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Header")
             .field("meta", &self.meta)
             .field("extra", &self.extra)
@@ -444,7 +443,7 @@ impl<E: HeaderExt + Debug> Debug for Header<E> {
 }
 
 /// Writes the samples to the given writer in ascii format.
-pub fn write_data_samples_ascii<W: Write, F: Float + Display>(
+pub fn write_data_samples_ascii<W: Write, F: Float + fmt::Display>(
     writer: &mut BufWriter<W>,
     samples: &[F],
     cols: u32,
@@ -460,7 +459,8 @@ pub fn write_data_samples_ascii<W: Write, F: Float + Display>(
     Ok(())
 }
 
-/// Converts an array of samples of type f32 to a byte array.
+/// Converts a f32 samples array into a byte array.
+///
 /// The byte array is either a copy of the original array or a reference to the
 /// original array. The byte array is in little endian format.
 fn f32_samples_to_bytes(samples: &[f32]) -> Cow<[u8]> {

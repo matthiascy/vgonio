@@ -4,10 +4,8 @@ use num_traits::Float;
 use std::fmt::Debug;
 
 pub mod lambert;
-mod measured;
-pub mod merl;
+pub mod measured;
 pub mod microfacet;
-pub mod utia;
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]

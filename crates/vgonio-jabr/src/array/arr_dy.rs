@@ -1,11 +1,14 @@
 use crate::array::{core::ArrCore, mem::heap::DynSized, MemLayout};
 use std::ops::Index;
 
-/// A dynamically-sized array with a known number of dimensions at compile-time.
+/// A dynamically sized array with a known number of dimensions at compile-time.
 ///
-/// The dimension is set at compilation time and cannot be changed, but the size
-/// of each dimension can be changed at runtime (non-growable).
-pub struct DyArr<T, const N: usize, const L: MemLayout = { MemLayout::RowMajor }>(
+/// The dimension is set at compilation time and can't be changed, but the size
+/// of each dimension can be changed at runtime.
+///
+/// By default, the layout of the array is row-major, and the number of
+/// dimensions is 1.
+pub struct DyArr<T, const N: usize = 1, const L: MemLayout = { MemLayout::RowMajor }>(
     pub(crate) ArrCore<DynSized<T>, [usize; N], L>,
 );
 
@@ -15,6 +18,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         strides -> &[usize], #[doc = "Returns the strides of the array."];
         order -> MemLayout, #[doc = "Returns the layout of the array."];
         dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
+        len -> usize, #[doc = "Returns the total number of elements in the array."];
     );
 
     /// Creates a new array with the given data and shape.
@@ -70,6 +74,14 @@ mod tests {
     #[test]
     fn test_dyarr_creation() {
         let arr: DyArr<i32, 3> = DyArr::new([2, 3, 2]);
+        assert_eq!(arr.shape(), &[2, 3, 2]);
+        assert_eq!(arr.strides(), &[6, 2, 1]);
+    }
+
+    #[test]
+    fn test_dyarr_reshape() {
+        let arr: DyArr<i32, 3> = DyArr::new([2, 3, 2]);
+        let arr = arr.reshape([-1, 3, 2]);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
     }

@@ -12,22 +12,15 @@ use crate::{
 };
 use base::{
     math::{rcp_f32, Sph2, Vec3, Vec3A},
-    optics::{
-        fresnel,
-        ior::{Ior, RefractiveIndexRecord},
-    },
+    optics::{fresnel, ior::Ior},
     partition::{PartitionScheme, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::{
-    atomic,
-    atomic::{AtomicU32, AtomicUsize},
-};
+use std::sync::{atomic, atomic::AtomicU32};
 use surf::MicroSurface;
-use wgpu::naga::TypeInner::Atomic;
 
 /// Data collected by the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]

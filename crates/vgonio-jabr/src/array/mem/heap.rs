@@ -6,7 +6,7 @@ use std::{
     ops::Deref,
 };
 
-// TODO: avoid using Vec here as it will over allocate memory
+// TODO: avoid using Vec here as it will over allocate memory.
 /// Dynamic-sized array on the heap.
 pub struct DynSized<T, A = Global>
 where

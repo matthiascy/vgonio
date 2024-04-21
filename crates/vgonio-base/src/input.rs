@@ -1,3 +1,5 @@
+//! Input handling module.
+
 use std::collections::HashMap;
 use winit::{
     dpi::PhysicalPosition,
