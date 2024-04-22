@@ -25,7 +25,7 @@ use base::{
     math,
     math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
     partition::{PartitionScheme, SphericalPartition},
-    units::{Degs, Rads},
+    units::{Degs, Radians, Rads},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -368,7 +368,7 @@ impl MeasuredBsdfData {
     }
 
     /// Extracts the BRDF from the measured BSDF data.
-    pub fn sampled_brdf(&self, s: &SampledBrdf, dense: bool) -> SampledBrdf {
+    pub fn sampled_brdf(&self, s: &SampledBrdf, dense: bool, phi_offset: Radians) -> SampledBrdf {
         let spectrum = self
             .params
             .emitter
@@ -402,33 +402,39 @@ impl MeasuredBsdfData {
                                 if wo.phi.as_f32().abs() < 1e-6 {
                                     // The azimuth of the incident direction is almost zero.
                                     for i in 0..4 {
-                                        wos_out[i] =
-                                            Sph2::new(wo.theta - wo_step * (3 - i) as f32, wo.phi);
+                                        wos_out[i] = Sph2::new(
+                                            wo.theta - wo_step * (3 - i) as f32,
+                                            wo.phi + phi_offset,
+                                        );
                                     }
                                     for i in 0..3 {
                                         wos_out[i + 4] = Sph2::new(
                                             wo.theta - wo_step * (3 - i) as f32,
-                                            Rads::PI,
+                                            Rads::PI + phi_offset,
                                         );
                                     }
                                 } else {
                                     for i in 0..3 {
                                         wos_out[i] = Sph2::new(
                                             wo.theta - wo_step * (3 - i) as f32,
-                                            Rads::ZERO,
+                                            Rads::ZERO + phi_offset,
                                         );
                                     }
                                     for i in 0..4 {
-                                        wos_out[i + 3] =
-                                            Sph2::new(wo.theta - wo_step * (3 - i) as f32, wo.phi);
+                                        wos_out[i + 3] = Sph2::new(
+                                            wo.theta - wo_step * (3 - i) as f32,
+                                            wo.phi + phi_offset,
+                                        );
                                     }
                                 }
                                 wos_out
                             } else {
                                 let mut wos_out = vec![*wo; 4];
                                 for i in 0..4 {
-                                    wos_out[i] =
-                                        Sph2::new(wo.theta - wo_step * (3 - i) as f32, wo.phi);
+                                    wos_out[i] = Sph2::new(
+                                        wo.theta - wo_step * (3 - i) as f32,
+                                        wo.phi + phi_offset,
+                                    );
                                 }
                                 wos_out
                             }

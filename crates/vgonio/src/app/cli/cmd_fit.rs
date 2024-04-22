@@ -192,7 +192,17 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .measured
                             .as_sampled_brdf()
                             .unwrap();
-                        measured_data.sampled_brdf(&olaf_data, false)
+                        let dense = if std::env::var("DENSE")
+                            .ok()
+                            .map(|s| s == "1")
+                            .unwrap_or(false)
+                        {
+                            true
+                        } else {
+                            false
+                        };
+                        log::debug!("Resampling the measured data, dense: {}", dense);
+                        measured_data.sampled_brdf(&olaf_data, dense, Rads::ZERO)
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
                     sampled_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache);

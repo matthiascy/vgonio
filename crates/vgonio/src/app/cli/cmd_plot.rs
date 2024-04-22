@@ -2,7 +2,7 @@ use crate::{
     app::{cache::Cache, Config},
     plotting::plot_brdf,
 };
-use base::error::VgonioError;
+use base::{error::VgonioError, units::Rads};
 use std::path::PathBuf;
 
 /// Kind of plot to generate.
@@ -58,7 +58,12 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     } else {
                         false
                     };
-                    let itrp = simulated.sampled_brdf(&olaf, dense);
+                    let phi_offset = std::env::var("PHI_OFFSET")
+                        .ok()
+                        .map(|s| s.parse::<f32>().unwrap())
+                        .unwrap_or(0.0)
+                        .to_radians();
+                    let itrp = simulated.sampled_brdf(&olaf, dense, Rads::new(phi_offset));
                     plot_brdf(&itrp, olaf, dense).unwrap();
                 }
                 Ok(())
