@@ -31,3 +31,4 @@ fit ~/Documents/virtual-gonio/output/test-data-d2/bsdf_aluminium3bar100_2024-02-
 ## Environment Variables
 
 * `ORIGINAL_MAX`
+* `DENSE`

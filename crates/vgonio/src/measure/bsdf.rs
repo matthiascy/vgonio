@@ -25,6 +25,7 @@ use base::{
     math,
     math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
     partition::{PartitionScheme, SphericalPartition},
+    units::{Degs, Rads},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -385,26 +386,56 @@ impl MeasuredBsdfData {
         // row-major [wi, spectrum]
         let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
 
-        let wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>)]> = if dense {
+        let wo_step = Degs::new(2.5).to_radians();
+        let wi_wo_pairs = if dense {
             s.wi_wo_pairs
                 .iter()
                 .map(|(wi, wos)| {
-                    let wo_step = (wos[0].theta - wos[1].theta) * 0.25;
                     let wos_new = wos
                         .iter()
                         .flat_map(|wo| {
-                            let mut wos_out = [*wo; 4];
-                            for i in 0..4 {
-                                wos_out[i] = Sph2 {
-                                    theta: wo.theta + wo_step * i as f32,
-                                    phi: wo.phi,
-                                };
+                            if wo.approx_eq(&Sph2::zero()) {
+                                vec![Sph2::zero(); 1]
+                            } else if (wo.theta - wi.theta).abs().as_f32() < 1e-6 {
+                                let mut wos_out = vec![*wo; 7];
+                                // The incident and outgoing directions are the same.
+                                if wo.phi.as_f32().abs() < 1e-6 {
+                                    // The azimuth of the incident direction is almost zero.
+                                    for i in 0..4 {
+                                        wos_out[i] =
+                                            Sph2::new(wo.theta - wo_step * (3 - i) as f32, wo.phi);
+                                    }
+                                    for i in 0..3 {
+                                        wos_out[i + 4] = Sph2::new(
+                                            wo.theta - wo_step * (3 - i) as f32,
+                                            Rads::PI,
+                                        );
+                                    }
+                                } else {
+                                    for i in 0..3 {
+                                        wos_out[i] = Sph2::new(
+                                            wo.theta - wo_step * (3 - i) as f32,
+                                            Rads::ZERO,
+                                        );
+                                    }
+                                    for i in 0..4 {
+                                        wos_out[i + 3] =
+                                            Sph2::new(wo.theta - wo_step * (3 - i) as f32, wo.phi);
+                                    }
+                                }
+                                wos_out
+                            } else {
+                                let mut wos_out = vec![*wo; 4];
+                                for i in 0..4 {
+                                    wos_out[i] =
+                                        Sph2::new(wo.theta - wo_step * (3 - i) as f32, wo.phi);
+                                }
+                                wos_out
                             }
-                            wos_out
                         })
                         .collect::<Vec<_>>()
                         .into_boxed_slice();
-                    (wi, wos_new)
+                    (*wi, wos_new)
                 })
                 .collect::<Vec<(Sph2, Box<[Sph2]>)>>()
                 .into_boxed_slice()
@@ -413,7 +444,7 @@ impl MeasuredBsdfData {
         };
 
         // Get the interpolated samples for wi, wo, and spectrum.
-        s.wi_wo_pairs.iter().enumerate().for_each(|(i, (wi, wos))| {
+        wi_wo_pairs.iter().enumerate().for_each(|(i, (wi, wos))| {
             let samples_offset_wi = i * n_wo_dense * n_lambda;
             let snap_idx = self
                 .snapshots
@@ -464,7 +495,6 @@ impl MeasuredBsdfData {
             max_values,
             normalised: self.normalised,
             wi_wo_pairs,
-            // num_pairs: s.num_pairs,
         }
     }
 

@@ -43,14 +43,23 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .measured
                         .as_bsdf()
                         .expect("Expected BSDF measured by Vgonio");
-                    let measured = cache
+                    let olaf = cache
                         .get_measurement_data(measured_hdl)
                         .unwrap()
                         .measured
                         .as_sampled_brdf()
                         .expect("Expected BSDF measured by Olaf");
-                    let interpolated = simulated.sampled_brdf(&measured, false);
-                    plot_brdf(&interpolated, measured).unwrap();
+                    let dense = if std::env::var("DENSE")
+                        .ok()
+                        .map(|s| s == "1")
+                        .unwrap_or(false)
+                    {
+                        true
+                    } else {
+                        false
+                    };
+                    let itrp = simulated.sampled_brdf(&olaf, dense);
+                    plot_brdf(&itrp, olaf, dense).unwrap();
                 }
                 Ok(())
             }
