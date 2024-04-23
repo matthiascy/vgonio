@@ -1,4 +1,4 @@
-use crate::error::RuntimeError;
+use crate::{error::RuntimeError, measure::MeasurementParams};
 use base::{
     error::VgonioError,
     math::Sph2,
@@ -19,7 +19,7 @@ pub const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
 
 /// Parameters for microfacet area distribution measurement.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct AdfMeasurementParams {
+pub struct NdfMeasurementParams {
     /// The way to measure the area distribution function.
     pub mode: AdfMeasurementMode,
     /// Whether to crop the surface to a disk during the measurement.
@@ -29,6 +29,8 @@ pub struct AdfMeasurementParams {
     /// the number of facets.
     pub use_facet_area: bool, // TODO: serialise/deserialise
 }
+
+impl MeasurementParams for NdfMeasurementParams {}
 
 /// How to measure the area distribution function.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -127,7 +129,7 @@ impl AdfMeasurementMode {
     }
 }
 
-impl AdfMeasurementParams {
+impl NdfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         match self.mode {
@@ -228,6 +230,8 @@ impl Default for MsfMeasurementParams {
     }
 }
 
+impl MeasurementParams for MsfMeasurementParams {}
+
 impl MsfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
@@ -292,6 +296,8 @@ pub struct SdfMeasurementParams {
     #[serde(deserialize_with = "deserialize_max_slope")]
     pub max_slope: f32,
 }
+
+impl MeasurementParams for SdfMeasurementParams {}
 
 fn deserialize_max_slope<'de, D>(deserializer: D) -> Result<f32, D::Error>
 where

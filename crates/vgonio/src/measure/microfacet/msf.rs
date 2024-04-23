@@ -1,7 +1,7 @@
 use crate::{
     app::cache::{Handle, RawCache},
     measure::{
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
+        data::{MeasuredData, MeasuredData2, MeasurementData, MeasurementDataSource},
         params::MsfMeasurementParams,
     },
 };
@@ -1363,6 +1363,8 @@ pub struct MeasuredMsfData {
     /// visibility data for each incident direction.
     pub samples: Box<[f32]>,
 }
+
+// pub type MeasuredMsf = MeasuredData2<MsfMeasurementParams, 4>;
 
 /// Measurement of microfacet shadowing and masking function.
 pub fn measure_masking_shadowing(

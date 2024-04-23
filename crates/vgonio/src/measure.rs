@@ -20,6 +20,12 @@ use rayon::{
 };
 use surf::MicroSurfaceMesh;
 
+/// Trait defining the parameters of the measurement.
+pub trait MeasurementParams {}
+
+/// Trait defining the samples of the measurement.
+pub trait MeasurementSamples {}
+
 /// Helper structure dealing with the spherical transform related to the
 /// acquisition.
 pub struct SphericalTransform;

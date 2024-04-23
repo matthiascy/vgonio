@@ -33,8 +33,8 @@ pub mod vgmo {
         data::MeasuredData,
         microfacet::MeasuredSdfData,
         params::{
-            AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, MeasurementKind,
-            MsfMeasurementParams, SdfMeasurementParams, SimulationKind,
+            AdfMeasurementMode, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
+            NdfMeasurementParams, SdfMeasurementParams, SimulationKind,
         },
     };
     use base::{
@@ -55,7 +55,7 @@ pub mod vgmo {
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum VgmoHeaderExt {
         Bsdf { params: BsdfMeasurementParams },
-        Adf { params: AdfMeasurementParams },
+        Adf { params: NdfMeasurementParams },
         Msf { params: MsfMeasurementParams },
         Sdf,
     }
@@ -140,7 +140,7 @@ pub mod vgmo {
             match MeasurementKind::from(kind[0]) {
                 MeasurementKind::Bsdf => BsdfMeasurementParams::read_from_vgmo(version, reader)
                     .map(|params| Ok(Self::Bsdf { params }))?,
-                MeasurementKind::Adf => AdfMeasurementParams::read_from_vgmo(version, reader)
+                MeasurementKind::Adf => NdfMeasurementParams::read_from_vgmo(version, reader)
                     .map(|params| Ok(Self::Adf { params }))?,
                 MeasurementKind::Msf => MsfMeasurementParams::read_from_vgmo(version, reader)
                     .map(|params| Ok(Self::Msf { params }))?,
@@ -558,7 +558,7 @@ pub mod vgmo {
         }
     }
 
-    impl AdfMeasurementParams {
+    impl NdfMeasurementParams {
         // TODO: resolve `crop_to_disk`
         // TODO: read partitioned ADF data
         pub fn read_from_vgmo<R: Read + Seek>(
@@ -578,7 +578,7 @@ pub mod vgmo {
                     let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
                     debug_assert_eq!(
                         sample_count as usize,
-                        AdfMeasurementParams::expected_samples_count_by_points(&azimuth, &zenith)
+                        NdfMeasurementParams::expected_samples_count_by_points(&azimuth, &zenith)
                     );
                     Ok(Self {
                         mode: AdfMeasurementMode::ByPoints { azimuth, zenith },

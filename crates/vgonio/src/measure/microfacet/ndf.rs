@@ -1,8 +1,8 @@
 use crate::{
     app::cache::{Handle, RawCache},
     measure::{
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::{AdfMeasurementMode, AdfMeasurementParams},
+        data::{MeasuredData, MeasuredData2, MeasurementData, MeasurementDataSource},
+        params::{AdfMeasurementMode, NdfMeasurementParams},
     },
 };
 use base::{
@@ -32,12 +32,14 @@ use surf::{MicroSurface, MicroSurfaceMesh};
 #[derive(Debug, Clone)]
 pub struct MeasuredAdfData {
     /// The measurement parameters.
-    pub params: AdfMeasurementParams,
+    pub params: NdfMeasurementParams,
     /// The distribution data. The outermost index is the azimuthal angle of the
     /// microfacet normal, and the inner index is the zenith angle of the
     /// microfacet normal.
     pub samples: Box<[f32]>,
 }
+
+// pub type MeasuredNdf = MeasuredData2<NdfMeasurementParams>;
 
 impl MeasuredAdfData {
     /// Writes the measured data as an EXR file.
@@ -133,7 +135,7 @@ const FACET_CHUNK_SIZE: usize = 4096;
 
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
-    params: AdfMeasurementParams,
+    params: NdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &RawCache,
 ) -> Box<[MeasurementData]> {
@@ -171,7 +173,7 @@ fn measure_area_distribution_by_points<'a>(
             &'a Option<&'a MicroSurfaceMesh>,
         ),
     >,
-    params: AdfMeasurementParams,
+    params: NdfMeasurementParams,
 ) -> Vec<MeasurementData> {
     use rayon::prelude::*;
     let (azimuth, zenith) = params.mode.as_mode_by_points().unwrap();
@@ -386,7 +388,7 @@ fn measure_area_distribution_by_partition<'a>(
             &'a Option<&'a MicroSurfaceMesh>,
         ),
     >,
-    params: AdfMeasurementParams,
+    params: NdfMeasurementParams,
 ) -> Vec<MeasurementData> {
     use rayon::prelude::*;
     let (precision, scheme) = params.mode.as_mode_by_partition().unwrap();

@@ -1,4 +1,4 @@
-//! Measurement of the BSDF (bidirectional scattering distribution function) of
+//! Measurement of the BSDF (Bidirectional Scattering Distribution Function) of
 //! micro-surfaces.
 
 use super::params::BsdfMeasurementParams;
@@ -15,7 +15,7 @@ use crate::{
             receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
-        data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
+        data::{MeasuredData, MeasuredData2, MeasurementData, MeasurementDataSource, SampledBrdf},
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
@@ -70,6 +70,8 @@ pub struct MeasuredBsdfData {
     /// See [`BsdfSnapshotRaw`] for more details.
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
 }
+
+// pub type MeasuredBsdf = MeasuredData2<BsdfMeasurementParams, >
 
 impl MeasuredBsdfData {
     /// Writes the BSDF data to images in exr format.
@@ -767,99 +769,110 @@ pub(crate) fn compute_bsdf_snapshots_max_values(snapshots: &[BsdfSnapshot]) -> B
     max_values
 }
 
-#[test]
-fn test_measured_bsdf_sample() {
-    let precision = Sph2 {
-        theta: Rads::from_degrees(30.0),
-        phi: Rads::from_degrees(2.0),
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::measure::bsdf::{
+        emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod::Grid,
     };
-    let partition =
-        SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
-    let samples = (0..partition.num_patches())
-        .into_iter()
-        .map(|_| SpectralSamples::splat(1.0, 4))
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let snapshots = Box::new([BsdfSnapshot {
-        wi: Sph2 {
+    use base::{
+        medium::Medium, partition::SphericalDomain, range::RangeByStepSizeInclusive, units::nm,
+    };
+
+    #[test]
+    fn test_measured_bsdf_sample() {
+        let precision = Sph2 {
+            theta: Rads::from_degrees(30.0),
+            phi: Rads::from_degrees(2.0),
+        };
+        let partition =
+            SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
+        let samples = (0..partition.num_patches())
+            .into_iter()
+            .map(|_| SpectralSamples::splat(1.0, 4))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let snapshots = Box::new([BsdfSnapshot {
+            wi: Sph2 {
+                theta: Rads::ZERO,
+                phi: Rads::ZERO,
+            },
+            samples,
+            trajectories: Vec::new(),
+            hit_points: Vec::new(),
+        }]);
+        let measured = MeasuredBsdfData {
+            params: BsdfMeasurementParams {
+                emitter: EmitterParams {
+                    num_rays: 0,
+                    max_bounces: 0,
+                    zenith: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
+                    azimuth: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
+                    spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
+                },
+                receiver: ReceiverParams {
+                    domain: SphericalDomain::Upper,
+                    precision,
+                    scheme: PartitionScheme::Beckers,
+                    retrieval: Default::default(),
+                },
+                kind: BsdfKind::Brdf,
+                sim_kind: SimulationKind::GeomOptics(Grid),
+                incident_medium: Medium::Vacuum,
+                fresnel: Default::default(),
+                transmitted_medium: Medium::Vacuum,
+            },
+            snapshots,
+            raw_snapshots: None,
+            normalised: false,
+            max_values: vec![1.0; 4].into_boxed_slice(),
+        };
+        let mut interpolated = vec![0.0, 0.0, 0.0, 0.0];
+        let wi = Sph2 {
             theta: Rads::ZERO,
             phi: Rads::ZERO,
-        },
-        samples,
-        trajectories: Vec::new(),
-        hit_points: Vec::new(),
-    }]);
-    let measured = MeasuredBsdfData {
-        params: BsdfMeasurementParams {
-            emitter: EmitterParams {
-                num_rays: 0,
-                max_bounces: 0,
-                zenith: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
-                azimuth: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
-                spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
+        };
+        measured.sample_at(
+            wi,
+            Sph2 {
+                theta: Rads::ZERO,
+                phi: Rads::ZERO,
             },
-            receiver: ReceiverParams {
-                domain: SphericalDomain::Upper,
-                precision,
-                scheme: PartitionScheme::Beckers,
-                retrieval: Default::default(),
+            &mut interpolated,
+        );
+        assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
+
+        interpolated.iter_mut().for_each(|spl| *spl = 0.0);
+        measured.sample_at(
+            wi,
+            Sph2 {
+                theta: Rads::from_degrees(80.0),
+                phi: Rads::from_degrees(30.0),
             },
-            kind: BsdfKind::Brdf,
-            sim_kind: SimulationKind::GeomOptics(Grid),
-            incident_medium: Medium::Vacuum,
-            fresnel: Default::default(),
-            transmitted_medium: Medium::Vacuum,
-        },
-        snapshots,
-        raw_snapshots: None,
-        normalised: false,
-        max_values: vec![1.0; 4].into_boxed_slice(),
-    };
-    let mut interpolated = vec![0.0, 0.0, 0.0, 0.0];
-    let wi = Sph2 {
-        theta: Rads::ZERO,
-        phi: Rads::ZERO,
-    };
-    measured.sample_at(
-        wi,
-        Sph2 {
-            theta: Rads::ZERO,
-            phi: Rads::ZERO,
-        },
-        &mut interpolated,
-    );
-    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
+            &mut interpolated,
+        );
+        assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
-    interpolated.iter_mut().for_each(|spl| *spl = 0.0);
-    measured.sample_at(
-        wi,
-        Sph2 {
-            theta: Rads::from_degrees(80.0),
-            phi: Rads::from_degrees(30.0),
-        },
-        &mut interpolated,
-    );
-    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
+        measured.sample_at(
+            wi,
+            Sph2 {
+                theta: Rads::from_degrees(40.0),
+                phi: Rads::from_degrees(30.0),
+            },
+            &mut interpolated,
+        );
+        assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
-    measured.sample_at(
-        wi,
-        Sph2 {
-            theta: Rads::from_degrees(40.0),
-            phi: Rads::from_degrees(30.0),
-        },
-        &mut interpolated,
-    );
-    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
-
-    measured.sample_at(
-        wi,
-        Sph2 {
-            theta: Rads::from_degrees(55.0),
-            phi: Rads::from_degrees(30.0),
-        },
-        &mut interpolated,
-    );
-    assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
+        measured.sample_at(
+            wi,
+            Sph2 {
+                theta: Rads::from_degrees(55.0),
+                phi: Rads::from_degrees(30.0),
+            },
+            &mut interpolated,
+        );
+        assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
+    }
 }
 
 /// Type of the BSDF to be measured.

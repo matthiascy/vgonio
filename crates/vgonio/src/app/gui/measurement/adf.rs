@@ -1,20 +1,20 @@
 use crate::{
     app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui},
-    measure::params::{AdfMeasurementMode, AdfMeasurementParams},
+    measure::params::{AdfMeasurementMode, NdfMeasurementParams},
 };
 use base::partition::PartitionScheme;
 use egui::Widget;
 
 #[derive(Debug)]
 pub struct AdfMeasurementTab {
-    pub params: AdfMeasurementParams,
+    pub params: NdfMeasurementParams,
     event_loop: EventLoopProxy,
 }
 
 impl AdfMeasurementTab {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
-            params: AdfMeasurementParams::default(),
+            params: NdfMeasurementParams::default(),
             event_loop,
         }
     }

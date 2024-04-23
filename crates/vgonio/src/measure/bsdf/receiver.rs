@@ -47,7 +47,7 @@ impl From<u8> for DataRetrieval {
 /// Description of a receiver collecting the data.
 ///
 /// The virtual goniophotometer's sensors are represented by the patches
-/// of a sphere (or an hemisphere) positioned around the specimen.
+/// of a sphere or a hemisphere positioned around the specimen.
 ///
 /// A receiver is defined by its domain, the precision of the
 /// measurements and the partitioning scheme.
@@ -206,7 +206,7 @@ impl Receiver {
         let n_bounce = atomic::AtomicU32::new(0);
         let n_received = atomic::AtomicU32::new(0);
         // Convert the last rays of the trajectories into a vector located
-        // at the center of the collector.
+        // at the centre of the collector.
         let dirs: Box<[OutgoingRay]> = result
             .trajectories
             .par_chunks(CHUNK_SIZE)

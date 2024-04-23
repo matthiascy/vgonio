@@ -4,8 +4,8 @@ use crate::{
         Config,
     },
     measure::params::{
-        AdfMeasurementMode, AdfMeasurementParams, BsdfMeasurementParams, Measurement,
-        MeasurementParams, MsfMeasurementParams,
+        AdfMeasurementMode, BsdfMeasurementParams, Measurement, MeasurementParams,
+        MsfMeasurementParams, NdfMeasurementParams,
     },
 };
 use base::{error::VgonioError, partition::PartitionScheme};
@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
 };
 
-impl Display for AdfMeasurementParams {
+impl Display for NdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.mode {
             AdfMeasurementMode::ByPoints { azimuth, zenith } => {
@@ -99,7 +99,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         println!(
             "Microfacet distribution default parameters:\n\n{}",
-            AdfMeasurementParams::default()
+            NdfMeasurementParams::default()
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
@@ -113,7 +113,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             Measurement {
-                params: MeasurementParams::Adf(AdfMeasurementParams::default()),
+                params: MeasurementParams::Adf(NdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

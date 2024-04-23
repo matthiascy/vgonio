@@ -20,7 +20,7 @@ pub enum MeasurementParams {
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Adf(AdfMeasurementParams),
+    Adf(NdfMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
     Msf(MsfMeasurementParams),
@@ -60,7 +60,7 @@ impl MeasurementParams {
     }
 
     /// Get the micro-facet distribution measurement parameters.
-    pub fn microfacet_distribution(&self) -> Option<&AdfMeasurementParams> {
+    pub fn microfacet_distribution(&self) -> Option<&NdfMeasurementParams> {
         if let MeasurementParams::Adf(mfd) = self {
             Some(mfd)
         } else {

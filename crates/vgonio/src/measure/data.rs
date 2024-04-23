@@ -57,6 +57,24 @@ impl MeasurementDataSource {
     }
 }
 
+use crate::measure::{MeasurementParams, MeasurementSamples};
+use jabr::array::DyArr;
+use std::fmt::Debug;
+
+#[derive(Debug, Clone)]
+pub struct MeasuredData2<P, D>
+where
+    P: MeasurementParams + Debug + Clone,
+    D: MeasurementSamples + Debug + Clone,
+{
+    /// Measurement kind.
+    pub kind: MeasurementKind,
+    /// Measurement parameters.
+    pub params: P,
+    /// Samples of the measurement data.
+    pub samples: D,
+}
+
 /// Different kinds of measurement data.
 #[derive(Debug, Clone)]
 pub enum MeasuredData {
