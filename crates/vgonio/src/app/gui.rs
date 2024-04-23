@@ -21,8 +21,6 @@ mod visual_grid;
 mod widgets;
 
 // TODO: MSAA
-
-use core::slice::SlicePattern;
 use std::{
     default::Default,
     sync::{Arc, RwLock},
@@ -61,9 +59,6 @@ const WIN_INITIAL_HEIGHT: u32 = 900;
 
 use self::tools::SamplingInspector;
 
-#[cfg(feature = "fitting")]
-use crate::fitting::err;
-
 use crate::{
     app::{
         cache::Cache,
@@ -77,10 +72,7 @@ use crate::{
         Config,
     },
     io::OutputOptions,
-    measure::{
-        data::{MeasuredData, MeasurementData},
-        params::MeasurementParams,
-    },
+    measure::params::MeasurementParams,
 };
 
 /// Launches Vgonio GUI application.

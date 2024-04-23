@@ -1,6 +1,6 @@
 use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use base::{
-    math::{cbr, cos_phi, cos_theta, cos_theta2, rcp_f64, sin_phi, sqr, tan_theta2, Vec3},
+    math::{cbr, cos_phi, cos_theta2, rcp_f64, sin_phi, sqr, tan_theta2, Vec3},
     Isotropy,
 };
 use std::fmt::Debug;

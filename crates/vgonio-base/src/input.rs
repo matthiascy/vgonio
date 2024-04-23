@@ -7,6 +7,8 @@ use winit::{
     keyboard::KeyCode,
 };
 
+/// Input state including key and mouse button states, cursor position and
+/// scroll delta.
 pub struct InputState {
     pub(crate) key_map: HashMap<KeyCode, bool>,
     pub(crate) mouse_map: HashMap<MouseButton, bool>,
@@ -28,12 +30,16 @@ impl Default for InputState {
 }
 
 impl InputState {
+    /// Creates a new input state.
     pub fn new() -> Self { Self::default() }
 
+    /// Returns the cursor delta.
     pub fn cursor_delta(&self) -> [f32; 2] { self.cursor_delta }
 
+    /// Returns the scroll delta.
     pub fn scroll_delta(&self) -> f32 { self.scroll_delta }
 
+    /// Returns the cursor position.
     pub fn cursor_pos(&self) -> [f32; 2] { self.cursor_pos }
 
     /// Resets the input state.
@@ -42,14 +48,17 @@ impl InputState {
         self.cursor_delta = [0.0, 0.0];
     }
 
+    /// Updates the key map with the given key code and state.
     pub fn update_key_map(&mut self, key_code: KeyCode, state: ElementState) {
         *self.key_map.entry(key_code).or_insert(false) = state == ElementState::Pressed;
     }
 
+    /// Updates the mouse map with the given button and state.  
     pub fn update_mouse_map(&mut self, button: MouseButton, state: ElementState) {
         *self.mouse_map.entry(button).or_insert(false) = state == ElementState::Pressed;
     }
 
+    /// Updates the cursor position.
     pub fn update_cursor_delta(&mut self, new_pos: PhysicalPosition<f32>) {
         self.cursor_delta = [
             new_pos.x - self.cursor_pos[0],
@@ -58,6 +67,7 @@ impl InputState {
         self.cursor_pos = new_pos.into();
     }
 
+    /// Updates the scroll delta.
     pub fn update_scroll_delta(&mut self, delta: MouseScrollDelta) {
         self.scroll_delta = match delta {
             MouseScrollDelta::LineDelta(_, y) => {
@@ -67,10 +77,12 @@ impl InputState {
         };
     }
 
+    /// Returns whether the given key is pressed.
     pub fn is_key_pressed(&self, key_code: KeyCode) -> bool {
         *self.key_map.get(&key_code).unwrap_or(&false)
     }
 
+    /// Returns whether the given mouse button is pressed.
     pub fn is_mouse_button_pressed(&self, button: MouseButton) -> bool {
         *self.mouse_map.get(&button).unwrap_or(&false)
     }

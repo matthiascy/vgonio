@@ -25,7 +25,7 @@ use surf::MicroSurface;
 /// Data collected by the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
 pub enum DataRetrieval {
-    /// The full data are collected.
+    /// The full data is collected.
     #[serde(rename = "full-data")]
     FullData = 0x00,
     /// Only the BSDF values are collected.
@@ -223,7 +223,13 @@ impl Receiver {
                                 // 1. Get the outgoing ray direction it's the last ray of the
                                 //    trajectory.
                                 let ray_dir = last.dir.normalize();
-                                // 2. Calculate the energy of the ray per wavelength.
+                                // 2. Calculate the energy of the ray per wavelength, the energy is
+                                //    attenuated by the Fresnel reflectance only if the flag is set
+                                //    to true. Initially, all types of energy are reflected and the
+                                //    energy is set to 1.0. Then, the energy is attenuated by the
+                                //    Fresnel reflectance at each node of the trajectory, and if the
+                                //    energy is less than or equal to 0.0, the energy will be set as
+                                //    been absorbed.
                                 let mut energy = vec![Energy::Reflected(1.0); spectrum_len];
                                 for node in trajectory.iter().take(trajectory.len() - 1) {
                                     for i in 0..spectrum_len {
@@ -239,8 +245,6 @@ impl Receiver {
                                                     if *e <= 0.0 {
                                                         energy[i] = Energy::Absorbed;
                                                     }
-                                                } else {
-                                                    *e *= 1.0;
                                                 }
                                             }
                                         }
@@ -449,11 +453,12 @@ impl<'a> CollectedData<'a> {
                     for (j, stats) in patch_data.iter().enumerate() {
                         let patch = self.partition.patches.get(i).unwrap();
                         let cos_o = patch.center().theta.cos();
+                        let solid_angle = patch.solid_angle().as_f32();
                         if cos_o == 0.0 {
                             samples[i][j] = 0.0;
                         } else {
                             let l_o = stats.total_energy * rcp_f32(cos_o);
-                            samples[i][j] = l_o * rcp_f32(l_i);
+                            samples[i][j] = l_o * rcp_f32(l_i) * rcp_f32(solid_angle);
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
                                 "energy of patch {i}: {}, λ[{j}] --  L_i: {}, L_o[{i}]: {} -- \

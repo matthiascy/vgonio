@@ -37,8 +37,8 @@ use bxdf::{
     brdf::{Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
 };
-use levenberg_marquardt::{MinimizationReport, TerminationReason};
-use std::{fmt::Debug, ops::Bound};
+use levenberg_marquardt::MinimizationReport;
+use std::fmt::Debug;
 
 /// Types of the fitting problem.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

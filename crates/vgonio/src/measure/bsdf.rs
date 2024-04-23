@@ -15,15 +15,17 @@ use crate::{
             receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
-        data::{MeasuredData, MeasuredData2, MeasurementData, MeasurementDataSource, SampledBrdf},
+        data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
 };
+#[cfg(feature = "visu-dbg")]
+use base::math::Vec3;
 use base::{
     error::VgonioError,
     math,
-    math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
+    math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2},
     partition::{PartitionScheme, SphericalPartition},
     units::{Degs, Radians, Rads},
 };

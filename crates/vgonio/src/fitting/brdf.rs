@@ -11,22 +11,15 @@ use base::{
 };
 use bxdf::{
     brdf::{
-        microfacet::{BeckmannBrdf, MicrofacetBrdf, TrowbridgeReitzBrdf, TrowbridgeReitzBrdfModel},
+        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         Bxdf,
     },
-    distro::{MicrofacetDistroKind, TrowbridgeReitzDistribution},
+    distro::MicrofacetDistroKind,
     Scattering,
 };
-use jabr::optics::reflect;
-use levenberg_marquardt::{
-    LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
-};
-use log::log;
+use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelBridge},
-    slice::ParallelSlice,
-};
+use rayon::iter::ParallelBridge;
 use std::{borrow::Cow, fmt::Display};
 
 /// The fitting problem for the microfacet based BSDF model.

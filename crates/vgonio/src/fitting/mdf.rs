@@ -1,8 +1,9 @@
 use crate::{
     fitting::{FittingProblem, FittingReport},
     measure::{
+        data::MeasuredMdfData,
         microfacet::{MeasuredAdfData, MeasuredMsfData},
-        params::{AdfMeasurementMode, MsfMeasurementParams},
+        params::AdfMeasurementMode,
     },
 };
 use base::{math::sph_to_cart, range::RangeByStepSizeInclusive, units::Radians, Isotropy};
@@ -13,9 +14,7 @@ use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
 };
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use rayon::slice::ParallelSlice;
 use std::{assert_matches::debug_assert_matches, borrow::Cow, fmt::Display};
-use crate::measure::data::MeasuredMdfData;
 
 /// Fitting variant for the microfacet distribution function (MDF).
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

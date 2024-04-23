@@ -1,7 +1,7 @@
 use crate::{
     app::cache::{Handle, RawCache},
     measure::{
-        data::{MeasuredData, MeasuredData2, MeasurementData, MeasurementDataSource},
+        data::{MeasuredData, MeasurementData, MeasurementDataSource},
         params::MsfMeasurementParams,
     },
 };
