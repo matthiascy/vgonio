@@ -15,14 +15,13 @@ use crate::{
             receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
-        data::{MeasuredData, MeasuredData2, MeasurementData, MeasurementDataSource, SampledBrdf},
+        data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
         microfacet::MeasuredAdfData,
         params::SimulationKind,
     },
 };
-#[cfg(feature = "visu-dbg")]
+#[cfg(any(feature = "visu-dbg", debug_assertions))]
 use base::math::Vec3;
-
 use base::{
     error::VgonioError,
     math,

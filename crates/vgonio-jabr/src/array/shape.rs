@@ -183,7 +183,7 @@ mod const_shape {
     }
 
     /// Macro counting the number of elements in a list of arguments.
-    macro count {
+    pub macro count {
         ($x:tt) => { 1usize },
         ($x:tt, $($xs:tt),*) => { 1usize + count!($($xs),*) }
     }
@@ -242,7 +242,7 @@ mod const_shape {
     }
 }
 
-pub use const_shape::s;
+pub use const_shape::{count, s};
 
 /// Computes the number of elements in an array with the given shape.
 pub(crate) const fn compute_n_elems(shape: &[usize]) -> usize {

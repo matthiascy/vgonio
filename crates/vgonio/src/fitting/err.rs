@@ -65,7 +65,7 @@ pub fn compute_iso_microfacet_brdf_err(
     let count = alpha.step_count();
     let partition = measured.params.receiver.partitioning();
     const CHUNK_SIZE: usize = 32;
-    let mut brdfs = {
+    let brdfs = {
         let mut brdfs = Box::new_uninit_slice(count);
         brdfs
             .chunks_mut(CHUNK_SIZE)
@@ -108,7 +108,7 @@ pub fn compute_iso_microfacet_brdf_err(
 
     let mses = brdfs
         .par_iter()
-        .map(|(model)| compute_distance(model, measured, &factor, &partition, max_theta_o, metric))
+        .map(|model| compute_distance(model, measured, &factor, &partition, max_theta_o, metric))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     mses
@@ -373,7 +373,7 @@ pub(crate) fn generate_analytical_brdf(
                 for (i, patch) in partition.patches.iter().enumerate() {
                     let wo_sph = patch.center();
                     let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
-                    let mut spectral_samples =
+                    let spectral_samples =
                         Scattering::eval_reflectance_spectrum(target, &wi, &wo, &iors_i, &iors_t)
                             .iter()
                             .map(|&x| x as f32)

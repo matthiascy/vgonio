@@ -42,7 +42,6 @@ use bxdf::{
     distro::MicrofacetDistroKind,
 };
 use core::slice::SlicePattern;
-use rayon::iter::ParallelIterator;
 use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {

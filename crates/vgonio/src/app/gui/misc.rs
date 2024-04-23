@@ -55,7 +55,7 @@ pub fn range_step_count_inclusive_angle_ui<A: AngleUnit>(
     range: &mut RangeByStepCountInclusive<Angle<A>>,
     ui: &mut egui::Ui,
 ) -> egui::Response {
-    /// Creates the UI for the range.
+    // Creates the UI for the range.
     ui.horizontal(|ui| {
         ui.add(drag_angle(&mut range.start, "start: "));
         ui.add(drag_angle(&mut range.stop, "stop: "));
@@ -68,7 +68,7 @@ pub fn range_step_size_inclusive_length_ui<L: LengthMeasurement>(
     range: &mut RangeByStepSizeInclusive<Length<L>>,
     ui: &mut egui::Ui,
 ) -> egui::Response {
-    /// Creates the UI for the range.
+    // Creates the UI for the range.
     ui.horizontal(|ui| {
         ui.add(DragValue::new(range.start.value_mut()).suffix(L::SYMBOL));
         ui.label("..=");

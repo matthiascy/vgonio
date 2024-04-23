@@ -3,7 +3,6 @@ use base::{
     math,
     math::{gamma, Vec3},
 };
-use std::borrow::Cow;
 
 const TOLERANCE: f32 = f32::EPSILON * 2.0;
 

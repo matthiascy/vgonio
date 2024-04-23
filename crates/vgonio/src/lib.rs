@@ -28,12 +28,9 @@ mod io;
 pub mod measure;
 pub(crate) mod plotting;
 
-use base::{error::VgonioError, units::Radians};
+use base::error::VgonioError;
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{Debug, Display, Formatter},
-    str::FromStr,
-};
+use std::str::FromStr;
 
 /// Main entry point for the VGonio app.
 pub fn run() -> Result<(), VgonioError> {
