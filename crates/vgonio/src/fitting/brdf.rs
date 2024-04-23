@@ -255,7 +255,7 @@ struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
 
 fn new_microfacet_brdf_fitting_problem_proxy_common(
     measured: &MeasuredBsdfData,
-    n_wavelengths: usize,
+    n_wavelength: usize,
     normalise: bool,
 ) -> (
     Option<Box<[f64]>>,
@@ -266,14 +266,14 @@ fn new_microfacet_brdf_fitting_problem_proxy_common(
     let partition = measured.params.receiver.partitioning();
     use rayon::iter::ParallelIterator;
     let max_measured = normalise.then(|| {
-        let mut max = vec![-1.0; measured.snapshots.len() * n_wavelengths].into_boxed_slice();
+        let mut max = vec![-1.0; measured.snapshots.len() * n_wavelength].into_boxed_slice();
         measured
             .snapshots
             .iter()
-            .zip(max.chunks_mut(n_wavelengths))
+            .zip(max.chunks_mut(n_wavelength))
             .par_bridge()
             .for_each(|(snapshot, max)| {
-                for spectral_samples in snapshot.samples.iter() {
+                for spectral_samples in snapshot.samples.chunks(n_wavelength) {
                     for (j, s) in spectral_samples.iter().enumerate() {
                         max[j] = f64::max(max[j], *s as f64);
                     }
@@ -366,7 +366,7 @@ impl<'a> MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
 fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy<I>) -> Box<[f64]> {
     // The number of residuals is the number of patches times the number of
     // snapshots.
-    let n_patches = problem.partition.num_patches();
+    let n_patches = problem.partition.n_patches();
     let residuals_count = problem.measured.snapshots.len() * n_patches * problem.n_wavelengths;
     let mut rs = Box::new_uninit_slice(residuals_count); // Row-major [snapshot, patch, wavelength]
     let max_modelled_values = problem.max_modelled.as_ref().map(|maxes| {
@@ -403,7 +403,8 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
                         &problem.iors_i,
                         &problem.iors_t,
                     );
-                    let measured_values = &snapshot.samples[j];
+                    let measured_values =
+                        &snapshot.samples[j * n_wavelengths..(j + 1) * n_wavelengths];
                     match (max_measured, max_modelled) {
                         (Some(max_measured), Some(max_modelled)) => {
                             for k in 0..n_wavelengths {
@@ -502,17 +503,17 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
         let mut jacobian =
             vec![
                 0.0;
-                self.measured.snapshots.len() * self.partition.num_patches() * self.n_wavelengths
+                self.measured.snapshots.len() * self.partition.n_patches() * self.n_wavelengths
             ]
             .into_boxed_slice();
         for (i, snapshot) in self.measured.snapshots.iter().enumerate() {
             for (j, patch) in self.partition.patches.iter().enumerate() {
                 for k in 0..self.n_wavelengths {
-                    let offset = i * self.partition.num_patches() * self.n_wavelengths
+                    let offset = i * self.partition.n_patches() * self.n_wavelengths
                         + j * self.n_wavelengths
                         + k;
                     jacobian[offset] =
-                        derivative_per_wavelength[k][i * self.partition.num_patches() + j];
+                        derivative_per_wavelength[k][i * self.partition.n_patches() + j];
                 }
             }
         }
@@ -578,24 +579,22 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
         // Re-arrange the shape of the derivatives to match the residuals:
         // [snapshot, patch, wavelength, alpha]
         //  n_snapshot, n_patch, n_wavelength, 2
-        let mut jacobian = vec![
-            0.0;
-            self.measured.snapshots.len()
-                * self.partition.num_patches()
-                * self.n_wavelengths
-                * 2
-        ]
-        .into_boxed_slice();
+        let mut jacobian =
+            vec![
+                0.0;
+                self.measured.snapshots.len() * self.partition.n_patches() * self.n_wavelengths * 2
+            ]
+            .into_boxed_slice();
         for (i, snapshot) in self.measured.snapshots.iter().enumerate() {
             for (j, patch) in self.partition.patches.iter().enumerate() {
                 for k in 0..self.n_wavelengths {
-                    let offset = i * self.partition.num_patches() * self.n_wavelengths * 2
+                    let offset = i * self.partition.n_patches() * self.n_wavelengths * 2
                         + j * self.n_wavelengths * 2
                         + k * 2;
                     jacobian[offset] =
-                        derivative_per_wavelength[k][i * self.partition.num_patches() * 2 + j * 2];
+                        derivative_per_wavelength[k][i * self.partition.n_patches() * 2 + j * 2];
                     jacobian[offset + 1] = derivative_per_wavelength[k]
-                        [i * self.partition.num_patches() * 2 + j * 2 + 1];
+                        [i * self.partition.n_patches() * 2 + j * 2 + 1];
                 }
             }
         }

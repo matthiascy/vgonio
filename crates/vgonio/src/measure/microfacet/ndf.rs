@@ -58,7 +58,7 @@ impl MeasuredAdfData {
         );
 
         // Collect the data following the patches.
-        let mut patch_data = vec![0.0; partition.num_patches()];
+        let mut patch_data = vec![0.0; partition.n_patches()];
         match self.params.mode {
             AdfMeasurementMode::ByPoints { zenith, azimuth } => {
                 assert!(
@@ -395,10 +395,10 @@ fn measure_area_distribution_by_partition<'a>(
     let partition = SphericalPartition::new(scheme, SphericalDomain::Upper, precision);
     log::info!(
         "  -- Partitioning the hemisphere into {} patches.",
-        partition.num_patches()
+        partition.n_patches()
     );
     // Data buffer for data of each patch.
-    let mut samples = vec![0.0; partition.num_patches()];
+    let mut samples = vec![0.0; partition.n_patches()];
     samples.shrink_to_fit();
     surfaces
         .filter_map(|((hdl, surf), mesh)| {
@@ -422,7 +422,7 @@ fn measure_area_distribution_by_partition<'a>(
             log::debug!("  -- micro facet total area: {}", mesh.facet_total_area);
             log::debug!("  -- micro facet count: {}", mesh.facet_normals.len());
 
-            let mut normals_per_patch = vec![vec![]; partition.num_patches()];
+            let mut normals_per_patch = vec![vec![]; partition.n_patches()];
 
             let macro_area = if !params.crop_to_disk {
                 for (facet_idx, normal) in mesh.facet_normals.iter().enumerate() {

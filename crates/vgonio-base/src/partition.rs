@@ -270,10 +270,10 @@ impl SphericalPartition {
     }
 
     /// Returns the number of patches.
-    pub fn num_patches(&self) -> usize { self.patches.len() }
+    pub fn n_patches(&self) -> usize { self.patches.len() }
 
     /// Returns the number of rings.
-    pub fn num_rings(&self) -> usize { self.rings.len() }
+    pub fn n_rings(&self) -> usize { self.rings.len() }
 
     /// Returns the index of the patch containing the direction.
     pub fn contains(&self, sph: Sph2) -> Option<usize> {

@@ -331,7 +331,7 @@ impl Receiver {
         let mut data =
             vec![
                 SpectralSamples::splat(BounceAndEnergy::empty(max_bounces), spectrum_len);
-                self.patches.num_patches()
+                self.patches.n_patches()
             ];
 
         // Compute the vertex positions of the outgoing rays.
@@ -428,20 +428,13 @@ impl<'a> CollectedData<'a> {
             "Computing BSDF... with {} patches",
             params.receiver.num_patches()
         );
+        let n_wavelengths = params.emitter.spectrum.step_count();
+        let n_patches = params.receiver.num_patches();
         self.snapshots
             .par_iter()
             .map(|snapshot| {
-                let mut samples = {
-                    let mut samples = Box::new_uninit_slice(snapshot.records.len());
-                    for spectral_samples in samples.iter_mut() {
-                        spectral_samples.write(SpectralSamples::splat(
-                            0.0,
-                            params.emitter.spectrum.values().len(),
-                        ));
-                    }
-                    unsafe { samples.assume_init() }
-                };
-
+                // Row-major order: [patch][wavelength]
+                let mut samples = vec![0.0; n_patches * n_wavelengths].into_boxed_slice();
                 let cos_i = snapshot.w_i.theta.cos();
                 let l_i = snapshot.stats.n_received as f32 * cos_i;
                 for (i, patch_data) in snapshot.records.iter().enumerate() {
@@ -449,11 +442,9 @@ impl<'a> CollectedData<'a> {
                     for (j, stats) in patch_data.iter().enumerate() {
                         let patch = self.partition.patches.get(i).unwrap();
                         let cos_o = patch.center().theta.cos();
-                        if cos_o == 0.0 {
-                            samples[i][j] = 0.0;
-                        } else {
+                        if cos_o != 0.0 {
                             let l_o = stats.total_energy * rcp_f32(cos_o);
-                            samples[i][j] = l_o * rcp_f32(l_i);
+                            samples[i * n_wavelengths + j] = l_o * rcp_f32(l_i);
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
                                 "energy of patch {i}: {}, λ[{j}] --  L_i: {}, L_o[{i}]: {} -- \
@@ -461,7 +452,7 @@ impl<'a> CollectedData<'a> {
                                 stats.total_energy,
                                 l_i,
                                 l_o,
-                                samples[i][j],
+                                samples[i * n_wavelengths + j],
                             );
                         }
                     }

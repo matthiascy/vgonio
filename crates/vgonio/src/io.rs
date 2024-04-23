@@ -543,8 +543,8 @@ pub mod vgmo {
                     buf[4..8].copy_from_slice(&(self.scheme as u32).to_le_bytes());
                     buf[8..12].copy_from_slice(&self.precision.theta.value().to_le_bytes());
                     buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
-                    buf[16..20].copy_from_slice(&(partition.num_rings() as u32).to_le_bytes());
-                    buf[20..24].copy_from_slice(&(partition.num_patches() as u32).to_le_bytes());
+                    buf[16..20].copy_from_slice(&(partition.n_rings() as u32).to_le_bytes());
+                    buf[20..24].copy_from_slice(&(partition.n_patches() as u32).to_le_bytes());
                     buf[24..28].copy_from_slice(&(self.retrieval as u32).to_le_bytes());
                     let offset = 28;
                     for (i, ring) in partition.rings.iter().enumerate() {
@@ -1019,15 +1019,25 @@ pub mod vgmo {
             reader.read_exact(&mut buf)?;
             let w_i = read_sph2_from_buf(&buf);
             let samples = {
-                let mut samples = Box::new_uninit_slice(n_patches);
+                let _samples = {
+                    let mut samples = Box::new_uninit_slice(n_patches);
+                    // TODO: improve this, get rid of the SpectralSamples
+                    for i in 0..n_patches {
+                        reader.read_exact(samples_buf)?;
+                        samples[i].write(SpectralSamples::<f32>::read_from_buf(
+                            samples_buf,
+                            n_wavelengths,
+                        ));
+                    }
+                    unsafe { samples.assume_init() }
+                };
+                let mut samples = vec![0.0; n_patches * n_wavelengths];
                 for i in 0..n_patches {
-                    reader.read_exact(samples_buf)?;
-                    samples[i].write(SpectralSamples::<f32>::read_from_buf(
-                        samples_buf,
-                        n_wavelengths,
-                    ));
+                    for j in 0..n_wavelengths {
+                        samples[i * n_wavelengths + j] = _samples[i][j];
+                    }
                 }
-                unsafe { samples.assume_init() }
+                samples.into_boxed_slice()
             };
             Ok(Self {
                 wi: w_i,
@@ -1047,19 +1057,21 @@ pub mod vgmo {
         pub fn write<W: Write>(
             &self,
             writer: &mut W,
-            n_wavelengths: usize,
+            n_wavelength: usize,
             samples_buf: &mut [u8],
         ) -> Result<(), std::io::Error> {
             debug_assert_eq!(
                 samples_buf.len(),
-                n_wavelengths * 4,
+                n_wavelength * 4,
                 "Writing BSDF snapshot: samples buffer too small!"
             );
             let mut buf = [0u8; 8];
             buf[0..4].copy_from_slice(&self.wi.theta.as_f32().to_le_bytes());
             buf[4..8].copy_from_slice(&self.wi.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
-            for samples in self.samples.iter() {
+            for samples in self.samples.chunks(n_wavelength) {
+                // TODO: improve this, get rid of the SpectralSamples
+                let samples = SpectralSamples::from_vec(samples.to_vec());
                 samples.write_to_buf(samples_buf);
                 writer.write_all(samples_buf)?;
             }
@@ -1155,7 +1167,10 @@ pub mod vgmo {
                     };
 
                     // TODO: read/write the max values and normalisation state
-                    let max_values = compute_bsdf_snapshots_max_values(&snapshots);
+                    let max_values = compute_bsdf_snapshots_max_values(
+                        &snapshots,
+                        params.emitter.spectrum.step_count(),
+                    );
                     Ok(Self {
                         params: *params,
                         snapshots,

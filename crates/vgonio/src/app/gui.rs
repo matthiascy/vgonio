@@ -534,10 +534,7 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state.detector_dome_drawing = status;
                             }
                             DebuggingEvent::UpdateDetectorPatches(patches) => {
-                                log::trace!(
-                                    "Updating detector patches: {:?}",
-                                    patches.num_patches()
-                                );
+                                log::trace!("Updating detector patches: {:?}", patches.n_patches());
                                 self.dbg_drawing_state
                                     .update_detector_drawing(&self.gpu_ctx, patches);
                             }

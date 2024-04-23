@@ -136,8 +136,8 @@ fn compute_distance(
             }
             model_snapshot
                 .samples
-                .iter()
-                .zip(measured_snapshot.samples.iter())
+                .chunks(n_lambda)
+                .zip(measured_snapshot.samples.chunks(n_lambda))
                 .zip(patches.iter())
                 .map(|((model_samples, measured_samples), patch)| {
                     if patch.center().theta > max_theta_o {
@@ -356,20 +356,21 @@ pub(crate) fn generate_analytical_brdf(
     let iors_t = iors
         .ior_of_spectrum(params.transmitted_medium, &wavelengths)
         .unwrap();
-    let n_lambda = wavelengths.len();
+    let n_wavelength = wavelengths.len();
     let n_wi = meas_pts.len();
-    let mut max_values = vec![-1.0f32; n_wi * n_lambda].into_boxed_slice();
+    let n_patches = partition.n_patches();
+    let mut max_values = vec![-1.0f32; n_wi * n_wavelength].into_boxed_slice();
     let mut snapshots = Box::new_uninit_slice(meas_pts.len());
     meas_pts
         .par_iter()
-        .zip(max_values.par_chunks_mut(n_lambda))
+        .zip(max_values.par_chunks_mut(n_wavelength))
         .zip(snapshots.par_iter_mut())
         .chunks(32)
         .for_each(|chunk| {
             for ((wi_sph, max_values_per_snapshot), snapshot) in chunk {
                 let wi = wi_sph.to_cartesian();
-                let mut samples = vec![];
-                for patch in partition.patches.iter() {
+                let mut samples = vec![0.0; n_patches * n_wavelength].into_boxed_slice();
+                for (i, patch) in partition.patches.iter().enumerate() {
                     let wo_sph = patch.center();
                     let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
                     let mut spectral_samples =
@@ -381,10 +382,11 @@ pub(crate) fn generate_analytical_brdf(
                     for (i, sample) in spectral_samples.iter().enumerate() {
                         max_values_per_snapshot[i] = f32::max(max_values_per_snapshot[i], *sample);
                     }
-                    samples.push(SpectralSamples::from_boxed_slice(spectral_samples));
+                    samples[i * n_wavelength..(i + 1) * n_wavelength]
+                        .copy_from_slice(&spectral_samples);
                 }
                 if normalise {
-                    for sample in samples.iter_mut() {
+                    for sample in samples.chunks_mut(n_wavelength) {
                         for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
                             *s /= *max as f32;
                         }
@@ -392,7 +394,7 @@ pub(crate) fn generate_analytical_brdf(
                 }
                 snapshot.write(BsdfSnapshot {
                     wi: *wi_sph,
-                    samples: samples.into_boxed_slice(),
+                    samples,
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     trajectories: vec![],
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
