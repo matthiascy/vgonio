@@ -20,7 +20,8 @@ type: !bsdf
     retrieval: bsdf-only # full-data / bsdf-only
 surfaces:
   #  - usr://surfaces/olaf/aluminium65bar100.vgms
-  - usr://surfaces/olaf/aluminium4bar100.vgms
+  - usr://surfaces/olaf/aluminium1bar100.vgms
+  - usr://surfaces/olaf/aluminiummirror.vgms
   #  - usr://surfaces/olaf/aluminium1bar100.vgms
   # - usr://surfaces/gaussian_sigma_0.5.vgms
   # - usr://surfaces/8x8_flat.vgms
