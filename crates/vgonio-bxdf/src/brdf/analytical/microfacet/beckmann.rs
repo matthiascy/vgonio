@@ -5,7 +5,7 @@ use base::{
 use libm::erf;
 
 use crate::{
-    brdf::{microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
+    brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
     distro::{BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind},
 };
 
@@ -47,9 +47,6 @@ impl Bxdf for BeckmannBrdf {
             .distro
             .eval_ndf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
         let g = self.distro.eval_msf1(wh, *wi) * self.distro.eval_msf1(wh, *wo);
-        if g <= 1e-16 {
-            log::error!("g = 0.0, wi = {:?}, wo = {:?}", wi, wo,);
-        }
         (d * g) / (4.0 * cos_theta_io)
     }
 

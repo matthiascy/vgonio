@@ -440,7 +440,7 @@ impl<'a> CollectedData<'a> {
                 // Row-major order: [patch][wavelength]
                 let mut samples = vec![0.0; n_patches * n_wavelengths].into_boxed_slice();
                 let cos_i = snapshot.w_i.theta.cos();
-                let l_i = snapshot.stats.n_received as f32 * cos_i;
+                let e_i = snapshot.stats.n_received as f32 * cos_i;
                 for (i, patch_data) in snapshot.records.iter().enumerate() {
                     // Per wavelength
                     for (j, stats) in patch_data.iter().enumerate() {
@@ -449,13 +449,14 @@ impl<'a> CollectedData<'a> {
                         let solid_angle = patch.solid_angle().as_f32();
                         if cos_o != 0.0 {
                             let l_o = stats.total_energy * rcp_f32(cos_o);
-                            samples[i * n_wavelengths + j] = l_o * rcp_f32(l_i);
+                            samples[i * n_wavelengths + j] =
+                                l_o * rcp_f32(e_i) * rcp_f32(solid_angle);
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
                                 "energy of patch {i}: {}, λ[{j}] --  L_i: {}, L_o[{i}]: {} -- \
                                  brdf: {}",
                                 stats.total_energy,
-                                l_i,
+                                e_i,
                                 l_o,
                                 samples[i * n_wavelengths + j],
                             );

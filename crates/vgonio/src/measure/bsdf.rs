@@ -1163,8 +1163,6 @@ pub struct BsdfSnapshot {
     /// Two-dimensional data (patch, wavelength) stored in a flat array in
     /// row-major order.
     pub samples: Box<[f32]>,
-    // /// BSDF values for each patch of the collector.
-    // pub samples: Box<[SpectralSamples<f32>]>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Extra ray trajectory data for debugging purposes.
     pub trajectories: Vec<RayTrajectory>,

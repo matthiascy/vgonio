@@ -3,9 +3,9 @@ use base::{math::Vec3, optics::ior::Ior, Isotropy};
 use num_traits::Float;
 use std::fmt::Debug;
 
+pub mod analytical;
 pub mod lambert;
 pub mod measured;
-pub mod microfacet;
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]

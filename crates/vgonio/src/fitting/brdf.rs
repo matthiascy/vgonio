@@ -11,7 +11,7 @@ use base::{
 };
 use bxdf::{
     brdf::{
-        microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         Bxdf,
     },
     distro::MicrofacetDistroKind,

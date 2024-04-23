@@ -5,7 +5,7 @@ use base::{
 use std::fmt::Debug;
 
 use crate::{
-    brdf::{microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
+    brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution},
 };
 
