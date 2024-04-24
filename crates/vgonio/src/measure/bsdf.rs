@@ -1028,12 +1028,25 @@ pub struct BsdfMeasurementStatsPoint {
     pub n_bounces: u32,
     /// Number of emitted rays that hit the surface; invariant over wavelength.
     pub n_received: u32,
-    /// Number of emitted rays that hit the surface and were absorbed.
-    pub n_absorbed: SpectralSamples<u32>,
-    /// The Number of emitted rays that hit the surface and were reflected.
-    pub n_reflected: SpectralSamples<u32>,
-    /// Number of emitted rays captured by the collector.
-    pub n_captured: SpectralSamples<u32>,
+    /// Number of wavelength, which is the number of samples in the spectrum.
+    pub n_wavelength: usize,
+    // /// Number of emitted rays that hit the surface and were absorbed.
+    // pub n_absorbed: SpectralSamples<u32>,
+    // /// The Number of emitted rays that hit the surface and were reflected.
+    // pub n_reflected: SpectralSamples<u32>,
+    // /// Number of emitted rays captured by the collector.
+    // pub n_captured: SpectralSamples<u32>,
+    /// Statistics of the number of emitted rays that either
+    /// 1. hit the surface and were absorbed, or
+    /// 2. hit the surface and were reflected, or
+    /// 3. hit the surface and were captured by the collector.
+    /// The statistics are variant over wavelength. The data is stored as a
+    /// flat array in row-major order with the dimensions (statistics,
+    /// wavelength). The index of the statistics is defined by the constants
+    /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`.
+    /// The total number of elements in the array is `3 * n_wavelength`.
+    pub n_ray_stats: Box<[u32]>,
+
     /// Energy captured by the collector; variant over wavelength.
     pub e_captured: SpectralSamples<f32>,
     /// Histogram of reflected rays by number of bounces, variant over
@@ -1047,10 +1060,9 @@ pub struct BsdfMeasurementStatsPoint {
 impl PartialEq for BsdfMeasurementStatsPoint {
     fn eq(&self, other: &Self) -> bool {
         self.n_bounces == other.n_bounces
+            && self.n_wavelength == other.n_wavelength
             && self.n_received == other.n_received
-            && self.n_absorbed == other.n_absorbed
-            && self.n_reflected == other.n_reflected
-            && self.n_captured == other.n_captured
+            && self.n_ray_stats == other.n_ray_stats
             && self.e_captured == other.e_captured
             && self.num_rays_per_bounce == other.num_rays_per_bounce
             && self.energy_per_bounce == other.energy_per_bounce
@@ -1058,29 +1070,77 @@ impl PartialEq for BsdfMeasurementStatsPoint {
 }
 
 impl BsdfMeasurementStatsPoint {
+    /// Index of the number of absorbed rays statistics in the `n_ray_stats`
+    /// array.
+    pub const ABSORBED_IDX: usize = 0;
+    /// Index of the number of reflected rays statistics in the `n_ray_stats`
+    /// array.
+    pub const REFLECTED_IDX: usize = 1;
+    /// Index of the number of captured rays statistics in the `n_ray_stats`
+    /// array.
+    pub const CAPTURED_IDX: usize = 2;
+
     /// Creates an empty `BsdfMeasurementStatsPoint`.
     ///
     /// # Arguments
     /// * `n_wavelengths`: Number of wavelengths.
     /// * `max_bounces`: Maximum number of bounces. This is used to pre-allocate
     ///   the memory for the histograms.
-    pub fn new(n_wavelengths: usize, max_bounces: usize) -> Self {
+    pub fn new(n_wavelength: usize, max_bounces: usize) -> Self {
         Self {
             n_bounces: max_bounces as u32,
             n_received: 0,
-            n_absorbed: SpectralSamples::splat(0, n_wavelengths),
-            n_reflected: SpectralSamples::splat(0, n_wavelengths),
-            n_captured: SpectralSamples::splat(0, n_wavelengths),
-            e_captured: SpectralSamples::splat(0.0, n_wavelengths),
+            // n_absorbed: SpectralSamples::splat(0, n_wavelength),
+            // n_reflected: SpectralSamples::splat(0, n_wavelength),
+            // n_captured: SpectralSamples::splat(0, n_wavelength),
+            n_wavelength,
+            n_ray_stats: vec![0; 3 * n_wavelength].into_boxed_slice(),
+            e_captured: SpectralSamples::splat(0.0, n_wavelength),
             num_rays_per_bounce: SpectralSamples::splat(
                 vec![0; max_bounces].into_boxed_slice(),
-                n_wavelengths,
+                n_wavelength,
             ),
             energy_per_bounce: SpectralSamples::splat(
                 vec![0.0; max_bounces].into_boxed_slice(),
-                n_wavelengths,
+                n_wavelength,
             ),
         }
+    }
+
+    /// Returns the number of absorbed rays statistics per wavelength.
+    pub fn n_absorbed(&self) -> &[u32] {
+        let offset = Self::ABSORBED_IDX * self.n_wavelength;
+        &self.n_ray_stats[offset..offset + self.n_wavelength]
+    }
+
+    /// Returns the number of absorbed rays statistics per wavelength.
+    pub fn n_absorbed_mut(&mut self) -> &mut [u32] {
+        let offset = Self::ABSORBED_IDX * self.n_wavelength;
+        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
+    }
+
+    /// Returns the number of reflected rays statistics per wavelength.
+    pub fn n_reflected(&self) -> &[u32] {
+        let offset = Self::REFLECTED_IDX * self.n_wavelength;
+        &self.n_ray_stats[offset..offset + self.n_wavelength]
+    }
+
+    /// Returns the number of reflected rays statistics per wavelength.
+    pub fn n_reflected_mut(&mut self) -> &mut [u32] {
+        let offset = Self::REFLECTED_IDX * self.n_wavelength;
+        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
+    }
+
+    /// Returns the number of captured rays statistics per wavelength.
+    pub fn n_captured(&self) -> &[u32] {
+        let offset = Self::CAPTURED_IDX * self.n_wavelength;
+        &self.n_ray_stats[offset..offset + self.n_wavelength]
+    }
+
+    /// Returns the number of captured rays statistics per wavelength.
+    pub fn n_captured_mut(&mut self) -> &mut [u32] {
+        let offset = Self::CAPTURED_IDX * self.n_wavelength;
+        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 }
 
@@ -1104,9 +1164,9 @@ impl Debug for BsdfMeasurementStatsPoint {
 "#,
             self.n_bounces,
             self.n_received,
-            self.n_absorbed,
-            self.n_reflected,
-            self.n_captured,
+            self.n_absorbed(),
+            self.n_reflected(),
+            self.n_captured(),
             self.e_captured,
             self.num_rays_per_bounce,
             self.energy_per_bounce

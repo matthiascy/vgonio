@@ -6,7 +6,7 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 1000000
+    num_rays: 10000000
     max_bounces: 10
     zenith: 0deg .. =80deg / 5deg
     azimuth: 0deg .. =360deg / 30deg
@@ -14,7 +14,7 @@ type: !bsdf
   receiver:
     domain: upper_hemisphere
     precision:
-      theta: 20.0 deg
+      theta: 2.0 deg
       phi: 0.5 deg # only for equal-angle scheme
     scheme: beckers
     retrieval: bsdf-only # full-data / bsdf-only

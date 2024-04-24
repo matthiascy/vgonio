@@ -327,12 +327,12 @@ impl Receiver {
         });
 
         for i in 0..n_wavelength {
-            stats.n_absorbed[i] = n_absorbed[i].load(atomic::Ordering::Relaxed);
-            stats.n_reflected[i] = n_reflected[i].load(atomic::Ordering::Relaxed);
+            stats.n_absorbed_mut()[i] = n_absorbed[i].load(atomic::Ordering::Relaxed);
+            stats.n_reflected_mut()[i] = n_reflected[i].load(atomic::Ordering::Relaxed);
         }
 
-        log::debug!("stats.n_absorbed: {:?}", stats.n_absorbed);
-        log::debug!("stats.n_reflected: {:?}", stats.n_reflected);
+        log::debug!("stats.n_absorbed: {:?}", stats.n_absorbed());
+        log::debug!("stats.n_reflected: {:?}", stats.n_reflected());
         log::debug!("stats.n_received: {:?}", stats.n_received);
 
         let n_patch = self.patches.n_patches();
@@ -358,7 +358,7 @@ impl Receiver {
                 match energy {
                     Energy::Absorbed => continue,
                     Energy::Reflected(e) => {
-                        stats.n_captured[i] += 1;
+                        stats.n_captured_mut()[i] += 1;
                         patch_samples[i].total_energy += e;
                         patch_samples[i].total_rays += 1;
                         patch_samples[i].energy_per_bounce[bounce_idx] += e;
