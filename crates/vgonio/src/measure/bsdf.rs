@@ -96,6 +96,8 @@ impl MeasuredBsdfData {
         normalise: bool,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
+        let n_wi = self.snapshots.len();
+        let n_wavelength = self.params.emitter.spectrum.step_count();
         let (w, h) = (resolution as usize, resolution as usize);
         let wavelengths = self
             .params
@@ -104,8 +106,6 @@ impl MeasuredBsdfData {
             .values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let n_wi = self.snapshots.len();
-        let n_wavelength = wavelengths.len();
 
         // Compute the correction factor for normalisation.
         //
@@ -134,13 +134,10 @@ impl MeasuredBsdfData {
             factor
         );
 
-        // The BSDF data are stored in a single flat array, with the order of
-        // the dimensions as follows:
-        // - x: width
-        // - y: height
-        // - z: wavelength
-        // - w: snapshot
-        let mut bsdf_samples_per_wavelength = vec![0.0; w * h * n_wavelength * n_wi];
+        // The BSDF data are stored in a single flat row-major array, with the order of
+        // the dimensions [wi, λ, y, x] where x is the width, y is the height, λ is the
+        // wavelength, and wi is the incident direction.
+        let mut bsdf_images = vec![0.0; n_wi * n_wavelength * w * h];
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         let partition = self.params.receiver.partitioning();
@@ -148,19 +145,18 @@ impl MeasuredBsdfData {
         {
             // Each snapshot is saved as a separate layer of the image.
             // Each channel of the layer stores the BSDF data for a single wavelength.
-            for (wi_idx, snapshot) in self.snapshots.iter().enumerate() {
-                let offset = wi_idx * w * h * n_wavelength;
+            for (l, snapshot) in self.snapshots.iter().enumerate() {
+                let offset = l * n_wavelength * w * h;
                 for i in 0..w {
                     for j in 0..h {
                         let idx = patch_indices[i + j * w];
                         if idx < 0 {
                             continue;
                         }
-                        for wavelength_idx in 0..n_wavelength {
-                            bsdf_samples_per_wavelength
-                                [offset + i + j * w + wavelength_idx * w * h] = snapshot.samples
-                                [idx as usize * n_wavelength + wavelength_idx]
-                                * factor[wi_idx * n_wavelength + wavelength_idx];
+                        for k in 0..n_wavelength {
+                            bsdf_images[offset + k * w * h + j * w + i] = snapshot.samples
+                                [idx as usize * n_wavelength + k]
+                                * factor[l * n_wavelength + k];
                         }
                     }
                 }
@@ -194,8 +190,7 @@ impl MeasuredBsdfData {
                             AnyChannel::new(
                                 name,
                                 FlatSamples::F32(Cow::Borrowed(
-                                    &bsdf_samples_per_wavelength
-                                        [offset + i * w * h..offset + (i + 1) * w * h],
+                                    &bsdf_images[offset + i * w * h..offset + (i + 1) * w * h],
                                 )),
                             )
                         })
@@ -237,95 +232,135 @@ impl MeasuredBsdfData {
                         .unwrap()
                 })
                 .unwrap_or(0) as usize;
-            if max_bounces > wavelengths.len() {
-                // Try to reuse the bsdf_samples_per_wavelength buffer for the raw snapshots.
-                bsdf_samples_per_wavelength = vec![0.0; w * h * max_bounces * raw_snapshots.len()];
+            if max_bounces == 0 {
+                log::info!("No bounces to save.");
+                return Ok(());
             }
-            // Each snapshot is saved as a separate layer of the image.
-            // Each channel of the layer stores the percentage of rays that have bounced a
-            // certain number of times.
-            for (snap_idx, snapshot) in raw_snapshots.iter().enumerate() {
-                let offset = snap_idx * w * h * max_bounces;
-                let rcp_n_received = math::rcp_f32(snapshot.stats.n_received as f32);
-                for i in 0..w {
-                    for j in 0..h {
-                        let idx = patch_indices[i + j * w];
-                        if idx < 0 {
-                            continue;
-                        }
-                        for bounce_idx in 0..snapshot.stats.n_bounces as usize {
-                            bsdf_samples_per_wavelength[offset + i + j * w + bounce_idx * w * h] =
-                                snapshot.records[idx as usize * n_wavelength].num_rays_per_bounce
-                                    [bounce_idx] as f32
-                                    * rcp_n_received;
-                        }
-                    }
+
+            // Save the BSDF samples for each wavelength and each bounce.
+            {
+                let desired = n_wi * max_bounces * h * w;
+                if desired > bsdf_images.len() {
+                    // Try to reuse the bsdf_images buffer with the new size.
+                    // [wi, bounce, y, x]
+                    bsdf_images = vec![0.0; desired];
                 }
             }
 
-            let layers = raw_snapshots
-                .iter()
-                .enumerate()
-                .filter_map(|(snap_idx, snapshot)| {
-                    let layer_attrib = LayerAttributes {
-                        owner: Text::new_or_none("vgonio"),
-                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                            timestamp,
-                        )),
-                        software_name: Text::new_or_none("vgonio"),
-                        other: self.params.to_exr_extra_info(),
-                        layer_name: Some(Text::new_or_panic(format!(
-                            "theta{:4.2}.phi{:4.2}",
-                            snapshot.w_i.theta.in_degrees().as_f32(),
-                            snapshot.w_i.phi.in_degrees().as_f32()
-                        ))),
-                        ..LayerAttributes::default()
-                    };
-                    let offset = snap_idx * w * h * max_bounces;
-                    if snapshot.stats.n_bounces == 0 {
-                        return None;
-                    }
-                    let channels = (0..snapshot.stats.n_bounces as usize)
-                        .map(|bounce_idx| {
-                            let name = Text::new_or_panic(format!("{} bounce", bounce_idx + 1));
-                            AnyChannel::new(
-                                name,
-                                FlatSamples::F32(Cow::Borrowed(
-                                    &bsdf_samples_per_wavelength[offset + bounce_idx * w * h
-                                        ..offset + (bounce_idx + 1) * w * h],
-                                )),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    Some(Layer::new(
-                        (w, h),
-                        layer_attrib,
-                        Encoding::FAST_LOSSLESS,
-                        AnyChannels {
-                            list: SmallVec::from(channels),
-                        },
-                    ))
-                })
-                .collect::<Vec<_>>();
+            // Save the percentage of rays that have bounced a certain number of times for
+            // each patch.
+            {
+                let desired = n_wi * max_bounces * h * w;
+                if desired > bsdf_images.len() {
+                    // Try to reuse the bsdf_images buffer with the new size.
+                    // [wi, bounce, y, x]
+                    bsdf_images = vec![0.0; desired];
+                }
+                bsdf_images.fill(0.0);
 
-            let filename = format!(
-                "{}_bounces.exr",
-                filepath.file_stem().unwrap().to_str().unwrap()
-            );
-            let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
-            let image = Image::from_layers(img_attrib, layers);
-            image
-                .write()
-                .to_file(filepath.with_file_name(filename))
-                .map_err(|err| {
-                    VgonioError::new(
-                        format!(
-                            "Failed to write BSDF bounces measurement data to image file: {}",
-                            err
-                        ),
-                        Some(Box::new(err)),
-                    )
-                })?;
+                // Each snapshot is saved as a separate layer of the image.
+                // Each channel of the layer stores the percentage of rays that have bounced a
+                // certain number of times.
+                for (snap_idx, snapshot) in raw_snapshots.iter().enumerate() {
+                    let offset = snap_idx * max_bounces * h * w;
+                    let rcp_n_received = rcp_f32(snapshot.stats.n_received as f32);
+                    for i in 0..w {
+                        for j in 0..h {
+                            let patch_idx = patch_indices[i + j * w];
+                            if patch_idx < 0 {
+                                continue;
+                            }
+                            for k in 0..snapshot.stats.n_bounces as usize {
+                                bsdf_images[offset + k * w * h + j * w + i] = snapshot.records
+                                    [patch_idx as usize * n_wavelength]
+                                    .num_rays_per_bounce[k]
+                                    as f32
+                                    * rcp_n_received;
+                            }
+                        }
+                    }
+                }
+
+                let layers = raw_snapshots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(snap_idx, snapshot)| {
+                        let theta = format!("{:4.2}", snapshot.wi.theta.in_degrees().as_f32())
+                            .replace(".", "_");
+                        let phi = format!("{:4.2}", snapshot.wi.phi.in_degrees().as_f32())
+                            .replace(".", "_");
+                        let offset = snap_idx * max_bounces * h * w;
+                        if snapshot.stats.n_bounces == 0 {
+                            return None;
+                        }
+                        let (percentage_per_bounce, channels): (
+                            Vec<f32>,
+                            Vec<AnyChannel<FlatSamples>>,
+                        ) = (0..snapshot.stats.n_bounces as usize)
+                            .map(|bounce_idx| {
+                                let name =
+                                    Text::new_or_panic(format!("bounce-{:03}", bounce_idx + 1));
+                                let samples = &bsdf_images[offset + bounce_idx * w * h
+                                    ..offset + (bounce_idx + 1) * w * h];
+                                let sum_percent = snapshot.stats.num_rays_per_bounce[0][bounce_idx]
+                                    as f32
+                                    / snapshot.stats.n_received as f32;
+                                (
+                                    sum_percent,
+                                    AnyChannel::new(name, FlatSamples::F32(Cow::Borrowed(samples))),
+                                )
+                            })
+                            .unzip();
+                        let mut other_info = self.params.to_exr_extra_info();
+                        for (i, bounce_percent) in percentage_per_bounce.iter().enumerate() {
+                            other_info.insert(
+                                Text::new_or_panic(format!("bounce-{:03}", i + 1)),
+                                AttributeValue::Text(Text::new_or_panic(format!(
+                                    "{:.2}%",
+                                    bounce_percent
+                                ))),
+                            );
+                        }
+                        let layer_attrib = LayerAttributes {
+                            owner: Text::new_or_none("vgonio"),
+                            capture_date: Text::new_or_none(
+                                base::utils::iso_timestamp_from_datetime(timestamp),
+                            ),
+                            software_name: Text::new_or_none("vgonio"),
+                            other: other_info,
+                            layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta, phi))),
+                            ..LayerAttributes::default()
+                        };
+                        Some(Layer::new(
+                            (w, h),
+                            layer_attrib,
+                            Encoding::FAST_LOSSLESS,
+                            AnyChannels {
+                                list: SmallVec::from(channels),
+                            },
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+
+                let filename = format!(
+                    "{}_ray_percent_per_patch_per_bounce.exr",
+                    filepath.file_stem().unwrap().to_str().unwrap()
+                );
+                let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
+                let image = Image::from_layers(img_attrib, layers);
+                image
+                    .write()
+                    .to_file(filepath.with_file_name(filename))
+                    .map_err(|err| {
+                        VgonioError::new(
+                            format!(
+                                "Failed to write BSDF bounces measurement data to image file: {}",
+                                err
+                            ),
+                            Some(Box::new(err)),
+                        )
+                    })?;
+            }
         }
         Ok(())
     }
@@ -1030,12 +1065,6 @@ pub struct BsdfMeasurementStatsPoint {
     pub n_received: u32,
     /// Number of wavelength, which is the number of samples in the spectrum.
     pub n_wavelength: usize,
-    // /// Number of emitted rays that hit the surface and were absorbed.
-    // pub n_absorbed: SpectralSamples<u32>,
-    // /// The Number of emitted rays that hit the surface and were reflected.
-    // pub n_reflected: SpectralSamples<u32>,
-    // /// Number of emitted rays captured by the collector.
-    // pub n_captured: SpectralSamples<u32>,
     /// Statistics of the number of emitted rays that either
     /// 1. hit the surface and were absorbed, or
     /// 2. hit the surface and were reflected, or
@@ -1046,7 +1075,6 @@ pub struct BsdfMeasurementStatsPoint {
     /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`.
     /// The total number of elements in the array is `3 * n_wavelength`.
     pub n_ray_stats: Box<[u32]>,
-
     /// Energy captured by the collector; variant over wavelength.
     pub e_captured: SpectralSamples<f32>,
     /// Histogram of reflected rays by number of bounces, variant over
@@ -1090,9 +1118,6 @@ impl BsdfMeasurementStatsPoint {
         Self {
             n_bounces: max_bounces as u32,
             n_received: 0,
-            // n_absorbed: SpectralSamples::splat(0, n_wavelength),
-            // n_reflected: SpectralSamples::splat(0, n_wavelength),
-            // n_captured: SpectralSamples::splat(0, n_wavelength),
             n_wavelength,
             n_ray_stats: vec![0; 3 * n_wavelength].into_boxed_slice(),
             e_captured: SpectralSamples::splat(0.0, n_wavelength),
@@ -1186,7 +1211,7 @@ where
     D: PerPatchData,
 {
     /// Incident direction in the unit spherical coordinates.
-    pub w_i: Sph2,
+    pub wi: Sph2,
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.

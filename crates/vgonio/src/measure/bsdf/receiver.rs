@@ -383,7 +383,7 @@ impl Receiver {
         );
 
         collected.snapshots.push(BsdfSnapshotRaw {
-            w_i: result.w_i,
+            wi: result.w_i,
             records,
             stats,
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -443,7 +443,7 @@ impl<'a> CollectedData<'a> {
             .map(|snapshot| {
                 // Row-major order: [patch][wavelength]
                 let mut samples = vec![0.0; n_patch * n_wavelength].into_boxed_slice();
-                let cos_i = snapshot.w_i.theta.cos();
+                let cos_i = snapshot.wi.theta.cos();
                 let e_i = snapshot.stats.n_received as f32 * cos_i;
                 for (i, patch_data) in snapshot.records.chunks(n_wavelength).enumerate() {
                     // Per wavelength
@@ -467,10 +467,17 @@ impl<'a> CollectedData<'a> {
                         }
                     }
                 }
+                // log::debug!(
+                //     "captured energy: {:?}, wi: {}, total energy: {:?} | {:?}",
+                //     snapshot.stats.e_captured,
+                //     snapshot.wi,
+                //     snapshot.stats.n_received as f32,
+                //     snapshot.stats.n_received as f32 * cos_i
+                // );
                 // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 // log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
                 BsdfSnapshot {
-                    wi: snapshot.w_i,
+                    wi: snapshot.wi,
                     samples,
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     trajectories: snapshot.trajectories.clone(),

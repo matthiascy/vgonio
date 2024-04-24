@@ -978,7 +978,7 @@ pub mod vgmo {
             }
 
             Ok(Self {
-                w_i,
+                wi: w_i,
                 stats,
                 records,
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -995,7 +995,7 @@ pub mod vgmo {
             n_wavelength: usize,
         ) -> Result<(), std::io::Error> {
             let mut buf = [0u8; 8];
-            write_sph2_to_buf(self.w_i, &mut buf);
+            write_sph2_to_buf(self.wi, &mut buf);
             writer.write_all(&buf)?;
             // Writes the stats for the current measurement point.
             self.stats.write(writer, n_wavelength)?;
@@ -1315,7 +1315,7 @@ mod tests {
         let n_wavelengths = 4;
         let n_patches = 2;
         let data = BsdfSnapshotRaw::<BounceAndEnergy> {
-            w_i: Sph2::zero(),
+            wi: Sph2::zero(),
             stats: BsdfMeasurementStatsPoint {
                 n_bounces: 3,
                 n_received: 1111,
