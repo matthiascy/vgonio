@@ -6,7 +6,7 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 10000000
+    num_rays: 1000000
     max_bounces: 10
     zenith: 0deg .. =80deg / 5deg
     azimuth: 0deg .. =360deg / 30deg
@@ -21,7 +21,7 @@ type: !bsdf
 surfaces:
   #  - usr://surfaces/olaf/aluminium65bar100.vgms
   - usr://surfaces/olaf/aluminium1bar100.vgms
-  - usr://surfaces/olaf/aluminiummirror.vgms
+  #  - usr://surfaces/olaf/aluminiummirror.vgms
   #  - usr://surfaces/olaf/aluminium1bar100.vgms
   # - usr://surfaces/gaussian_sigma_0.5.vgms
   # - usr://surfaces/8x8_flat.vgms

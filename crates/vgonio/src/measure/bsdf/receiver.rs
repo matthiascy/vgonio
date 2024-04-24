@@ -236,15 +236,18 @@ impl Receiver {
                                         match energy[i] {
                                             Energy::Absorbed => continue,
                                             Energy::Reflected(ref mut e) => {
+                                                let cos_i_abs = node.cos.unwrap_or(1.0).abs();
                                                 if fresnel {
                                                     *e *= fresnel::reflectance(
-                                                        node.cos.unwrap_or(1.0),
+                                                        cos_i_abs,
                                                         &self.iors_i[i],
                                                         &self.iors_t[i],
-                                                    );
+                                                    ) * cos_i_abs;
                                                     if *e <= 0.0 {
                                                         energy[i] = Energy::Absorbed;
                                                     }
+                                                } else {
+                                                    *e *= cos_i_abs;
                                                 }
                                             }
                                         }
