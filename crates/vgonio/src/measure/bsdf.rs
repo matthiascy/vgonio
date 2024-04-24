@@ -105,7 +105,7 @@ impl MeasuredBsdfData {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let n_wi = self.snapshots.len();
-        let n_lambda = wavelengths.len();
+        let n_wavelength = wavelengths.len();
 
         // Compute the correction factor for normalisation.
         //
@@ -113,7 +113,7 @@ impl MeasuredBsdfData {
         //   - if the BSDF data are NOT normalised and the user does NOT want to
         //     normalise it
         //   - if the BSDF data are normalised and the user wants to normalise it
-        let mut factor = vec![1.0; n_wi * n_lambda].into_boxed_slice();
+        let mut factor = vec![1.0; n_wi * n_wavelength].into_boxed_slice();
 
         if normalise && !self.normalised {
             // Set to the reciprocal of the maximum values the correction factor for
@@ -140,7 +140,7 @@ impl MeasuredBsdfData {
         // - y: height
         // - z: wavelength
         // - w: snapshot
-        let mut bsdf_samples_per_wavelength = vec![0.0; w * h * n_lambda * n_wi];
+        let mut bsdf_samples_per_wavelength = vec![0.0; w * h * n_wavelength * n_wi];
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         let partition = self.params.receiver.partitioning();
@@ -149,18 +149,18 @@ impl MeasuredBsdfData {
             // Each snapshot is saved as a separate layer of the image.
             // Each channel of the layer stores the BSDF data for a single wavelength.
             for (wi_idx, snapshot) in self.snapshots.iter().enumerate() {
-                let offset = wi_idx * w * h * n_lambda;
+                let offset = wi_idx * w * h * n_wavelength;
                 for i in 0..w {
                     for j in 0..h {
                         let idx = patch_indices[i + j * w];
                         if idx < 0 {
                             continue;
                         }
-                        for wavelength_idx in 0..n_lambda {
+                        for wavelength_idx in 0..n_wavelength {
                             bsdf_samples_per_wavelength
                                 [offset + i + j * w + wavelength_idx * w * h] = snapshot.samples
-                                [idx as usize * n_lambda + wavelength_idx]
-                                * factor[wi_idx * n_lambda + wavelength_idx];
+                                [idx as usize * n_wavelength + wavelength_idx]
+                                * factor[wi_idx * n_wavelength + wavelength_idx];
                         }
                     }
                 }
@@ -255,8 +255,8 @@ impl MeasuredBsdfData {
                         }
                         for bounce_idx in 0..snapshot.stats.n_bounces as usize {
                             bsdf_samples_per_wavelength[offset + i + j * w + bounce_idx * w * h] =
-                                snapshot.records[idx as usize][0].num_rays_per_bounce[bounce_idx]
-                                    as f32
+                                snapshot.records[idx as usize * n_wavelength].num_rays_per_bounce
+                                    [bounce_idx] as f32
                                     * rcp_n_received;
                         }
                     }
@@ -1130,7 +1130,9 @@ where
     /// Statistics of the measurement at the point.
     pub stats: BsdfMeasurementStatsPoint,
     /// A list of data collected for each patch of the collector.
-    pub records: Box<[SpectralSamples<D>]>,
+    /// The data is stored as a flat array in row-major order with the
+    /// dimensions (patch, wavelength).
+    pub records: Box<[D]>,
     /// Extra ray trajectory data for debugging purposes.
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub trajectories: Vec<RayTrajectory>,

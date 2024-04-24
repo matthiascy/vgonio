@@ -953,27 +953,26 @@ pub mod vgmo {
         /// Reads a single data point from the reader.
         pub fn read<R: Read>(
             reader: &mut R,
-            n_wavelengths: usize,
+            n_wavelength: usize,
             n_patches: usize,
         ) -> Result<Self, std::io::Error> {
             let mut buf = [0u8; 8];
             reader.read_exact(&mut buf)?;
             let w_i = read_sph2_from_buf(&buf);
-            let stats = BsdfMeasurementStatsPoint::read(reader, n_wavelengths).unwrap();
+            let stats = BsdfMeasurementStatsPoint::read(reader, n_wavelength).unwrap();
             // TODO: improve this
-            let mut records = Vec::with_capacity(n_patches);
-            let mut samples = vec![BounceAndEnergy::default(); n_wavelengths];
-            for _ in 0..n_patches {
-                for j in 0..n_wavelengths {
-                    samples[j] = BounceAndEnergy::read(reader)?;
+            let mut records =
+                vec![BounceAndEnergy::default(); n_patches * n_wavelength].into_boxed_slice();
+            for i in 0..n_patches {
+                for j in 0..n_wavelength {
+                    records[i * n_wavelength + j] = BounceAndEnergy::read(reader)?;
                 }
-                records.push(SpectralSamples::from_vec(samples.clone()));
             }
 
             Ok(Self {
                 w_i,
                 stats,
-                records: records.into_boxed_slice(),
+                records,
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 trajectories: vec![],
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -985,19 +984,16 @@ pub mod vgmo {
         pub fn write<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-            n_wavelengths: usize,
+            n_wavelength: usize,
         ) -> Result<(), std::io::Error> {
             let mut buf = [0u8; 8];
             write_sph2_to_buf(self.w_i, &mut buf);
             writer.write_all(&buf)?;
             // Writes the stats for the current measurement point.
-            self.stats.write(writer, n_wavelengths)?;
+            self.stats.write(writer, n_wavelength)?;
             // Writes the collected data for each patch.
             for samples in self.records.iter() {
-                // Writes the data for each wavelength.
-                for s in samples.iter() {
-                    s.write(writer)?;
-                }
+                samples.write(writer)?;
             }
             Ok(())
         }
