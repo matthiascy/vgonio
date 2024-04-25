@@ -356,7 +356,10 @@ fn simulate_bsdf_measurement_single_point(
         .flat_map(|d| d.trajectory)
         .collect::<Vec<_>>();
 
-    SimulationResultPoint { w_i, trajectories }
+    SimulationResultPoint {
+        wi: w_i,
+        trajectories,
+    }
 
     // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     // {

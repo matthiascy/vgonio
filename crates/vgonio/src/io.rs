@@ -706,38 +706,36 @@ pub mod vgmo {
         }
     }
 
-    trait EndianRead: Sized {
-        const SIZE: usize = mem::size_of::<Self>();
-        fn from_le_bytes(bytes: &[u8]) -> Self;
-        fn from_be_bytes(bytes: &[u8]) -> Self;
+    pub trait EndianRead: Sized {
+        fn read_le_bytes(src: &[u8]) -> Self;
+        fn read_be_bytes(src: &[u8]) -> Self;
     }
 
-    trait EndianWrite: Sized {
-        const SIZE: usize = mem::size_of::<Self>();
-        fn to_le_bytes(&self) -> [u8; Self::SIZE];
-        fn to_be_bytes(&self) -> [u8; Self::SIZE];
+    pub trait EndianWrite: Sized {
+        fn write_le_bytes(&self, dst: &mut [u8]);
+        fn write_be_bytes(&self, dst: &mut [u8]);
     }
 
     macro_rules! impl_endian_read_write {
         ($($t:ty),*) => {
             $(
                 impl EndianRead for $t {
-                    fn from_le_bytes(bytes: &[u8]) -> Self {
-                        Self::from_le_bytes(bytes.try_into().expect("Invalid byte slice, expected 4 bytes"))
+                    fn read_le_bytes(src: &[u8]) -> Self {
+                        Self::from_le_bytes(src.try_into().expect("Invalid byte slice, expected 4 bytes"))
                     }
 
-                    fn from_be_bytes(bytes: &[u8]) -> Self {
-                        Self::from_be_bytes(bytes.try_into().expect("Invalid byte slice, expected 4 bytes"))
+                    fn read_be_bytes(src: &[u8]) -> Self {
+                        Self::from_be_bytes(src.try_into().expect("Invalid byte slice, expected 4 bytes"))
                     }
                 }
 
                 impl EndianWrite for $t {
-                    fn to_le_bytes(&self) -> [u8; <$t as EndianWrite>::SIZE] {
-                        self.to_le_bytes()
+                    fn write_le_bytes(&self, dst: &mut [u8]) {
+                        dst.copy_from_slice(&self.to_le_bytes())
                     }
 
-                    fn to_be_bytes(&self) -> [u8; <$t as EndianWrite>::SIZE] {
-                        self.to_be_bytes()
+                    fn write_be_bytes(&self, dst: &mut [u8]) {
+                        dst.copy_from_slice(&self.to_be_bytes())
                     }
                 }
             )*
@@ -747,18 +745,16 @@ pub mod vgmo {
     impl_endian_read_write!(u32, f32);
 
     /// Writes the given slice to the buffer in little-endian format.
-    pub fn write_slice_to_buf<T: EndianWrite>(src: &[T], dst: &mut [u8])
-    where
-        [(); T::SIZE]:,
-    {
+    pub fn write_slice_to_buf<T: EndianWrite>(src: &[T], dst: &mut [u8]) {
+        let SIZE: usize = mem::size_of::<T>();
         debug_assert!(
-            dst.len() >= src.len() * T::SIZE,
+            dst.len() >= src.len() * SIZE,
             "Write array to buffer: desired size {}, got {}",
-            src.len() * T::SIZE,
+            src.len() * SIZE,
             dst.len()
         );
         for i in 0..src.len() {
-            dst[i * T::SIZE..(i + 1) * T::SIZE].copy_from_slice(&src[i].to_le_bytes());
+            src[i].write_le_bytes(&mut dst[i * SIZE..(i + 1) * SIZE]);
         }
     }
 
@@ -770,19 +766,17 @@ pub mod vgmo {
     /// * `len` - The number of elements to read.
     /// * `dst` - The destination slice to write to.
     #[track_caller]
-    pub fn read_slice_from_buf<T: EndianRead>(src: &[u8], dst: &mut [T], len: usize)
-    where
-        [(); T::SIZE]:,
-    {
+    pub fn read_slice_from_buf<T: EndianRead>(src: &[u8], dst: &mut [T], len: usize) {
+        let SIZE: usize = mem::size_of::<T>();
         assert_eq!(
             src.len(),
-            len * T::SIZE,
+            len * SIZE,
             "Buffer size mismatch, expected {} bytes, got {}",
-            len * T::SIZE,
+            len * SIZE,
             src.len()
         );
         for i in 0..len {
-            dst[i] = <T>::from_le_bytes(&src[i * T::SIZE..(i + 1) * T::SIZE]);
+            dst[i] = <T>::read_le_bytes(&src[i * SIZE..(i + 1) * SIZE]);
         }
     }
 
@@ -811,7 +805,7 @@ pub mod vgmo {
 
             // Write n_absorbed, n_reflected, n_captured per wavelength
             write_slice_to_buf::<u32>(
-                &self.n_rays_stats,
+                &self.n_ray_stats,
                 &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_wavelength * 3],
             );
             offset_in_bytes += 4 * n_wavelength * 3;
@@ -824,7 +818,7 @@ pub mod vgmo {
             offset_in_bytes += 4 * n_wavelength;
 
             // Write the number of rays per bounce for each wavelength
-            self.n_rays_per_bounce.iter().for_each(|val| {
+            self.n_ray_per_bounce.iter().for_each(|val| {
                 buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&val.to_le_bytes());
                 offset_in_bytes += 4;
             });
@@ -869,12 +863,12 @@ pub mod vgmo {
             );
             offset += e_captured_size;
 
-            let mut n_rays_per_bounce =
+            let mut n_ray_per_bounce =
                 vec![0u32; n_wavelength * n_bounce as usize].into_boxed_slice();
-            let n_rays_per_bounce_size = 4 * n_rays_per_bounce.len();
+            let n_rays_per_bounce_size = 4 * n_ray_per_bounce.len();
             read_slice_from_buf::<u32>(
                 &buf[offset..offset + n_rays_per_bounce_size],
-                &mut n_rays_per_bounce,
+                &mut n_ray_per_bounce,
                 n_wavelength * n_bounce as usize,
             );
             offset += n_rays_per_bounce_size;
@@ -891,9 +885,9 @@ pub mod vgmo {
                 n_bounce,
                 n_received,
                 n_wavelength,
-                n_rays_stats,
+                n_ray_stats: n_rays_stats,
                 e_captured,
-                n_rays_per_bounce,
+                n_ray_per_bounce,
                 energy_per_bounce,
             })
         }
@@ -916,13 +910,13 @@ pub mod vgmo {
             let total_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
             let total_energy = f32::from_le_bytes(buf[4..8].try_into().unwrap());
             let mut offset = 8;
-            let mut num_rays_per_bounce = vec![0u32; n_bounces as usize];
+            let mut n_ray_per_bounce = vec![0u32; n_bounces as usize].into_boxed_slice();
             for i in 0..n_bounces as usize {
-                num_rays_per_bounce[i] =
+                n_ray_per_bounce[i] =
                     u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
                 offset += 4;
             }
-            let mut energy_per_bounce = vec![0f32; n_bounces as usize];
+            let mut energy_per_bounce = vec![0f32; n_bounces as usize].into_boxed_slice();
             for i in 0..n_bounces as usize {
                 energy_per_bounce[i] =
                     f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
@@ -932,7 +926,7 @@ pub mod vgmo {
                 n_bounces,
                 total_rays,
                 total_energy,
-                num_rays_per_bounce,
+                n_ray_per_bounce,
                 energy_per_bounce,
             })
         }
@@ -946,7 +940,7 @@ pub mod vgmo {
             buf[8..12].copy_from_slice(&self.total_energy.to_le_bytes());
             let mut offset = 12;
             for i in 0..self.n_bounces as usize {
-                buf[offset..offset + 4].copy_from_slice(&self.num_rays_per_bounce[i].to_le_bytes());
+                buf[offset..offset + 4].copy_from_slice(&self.n_ray_per_bounce[i].to_le_bytes());
                 offset += 4;
             }
             for i in 0..self.n_bounces as usize {
@@ -1001,7 +995,7 @@ pub mod vgmo {
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 trajectories: vec![],
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                hit_points: vec![],
+                hit_points: vec![].into_boxed_slice(),
             })
         }
 
@@ -1056,7 +1050,7 @@ pub mod vgmo {
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 trajectories: vec![],
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                hit_points: vec![],
+                hit_points: vec![].into_boxed_slice(),
             })
         }
 
@@ -1072,6 +1066,7 @@ pub mod vgmo {
             n_patch: usize,
             samples_buf: &mut [u8],
         ) -> Result<(), std::io::Error> {
+            log::debug!("Writing BSDF snapshot at {}", self.wi);
             assert_eq!(
                 samples_buf.len(),
                 n_patch * n_wavelength * 4,
@@ -1094,6 +1089,12 @@ pub mod vgmo {
             n_wavelength: usize,
             n_patch: usize,
         ) -> Result<(), std::io::Error> {
+            log::debug!(
+                "Writing BSDF snapshots, n_snapshot: {}, n_wavelength: {}, n_patch: {}",
+                snapshots.len(),
+                n_wavelength,
+                n_patch
+            );
             let mut samples_buf = vec![0u8; 4 * n_patch * n_wavelength].into_boxed_slice();
             for snapshot in snapshots {
                 snapshot.write(writer, n_wavelength, n_patch, &mut samples_buf)?;
@@ -1214,6 +1215,7 @@ pub mod vgmo {
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<(), WriteFileErrorKind> {
+            log::debug!("Writing BSDF data...");
             if encoding == FileEncoding::Ascii {
                 return Err(WriteFileErrorKind::UnsupportedEncoding);
             }
@@ -1280,14 +1282,14 @@ mod tests {
             n_bounce: 3,
             n_received: 1234567,
             n_wavelength: 4,
-            n_rays_stats: vec![
+            n_ray_stats: vec![
                 1, 2, 3, 4, // n_absorbed
                 5, 6, 7, 8, // n_reflected
                 9, 10, 11, 12, // n_captured
             ]
             .into_boxed_slice(),
             e_captured: vec![13.0, 14.0, 15.0, 16.0].into_boxed_slice(),
-            n_rays_per_bounce: vec![
+            n_ray_per_bounce: vec![
                 17, 18, 19, //
                 22, 23, 24, //
                 26, 27, 28, //
@@ -1317,10 +1319,12 @@ mod tests {
             n_bounces: 11,
             total_rays: 33468,
             total_energy: 1349534.0,
-            num_rays_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0],
+            n_ray_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0]
+                .into_boxed_slice(),
             energy_per_bounce: vec![
                 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
-            ],
+            ]
+            .into_boxed_slice(),
         };
         let size = BounceAndEnergy::size_in_bytes(data.n_bounces as usize);
         let mut writer = BufWriter::with_capacity(size, vec![]);
@@ -1342,14 +1346,14 @@ mod tests {
                 n_bounce: 3,
                 n_received: 1111,
                 n_wavelength,
-                n_rays_stats: vec![
+                n_ray_stats: vec![
                     1, 2, 3, 4, // n_absorbed
                     5, 6, 7, 8, // n_reflected
                     9, 10, 11, 12, // n_captured
                 ]
                 .into_boxed_slice(),
                 e_captured: vec![13.0, 14.0, 15.0, 16.0].into_boxed_slice(),
-                n_rays_per_bounce: vec![
+                n_ray_per_bounce: vec![
                     17, 18, 19, // wavelength 1
                     22, 23, 24, // wavelength 2
                     26, 27, 28, // wavelength 3
@@ -1369,64 +1373,64 @@ mod tests {
                     n_bounces: 3,
                     total_rays: 33468,
                     total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    n_ray_per_bounce: vec![210, 40, 60].into_boxed_slice(),
+                    energy_per_bounce: vec![20.0, 30.0, 40.0].into_boxed_slice(),
                 }, //  patch 0, wavelength 0
                 BounceAndEnergy {
                     n_bounces: 2,
                     total_rays: 33,
                     total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4],
-                    energy_per_bounce: vec![0.0, 3.0],
+                    n_ray_per_bounce: vec![10, 4].into_boxed_slice(),
+                    energy_per_bounce: vec![0.0, 3.0].into_boxed_slice(),
                 }, // patch 0, wavelength 1
                 BounceAndEnergy {
                     n_bounces: 3,
                     total_rays: 33468,
                     total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    n_ray_per_bounce: vec![210, 40, 60].into_boxed_slice(),
+                    energy_per_bounce: vec![20.0, 30.0, 40.0].into_boxed_slice(),
                 }, // patch 0, wavelength 2
                 BounceAndEnergy {
                     n_bounces: 1,
                     total_rays: 33,
                     total_energy: 14.0,
-                    num_rays_per_bounce: vec![10],
-                    energy_per_bounce: vec![0.0],
+                    n_ray_per_bounce: vec![10].into_boxed_slice(),
+                    energy_per_bounce: vec![0.0].into_boxed_slice(),
                 }, // patch 0, wavelength 3
                 BounceAndEnergy {
                     n_bounces: 3,
                     total_rays: 33468,
                     total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40, 60],
-                    energy_per_bounce: vec![20.0, 30.0, 40.0],
+                    n_ray_per_bounce: vec![210, 40, 60].into_boxed_slice(),
+                    energy_per_bounce: vec![20.0, 30.0, 40.0].into_boxed_slice(),
                 }, // patch 1, wavelength 0
                 BounceAndEnergy {
                     n_bounces: 3,
                     total_rays: 33,
                     total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4, 0],
-                    energy_per_bounce: vec![0.0, 3.0, 4.0],
+                    n_ray_per_bounce: vec![10, 4, 0].into_boxed_slice(),
+                    energy_per_bounce: vec![0.0, 3.0, 4.0].into_boxed_slice(),
                 }, // patch 1, wavelength 1
                 BounceAndEnergy {
                     n_bounces: 2,
                     total_rays: 33468,
                     total_energy: 1349534.0,
-                    num_rays_per_bounce: vec![210, 40],
-                    energy_per_bounce: vec![20.0, 30.0],
+                    n_ray_per_bounce: vec![210, 40].into_boxed_slice(),
+                    energy_per_bounce: vec![20.0, 30.0].into_boxed_slice(),
                 }, // patch 1, wavelength 2
                 BounceAndEnergy {
                     n_bounces: 2,
                     total_rays: 33,
                     total_energy: 14.0,
-                    num_rays_per_bounce: vec![10, 4],
-                    energy_per_bounce: vec![0.0, 3.0],
+                    n_ray_per_bounce: vec![10, 4].into_boxed_slice(),
+                    energy_per_bounce: vec![0.0, 3.0].into_boxed_slice(),
                 }, // patch 1, wavelength 3
             ]
             .into_boxed_slice(),
             #[cfg(debug_assertions)]
             trajectories: vec![],
             #[cfg(debug_assertions)]
-            hit_points: vec![],
+            hit_points: vec![].into_boxed_slice(),
         };
 
         let mut writer = BufWriter::new(vec![]);
@@ -1448,16 +1452,16 @@ mod tests {
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: vec![],
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
-            hit_points: vec![],
+            hit_points: vec![].into_boxed_slice(),
         };
-        let mut samples_buf = vec![0u8; 4 * n_wavelength].into_boxed_slice();
+        let mut samples_buf = vec![0u8; 4 * n_wavelength * n_patch].into_boxed_slice();
         let mut writer = BufWriter::new(vec![]);
         snapshot
             .write(&mut writer, n_wavelength, n_patch, &mut samples_buf)
             .unwrap();
 
         let mut reader = BufReader::new(Cursor::new(writer.into_inner().unwrap()));
-        let mut samples_buf = vec![0u8; 4 * n_wavelength].into_boxed_slice();
+        let mut samples_buf = vec![0u8; 4 * n_wavelength * n_patch].into_boxed_slice();
         let snapshot2 =
             BsdfSnapshot::read(&mut reader, n_wavelength, n_patch, &mut samples_buf).unwrap();
         assert_eq!(snapshot, snapshot2);

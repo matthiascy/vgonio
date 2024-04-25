@@ -4,11 +4,11 @@ type: !bsdf
   sim_kind: !geom-optics embree # embree/grid/optix # !wave_optics
   incident_medium: air
   transmitted_medium: al
-  fresnel: true
+  fresnel: false
   emitter:
     num_rays: 1000000
     max_bounces: 10
-    zenith: 0deg .. =80deg / 10deg
+    zenith: 0deg .. =80deg / 20deg
     azimuth: 0deg .. =360deg / 180deg
     spectrum: 400 nm .. = 700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receiver:

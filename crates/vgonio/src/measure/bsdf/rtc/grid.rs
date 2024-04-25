@@ -199,7 +199,7 @@ pub fn measure_bsdf(
                 .collect::<Vec<_>>();
 
             SimulationResultPoint {
-                w_i: *w_i,
+                wi: *w_i,
                 trajectories,
             }
         })

@@ -270,7 +270,7 @@ impl MeasuredBsdfData {
                             for k in 0..snapshot.stats.n_bounce as usize {
                                 bsdf_images[offset + k * w * h + j * w + i] = snapshot.records
                                     [patch_idx as usize * n_wavelength]
-                                    .num_rays_per_bounce[k]
+                                    .n_ray_per_bounce[k]
                                     as f32
                                     * rcp_n_received;
                             }
@@ -301,7 +301,7 @@ impl MeasuredBsdfData {
                                 let samples = &bsdf_images[offset + bounce_idx * w * h
                                     ..offset + (bounce_idx + 1) * w * h];
                                 // Only take the first wavelength.
-                                let sum_percent = snapshot.stats.n_rays_per_bounce
+                                let sum_percent = snapshot.stats.n_ray_per_bounce
                                     [0 * n_bounce + bounce_idx]
                                     as f32
                                     / snapshot.stats.n_received as f32;
@@ -847,7 +847,7 @@ mod tests {
             },
             samples,
             trajectories: Vec::new(),
-            hit_points: Vec::new(),
+            hit_points: Vec::new().into_boxed_slice(),
         }]);
         let measured = MeasuredBsdfData {
             params: BsdfMeasurementParams {
@@ -998,7 +998,7 @@ pub struct BsdfMeasurementStatsPoint {
     /// wavelength). The index of the statistics is defined by the constants
     /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`.
     /// The total number of elements in the array is `3 * n_wavelength`.
-    pub n_rays_stats: Box<[u32]>,
+    pub n_ray_stats: Box<[u32]>,
     // TODO: verify if this is the correct way to store the energy captured by
     // the collector. Check if the energy is the sum of the energy of the rays
     // that were captured in each patch. After that, this could be removed.
@@ -1008,7 +1008,7 @@ pub struct BsdfMeasurementStatsPoint {
     /// wavelength. The data is stored as a flat array in row-major order with
     /// the dimensions (wavelegnth, bounce). The total number of elements in
     /// the array is `n_wavelength * n_bounces`.
-    pub n_rays_per_bounce: Box<[u32]>,
+    pub n_ray_per_bounce: Box<[u32]>,
     /// Histogram of energy of reflected rays by number of bounces. The energy
     /// is the sum of the energy of the rays that were reflected at the
     /// corresponding bounce. The data is stored as a flat array in row-major
@@ -1022,9 +1022,9 @@ impl PartialEq for BsdfMeasurementStatsPoint {
         self.n_bounce == other.n_bounce
             && self.n_wavelength == other.n_wavelength
             && self.n_received == other.n_received
-            && self.n_rays_stats == other.n_rays_stats
+            && self.n_ray_stats == other.n_ray_stats
             && self.e_captured == other.e_captured
-            && self.n_rays_per_bounce == other.n_rays_per_bounce
+            && self.n_ray_per_bounce == other.n_ray_per_bounce
             && self.energy_per_bounce == other.energy_per_bounce
     }
 }
@@ -1051,9 +1051,9 @@ impl BsdfMeasurementStatsPoint {
             n_bounce: max_bounce as u32,
             n_received: 0,
             n_wavelength,
-            n_rays_stats: vec![0; 3 * n_wavelength].into_boxed_slice(),
+            n_ray_stats: vec![0; 3 * n_wavelength].into_boxed_slice(),
             e_captured: vec![0.0; n_wavelength].into_boxed_slice(),
-            n_rays_per_bounce: vec![0; n_wavelength * max_bounce].into_boxed_slice(),
+            n_ray_per_bounce: vec![0; n_wavelength * max_bounce].into_boxed_slice(),
             energy_per_bounce: vec![0.0; n_wavelength * max_bounce].into_boxed_slice(),
         }
     }
@@ -1061,37 +1061,37 @@ impl BsdfMeasurementStatsPoint {
     /// Returns the number of absorbed rays statistics per wavelength.
     pub fn n_absorbed(&self) -> &[u32] {
         let offset = Self::ABSORBED_IDX * self.n_wavelength;
-        &self.n_rays_stats[offset..offset + self.n_wavelength]
+        &self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 
     /// Returns the number of absorbed rays statistics per wavelength.
     pub fn n_absorbed_mut(&mut self) -> &mut [u32] {
         let offset = Self::ABSORBED_IDX * self.n_wavelength;
-        &mut self.n_rays_stats[offset..offset + self.n_wavelength]
+        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 
     /// Returns the number of reflected rays statistics per wavelength.
     pub fn n_reflected(&self) -> &[u32] {
         let offset = Self::REFLECTED_IDX * self.n_wavelength;
-        &self.n_rays_stats[offset..offset + self.n_wavelength]
+        &self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 
     /// Returns the number of reflected rays statistics per wavelength.
     pub fn n_reflected_mut(&mut self) -> &mut [u32] {
         let offset = Self::REFLECTED_IDX * self.n_wavelength;
-        &mut self.n_rays_stats[offset..offset + self.n_wavelength]
+        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 
     /// Returns the number of captured rays statistics per wavelength.
     pub fn n_captured(&self) -> &[u32] {
         let offset = Self::CAPTURED_IDX * self.n_wavelength;
-        &self.n_rays_stats[offset..offset + self.n_wavelength]
+        &self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 
     /// Returns the number of captured rays statistics per wavelength.
     pub fn n_captured_mut(&mut self) -> &mut [u32] {
         let offset = Self::CAPTURED_IDX * self.n_wavelength;
-        &mut self.n_rays_stats[offset..offset + self.n_wavelength]
+        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
     }
 }
 
@@ -1119,7 +1119,7 @@ impl Debug for BsdfMeasurementStatsPoint {
             self.n_reflected(),
             self.n_captured(),
             self.e_captured,
-            self.n_rays_per_bounce,
+            self.n_ray_per_bounce,
             self.energy_per_bounce
         )
     }
@@ -1149,7 +1149,7 @@ where
     pub trajectories: Vec<RayTrajectory>,
     /// Hit points on the collector.
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    pub hit_points: Vec<Vec3>,
+    pub hit_points: Box<[Vec3]>,
 }
 
 impl<D: Debug + PerPatchData> Debug for BsdfSnapshotRaw<D> {
@@ -1191,13 +1191,13 @@ pub struct BsdfSnapshot {
     pub trajectories: Vec<RayTrajectory>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Hit points on the collector for debugging purposes.
-    pub hit_points: Vec<Vec3>,
+    pub hit_points: Box<[Vec3]>,
 }
 
 /// Ray tracing simulation result for a single incident direction of a surface.
 pub struct SimulationResultPoint {
     /// Incident direction in the unit spherical coordinates.
-    pub w_i: Sph2,
+    pub wi: Sph2,
     /// Trajectories of the rays.
     pub trajectories: Vec<RayTrajectory>,
 }
@@ -1264,7 +1264,7 @@ pub fn measure_bsdf_rt(
         log::trace!("Estimated orbit radius: {}", orbit_radius);
         let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &receiver.patches);
         for sim_result_point in sim_result_points {
-            log::debug!("Collecting BSDF snapshot at {}", sim_result_point.w_i);
+            log::debug!("Collecting BSDF snapshot at {}", sim_result_point.wi);
 
             #[cfg(feature = "bench")]
             let t = std::time::Instant::now();

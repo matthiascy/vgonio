@@ -398,7 +398,7 @@ pub(crate) fn generate_analytical_brdf(
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     trajectories: vec![],
                     #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                    hit_points: vec![],
+                    hit_points: vec![].into_boxed_slice(),
                 });
             }
         });
