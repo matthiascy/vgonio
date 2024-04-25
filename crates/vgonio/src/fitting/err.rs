@@ -1,7 +1,7 @@
 use crate::{
     app::cache::{RawCache, RefractiveIndexRegistry},
     measure::{
-        bsdf::{BsdfSnapshot, MeasuredBsdfData, SpectralSamples},
+        bsdf::{BsdfSnapshot, MeasuredBsdfData},
         data::SampledBrdf,
         params::BsdfMeasurementParams,
     },

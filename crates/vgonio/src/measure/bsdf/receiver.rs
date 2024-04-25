@@ -3,10 +3,7 @@
 use crate::{
     app::cache::{Handle, RawCache},
     measure::{
-        bsdf::{
-            BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SimulationResultPoint,
-            SpectralSamples,
-        },
+        bsdf::{BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SimulationResultPoint},
         params::BsdfMeasurementParams,
     },
 };
@@ -203,7 +200,7 @@ impl Receiver {
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
         let n_escaped = atomic::AtomicU32::new(0);
-        let n_bounce = atomic::AtomicU32::new(0);
+        let n_bounce_atomic = atomic::AtomicU32::new(0);
         let n_received = atomic::AtomicU32::new(0);
         // Convert the last rays of the trajectories into a vector located
         // at the centre of the collector.
@@ -268,7 +265,7 @@ impl Receiver {
 
                                 // 4. Update the maximum number of bounces.
                                 let bounce = (trajectory.len() - 1) as u32;
-                                n_bounce.fetch_max(bounce, atomic::Ordering::Relaxed);
+                                n_bounce_atomic.fetch_max(bounce, atomic::Ordering::Relaxed);
 
                                 // 5. Update the number of received rays.
                                 n_received.fetch_add(1, atomic::Ordering::Relaxed);
@@ -292,9 +289,9 @@ impl Receiver {
 
         log::debug!("n_escaped: {}", n_escaped.load(atomic::Ordering::Relaxed));
 
-        let max_bounces = n_bounce.load(atomic::Ordering::Relaxed) as usize;
+        let n_bounce = n_bounce_atomic.load(atomic::Ordering::Relaxed) as usize;
 
-        let mut stats = BsdfMeasurementStatsPoint::new(n_wavelength, max_bounces);
+        let mut stats = BsdfMeasurementStatsPoint::new(n_wavelength, n_bounce);
         stats.n_received = n_received.load(atomic::Ordering::Relaxed);
         let mut n_absorbed = Vec::with_capacity(n_wavelength);
         let mut n_reflected = Vec::with_capacity(n_wavelength);
@@ -338,7 +335,7 @@ impl Receiver {
         let n_patch = self.patches.n_patches();
 
         let mut records =
-            vec![BounceAndEnergy::empty(max_bounces); n_patch * n_wavelength].into_boxed_slice();
+            vec![BounceAndEnergy::empty(n_bounce); n_patch * n_wavelength].into_boxed_slice();
 
         // Compute the vertex positions of the outgoing rays.
         #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -363,8 +360,8 @@ impl Receiver {
                         patch_samples[i].total_rays += 1;
                         patch_samples[i].energy_per_bounce[bounce_idx] += e;
                         patch_samples[i].num_rays_per_bounce[bounce_idx] += 1;
-                        stats.num_rays_per_bounce[i][bounce_idx] += 1;
-                        stats.energy_per_bounce[i][bounce_idx] += e;
+                        stats.n_rays_per_bounce[i * n_bounce + bounce_idx] += 1;
+                        stats.energy_per_bounce[i * n_bounce + bounce_idx] += e;
                     }
                 }
             }
@@ -512,7 +509,9 @@ impl Energy {
 }
 
 /// Represents the data that a patch can carry.
-pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
+pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {
+    fn validate(&self) -> bool;
+}
 
 /// Bounce and energy of a patch.
 #[derive(Debug, Clone, Default)]
@@ -551,4 +550,6 @@ impl PartialEq for BounceAndEnergy {
     }
 }
 
-impl PerPatchData for BounceAndEnergy {}
+impl PerPatchData for BounceAndEnergy {
+    fn validate(&self) -> bool { todo!() }
+}

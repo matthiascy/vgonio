@@ -16,6 +16,7 @@
 #![feature(slice_pattern)]
 #![feature(os_str_display)]
 #![feature(let_chains)]
+#![feature(generic_const_exprs)]
 #![warn(missing_docs)]
 
 extern crate core;
@@ -29,8 +30,6 @@ pub mod measure;
 pub(crate) mod plotting;
 
 use base::error::VgonioError;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 /// Main entry point for the VGonio app.
 pub fn run() -> Result<(), VgonioError> {

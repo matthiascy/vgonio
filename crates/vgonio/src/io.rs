@@ -28,7 +28,7 @@ pub mod vgmo {
             compute_bsdf_snapshots_max_values,
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
-            BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SpectralSamples,
+            BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
         },
         data::MeasuredData,
         microfacet::MeasuredSdfData,
@@ -49,7 +49,10 @@ pub mod vgmo {
         units::{rad, Nanometres, Radians},
         Version,
     };
-    use std::io::{BufWriter, Seek};
+    use std::{
+        io::{BufWriter, Seek},
+        mem,
+    };
 
     /// The VGMO header extension.
     #[derive(Debug, Clone, Copy, PartialEq)]
@@ -703,36 +706,85 @@ pub mod vgmo {
         }
     }
 
-    macro_rules! impl_per_wavelength_data_io {
+    trait EndianRead: Sized {
+        const SIZE: usize = mem::size_of::<Self>();
+        fn from_le_bytes(bytes: &[u8]) -> Self;
+        fn from_be_bytes(bytes: &[u8]) -> Self;
+    }
+
+    trait EndianWrite: Sized {
+        const SIZE: usize = mem::size_of::<Self>();
+        fn to_le_bytes(&self) -> [u8; Self::SIZE];
+        fn to_be_bytes(&self) -> [u8; Self::SIZE];
+    }
+
+    macro_rules! impl_endian_read_write {
         ($($t:ty),*) => {
             $(
-                impl SpectralSamples<$t> {
-                    /// The size of a single element in bytes.
-                    pub const ELEM_SIZE: usize = std::mem::size_of::<$t>();
-
-                    /// Writes the data to the given buffer.
-                    pub fn write_to_buf(&self, buf: &mut [u8]) {
-                        debug_assert!(buf.len() >= self.len() * Self::ELEM_SIZE, "Write SpectralSamples to buffer: desired size {}, got {}", self.len() * Self::ELEM_SIZE, buf.len());
-                        for i in 0..self.len() {
-                            buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].copy_from_slice(&self[i].to_le_bytes());
-                        }
+                impl EndianRead for $t {
+                    fn from_le_bytes(bytes: &[u8]) -> Self {
+                        Self::from_le_bytes(bytes.try_into().expect("Invalid byte slice, expected 4 bytes"))
                     }
 
-                    /// Reads the data from the given buffer.
-                    pub fn read_from_buf(buf: &[u8], len: usize) -> Self {
-                        debug_assert!(buf.len() >= len * Self::ELEM_SIZE, "Buffer too small");
-                        let mut data = vec![0 as $t; len];
-                        for i in 0..len {
-                            data[i] = <$t>::from_le_bytes(buf[i * Self::ELEM_SIZE..(i + 1) * Self::ELEM_SIZE].try_into().unwrap());
-                        }
-                        Self::from_vec(data)
+                    fn from_be_bytes(bytes: &[u8]) -> Self {
+                        Self::from_be_bytes(bytes.try_into().expect("Invalid byte slice, expected 4 bytes"))
+                    }
+                }
+
+                impl EndianWrite for $t {
+                    fn to_le_bytes(&self) -> [u8; <$t as EndianWrite>::SIZE] {
+                        self.to_le_bytes()
+                    }
+
+                    fn to_be_bytes(&self) -> [u8; <$t as EndianWrite>::SIZE] {
+                        self.to_be_bytes()
                     }
                 }
             )*
         };
     }
 
-    impl_per_wavelength_data_io!(f32, u32);
+    impl_endian_read_write!(u32, f32);
+
+    /// Writes the given slice to the buffer in little-endian format.
+    pub fn write_slice_to_buf<T: EndianWrite>(src: &[T], dst: &mut [u8])
+    where
+        [(); T::SIZE]:,
+    {
+        debug_assert!(
+            dst.len() >= src.len() * T::SIZE,
+            "Write array to buffer: desired size {}, got {}",
+            src.len() * T::SIZE,
+            dst.len()
+        );
+        for i in 0..src.len() {
+            dst[i * T::SIZE..(i + 1) * T::SIZE].copy_from_slice(&src[i].to_le_bytes());
+        }
+    }
+
+    /// Reads the given slice from the buffer in little-endian format.
+    ///
+    /// # Arguments
+    ///
+    /// * `src` - The buffer to read from.
+    /// * `len` - The number of elements to read.
+    /// * `dst` - The destination slice to write to.
+    #[track_caller]
+    pub fn read_slice_from_buf<T: EndianRead>(src: &[u8], dst: &mut [T], len: usize)
+    where
+        [(); T::SIZE]:,
+    {
+        assert_eq!(
+            src.len(),
+            len * T::SIZE,
+            "Buffer size mismatch, expected {} bytes, got {}",
+            len * T::SIZE,
+            src.len()
+        );
+        for i in 0..len {
+            dst[i] = <T>::from_le_bytes(&src[i * T::SIZE..(i + 1) * T::SIZE]);
+        }
+    }
 
     impl BsdfMeasurementStatsPoint {
         /// The size of the buffer required to read/write the BSDF measurement
@@ -748,47 +800,40 @@ pub mod vgmo {
             writer: &mut BufWriter<W>,
             n_wavelength: usize,
         ) -> Result<(), std::io::Error> {
-            let size = Self::size_in_bytes(n_wavelength, self.n_bounces as usize);
+            let size = Self::size_in_bytes(n_wavelength, self.n_bounce as usize);
             let mut buf = vec![0u8; size].into_boxed_slice();
-            let mut offset = 0;
-            buf[offset..offset + 4].copy_from_slice(&self.n_bounces.to_le_bytes());
-            offset += 4;
-            buf[offset..offset + 4].copy_from_slice(&self.n_received.to_le_bytes());
-            offset += 4;
+            let mut offset_in_bytes = 0;
+            buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&self.n_bounce.to_le_bytes());
+            offset_in_bytes += 4;
+            buf[offset_in_bytes..offset_in_bytes + 4]
+                .copy_from_slice(&self.n_received.to_le_bytes());
+            offset_in_bytes += 4;
 
-            // TODO: get rid of spectral samples
-            let n_absorbed = SpectralSamples::from_vec(self.n_absorbed().to_vec());
-            n_absorbed.write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+            // Write n_absorbed, n_reflected, n_captured per wavelength
+            write_slice_to_buf::<u32>(
+                &self.n_rays_stats,
+                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_wavelength * 3],
+            );
+            offset_in_bytes += 4 * n_wavelength * 3;
 
-            // TODO: get rid of spectral samples
-            let n_reflected = SpectralSamples::from_vec(self.n_reflected().to_vec());
-            n_reflected.write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+            // Write the energy captured per wavelength
+            write_slice_to_buf(
+                &self.e_captured,
+                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_wavelength],
+            );
+            offset_in_bytes += 4 * n_wavelength;
 
-            // TODO: get rid of spectral samples
-            let n_captured = SpectralSamples::from_vec(self.n_captured().to_vec());
-            n_captured.write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
+            // Write the number of rays per bounce for each wavelength
+            self.n_rays_per_bounce.iter().for_each(|val| {
+                buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&val.to_le_bytes());
+                offset_in_bytes += 4;
+            });
 
-            self.e_captured
-                .write_to_buf(&mut buf[offset..offset + 4 * n_wavelength]);
-            offset += 4 * n_wavelength;
-
-            for i in 0..n_wavelength {
-                for j in 0..self.n_bounces as usize {
-                    buf[offset..offset + 4]
-                        .copy_from_slice(&self.num_rays_per_bounce[i][j].to_le_bytes());
-                    offset += 4;
-                }
-            }
-            for i in 0..n_wavelength {
-                for j in 0..self.n_bounces as usize {
-                    buf[offset..offset + 4]
-                        .copy_from_slice(&self.energy_per_bounce[i][j].to_le_bytes());
-                    offset += 4;
-                }
-            }
+            // Write the energy per bounce for each wavelength
+            self.energy_per_bounce.iter().for_each(|val| {
+                buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&val.to_le_bytes());
+                offset_in_bytes += 4;
+            });
             writer.write_all(&buf)
         }
 
@@ -797,87 +842,59 @@ pub mod vgmo {
         pub fn read<R: Read>(reader: &mut R, n_wavelength: usize) -> Result<Self, std::io::Error> {
             let mut buf = [0u8; 4];
             reader.read_exact(&mut buf)?;
-            let n_bounces = u32::from_le_bytes(buf);
+            let n_bounce = u32::from_le_bytes(buf);
             reader.read_exact(&mut buf)?;
             let n_received = u32::from_le_bytes(buf);
 
             let mut buf =
-                vec![0u8; 4 * n_wavelength * 4 + 4 * n_wavelength * n_bounces as usize * 2];
+                vec![0u8; 4 * n_wavelength * 4 + 4 * n_wavelength * n_bounce as usize * 2];
             reader.read_exact(&mut buf)?;
 
-            // TODO: get rid of spectral samples
             let mut offset = 0;
-            let n_absorbed = SpectralSamples::<u32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
+            let mut n_rays_stats = vec![0u32; n_wavelength * 3].into_boxed_slice();
+            let n_ray_stats_size = 4 * n_rays_stats.len();
+            read_slice_from_buf::<u32>(
+                &buf[offset..n_ray_stats_size],
+                &mut n_rays_stats,
+                n_wavelength * 3,
+            );
+            offset += n_ray_stats_size;
+
+            let mut e_captured = vec![0f32; n_wavelength].into_boxed_slice();
+            let e_captured_size = 4 * e_captured.len();
+            read_slice_from_buf::<f32>(
+                &buf[offset..offset + e_captured_size],
+                &mut e_captured,
                 n_wavelength,
             );
-            offset += 4 * n_wavelength;
-            let n_reflected = SpectralSamples::<u32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
+            offset += e_captured_size;
+
+            let mut n_rays_per_bounce =
+                vec![0u32; n_wavelength * n_bounce as usize].into_boxed_slice();
+            let n_rays_per_bounce_size = 4 * n_rays_per_bounce.len();
+            read_slice_from_buf::<u32>(
+                &buf[offset..offset + n_rays_per_bounce_size],
+                &mut n_rays_per_bounce,
+                n_wavelength * n_bounce as usize,
             );
-            offset += 4 * n_wavelength;
-            let n_captured = SpectralSamples::<u32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
+            offset += n_rays_per_bounce_size;
+
+            let mut energy_per_bounce =
+                vec![0f32; n_wavelength * n_bounce as usize].into_boxed_slice();
+            read_slice_from_buf::<f32>(
+                &buf[offset..offset + 4 * n_wavelength * n_bounce as usize],
+                &mut energy_per_bounce,
+                n_wavelength * n_bounce as usize,
             );
-            offset += 4 * n_wavelength;
-
-            let e_captured = SpectralSamples::<f32>::read_from_buf(
-                &buf[offset..offset + 4 * n_wavelength],
-                n_wavelength,
-            );
-            offset += 4 * n_wavelength;
-
-            let num_rays_per_bounce = {
-                let mut num_rays_per_bounce_per_wavelength = Box::new_uninit_slice(n_wavelength);
-                for n_rays_per_bounce_per_wavelength in
-                    num_rays_per_bounce_per_wavelength.iter_mut()
-                {
-                    let mut num_rays_per_bounce = Box::new_uninit_slice(n_bounces as usize);
-                    for n_rays_per_bounce in num_rays_per_bounce.iter_mut() {
-                        n_rays_per_bounce.write(u32::from_le_bytes(
-                            buf[offset..offset + 4].try_into().unwrap(),
-                        ));
-                        offset += 4;
-                    }
-                    unsafe {
-                        n_rays_per_bounce_per_wavelength.write(num_rays_per_bounce.assume_init());
-                    }
-                }
-                unsafe { num_rays_per_bounce_per_wavelength.assume_init() }
-            };
-
-            let energy_per_bounce = {
-                let mut energy_per_bounce_per_wavelength = Box::new_uninit_slice(n_wavelength);
-                for e_per_bounce_per_wavelength in energy_per_bounce_per_wavelength.iter_mut() {
-                    let mut energy_per_bounce = Box::new_uninit_slice(n_bounces as usize);
-                    for energy in energy_per_bounce.iter_mut() {
-                        energy.write(f32::from_le_bytes(
-                            buf[offset..offset + 4].try_into().unwrap(),
-                        ));
-                        offset += 4;
-                    }
-                    unsafe {
-                        e_per_bounce_per_wavelength.write(energy_per_bounce.assume_init());
-                    }
-                }
-                unsafe { energy_per_bounce_per_wavelength.assume_init() }
-            };
-
-            let mut n_ray_stats = vec![0u32; n_wavelength * 3].into_boxed_slice();
-            n_ray_stats[0..n_wavelength].copy_from_slice(&n_absorbed);
-            n_ray_stats[n_wavelength..2 * n_wavelength].copy_from_slice(&n_reflected);
-            n_ray_stats[2 * n_wavelength..].copy_from_slice(&n_captured);
 
             Ok(Self {
-                n_bounces,
+                n_bounce,
                 n_received,
                 n_wavelength,
-                n_ray_stats,
+                n_rays_stats,
                 e_captured,
-                num_rays_per_bounce: SpectralSamples::from_boxed_slice(num_rays_per_bounce),
-                energy_per_bounce: SpectralSamples::from_boxed_slice(energy_per_bounce),
+                n_rays_per_bounce,
+                energy_per_bounce,
             })
         }
     }
@@ -1011,40 +1028,30 @@ pub mod vgmo {
         /// Reads a BSDF snapshot from the given reader.
         ///
         /// The `samples_buf` is a buffer that is used to read the spectral
-        /// samples for each patch. It must be at least `n_wavelengths * 4`
+        /// samples for all patches. It must have the size of `n_patch *
+        /// n_wavelength * 4`
         pub fn read<R: Read>(
             reader: &mut R,
-            n_wavelengths: usize,
-            n_patches: usize,
+            n_wavelength: usize,
+            n_patch: usize,
             samples_buf: &mut [u8],
         ) -> Result<Self, std::io::Error> {
-            assert_eq!(samples_buf.len(), n_wavelengths * 4, "Buffer too small");
-            let mut buf = [0u8; 8];
-            reader.read_exact(&mut buf)?;
-            let w_i = read_sph2_from_buf(&buf);
-            let samples = {
-                let _samples = {
-                    let mut samples = Box::new_uninit_slice(n_patches);
-                    // TODO: improve this, get rid of the SpectralSamples
-                    for i in 0..n_patches {
-                        reader.read_exact(samples_buf)?;
-                        samples[i].write(SpectralSamples::<f32>::read_from_buf(
-                            samples_buf,
-                            n_wavelengths,
-                        ));
-                    }
-                    unsafe { samples.assume_init() }
-                };
-                let mut samples = vec![0.0; n_patches * n_wavelengths];
-                for i in 0..n_patches {
-                    for j in 0..n_wavelengths {
-                        samples[i * n_wavelengths + j] = _samples[i][j];
-                    }
-                }
-                samples.into_boxed_slice()
+            assert_eq!(
+                samples_buf.len(),
+                n_patch * n_wavelength * 4,
+                "Buffer too small"
+            );
+            let wi = {
+                let mut buf = [0u8; 8];
+                reader.read_exact(&mut buf)?;
+                read_sph2_from_buf(&buf)
             };
+            let mut samples = vec![0.0; n_patch * n_wavelength].into_boxed_slice();
+            reader.read_exact(samples_buf)?;
+            read_slice_from_buf(samples_buf, &mut samples, n_patch * n_wavelength);
+
             Ok(Self {
-                wi: w_i,
+                wi,
                 samples,
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 trajectories: vec![],
@@ -1056,30 +1063,26 @@ pub mod vgmo {
         /// Writes a BSDF snapshot to the given writer.
         ///
         /// The `samples_buf` is a buffer that is used to write the spectral
-        /// samples for each patch. It must be at least `n_wavelengths * 4`
-        /// bytes.
+        /// samples for each patch. It must be at least `n_patch * n_wavelength
+        /// * 4` bytes.
         pub fn write<W: Write>(
             &self,
             writer: &mut W,
             n_wavelength: usize,
+            n_patch: usize,
             samples_buf: &mut [u8],
         ) -> Result<(), std::io::Error> {
-            debug_assert_eq!(
+            assert_eq!(
                 samples_buf.len(),
-                n_wavelength * 4,
+                n_patch * n_wavelength * 4,
                 "Writing BSDF snapshot: samples buffer too small!"
             );
             let mut buf = [0u8; 8];
             buf[0..4].copy_from_slice(&self.wi.theta.as_f32().to_le_bytes());
             buf[4..8].copy_from_slice(&self.wi.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
-            for samples in self.samples.chunks(n_wavelength) {
-                // TODO: improve this, get rid of the SpectralSamples
-                let samples = SpectralSamples::from_vec(samples.to_vec());
-                samples.write_to_buf(samples_buf);
-                writer.write_all(samples_buf)?;
-            }
-            Ok(())
+            write_slice_to_buf(&self.samples, samples_buf);
+            writer.write_all(samples_buf)
         }
     }
 
@@ -1088,28 +1091,30 @@ pub mod vgmo {
         pub(crate) fn write_bsdf_snapshots<W: Write>(
             writer: &mut W,
             snapshots: &[BsdfSnapshot],
-            n_wavelengths: usize,
+            n_wavelength: usize,
+            n_patch: usize,
         ) -> Result<(), std::io::Error> {
-            let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
+            let mut samples_buf = vec![0u8; 4 * n_patch * n_wavelength].into_boxed_slice();
             for snapshot in snapshots {
-                snapshot.write(writer, n_wavelengths, &mut samples_buf)?;
+                snapshot.write(writer, n_wavelength, n_patch, &mut samples_buf)?;
             }
             Ok(())
         }
 
         pub(crate) fn read_bsdf_snapshots<R: Read>(
             reader: &mut R,
-            n_wavelengths: usize,
-            n_patches: usize,
-            n_snapshots: usize,
+            n_wavelength: usize,
+            n_patch: usize,
+            n_snapshot: usize,
         ) -> Result<Box<[BsdfSnapshot]>, std::io::Error> {
-            let mut snapshots = Vec::with_capacity(n_snapshots);
-            let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
-            for _ in 0..n_snapshots {
+            let mut snapshots = Vec::with_capacity(n_snapshot);
+            // Buffer for reading the samples for all patches and wavelengths
+            let mut samples_buf = vec![0u8; n_patch * n_wavelength * 4].into_boxed_slice();
+            for _ in 0..n_snapshot {
                 snapshots.push(BsdfSnapshot::read(
                     reader,
-                    n_wavelengths,
-                    n_patches,
+                    n_wavelength,
+                    n_patch,
                     &mut samples_buf,
                 )?);
             }
@@ -1212,11 +1217,12 @@ pub mod vgmo {
             if encoding == FileEncoding::Ascii {
                 return Err(WriteFileErrorKind::UnsupportedEncoding);
             }
-            let n_wavelengths = self.params.emitter.spectrum.step_count();
+            let n_wavelength = self.params.emitter.spectrum.step_count();
+            let n_patch = self.params.receiver.num_patches();
             match compression {
                 CompressionScheme::None => {
                     let before = writer.buffer().len();
-                    Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelengths)?;
+                    Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelength, n_patch)?;
                     log::debug!(
                         "BSDF snapshots written in {} bytes",
                         writer.buffer().len() - before
@@ -1225,20 +1231,30 @@ pub mod vgmo {
                         // TODO: the same for zlib and gzip
                         log::debug!("Writing raw BSDF snapshots");
                         for snapshot in self.raw_snapshots.as_ref().unwrap().iter() {
-                            snapshot.write(writer, n_wavelengths)?;
+                            snapshot.write(writer, n_wavelength)?;
                         }
                     }
                 }
                 CompressionScheme::Zlib => {
                     let mut zlib_encoder =
                         flate2::write::ZlibEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_bsdf_snapshots(&mut zlib_encoder, &self.snapshots, n_wavelengths)?;
+                    Self::write_bsdf_snapshots(
+                        &mut zlib_encoder,
+                        &self.snapshots,
+                        n_wavelength,
+                        n_patch,
+                    )?;
                     writer.write_all(&zlib_encoder.flush_finish()?)?
                 }
                 CompressionScheme::Gzip => {
                     let mut gzip_encoder =
                         flate2::write::GzEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_bsdf_snapshots(&mut gzip_encoder, &self.snapshots, n_wavelengths)?;
+                    Self::write_bsdf_snapshots(
+                        &mut gzip_encoder,
+                        &self.snapshots,
+                        n_wavelength,
+                        n_patch,
+                    )?;
                     writer.write_all(&gzip_encoder.finish()?)?
                 }
                 _ => {}
@@ -1253,7 +1269,7 @@ pub mod vgmo {
 mod tests {
     use crate::measure::bsdf::{
         receiver::BounceAndEnergy, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
-        MeasuredBsdfData, SpectralSamples,
+        MeasuredBsdfData,
     };
     use base::math::Sph2;
     use std::io::{BufReader, BufWriter, Cursor, Write};
@@ -1261,24 +1277,30 @@ mod tests {
     #[test]
     fn test_bsdf_measurement_stats_point_read_write() {
         let data = BsdfMeasurementStatsPoint {
-            n_bounces: 3,
+            n_bounce: 3,
             n_received: 1234567,
-            n_absorbed: SpectralSamples::from_vec(vec![1, 2, 3, 4]),
-            n_reflected: SpectralSamples::from_vec(vec![5, 6, 7, 8]),
-            n_captured: SpectralSamples::from_vec(vec![9, 10, 11, 12]),
-            e_captured: SpectralSamples::from_vec(vec![13.0, 14.0, 15.0, 16.0]),
-            num_rays_per_bounce: SpectralSamples::from_vec(vec![
-                Box::new([17, 18, 19]),
-                Box::new([22, 23, 24]),
-                Box::new([26, 27, 28]),
-                Box::new([30, 31, 32]),
-            ]),
-            energy_per_bounce: SpectralSamples::from_vec(vec![
-                Box::new([1.0, 2.0, 4.0]),
-                Box::new([5.0, 6.0, 7.0]),
-                Box::new([8.0, 9.0, 10.0]),
-                Box::new([11.0, 12.0, 13.0]),
-            ]),
+            n_wavelength: 4,
+            n_rays_stats: vec![
+                1, 2, 3, 4, // n_absorbed
+                5, 6, 7, 8, // n_reflected
+                9, 10, 11, 12, // n_captured
+            ]
+            .into_boxed_slice(),
+            e_captured: vec![13.0, 14.0, 15.0, 16.0].into_boxed_slice(),
+            n_rays_per_bounce: vec![
+                17, 18, 19, //
+                22, 23, 24, //
+                26, 27, 28, //
+                30, 31, 32, //
+            ]
+            .into_boxed_slice(),
+            energy_per_bounce: vec![
+                1.0, 2.0, 4.0, //
+                5.0, 6.0, 7.0, //
+                8.0, 9.0, 10.0, //
+                11.0, 12.0, 13.0, //
+            ]
+            .into_boxed_slice(),
         };
         let size = BsdfMeasurementStatsPoint::size_in_bytes(4, 3);
         let mut writer = BufWriter::with_capacity(size, vec![]);
@@ -1312,91 +1334,93 @@ mod tests {
 
     #[test]
     fn test_bsdf_measurement_raw_snapshot() {
-        let n_wavelengths = 4;
+        let n_wavelength = 4;
         let n_patches = 2;
         let data = BsdfSnapshotRaw::<BounceAndEnergy> {
             wi: Sph2::zero(),
             stats: BsdfMeasurementStatsPoint {
-                n_bounces: 3,
+                n_bounce: 3,
                 n_received: 1111,
-                n_absorbed: SpectralSamples::from_vec(vec![1, 2, 3, 4]),
-                n_reflected: SpectralSamples::from_vec(vec![5, 6, 7, 8]),
-                n_captured: SpectralSamples::from_vec(vec![9, 10, 11, 12]),
-                e_captured: SpectralSamples::from_vec(vec![13.0, 14.0, 15.0, 16.0]),
-                num_rays_per_bounce: SpectralSamples::from_vec(vec![
-                    Box::new([17, 18, 19]),
-                    Box::new([22, 23, 24]),
-                    Box::new([26, 27, 28]),
-                    Box::new([30, 31, 32]),
-                ]),
-                energy_per_bounce: SpectralSamples::from_vec(vec![
-                    Box::new([1.0, 2.0, 4.0]),
-                    Box::new([5.0, 6.0, 7.0]),
-                    Box::new([8.0, 9.0, 10.0]),
-                    Box::new([11.0, 12.0, 13.0]),
-                ]),
+                n_wavelength,
+                n_rays_stats: vec![
+                    1, 2, 3, 4, // n_absorbed
+                    5, 6, 7, 8, // n_reflected
+                    9, 10, 11, 12, // n_captured
+                ]
+                .into_boxed_slice(),
+                e_captured: vec![13.0, 14.0, 15.0, 16.0].into_boxed_slice(),
+                n_rays_per_bounce: vec![
+                    17, 18, 19, // wavelength 1
+                    22, 23, 24, // wavelength 2
+                    26, 27, 28, // wavelength 3
+                    30, 31, 32, // wavelength 4
+                ]
+                .into_boxed_slice(),
+                energy_per_bounce: vec![
+                    1.0, 2.0, 4.0, // bounce 1
+                    5.0, 6.0, 7.0, // bounce 2
+                    8.0, 9.0, 10.0, // bounce 3
+                    11.0, 12.0, 13.0, // bounce 4
+                ]
+                .into_boxed_slice(),
             },
             records: vec![
-                SpectralSamples::from_vec(vec![
-                    BounceAndEnergy {
-                        n_bounces: 3,
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        n_bounces: 2,
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4],
-                        energy_per_bounce: vec![0.0, 3.0],
-                    },
-                    BounceAndEnergy {
-                        n_bounces: 3,
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        n_bounces: 1,
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10],
-                        energy_per_bounce: vec![0.0],
-                    },
-                ]),
-                SpectralSamples::from_vec(vec![
-                    BounceAndEnergy {
-                        n_bounces: 3,
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40, 60],
-                        energy_per_bounce: vec![20.0, 30.0, 40.0],
-                    },
-                    BounceAndEnergy {
-                        n_bounces: 3,
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4, 0],
-                        energy_per_bounce: vec![0.0, 3.0, 4.0],
-                    },
-                    BounceAndEnergy {
-                        n_bounces: 2,
-                        total_rays: 33468,
-                        total_energy: 1349534.0,
-                        num_rays_per_bounce: vec![210, 40],
-                        energy_per_bounce: vec![20.0, 30.0],
-                    },
-                    BounceAndEnergy {
-                        n_bounces: 2,
-                        total_rays: 33,
-                        total_energy: 14.0,
-                        num_rays_per_bounce: vec![10, 4],
-                        energy_per_bounce: vec![0.0, 3.0],
-                    },
-                ]),
+                BounceAndEnergy {
+                    n_bounces: 3,
+                    total_rays: 33468,
+                    total_energy: 1349534.0,
+                    num_rays_per_bounce: vec![210, 40, 60],
+                    energy_per_bounce: vec![20.0, 30.0, 40.0],
+                }, //  patch 0, wavelength 0
+                BounceAndEnergy {
+                    n_bounces: 2,
+                    total_rays: 33,
+                    total_energy: 14.0,
+                    num_rays_per_bounce: vec![10, 4],
+                    energy_per_bounce: vec![0.0, 3.0],
+                }, // patch 0, wavelength 1
+                BounceAndEnergy {
+                    n_bounces: 3,
+                    total_rays: 33468,
+                    total_energy: 1349534.0,
+                    num_rays_per_bounce: vec![210, 40, 60],
+                    energy_per_bounce: vec![20.0, 30.0, 40.0],
+                }, // patch 0, wavelength 2
+                BounceAndEnergy {
+                    n_bounces: 1,
+                    total_rays: 33,
+                    total_energy: 14.0,
+                    num_rays_per_bounce: vec![10],
+                    energy_per_bounce: vec![0.0],
+                }, // patch 0, wavelength 3
+                BounceAndEnergy {
+                    n_bounces: 3,
+                    total_rays: 33468,
+                    total_energy: 1349534.0,
+                    num_rays_per_bounce: vec![210, 40, 60],
+                    energy_per_bounce: vec![20.0, 30.0, 40.0],
+                }, // patch 1, wavelength 0
+                BounceAndEnergy {
+                    n_bounces: 3,
+                    total_rays: 33,
+                    total_energy: 14.0,
+                    num_rays_per_bounce: vec![10, 4, 0],
+                    energy_per_bounce: vec![0.0, 3.0, 4.0],
+                }, // patch 1, wavelength 1
+                BounceAndEnergy {
+                    n_bounces: 2,
+                    total_rays: 33468,
+                    total_energy: 1349534.0,
+                    num_rays_per_bounce: vec![210, 40],
+                    energy_per_bounce: vec![20.0, 30.0],
+                }, // patch 1, wavelength 2
+                BounceAndEnergy {
+                    n_bounces: 2,
+                    total_rays: 33,
+                    total_energy: 14.0,
+                    num_rays_per_bounce: vec![10, 4],
+                    energy_per_bounce: vec![0.0, 3.0],
+                }, // patch 1, wavelength 3
             ]
             .into_boxed_slice(),
             #[cfg(debug_assertions)]
@@ -1406,50 +1430,49 @@ mod tests {
         };
 
         let mut writer = BufWriter::new(vec![]);
-        data.write(&mut writer, n_wavelengths).unwrap();
+        data.write(&mut writer, n_wavelength).unwrap();
         let buf = writer.into_inner().unwrap();
 
         let mut reader = BufReader::new(Cursor::new(buf));
-        let data2 =
-            BsdfSnapshotRaw::<BounceAndEnergy>::read(&mut reader, n_wavelengths, 2).unwrap();
+        let data2 = BsdfSnapshotRaw::<BounceAndEnergy>::read(&mut reader, n_wavelength, 2).unwrap();
         assert_eq!(data, data2);
     }
 
     #[test]
     fn test_bsdf_measurement_snapshot() {
-        let n_wavelengths = 4;
-        let n_patches = 4;
+        let n_wavelength = 4;
+        let n_patch = 4;
         let snapshot = BsdfSnapshot {
             wi: Sph2::zero(),
-            samples: vec![SpectralSamples::splat(11.0, n_wavelengths); n_patches]
-                .into_boxed_slice(),
+            samples: vec![11.0; n_patch * n_wavelength].into_boxed_slice(),
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: vec![],
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             hit_points: vec![],
         };
-        let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
+        let mut samples_buf = vec![0u8; 4 * n_wavelength].into_boxed_slice();
         let mut writer = BufWriter::new(vec![]);
         snapshot
-            .write(&mut writer, n_wavelengths, &mut samples_buf)
+            .write(&mut writer, n_wavelength, n_patch, &mut samples_buf)
             .unwrap();
 
         let mut reader = BufReader::new(Cursor::new(writer.into_inner().unwrap()));
-        let mut samples_buf = vec![0u8; 4 * n_wavelengths].into_boxed_slice();
+        let mut samples_buf = vec![0u8; 4 * n_wavelength].into_boxed_slice();
         let snapshot2 =
-            BsdfSnapshot::read(&mut reader, n_wavelengths, n_patches, &mut samples_buf).unwrap();
+            BsdfSnapshot::read(&mut reader, n_wavelength, n_patch, &mut samples_buf).unwrap();
         assert_eq!(snapshot, snapshot2);
 
         let snapshots = vec![snapshot; 4];
         let mut writer = BufWriter::new(vec![]);
-        MeasuredBsdfData::write_bsdf_snapshots(&mut writer, &snapshots, n_wavelengths).unwrap();
+        MeasuredBsdfData::write_bsdf_snapshots(&mut writer, &snapshots, n_wavelength, n_patch)
+            .unwrap();
 
         let buf = writer.into_inner().unwrap();
         let mut reader = BufReader::new(Cursor::new(buf));
         let snapshots2 = MeasuredBsdfData::read_bsdf_snapshots(
             &mut reader,
-            n_wavelengths,
-            n_patches,
+            n_wavelength,
+            n_patch,
             snapshots.len(),
         )
         .unwrap();
