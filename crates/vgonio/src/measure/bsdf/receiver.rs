@@ -56,7 +56,7 @@ pub struct ReceiverParams {
     /// Azimuth angle precision is only used for the EqualAngle partitioning
     /// scheme.
     pub precision: Sph2,
-    /// Partitioning scheme of the globe.
+    /// Partitioning schema of the globe.
     pub scheme: PartitionScheme,
     /// Type of data to retrieve.
     pub retrieval: DataRetrieval,
@@ -444,7 +444,7 @@ pub struct CollectedData<'a> {
 }
 
 impl<'a> CollectedData<'a> {
-    /// Creates an empty collected data.
+    /// Creates an empty collected date.
     pub fn empty(surf: Handle<MicroSurface>, partition: &'a SphericalPartition) -> Self {
         Self {
             surface: surf,
@@ -479,7 +479,7 @@ impl<'a> CollectedData<'a> {
                 // Row-major order: [patch][wavelength]
                 let mut samples = vec![0.0; n_patch * n_wavelength].into_boxed_slice();
                 let cos_i = snapshot.wi.theta.cos();
-                let e_i = snapshot.stats.n_received as f32 * cos_i;
+                let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
                 for (i, patch_data) in snapshot.records.chunks(n_wavelength).enumerate() {
                     // Per wavelength
                     for (j, stats) in patch_data.iter().enumerate() {
@@ -488,13 +488,13 @@ impl<'a> CollectedData<'a> {
                         let solid_angle = patch.solid_angle().as_f32();
                         if cos_o != 0.0 {
                             let l_o = stats.total_energy * rcp_f32(cos_o) * rcp_f32(solid_angle);
-                            samples[i * n_wavelength + j] = l_o * rcp_f32(e_i);
+                            samples[i * n_wavelength + j] = l_o * rcp_e_i;
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
                                 "energy of patch {i}: {:>12.4}, λ[{j}] --  E_i: {:>12.4}, \
                                  L_o[{i}]: {:>12.4} -- brdf: {:>14.8}",
                                 stats.total_energy,
-                                e_i,
+                                rcp_f32(rcp_e_i),
                                 l_o,
                                 samples[i * n_wavelength + j],
                             );

@@ -2,6 +2,7 @@ pub mod heap;
 pub mod stack;
 
 use core::{fmt::Write, marker::ConstParamTy};
+use std::mem::MaybeUninit;
 
 /// Memory layout of a multidimensional array.
 ///
@@ -21,12 +22,11 @@ pub enum MemLayout {
     ColMajor,
 }
 
-trait Sealed {}
-
 /// Trait providing raw access to the elements of the storage.
-pub unsafe trait Data: Sized + Sealed {
+pub unsafe trait Data: Sized {
     /// The type of the elements stored in the array.
     type Elem;
+    type Uninit;
 
     /// Returns a pointer to the first element of the array.
     fn as_ptr(&self) -> *const Self::Elem;
@@ -40,24 +40,7 @@ pub unsafe trait Data: Sized + Sealed {
     /// Returns a mutable slice of the data.
     fn as_mut_slice(&mut self) -> &mut [Self::Elem];
 
-    // /// Allocates a new storage for given number of elements, without
-    // /// initializing the memory.
-    // ///
-    // /// The storage may be allocated on the heap or on the stack depending
-    // /// on the concrete data container. The required size of the storage must
-    // /// match the shape of array.
-    // ///
-    // /// Unsafe because the caller must ensure that the storage is properly
-    // /// initialized after the call. Then, the storage will be dropped
-    // /// automatically when it goes out of scope.
-    // ///
-    // /// # Safety
-    // ///
-    // /// The storage is uninitialized [`MaybeUninit`]. The caller must initialize
-    // /// it before using it. Please use `ptr::write` or `ptr::copy` to
-    // /// initialize the storage elements without dropping the uninitialized
-    // /// values.
-    // unsafe fn alloc_uninit(n: usize) -> Self;
+    fn uninit(size: usize) -> Self::Uninit;
 }
 
 pub trait DataClone: Data + Clone {}

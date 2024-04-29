@@ -1,5 +1,5 @@
 /// Forward array methods to upper wrapper.
-macro forward_core_array_methods {
+macro_rules! forward_array_core_methods {
     ($($method:ident -> $rty:ty, #[$doc:meta]);*;) => {
         $(
             #[$doc]
@@ -8,7 +8,7 @@ macro forward_core_array_methods {
                 self.0.$method()
             }
         )*
-    },
+    };
     (@const $($method:ident -> $rty:ty, #[$doc:meta]);*;) => {
         $(
             #[$doc]
@@ -17,7 +17,20 @@ macro forward_core_array_methods {
                 self.0.$method()
             }
         )*
-    },
+    };
+}
+
+/// Common array methods shared by all array types.
+macro_rules! forward_array_core_common_methods {
+    () => {
+        forward_array_core_methods!(@const
+            shape -> &[usize], #[doc = "Returns the shape of the array."];
+            strides -> &[usize], #[doc = "Returns the strides of the array."];
+            order -> MemLayout, #[doc = "Returns the layout of the array."];
+            dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
+            len -> usize, #[doc = "Returns the total number of elements in the array."];
+        );
+    }
 }
 
 mod arr_d;

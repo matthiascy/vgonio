@@ -1,8 +1,10 @@
 use crate::array::{
     core::ArrCore,
-    mem::{heap::DynFixSized, MemLayout},
+    mem::{heap::DynSized, MemLayout},
     shape::ConstShape,
 };
+use num_traits::{One, Zero};
+use std::ops::Index;
 
 /// A fixed-size multidimensional array on the heap with type level fixed shape,
 /// in other words with fixed dimensions and size of each dimension.
@@ -10,7 +12,7 @@ use crate::array::{
 /// The number of dimensions and the size of each dimension are set at
 /// compilation time and can't be changed.
 pub struct DArr<T, S, const L: MemLayout = { MemLayout::RowMajor }>(
-    pub(crate) ArrCore<DynFixSized<T, { S::N_ELEMS }>, S, L>,
+    pub(crate) ArrCore<DynSized<T>, S, L>,
 )
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
@@ -21,21 +23,74 @@ where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
     [(); S::N_ELEMS]:,
 {
-    super::forward_core_array_methods!(@const
-        shape -> &[usize], #[doc = "Returns the shape of the array."];
-        strides -> &[usize], #[doc = "Returns the strides of the array."];
-        order -> MemLayout, #[doc = "Returns the layout of the array."];
-        dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
-    );
+    forward_array_core_common_methods!();
 
     /// Creates a new array with the given data and shape.
     pub fn new(data: [T; S::N_ELEMS]) -> Self
     where
         T: Clone,
     {
-        Self(ArrCore::new(S::SHAPE, DynFixSized::from_slice(&data)))
+        Self(ArrCore::new(S::SHAPE, DynSized::from_slice(&data)))
+    }
+
+    pub fn ones() -> Self
+    where
+        T: One + Clone,
+    {
+        Self(ArrCore::new(
+            S::SHAPE,
+            DynSized::splat(T::one(), S::N_ELEMS),
+        ))
+    }
+
+    pub fn zeros() -> Self
+    where
+        T: Zero + Clone,
+    {
+        Self(ArrCore::new(
+            S::SHAPE,
+            DynSized::splat(T::zero(), S::N_ELEMS),
+        ))
+    }
+
+    pub fn full(value: T) -> Self
+    where
+        T: Clone,
+    {
+        Self(ArrCore::new(
+            S::SHAPE,
+            DynSized::splat(value.clone(), S::N_ELEMS),
+        ))
+    }
+
+    pub fn splat(value: T) -> Self
+    where
+        T: Clone,
+    {
+        Self(ArrCore::new(
+            S::SHAPE,
+            DynSized::splat(value.clone(), S::N_ELEMS),
+        ))
     }
 }
+
+impl<T, S, const L: MemLayout, const N: usize> Index<[usize; N]> for DArr<T, S, L>
+where
+    S: ConstShape<Underlying = [usize; S::N_DIMS]>,
+    [(); S::N_ELEMS]:,
+{
+    type Output = T;
+
+    #[inline]
+    fn index(&self, index: [usize; N]) -> &Self::Output { &self.0[index] }
+}
+
+use crate::array::shape::s;
+/// A macro to create a fixed-size array on the heap with type level fixed
+/// shape.
+pub macro darr($($n:expr),+ $(,)*; [$($x:expr),* $(,)*]) {{
+    crate::array::DArr::<_, s![$($n),*], { MemLayout::RowMajor }>::new([$($x),*])
+}}
 
 #[cfg(test)]
 mod tests {
@@ -49,5 +104,30 @@ mod tests {
         ]);
         assert_eq!(arr.shape(), &[2, 3, 2, 2]);
         assert_eq!(arr.strides(), &[12, 4, 2, 1]);
+    }
+
+    #[test]
+    fn test_darr_macro() {
+        let arr = darr!(2, 2, 2, 2; [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        assert_eq!(arr.shape(), &[2, 2, 2, 2]);
+        assert_eq!(arr.strides(), &[8, 4, 2, 1]);
+    }
+
+    #[test]
+    fn test_darr_ones() {
+        let arr = DArr::<i32, s![2, 2], { MemLayout::RowMajor }>::ones();
+        assert_eq!(arr.shape(), &[2, 2]);
+        assert_eq!(arr.strides(), &[2, 1]);
+        assert_eq!(arr[[0, 0]], 1);
+        assert_eq!(arr[[1, 1]], 1);
+    }
+
+    #[test]
+    fn test_darr_zeros() {
+        let arr = DArr::<i32, s![2, 2], { MemLayout::RowMajor }>::zeros();
+        assert_eq!(arr.shape(), &[2, 2]);
+        assert_eq!(arr.strides(), &[2, 1]);
+        assert_eq!(arr[[0, 0]], 0);
+        assert_eq!(arr[[1, 1]], 0);
     }
 }

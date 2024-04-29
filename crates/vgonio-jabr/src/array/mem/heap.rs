@@ -1,290 +1,206 @@
-use crate::array::mem::{self, Data, Sealed};
+use crate::array::mem::{self, Data};
 use std::{
     alloc::{Allocator, Global},
     fmt::{Debug, Display},
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
+    ptr::NonNull,
 };
 
-// TODO: avoid using Vec here as it will over allocate memory.
-/// Dynamic-sized array on the heap.
-pub struct DynSized<T, A = Global>
-where
-    A: Allocator,
-{
-    inner: Vec<T, A>,
+/// A fixed-size array allocated on the heap, with a dynamically determined
+/// size.
+#[repr(C)]
+pub struct DynSized<T> {
+    ptr: NonNull<T>,
+    len: usize,
 }
 
-impl<T, A> DynSized<T, A>
-where
-    A: Allocator,
-{
-    /// Creates a new empty array with a specific allocator.
-    pub fn new_in(alloc: A) -> Self {
+impl<T> DynSized<T> {
+    pub(crate) fn new() -> Self {
         Self {
-            inner: Vec::new_in(alloc),
+            ptr: NonNull::dangling(),
+            len: 0,
         }
     }
 
-    /// Creates a new empty array with the global allocator.
-    pub fn from_vec(vec: Vec<T, A>) -> Self { Self { inner: vec } }
+    pub(crate) fn len(&self) -> usize { self.len }
 
-    /// Creates a new empty array with the global allocator.
-    pub fn from_slice_in(slice: &[T], alloc: A) -> Self
-    where
-        T: Clone,
-    {
+    /// Creates a new `DynSized` from a vector without copying the data.
+    pub(crate) fn from_vec(vec: Vec<T>) -> Self {
+        let mut vec = {
+            let mut v = vec;
+            v.shrink_to_fit();
+            ManuallyDrop::new(v)
+        };
+        let ptr = vec.as_mut_ptr();
+        let len = vec.len();
         Self {
-            inner: slice.to_vec_in(alloc),
+            ptr: NonNull::new(ptr).unwrap(),
+            len,
         }
     }
 
-    pub fn with_capacity_in(cap: usize, alloc: A) -> Self {
+    pub(crate) fn from_boxed_slice(slice: Box<[T]>) -> Self {
+        let ptr = slice.as_ptr();
+        let len = slice.len();
+        std::mem::forget(slice);
         Self {
-            inner: Vec::with_capacity_in(cap, alloc),
-        }
-    }
-}
-
-impl<T> DynSized<T, Global> {
-    /// Creates a new empty array with the global allocator.
-    pub fn new() -> Self { Self { inner: Vec::new() } }
-
-    pub fn with_capacity(cap: usize) -> Self {
-        Self {
-            inner: Vec::with_capacity(cap),
+            ptr: NonNull::new(ptr as *mut T).unwrap(),
+            len,
         }
     }
 
-    /// Creates a new empty array with the global allocator.
-    pub fn from_slice(slice: &[T]) -> Self
-    where
-        T: Clone,
-    {
-        Self {
-            inner: slice.to_vec(),
+    pub(crate) fn into_vec(self) -> Vec<T> {
+        let ptr = self.ptr.as_ptr();
+        let len = self.len;
+        let cap = self.len;
+        unsafe {
+            let vec = Vec::from_raw_parts(ptr, len, cap);
+            vec
         }
     }
-}
 
-impl<T, A: Allocator> Sealed for DynSized<T, A> {}
-impl<'a, T, A: Allocator> Sealed for &'a DynSized<T, A> {}
-impl<'a, T, A: Allocator> Sealed for &'a mut DynSized<T, A> {}
-
-impl<T, A> Clone for DynSized<T, A>
-where
-    T: Clone,
-    A: Allocator + Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
+    pub(crate) fn as_slice(&self) -> &[T] {
+        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
     }
-}
 
-impl<T: PartialEq, A: Allocator> PartialEq for DynSized<T, A> {
-    fn eq(&self, other: &Self) -> bool { self.inner == other.inner }
-}
-
-impl<T: Eq, A: Allocator> Eq for DynSized<T, A> {}
-
-unsafe impl<T, A: Allocator> Data for DynSized<T, A> {
-    type Elem = T;
-
-    fn as_ptr(&self) -> *const T { self.inner.as_ptr() }
-
-    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.inner.as_mut_ptr() }
-
-    fn as_slice(&self) -> &[Self::Elem] { &self.inner }
-
-    fn as_mut_slice(&mut self) -> &mut [Self::Elem] { &mut self.inner }
-
-    // unsafe fn alloc_uninit(n: usize) -> Self { Self(Vec::with_capacity(n)) }
-}
-
-impl<T: Debug, A: Allocator> Debug for DynSized<T, A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("DynSized({:?})", &self.inner))
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
     }
+
+    pub(crate) fn as_ptr(&self) -> *const T { self.ptr.as_ptr() }
+
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut T { self.ptr.as_ptr() }
 }
 
-impl<T: Display, A: Allocator> Display for DynSized<T, A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        mem::print_slice(f, &self.inner)
-    }
-}
-
-impl<T, A: Allocator> Deref for DynSized<T, A> {
-    type Target = [T];
-
-    fn deref(&self) -> &Self::Target { &self.inner }
-}
-
-impl<T, A: Allocator> From<Vec<T, A>> for DynSized<T, A> {
-    fn from(vec: Vec<T, A>) -> Self { Self { inner: vec } }
-}
-
-/// A fixed-size array allocated on the heap.
-#[repr(transparent)]
-pub struct DynFixSized<T, const N: usize, A = Global>
-where
-    A: Allocator,
-{
-    inner: Box<[T], A>,
-    marker: std::marker::PhantomData<[T; N]>,
-}
-
-impl<T, const N: usize, A: Allocator> Sealed for DynFixSized<T, N, A> {}
-impl<'a, T, const N: usize, A: Allocator> Sealed for &'a DynFixSized<T, N, A> {}
-impl<'a, T, const N: usize, A: Allocator> Sealed for &'a mut DynFixSized<T, N, A> {}
-
-impl<T, const N: usize, A> Clone for DynFixSized<T, N, A>
+impl<T> Clone for DynSized<T>
 where
     T: Clone,
-    A: Allocator + Clone,
 {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            marker: std::marker::PhantomData,
+    fn clone(&self) -> Self { Self::from_vec(self.as_slice().to_owned()) }
+
+    fn clone_from(&mut self, source: &Self) {
+        let mut v = unsafe { Vec::from_raw_parts(self.ptr.as_ptr(), self.len, self.len) };
+        if v.len() > source.len {
+            v.truncate(source.len);
+        }
+        let other = source.as_slice();
+        let (front, back) = other.split_at(v.len());
+        v.clone_from_slice(front);
+        v.extend_from_slice(back);
+        *self = Self::from_vec(v);
+    }
+}
+
+impl<T> Drop for DynSized<T> {
+    fn drop(&mut self) {
+        if self.len > 0 {
+            let ptr = self.ptr.as_ptr();
+            let len = self.len;
+            let cap = self.len;
+            unsafe {
+                Vec::from_raw_parts(ptr, len, cap);
+            }
         }
     }
 }
 
-impl<T, const N: usize, A> PartialEq for DynFixSized<T, N, A>
+impl<T> PartialEq for DynSized<T>
 where
-    A: Allocator,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        let mut i = 0;
-        while i < N {
-            if self.inner[i].eq(&other.inner[i]) {
-                return false;
-            }
-            i += 1;
+        if self.len != other.len() {
+            return false;
         }
-        true
+        self.as_slice()
+            .iter()
+            .zip(other.as_slice().iter())
+            .all(|(a, b)| a == b)
     }
 }
 
-impl<T: Eq, const N: usize, A: Allocator> Eq for DynFixSized<T, N, A> {}
+impl<T: Eq> Eq for DynSized<T> {}
 
-unsafe impl<T, const N: usize, A> Data for DynFixSized<T, N, A>
-where
-    A: Allocator,
-{
+unsafe impl<T> Data for DynSized<T> {
     type Elem = T;
+    type Uninit = DynSized<MaybeUninit<T>>;
 
-    fn as_ptr(&self) -> *const T { self.inner.as_ptr() }
+    fn as_ptr(&self) -> *const T { self.ptr.as_ptr() }
 
-    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.inner.as_mut_ptr() }
+    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.ptr.as_ptr() }
 
-    fn as_slice(&self) -> &[Self::Elem] { &self.inner }
+    fn as_slice(&self) -> &[Self::Elem] { &self.as_slice() }
 
-    fn as_mut_slice(&mut self) -> &mut [Self::Elem] { &mut self.inner }
+    fn as_mut_slice(&mut self) -> &mut [Self::Elem] { self.as_mut_slice() }
 
-    // unsafe fn alloc_uninit(n: usize) -> Self {
-    // std::mem::MaybeUninit::uninit().assume_init() }
+    fn uninit(size: usize) -> Self::Uninit { DynSized::new_uninit(size) }
 }
 
-impl<T, const N: usize, A> Debug for DynFixSized<T, N, A>
+impl<T> Debug for DynSized<T>
 where
     T: Debug,
-    A: Allocator,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("FixSized({:?})", &self.inner))
+        f.write_fmt(format_args!("DynSized({:?})", &self.as_slice()))
     }
 }
 
-impl<T, const N: usize, A> Display for DynFixSized<T, N, A>
+impl<T> Display for DynSized<T>
 where
     T: Display,
-    A: Allocator,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        mem::print_slice(f, &self.inner)
+        mem::print_slice(f, &self.as_slice())
     }
 }
 
-impl<T, const N: usize, A> Deref for DynFixSized<T, N, A>
-where
-    A: Allocator,
-{
-    type Target = [T];
-
-    fn deref(&self) -> &Self::Target { &self.inner }
-}
-
-impl<T, const N: usize> DynFixSized<T, N, Global> {
-    pub fn new_uninit() -> DynFixSized<MaybeUninit<T>, N> {
-        DynFixSized {
-            inner: Box::new_uninit_slice(N),
-            marker: std::marker::PhantomData,
+impl<T> DynSized<T> {
+    pub fn new_uninit(len: usize) -> DynSized<MaybeUninit<T>> {
+        let mut slice = Box::new_uninit_slice(len);
+        DynSized {
+            ptr: NonNull::new(slice.as_mut_ptr()).unwrap(),
+            len,
         }
+    }
+
+    pub fn splat(value: T, len: usize) -> Self
+    where
+        T: Clone,
+    {
+        Self::from_vec(vec![value; len])
     }
 
     pub fn from_slice(slice: &[T]) -> Self
     where
         T: Clone,
     {
-        assert!(
-            slice.len() >= N,
-            "slice length must greater than array size"
-        );
-        Self {
-            inner: slice.to_vec().into_boxed_slice(),
-            marker: std::marker::PhantomData,
-        }
+        Self::from_boxed_slice(slice.to_vec().into_boxed_slice())
     }
 }
 
-impl<T, const N: usize, A> DynFixSized<T, N, A>
+impl<T> DynSized<MaybeUninit<T>> {
+    pub unsafe fn assume_init(self) -> DynSized<T> {
+        let ptr = self.ptr.cast::<T>();
+        let len = self.len;
+        std::mem::forget(self);
+        DynSized { ptr, len }
+    }
+}
+
+impl<T, const N: usize> From<[T; N]> for DynSized<T>
 where
-    A: Allocator,
+    T: Clone,
 {
-    pub fn new_uninit_in(alloc: A) -> DynFixSized<MaybeUninit<T>, N, A> {
-        DynFixSized {
-            inner: Box::new_uninit_slice_in(N, alloc),
-            marker: std::marker::PhantomData,
-        }
-    }
-
-    pub fn from_slice_in(slice: &[T], alloc: A) -> Self
-    where
-        T: Clone,
-    {
-        assert!(slice.len() > N, "slice length must greater than array size");
-        Self {
-            inner: slice.to_vec_in(alloc).into_boxed_slice(),
-            marker: std::marker::PhantomData,
-        }
-    }
+    fn from(array: [T; N]) -> Self { Self::from_slice(&array) }
 }
 
-impl<T, const N: usize, A> DynFixSized<MaybeUninit<T>, N, A>
-where
-    A: Allocator,
-{
-    pub unsafe fn assume_init(self) -> DynFixSized<T, N, A> {
-        let inner = self.inner.assume_init();
-        DynFixSized {
-            inner,
-            marker: std::marker::PhantomData,
-        }
-    }
+impl<T> From<Vec<T>> for DynSized<T> {
+    fn from(vec: Vec<T>) -> Self { Self::from_vec(vec) }
 }
 
-impl<T, const N: usize> From<[T; N]> for DynFixSized<T, N> {
-    fn from(array: [T; N]) -> Self {
-        Self {
-            inner: array.into(),
-            marker: std::marker::PhantomData,
-        }
-    }
-}
+unsafe impl<T: Send> Send for DynSized<T> {}
+unsafe impl<T: Sync> Sync for DynSized<T> {}
 
 #[cfg(test)]
 mod tests {
@@ -301,13 +217,13 @@ mod tests {
 
     #[test]
     fn test_fixed_sized() {
-        let array: DynFixSized<u32, 3> = DynFixSized::from([1, 2, 3]);
+        let array: DynSized<u32> = DynSized::from([1, 2, 3]);
         assert_eq!(array.as_slice(), &[1, 2, 3]);
     }
 
     #[test]
     fn fixed_sized_display() {
-        let a = DynFixSized::from([1u32, 2, 3]);
+        let a = DynSized::from([1u32, 2, 3]);
         assert_eq!(format!("{:?}", a), "FixSized([1, 2, 3])");
         assert_eq!(format!("{}", a), "[1, 2, 3]");
     }

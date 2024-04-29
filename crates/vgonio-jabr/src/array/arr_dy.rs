@@ -1,5 +1,5 @@
 use crate::array::{core::ArrCore, mem::heap::DynSized, MemLayout};
-use std::ops::Index;
+use std::{mem::MaybeUninit, ops::Index};
 
 /// A dynamically sized array with a known number of dimensions at compile-time.
 ///
@@ -13,26 +13,20 @@ pub struct DyArr<T, const N: usize = 1, const L: MemLayout = { MemLayout::RowMaj
 );
 
 impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
-    super::forward_core_array_methods!(@const
-        shape -> &[usize], #[doc = "Returns the shape of the array."];
-        strides -> &[usize], #[doc = "Returns the strides of the array."];
-        order -> MemLayout, #[doc = "Returns the layout of the array."];
-        dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
-        len -> usize, #[doc = "Returns the total number of elements in the array."];
-    );
+    forward_array_core_common_methods!();
 
     /// Creates a new array with the given data and shape.
-    pub fn new(shape: [usize; N]) -> Self {
-        Self(ArrCore::new(
+    pub fn empty(shape: [usize; N]) -> DyArr<MaybeUninit<T>, N, L> {
+        DyArr(ArrCore::new(
             shape,
-            DynSized::with_capacity(shape.iter().product()),
+            DynSized::new_uninit(shape.iter().product()),
         ))
     }
 
     /// Creates a new array with the given data and shape.
     pub fn with_data(shape: [usize; N], data: Vec<T>) -> Self {
         assert_eq!(shape.iter().product::<usize>(), data.len());
-        Self(ArrCore::new(shape, DynSized::from_vec(data)))
+        Self(ArrCore::new(shape, DynSized::from(data)))
     }
 
     /// Reshapes the array to the given shape.
@@ -73,14 +67,14 @@ mod tests {
 
     #[test]
     fn test_dyarr_creation() {
-        let arr: DyArr<i32, 3> = DyArr::new([2, 3, 2]);
+        let arr = DyArr::<u32, 3>::empty([2, 3, 2]);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
     }
 
     #[test]
     fn test_dyarr_reshape() {
-        let arr: DyArr<i32, 3> = DyArr::new([2, 3, 2]);
+        let arr: DyArr<MaybeUninit<i32>, 3> = DyArr::empty([2, 3, 2]);
         let arr = arr.reshape([-1, 3, 2]);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);

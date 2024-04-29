@@ -9,11 +9,12 @@
 #![feature(thin_box)]
 #![feature(new_uninit)]
 #![feature(associated_type_defaults)]
+#![feature(inline_const)]
 
 extern crate core;
 
 pub mod array;
-mod expr;
+pub mod expr;
 pub mod linalg;
 pub mod optics;
 pub mod prelude;

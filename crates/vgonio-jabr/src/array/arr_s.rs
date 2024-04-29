@@ -6,6 +6,7 @@ use crate::{
     },
     utils::{Assert, IsTrue},
 };
+use num_traits::{One, Zero};
 use std::ops::Index;
 
 /// A fixed-size multidimensional array on the stack with type level fixed
@@ -23,13 +24,7 @@ where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
     [(); S::N_ELEMS]:,
 {
-    super::forward_core_array_methods!(@const
-        shape -> &[usize], #[doc = "Returns the shape of the array."];
-        strides -> &[usize], #[doc = "Returns the strides of the array."];
-        order -> MemLayout, #[doc = "Returns the layout of the array."];
-        dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
-        len -> usize, #[doc = "Returns the total number of elements in the array."];
-    );
+    forward_array_core_common_methods!();
 
     /// Creates a new array with the given data and shape.
     pub fn new(data: [T; S::N_ELEMS]) -> Self { Self(ArrCore::new(S::SHAPE, FixedSized(data))) }
@@ -41,6 +36,38 @@ where
         Assert<{ S::N_ELEMS == S0::N_ELEMS }>: IsTrue,
     {
         todo!("Implement reshape for Arr")
+    }
+
+    /// Creates a new array with all elements set to one.
+    pub fn ones() -> Self
+    where
+        T: One + Copy,
+    {
+        Self(ArrCore::new(S::SHAPE, FixedSized([T::one(); S::N_ELEMS])))
+    }
+
+    /// Creates a new array with all elements set to zero.
+    pub fn zeros() -> Self
+    where
+        T: Zero + Copy,
+    {
+        Self(ArrCore::new(S::SHAPE, FixedSized([T::zero(); S::N_ELEMS])))
+    }
+
+    /// Creates a new array with all elements set to the given value.
+    pub fn full(value: T) -> Self
+    where
+        T: Copy,
+    {
+        Self(ArrCore::new(S::SHAPE, FixedSized([value; S::N_ELEMS])))
+    }
+
+    /// Creates a new array with all elements set to the given value.
+    pub fn splat(value: T) -> Self
+    where
+        T: Copy,
+    {
+        Self(ArrCore::new(S::SHAPE, FixedSized([value; S::N_ELEMS])))
     }
 }
 
@@ -63,7 +90,6 @@ where
 
 impl<T, S, const L: MemLayout, const N: usize> Index<[usize; N]> for Arr<T, S, L>
 where
-    T: Copy,
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
     [(); S::N_ELEMS]:,
 {
@@ -77,7 +103,7 @@ use crate::array::shape::s;
 
 /// A macro for creating a fixed-size array with the given elements on the
 /// stack.
-pub macro arr([$($n:expr),+ $(,)*]; [$($x:expr),* $(,)*]) {{
+pub macro arr($($n:expr),+ $(,)*; [$($x:expr),* $(,)*]) {{
     crate::array::Arr::<_, s![$($n),*], { MemLayout::RowMajor }>::new([$($x),*])
 }}
 
@@ -96,19 +122,27 @@ mod tests {
 
     #[test]
     fn test_arr_macro_dim1() {
-        let a = arr!([6]; [1, 2, 3, 4, 5, 6]);
+        let a = arr!(6; [1, 2, 3, 4, 5, 6]);
         assert_eq!(a.shape(), &[6]);
         assert_eq!(a.strides(), &[1]);
-        let b = arr!([2, 3]; [1, 2, 3, 4, 5, 6]);
+        let b = arr!(2, 3; [1, 2, 3, 4, 5, 6]);
         assert_eq!(b.shape(), &[2, 3]);
         assert_eq!(b.strides(), &[3, 1]);
         assert_eq!(b[[1, 2]], 6);
     }
 
     #[test]
-    fn test_deref() {
-        let arr: Arr<i32, s![2, 3], { MemLayout::ColMajor }> = Arr::new([1, 2, 3, 4, 5, 6]);
-        assert_eq!(arr.shape(), &[2, 3]);
-        assert_eq!(arr.strides(), &[1, 2]);
+    fn test_empty() {
+        let arr: Arr<i32, s![2, 3, 5], { MemLayout::RowMajor }> = Arr::ones();
+        assert_eq!(arr.shape(), &[2, 3, 5]);
+        assert_eq!(arr.strides(), &[15, 5, 1]);
+
+        for i in 0..2 {
+            for j in 0..3 {
+                for k in 0..5 {
+                    assert_eq!(arr[[i, j, k]], 1);
+                }
+            }
+        }
     }
 }

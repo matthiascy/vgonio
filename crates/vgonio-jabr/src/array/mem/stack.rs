@@ -1,13 +1,12 @@
-use crate::array::mem::{Data, Sealed};
-use std::ops::Deref;
+use crate::array::mem::Data;
+use std::{mem::MaybeUninit, ops::Deref};
 
 /// A fixed-sized array that is allocated on the stack.
 pub struct FixedSized<T, const N: usize>(pub(crate) [T; N]);
 
-impl<T, const N: usize> Sealed for FixedSized<T, N> {}
-
 unsafe impl<T, const N: usize> Data for FixedSized<T, N> {
     type Elem = T;
+    type Uninit = FixedSized<MaybeUninit<T>, N>;
 
     fn as_ptr(&self) -> *const Self::Elem { self.0.as_ptr() }
 
@@ -16,6 +15,10 @@ unsafe impl<T, const N: usize> Data for FixedSized<T, N> {
     fn as_slice(&self) -> &[Self::Elem] { &self.0 }
 
     fn as_mut_slice(&mut self) -> &mut [Self::Elem] { &mut self.0 }
+
+    fn uninit(_: usize) -> Self::Uninit {
+        FixedSized(unsafe { MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init() })
+    }
 }
 
 impl<T, const N: usize> Clone for FixedSized<T, N>
