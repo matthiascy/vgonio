@@ -266,7 +266,7 @@ fn new_microfacet_brdf_fitting_problem_proxy_common(
             .zip(max.chunks_mut(n_wavelength))
             .par_bridge()
             .for_each(|(snapshot, max)| {
-                for spectral_samples in snapshot.samples.chunks(n_wavelength) {
+                for spectral_samples in snapshot.samples.as_slice().chunks(n_wavelength) {
                     for (j, s) in spectral_samples.iter().enumerate() {
                         max[j] = f64::max(max[j], *s as f64);
                     }
@@ -397,7 +397,7 @@ fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy
                         &problem.iors_t,
                     );
                     let measured_values =
-                        &snapshot.samples[j * n_wavelengths..(j + 1) * n_wavelengths];
+                        &snapshot.samples.as_slice()[j * n_wavelengths..(j + 1) * n_wavelengths];
                     match (max_measured, max_modelled) {
                         (Some(max_measured), Some(max_modelled)) => {
                             for k in 0..n_wavelengths {

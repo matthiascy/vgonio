@@ -2,7 +2,7 @@ use crate::array::{
     mem::{Data, DataClone, DataCopy, MemLayout},
     shape::{self, Shape, ShapeMetadata},
 };
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 /// Base struct for all arrays.
 pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::RowMajor }>
@@ -95,6 +95,37 @@ where
         );
         let idx = shape::compute_index::<_, L>(&self.meta, &index);
         &self.data.as_slice()[idx]
+    }
+}
+
+impl<D, S, const L: MemLayout, const N: usize> IndexMut<[usize; N]> for ArrCore<D, S, L>
+where
+    D: Data,
+    S: Shape,
+{
+    #[track_caller]
+    fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output {
+        debug_assert!(
+            N <= self.meta.dimension()
+                && index
+                    .iter()
+                    .zip(self.meta.shape().iter())
+                    .all(|(&i, &s)| i < s),
+            "Index out of bounds"
+        );
+        let idx = shape::compute_index::<_, L>(&self.meta, &index);
+        &mut self.data.as_mut_slice()[idx]
+    }
+}
+
+impl<D, S, const L: MemLayout> PartialEq for ArrCore<D, S, L>
+where
+    D: Data,
+    S: Shape,
+    D::Elem: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.meta == other.meta && self.data.as_slice() == other.data.as_slice()
     }
 }
 

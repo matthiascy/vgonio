@@ -1,5 +1,10 @@
-use crate::array::{core::ArrCore, mem::heap::DynSized, MemLayout};
-use std::{mem::MaybeUninit, ops::Index};
+use crate::array::{core::ArrCore, mem::heap::DynSized, shape::compute_n_elems, MemLayout};
+use num_traits::{One, Zero};
+use std::{
+    fmt::Debug,
+    mem::MaybeUninit,
+    ops::{Index, IndexMut},
+};
 
 /// A dynamically sized array with a known number of dimensions at compile-time.
 ///
@@ -23,11 +28,32 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         ))
     }
 
-    /// Creates a new array with the given data and shape.
-    pub fn with_data(shape: [usize; N], data: Vec<T>) -> Self {
-        assert_eq!(shape.iter().product::<usize>(), data.len());
-        Self(ArrCore::new(shape, DynSized::from(data)))
+    /// Creates a new array from a vector.
+    pub fn from_vec(shape: [usize; N], vec: Vec<T>) -> Self {
+        assert_eq!(compute_n_elems(&shape), vec.len());
+        Self(ArrCore::new(shape, DynSized::from_vec(vec)))
     }
+
+    /// Creates a new array from a boxed slice.
+    pub fn from_boxed_slice(shape: [usize; N], slice: Box<[T]>) -> Self {
+        assert_eq!(compute_n_elems(&shape), slice.len());
+        Self(ArrCore::new(shape, DynSized::from_boxed_slice(slice)))
+    }
+
+    /// Creates a new array from a slice.
+    pub fn from_slice(shape: [usize; N], slice: &[T]) -> Self
+    where
+        T: Clone,
+    {
+        assert_eq!(compute_n_elems(&shape), slice.len());
+        Self(ArrCore::new(shape, DynSized::from_slice(slice)))
+    }
+
+    /// Returns the array underlying data as a slice.
+    pub fn as_slice(&self) -> &[T] { self.0.data.as_slice() }
+
+    /// Returns the array underlying data as a mutable slice.
+    pub fn as_mut_slice(&mut self) -> &mut [T] { self.0.data.as_mut_slice() }
 
     /// Reshapes the array to the given shape.
     ///
@@ -45,21 +71,69 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         );
         todo!()
     }
+
+    /// Creates a new array with all elements set to zero.
+    pub fn zeros(shape: [usize; N]) -> Self
+    where
+        T: Zero + Clone,
+    {
+        let n = compute_n_elems(&shape);
+        Self(ArrCore::new(shape, DynSized::splat(T::zero(), n)))
+    }
+
+    /// Creates a new array with all elements set to one.
+    pub fn ones(shape: [usize; N]) -> Self
+    where
+        T: One + Clone,
+    {
+        let n = compute_n_elems(&shape);
+        Self(ArrCore::new(shape, DynSized::splat(T::one(), n)))
+    }
+
+    pub fn splat(value: T, shape: [usize; N]) -> Self
+    where
+        T: Clone,
+    {
+        let n = compute_n_elems(&shape);
+        Self(ArrCore::new(shape, DynSized::splat(value, n)))
+    }
 }
 
-impl<T, const L: MemLayout, const N: usize> Index<[usize; N]> for DyArr<T, N, L> {
+impl<T, const N: usize, const L: MemLayout> Index<[usize; N]> for DyArr<T, N, L> {
     type Output = T;
 
     #[inline]
     fn index(&self, index: [usize; N]) -> &Self::Output { &self.0[index] }
 }
 
-impl<T, const L: MemLayout, const N: usize> Clone for DyArr<T, N, L>
+impl<T, const N: usize, const L: MemLayout> IndexMut<[usize; N]> for DyArr<T, N, L> {
+    fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output { &mut self.0[index] }
+}
+
+impl<T, const N: usize, const L: MemLayout> Clone for DyArr<T, N, L>
 where
     T: Clone,
 {
     fn clone(&self) -> Self { Self(self.0.clone()) }
 }
+
+impl<T, const N: usize, const L: MemLayout> Debug for DyArr<T, N, L>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("DyArr({:?})", &self.0.data))
+    }
+}
+
+impl<T, const N: usize, const L: MemLayout> PartialEq for DyArr<T, N, L>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+}
+
+impl<T, const N: usize, const L: MemLayout> Eq for DyArr<T, N, L> where T: Eq {}
 
 #[cfg(test)]
 mod tests {

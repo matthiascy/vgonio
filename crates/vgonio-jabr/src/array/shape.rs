@@ -10,7 +10,7 @@ pub trait Shape {
     fn new_metadata(dims: &Self::Underlying, layout: MemLayout) -> Self::Metadata;
 }
 
-pub trait ShapeMetadata: Clone {
+pub trait ShapeMetadata: Clone + PartialEq {
     fn shape(&self) -> &[usize];
     fn strides<const L: MemLayout>(&self) -> &[usize];
     fn dimension(&self) -> usize;
@@ -57,7 +57,17 @@ where
     fn dimension(&self) -> usize { self.shape.len() }
 }
 
-#[derive(Copy, Clone)]
+impl<T> PartialEq for DynShapeMetadata<T>
+where
+    T: DimSeq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.shape.as_slice() == other.shape.as_slice()
+            && self.strides.as_slice() == other.strides.as_slice()
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FixedShapeMetadata<T: ConstShape>(::core::marker::PhantomData<T>);
 
 impl<T, const N: usize> ShapeMetadata for FixedShapeMetadata<T>
@@ -111,7 +121,7 @@ impl Shape for Vec<usize> {
 /// This trait is a helper to construct a concrete array shape from
 /// type-level constants.
 #[const_trait]
-pub trait ConstShape: Sized + Clone + Copy {
+pub trait ConstShape: Sized + Clone + Copy + PartialEq {
     /// Underlying storage type for the shape.
     type Underlying: DimSeq;
     /// The number of dimensions of the array.
@@ -168,7 +178,7 @@ mod const_shape {
     /// This is a workaround to the lack of variadic generics in Rust. Once
     /// variadic generics are stabilized, this type will be replaced by a
     /// variadic generic type.
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     pub struct CShape<A: ConstShape, const N: usize>(::core::marker::PhantomData<[A; N]>);
 
     /// Recursive macro generating type signature for `CShape` from a sequence

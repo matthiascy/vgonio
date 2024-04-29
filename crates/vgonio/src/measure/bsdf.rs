@@ -28,6 +28,7 @@ use base::{
     partition::{PartitionScheme, SphericalPartition},
     units::{Degs, Radians, Rads},
 };
+use jabr::array::DyArr;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -151,9 +152,8 @@ impl MeasuredBsdfData {
                             continue;
                         }
                         for k in 0..n_wavelength {
-                            bsdf_images[offset + k * w * h + j * w + i] = snapshot.samples
-                                [idx as usize * n_wavelength + k]
-                                * factor[l * n_wavelength + k];
+                            bsdf_images[offset + k * w * h + j * w + i] =
+                                snapshot.samples[[idx as usize, k]] * factor[l * n_wavelength + k];
                         }
                     }
                 }
@@ -622,11 +622,11 @@ impl MeasuredBsdfData {
                         center.1.to_cartesian(),
                         center.2.to_cartesian(),
                     );
-                    let patch0_samples = &snapshot.samples
+                    let patch0_samples = &snapshot.samples.as_slice()
                         [patch_idx.0 * n_wavelengths..(patch_idx.0 + 1) * n_wavelengths];
-                    let patch1_samples = &snapshot.samples
+                    let patch1_samples = &snapshot.samples.as_slice()
                         [patch_idx.1 * n_wavelengths..(patch_idx.1 + 1) * n_wavelengths];
-                    let patch2_samples = &snapshot.samples
+                    let patch2_samples = &snapshot.samples.as_slice()
                         [patch_idx.2 * n_wavelengths..(patch_idx.2 + 1) * n_wavelengths];
                     log::trace!(
                         "  - Interpolating inside a triangle between patches #{} ({}, {} | {:?}), \
@@ -661,9 +661,9 @@ impl MeasuredBsdfData {
                     let patch0 = partition.patches[patch0_idx];
                     let patch1 = partition.patches[patch1_idx];
                     let center = (patch0.center(), patch1.center());
-                    let patch0_samples = &snapshot.samples
+                    let patch0_samples = &snapshot.samples.as_slice()
                         [patch0_idx * n_wavelengths..(patch0_idx + 1) * n_wavelengths];
-                    let patch1_samples = &snapshot.samples
+                    let patch1_samples = &snapshot.samples.as_slice()
                         [patch1_idx * n_wavelengths..(patch1_idx + 1) * n_wavelengths];
                     log::trace!(
                         "  - Interpolating between two patches: #{} ({}, {} | {:?}) and #{} ({}, \
@@ -758,13 +758,17 @@ impl MeasuredBsdfData {
                         ))
                     .clamp(0.0, 1.0);
                     // Bilateral interpolation.
-                    let upper_patch0_samples = &snapshot.samples[upper_patch_idx.0 * n_wavelengths
+                    let upper_patch0_samples = &snapshot.samples.as_slice()[upper_patch_idx.0
+                        * n_wavelengths
                         ..(upper_patch_idx.0 + 1) * n_wavelengths];
-                    let upper_patch1_samples = &snapshot.samples[upper_patch_idx.1 * n_wavelengths
+                    let upper_patch1_samples = &snapshot.samples.as_slice()[upper_patch_idx.1
+                        * n_wavelengths
                         ..(upper_patch_idx.1 + 1) * n_wavelengths];
-                    let lower_patch0_samples = &snapshot.samples[lower_patch_idx.0 * n_wavelengths
+                    let lower_patch0_samples = &snapshot.samples.as_slice()[lower_patch_idx.0
+                        * n_wavelengths
                         ..(lower_patch_idx.0 + 1) * n_wavelengths];
-                    let lower_patch1_samples = &snapshot.samples[lower_patch_idx.1 * n_wavelengths
+                    let lower_patch1_samples = &snapshot.samples.as_slice()[lower_patch_idx.1
+                        * n_wavelengths
                         ..(lower_patch_idx.1 + 1) * n_wavelengths];
                     log::trace!(
                         "  - Interpolating inside a quadrilateral between rings #{} (#{} vals \
@@ -811,6 +815,7 @@ pub(crate) fn compute_bsdf_snapshots_max_values(
         let offset = i * n_wavelength;
         snapshot
             .samples
+            .as_slice()
             .chunks(n_wavelength)
             .for_each(|patch_samples| {
                 patch_samples.iter().enumerate().for_each(|(j, val)| {
@@ -830,6 +835,7 @@ mod tests {
     use base::{
         medium::Medium, partition::SphericalDomain, range::RangeByStepSizeInclusive, units::nm,
     };
+    use jabr::array::DynArr;
 
     #[test]
     fn test_measured_bsdf_sample() {
@@ -839,7 +845,7 @@ mod tests {
         };
         let partition =
             SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
-        let samples = vec![1.0; partition.n_patches() * 4].into_boxed_slice();
+        let samples = DyArr::ones([partition.n_patches(), 4]);
         let snapshots = Box::new([BsdfSnapshot {
             wi: Sph2 {
                 theta: Rads::ZERO,
@@ -1185,7 +1191,7 @@ pub struct BsdfSnapshot {
     /// BSDF values for each patch of the collector and each wavelength.
     /// Two-dimensional data (patch, wavelength) stored in a flat array in
     /// row-major order.
-    pub samples: Box<[f32]>,
+    pub samples: DyArr<f32, 2>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Extra ray trajectory data for debugging purposes.
     pub trajectories: Vec<RayTrajectory>,

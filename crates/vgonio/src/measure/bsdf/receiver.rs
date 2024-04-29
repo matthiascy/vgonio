@@ -14,6 +14,7 @@ use base::{
     range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
+use jabr::array::DyArr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::{atomic, atomic::AtomicU32};
@@ -477,7 +478,7 @@ impl<'a> CollectedData<'a> {
             .par_iter()
             .map(|snapshot| {
                 // Row-major order: [patch][wavelength]
-                let mut samples = vec![0.0; n_patch * n_wavelength].into_boxed_slice();
+                let mut samples = DyArr::<f32, 2>::zeros([n_patch, n_wavelength]);
                 let cos_i = snapshot.wi.theta.cos();
                 let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
                 for (i, patch_data) in snapshot.records.chunks(n_wavelength).enumerate() {
@@ -488,7 +489,8 @@ impl<'a> CollectedData<'a> {
                         let solid_angle = patch.solid_angle().as_f32();
                         if cos_o != 0.0 {
                             let l_o = stats.total_energy * rcp_f32(cos_o) * rcp_f32(solid_angle);
-                            samples[i * n_wavelength + j] = l_o * rcp_e_i;
+                            // samples[i * n_wavelength + j] = l_o * rcp_e_i;
+                            samples[[i, j]] = l_o * rcp_e_i;
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
                                 "energy of patch {i}: {:>12.4}, λ[{j}] --  E_i: {:>12.4}, \
@@ -501,13 +503,6 @@ impl<'a> CollectedData<'a> {
                         }
                     }
                 }
-                // log::debug!(
-                //     "captured energy: {:?}, wi: {}, total energy: {:?} | {:?}",
-                //     snapshot.stats.e_captured,
-                //     snapshot.wi,
-                //     snapshot.stats.n_received as f32,
-                //     snapshot.stats.n_received as f32 * cos_i
-                // );
                 // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 // log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
                 BsdfSnapshot {

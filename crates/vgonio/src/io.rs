@@ -49,6 +49,7 @@ pub mod vgmo {
         units::{rad, Nanometres, Radians},
         Version,
     };
+    use jabr::array::DyArr;
     use std::{
         io::{BufWriter, Seek},
         mem,
@@ -1040,9 +1041,9 @@ pub mod vgmo {
                 reader.read_exact(&mut buf)?;
                 read_sph2_from_buf(&buf)
             };
-            let mut samples = vec![0.0; n_patch * n_wavelength].into_boxed_slice();
+            let mut samples = DyArr::zeros([n_patch, n_wavelength]);
             reader.read_exact(samples_buf)?;
-            read_slice_from_buf(samples_buf, &mut samples, n_patch * n_wavelength);
+            read_slice_from_buf(samples_buf, samples.as_mut_slice(), n_patch * n_wavelength);
 
             Ok(Self {
                 wi,
@@ -1076,7 +1077,7 @@ pub mod vgmo {
             buf[0..4].copy_from_slice(&self.wi.theta.as_f32().to_le_bytes());
             buf[4..8].copy_from_slice(&self.wi.phi.as_f32().to_le_bytes());
             writer.write_all(&buf)?;
-            write_slice_to_buf(&self.samples, samples_buf);
+            write_slice_to_buf(&self.samples.as_slice(), samples_buf);
             writer.write_all(samples_buf)
         }
     }
@@ -1274,6 +1275,7 @@ mod tests {
         MeasuredBsdfData,
     };
     use base::math::Sph2;
+    use jabr::array::DyArr;
     use std::io::{BufReader, BufWriter, Cursor, Write};
 
     #[test]
@@ -1448,7 +1450,7 @@ mod tests {
         let n_patch = 4;
         let snapshot = BsdfSnapshot {
             wi: Sph2::zero(),
-            samples: vec![11.0; n_patch * n_wavelength].into_boxed_slice(),
+            samples: DyArr::splat(11.0, [n_patch, n_wavelength]),
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: vec![],
             #[cfg(any(feature = "visu-dbg", debug_assertions))]

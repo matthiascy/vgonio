@@ -21,6 +21,7 @@ use bxdf::{
     distro::MicrofacetDistroKind,
     Scattering,
 };
+use jabr::array::DyArr;
 use rayon::{
     iter::{
         IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
@@ -136,8 +137,9 @@ fn compute_distance(
             }
             model_snapshot
                 .samples
+                .as_slice()
                 .chunks(n_lambda)
-                .zip(measured_snapshot.samples.chunks(n_lambda))
+                .zip(measured_snapshot.samples.as_slice().chunks(n_lambda))
                 .zip(patches.iter())
                 .map(|((model_samples, measured_samples), patch)| {
                     if patch.center().theta > max_theta_o {
@@ -369,7 +371,7 @@ pub(crate) fn generate_analytical_brdf(
         .for_each(|chunk| {
             for ((wi_sph, max_values_per_snapshot), snapshot) in chunk {
                 let wi = wi_sph.to_cartesian();
-                let mut samples = vec![0.0; n_patches * n_wavelength].into_boxed_slice();
+                let mut samples = DyArr::zeros([n_patches, n_wavelength]);
                 for (i, patch) in partition.patches.iter().enumerate() {
                     let wo_sph = patch.center();
                     let wo = sph_to_cart(wo_sph.theta, wo_sph.phi);
@@ -382,11 +384,11 @@ pub(crate) fn generate_analytical_brdf(
                     for (i, sample) in spectral_samples.iter().enumerate() {
                         max_values_per_snapshot[i] = f32::max(max_values_per_snapshot[i], *sample);
                     }
-                    samples[i * n_wavelength..(i + 1) * n_wavelength]
+                    samples.as_mut_slice()[i * n_wavelength..(i + 1) * n_wavelength]
                         .copy_from_slice(&spectral_samples);
                 }
                 if normalise {
-                    for sample in samples.chunks_mut(n_wavelength) {
+                    for sample in samples.as_mut_slice().chunks_mut(n_wavelength) {
                         for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
                             *s /= *max as f32;
                         }
