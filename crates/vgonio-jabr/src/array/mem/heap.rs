@@ -1,108 +1,39 @@
 use crate::array::mem::{self, Data};
 use std::{
-    alloc::{Allocator, Global},
+    alloc::Allocator,
     fmt::{Debug, Display},
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
     ptr::NonNull,
 };
 
+// TODO: rewrite avoiding the use of `Vec` to enable slicing.
 /// A fixed-size array allocated on the heap, with a dynamically determined
 /// size.
 #[repr(C)]
-pub struct DynSized<T> {
-    ptr: NonNull<T>,
-    len: usize,
-}
+#[derive(Clone)]
+pub struct DynSized<T>(Vec<T>);
 
 impl<T> DynSized<T> {
-    pub(crate) fn new() -> Self {
-        Self {
-            ptr: NonNull::dangling(),
-            len: 0,
-        }
-    }
-
-    pub(crate) fn len(&self) -> usize { self.len }
+    pub(crate) fn new() -> Self { Self(Vec::new()) }
 
     /// Creates a new `DynSized` from a vector without copying the data.
     pub(crate) fn from_vec(vec: Vec<T>) -> Self {
-        let mut vec = {
-            let mut v = vec;
-            v.shrink_to_fit();
-            ManuallyDrop::new(v)
-        };
-        let ptr = vec.as_mut_ptr();
-        let len = vec.len();
-        Self {
-            ptr: NonNull::new(ptr).unwrap(),
-            len,
-        }
+        let mut v = vec;
+        // Make sure there is no extra memory allocated.
+        v.shrink_to_fit();
+        Self(v)
     }
 
-    pub(crate) fn from_boxed_slice(slice: Box<[T]>) -> Self {
-        let ptr = slice.as_ptr();
-        let len = slice.len();
-        std::mem::forget(slice);
-        Self {
-            ptr: NonNull::new(ptr as *mut T).unwrap(),
-            len,
-        }
-    }
+    pub(crate) fn from_boxed_slice(slice: Box<[T]>) -> Self { Self(slice.into_vec()) }
 
-    pub(crate) fn into_vec(self) -> Vec<T> {
-        let ptr = self.ptr.as_ptr();
-        let len = self.len;
-        let cap = self.len;
-        unsafe {
-            let vec = Vec::from_raw_parts(ptr, len, cap);
-            vec
-        }
-    }
+    pub(crate) fn as_slice(&self) -> &[T] { self.0.as_slice() }
 
-    pub(crate) fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
-    }
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [T] { self.0.as_mut_slice() }
 
-    pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
-    }
+    pub(crate) fn as_ptr(&self) -> *const T { self.0.as_ptr() }
 
-    pub(crate) fn as_ptr(&self) -> *const T { self.ptr.as_ptr() }
-
-    pub(crate) fn as_mut_ptr(&mut self) -> *mut T { self.ptr.as_ptr() }
-}
-
-impl<T> Clone for DynSized<T>
-where
-    T: Clone,
-{
-    fn clone(&self) -> Self { Self::from_vec(self.as_slice().to_owned()) }
-
-    fn clone_from(&mut self, source: &Self) {
-        let mut v = unsafe { Vec::from_raw_parts(self.ptr.as_ptr(), self.len, self.len) };
-        if v.len() > source.len {
-            v.truncate(source.len);
-        }
-        let other = source.as_slice();
-        let (front, back) = other.split_at(v.len());
-        v.clone_from_slice(front);
-        v.extend_from_slice(back);
-        *self = Self::from_vec(v);
-    }
-}
-
-impl<T> Drop for DynSized<T> {
-    fn drop(&mut self) {
-        if self.len > 0 {
-            let ptr = self.ptr.as_ptr();
-            let len = self.len;
-            let cap = self.len;
-            unsafe {
-                Vec::from_raw_parts(ptr, len, cap);
-            }
-        }
-    }
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut T { self.0.as_mut_ptr() }
 }
 
 impl<T> PartialEq for DynSized<T>
@@ -110,9 +41,6 @@ where
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        if self.len != other.len() {
-            return false;
-        }
         self.as_slice()
             .iter()
             .zip(other.as_slice().iter())
@@ -126,9 +54,9 @@ unsafe impl<T> Data for DynSized<T> {
     type Elem = T;
     type Uninit = DynSized<MaybeUninit<T>>;
 
-    fn as_ptr(&self) -> *const T { self.ptr.as_ptr() }
+    fn as_ptr(&self) -> *const T { self.0.as_ptr() }
 
-    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.ptr.as_ptr() }
+    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.0.as_mut_ptr() }
 
     fn as_slice(&self) -> &[Self::Elem] { &self.as_slice() }
 
@@ -157,11 +85,7 @@ where
 
 impl<T> DynSized<T> {
     pub fn new_uninit(len: usize) -> DynSized<MaybeUninit<T>> {
-        let mut slice = Box::new_uninit_slice(len);
-        DynSized {
-            ptr: NonNull::new(slice.as_mut_ptr()).unwrap(),
-            len,
-        }
+        DynSized::from_boxed_slice(Box::new_uninit_slice(len))
     }
 
     pub fn splat(value: T, len: usize) -> Self
@@ -181,10 +105,11 @@ impl<T> DynSized<T> {
 
 impl<T> DynSized<MaybeUninit<T>> {
     pub unsafe fn assume_init(self) -> DynSized<T> {
-        let ptr = self.ptr.cast::<T>();
-        let len = self.len;
-        std::mem::forget(self);
-        DynSized { ptr, len }
+        let mut vec = self.0;
+        let ptr = vec.as_mut_ptr() as *mut T;
+        let len = vec.len();
+        std::mem::forget(vec);
+        DynSized(Vec::from_raw_parts(ptr, len, len))
     }
 }
 

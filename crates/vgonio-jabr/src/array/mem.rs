@@ -2,7 +2,6 @@ pub mod heap;
 pub mod stack;
 
 use core::{fmt::Write, marker::ConstParamTy};
-use std::mem::MaybeUninit;
 
 /// Memory layout of a multidimensional array.
 ///

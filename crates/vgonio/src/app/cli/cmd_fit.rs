@@ -160,6 +160,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .unwrap();
                         #[cfg(debug_assertions)]
                         {
+                            let n_wavelength = measured_data.params.emitter.spectrum.step_count();
                             let partition = measured_data.params.receiver.partitioning();
                             for snap in measured_data.snapshots.iter() {
                                 log::debug!("  = snapshot | wi: {}", snap.wi);
@@ -179,7 +180,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                             partition.patches[patch_idx].min,
                                             partition.patches[patch_idx].max,
                                             partition.patches[patch_idx].center(),
-                                            snap.samples[patch_idx]
+                                            &snap.samples.as_slice()[patch_idx * n_wavelength
+                                                ..(patch_idx + 1) * n_wavelength]
                                         );
                                     }
                                 }
