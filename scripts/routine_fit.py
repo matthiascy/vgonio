@@ -1,3 +1,4 @@
+import os.path
 import subprocess
 import re
 from datetime import datetime
@@ -45,36 +46,47 @@ def parse_bruteforce_output(output):
     return min_error, min_alpha
 
 
-def process_brdf_fitting(input_files, distributions, f):
-    for file in input_files:
-        for distro in distributions:
-            bruteforce_command = f"./target/release/vgonio fit -i {file} -s 0.01 -e 0.6 -p 0.01 --family microfacet --isotropy isotropic --distro {distro} --method bruteforce"
-            bruteforce_output = run_command(bruteforce_command)
-            min_error, min_alpha = parse_bruteforce_output(bruteforce_output)
-            s = max(min_alpha - 0.025, 0.001)
-            e = min(min_alpha + 0.025, 0.6)
-            p = 0.001
-            if min_alpha is not None:
-                nlls_command = f"./target/release/vgonio fit -i {file} -s {s} -e {e} -p {p} --family microfacet --isotropy isotropic --distro {distro} --method nlls"
-                nlls_output = run_command(nlls_command)
-                best_alpha, best_error = parse_nlls_output(nlls_output)
-                # Print results
-                print(f"Results for file: {file}, distribution: {distro}, s: {s}, e: {e}, p: {p}", file=f)
-                print(f"-- Bruteforce alpha: {min_alpha}", file=f)
-                print(f"-- Non-linear least squares: {best_alpha}, err: {best_error}", file=f)
+def process_brdf_fitting(inputs, distributions, f):
+    for input in inputs:
+        if os.path.exists(input):
+            if os.path.isdir(input):
+                for file in os.listdir(input):
+                    if file.endswith(".vgmo"):
+                        for distro in distributions:
+                            brdf_fitting(os.path.join(input, file), distro, f)
+            elif input.endswith(".vgmo"):
+                for distro in distributions:
+                    brdf_fitting(input, distro, f)
+
+
+def brdf_fitting(input, distro, f):
+    bruteforce_command = f"./target/release/vgonio fit -i {input} -s 0.01 -e 0.6 -p 0.01 --family microfacet --isotropy isotropic --distro {distro} --method bruteforce"
+    bruteforce_output = run_command(bruteforce_command)
+    min_error, min_alpha = parse_bruteforce_output(bruteforce_output)
+    s = max(min_alpha - 0.025, 0.001)
+    e = min(min_alpha + 0.025, 0.6)
+    p = 0.001
+    if min_alpha is not None:
+        nlls_command = f"./target/release/vgonio fit -i {input} -s {s} -e {e} -p {p} --family microfacet --isotropy isotropic --distro {distro} --method nlls"
+        nlls_output = run_command(nlls_command)
+        best_alpha, best_error = parse_nlls_output(nlls_output)
+        # Print results
+        print(f"Results for file: {input}, distribution: {distro}, s: {s}, e: {e}, p: {p}", file=f)
+        print(f"-- Bruteforce alpha: {min_alpha}", file=f)
+        print(f"-- Non-linear least squares: {best_alpha}, err: {best_error}", file=f)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python script.py <input_file1> ...")
+        print("Usage: python script.py <file/directory> ...")
         sys.exit(1)
 
     # List of input files from command line arguments
-    input_files = sys.argv[1:]
+    inputs = sys.argv[1:]
 
     # List of distributions
     distributions = ['bk', 'tr']
 
     # open a file to write the results with the date and time as the filename
-    with open(f"results_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt", 'w') as f:
-        process_brdf_fitting(input_files, distributions, f)
+    with open(f"rountine_fit_results_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt", 'w') as f:
+        process_brdf_fitting(inputs, distributions, f)
