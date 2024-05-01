@@ -1,5 +1,7 @@
 import subprocess
 import re
+from datetime import datetime
+
 import sys
 
 
@@ -43,27 +45,23 @@ def parse_bruteforce_output(output):
     return min_error, min_alpha
 
 
-def process_files(input_files, distributions):
-    results = {}
+def process_brdf_fitting(input_files, distributions, f):
     for file in input_files:
         for distro in distributions:
-            bruteforce_command = f"./target/release/vgonio fit -i {file} -s 0.01 -e 0.5 -p 0.01 --family microfacet --isotropy isotropic --distro {distro} --method bruteforce"
+            bruteforce_command = f"./target/release/vgonio fit -i {file} -s 0.01 -e 0.6 -p 0.01 --family microfacet --isotropy isotropic --distro {distro} --method bruteforce"
             bruteforce_output = run_command(bruteforce_command)
             min_error, min_alpha = parse_bruteforce_output(bruteforce_output)
-            s = max(min_alpha - 0.05, 0.001)
-            e = min(min_alpha + 0.05, 0.5)
+            s = max(min_alpha - 0.025, 0.001)
+            e = min(min_alpha + 0.025, 0.6)
             p = 0.001
-            print(f"File: {file}, Distribution: {distro}, s: {s}, e: {e}, p: {p}")
             if min_alpha is not None:
                 nlls_command = f"./target/release/vgonio fit -i {file} -s {s} -e {e} -p {p} --family microfacet --isotropy isotropic --distro {distro} --method nlls"
                 nlls_output = run_command(nlls_command)
                 best_alpha, best_error = parse_nlls_output(nlls_output)
-                results[(file, distro)] = {
-                    'bf_min_alpha': min_alpha,
-                    'nl_min_alpha': best_alpha,
-                    'nl_min_error': best_error,
-                }
-    return results
+                # Print results
+                print(f"Results for file: {file}, distribution: {distro}, s: {s}, e: {e}, p: {p}", file=f)
+                print(f"-- Bruteforce alpha: {min_alpha}", file=f)
+                print(f"-- Non-linear least squares: {best_alpha}, err: {best_error}", file=f)
 
 
 if __name__ == "__main__":
@@ -77,12 +75,6 @@ if __name__ == "__main__":
     # List of distributions
     distributions = ['bk', 'tr']
 
-    # Process files
-    results = process_files(input_files, distributions)
-
-    # Print results
-    for key, data in results.items():
-        file, distro = key
-        print(f"Results for file: {file}, distribution: {distro}")
-        print("-- Bruteforce alpha:", data['bf_min_alpha'])
-        print("-- Non-linear least squares:", data['nl_min_alpha'], data['nl_min_error'])
+    # open a file to write the results with the date and time as the filename
+    with open(f"results_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt", 'w') as f:
+        process_brdf_fitting(input_files, distributions, f)
