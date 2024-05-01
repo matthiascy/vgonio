@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{atomic, atomic::AtomicU32};
 use surf::MicroSurface;
 
-/// Data collected by the receiver.
+/// Kind of data to retrieve from the simulation.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
 pub enum DataRetrieval {
     /// The full data is collected.
@@ -83,10 +83,10 @@ impl ReceiverParams {
                 num_rings * num_patches_per_ring
             }
         };
-        if self.domain == SphericalDomain::Whole {
-            return num_patches_hemi * 2;
+        match self.domain {
+            SphericalDomain::Whole => num_patches_hemi * 2,
+            _ => num_patches_hemi,
         }
-        num_patches_hemi
     }
 
     // TODO: constify this
@@ -94,10 +94,10 @@ impl ReceiverParams {
     pub fn num_rings(&self) -> usize {
         let num_rings_hemi =
             (self.domain.zenith_angle_diff() / self.precision.theta).round() as usize;
-        if self.domain == SphericalDomain::Whole {
-            return num_rings_hemi * 2;
+        match self.domain {
+            SphericalDomain::Whole => num_rings_hemi * 2,
+            _ => num_rings_hemi,
         }
-        num_rings_hemi
     }
 
     /// Partition the receiver into patches.
@@ -477,7 +477,6 @@ impl<'a> CollectedData<'a> {
         self.snapshots
             .par_iter()
             .map(|snapshot| {
-                // Row-major order: [patch][wavelength]
                 let mut samples = DyArr::<f32, 2>::zeros([n_patch, n_wavelength]);
                 let cos_i = snapshot.wi.theta.cos();
                 let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
@@ -489,7 +488,6 @@ impl<'a> CollectedData<'a> {
                         let solid_angle = patch.solid_angle().as_f32();
                         if cos_o != 0.0 {
                             let l_o = stats.total_energy * rcp_f32(cos_o) * rcp_f32(solid_angle);
-                            // samples[i * n_wavelength + j] = l_o * rcp_e_i;
                             samples[[i, j]] = l_o * rcp_e_i;
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
@@ -541,9 +539,7 @@ impl Energy {
 }
 
 /// Represents the data that a patch can carry.
-pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {
-    fn validate(&self) -> bool;
-}
+pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
 
 /// Bounce and energy of a patch.
 #[derive(Debug, Clone, Default)]
@@ -582,6 +578,4 @@ impl PartialEq for BounceAndEnergy {
     }
 }
 
-impl PerPatchData for BounceAndEnergy {
-    fn validate(&self) -> bool { todo!() }
-}
+impl PerPatchData for BounceAndEnergy {}

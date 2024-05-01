@@ -1173,16 +1173,6 @@ impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
     }
 }
 
-impl<D: PerPatchData> BsdfSnapshotRaw<D> {
-    /// Validates the data in the BSDF snapshot. TODO: Implement this.
-    pub fn validate(&self) {
-        assert_eq!(self.records.len(), self.stats.n_wavelength);
-        if !self.records.iter().all(|data| data.validate()) {
-            panic!("Invalid data in the BSDF snapshot.");
-        }
-    }
-}
-
 /// A snapshot of the measured BSDF.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BsdfSnapshot {

@@ -274,14 +274,22 @@ fn brute_force_fitting_sampled_brdf(
         opts.normalise,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
+    let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
+    let min_idx = errs.iter().position(|&x| x == min_err).unwrap();
     println!(
-        "    {}>{} MSE ({}) {:?}",
+        "    {}>{} MSEs ({}) {:?}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         filepath.file_name().unwrap().display(),
         errs.as_slice()
     );
-    errs.iter_mut().for_each(|err| *err = err.log10());
+    println!(
+        "    {}>{} Minimum error: {} at alpha = {}",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET,
+        min_err,
+        alpha.values().nth(min_idx).unwrap()
+    );
     if opts.plot {
         plot_err(
             errs.as_slice(),
@@ -359,12 +367,21 @@ fn brute_force_fitting_measured_brdf(
         opts.normalise,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
+    let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
+    let min_idx = errs.iter().position(|&x| x == min_err).unwrap();
     println!(
         "    {}>{} MSE ({}) {:?}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         filepath.file_name().unwrap().display(),
         errs.as_slice()
+    );
+    println!(
+        "    {}>{} Minimum error: {} at alpha = {}",
+        ansi::BRIGHT_YELLOW,
+        ansi::RESET,
+        min_err,
+        alpha.values().nth(min_idx).unwrap()
     );
     errs.iter_mut().for_each(|err| *err = err.log10());
     if opts.plot {

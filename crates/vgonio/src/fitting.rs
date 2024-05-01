@@ -184,7 +184,11 @@ impl<M> FittingReport<M> {
         M: Debug,
     {
         println!("Fitting report:");
-        println!("  Best model: {:?}", self.best_model());
+        println!(
+            "  Best model: {:?}, Err: {}",
+            self.best_model(),
+            self.best_model_report().unwrap().1.objective_function
+        );
         println!("  Reports (first 16):");
         for (m, r) in self.reports.iter().take(16) {
             println!(

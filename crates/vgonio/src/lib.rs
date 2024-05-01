@@ -17,6 +17,7 @@
 #![feature(os_str_display)]
 #![feature(let_chains)]
 #![feature(generic_const_exprs)]
+#![feature(effects)]
 #![warn(missing_docs)]
 
 extern crate core;
