@@ -4,7 +4,7 @@ use crate::array::{
 };
 use std::mem::MaybeUninit;
 
-/// A dynamically-sized array with dynamical number of dimensions
+/// A dynamically sized array with dynamical number of dimensions
 /// and size of each dimension at runtime (growable).
 pub struct DynArr<T, const L: MemLayout = { MemLayout::RowMajor }>(
     pub(crate) ArrCore<DynSized<T>, Vec<usize>, L>,

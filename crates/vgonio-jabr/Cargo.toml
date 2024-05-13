@@ -8,6 +8,7 @@ version.workspace = true
 [features]
 default = []
 packed = []
+simd = []
 
 [dependencies]
 num-traits = { version = "0.2" }

@@ -85,14 +85,6 @@ where
 
     #[track_caller]
     fn index(&self, index: [usize; N]) -> &Self::Output {
-        debug_assert!(
-            N <= self.meta.dimension()
-                && index
-                    .iter()
-                    .zip(self.meta.shape().iter())
-                    .all(|(&i, &s)| i < s),
-            "Index out of bounds"
-        );
         let idx = shape::compute_index::<_, L>(&self.meta, &index);
         &self.data.as_slice()[idx]
     }
@@ -105,16 +97,30 @@ where
 {
     #[track_caller]
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output {
-        debug_assert!(
-            N <= self.meta.dimension()
-                && index
-                    .iter()
-                    .zip(self.meta.shape().iter())
-                    .all(|(&i, &s)| i < s),
-            "Index out of bounds"
-        );
         let idx = shape::compute_index::<_, L>(&self.meta, &index);
         &mut self.data.as_mut_slice()[idx]
+    }
+}
+
+impl<D, S, const L: MemLayout> Index<usize> for ArrCore<D, S, L>
+where
+    D: Data,
+    S: Shape,
+{
+    type Output = D::Elem;
+
+    #[track_caller]
+    fn index(&self, index: usize) -> &Self::Output { &self.data.as_slice()[index] }
+}
+
+impl<D, S, const L: MemLayout> IndexMut<usize> for ArrCore<D, S, L>
+where
+    D: Data,
+    S: Shape,
+{
+    #[track_caller]
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.data.as_mut_slice()[index]
     }
 }
 

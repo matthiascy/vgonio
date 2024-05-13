@@ -20,7 +20,7 @@ impl<const N: usize> DimSeq for [usize; N] {
     fn as_mut_slice(&mut self) -> &mut [usize] { &mut self[..] }
 }
 
-/// A dynamically-sized dimension sequence.
+/// A dynamically sized dimension sequence.
 impl DimSeq for Vec<usize> {
     #[inline]
     fn n_dims(&self) -> usize { self.len() }

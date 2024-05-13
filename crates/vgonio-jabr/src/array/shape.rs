@@ -252,7 +252,7 @@ mod const_shape {
     }
 }
 
-pub use const_shape::{count, s};
+pub use const_shape::s;
 
 /// Computes the number of elements in an array with the given shape.
 pub(crate) const fn compute_n_elems(shape: &[usize]) -> usize {

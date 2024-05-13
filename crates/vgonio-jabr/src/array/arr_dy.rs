@@ -135,6 +135,10 @@ where
 
 impl<T, const N: usize, const L: MemLayout> Eq for DyArr<T, N, L> where T: Eq {}
 
+impl<T, const N: usize, const L: MemLayout> AsRef<[T]> for DyArr<T, N, L> {
+    fn as_ref(&self) -> &[T] { self.as_slice() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

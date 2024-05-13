@@ -1341,8 +1341,6 @@ impl MeasurementPoint {
     }
 }
 
-// TODO: use boxed slice instead of vec
-
 /// Structure holding the data for microfacet shadowing and masking measurement.
 ///
 /// G(i, o, m) is the micro facet masking-shadowing function, which describes

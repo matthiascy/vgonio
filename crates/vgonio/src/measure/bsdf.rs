@@ -384,7 +384,7 @@ impl MeasuredBsdfData {
     pub fn hit_points(&self) -> Vec<Vec<Vec3>> {
         self.snapshots
             .iter()
-            .map(|snapshot| snapshot.hit_points.clone())
+            .map(|snapshot| snapshot.hit_points.clone().into_vec())
             .collect()
     }
 

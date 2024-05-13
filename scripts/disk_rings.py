@@ -131,6 +131,7 @@ if __name__ == "__main__":
     print("dr: ", rs[1:] - rs[:-1])
     print("ns: ", ks[1:] - ks[:-1])
     print("ts: ", ts)
+    print("total number of patches: ", ks[-1])
     becker_plot_rings(ks, rs, figure.add_subplot(1, 2, 1))
     becker_plot_hemisphere(ks, rs, ts, N, figure.add_subplot(1, 2, 2, projection="3d"))
 

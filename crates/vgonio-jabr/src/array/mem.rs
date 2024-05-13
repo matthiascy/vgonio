@@ -21,6 +21,12 @@ pub enum MemLayout {
     ColMajor,
 }
 
+/// Row-major layout (or C layout).
+pub const C: MemLayout = MemLayout::RowMajor;
+
+/// Column-major layout (or Fortran layout).
+pub const F: MemLayout = MemLayout::ColMajor;
+
 /// Trait providing raw access to the elements of the storage.
 pub unsafe trait Data: Sized {
     /// The type of the elements stored in the array.

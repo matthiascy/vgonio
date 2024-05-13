@@ -39,9 +39,12 @@ mod arr_dyn;
 mod arr_s;
 mod core;
 mod dim;
+mod masks;
 mod mem;
 mod ops;
+mod packet;
 mod shape;
+mod traits;
 
 pub use arr_d::*;
 pub use arr_dy::*;
