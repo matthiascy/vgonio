@@ -37,9 +37,9 @@ macro_rules! impl_mask_element {
     };
 }
 
-impl_mask_element!(i8, u8; i16, u16; i32, u32; i64, u64; i128, u128);
+// impl_mask_element!(i8, u8; i16, u16; i32, u32; i64, u64; i128, u128);
 
-pub struct Mask<T, const N: usize>(PacketLaneCount<T, N>::SimdType)
+pub struct Mask<T, const N: usize>(<PacketLaneCount<T, N> as SupportedPacketLaneCount>::SimdType)
 where
     T: MaskElement,
     PacketLaneCount<T, N>: SupportedPacketLaneCount;

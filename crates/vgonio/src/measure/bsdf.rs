@@ -1173,7 +1173,7 @@ impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
     }
 }
 
-/// A snapshot of the measured BSDF.
+/// A snapshot of the measured BSDF at a single incident direction.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.

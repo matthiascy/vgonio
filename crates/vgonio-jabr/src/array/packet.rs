@@ -15,7 +15,7 @@ pub unsafe trait SimdElement: Sealed + Copy {
 /// SIMD packet of `N` elements of a type `T`.
 ///
 /// This is a wrapper around the SIMD type that provides a more ergonomic API.
-pub struct Packet<T, const N: usize>(PacketLaneCount<T, N>::SimdType)
+pub struct Packet<T, const N: usize>(<PacketLaneCount<T, N> as SupportedPacketLaneCount>::SimdType)
 where
     T: SimdElement,
     PacketLaneCount<T, N>: SupportedPacketLaneCount;
@@ -26,7 +26,7 @@ pub trait SupportedPacketLaneCount {
     type SimdType;
 }
 
-pub struct PacketLaneCount<T, const N: usize>;
+pub struct PacketLaneCount<T, const N: usize>(std::marker::PhantomData<(T, [(); N])>);
 
 // impl SupportedPacketLaneCount for PacketLaneCount<f32, 4> {
 //     type SimdType = __m128

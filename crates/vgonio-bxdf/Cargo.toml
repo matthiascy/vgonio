@@ -6,10 +6,13 @@ version.workspace = true
 
 [features]
 default = []
+exr = ["dep:exr", "dep:chrono"]
 fitting = []
 cli = ["dep:clap"]
 
 [dependencies]
+chrono = { workspace = true, optional = true }
+exr = { workspace = true, optional = true }
 libm.workspace = true
 num-traits.workspace = true
 log.workspace = true

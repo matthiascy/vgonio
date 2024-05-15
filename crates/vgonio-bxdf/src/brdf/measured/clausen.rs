@@ -33,8 +33,8 @@ pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
 
 impl ClausenBrdf {
     /// Return the number of incident directions in the measured BRDF.
-    pub fn n_wi(&self) -> usize { self.param.incoming.len() }
+    pub fn n_wi(&self) -> usize { self.params.incoming.len() }
 
     /// Return the number of outgoing directions for each incident direction.
-    pub fn n_wo(&self) -> usize { self.param.num_outgoing_per_incoming }
+    pub fn n_wo(&self) -> usize { self.params.num_outgoing_per_incoming }
 }

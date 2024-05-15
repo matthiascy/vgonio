@@ -39,7 +39,6 @@ mod arr_dyn;
 mod arr_s;
 mod core;
 mod dim;
-mod masks;
 mod mem;
 mod ops;
 mod packet;

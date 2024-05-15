@@ -36,25 +36,27 @@ pub use vgonio::*;
 
 /// A BRDF measured either in the real world or in a simulation.
 #[derive(Clone)]
-pub struct MeasuredBrdf<P: BrdfParameterisation, const N: usize> {
+pub struct MeasuredBrdf<P, const N: usize>
+where
+    P: Clone + Send + Sync + BrdfParameterisation + 'static,
+{
     /// The origin of the measured BRDF.
     origin: Origin,
     /// The parameterisation of the measured BRDF.
-    param: Box<P>,
-    /// Wavelengths of the measured BRDF.
-    wavelengths: DyArr<Nanometres>,
+    params: Box<P>,
+    /// Wavelengths at which the BRDF is measured.
+    spectrum: DyArr<Nanometres>,
     /// Sampled BRDF data stored in a multi-dimensional array.
     samples: DyArr<f32, N>,
-    /// Maximum values of the BRDF for each incident direction and wavelength.
-    max_values: DyArr<f32, 2>,
-    /// Whether the BRDF is normalised (per incident direction) or not.
-    normalised: bool,
 }
 
-impl<P: BrdfParameterisation, const N: usize> MeasuredBrdf<P, N> {
-    /// Return the origin of the measured BRDF.
-    pub fn n_wavelengths(&self) -> usize { self.wavelengths.len() }
+impl<P, const N: usize> MeasuredBrdf<P, N>
+where
+    P: Clone + Send + Sync + BrdfParameterisation + 'static,
+{
+    /// Returns the number of wavelengths of the measured BRDF.
+    pub fn n_spectrum(&self) -> usize { self.spectrum.len() }
 
-    /// Return the total number of samples in the measured BRDF.
+    /// Returns the number of samples of the measured BRDF.
     pub fn n_samples(&self) -> usize { self.samples.len() }
 }
