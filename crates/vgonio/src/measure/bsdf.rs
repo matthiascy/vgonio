@@ -26,9 +26,11 @@ use base::{
     error::VgonioError,
     math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2},
     partition::{PartitionScheme, SphericalPartition},
-    units::{Degs, Radians, Rads},
+    units::{Degs, Nanometres, Radians, Rads},
 };
+use bxdf::brdf::measured::{MeasuredBrdf, VgonioBrdf, VgonioBrdfParameterisation};
 use jabr::array::DyArr;
+use rayon::slice::ParallelSlice;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -71,9 +73,41 @@ pub struct MeasuredBsdfData {
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
 }
 
-// pub type MeasuredBsdf = MeasuredData2<BsdfMeasurementParams, >
-
 impl MeasuredBsdfData {
+    pub fn into_measured_brdf(self) -> VgonioBrdf {
+        // TODO: NdArray ergonomics
+        let mut incoming = DyArr::<Sph2>::zeros([self.snapshots.len()]);
+        for (i, snapshot) in self.snapshots.iter().enumerate() {
+            incoming[i] = snapshot.wi;
+        }
+        let params = VgonioBrdfParameterisation {
+            incoming,
+            outgoing: self.params.receiver.partitioning(),
+        };
+        let n_wi = self.snapshots.len();
+        let n_wo = params.outgoing.n_patches();
+        let n_spectrum = self.params.emitter.spectrum.step_count();
+        let mut spectrum = DyArr::<Nanometres>::zeros([n_spectrum]);
+        for (i, w) in self.params.emitter.spectrum.values().enumerate() {
+            spectrum[[i]] = w;
+        }
+        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+        samples
+            .as_mut_slice()
+            .par_chunks(n_wo * n_spectrum)
+            .zip(self.snapshots.iter())
+            .for_each(|(s, snapshot)| {
+                s.copy_from_slice(snapshot.samples.as_slice());
+            });
+        VgonioBrdf::new(
+            self.params.incident_medium,
+            self.params.transmitted_medium,
+            params,
+            spectrum,
+            samples,
+        )
+    }
+
     /// Writes the BSDF data to images in exr format.
     ///
     /// Only BSDF data are written to the images. The full measurement data
@@ -1179,8 +1213,8 @@ pub struct BsdfSnapshot {
     /// Incident direction in the unit spherical coordinates.
     pub wi: Sph2,
     /// BSDF values for each patch of the collector and each wavelength.
-    /// Two-dimensional data (patch, wavelength) stored in a flat array in
-    /// row-major order.
+    /// Two-dimensional data (patch, wavelength) (ωo, λ) stored in a flat array
+    /// in row-major order.
     pub samples: DyArr<f32, 2>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Extra ray trajectory data for debugging purposes.

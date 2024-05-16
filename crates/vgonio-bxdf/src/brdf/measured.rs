@@ -1,4 +1,4 @@
-use base::units::Nanometres;
+use base::{medium::Medium, units::Nanometres};
 use jabr::array::DyArr;
 
 pub mod clausen;
@@ -42,11 +42,16 @@ where
 {
     /// The origin of the measured BRDF.
     origin: Origin,
+    /// Incident medium.
+    incident_medium: Medium,
+    /// Transmitted medium.
+    transmitted_medium: Medium,
     /// The parameterisation of the measured BRDF.
     params: Box<P>,
     /// Wavelengths at which the BRDF is measured.
     spectrum: DyArr<Nanometres>,
-    /// Sampled BRDF data stored in a multi-dimensional array.
+    /// Sampled BRDF data stored in a multidimensional array.
+    /// Its shape depends on the parameterisation of the BRDF.
     samples: DyArr<f32, N>,
 }
 

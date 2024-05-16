@@ -167,6 +167,11 @@ pub struct Sph2 {
     pub phi: Radians,
 }
 
+impl num_traits::Zero for Sph2 {
+    fn zero() -> Self { Self::zero() }
+    fn is_zero(&self) -> bool { self.approx_eq(&Self::zero()) }
+}
+
 impl Sph2 {
     /// Create a new spherical coordinate.
     pub const fn new(zenith: Radians, azimuth: Radians) -> Self {

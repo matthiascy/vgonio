@@ -431,6 +431,12 @@ pub type Micrometres = Length<UMicrometre>;
 /// Type alias for a length in nanometres.
 pub type Nanometres = Length<UNanometre>;
 
+impl num_traits::Zero for Nanometres {
+    fn zero() -> Self { Length::new(0.0) }
+
+    fn is_zero(&self) -> bool { self.value == 0.0 }
+}
+
 /// Macro for creating a new length type in metres.
 pub macro metres($val:expr) {
     $crate::units::Length::<$crate::units::UMetre>::new($val)

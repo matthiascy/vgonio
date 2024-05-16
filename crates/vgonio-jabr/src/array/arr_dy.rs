@@ -107,7 +107,20 @@ impl<T, const N: usize, const L: MemLayout> Index<[usize; N]> for DyArr<T, N, L>
 }
 
 impl<T, const N: usize, const L: MemLayout> IndexMut<[usize; N]> for DyArr<T, N, L> {
+    #[inline]
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output { &mut self.0[index] }
+}
+
+impl<T, const N: usize, const L: MemLayout> Index<usize> for DyArr<T, N, L> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, index: usize) -> &Self::Output { &self.0[index] }
+}
+
+impl<T, const N: usize, const L: MemLayout> IndexMut<usize> for DyArr<T, N, L> {
+    #[inline]
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output { &mut self.0[index] }
 }
 
 impl<T, const N: usize, const L: MemLayout> Clone for DyArr<T, N, L>

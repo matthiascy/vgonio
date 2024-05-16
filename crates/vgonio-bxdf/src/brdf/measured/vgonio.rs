@@ -1,15 +1,18 @@
 //! BRDF from the VGonio simulator.
 use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, ParametrisationKind};
-use base::{error::VgonioError, math::Sph2, partition::SphericalPartition};
+use base::{
+    error::VgonioError, math::Sph2, medium::Medium, partition::SphericalPartition,
+    units::Nanometres,
+};
 use jabr::array::DyArr;
 use std::{borrow::Cow, mem::MaybeUninit, ops::Index, path::Path};
 
 #[derive(Clone)]
 pub struct VgonioBrdfParameterisation {
     /// The incident directions of the BRDF.
-    incoming: DyArr<Sph2>,
+    pub incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF.
-    outgoing: SphericalPartition,
+    pub outgoing: SphericalPartition,
 }
 
 impl BrdfParameterisation for VgonioBrdfParameterisation {
@@ -73,12 +76,35 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a> {
     }
 }
 
+impl<'a> ExactSizeIterator for BrdfSnapshotIterator<'a> {
+    fn len(&self) -> usize { self.n_wi - self.idx }
+}
+
 /// BRDF from the VGonio simulator.
 ///
 /// Sampled BRDF data has three dimensions: ωi, ωo, λ.
 pub type VgonioBrdf = MeasuredBrdf<VgonioBrdfParameterisation, 3>;
 
 impl VgonioBrdf {
+    /// Creates a new VGonio BRDF. The BRDF is parameterised in the incident
+    /// and outgoing directions.
+    pub fn new(
+        incident_medium: Medium,
+        transmitted_medium: Medium,
+        params: VgonioBrdfParameterisation,
+        spectrum: DyArr<Nanometres>,
+        samples: DyArr<f32, 3>,
+    ) -> Self {
+        Self {
+            origin,
+            incident_medium,
+            transmitted_medium,
+            params: Box::new(params),
+            spectrum,
+            samples,
+        }
+    }
+
     /// Returns an iterator over the snapshots of the BRDF.
     pub fn snapshots(&self) -> BrdfSnapshotIterator {
         BrdfSnapshotIterator {
@@ -101,7 +127,7 @@ impl VgonioBrdf {
         // The BSDF data is stored in a single flat row-major array, with the order of
         // the dimensions [wi, λ, y, x] where x is the width, y is the height, λ is the
         // wavelength, and wi is the incident direction.
-        let mut bsdf_images = vec![0.0; n_wi * n_spectrum * w * h];
+        let mut bsdf_images = DyArr::zeros([n_wi, n_spectrum, w, h]);
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         self.params.outgoing.compute_pixel_patch_indices(
