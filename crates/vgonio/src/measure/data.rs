@@ -99,16 +99,10 @@ pub struct SampledBrdf {
     /// Maximum values of the spectral samples for each snapshot (wi direction)
     /// and each wavelength. Row-major [ωi, λ] array.
     pub max_values: Box<[f32]>,
-    /// Indicates whether the samples are normalised or not.
-    pub normalised: bool,
     /// All pairs of incidents and outgoing directions. The first element of the
     /// tuple is the incident direction. The second element is the list of
     /// outgoing directions.
     pub wi_wo_pairs: Box<[(Sph2, Box<[Sph2]>)]>,
-    // /// Total number of wi-wo pairs. Because the number of outgoing directions
-    // /// can be different for each incident direction, we need to store the total
-    // /// number of pairs apart from the pairs themselves.
-    // pub num_pairs: usize,
 }
 
 impl SampledBrdf {
@@ -514,7 +508,7 @@ impl MeasurementData {
                 let filepath = filepath.with_extension("exr");
                 match &self.measured {
                     MeasuredData::Bsdf(bsdf) => {
-                        bsdf.write_as_exr(&filepath, &self.timestamp, *resolution, false)?
+                        bsdf.write_as_exr(&filepath, &self.timestamp, *resolution)?
                     }
                     MeasuredData::Adf(adf) => {
                         adf.write_as_exr(&filepath, &self.timestamp, *resolution)?
@@ -667,13 +661,11 @@ impl MeasurementData {
                     spectrum: wavelengths,
                     samples: samples.into_boxed_slice(),
                     max_values: max_values.into_boxed_slice(),
-                    normalised: false,
                     wi_wo_pairs: wi_wo_pairs
                         .into_iter()
                         .map(|(wi, wo)| (wi, wo.into_boxed_slice()))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                    // num_pairs: i - 1,
                 }),
             });
         }

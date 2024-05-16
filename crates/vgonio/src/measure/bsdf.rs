@@ -30,7 +30,6 @@ use base::{
 };
 use bxdf::brdf::measured::{MeasuredBrdf, VgonioBrdf, VgonioBrdfParameterisation};
 use jabr::array::DyArr;
-use rayon::slice::ParallelSlice;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -62,9 +61,6 @@ pub struct MeasuredBsdfData {
     /// Maximum values of the BSDF samples for each incident direction and each
     /// wavelength; stored in 1D row major order array [ωi, λ].
     pub max_values: Box<[f32]>,
-    /// Tells whether the BSDF data are normalized for each snapshot, i.e., the
-    /// samples are divided by the maximum value of each snapshot.
-    pub normalised: bool,
     /// Raw snapshots of the BSDF containing the full measurement data.
     /// This field is only available when the
     /// [`crate::measure::bsdf::params::DataRetrievalMode`] is set to
@@ -75,6 +71,10 @@ pub struct MeasuredBsdfData {
 
 impl MeasuredBsdfData {
     pub fn into_measured_brdf(self) -> VgonioBrdf {
+        use rayon::{
+            iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+            slice::ParallelSliceMut,
+        };
         // TODO: NdArray ergonomics
         let mut incoming = DyArr::<Sph2>::zeros([self.snapshots.len()]);
         for (i, snapshot) in self.snapshots.iter().enumerate() {
@@ -94,8 +94,8 @@ impl MeasuredBsdfData {
         let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
         samples
             .as_mut_slice()
-            .par_chunks(n_wo * n_spectrum)
-            .zip(self.snapshots.iter())
+            .par_chunks_mut(n_wo * n_spectrum)
+            .zip(self.snapshots.par_iter())
             .for_each(|(s, snapshot)| {
                 s.copy_from_slice(snapshot.samples.as_slice());
             });
@@ -125,7 +125,6 @@ impl MeasuredBsdfData {
         filepath: &Path,
         timestamp: &chrono::DateTime<chrono::Local>,
         resolution: u32,
-        normalise: bool,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         let n_wi = self.snapshots.len();
@@ -138,33 +137,6 @@ impl MeasuredBsdfData {
             .values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
-
-        // Compute the correction factor for normalisation.
-        //
-        // Set to 1 the correction factor for normalisation
-        //   - if the BSDF data are NOT normalised and the user does NOT want to
-        //     normalise it
-        //   - if the BSDF data are normalised and the user wants to normalise it
-        let mut factor = vec![1.0; n_wi * n_wavelength].into_boxed_slice();
-
-        if normalise && !self.normalised {
-            // Set to the reciprocal of the maximum values the correction factor for
-            // normalisation if the BSDF data are NOT normalised and the user wants
-            // to normalise it
-            factor.copy_from_slice(&self.max_values);
-            factor.iter_mut().for_each(|val| *val = rcp_f32(*val));
-        } else if !normalise && self.normalised {
-            // Set the correction factor to the maximum values if the BSDF data are
-            // normalised and the user does NOT want to normalise it
-            factor.copy_from_slice(&self.max_values);
-        }
-
-        log::debug!(
-            "pre-normalised? {} to normalise ? {} - max_bsdf_samples: {:?}",
-            self.normalised,
-            normalise,
-            factor
-        );
 
         // The BSDF data are stored in a single flat row-major array, with the order of
         // the dimensions [wi, λ, y, x] where x is the width, y is the height, λ is the
@@ -187,7 +159,7 @@ impl MeasuredBsdfData {
                         }
                         for k in 0..n_wavelength {
                             bsdf_images[offset + k * w * h + j * w + i] =
-                                snapshot.samples[[idx as usize, k]] * factor[l * n_wavelength + k];
+                                snapshot.samples[[idx as usize, k]];
                         }
                     }
                 }
@@ -572,7 +544,6 @@ impl MeasuredBsdfData {
             spectrum,
             samples,
             max_values,
-            normalised: self.normalised,
             wi_wo_pairs,
         }
     }
@@ -1332,7 +1303,6 @@ pub fn measure_bsdf_rt(
                 params,
                 snapshots,
                 raw_snapshots,
-                normalised: false,
                 max_values,
             }),
         })

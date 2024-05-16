@@ -15,7 +15,6 @@ use std::fmt::Display;
 pub struct SampledBrdfFittingProblem<'a> {
     pub measured: &'a SampledBrdf,
     pub target: MicrofacetDistroKind,
-    pub normalise: bool,
     pub iors_i: Box<[Ior]>,
     pub iors_t: Box<[Ior]>,
     pub iors: &'a RefractiveIndexRegistry,
@@ -35,7 +34,6 @@ impl<'a> SampledBrdfFittingProblem<'a> {
         measured: &'a SampledBrdf,
         target: MicrofacetDistroKind,
         initial: RangeByStepSizeInclusive<f64>,
-        normalise: bool,
         cache: &'a RawCache,
     ) -> Self {
         let iors_i = cache
@@ -49,7 +47,6 @@ impl<'a> SampledBrdfFittingProblem<'a> {
         Self {
             measured,
             target,
-            normalise,
             iors_i,
             iors_t,
             iors: &cache.iors,
@@ -81,7 +78,6 @@ impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
                             SampledBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
                                 &self.measured,
                                 model,
-                                self.normalise,
                                 self.iors,
                                 &self.iors_i,
                                 &self.iors_t,
@@ -94,7 +90,6 @@ impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
                             SampledBrdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
                                 &self.measured,
                                 model,
-                                self.normalise,
                                 self.iors,
                                 &self.iors_i,
                                 &self.iors_t,
@@ -133,11 +128,6 @@ impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
 struct SampledBrdfFittingProblemProxy<'a, const I: Isotropy> {
     measured: &'a SampledBrdf,
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
-    /// Maximum value of the modelled samples for each snapshot(incident
-    /// direction) and wavelength. The array is stored as row major array
-    /// [ωι, λ].
-    max_modelled: Option<Vec<((f64, f64), Box<[f32]>)>>,
-    normalise: bool,
     iors: &'a RefractiveIndexRegistry,
     iors_i: &'a [Ior],
     iors_t: &'a [Ior],
@@ -147,22 +137,13 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
     pub fn new(
         measured: &'a SampledBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
-        normalise: bool,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
-        let max_modelled = normalise.then_some(vec![]);
-        log::debug!(
-            "Initialising isotropic BRDF fitting problem. Normalise: {}, Max Modelled: {:?}",
-            normalise,
-            max_modelled
-        );
         let mut problem = Self {
             measured,
             model,
-            max_modelled,
-            normalise,
             iors,
             iors_i,
             iors_t,
@@ -179,17 +160,13 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
     pub fn new(
         measured: &'a SampledBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
-        normalise: bool,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
-        let max_modelled = normalise.then_some(vec![]);
         let mut problem = Self {
             measured,
             model,
-            max_modelled,
-            normalise,
             iors,
             iors_i,
             iors_t,
@@ -203,14 +180,6 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
 fn eval_sampled_brdf_residuals<const I: Isotropy>(
     problem: &SampledBrdfFittingProblemProxy<I>,
 ) -> Box<[f64]> {
-    let max_modelled = problem.max_modelled.as_ref().map(|maxes| {
-        maxes
-            .iter()
-            .find(|((ax, ay), _)| [*ax, *ay] == problem.model.params())
-            .unwrap()
-            .1
-            .as_ref()
-    });
     let n_lambda = problem.measured.n_lambda();
     let n_wo = problem.measured.n_wo();
     problem
@@ -220,8 +189,6 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
         .enumerate()
         .flat_map(|(i, (wi, wos))| {
             let wi = wi.to_cartesian();
-            let max_modelled = max_modelled.map(|m| &m[i * n_lambda..(i + 1) * n_lambda]);
-            let max_measured = &problem.measured.max_values[i * n_lambda..(i + 1) * n_lambda];
             wos.iter().enumerate().flat_map(move |(j, wo)| {
                 let wo = wo.to_cartesian();
                 // Reuse the memory of the modelled samples to store the residuals.
@@ -235,82 +202,17 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
                 .into_vec();
                 let offset = i * n_wo * n_lambda + j * n_lambda;
                 let measured = &problem.measured.samples[offset..offset + n_lambda];
-                match max_modelled {
-                    Some(max_modelled) => modelled
-                        .iter_mut()
-                        .zip(measured.iter())
-                        .zip(max_modelled)
-                        .zip(max_measured)
-                        .for_each(|(((modelled, measured), max_modelled), max_measured)| {
-                            let measured_norm = if *max_measured == 0.0 {
-                                *measured as f64
-                            } else {
-                                *measured as f64 / *max_measured as f64
-                            };
-                            let modelled_norm = if *max_modelled == 0.0 {
-                                *modelled as f64
-                            } else {
-                                *modelled / *max_modelled as f64
-                            };
-                            *modelled = modelled_norm - measured_norm;
-                        }),
-                    None => {
-                        log::debug!(
-                            "No max modelled values found, calculating residuals without \
-                             normalisation."
-                        );
-                        modelled.iter_mut().zip(measured.iter()).for_each(
-                            |(modelled, measured)| {
-                                *modelled = *measured as f64 - *modelled;
-                            },
-                        );
-                    }
-                }
+                modelled
+                    .iter_mut()
+                    .zip(measured.iter())
+                    .for_each(|(modelled, measured)| {
+                        *modelled = *measured as f64 - *modelled;
+                    });
                 modelled.into_iter()
             })
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
-}
-
-fn update_modelled_maximum_values<const I: Isotropy>(
-    problem: &mut SampledBrdfFittingProblemProxy<I>,
-    isotropy: Isotropy,
-    alphax: f64,
-    alphay: f64,
-) {
-    let max_modelled_found = match isotropy {
-        Isotropy::Isotropic => problem
-            .max_modelled
-            .as_ref()
-            .and_then(|maxes| maxes.iter().find(|((ax, _), _)| *ax == alphax))
-            .is_none(),
-        Isotropy::Anisotropic => problem
-            .max_modelled
-            .as_ref()
-            .and_then(|maxes| {
-                maxes
-                    .iter()
-                    .find(|((ax, ay), _)| *ax == alphax && *ay == alphay)
-            })
-            .is_none(),
-    };
-    if problem.normalise {
-        if max_modelled_found {
-            let maxes = generate_analytical_brdf_from_sampled_brdf(
-                &problem.measured,
-                problem.model.as_ref(),
-                problem.iors,
-                problem.normalise,
-            )
-            .max_values;
-            problem
-                .max_modelled
-                .as_mut()
-                .unwrap()
-                .push(((alphax, alphay), maxes));
-        }
-    }
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
@@ -322,7 +224,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 
     fn set_params(&mut self, params: &Vector<f64, U1, Self::ParameterStorage>) {
         self.model.set_params(&[params[0], params[0]]);
-        update_modelled_maximum_values(self, Isotropy::Isotropic, params[0], params[0]);
     }
 
     fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
@@ -362,7 +263,6 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
 
     fn set_params(&mut self, params: &Vector<f64, U2, Self::ParameterStorage>) {
         self.model.set_params(&[params[0], params[1]]);
-        update_modelled_maximum_values(self, Isotropy::Anisotropic, params[0], params[1]);
     }
 
     fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {

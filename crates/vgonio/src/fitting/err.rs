@@ -59,7 +59,6 @@ pub fn compute_iso_microfacet_brdf_err(
     distro: MicrofacetDistroKind,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
-    normalise: bool,
     metric: ErrorMetric,
 ) -> Box<[f64]> {
     // TODO: remove max_theta_o
@@ -85,8 +84,7 @@ pub fn compute_iso_microfacet_brdf_err(
                                 as Box<dyn Bxdf<Params = [f64; 2]>>
                         }
                     };
-                    let model_brdf =
-                        generate_analytical_brdf(&measured.params, &*m, &cache.iors, normalise);
+                    let model_brdf = generate_analytical_brdf(&measured.params, &*m, &cache.iors);
                     brdf_data[j].write(model_brdf);
                 }
             });
@@ -96,20 +94,10 @@ pub fn compute_iso_microfacet_brdf_err(
     println!(" Finished generating analytical BRDFs");
 
     let max_theta_o = max_theta_o.unwrap_or(deg!(90.0)).to_radians();
-    let factor = if normalise && !measured.normalised {
-        measured
-            .max_values
-            .iter()
-            .map(|&x| rcp_f32(x) as f64)
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
-    } else {
-        vec![1.0; measured.snapshots.len()].into_boxed_slice()
-    };
 
     let mses = brdfs
         .par_iter()
-        .map(|model| compute_distance(model, measured, &factor, &partition, max_theta_o, metric))
+        .map(|model| compute_distance(model, measured, &partition, max_theta_o, metric))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     mses
@@ -118,7 +106,6 @@ pub fn compute_iso_microfacet_brdf_err(
 fn compute_distance(
     normalized_model: &MeasuredBsdfData,
     measured: &MeasuredBsdfData,
-    factor: &[f64],
     partition: &SphericalPartition,
     max_theta_o: Radians,
     metric: ErrorMetric,
@@ -130,8 +117,7 @@ fn compute_distance(
         .snapshots
         .par_iter()
         .zip(measured.snapshots.par_iter())
-        .zip(factor.par_chunks(n_lambda))
-        .map(|((model_snapshot, measured_snapshot), norm_factor)| {
+        .map(|(model_snapshot, measured_snapshot)| {
             if model_snapshot.wi.theta > max_theta_o {
                 return 0.0;
             }
@@ -150,12 +136,10 @@ fn compute_distance(
                             std::sync::atomic::Ordering::Relaxed,
                         );
                         let mut sum = 0.0;
-                        for ((model_sample, measured_sample), factor) in model_samples
-                            .iter()
-                            .zip(measured_samples.iter())
-                            .zip(norm_factor.iter())
+                        for (model_sample, measured_sample) in
+                            model_samples.iter().zip(measured_samples.iter())
                         {
-                            sum += sqr(*model_sample as f64 - *measured_sample as f64 * *factor);
+                            sum += sqr(*model_sample as f64 - *measured_sample as f64);
                         }
                         sum
                     }
@@ -180,7 +164,6 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
     sampled_brdf: &SampledBrdf,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
-    normalise: bool,
 ) -> SampledBrdf {
     let iors_i = iors
         .ior_of_spectrum(Medium::Air, &sampled_brdf.spectrum)
@@ -219,26 +202,11 @@ pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
                     });
             })
         });
-    if normalise {
-        for (i, (_, wos)) in sampled_brdf.wi_wo_pairs.iter().enumerate() {
-            let offset = i * n_wo * n_lambda;
-            let max_values = &max_values[i * n_lambda..(i + 1) * n_lambda];
-            for (j, _) in wos.iter().enumerate() {
-                let samples_offset = offset + j * n_lambda;
-                let samples = &mut samples[samples_offset..samples_offset + n_lambda];
-                for (sample, max) in samples.iter_mut().zip(max_values.iter()) {
-                    *sample /= *max;
-                }
-            }
-        }
-    }
     SampledBrdf {
         spectrum: sampled_brdf.spectrum.clone(),
         samples,
         max_values,
-        normalised: normalise,
         wi_wo_pairs: sampled_brdf.wi_wo_pairs.clone(),
-        // num_pairs: sampled_brdf.num_pairs,
     }
 }
 
@@ -247,13 +215,8 @@ pub fn compute_iso_sampled_brdf_err(
     distro: MicrofacetDistroKind,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
-    normalise: bool,
     metric: ErrorMetric,
 ) -> Box<[f64]> {
-    assert!(
-        !sampled.normalised,
-        "The sampled BRDF must not be normalised."
-    );
     let mut modelled_brdfs = {
         let mut brdfs = Box::new_uninit_slice(alpha.step_count());
         brdfs.iter_mut().enumerate().for_each(|(i, brdf)| {
@@ -267,29 +230,15 @@ pub fn compute_iso_sampled_brdf_err(
                         as Box<dyn Bxdf<Params = [f64; 2]>>
                 }
             };
-            let model_brdf =
-                generate_analytical_brdf_from_sampled_brdf(sampled, &*m, &cache.iors, normalise);
+            let model_brdf = generate_analytical_brdf_from_sampled_brdf(sampled, &*m, &cache.iors);
             brdf.write(model_brdf);
         });
         unsafe { brdfs.assume_init() }
     };
 
-    let measured_factor = if normalise && !sampled.normalised {
-        log::debug!("Normalising the samples");
-        sampled
-            .max_values
-            .iter()
-            .map(|&x| rcp_f32(x))
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
-    } else {
-        log::debug!("Not normalising the samples");
-        vec![1.0; sampled.wi_wo_pairs.len() * sampled.spectrum.len()].into_boxed_slice()
-    };
-
     modelled_brdfs
         .par_iter()
-        .map(|model| compute_distance_from_sampled_brdf(model, sampled, &measured_factor, metric))
+        .map(|model| compute_distance_from_sampled_brdf(model, sampled, metric))
         .collect::<Vec<_>>()
         .into_boxed_slice()
 }
@@ -297,7 +246,6 @@ pub fn compute_iso_sampled_brdf_err(
 fn compute_distance_from_sampled_brdf(
     modelled: &SampledBrdf,
     measured: &SampledBrdf,
-    measured_factor: &[f32],
     error_metric: ErrorMetric,
 ) -> f64 {
     assert_eq!(
@@ -309,14 +257,12 @@ fn compute_distance_from_sampled_brdf(
     let n_wo = modelled.n_wo();
     let mut sqr_err_sum = 0.0;
     for (i, (wi, wos)) in modelled.wi_wo_pairs.iter().enumerate() {
-        let factors = &measured_factor[i * n_lambda..i * n_lambda + n_lambda];
         for (j, wo) in wos.iter().enumerate() {
             let offset = i * n_lambda * n_wo + j * n_lambda;
             let model_samples = &modelled.samples[offset..offset + n_lambda];
             let measured_samples = &measured.samples[offset..offset + n_lambda];
             for k in 0..n_lambda {
-                sqr_err_sum +=
-                    sqr(model_samples[k] as f64 - measured_samples[k] as f64 * factors[k] as f64);
+                sqr_err_sum += sqr(model_samples[k] as f64 - measured_samples[k] as f64);
             }
         }
     }
@@ -342,7 +288,6 @@ pub(crate) fn generate_analytical_brdf(
     params: &BsdfMeasurementParams,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
-    normalise: bool,
 ) -> MeasuredBsdfData {
     let partition = params.receiver.partitioning();
     let meas_pts = params.emitter.generate_measurement_points();
@@ -387,13 +332,6 @@ pub(crate) fn generate_analytical_brdf(
                     samples.as_mut_slice()[i * n_wavelength..(i + 1) * n_wavelength]
                         .copy_from_slice(&spectral_samples);
                 }
-                if normalise {
-                    for sample in samples.as_mut_slice().chunks_mut(n_wavelength) {
-                        for (s, max) in sample.iter_mut().zip(max_values_per_snapshot.iter()) {
-                            *s /= *max as f32;
-                        }
-                    }
-                }
                 snapshot.write(BsdfSnapshot {
                     wi: *wi_sph,
                     samples,
@@ -408,7 +346,6 @@ pub(crate) fn generate_analytical_brdf(
         params: params.clone(),
         snapshots: unsafe { snapshots.assume_init() },
         raw_snapshots: None,
-        normalised: normalise,
         max_values,
     }
 }

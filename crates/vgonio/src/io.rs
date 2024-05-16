@@ -1186,26 +1186,9 @@ pub mod vgmo {
                         params: *params,
                         snapshots,
                         raw_snapshots,
-                        normalised: false,
                         max_values,
                     })
                 }
-            }
-        }
-
-        /// Calculates the maximum values for each incident direction and
-        /// wavelength.
-        ///
-        /// These are always the current maximum values, which are 1.0 if the
-        /// data is normalised, and the actual maximum values if the
-        /// data is not normalised.
-        pub fn calculate_current_maximum_values(&self, vals: &mut [f32]) {
-            let n_lambda = self.params.emitter.spectrum.step_count();
-            assert_eq!(vals.len(), n_lambda, "Invalid length of the values buffer");
-            if self.normalised {
-                vals.iter_mut().for_each(|v| *v = 1.0);
-            } else {
-                vals.copy_from_slice(&self.max_values);
             }
         }
 

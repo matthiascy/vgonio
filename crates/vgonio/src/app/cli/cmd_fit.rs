@@ -124,13 +124,13 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 fresnel: true,
             };
             for model in models.iter() {
-                let brdf = generate_analytical_brdf(&params, &**model, &cache.iors, opts.normalise);
+                let brdf = generate_analytical_brdf(&params, &**model, &cache.iors);
                 let output = config.output_dir().join(format!(
                     "{:?}_{}.exr",
                     model.family(),
                     model.params()[0],
                 ));
-                brdf.write_as_exr(&output, &chrono::Local::now(), 512, opts.normalise)
+                brdf.write_as_exr(&output, &chrono::Local::now(), 512)
                     .unwrap();
             }
         } else {
@@ -239,12 +239,11 @@ fn sampled_brdf_fitting(
     cache: &RawCache,
 ) {
     println!(
-        "    {}>{} Fitting to model: {:?} , distro: {:?}, normalise: {}, isotropy: {}, olaf: {}",
+        "    {}>{} Fitting to model: {:?} , distro: {:?}, isotropy: {}, olaf: {}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         opts.family,
         opts.distro,
-        opts.normalise,
         opts.isotropy,
         opts.olaf,
     );
@@ -265,13 +264,11 @@ fn brute_force_fitting_sampled_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
-    assert!(!brdf.normalised, "The BRDF should not be normalised.");
     let mut errs = compute_iso_sampled_brdf_err(
         &brdf,
         opts.distro,
         alpha,
         &cache,
-        opts.normalise,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
@@ -307,7 +304,7 @@ fn nlls_fitting_sampled_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem = SampledBrdfFittingProblem::new(brdf, opts.distro, alpha, opts.normalise, cache);
+    let problem = SampledBrdfFittingProblem::new(brdf, opts.distro, alpha, cache);
     problem.lsq_lm_fit(opts.isotropy)
 }
 
@@ -320,13 +317,11 @@ fn measured_brdf_fitting(
     cache: &RawCache,
 ) {
     println!(
-        "    {}>{} Fitting to model: {:?} , distro: {:?}, normalise: {}, isotropy: {}, method: \
-         {:?}",
+        "    {}>{} Fitting to model: {:?} , distro: {:?}, isotropy: {}, method: {:?}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         opts.family,
         opts.distro,
-        opts.normalise,
         opts.isotropy,
         opts.method,
     );
@@ -346,8 +341,7 @@ fn nlls_fitting_measured_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem =
-        MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, opts.normalise, cache);
+    let problem = MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, cache);
     problem.lsq_lm_fit(opts.isotropy)
 }
 
@@ -364,7 +358,6 @@ fn brute_force_fitting_measured_brdf(
         opts.distro,
         alpha,
         &cache,
-        opts.normalise,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
@@ -457,13 +450,6 @@ pub struct FitOptions {
         default_value = "false"
     )]
     pub generate: bool,
-
-    #[clap(
-        long,
-        help = "Whether to normalize the generated analytical model. The BRDF snapshot will be \
-                normalized to 1.0 by its maximum values of each snapshot."
-    )]
-    pub normalise: bool,
 
     #[clap(
         short = 's',

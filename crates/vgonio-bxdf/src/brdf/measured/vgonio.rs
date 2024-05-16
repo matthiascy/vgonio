@@ -1,11 +1,11 @@
 //! BRDF from the VGonio simulator.
-use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, ParametrisationKind};
+use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, Origin, ParametrisationKind};
 use base::{
     error::VgonioError, math::Sph2, medium::Medium, partition::SphericalPartition,
     units::Nanometres,
 };
 use jabr::array::DyArr;
-use std::{borrow::Cow, mem::MaybeUninit, ops::Index, path::Path};
+use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
 
 #[derive(Clone)]
 pub struct VgonioBrdfParameterisation {
@@ -96,7 +96,7 @@ impl VgonioBrdf {
         samples: DyArr<f32, 3>,
     ) -> Self {
         Self {
-            origin,
+            origin: Origin::Simulated,
             incident_medium,
             transmitted_medium,
             params: Box::new(params),
@@ -111,7 +111,7 @@ impl VgonioBrdf {
             brdf: self,
             n_spectrum: self.spectrum.len(),
             n_wi: self.params.incoming.len(),
-            n_wo: self.params.outgoing.len(),
+            n_wo: self.params.outgoing.patches.len(),
             idx: 0,
         }
     }
@@ -127,7 +127,7 @@ impl VgonioBrdf {
         // The BSDF data is stored in a single flat row-major array, with the order of
         // the dimensions [wi, λ, y, x] where x is the width, y is the height, λ is the
         // wavelength, and wi is the incident direction.
-        let mut bsdf_images = DyArr::zeros([n_wi, n_spectrum, w, h]);
+        let mut bsdf_images = DyArr::<f32, 4>::zeros([n_wi, n_spectrum, w, h]);
         // Pre-compute the patch index for each pixel.
         let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
         self.params.outgoing.compute_pixel_patch_indices(
@@ -137,7 +137,7 @@ impl VgonioBrdf {
         );
 
         // Each snapshot is saved as a separate layer of the image.
-        let mut layers = vec![MaybeUninit::uninit(); n_wi];
+        let mut layers = Box::new_uninit_slice(n_wi);
         // Each channel of the layer stores the BSDF data for a single wavelength.
         for (l, snapshot) in self.snapshots().enumerate() {
             let offset = l * n_spectrum * w * h;
@@ -152,7 +152,9 @@ impl VgonioBrdf {
                     }
                 }
             }
+        }
 
+        for (l, snapshot) in self.snapshots().enumerate() {
             let theta =
                 format!("{:4.2}", snapshot.wi.theta.in_degrees().as_f32()).replace(".", "_");
             let phi = format!("{:4.2}", snapshot.wi.phi.in_degrees().as_f32()).replace(".", "_");
@@ -162,7 +164,7 @@ impl VgonioBrdf {
                     &timestamp,
                 )),
                 software_name: Text::new_or_none("vgonio"),
-                other: self.params.to_exr_extra_info(),
+                other: HashMap::new(), // TODO: encode more info: self.params.to_exr_extra_info(),
                 layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta, phi))),
                 ..LayerAttributes::default()
             };
@@ -177,7 +179,7 @@ impl VgonioBrdf {
                     AnyChannel::new(
                         name,
                         FlatSamples::F32(Cow::Borrowed(
-                            &bsdf_images[offset + i * w * h..offset + (i + 1) * w * h],
+                            &bsdf_images.as_slice()[offset + i * w * h..offset + (i + 1) * w * h],
                         )),
                     )
                 })
@@ -192,8 +194,7 @@ impl VgonioBrdf {
             ));
         }
 
-        let layers =
-            unsafe { std::mem::transmute::<_, Vec<Layer<AnyChannels<FlatSamples>>>>(layers) };
+        let layers = unsafe { Vec::from_raw_parts(layers.assume_init().as_mut_ptr(), n_wi, n_wi) };
 
         let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
         let image = Image::from_layers(img_attrib, layers);
