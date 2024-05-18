@@ -57,7 +57,7 @@ pub struct MeasuredBsdfData {
     /// Snapshot of the BSDF at each incident direction of the emitter.
     /// See [`BsdfSnapshot`] for more details.
     pub snapshots: Box<[BsdfSnapshot]>,
-    // TODO: write the max_values and normalised fields to the vgmo file.
+    // TODO: write the max_values to the vgmo file.
     /// Maximum values of the BSDF samples for each incident direction and each
     /// wavelength; stored in 1D row major order array [ωi, λ].
     pub max_values: Box<[f32]>,
@@ -118,8 +118,6 @@ impl MeasuredBsdfData {
     /// * `filepath` - The path to the directory where the images will be saved.
     /// * `timestamp` - The timestamp of the measurement.
     /// * `resolution` - The resolution of the images.
-    /// * `normalise` - Whether to normalise the BSDF data before writing them
-    ///   to the images.
     pub fn write_as_exr(
         &self,
         filepath: &Path,
@@ -883,7 +881,6 @@ mod tests {
             },
             snapshots,
             raw_snapshots: None,
-            normalised: false,
             max_values: vec![1.0; 4].into_boxed_slice(),
         };
         let mut interpolated = vec![0.0, 0.0, 0.0, 0.0];

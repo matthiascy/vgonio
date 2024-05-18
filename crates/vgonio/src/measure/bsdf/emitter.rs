@@ -127,17 +127,17 @@ impl EmitterParams {
 
 /// Emitter's samples in the sampling space.
 #[derive(Debug, Clone)]
-pub struct EmitterSamples(Vec<Vec3>);
+pub struct EmitterSamples(Box<[Vec3]>);
 
 impl Deref for EmitterSamples {
-    type Target = Vec<Vec3>;
+    type Target = [Vec3];
 
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl FromIterator<Vec3> for EmitterSamples {
     fn from_iter<T: IntoIterator<Item = Vec3>>(iter: T) -> Self {
-        EmitterSamples(iter.into_iter().collect())
+        EmitterSamples(iter.into_iter().collect::<Vec<_>>().into_boxed_slice())
     }
 }
 

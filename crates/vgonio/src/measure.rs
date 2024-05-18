@@ -94,12 +94,13 @@ impl SphericalTransform {
 /// NOTE: samples are generated on the xy-plane, with the z component set to 1.0
 /// in the returned vector. This could simplify the transformation of the
 /// samples when rotating the disk.
-pub fn uniform_sampling_on_unit_disk(num: usize) -> Vec<Vec3> {
+pub fn uniform_sampling_on_unit_disk(num: usize) -> Box<[Vec3]> {
     const SEED: u64 = 0;
 
     let range: Uniform<f32> = Uniform::new(0.0, 1.0);
     let mut samples = Vec::with_capacity(num);
     samples.resize(num, Vec3::Z);
+    let mut samples = Box::new_uninit_slice(num);
     samples
         .par_chunks_mut(8192)
         .enumerate()
@@ -110,15 +111,16 @@ pub fn uniform_sampling_on_unit_disk(num: usize) -> Vec<Vec3> {
             chunks.iter_mut().for_each(|v| {
                 let r = range.sample(&mut rng).sqrt();
                 let a = range.sample(&mut rng) * std::f32::consts::TAU;
-                v.x = r * a.cos();
-                v.y = r * a.sin();
+                v.write(Vec3::new(r * a.cos(), r * a.sin(), 1.0));
             });
         });
 
-    samples
+    unsafe { samples.assume_init() }
 }
 
 /// Generates uniformly distributed samples on the unit sphere.
+///
+/// TODO: sampling with pdf
 ///
 /// The samples are generated on the unit sphere, in the right-handed,
 /// Z-up coordinate system.
@@ -132,11 +134,10 @@ pub fn uniform_sampling_on_unit_sphere(
     theta_stop: Radians,
     phi_start: Radians,
     phi_stop: Radians,
-) -> Vec<Vec3> {
+) -> Box<[Vec3]> {
     const SEED: u64 = 0;
     let range = Uniform::new(0.0, 1.0);
-    let mut samples = Vec::with_capacity(num);
-    samples.resize(num, Vec3::ZERO);
+    let mut samples = Box::new_uninit_slice(num);
     log::trace!("  - Generating samples on unit sphere");
 
     samples
@@ -153,13 +154,13 @@ pub fn uniform_sampling_on_unit_sphere(
                 if (theta_start..theta_stop).contains(&theta)
                     && (phi_start..phi_stop).contains(&phi)
                 {
-                    chunks[j] = Sph3::new(1.0, theta, phi).to_cartesian();
+                    chunks[j].write(Sph3::new(1.0, theta, phi).to_cartesian());
                     j += 1;
                 }
             }
         });
 
-    samples
+    unsafe { samples.assume_init() }
 }
 
 /// Estimates the radius of the sphere or hemisphere enclosing the specimen.
