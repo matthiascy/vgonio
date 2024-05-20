@@ -1,4 +1,4 @@
-use base::Isotropy;
+use base::{Isotropy, MeasurementKind};
 use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
@@ -18,8 +18,9 @@ use crate::{
         },
     },
     measure::{
-        data::{MeasuredData, MeasurementDataSource},
-        params::AdfMeasurementMode,
+        mfd::{MeasuredMsfData, MeasuredNdfData},
+        params::NdfMeasurementMode,
+        MeasurementSource,
     },
 };
 
@@ -161,13 +162,13 @@ impl PropertyInspector {
 
                                 ui.add(egui::Label::new("Source:"));
                                 match &state.source {
-                                    MeasurementDataSource::Loaded(path) => {
+                                    MeasurementSource::Loaded(path) => {
                                         ui.add(egui::Label::new("Loaded")).on_hover_text(format!(
                                             "Surface path: {}",
                                             path.display()
                                         ));
                                     }
-                                    MeasurementDataSource::Measured(hdl) => {
+                                    MeasurementSource::Measured(hdl) => {
                                         ui.add(egui::Label::new("Measured"))
                                             .on_hover_text(format!("Surface ID: {}", hdl));
                                     }
@@ -175,59 +176,69 @@ impl PropertyInspector {
                                 ui.end_row();
 
                                 self.cache.read(|cache| {
-                                    match &cache.get_measurement_data(meas).unwrap().measured {
-                                        MeasuredData::Adf(adf) => match adf.params.mode {
-                                            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
-                                                ui.label("θ:");
-                                                ui.label(format!(
-                                                    "{} ~ {}, every {}",
-                                                    zenith.start.prettified(),
-                                                    zenith.stop.prettified(),
-                                                    zenith.step_size.prettified()
-                                                ));
-                                                ui.end_row();
-
-                                                #[cfg(debug_assertions)]
-                                                {
-                                                    ui.label("θ bins count:");
+                                    let measured = &cache.get_measurement(meas).unwrap().measured;
+                                    match measured.kind() {
+                                        MeasurementKind::Ndf => {
+                                            let ndf =
+                                                measured.downcast::<MeasuredNdfData>().unwrap();
+                                            match ndf.params.mode {
+                                                NdfMeasurementMode::ByPoints {
+                                                    azimuth,
+                                                    zenith,
+                                                } => {
+                                                    ui.label("θ:");
                                                     ui.label(format!(
-                                                        "{}",
-                                                        zenith.step_count_wrapped()
+                                                        "{} ~ {}, every {}",
+                                                        zenith.start.prettified(),
+                                                        zenith.stop.prettified(),
+                                                        zenith.step_size.prettified()
                                                     ));
-                                                    ui.end_row()
+                                                    ui.end_row();
+
+                                                    #[cfg(debug_assertions)]
+                                                    {
+                                                        ui.label("θ bins count:");
+                                                        ui.label(format!(
+                                                            "{}",
+                                                            zenith.step_count_wrapped()
+                                                        ));
+                                                        ui.end_row()
+                                                    }
+
+                                                    ui.label("φ:");
+                                                    ui.label(format!(
+                                                        "{} ~ {}, every {}",
+                                                        azimuth.start.prettified(),
+                                                        azimuth.stop.prettified(),
+                                                        azimuth.step_size.prettified(),
+                                                    ));
+                                                    ui.end_row();
+
+                                                    #[cfg(debug_assertions)]
+                                                    {
+                                                        ui.label("φ bins count:");
+                                                        ui.label(format!(
+                                                            "{}",
+                                                            azimuth.step_count_wrapped()
+                                                        ));
+                                                        ui.end_row()
+                                                    }
                                                 }
-
-                                                ui.label("φ:");
-                                                ui.label(format!(
-                                                    "{} ~ {}, every {}",
-                                                    azimuth.start.prettified(),
-                                                    azimuth.stop.prettified(),
-                                                    azimuth.step_size.prettified(),
-                                                ));
-                                                ui.end_row();
-
-                                                #[cfg(debug_assertions)]
-                                                {
-                                                    ui.label("φ bins count:");
-                                                    ui.label(format!(
-                                                        "{}",
-                                                        azimuth.step_count_wrapped()
-                                                    ));
-                                                    ui.end_row()
+                                                NdfMeasurementMode::ByPartition { .. } => {
+                                                    // TODO: Add partition info.
+                                                    log::info!("Partition mode not implemented");
                                                 }
                                             }
-                                            AdfMeasurementMode::ByPartition { .. } => {
-                                                // TODO: Add partition info.
-                                                log::info!("Partition mode not implemented");
-                                            }
-                                        },
-                                        MeasuredData::Msf(mmsf) => {
+                                        }
+                                        MeasurementKind::Msf => {
+                                            let msf =
+                                                measured.downcast::<MeasuredMsfData>().unwrap();
                                             ui.label("θ:");
                                             ui.label(format!(
                                                 "{} ~ {}, every {}",
-                                                mmsf.params.zenith.start.prettified(),
-                                                mmsf.params.zenith.stop.prettified(),
-                                                mmsf.params.zenith.step_size.prettified()
+                                                msf.params.zenith.start.prettified(),
+                                                msf.params.zenith.stop.prettified(),
+                                                msf.params.zenith.step_size.prettified()
                                             ));
                                             ui.end_row();
 
@@ -236,7 +247,7 @@ impl PropertyInspector {
                                                 ui.label("θ bins count:");
                                                 ui.label(format!(
                                                     "{}",
-                                                    mmsf.params.zenith.step_count_wrapped()
+                                                    msf.params.zenith.step_count_wrapped()
                                                 ));
                                                 ui.end_row()
                                             }
@@ -244,9 +255,9 @@ impl PropertyInspector {
                                             ui.label("φ:");
                                             ui.label(format!(
                                                 "{} ~ {}, every {}",
-                                                mmsf.params.azimuth.start.prettified(),
-                                                mmsf.params.azimuth.stop.prettified(),
-                                                mmsf.params.azimuth.step_size.prettified(),
+                                                msf.params.azimuth.start.prettified(),
+                                                msf.params.azimuth.stop.prettified(),
+                                                msf.params.azimuth.step_size.prettified(),
                                             ));
                                             ui.end_row();
 
@@ -255,14 +266,12 @@ impl PropertyInspector {
                                                 ui.label("φ bins count:");
                                                 ui.label(format!(
                                                     "{}",
-                                                    mmsf.params.azimuth.step_count_wrapped()
+                                                    msf.params.azimuth.step_count_wrapped()
                                                 ));
                                                 ui.end_row()
                                             }
                                         }
-                                        MeasuredData::Bsdf(_) => {}
-                                        MeasuredData::Sdf(_) => {}
-                                        MeasuredData::Sampled(_) => {}
+                                        _ => {}
                                     }
                                 })
                             });

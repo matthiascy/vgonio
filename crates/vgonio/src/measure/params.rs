@@ -1,13 +1,11 @@
 //! Measurement parameters.
-pub use crate::measure::{bsdf::params::*, microfacet::params::*};
+pub use crate::measure::{bsdf::params::*, mfd::params::*};
 
 use crate::error::RuntimeError;
 use base::error::VgonioError;
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::{Display, Formatter},
     fs::File,
-    hash::Hash,
     io::BufReader,
     path::{Path, PathBuf},
 };
@@ -83,7 +81,7 @@ impl MeasurementParams {
 /// The measurement description file uses the [YAML](https://yaml.org/) format.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub struct Measurement {
+pub struct MeasurementDescription {
     /// Type of measurement.
     #[serde(rename = "type")]
     pub params: MeasurementParams,
@@ -93,65 +91,7 @@ pub struct Measurement {
     pub surfaces: Vec<PathBuf>, // TODO(yang): use Cow<'a, Vec<PathBuf>> to avoid copying the path
 }
 
-/// Kind of different measurements.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum MeasurementKind {
-    /// BSDF measurement.
-    Bsdf = 0x00,
-    /// Microfacet area distribution function measurement.
-    Adf = 0x01,
-    /// Microfacet Masking-shadowing function measurement.
-    Msf = 0x02,
-    /// Microfacet slope distribution function measurement.
-    Sdf = 0x03,
-}
-
-impl Display for MeasurementKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MeasurementKind::Bsdf => {
-                write!(f, "BSDF")
-            }
-            MeasurementKind::Adf => {
-                write!(f, "ADF")
-            }
-            MeasurementKind::Msf => {
-                write!(f, "MSF")
-            }
-            MeasurementKind::Sdf => {
-                write!(f, "SDF")
-            }
-        }
-    }
-}
-
-impl From<u8> for MeasurementKind {
-    fn from(value: u8) -> Self {
-        match value {
-            0x00 => Self::Bsdf,
-            0x01 => Self::Adf,
-            0x02 => Self::Msf,
-            0x03 => Self::Sdf,
-            _ => panic!("Invalid measurement kind! {}", value),
-        }
-    }
-}
-
-impl MeasurementKind {
-    /// Returns the measurement kind in the form of a string slice in
-    /// lowercase ASCII characters.
-    pub fn ascii_str(&self) -> &'static str {
-        match self {
-            MeasurementKind::Bsdf => "bsdf",
-            MeasurementKind::Adf => "adf",
-            MeasurementKind::Msf => "msf",
-            MeasurementKind::Sdf => "sdf",
-        }
-    }
-}
-
-impl Measurement {
+impl MeasurementDescription {
     /// Loads the measurement from a path. The path can be either a file path
     /// or a directory path. In the latter case, files with the extension
     /// `.yaml` or `.yml` are loaded.
@@ -159,7 +99,7 @@ impl Measurement {
     /// # Arguments
     /// * `path` - Path to the measurement file or directory, must be in
     ///   canonical form.
-    pub fn load(path: &Path) -> Result<Vec<Measurement>, VgonioError> {
+    pub fn load(path: &Path) -> Result<Vec<MeasurementDescription>, VgonioError> {
         if path.exists() {
             if path.is_dir() {
                 Self::load_from_dir(path)
@@ -178,7 +118,7 @@ impl Measurement {
     /// # Arguments
     /// * `path` - Path to the measurement directory, must be in canonical form
     ///   and must exist.
-    fn load_from_dir(dir: &Path) -> Result<Vec<Measurement>, VgonioError> {
+    fn load_from_dir(dir: &Path) -> Result<Vec<MeasurementDescription>, VgonioError> {
         let mut measurements = Vec::new();
         for entry in std::fs::read_dir(dir).map_err(|err| {
             VgonioError::from_io_error(err, format!("Failed to read directory: {}", dir.display()))
@@ -208,7 +148,7 @@ impl Measurement {
     ///
     /// * `filepath` - Path to the file containing the measurement descriptions,
     ///   must be in canonical form and must exist.
-    fn load_from_file(filepath: &Path) -> Result<Vec<Measurement>, VgonioError> {
+    fn load_from_file(filepath: &Path) -> Result<Vec<MeasurementDescription>, VgonioError> {
         let mut file = File::open(filepath).map_err(|err| {
             VgonioError::from_io_error(
                 err,
@@ -221,7 +161,7 @@ impl Measurement {
         let reader = BufReader::new(&mut file);
         let measurements = serde_yaml::Deserializer::from_reader(reader)
             .map(|doc| {
-                Measurement::deserialize(doc)
+                MeasurementDescription::deserialize(doc)
                     .map_err(|err| {
                         VgonioError::new(
                             "Failed to deserialize measurement description",

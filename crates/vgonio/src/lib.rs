@@ -28,7 +28,7 @@ mod error;
 pub mod fitting;
 mod io;
 pub mod measure;
-pub(crate) mod plotting;
+pub(crate) mod pyplot;
 
 use base::error::VgonioError;
 

@@ -2,20 +2,21 @@ use crate::{
     app::cache::{RawCache, RefractiveIndexRegistry},
     measure::{
         bsdf::{BsdfSnapshot, MeasuredBsdfData},
-        data::SampledBrdf,
         params::BsdfMeasurementParams,
     },
 };
 use base::{
-    math::{rcp_f32, sph_to_cart, sqr},
+    math::{sph_to_cart, sqr},
     medium::Medium,
     partition::SphericalPartition,
     range::RangeByStepSizeInclusive,
     units::{deg, Degrees, Radians},
+    ErrorMetric,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        measured::{ClausenBrdf, Origin},
         Bxdf,
     },
     distro::MicrofacetDistroKind,
@@ -27,21 +28,11 @@ use rayon::{
         IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
         ParallelIterator,
     },
-    slice::{ParallelSlice, ParallelSliceMut},
+    slice::ParallelSliceMut,
 };
 use std::sync::atomic::AtomicU64;
 
-/// Metrics to use for the error computation.
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ErrorMetric {
-    /// Mean squared error.
-    Mse,
-    /// Most commonly used error metrics in non-linear least squares fitting.
-    /// Which is the half of the sum of the squares of the differences between
-    /// the measured data and the model.
-    #[default]
-    Nlls,
-}
+// TODO: move under bxdf crate
 
 /// Compute the distance (error) between the measured data and the model.
 ///
@@ -160,64 +151,55 @@ fn compute_distance(
     }
 }
 
-pub(crate) fn generate_analytical_brdf_from_sampled_brdf(
-    sampled_brdf: &SampledBrdf,
+pub(crate) fn generate_analytical_brdf_from_clausen_brdf(
+    brdf: &ClausenBrdf,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
-) -> SampledBrdf {
+) -> ClausenBrdf {
     let iors_i = iors
-        .ior_of_spectrum(Medium::Air, &sampled_brdf.spectrum)
+        .ior_of_spectrum(Medium::Air, brdf.spectrum.as_ref())
         .unwrap();
     let iors_t = iors
-        .ior_of_spectrum(Medium::Aluminium, &sampled_brdf.spectrum)
+        .ior_of_spectrum(Medium::Aluminium, brdf.spectrum.as_ref())
         .unwrap();
-    let n_samples = sampled_brdf.samples.len();
-    let n_lambda = sampled_brdf.n_lambda();
-    let mut samples = vec![0.0f32; n_samples].into_boxed_slice();
-    let mut max_values =
-        vec![-1.0f32; sampled_brdf.spectrum.len() * sampled_brdf.wi_wo_pairs.len()]
-            .into_boxed_slice();
-    let n_wo = sampled_brdf.n_wo();
-    sampled_brdf
-        .wi_wo_pairs
+    let n_spectrum = brdf.n_spectrum();
+    let n_wo = brdf.n_wo();
+    let mut samples = DyArr::zeros([brdf.n_wi(), n_wo, n_spectrum]);
+    brdf.params
+        .incoming
+        .as_slice()
         .iter()
         .enumerate()
-        .zip(max_values.chunks_mut(n_lambda))
-        .for_each(|((i, (wi, wos)), max_values)| {
-            let offset = i * n_wo * n_lambda;
+        .zip(brdf.params.outgoing.as_slice().chunks(n_wo))
+        .for_each(|((i, wi), wos)| {
+            let wi = wi.to_cartesian();
             wos.iter().enumerate().for_each(|(j, wo)| {
-                let samples_offset = offset + j * n_lambda;
-                let samples = &mut samples[samples_offset..samples_offset + n_lambda];
-                let wi = wi.to_cartesian();
                 let wo = wo.to_cartesian();
                 let spectral_samples =
                     Scattering::eval_reflectance_spectrum(target, &wi, &wo, &iors_i, &iors_t);
-                samples
-                    .iter_mut()
-                    .zip(spectral_samples.iter())
-                    .zip(max_values.iter_mut())
-                    .for_each(|((sample, value), max)| {
-                        *sample = *value as f32;
-                        *max = f32::max(*max, *sample);
-                    });
-            })
+                for (k, sample) in spectral_samples.iter().enumerate() {
+                    samples[[i, j, k]] = *sample as f32;
+                }
+            });
         });
-    SampledBrdf {
-        spectrum: sampled_brdf.spectrum.clone(),
+    ClausenBrdf::new(
+        Origin::Analytical,
+        brdf.incident_medium,
+        brdf.transmitted_medium,
+        brdf.params.clone(),
+        brdf.spectrum.clone(),
         samples,
-        max_values,
-        wi_wo_pairs: sampled_brdf.wi_wo_pairs.clone(),
-    }
+    )
 }
 
-pub fn compute_iso_sampled_brdf_err(
-    sampled: &SampledBrdf,
+pub fn compute_iso_clausen_brdf_err(
+    sampled: &ClausenBrdf,
     distro: MicrofacetDistroKind,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
     metric: ErrorMetric,
 ) -> Box<[f64]> {
-    let mut modelled_brdfs = {
+    let modelled_brdfs = {
         let mut brdfs = Box::new_uninit_slice(alpha.step_count());
         brdfs.iter_mut().enumerate().for_each(|(i, brdf)| {
             let alpha_x = i as f64 * alpha.step_size + alpha.start;
@@ -230,7 +212,7 @@ pub fn compute_iso_sampled_brdf_err(
                         as Box<dyn Bxdf<Params = [f64; 2]>>
                 }
             };
-            let model_brdf = generate_analytical_brdf_from_sampled_brdf(sampled, &*m, &cache.iors);
+            let model_brdf = generate_analytical_brdf_from_clausen_brdf(sampled, &*m, &cache.iors);
             brdf.write(model_brdf);
         });
         unsafe { brdfs.assume_init() }
@@ -238,41 +220,9 @@ pub fn compute_iso_sampled_brdf_err(
 
     modelled_brdfs
         .par_iter()
-        .map(|model| compute_distance_from_sampled_brdf(model, sampled, metric))
+        .map(|model| model.distance(sampled, metric))
         .collect::<Vec<_>>()
         .into_boxed_slice()
-}
-
-fn compute_distance_from_sampled_brdf(
-    modelled: &SampledBrdf,
-    measured: &SampledBrdf,
-    error_metric: ErrorMetric,
-) -> f64 {
-    assert_eq!(
-        modelled.spectrum.len(),
-        measured.spectrum.len(),
-        "The number of wavelengths in the modelled and measured data must be the same."
-    );
-    let n_lambda = modelled.n_lambda();
-    let n_wo = modelled.n_wo();
-    let mut sqr_err_sum = 0.0;
-    for (i, (wi, wos)) in modelled.wi_wo_pairs.iter().enumerate() {
-        for (j, wo) in wos.iter().enumerate() {
-            let offset = i * n_lambda * n_wo + j * n_lambda;
-            let model_samples = &modelled.samples[offset..offset + n_lambda];
-            let measured_samples = &measured.samples[offset..offset + n_lambda];
-            for k in 0..n_lambda {
-                sqr_err_sum += sqr(model_samples[k] as f64 - measured_samples[k] as f64);
-            }
-        }
-    }
-    match error_metric {
-        ErrorMetric::Mse => {
-            let n = modelled.n_wi() * modelled.n_wo() * modelled.n_lambda();
-            sqr_err_sum / n as f64
-        }
-        ErrorMetric::Nlls => sqr_err_sum * 0.5,
-    }
 }
 
 // TODO: use specific container instead of MeasuredBsdfData

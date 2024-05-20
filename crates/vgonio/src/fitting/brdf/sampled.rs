@@ -1,19 +1,19 @@
 use crate::{
     app::cache::{RawCache, RefractiveIndexRegistry},
-    fitting::{
-        brdf::initialise_microfacet_bsdf_models, err::generate_analytical_brdf_from_sampled_brdf,
-        FittingProblem, FittingReport,
-    },
-    measure::data::SampledBrdf,
+    fitting::{brdf::initialise_microfacet_bsdf_models, FittingProblem, FittingReport},
 };
 use base::{medium::Medium, optics::ior::Ior, range::RangeByStepSizeInclusive, Isotropy};
-use bxdf::{brdf::Bxdf, distro::MicrofacetDistroKind, Scattering};
+use bxdf::{
+    brdf::{measured::ClausenBrdf, Bxdf},
+    distro::MicrofacetDistroKind,
+    Scattering,
+};
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
 
-pub struct SampledBrdfFittingProblem<'a> {
-    pub measured: &'a SampledBrdf,
+pub struct ClausenBrdfFittingProblem<'a> {
+    pub measured: &'a ClausenBrdf,
     pub target: MicrofacetDistroKind,
     pub iors_i: Box<[Ior]>,
     pub iors_t: Box<[Ior]>,
@@ -21,7 +21,7 @@ pub struct SampledBrdfFittingProblem<'a> {
     pub initial_guess: RangeByStepSizeInclusive<f64>,
 }
 
-impl<'a> Display for SampledBrdfFittingProblem<'a> {
+impl<'a> Display for ClausenBrdfFittingProblem<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BSDF Fitting Problem (sampled brdf)")
             .field("target", &self.target)
@@ -29,20 +29,20 @@ impl<'a> Display for SampledBrdfFittingProblem<'a> {
     }
 }
 
-impl<'a> SampledBrdfFittingProblem<'a> {
+impl<'a> ClausenBrdfFittingProblem<'a> {
     pub fn new(
-        measured: &'a SampledBrdf,
+        measured: &'a ClausenBrdf,
         target: MicrofacetDistroKind,
         initial: RangeByStepSizeInclusive<f64>,
         cache: &'a RawCache,
     ) -> Self {
         let iors_i = cache
             .iors
-            .ior_of_spectrum(Medium::Air, &measured.spectrum)
+            .ior_of_spectrum(Medium::Air, measured.spectrum.as_ref())
             .unwrap();
         let iors_t = cache
             .iors
-            .ior_of_spectrum(Medium::Aluminium, &measured.spectrum)
+            .ior_of_spectrum(Medium::Aluminium, measured.spectrum.as_ref())
             .unwrap();
         Self {
             measured,
@@ -55,7 +55,7 @@ impl<'a> SampledBrdfFittingProblem<'a> {
     }
 }
 
-impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
+impl<'a> FittingProblem for ClausenBrdfFittingProblem<'a> {
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
     fn lsq_lm_fit(self, isotropy: Isotropy) -> FittingReport<Self::Model> {
@@ -75,7 +75,7 @@ impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
                 let (model, report) = match isotropy {
                     Isotropy::Isotropic => {
                         let problem =
-                            SampledBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                            ClausenBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
                                 &self.measured,
                                 model,
                                 self.iors,
@@ -87,7 +87,7 @@ impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
                     }
                     Isotropy::Anisotropic => {
                         let problem =
-                            SampledBrdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
+                            ClausenBrdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
                                 &self.measured,
                                 model,
                                 self.iors,
@@ -119,23 +119,21 @@ impl<'a> FittingProblem for SampledBrdfFittingProblem<'a> {
             .collect::<Vec<_>>()
         };
         results.shrink_to_fit();
-        FittingReport::new(results, |m: &Box<dyn Bxdf<Params = [f64; 2]>>| {
-            m.params()[0] > 0.0 && m.params()[1] > 0.0
-        })
+        FittingReport::new(results)
     }
 }
 
-struct SampledBrdfFittingProblemProxy<'a, const I: Isotropy> {
-    measured: &'a SampledBrdf,
+struct ClausenBrdfFittingProblemProxy<'a, const I: Isotropy> {
+    measured: &'a ClausenBrdf,
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
     iors: &'a RefractiveIndexRegistry,
     iors_i: &'a [Ior],
     iors_t: &'a [Ior],
 }
 
-impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
+impl<'a> ClausenBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
     pub fn new(
-        measured: &'a SampledBrdf,
+        measured: &'a ClausenBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
@@ -156,9 +154,9 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
     }
 }
 
-impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
+impl<'a> ClausenBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
     pub fn new(
-        measured: &'a SampledBrdf,
+        measured: &'a ClausenBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
@@ -177,16 +175,15 @@ impl<'a> SampledBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
     }
 }
 
-fn eval_sampled_brdf_residuals<const I: Isotropy>(
-    problem: &SampledBrdfFittingProblemProxy<I>,
+fn eval_clausen_brdf_residuals<const I: Isotropy>(
+    problem: &ClausenBrdfFittingProblemProxy<I>,
 ) -> Box<[f64]> {
-    let n_lambda = problem.measured.n_lambda();
+    let n_spectrum = problem.measured.n_spectrum();
     let n_wo = problem.measured.n_wo();
     problem
         .measured
-        .wi_wo_pairs
-        .iter()
-        .enumerate()
+        .params
+        .wi_wos_iter()
         .flat_map(|(i, (wi, wos))| {
             let wi = wi.to_cartesian();
             wos.iter().enumerate().flat_map(move |(j, wo)| {
@@ -200,8 +197,8 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
                     &problem.iors_t,
                 )
                 .into_vec();
-                let offset = i * n_wo * n_lambda + j * n_lambda;
-                let measured = &problem.measured.samples[offset..offset + n_lambda];
+                let offset = i * n_wo * n_spectrum + j * n_spectrum;
+                let measured = &problem.measured.samples.as_slice()[offset..offset + n_spectrum];
                 modelled
                     .iter_mut()
                     .zip(measured.iter())
@@ -216,7 +213,7 @@ fn eval_sampled_brdf_residuals<const I: Isotropy>(
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
-    for SampledBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
+    for ClausenBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
@@ -232,15 +229,15 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 
     fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
         Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
-            &eval_sampled_brdf_residuals(self),
+            &eval_clausen_brdf_residuals(self),
         ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         let pds = self
             .measured
-            .wios()
-            .iter()
+            .params
+            .all_wi_wo_iter()
             .flat_map(|(wi_sph, wo_sph)| {
                 let wi = wi_sph.to_cartesian();
                 let wo = wo_sph.to_cartesian();
@@ -255,7 +252,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for SampledBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
+    for ClausenBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -271,15 +268,15 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
         Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
-            &eval_sampled_brdf_residuals(self),
+            &eval_clausen_brdf_residuals(self),
         ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
         let pds = self
             .measured
-            .wios()
-            .iter()
+            .params
+            .all_wi_wo_iter()
             .flat_map(|(wi_sph, wo_sph)| {
                 let wi = wi_sph.to_cartesian();
                 let wo = wo_sph.to_cartesian();

@@ -27,10 +27,10 @@ macro_rules! impl_least_squares_problem_common_methods {
 
 mod brdf;
 pub mod err;
-mod mdf;
+mod mfd;
 
 pub use brdf::*;
-pub use mdf::*;
+pub use mfd::*;
 
 use base::Isotropy;
 use bxdf::{
@@ -43,12 +43,10 @@ use std::fmt::Debug;
 /// Types of the fitting problem.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FittingProblemKind {
-    /// Fitting the microfacet area distribution function.
-    Mdf {
+    /// Fitting the microfacet distribution related model.
+    Mfd {
         /// The target microfacet distribution model.
         model: MicrofacetDistroKind,
-        /// The fitting variant.
-        variant: MicrofacetDistributionFittingVariant,
         /// The isotropy of the model.
         isotropy: Isotropy,
     },
@@ -93,14 +91,12 @@ impl FittedModel {
                 distro: model.distro(),
                 isotropy: model.isotropy(),
             },
-            FittedModel::Msf(model) => FittingProblemKind::Mdf {
+            FittedModel::Msf(model) => FittingProblemKind::Mfd {
                 model: model.kind(),
-                variant: MicrofacetDistributionFittingVariant::Msf,
                 isotropy: model.isotropy(),
             },
-            FittedModel::Ndf(model, _) => FittingProblemKind::Mdf {
+            FittedModel::Ndf(model, _) => FittingProblemKind::Mfd {
                 model: model.kind(),
-                variant: MicrofacetDistributionFittingVariant::Ndf,
                 isotropy: model.isotropy(),
             },
         }
@@ -151,7 +147,7 @@ pub struct FittingReport<M> {
 
 impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
-    pub fn new(results: Vec<(M, MinimizationReport<f64>)>, cond: impl Fn(&M) -> bool) -> Self {
+    pub fn new(results: Vec<(M, MinimizationReport<f64>)>) -> Self {
         let mut reports = results.into_boxed_slice();
         reports.sort_by(|(_, r1), (_, r2)| {
             r1.objective_function
@@ -167,6 +163,14 @@ impl<M> FittingReport<M> {
         FittingReport {
             best: Some(0),
             reports,
+        }
+    }
+
+    /// Creates an empty fitting report.
+    pub fn empty() -> Self {
+        FittingReport {
+            best: None,
+            reports: Box::new([]),
         }
     }
 

@@ -10,11 +10,12 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    measure::data::MeasurementData,
+    measure::{mfd::MeasuredMsfData, Measurement},
 };
 use base::{
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
+    MeasurementKind,
 };
 use bxdf::distro::MicrofacetDistribution;
 use egui::{Align, Ui};
@@ -68,9 +69,15 @@ impl Default for MaskingShadowingExtra {
 }
 
 impl VariantData for MaskingShadowingExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache) {
-        let measurement = cache.get_measurement_data(data).unwrap();
-        let (azimuth, zenith) = measurement.measured.adf_or_msf_angle_ranges().unwrap();
+    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
+        let measurement = cache.get_measurement(data).unwrap();
+        assert_eq!(
+            measurement.measured.kind(),
+            MeasurementKind::Msf,
+            "Wrong measurement kind!"
+        );
+        let msf = measurement.measured.downcast::<MeasuredMsfData>().unwrap();
+        let (azimuth, zenith) = msf.measurement_range();
         self.azimuth_range = azimuth;
         self.zenith_range = zenith;
         // let zenith_step_count = self.zenith_range.step_count_wrapped();
@@ -157,7 +164,7 @@ impl VariantData for MaskingShadowingExtra {
         &mut self,
         ui: &mut Ui,
         _event_loop: &EventLoopProxy,
-        _data: Handle<MeasurementData>,
+        _data: Handle<Measurement>,
         _cache: &Cache,
     ) {
         ui.allocate_ui_with_layout(

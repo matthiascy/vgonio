@@ -1,4 +1,3 @@
-#![feature(byte_slice_trim_ascii)]
 #![feature(seek_stream_len)]
 #![feature(new_uninit)]
 //! Heightfield

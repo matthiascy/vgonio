@@ -8,10 +8,9 @@ use crate::{
     },
     fitting::{
         err::{
-            compute_iso_microfacet_brdf_err, compute_iso_sampled_brdf_err,
-            generate_analytical_brdf, ErrorMetric,
+            compute_iso_clausen_brdf_err, compute_iso_microfacet_brdf_err, generate_analytical_brdf,
         },
-        sampled::SampledBrdfFittingProblem,
+        sampled::ClausenBrdfFittingProblem,
         FittingProblem, FittingReport, MicrofacetBrdfFittingProblem,
     },
     measure::{
@@ -20,10 +19,9 @@ use crate::{
             receiver::{DataRetrieval, ReceiverParams},
             BsdfKind, MeasuredBsdfData,
         },
-        data::SampledBrdf,
         params::{BsdfMeasurementParams, SimulationKind},
     },
-    plotting::plot_err,
+    pyplot::plot_err,
 };
 use base::{
     error::VgonioError,
@@ -32,11 +30,12 @@ use base::{
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{deg, nm, Rads},
-    Isotropy,
+    ErrorMetric, Isotropy,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        measured::ClausenBrdf,
         Bxdf, BxdfFamily,
     },
     distro::MicrofacetDistroKind,
@@ -152,17 +151,17 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         let olaf = cache
                             .load_micro_surface_measurement(&config, &input[1])
                             .unwrap();
-                        let measured_data = cache
-                            .get_measurement_data(measured)
+                        let simulated_brdf = cache
+                            .get_measurement(measured)
                             .unwrap()
                             .measured
-                            .as_bsdf()
+                            .downcast::<MeasuredBsdfData>()
                             .unwrap();
                         #[cfg(debug_assertions)]
                         {
-                            let n_wavelength = measured_data.params.emitter.spectrum.step_count();
-                            let partition = measured_data.params.receiver.partitioning();
-                            for snap in measured_data.snapshots.iter() {
+                            let n_spectrum = simulated_brdf.params.emitter.spectrum.step_count();
+                            let partition = simulated_brdf.params.receiver.partitioning();
+                            for snap in simulated_brdf.snapshots.iter() {
                                 log::debug!("  = snapshot | wi: {}", snap.wi);
                                 for (i, ring) in partition.rings.iter().enumerate() {
                                     log::debug!(
@@ -180,18 +179,18 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                             partition.patches[patch_idx].min,
                                             partition.patches[patch_idx].max,
                                             partition.patches[patch_idx].center(),
-                                            &snap.samples.as_slice()[patch_idx * n_wavelength
-                                                ..(patch_idx + 1) * n_wavelength]
+                                            &snap.samples.as_slice()[patch_idx * n_spectrum
+                                                ..(patch_idx + 1) * n_spectrum]
                                         );
                                     }
                                 }
                             }
                         }
                         let olaf_data = cache
-                            .get_measurement_data(olaf)
+                            .get_measurement(olaf)
                             .unwrap()
                             .measured
-                            .as_sampled_brdf()
+                            .downcast::<ClausenBrdf>()
                             .unwrap();
                         let dense = if std::env::var("DENSE")
                             .ok()
@@ -203,21 +202,35 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             false
                         };
                         log::debug!("Resampling the measured data, dense: {}", dense);
-                        measured_data.sampled_brdf(&olaf_data, dense, Rads::ZERO)
+                        simulated_brdf.resample(&olaf_data.params, dense, Rads::ZERO)
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
-                    sampled_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache);
+                    measured_brdf_fitting_clausen(
+                        opts.method,
+                        &input[0],
+                        &brdf,
+                        &opts,
+                        alpha,
+                        &cache,
+                    );
                 }
             } else {
                 for input in &opts.inputs {
                     let measurement = cache
                         .load_micro_surface_measurement(&config, &input)
                         .unwrap();
-                    let measured = &cache.get_measurement_data(measurement).unwrap().measured;
-                    match measured.as_bsdf() {
+                    let measured = &cache.get_measurement(measurement).unwrap().measured;
+                    match measured.downcast::<MeasuredBsdfData>() {
                         None => {
-                            let brdf = measured.as_sampled_brdf().unwrap();
-                            sampled_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache);
+                            let brdf = measured.downcast::<ClausenBrdf>().unwrap();
+                            measured_brdf_fitting_clausen(
+                                opts.method,
+                                &input,
+                                brdf,
+                                &opts,
+                                alpha,
+                                &cache,
+                            );
                         }
                         Some(brdf) => {
                             measured_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache)
@@ -230,10 +243,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn sampled_brdf_fitting(
+fn measured_brdf_fitting_clausen(
     method: FittingMethod,
     filepath: &PathBuf,
-    brdf: &SampledBrdf,
+    brdf: &ClausenBrdf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
@@ -249,22 +262,22 @@ fn sampled_brdf_fitting(
     );
     match method {
         FittingMethod::Bruteforce => {
-            brute_force_fitting_sampled_brdf(brdf, filepath, opts, alpha, cache)
+            brute_force_fitting_clausen_brdf(brdf, filepath, opts, alpha, cache)
         }
         FittingMethod::Nlls => {
-            nlls_fitting_sampled_brdf(brdf, opts, alpha, cache).print_fitting_report()
+            nlls_fitting_clausen_brdf(brdf, opts, alpha, cache).print_fitting_report()
         }
     }
 }
 
-fn brute_force_fitting_sampled_brdf(
-    brdf: &SampledBrdf,
+fn brute_force_fitting_clausen_brdf(
+    brdf: &ClausenBrdf,
     filepath: &PathBuf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
-    let mut errs = compute_iso_sampled_brdf_err(
+    let errs = compute_iso_clausen_brdf_err(
         &brdf,
         opts.distro,
         alpha,
@@ -298,13 +311,13 @@ fn brute_force_fitting_sampled_brdf(
     }
 }
 
-fn nlls_fitting_sampled_brdf(
-    brdf: &SampledBrdf,
+fn nlls_fitting_clausen_brdf(
+    brdf: &ClausenBrdf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem = SampledBrdfFittingProblem::new(brdf, opts.distro, alpha, cache);
+    let problem = ClausenBrdfFittingProblem::new(brdf, opts.distro, alpha, cache);
     problem.lsq_lm_fit(opts.isotropy)
 }
 

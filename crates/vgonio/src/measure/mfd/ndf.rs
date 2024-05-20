@@ -1,8 +1,8 @@
 use crate::{
     app::cache::{Handle, RawCache},
     measure::{
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::{AdfMeasurementMode, NdfMeasurementParams},
+        params::{NdfMeasurementMode, NdfMeasurementParams},
+        MeasuredData, Measurement, MeasurementSource,
     },
 };
 use base::{
@@ -13,8 +13,9 @@ use base::{
     range::RangeByStepSizeInclusive,
     units,
     units::{rad, Radians},
+    MeasurementKind,
 };
-use std::{borrow::Cow, path::Path};
+use std::{any::Any, borrow::Cow, path::Path};
 use surf::{MicroSurface, MicroSurfaceMesh};
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -30,7 +31,7 @@ use surf::{MicroSurface, MicroSurfaceMesh};
 /// Microfacet slope distribution function (MSDF)
 /// Microfacet normal distribution function (MNDF)
 #[derive(Debug, Clone)]
-pub struct MeasuredAdfData {
+pub struct MeasuredNdfData {
     /// The measurement parameters.
     pub params: NdfMeasurementParams,
     /// The distribution data. The outermost index is the azimuthal angle of the
@@ -41,7 +42,15 @@ pub struct MeasuredAdfData {
 
 // pub type MeasuredNdf = MeasuredData2<NdfMeasurementParams>;
 
-impl MeasuredAdfData {
+impl MeasuredData for MeasuredNdfData {
+    fn kind(&self) -> MeasurementKind { MeasurementKind::Ndf }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+}
+
+impl MeasuredNdfData {
     /// Writes the measured data as an EXR file.
     pub fn write_as_exr(
         &self,
@@ -60,7 +69,7 @@ impl MeasuredAdfData {
         // Collect the data following the patches.
         let mut patch_data = vec![0.0; partition.n_patches()];
         match self.params.mode {
-            AdfMeasurementMode::ByPoints { zenith, azimuth } => {
+            NdfMeasurementMode::ByPoints { zenith, azimuth } => {
                 assert!(
                     zenith.step_size > rad!(0.0) && azimuth.step_size > rad!(0.0),
                     "The step size of zenith and azimuth must be greater than 0."
@@ -82,7 +91,7 @@ impl MeasuredAdfData {
                     }
                 });
             }
-            AdfMeasurementMode::ByPartition { .. } => {
+            NdfMeasurementMode::ByPartition { .. } => {
                 patch_data.copy_from_slice(&self.samples);
             }
         }
@@ -128,6 +137,37 @@ impl MeasuredAdfData {
             .to_file(filepath)
             .map_err(|err| VgonioError::new("Failed to write NDF EXR file.", Some(Box::new(err))))
     }
+
+    // TODO: review the necessity of this method.
+    /// Returns the measurement range of the azimuthal and zenith angles.
+    /// The azimuthal angle is in the range [0, 2π] and the zenith angle is in
+    /// the range [0, π/2].
+    pub fn measurement_range(
+        &self,
+    ) -> Option<(
+        RangeByStepSizeInclusive<Radians>,
+        RangeByStepSizeInclusive<Radians>,
+    )> {
+        match self.params.mode {
+            NdfMeasurementMode::ByPoints { zenith, azimuth } => Some((azimuth, zenith)),
+            NdfMeasurementMode::ByPartition { .. } => {
+                eprintln!("Measurement range is not available for the partition mode.");
+                None
+            }
+        }
+    }
+
+    /// Returns the zenith range of the measurement only if the measurement is
+    /// in the ByPoints mode.
+    pub fn zenith_range(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
+        match self.params.mode {
+            NdfMeasurementMode::ByPoints { zenith, .. } => Some(zenith),
+            NdfMeasurementMode::ByPartition { .. } => {
+                eprintln!("Zenith range is not available for the partition mode.");
+                None
+            }
+        }
+    }
 }
 
 /// Size of the chunk of facets to process in parallel.
@@ -138,7 +178,7 @@ pub fn measure_area_distribution(
     params: NdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &RawCache,
-) -> Box<[MeasurementData]> {
+) -> Box<[Measurement]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
     log::info!("Measuring microfacet area distribution...");
@@ -148,10 +188,10 @@ pub fn measure_area_distribution(
     let surfaces = handles.iter().zip(surfs.iter()).zip(meshes.iter());
 
     let measurements = match params.mode {
-        AdfMeasurementMode::ByPoints { .. } => {
+        NdfMeasurementMode::ByPoints { .. } => {
             measure_area_distribution_by_points(surfaces, params)
         }
-        AdfMeasurementMode::ByPartition { .. } => {
+        NdfMeasurementMode::ByPartition { .. } => {
             measure_area_distribution_by_partition(surfaces, params)
         }
     };
@@ -174,7 +214,7 @@ fn measure_area_distribution_by_points<'a>(
         ),
     >,
     params: NdfMeasurementParams,
-) -> Vec<MeasurementData> {
+) -> Vec<Measurement> {
     use rayon::prelude::*;
     let (azimuth, zenith) = params.mode.as_mode_by_points().unwrap();
     surfaces
@@ -369,11 +409,11 @@ fn measure_area_distribution_by_points<'a>(
             //         });
             //     });
 
-            Some(MeasurementData {
+            Some(Measurement {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
-                source: MeasurementDataSource::Measured(*hdl),
+                source: MeasurementSource::Measured(*hdl),
                 timestamp: chrono::Local::now(),
-                measured: MeasuredData::Adf(MeasuredAdfData { params, samples }),
+                measured: Box::new(MeasuredNdfData { params, samples }),
             })
         })
         .collect()
@@ -389,7 +429,7 @@ fn measure_area_distribution_by_partition<'a>(
         ),
     >,
     params: NdfMeasurementParams,
-) -> Vec<MeasurementData> {
+) -> Vec<Measurement> {
     use rayon::prelude::*;
     let (precision, scheme) = params.mode.as_mode_by_partition().unwrap();
     let partition = SphericalPartition::new(scheme, SphericalDomain::Upper, precision);
@@ -500,11 +540,11 @@ fn measure_area_distribution_by_partition<'a>(
                     *sample = facets_area * denom_rcp;
                 });
 
-            Some(MeasurementData {
+            Some(Measurement {
                 name: surf.unwrap().file_stem().unwrap().to_owned(),
-                source: MeasurementDataSource::Measured(*hdl),
+                source: MeasurementSource::Measured(*hdl),
                 timestamp: chrono::Local::now(),
-                measured: MeasuredData::Adf(MeasuredAdfData {
+                measured: Box::new(MeasuredNdfData {
                     params,
                     samples: samples.clone().into_boxed_slice(),
                 }),

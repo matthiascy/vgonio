@@ -1,5 +1,5 @@
 use base::error::VgonioError;
-use egui::epaint::ahash::HashMap;
+use egui::{epaint::ahash::HashMap, Image};
 use egui_extras::RetainedImage;
 use std::sync::{
     atomic::{AtomicPtr, Ordering},
@@ -51,6 +51,7 @@ fn get_icons_cache() -> &'static mut Icons {
     if ptr.is_null() {
         let icons = Box::new(Icons(Arc::new(Mutex::new(HashMap::default()))));
         ptr = Box::into_raw(icons);
+        // If the momentary value is not null, drop the new value.
         if ICONS
             .compare_exchange(
                 std::ptr::null_mut(),

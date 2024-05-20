@@ -12,14 +12,15 @@ use crate::{
     io::OutputOptions,
     measure::{
         bsdf::emitter::{EmitterSamples, MeasurementPoints},
-        data::MeasurementData,
-        params::{MeasurementKind, MeasurementParams},
+        params::MeasurementParams,
+        Measurement,
     },
 };
 use base::{
     math::{IVec2, Sph2},
     partition::SphericalPartition,
     units::Degrees,
+    MeasurementKind,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
@@ -70,7 +71,7 @@ pub enum VgonioEvent {
         /// Output file format.
         output_opts: Option<OutputOptions>,
     },
-    ExportMeasurement(Handle<MeasurementData>),
+    ExportMeasurement(Handle<Measurement>),
     Notify {
         kind: NotifyKind,
         text: String,
@@ -81,13 +82,13 @@ pub enum VgonioEvent {
     Outliner(OutlinerEvent),
     Graphing {
         kind: MeasurementKind,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         independent: bool,
     },
     #[cfg(feature = "fitting")]
     Fitting {
         kind: FittingProblemKind,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         scale: f32,
     },
     // TODO

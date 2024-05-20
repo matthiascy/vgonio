@@ -1,13 +1,10 @@
 use crate::{
     error::RuntimeError,
-    measure::{
-        bsdf::{
-            emitter::EmitterParams,
-            receiver::{DataRetrieval, ReceiverParams},
-            rtc::RtcMethod,
-            BsdfKind,
-        },
-        MeasurementParams,
+    measure::bsdf::{
+        emitter::EmitterParams,
+        receiver::{DataRetrieval, ReceiverParams},
+        rtc::RtcMethod,
+        BsdfKind,
     },
 };
 use base::{
@@ -121,8 +118,6 @@ impl Default for BsdfMeasurementParams {
         }
     }
 }
-
-impl MeasurementParams for BsdfMeasurementParams {}
 
 impl BsdfMeasurementParams {
     /// Whether the measurement parameters are valid.

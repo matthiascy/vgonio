@@ -15,9 +15,9 @@ use crate::{
             receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
-        data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
-        microfacet::MeasuredAdfData,
+        mfd::MeasuredNdfData,
         params::SimulationKind,
+        MeasuredData, Measurement, MeasurementSource,
     },
 };
 #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -27,11 +27,15 @@ use base::{
     math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2},
     partition::{PartitionScheme, SphericalPartition},
     units::{Degs, Nanometres, Radians, Rads},
+    MeasurementKind,
 };
-use bxdf::brdf::measured::{MeasuredBrdf, VgonioBrdf, VgonioBrdfParameterisation};
+use bxdf::brdf::measured::{
+    ClausenBrdf, ClausenBrdfParameterisation, Origin, VgonioBrdf, VgonioBrdfParameterisation,
+};
 use jabr::array::DyArr;
 use serde::{Deserialize, Serialize};
 use std::{
+    any::Any,
     borrow::Cow,
     fmt::{Debug, Display, Formatter},
     path::Path,
@@ -69,6 +73,14 @@ pub struct MeasuredBsdfData {
     pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
 }
 
+impl MeasuredData for MeasuredBsdfData {
+    fn kind(&self) -> MeasurementKind { MeasurementKind::Bsdf }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+}
+
 impl MeasuredBsdfData {
     pub fn into_measured_brdf(self) -> VgonioBrdf {
         use rayon::{
@@ -100,6 +112,7 @@ impl MeasuredBsdfData {
                 s.copy_from_slice(snapshot.samples.as_slice());
             });
         VgonioBrdf::new(
+            Origin::Simulated,
             self.params.incident_medium,
             self.params.transmitted_medium,
             params,
@@ -393,7 +406,7 @@ impl MeasuredBsdfData {
     }
 
     /// Extracts the NDF from the measured BSDF.
-    pub fn extract_ndf(&self) -> MeasuredAdfData {
+    pub fn extract_ndf(&self) -> MeasuredNdfData {
         todo!()
         // let params =  AdfMeasurementParams {
         //     azimuth: RangeByStepSizeInclusive {},
@@ -410,139 +423,103 @@ impl MeasuredBsdfData {
         // ndf
     }
 
-    /// Extracts the BRDF from the measured BSDF data.
-    pub fn sampled_brdf(&self, s: &SampledBrdf, dense: bool, phi_offset: Radians) -> SampledBrdf {
-        let spectrum = self
-            .params
-            .emitter
-            .spectrum
-            .values()
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let n_lambda = spectrum.len();
-        let n_wi = s.n_wi();
-        let n_wo = s.n_wo();
+    /// Resamples the BSDF data to match the `ClausenBrdfParameterisation`.
+    pub fn resample(
+        &self,
+        params: &ClausenBrdfParameterisation,
+        dense: bool,
+        phi_offset: Radians,
+    ) -> ClausenBrdf {
+        let spectrum = self.params.emitter.spectrum.values().collect::<Vec<_>>();
+        let n_spectrum = spectrum.len();
+        let n_wi = params.incoming.len();
+        let n_wo = params.num_outgoing_per_incoming;
         let n_wo_dense = if dense { n_wo * 4 } else { n_wo };
 
         // row-major [wi, wo, spectrum]
-        let mut samples = vec![0.0; n_wi * n_wo_dense * n_lambda].into_boxed_slice();
-        // row-major [wi, spectrum]
-        let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
-
+        let mut samples = vec![0.0; n_wi * n_wo_dense * n_spectrum];
         let wo_step = Degs::new(2.5).to_radians();
-        let wi_wo_pairs = if dense {
-            s.wi_wo_pairs
-                .iter()
-                .map(|(wi, wos)| {
-                    let wos_new = wos
-                        .iter()
-                        .flat_map(|wo| {
-                            if wo.approx_eq(&Sph2::zero()) {
-                                vec![Sph2::zero(); 1]
-                            } else if (wo.theta - wi.theta).abs().as_f32() < 1e-6 {
-                                let mut wos_out = vec![*wo; 7];
-                                // The incident and outgoing directions are the same.
-                                if wo.phi.as_f32().abs() < 1e-6 {
-                                    // The azimuth of the incident direction is almost zero.
-                                    for i in 0..4 {
-                                        wos_out[i] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            wo.phi + phi_offset,
-                                        );
-                                    }
-                                    for i in 0..3 {
-                                        wos_out[i + 4] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            Rads::PI + phi_offset,
-                                        );
-                                    }
-                                } else {
-                                    for i in 0..3 {
-                                        wos_out[i] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            Rads::ZERO + phi_offset,
-                                        );
-                                    }
-                                    for i in 0..4 {
-                                        wos_out[i + 3] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            wo.phi + phi_offset,
-                                        );
-                                    }
-                                }
-                                wos_out
-                            } else {
-                                let mut wos_out = vec![*wo; 4];
-                                for i in 0..4 {
-                                    wos_out[i] = Sph2::new(
-                                        wo.theta - wo_step * (3 - i) as f32,
-                                        wo.phi + phi_offset,
-                                    );
-                                }
-                                wos_out
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice();
-                    (*wi, wos_new)
-                })
-                .collect::<Vec<(Sph2, Box<[Sph2]>)>>()
-                .into_boxed_slice()
-        } else {
-            s.wi_wo_pairs.clone()
-        };
 
-        // Get the interpolated samples for wi, wo, and spectrum.
-        wi_wo_pairs.iter().enumerate().for_each(|(i, (wi, wos))| {
-            let samples_offset_wi = i * n_wo_dense * n_lambda;
-            let snap_idx = self
-                .snapshots
-                .iter()
-                .position(|snap| snap.wi.approx_eq(&wi))
-                .expect(
-                    "The incident direction is not found in the BSDF snapshots. The incident \
-                     direction must be one of the directions of the emitter.",
-                );
-            let max_offset = i * n_lambda;
-            let use_original_max = std::env::var("ORIGINAL_MAX")
-                .map(|v| v == "1")
-                .unwrap_or(false);
-            if use_original_max {
-                max_values[max_offset..max_offset + n_lambda].copy_from_slice(
-                    &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda],
-                );
-                log::trace!(
-                    "Original max values: {:?}",
-                    &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda]
-                );
-            }
-            for (j, wo) in wos.iter().enumerate() {
-                let samples_offset = samples_offset_wi + j * n_lambda;
-                self.sample_at(
-                    *wi,
-                    *wo,
-                    &mut samples[samples_offset..samples_offset + n_lambda],
-                );
-                if !use_original_max {
-                    for k in 0..n_lambda {
-                        max_values[max_offset + k] =
-                            f32::max(max_values[max_offset + k], samples[samples_offset + k]);
+        let new_params = if dense {
+            let mut outgoing = DyArr::<Sph2, 2>::zeros([n_wi, n_wo_dense]);
+            for (i, wi) in params.incoming.as_slice().iter().enumerate() {
+                let mut new_j = 0;
+                for j in 0..n_wo {
+                    let wo = params.outgoing[[i, j]];
+                    if wo.approx_eq(&Sph2::zero()) {
+                        outgoing[[i, new_j]] = Sph2::zero();
+                        new_j += 1;
+                    } else if (wo.theta - wi.theta).abs().as_f32() < 1e-6 {
+                        // The incident and outgoing directions are the same.
+                        if wo.phi.as_f32().abs() < 1e-6 {
+                            // The azimuth of the incident direction is almost zero.
+                            for k in 0..4 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    wo.phi + phi_offset,
+                                );
+                                new_j += 1;
+                            }
+                            for k in 0..3 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    Rads::PI + phi_offset,
+                                );
+                                new_j += 1;
+                            }
+                        } else {
+                            for k in 0..3 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    Rads::ZERO + phi_offset,
+                                );
+                                new_j += 1;
+                            }
+                            for k in 0..4 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    wo.phi + phi_offset,
+                                );
+                            }
+                        }
+                    } else {
+                        for k in 0..4 {
+                            outgoing[[i, new_j]] =
+                                Sph2::new(wo.theta - wo_step * (3 - k) as f32, wo.phi + phi_offset);
+                            new_j += 1;
+                        }
                     }
                 }
             }
-            if !use_original_max {
-                log::trace!(
-                    "Max values: {:?}",
-                    &max_values[max_offset..max_offset + n_lambda]
+            ClausenBrdfParameterisation {
+                incoming: params.incoming.clone(),
+                outgoing,
+                num_outgoing_per_incoming: n_wo_dense,
+            }
+        } else {
+            params.clone()
+        };
+
+        // Get the interpolated samples for wi, wo, and spectrum.
+        new_params.wi_wos_iter().for_each(|(i, (wi, wos))| {
+            let samples_offset_wi = i * n_wo_dense * n_spectrum;
+            for (j, wo) in wos.iter().enumerate() {
+                let samples_offset = samples_offset_wi + j * n_spectrum;
+                self.sample_at(
+                    *wi,
+                    *wo,
+                    &mut samples[samples_offset..samples_offset + n_spectrum],
                 );
             }
         });
 
-        SampledBrdf {
-            spectrum,
-            samples,
-            max_values,
-            wi_wo_pairs,
+        ClausenBrdf {
+            origin: Origin::RealWorld,
+            incident_medium: self.params.incident_medium,
+            transmitted_medium: self.params.transmitted_medium,
+            params: Box::new(new_params),
+            spectrum: DyArr::from_vec_1d(spectrum),
+            samples: DyArr::<f32, 3>::from_vec([n_wi, n_wo_dense, n_spectrum], samples),
         }
     }
 
@@ -1206,7 +1183,7 @@ pub fn measure_bsdf_rt(
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
     cache: &RawCache,
-) -> Box<[MeasurementData]> {
+) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
@@ -1292,11 +1269,11 @@ pub fn measure_bsdf_rt(
         };
         let max_values =
             compute_bsdf_snapshots_max_values(&snapshots, params.emitter.spectrum.step_count());
-        measurements.push(MeasurementData {
+        measurements.push(Measurement {
             name: surf.file_stem().unwrap().to_owned(),
-            source: MeasurementDataSource::Measured(collected.surface),
+            source: MeasurementSource::Measured(collected.surface),
             timestamp: chrono::Local::now(),
-            measured: MeasuredData::Bsdf(MeasuredBsdfData {
+            measured: Box::new(MeasuredBsdfData {
                 params,
                 snapshots,
                 raw_snapshots,

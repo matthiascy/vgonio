@@ -6,8 +6,8 @@ use crate::{
     },
     measure::{
         bsdf::MeasuredBsdfData,
-        data::MeasurementData,
-        microfacet::{MeasuredAdfData, MeasuredMsfData},
+        mfd::{MeasuredMsfData, MeasuredNdfData},
+        Measurement,
     },
 };
 use base::{
@@ -30,11 +30,10 @@ pub mod vgmo {
             receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
             BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
         },
-        data::MeasuredData,
-        microfacet::MeasuredSdfData,
+        mfd::MeasuredSdfData,
         params::{
-            AdfMeasurementMode, BsdfMeasurementParams, MeasurementKind, MsfMeasurementParams,
-            NdfMeasurementParams, SdfMeasurementParams, SimulationKind,
+            BsdfMeasurementParams, MsfMeasurementParams, NdfMeasurementMode, NdfMeasurementParams,
+            SdfMeasurementParams, SimulationKind,
         },
     };
     use base::{
@@ -47,7 +46,7 @@ pub mod vgmo {
         partition::{PartitionScheme, Ring, SphericalDomain},
         range::RangeByStepSizeInclusive,
         units::{rad, Nanometres, Radians},
-        Version,
+        MeasuredData, MeasurementKind, Version,
     };
     use jabr::array::DyArr;
     use std::{
@@ -59,25 +58,36 @@ pub mod vgmo {
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum VgmoHeaderExt {
         Bsdf { params: BsdfMeasurementParams },
-        Adf { params: NdfMeasurementParams },
-        Msf { params: MsfMeasurementParams },
+        Ndf { params: NdfMeasurementParams },
+        Gaf { params: MsfMeasurementParams },
         Sdf,
     }
 
-    impl MeasuredData {
-        /// Returns the [`VgmoHeaderExt`] variant corresponding to the
-        /// measurement data.
-        pub fn as_vgmo_header_ext(&self) -> VgmoHeaderExt {
-            match self {
-                MeasuredData::Bsdf(bsdf) => VgmoHeaderExt::Bsdf {
-                    params: bsdf.params,
-                },
-                MeasuredData::Adf(adf) => VgmoHeaderExt::Adf { params: adf.params },
-                MeasuredData::Msf(msf) => VgmoHeaderExt::Msf { params: msf.params },
-                MeasuredData::Sdf(_) => VgmoHeaderExt::Sdf,
-                _ => {
-                    unimplemented!("Unsupported VGMO measurement data variant")
+    /// Returns the corresponding [`VgmoHeaderExt`] variant for the given
+    /// measurement data.
+    pub fn vgmo_header_ext_from_data(data: &Box<dyn MeasuredData>) -> VgmoHeaderExt {
+        match data.kind() {
+            MeasurementKind::Bsdf => {
+                let bsdf = data.downcast::<MeasuredBsdfData>().unwrap();
+                VgmoHeaderExt::Bsdf {
+                    params: bsdf.params.clone(),
                 }
+            }
+            MeasurementKind::Ndf => {
+                let ndf = data.downcast::<MeasuredNdfData>().unwrap();
+                VgmoHeaderExt::Ndf {
+                    params: ndf.params.clone(),
+                }
+            }
+            MeasurementKind::Msf => {
+                let msf = data.downcast::<MeasuredMsfData>().unwrap();
+                VgmoHeaderExt::Gaf {
+                    params: msf.params.clone(),
+                }
+            }
+            MeasurementKind::Sdf => VgmoHeaderExt::Sdf,
+            _ => {
+                unreachable!("Unsupported measurement kind: {}", data.kind())
             }
         }
     }
@@ -100,16 +110,16 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => match self {
-                    Self::Adf { params } => match &params.mode {
-                        AdfMeasurementMode::ByPoints { azimuth, zenith } => {
-                            writer.write_all(&[MeasurementKind::Adf as u8])?;
+                    Self::Ndf { params } => match &params.mode {
+                        NdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                            writer.write_all(&[MeasurementKind::Ndf as u8])?;
                             write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
                         }
-                        AdfMeasurementMode::ByPartition { .. } => {
+                        NdfMeasurementMode::ByPartition { .. } => {
                             // TODO: implement
                         }
                     },
-                    Self::Msf { params } => {
+                    Self::Gaf { params } => {
                         writer.write_all(&[MeasurementKind::Msf as u8])?;
                         write_adf_or_msf_params_to_vgmo(
                             &params.azimuth,
@@ -144,11 +154,14 @@ pub mod vgmo {
             match MeasurementKind::from(kind[0]) {
                 MeasurementKind::Bsdf => BsdfMeasurementParams::read_from_vgmo(version, reader)
                     .map(|params| Ok(Self::Bsdf { params }))?,
-                MeasurementKind::Adf => NdfMeasurementParams::read_from_vgmo(version, reader)
-                    .map(|params| Ok(Self::Adf { params }))?,
+                MeasurementKind::Ndf => NdfMeasurementParams::read_from_vgmo(version, reader)
+                    .map(|params| Ok(Self::Ndf { params }))?,
                 MeasurementKind::Msf => MsfMeasurementParams::read_from_vgmo(version, reader)
-                    .map(|params| Ok(Self::Msf { params }))?,
+                    .map(|params| Ok(Self::Gaf { params }))?,
                 MeasurementKind::Sdf => Ok(Self::Sdf),
+                _ => {
+                    unreachable!("Unsupported measurement kind: {}", kind[0])
+                }
             }
         }
     }
@@ -157,7 +170,7 @@ pub mod vgmo {
     pub fn read<R: Read>(
         reader: &mut BufReader<R>,
         header: &Header<VgmoHeaderExt>,
-    ) -> Result<MeasuredData, ReadFileErrorKind> {
+    ) -> Result<Box<dyn MeasuredData>, ReadFileErrorKind> {
         match header.extra {
             VgmoHeaderExt::Bsdf { params } => {
                 log::debug!(
@@ -165,14 +178,14 @@ pub mod vgmo {
                     params.emitter.measurement_points_count(),
                     params.samples_count()
                 );
-                Ok(MeasuredData::Bsdf(MeasuredBsdfData::read_from_vgmo(
+                Ok(Box::new(MeasuredBsdfData::read_from_vgmo(
                     reader,
                     &params,
                     header.meta.encoding,
                     header.meta.compression,
                 )?))
             }
-            VgmoHeaderExt::Adf { params } => {
+            VgmoHeaderExt::Ndf { params } => {
                 log::debug!(
                     "Reading ADF data of {} samples from VGMO file",
                     params.samples_count()
@@ -184,9 +197,9 @@ pub mod vgmo {
                     header.meta.compression,
                 )
                 .map_err(ReadFileErrorKind::Parse)?;
-                Ok(MeasuredData::Adf(MeasuredAdfData { params, samples }))
+                Ok(Box::new(MeasuredNdfData { params, samples }))
             }
-            VgmoHeaderExt::Msf { params } => {
+            VgmoHeaderExt::Gaf { params } => {
                 log::debug!(
                     "Reading MSF data of {} samples from VGMO file",
                     params.samples_count()
@@ -198,7 +211,7 @@ pub mod vgmo {
                     header.meta.compression,
                 )
                 .map_err(ReadFileErrorKind::Parse)?;
-                Ok(MeasuredData::Msf(MeasuredMsfData { params, samples }))
+                Ok(Box::new(MeasuredMsfData { params, samples }))
             }
             VgmoHeaderExt::Sdf => {
                 log::debug!("Reading SDF data from VGMO file");
@@ -216,7 +229,7 @@ pub mod vgmo {
                     .map(|s| math::Vec2::new(s[0], s[1]))
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
-                Ok(MeasuredData::Sdf(MeasuredSdfData {
+                Ok(Box::new(MeasuredSdfData {
                     params: SdfMeasurementParams {
                         max_slope: std::f32::consts::PI,
                     },
@@ -231,7 +244,7 @@ pub mod vgmo {
     pub fn write<W: Write + Seek>(
         writer: &mut BufWriter<W>,
         header: Header<VgmoHeaderExt>,
-        measured: &MeasuredData,
+        measured: &Box<dyn MeasuredData>,
     ) -> Result<(), WriteFileErrorKind> {
         let init_size = writer.stream_len().unwrap();
         log::debug!("Writing VGMO file with writer at position {}", init_size);
@@ -244,28 +257,31 @@ pub mod vgmo {
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
 
-        match measured {
-            MeasuredData::Adf(_) | MeasuredData::Msf(_) => {
-                let samples = measured.adf_or_msf_samples().unwrap();
+        match measured.kind() {
+            mfd @ (MeasurementKind::Ndf | MeasurementKind::Msf) => {
+                let (samples, cols) = match mfd {
+                    MeasurementKind::Ndf => {
+                        let ndf = measured.downcast::<MeasuredNdfData>().unwrap();
+                        let cols = match &ndf.params.mode {
+                            NdfMeasurementMode::ByPoints { zenith, .. } => {
+                                zenith.step_count_wrapped()
+                            }
+                            NdfMeasurementMode::ByPartition { .. } => {
+                                unimplemented!()
+                            }
+                        };
+                        (&ndf.samples, cols)
+                    }
+                    MeasurementKind::Msf => {
+                        let msf = measured.downcast::<MeasuredMsfData>().unwrap();
+                        (&msf.samples, msf.params.zenith.step_count_wrapped())
+                    }
+                    _ => {
+                        unreachable!("Unsupported measurement kind: {}", mfd)
+                    }
+                };
                 match header.meta.encoding {
                     FileEncoding::Ascii => {
-                        let cols = if let MeasuredData::Adf(adf) = &measured {
-                            match &adf.params.mode {
-                                AdfMeasurementMode::ByPoints { zenith, .. } => {
-                                    zenith.step_count_wrapped()
-                                }
-                                AdfMeasurementMode::ByPartition { .. } => {
-                                    unimplemented!()
-                                }
-                            }
-                        } else {
-                            measured
-                                .as_msf()
-                                .unwrap()
-                                .params
-                                .zenith
-                                .step_count_wrapped()
-                        };
                         base::io::write_data_samples_ascii(writer, samples, cols as u32)
                     }
                     FileEncoding::Binary => base::io::write_f32_data_samples_binary(
@@ -276,10 +292,12 @@ pub mod vgmo {
                 }
                 .map_err(WriteFileErrorKind::Write)?;
             }
-            MeasuredData::Bsdf(bsdf) => {
+            MeasurementKind::Bsdf => {
+                let bsdf = measured.downcast::<MeasuredBsdfData>().unwrap();
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
             }
-            MeasuredData::Sdf(sdf) => {
+            MeasurementKind::Sdf => {
+                let sdf = measured.downcast::<MeasuredSdfData>().unwrap();
                 writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
                 let samples = unsafe {
                     std::slice::from_raw_parts(
@@ -585,7 +603,7 @@ pub mod vgmo {
                         NdfMeasurementParams::expected_samples_count_by_points(&azimuth, &zenith)
                     );
                     Ok(Self {
-                        mode: AdfMeasurementMode::ByPoints { azimuth, zenith },
+                        mode: NdfMeasurementMode::ByPoints { azimuth, zenith },
                         crop_to_disk: false,
                         use_facet_area: true,
                     })
@@ -1492,7 +1510,7 @@ pub enum OutputFileFormatOption {
 
 /// Writes the measured data to a file.
 pub fn write_measured_data_to_file(
-    data: &[MeasurementData],
+    data: &[Measurement],
     surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
@@ -1566,7 +1584,7 @@ pub fn write_measured_data_to_file(
 /// Depending on the file extension, the data is saved as either a VGMO file or
 /// an EXR file.
 pub fn write_single_measured_data_to_file(
-    measured: &MeasurementData,
+    measured: &Measurement,
     encoding: FileEncoding,
     compression: CompressionScheme,
     resolution: Option<u32>,

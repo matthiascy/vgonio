@@ -1,9 +1,8 @@
 #[cfg(feature = "fitting")]
 use crate::fitting::{
     FittedModel, FittingProblem, FittingProblemKind, MicrofacetBrdfFittingProblem,
-    MicrofacetDistributionFittingProblem, MicrofacetDistributionFittingVariant,
+    MicrofacetDistributionFittingProblem,
 };
-use crate::measure::data::MeasuredMdfData;
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -24,17 +23,24 @@ use crate::{
         },
         Config,
     },
-    measure::{data::MeasurementData, params::MeasurementKind},
+    measure::Measurement,
+};
+use crate::{
+    fitting::{FittingReport, MfdFittingData},
+    measure::{
+        bsdf::MeasuredBsdfData,
+        mfd::{MeasuredMsfData, MeasuredNdfData},
+    },
 };
 use base::{
     io::{CompressionScheme, FileEncoding},
     range::RangeByStepSizeInclusive,
+    MeasurementKind,
 };
 use bxdf::brdf::BxdfFamily;
 use egui::NumExt;
 use gfxkit::context::GpuContext;
 use std::{
-    borrow::Cow,
     path::PathBuf,
     sync::{Arc, RwLock},
 };
@@ -162,7 +168,7 @@ impl VgonioGui {
                 let hdl = std::thread::spawn(move || pollster::block_on(task)).join();
                 if let Ok(Some(hdl)) = hdl {
                     self.cache.read(|cache| {
-                        let measured = cache.get_measurement_data(*meas).unwrap();
+                        let measured = cache.get_measurement(*meas).unwrap();
                         crate::io::write_single_measured_data_to_file(
                             measured,
                             FileEncoding::Binary,
@@ -205,7 +211,7 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Adf => Box::new(PlotInspector::new_adf(
+                        MeasurementKind::Ndf => Box::new(PlotInspector::new_adf(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
@@ -226,6 +232,9 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
+                        _ => {
+                            unreachable!("Unsupported measurement kind: {:?}", kind)
+                        }
                     };
                     if *independent {
                         self.plotters.push((true, plotter));
@@ -246,9 +255,12 @@ impl VgonioGui {
                         match family {
                             BxdfFamily::Microfacet => {
                                 let report = self.cache.read(|cache| {
-                                    let measurement = cache.get_measurement_data(*data).unwrap();
+                                    let measurement = cache.get_measurement(*data).unwrap();
                                     let problem = MicrofacetBrdfFittingProblem::new(
-                                        measurement.measured.as_bsdf().unwrap(),
+                                        measurement
+                                            .measured
+                                            .downcast::<MeasuredBsdfData>()
+                                            .unwrap(),
                                         distro.unwrap(),
                                         RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
                                         cache,
@@ -261,41 +273,36 @@ impl VgonioGui {
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
                         }
                     }
-                    FittingProblemKind::Mdf {
-                        model,
-                        variant,
-                        isotropy,
-                    } => {
+                    FittingProblemKind::Mfd { model, isotropy } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        log::debug!("Fitting MDF with {:?} through {:?}", model, variant);
                         if fitted.contains(kind, Some(*scale), *isotropy) {
                             log::debug!("Already fitted, skipping");
                             return EventResponse::Handled;
                         }
                         let report = self.cache.read(|cache| {
-                            let measurement = cache.get_measurement_data(*data).unwrap();
-                            let data = match variant {
-                                MicrofacetDistributionFittingVariant::Ndf => {
-                                    MeasuredMdfData::Ndf(Cow::Borrowed(
-                                        measurement
-                                            .measured
-                                            .as_adf()
-                                            .expect("Measurement has no ADF data."),
-                                    ))
-                                }
-                                MicrofacetDistributionFittingVariant::Msf => {
-                                    MeasuredMdfData::Msf(Cow::Borrowed(
-                                        measurement
-                                            .measured
-                                            .as_msf()
-                                            .expect("Measurement has no MSF data."),
-                                    ))
+                            let measurement = cache.get_measurement(*data).unwrap();
+                            log::debug!(
+                                "Fitting MFD with {:?} through {:?}",
+                                model,
+                                measurement.measured.kind()
+                            );
+                            let data = match measurement.measured.kind() {
+                                MeasurementKind::Msf => MfdFittingData::Msf(
+                                    measurement.measured.downcast::<MeasuredMsfData>().unwrap(),
+                                ),
+                                MeasurementKind::Ndf => MfdFittingData::Ndf(
+                                    measurement.measured.downcast::<MeasuredNdfData>().unwrap(),
+                                ),
+                                _ => {
+                                    log::error!(
+                                        "Measurement kind not supported for fitting NDF or MSF."
+                                    );
+                                    return FittingReport::empty();
                                 }
                             };
-                            let problem = MicrofacetDistributionFittingProblem::new(
-                                data, *variant, *model, *scale,
-                            );
+                            let problem =
+                                MicrofacetDistributionFittingProblem::new(data, *model, *scale);
                             problem.lsq_lm_fit(*isotropy)
                         });
                         report.print_fitting_report();
@@ -308,7 +315,7 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            VgonioEvent::SmoothSurface { surf, lod } => EventResponse::Handled,
+            VgonioEvent::SmoothSurface { .. } => EventResponse::Handled,
             _ => EventResponse::Ignored(event),
         }
     }
@@ -513,7 +520,7 @@ impl VgonioGui {
     fn open_files(
         &mut self,
         files: &[rfd::FileHandle],
-    ) -> (Vec<Handle<MicroSurface>>, Vec<Handle<MeasurementData>>) {
+    ) -> (Vec<Handle<MicroSurface>>, Vec<Handle<Measurement>>) {
         let mut surfaces = vec![];
         let mut measurements = vec![];
         // TODO: handle other file types

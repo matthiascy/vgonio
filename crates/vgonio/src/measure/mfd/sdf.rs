@@ -1,9 +1,6 @@
 use crate::{
     app::cache::{Handle, RawCache},
-    measure::{
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::SdfMeasurementParams,
-    },
+    measure::{params::SdfMeasurementParams, MeasuredData, Measurement, MeasurementSource},
 };
 use base::{
     error::VgonioError,
@@ -11,8 +8,9 @@ use base::{
     math::{IVec2, Vec2},
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
+    MeasurementKind,
 };
-use std::{borrow::Cow, path::Path};
+use std::{any::Any, borrow::Cow, path::Path};
 use surf::MicroSurface;
 
 /// Slope of the microfacet normal, i.e. the normal of the microfacet in the
@@ -26,6 +24,14 @@ pub struct MeasuredSdfData {
     pub params: SdfMeasurementParams,
     /// Slopes of all microfacets.
     pub slopes: Box<[Slope2]>,
+}
+
+impl MeasuredData for MeasuredSdfData {
+    fn kind(&self) -> MeasurementKind { MeasurementKind::Sdf }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 }
 
 /// Data of the slope distribution function (SDF) of a microsurface.
@@ -247,7 +253,7 @@ pub fn measure_slope_distribution(
     handles: &[Handle<MicroSurface>],
     params: SdfMeasurementParams,
     cache: &RawCache,
-) -> Box<[MeasurementData]> {
+) -> Box<[Measurement]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();
 
@@ -274,11 +280,11 @@ pub fn measure_slope_distribution(
                 unsafe { slopes.assume_init() }
             };
 
-            Some(MeasurementData {
+            Some(Measurement {
                 name: format!("sdf-{}", surf.unwrap().file_stem().unwrap()),
-                source: MeasurementDataSource::Measured(*hdl),
+                source: MeasurementSource::Measured(*hdl),
                 timestamp: chrono::Local::now(),
-                measured: MeasuredData::Sdf(MeasuredSdfData { params, slopes }),
+                measured: Box::new(MeasuredSdfData { params, slopes }),
             })
         })
         .collect();

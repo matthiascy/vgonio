@@ -1,8 +1,10 @@
 use crate::{
     app::{cache::Cache, Config},
-    plotting::plot_brdf,
+    measure::bsdf::MeasuredBsdfData,
+    pyplot::plot_brdf,
 };
 use base::{error::VgonioError, units::Rads};
+use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
 
 /// Kind of plot to generate.
@@ -38,16 +40,16 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     // Measured by Olaf
                     let measured_hdl = cache.load_micro_surface_measurement(&config, &input[1])?;
                     let simulated = cache
-                        .get_measurement_data(simulated_hdl)
+                        .get_measurement(simulated_hdl)
                         .unwrap()
                         .measured
-                        .as_bsdf()
-                        .expect("Expected BSDF measured by Vgonio");
+                        .downcast::<MeasuredBsdfData>()
+                        .unwrap();
                     let olaf = cache
-                        .get_measurement_data(measured_hdl)
+                        .get_measurement(measured_hdl)
                         .unwrap()
                         .measured
-                        .as_sampled_brdf()
+                        .downcast::<ClausenBrdf>()
                         .expect("Expected BSDF measured by Olaf");
                     let dense = if std::env::var("DENSE")
                         .ok()
@@ -63,7 +65,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .map(|s| s.parse::<f32>().unwrap())
                         .unwrap_or(0.0)
                         .to_radians();
-                    let itrp = simulated.sampled_brdf(&olaf, dense, Rads::new(phi_offset));
+                    let itrp = simulated.resample(&olaf.params, dense, Rads::new(phi_offset));
                     plot_brdf(&itrp, olaf, dense).unwrap();
                 }
                 Ok(())

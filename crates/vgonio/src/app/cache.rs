@@ -23,7 +23,7 @@ use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 
 use crate::{
     app::{cli::ansi, Config},
-    measure::data::MeasurementData,
+    measure::Measurement,
 };
 
 /// Handle referencing loaded assets.
@@ -213,7 +213,7 @@ pub struct RawCache {
     renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
 
     /// Cache for measured data.
-    measurements_data: HashMap<Handle<MeasurementData>, MeasurementData>,
+    measurements: HashMap<Handle<Measurement>, Measurement>,
 
     // TODO: recently files
     /// Cache for recently opened files.
@@ -234,7 +234,7 @@ impl RawCache {
             iors: RefractiveIndexRegistry::default(),
             renderables: Default::default(),
             records: Default::default(),
-            measurements_data: Default::default(),
+            measurements: Default::default(),
         }
     }
 
@@ -402,11 +402,8 @@ impl RawCache {
             .collect()
     }
 
-    pub fn get_measurement_data(
-        &self,
-        handle: Handle<MeasurementData>,
-    ) -> Option<&MeasurementData> {
-        self.measurements_data.get(&handle)
+    pub fn get_measurement(&self, handle: Handle<Measurement>) -> Option<&Measurement> {
+        self.measurements.get(&handle)
     }
 
     /// Loads a surface from its relevant place and returns its cache handle.
@@ -476,10 +473,10 @@ impl RawCache {
     /// Adds micro-surface measurement data to the cache.
     pub fn add_micro_surface_measurement(
         &mut self,
-        data: MeasurementData,
-    ) -> Result<Handle<MeasurementData>, VgonioError> {
+        data: Measurement,
+    ) -> Result<Handle<Measurement>, VgonioError> {
         let handle = Handle::with_type_id(data.measured.kind() as u8);
-        self.measurements_data.insert(handle, data);
+        self.measurements.insert(handle, data);
         Ok(handle)
     }
 
@@ -489,7 +486,7 @@ impl RawCache {
         &mut self,
         config: &Config,
         path: &Path,
-    ) -> Result<Handle<MeasurementData>, VgonioError> {
+    ) -> Result<Handle<Measurement>, VgonioError> {
         match config.resolve_path(path) {
             None => Err(VgonioError::new(
                 "Failed to resolve measurement file.",
@@ -497,7 +494,7 @@ impl RawCache {
             )),
             Some(filepath) => {
                 if let Some((hdl, _)) = self
-                    .measurements_data
+                    .measurements
                     .iter()
                     .find(|(_, d)| d.source.path() == Some(&filepath))
                 {
@@ -505,9 +502,9 @@ impl RawCache {
                     Ok(*hdl)
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
-                    let data = MeasurementData::read_from_file(&filepath)?;
+                    let data = Measurement::read_from_file(&filepath)?;
                     let handle = Handle::with_type_id(data.measured.kind() as u8);
-                    self.measurements_data.insert(handle, data);
+                    self.measurements.insert(handle, data);
                     Ok(handle)
                 }
             }

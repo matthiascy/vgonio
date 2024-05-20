@@ -9,7 +9,7 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    measure::data::MeasurementData,
+    measure::Measurement,
 };
 use base::{
     range::RangeByStepSizeInclusive,
@@ -20,6 +20,7 @@ use std::any::Any;
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
+use crate::measure::mfd::MeasuredSdfData;
 
 pub struct SlopeDistributionExtra {
     /// The azimuth of the facet normal.
@@ -58,13 +59,10 @@ impl Default for SlopeDistributionExtra {
 impl SlopeDistributionExtra {
     /// Generates the curves of the slope distribution function estimated from
     /// the measured data according to the azimuth and zenith bin sizes.
-    fn generate_curves(&mut self, data: &MeasurementData) {
-        let data = data
-            .measured
-            .as_sdf()
-            .expect("Trying to generate SDF curves from non-SDF data");
+    fn generate_curves(&mut self, measured: &Measurement) {
+        let sdf = measured.measured.downcast::<MeasuredSdfData>().unwrap();
         self.curves.clear();
-        let pmf = data.pmf(self.azi_range.step_size, self.zen_range.step_size);
+        let pmf = sdf.pmf(self.azi_range.step_size, self.zen_range.step_size);
         for azi_idx in 0..pmf.azi_bin_count {
             // let azi = self.azi_range.step(azi_idx);
             // let opposite_azi = azi.opposite();
@@ -104,8 +102,8 @@ impl SlopeDistributionExtra {
 }
 
 impl VariantData for SlopeDistributionExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache) {
-        self.generate_curves(cache.get_measurement_data(data).unwrap());
+    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
+        self.generate_curves(cache.get_measurement(data).unwrap());
     }
 
     fn current_curve(&self) -> Option<&Curve> { self.curves.get(self.current_azimuth_idx()) }
@@ -122,12 +120,12 @@ impl VariantData for SlopeDistributionExtra {
     fn ui(
         &mut self,
         ui: &mut Ui,
-        event_loop: &EventLoopProxy,
-        data: Handle<MeasurementData>,
+        _event_loop: &EventLoopProxy,
+        data: Handle<Measurement>,
         cache: &Cache,
     ) {
         let azi_step_size = self.azi_range.step_size;
-        let zen_step_size = self.zen_range.step_size;
+        let _zen_step_size = self.zen_range.step_size;
 
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
@@ -185,7 +183,7 @@ impl VariantData for SlopeDistributionExtra {
 
             if ui.button("Update").clicked() {
                 cache.read(|cache| {
-                    self.generate_curves(cache.get_measurement_data(data).unwrap());
+                    self.generate_curves(cache.get_measurement(data).unwrap());
                 });
             }
         });

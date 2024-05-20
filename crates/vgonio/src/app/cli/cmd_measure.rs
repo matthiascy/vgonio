@@ -2,7 +2,7 @@ use crate::{
     app::{args::OutputFormat, cache::Cache, cli::ansi, Config},
     io::{OutputFileFormatOption, OutputOptions},
     measure,
-    measure::params::{AdfMeasurementMode, Measurement, MeasurementParams},
+    measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
 };
 use base::{
     error::VgonioError,
@@ -37,15 +37,15 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         .inputs
         .iter()
         .flat_map(|meas_path| {
-            config
-                .resolve_path(meas_path)
-                .map(|resolved| match Measurement::load(&resolved) {
+            config.resolve_path(meas_path).map(|resolved| {
+                match MeasurementDescription::load(&resolved) {
                     Ok(meas) => Some(meas),
                     Err(err) => {
                         log::warn!("Failed to load measurement description file: {}", err);
                         None
                     }
-                })
+                }
+            })
         })
         .filter_map(|meas| meas)
         .flatten()
@@ -123,9 +123,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     }
 
     let start_time = Instant::now();
-    for (measurement, surfaces) in tasks {
+    for (desc, surfaces) in tasks {
         let measurement_start_time = std::time::SystemTime::now();
-        let measured_data = match measurement.params {
+        let measured = match desc.params {
             MeasurementParams::Bsdf(params) => {
                 println!(
                     "  {}>{} Launch BSDF measurement at {}
@@ -162,7 +162,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             }
             MeasurementParams::Adf(measurement) => {
                 match &measurement.mode {
-                    AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                    NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                         println!(
                             "  {}>{} Measuring microfacet area distribution:
     • parameters:
@@ -175,7 +175,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                             zenith.pretty_print(),
                         );
                     }
-                    AdfMeasurementMode::ByPartition { precision, scheme } => {
+                    NdfMeasurementMode::ByPartition { precision, scheme } => {
                         println!(
                             "  {}>{} Measuring microfacet area distribution:
     • parameters:
@@ -194,7 +194,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     }
                 }
                 cache.read(|cache| {
-                    measure::microfacet::measure_area_distribution(measurement, &surfaces, cache)
+                    measure::mfd::measure_area_distribution(measurement, &surfaces, cache)
                 })
             }
             MeasurementParams::Msf(measurement) => {
@@ -217,7 +217,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     "Debug mode is enabled. Measuring MMSF in debug mode is not recommended."
                 );
                 cache.read(|cache| {
-                    measure::microfacet::measure_masking_shadowing(measurement, &surfaces, cache)
+                    measure::mfd::measure_masking_shadowing_function(measurement, &surfaces, cache)
                 })
             }
             MeasurementParams::Sdf(params) => {
@@ -227,7 +227,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     ansi::RESET
                 );
                 cache.read(|cache| {
-                    measure::microfacet::measure_slope_distribution(&surfaces, params, cache)
+                    measure::mfd::measure_slope_distribution(&surfaces, params, cache)
                 })
             }
         };
@@ -262,7 +262,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         };
 
         crate::io::write_measured_data_to_file(
-            &measured_data,
+            &measured,
             &surfaces,
             &cache,
             &config,

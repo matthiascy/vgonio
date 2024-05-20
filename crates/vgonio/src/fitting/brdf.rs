@@ -2,7 +2,7 @@ pub mod sampled;
 
 use crate::{
     app::cache::{RawCache, RefractiveIndexRegistry},
-    fitting::{err::generate_analytical_brdf, FittingProblem, FittingReport},
+    fitting::{FittingProblem, FittingReport},
     measure::bsdf::MeasuredBsdfData,
 };
 use base::{
@@ -19,7 +19,6 @@ use bxdf::{
 };
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use rayon::iter::ParallelBridge;
 use std::{borrow::Cow, fmt::Display};
 
 /// The fitting problem for the microfacet based BSDF model.
@@ -191,9 +190,7 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
             .collect::<Vec<_>>()
         };
         results.shrink_to_fit();
-        FittingReport::new(results, |m: &Box<dyn Bxdf<Params = [f64; 2]>>| {
-            m.params()[0] > 0.0 && m.params()[1] > 0.0
-        })
+        FittingReport::new(results)
     }
 }
 

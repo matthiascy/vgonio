@@ -1,3 +1,4 @@
+use base::MeasurementKind;
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
@@ -9,10 +10,7 @@ use crate::fitting::FittedModels;
 
 use crate::{
     app::cache::{Handle, RawCache},
-    measure::{
-        data::{MeasurementData, MeasurementDataSource},
-        params::MeasurementKind,
-    },
+    measure::{Measurement, MeasurementSource},
 };
 
 use super::outliner::OutlinerItem;
@@ -52,7 +50,7 @@ pub struct MicroSurfaceProp {
 
 /// Measured data properties.
 #[derive(Debug, Clone)]
-pub struct MeasurementDataProp {
+pub struct MeasurementProp {
     /// The kind of the measured data.
     pub kind: MeasurementKind,
     /// The name of the measured data.
@@ -60,7 +58,7 @@ pub struct MeasurementDataProp {
     /// Timestamp of the measured data.
     pub timestamp: DateTime<Local>,
     /// Source of the measured data.
-    pub source: MeasurementDataSource,
+    pub source: MeasurementSource,
     #[cfg(feature = "fitting")]
     /// Fitted model.
     pub fitted: FittedModels,
@@ -75,7 +73,7 @@ pub struct PropertyData {
     /// Micro surface properties.
     pub surfaces: HashMap<Handle<MicroSurface>, MicroSurfaceProp>,
     /// Measured data properties.
-    pub measured: HashMap<Handle<MeasurementData>, MeasurementDataProp>,
+    pub measured: HashMap<Handle<Measurement>, MeasurementProp>,
     /// The currently selected item.
     pub selected: Option<OutlinerItem>,
 }
@@ -144,13 +142,13 @@ impl PropertyData {
     /// Updates the list of measurement data.
     pub fn update_measurement_data(
         &mut self,
-        measurements: &[Handle<MeasurementData>],
+        measurements: &[Handle<Measurement>],
         cache: &RawCache,
     ) {
         for meas in measurements {
             if let std::collections::hash_map::Entry::Vacant(e) = self.measured.entry(*meas) {
-                let data = cache.get_measurement_data(*meas).unwrap();
-                e.insert(MeasurementDataProp {
+                let data = cache.get_measurement(*meas).unwrap();
+                e.insert(MeasurementProp {
                     kind: data.kind(),
                     source: data.source.clone(),
                     timestamp: data.timestamp,
