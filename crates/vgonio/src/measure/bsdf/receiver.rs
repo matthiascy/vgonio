@@ -3,7 +3,10 @@
 use crate::{
     app::cache::{Handle, RawCache},
     measure::{
-        bsdf::{BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw, SimulationResultPoint},
+        bsdf::{
+            rtc::RayTrajectory, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
+            SimulationResultPoint,
+        },
         params::BsdfMeasurementParams,
     },
 };
@@ -17,7 +20,10 @@ use base::{
 use jabr::array::DyArr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::{atomic, atomic::AtomicU32};
+use std::{
+    mem::MaybeUninit,
+    sync::{atomic, atomic::AtomicU32},
+};
 use surf::MicroSurface;
 
 /// Kind of data to retrieve from the simulation.
@@ -189,14 +195,18 @@ impl Receiver {
     /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
-        result: &SimulationResultPoint,
-        collected: &mut CollectedData<'_>,
+        result: SimulationResultPoint,
+        // collected: &mut CollectedData<'_>,
+        out_trajs: *mut Vec<RayTrajectory>,
+        out_hpnts: *mut Box<[Vec3]>,
+        out_stats: *mut BsdfMeasurementStatsPoint,
+        out_records: &mut [MaybeUninit<BounceAndEnergy>],
         orbit_radius: f32,
         fresnel: bool,
     ) {
         const CHUNK_SIZE: usize = 2048;
         // TODO: deal with the domain of the receiver
-        let n_wavelength = self.spectrum.len();
+        let n_spectrum = self.spectrum.len();
 
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
@@ -205,8 +215,8 @@ impl Receiver {
             let n_escaped = AtomicU32::new(0);
             let n_bounce = AtomicU32::new(0);
             let n_received = AtomicU32::new(0);
-            let mut n_reflected = Vec::with_capacity(n_wavelength);
-            for _ in 0..n_wavelength {
+            let mut n_reflected = Vec::with_capacity(n_spectrum);
+            for _ in 0..n_spectrum {
                 n_reflected.push(AtomicU32::new(0));
             }
             n_reflected.shrink_to_fit();
@@ -235,7 +245,7 @@ impl Receiver {
                                     //    is attenuated by the Fresnel reflectance at each node of
                                     //    the trajectory, and if the energy is less than or equal to
                                     //    0.0, the energy will be set as been absorbed.
-                                    let mut energy = vec![Energy::Reflected(1.0); n_wavelength];
+                                    let mut energy = vec![Energy::Reflected(1.0); n_spectrum];
                                     for node in trajectory.iter().take(trajectory.len() - 1) {
                                         if node.cos.is_none() {
                                             continue;
@@ -315,7 +325,7 @@ impl Receiver {
             let n_received = n_received.load(atomic::Ordering::Relaxed);
 
             // Create the statistics of the BSDF measurement for the current incident point.
-            let mut stats = BsdfMeasurementStatsPoint::new(n_wavelength, n_bounce);
+            let mut stats = BsdfMeasurementStatsPoint::new(n_spectrum, n_bounce);
             stats.n_received = n_received;
 
             // Update the number of rays statistics including the number of rays absorbed
@@ -348,9 +358,6 @@ impl Receiver {
         let dirs_proc_time = start.elapsed().as_millis();
         #[cfg(feature = "bench")]
         log::info!("Collector::collect: dirs: {} ms", dirs_proc_time);
-        let n_patch = self.patches.n_patches();
-        let mut records =
-            vec![BounceAndEnergy::empty(n_bounce); n_patch * n_wavelength].into_boxed_slice();
 
         // Compute the vertex positions of the outgoing rays.
         #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -361,8 +368,8 @@ impl Receiver {
             {
                 hit_points[i] = (dir.ray_dir * orbit_radius).into();
             }
-            let samples_offset = dir.patch_idx * n_wavelength;
-            let patch_samples = &mut records[samples_offset..samples_offset + n_wavelength];
+            let samples_offset = dir.patch_idx * n_spectrum;
+            let patch_samples = &mut out_records[samples_offset..samples_offset + n_spectrum];
             let bounce_idx = dir.bounce as usize - 1;
             dir.energy_per_wavelength
                 .iter()
@@ -371,10 +378,11 @@ impl Receiver {
                 .for_each(|(j, (energy, patch))| match energy {
                     Energy::Absorbed => {}
                     Energy::Reflected(e) => {
-                        patch.total_energy += e;
-                        patch.total_rays += 1;
-                        patch.energy_per_bounce[bounce_idx] += e;
-                        patch.n_ray_per_bounce[bounce_idx] += 1;
+                        let mut_patch = patch.write(BounceAndEnergy::empty(n_bounce));
+                        mut_patch.total_energy += e;
+                        mut_patch.total_rays += 1;
+                        mut_patch.energy_per_bounce[bounce_idx] += e;
+                        mut_patch.n_ray_per_bounce[bounce_idx] += 1;
                         stats.n_ray_per_bounce[j * n_bounce + bounce_idx] += 1;
                         stats.energy_per_bounce[j * n_bounce + bounce_idx] += e;
                         stats.e_captured[j] += e;
@@ -386,15 +394,15 @@ impl Receiver {
         {
             log::debug!("n_bounce: {}", n_bounce);
             log::debug!("captured energy per wavelength: {:?}", stats.e_captured,);
-            for i in 0..n_wavelength {
+            for i in 0..n_spectrum {
                 log::debug!(
                     "energy per bounce, λ[{}]: {:?}",
                     i,
                     &stats.energy_per_bounce[i * n_bounce..(i + 1) * n_bounce]
                 );
             }
-            let mut energy_per_wavelength = vec![0.0; n_wavelength].into_boxed_slice();
-            for i in 0..n_wavelength {
+            let mut energy_per_wavelength = vec![0.0; n_spectrum].into_boxed_slice();
+            for i in 0..n_spectrum {
                 for e in &stats.energy_per_bounce[i * n_bounce..(i + 1) * n_bounce] {
                     energy_per_wavelength[i] += *e as f64;
                 }
@@ -406,8 +414,6 @@ impl Receiver {
         }
 
         #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-        log::debug!("data per patch: {:?}", records);
-        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
         log::debug!("stats: {:?}", stats);
 
         #[cfg(feature = "bench")]
@@ -418,15 +424,11 @@ impl Receiver {
             data_time - dirs_proc_time
         );
 
-        collected.snapshots.push(BsdfSnapshotRaw {
-            wi: result.wi,
-            records,
-            stats,
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-            trajectories: result.trajectories.to_vec(),
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-            hit_points,
-        });
+        unsafe {
+            out_stats.write(stats);
+            out_trajs.write(result.trajectories);
+            out_hpnts.write(hit_points);
+        }
     }
 }
 

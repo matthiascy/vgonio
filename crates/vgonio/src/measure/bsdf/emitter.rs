@@ -143,7 +143,7 @@ impl FromIterator<Vec3> for EmitterSamples {
 
 /// Emitter's possible positions in spherical coordinates.
 #[derive(Debug, Clone)]
-pub struct MeasurementPoints(Box<[Sph2]>);
+pub struct MeasurementPoints(pub(crate) Box<[Sph2]>);
 
 impl Deref for MeasurementPoints {
     type Target = [Sph2];

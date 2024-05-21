@@ -3,13 +3,16 @@ use crate::brdf::measured::{
     BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
 };
 use base::{
-    error::VgonioError, math::Sph2, medium::Medium, partition::SphericalPartition,
+    error::VgonioError,
+    math::{Sph2, Vec3},
+    medium::Medium,
+    partition::SphericalPartition,
     units::Nanometres,
 };
 use jabr::array::DyArr;
 use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct VgonioBrdfParameterisation {
     /// The incident directions of the BRDF.
     pub incoming: DyArr<Sph2>,
@@ -19,6 +22,24 @@ pub struct VgonioBrdfParameterisation {
 
 impl BrdfParameterisation for VgonioBrdfParameterisation {
     fn kind() -> ParametrisationKind { ParametrisationKind::IncidentDirection }
+}
+
+impl VgonioBrdfParameterisation {
+    /// Returns the incoming directions in cartesian coordinates.
+    pub fn incoming_cartesian(&self) -> DyArr<Vec3> {
+        DyArr::from_iterator([-1], self.incoming.iter().map(|sph| sph.to_cartesian()))
+    }
+
+    /// Returns the outgoing directions in cartesian coordinates.
+    pub fn outgoing_cartesian(&self) -> DyArr<Vec3> {
+        DyArr::from_iterator(
+            [-1],
+            self.outgoing
+                .patches
+                .iter()
+                .map(|patch| patch.center().to_cartesian()),
+        )
+    }
 }
 
 /// BRDF from the VGonio simulator.
@@ -179,14 +200,14 @@ impl VgonioBrdf {
 /// BRDF snapshot at a specific incident direction.
 pub struct BrdfSnapshot<'a> {
     /// The incident direction of the snapshot.
-    wi: Sph2,
+    pub wi: Sph2,
     // TODO: use NdArray subslice which carries the shape information.
     /// Number of wavelengths.
-    n_spectrum: usize,
+    pub n_spectrum: usize,
     // TODO: use NdArray subslice which carries the shape information.
     /// The samples of the snapshot stored in a flat row-major array with
     /// dimension: ωo, λ.
-    samples: &'a [f32],
+    pub samples: &'a [f32],
 }
 
 // TODO: once the NdArray subslice is implemented, no need to implement Index

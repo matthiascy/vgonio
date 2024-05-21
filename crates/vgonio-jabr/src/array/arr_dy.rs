@@ -4,6 +4,7 @@ use std::{
     fmt::Debug,
     mem::MaybeUninit,
     ops::{Index, IndexMut},
+    slice::Iter,
 };
 
 /// A dynamically sized array with a known number of dimensions at compile-time.
@@ -131,6 +132,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         Self(ArrCore::new(shape, DynSized::splat(T::one(), n)))
     }
 
+    /// Creates a new array with all elements set to the given value.
     pub fn splat(value: T, shape: [usize; N]) -> Self
     where
         T: Clone,
@@ -138,6 +140,9 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         let n = compute_n_elems(&shape);
         Self(ArrCore::new(shape, DynSized::splat(value, n)))
     }
+
+    /// Returns an iterator over the array elements.
+    pub fn iter(&self) -> Iter<T> { self.0.data.as_slice().iter() }
 }
 
 impl<T, const N: usize, const L: MemLayout> DyArr<MaybeUninit<T>, N, L> {
@@ -256,6 +261,11 @@ mod tests {
         let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([-1, 3, 2], (0..12));
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
+        assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+
+        let arr = DyArr::<i32, 1, { MemLayout::RowMajor }>::from_iterator([-1], (0..12));
+        assert_eq!(arr.shape(), &[12]);
+        assert_eq!(arr.strides(), &[1]);
         assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     }
 }

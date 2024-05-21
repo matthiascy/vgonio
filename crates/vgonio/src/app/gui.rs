@@ -637,10 +637,10 @@ impl VgonioGuiApp {
                                         .unwrap();
                                     self.dbg_drawing_state.update_ray_trajectories(
                                         &self.gpu_ctx,
-                                        &bsdf.trajectories(),
+                                        &bsdf.raw.trajectories,
                                     );
                                     self.dbg_drawing_state
-                                        .update_ray_hit_points(&self.gpu_ctx, &bsdf.hit_points());
+                                        .update_ray_hit_points(&self.gpu_ctx, &bsdf.raw.hit_points);
                                     measured
                                 }
 

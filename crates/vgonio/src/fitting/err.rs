@@ -256,15 +256,13 @@ pub(crate) fn generate_analytical_brdf(
     let n_wavelength = wavelengths.len();
     let n_wi = meas_pts.len();
     let n_patches = partition.n_patches();
-    let mut max_values = vec![-1.0f32; n_wi * n_wavelength].into_boxed_slice();
     let mut snapshots = Box::new_uninit_slice(meas_pts.len());
     meas_pts
         .par_iter()
-        .zip(max_values.par_chunks_mut(n_wavelength))
         .zip(snapshots.par_iter_mut())
         .chunks(32)
         .for_each(|chunk| {
-            for ((wi_sph, max_values_per_snapshot), snapshot) in chunk {
+            for (wi_sph, snapshot) in chunk {
                 let wi = wi_sph.to_cartesian();
                 let mut samples = DyArr::zeros([n_patches, n_wavelength]);
                 for (i, patch) in partition.patches.iter().enumerate() {
@@ -276,9 +274,6 @@ pub(crate) fn generate_analytical_brdf(
                             .map(|&x| x as f32)
                             .collect::<Vec<_>>()
                             .into_boxed_slice();
-                    for (i, sample) in spectral_samples.iter().enumerate() {
-                        max_values_per_snapshot[i] = f32::max(max_values_per_snapshot[i], *sample);
-                    }
                     samples.as_mut_slice()[i * n_wavelength..(i + 1) * n_wavelength]
                         .copy_from_slice(&spectral_samples);
                 }
@@ -296,6 +291,5 @@ pub(crate) fn generate_analytical_brdf(
         params: params.clone(),
         snapshots: unsafe { snapshots.assume_init() },
         raw_snapshots: None,
-        max_values,
     }
 }

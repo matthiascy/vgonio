@@ -25,7 +25,6 @@ pub mod vgmo {
     use super::*;
     use crate::measure::{
         bsdf::{
-            compute_bsdf_snapshots_max_values,
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
             BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
@@ -1195,16 +1194,10 @@ pub mod vgmo {
                         raw_snapshots = Some(snapshots);
                     };
 
-                    // TODO: read/write the max values and normalisation state
-                    let max_values = compute_bsdf_snapshots_max_values(
-                        &snapshots,
-                        params.emitter.spectrum.step_count(),
-                    );
                     Ok(Self {
                         params: *params,
                         snapshots,
                         raw_snapshots,
-                        max_values,
                     })
                 }
             }

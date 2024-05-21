@@ -28,7 +28,7 @@ use crate::{
 use crate::{
     fitting::{FittingReport, MfdFittingData},
     measure::{
-        bsdf::MeasuredBsdfData,
+        bsdf::{MeasuredBsdfData, L0},
         mfd::{MeasuredMsfData, MeasuredNdfData},
     },
 };
@@ -261,6 +261,7 @@ impl VgonioGui {
                                             .unwrap(),
                                         distro.unwrap(),
                                         RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
+                                        L0,
                                         cache,
                                     );
                                     problem.lsq_lm_fit(*isotropy)

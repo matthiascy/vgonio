@@ -17,7 +17,7 @@ use crate::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{DataRetrieval, ReceiverParams},
-            BsdfKind, MeasuredBsdfData,
+            BsdfKind, MeasuredBsdfData, L0,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     },
@@ -354,7 +354,7 @@ fn nlls_fitting_measured_brdf(
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem = MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, cache);
+    let problem = MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, L0, cache);
     problem.lsq_lm_fit(opts.isotropy)
 }
 

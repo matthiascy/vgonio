@@ -3,20 +3,19 @@ pub mod sampled;
 use crate::{
     app::cache::{RawCache, RefractiveIndexRegistry},
     fitting::{FittingProblem, FittingReport},
-    measure::bsdf::MeasuredBsdfData,
+    measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
 };
-use base::{
-    math::Vec3, optics::ior::Ior, partition::SphericalPartition, range::RangeByStepSizeInclusive,
-    Isotropy,
-};
+use base::{math::Vec3, optics::ior::Ior, range::RangeByStepSizeInclusive, Isotropy};
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        measured::VgonioBrdf,
         Bxdf,
     },
     distro::MicrofacetDistroKind,
     Scattering,
 };
+use jabr::array::DyArr;
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::{borrow::Cow, fmt::Display};
@@ -29,6 +28,8 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     pub measured: Cow<'a, MeasuredBsdfData>,
     /// The target BSDF model.
     pub target: MicrofacetDistroKind,
+    /// The level of the measured BRDF data to be fitted.
+    pub level: MeasuredBrdfLevel,
     /// The refractive indices of the incident medium at the measured
     /// wavelengths.
     pub iors_i: Box<[Ior]>,
@@ -62,6 +63,7 @@ impl<'a> MicrofacetBrdfFittingProblem<'a> {
         measured: &'a MeasuredBsdfData,
         target: MicrofacetDistroKind,
         initial: RangeByStepSizeInclusive<f64>,
+        level: MeasuredBrdfLevel, // temporarily only one level is supported
         cache: &'a RawCache,
     ) -> Self {
         let wavelengths = measured
@@ -92,6 +94,7 @@ impl<'a> MicrofacetBrdfFittingProblem<'a> {
         Self {
             measured: Cow::Borrowed(measured),
             target,
+            level,
             iors_i,
             iors_t,
             iors: &cache.iors,
@@ -147,7 +150,7 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
                     Isotropy::Isotropic => {
                         let problem =
                             MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
-                                &self.measured,
+                                &self.measured.brdf_at(self.level).unwrap(),
                                 model,
                                 self.iors,
                                 &self.iors_i,
@@ -159,7 +162,7 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
                     Isotropy::Anisotropic => {
                         let problem =
                             MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
-                                &self.measured,
+                                &self.measured.brdf_at(self.level).unwrap(),
                                 model,
                                 self.iors,
                                 &self.iors_i,
@@ -196,12 +199,9 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
 
 struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// The measured BSDF data.
-    measured: &'a MeasuredBsdfData,
+    measured: &'a VgonioBrdf,
     /// The target BSDF model.
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
-    n_wavelengths: usize,
-    /// The actual partition (not the params) of the measured BSDF data.
-    partition: SphericalPartition,
     /// The refractive index registry.
     iors: &'a RefractiveIndexRegistry,
     /// The refractive indices of the incident medium at the measured
@@ -210,124 +210,65 @@ struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// The refractive indices of the transmitted medium at the measured
     /// wavelengths.
     iors_t: &'a [Ior],
-    /// Incident directions
-    wis: Box<[Vec3]>,
-    /// Outgoing directions
-    wos: Box<[Vec3]>,
+    /// Incident directions in cartesian coordinates.
+    wis: DyArr<Vec3>,
+    /// Outgoing directions in cartesian coordinates.
+    wos: DyArr<Vec3>,
 }
 
-fn new_microfacet_brdf_fitting_problem_proxy_common(
-    measured: &MeasuredBsdfData,
-) -> (Box<[Vec3]>, Box<[Vec3]>, SphericalPartition) {
-    let partition = measured.params.receiver.partitioning();
-    let wis = measured
-        .snapshots
-        .iter()
-        .map(|s| s.wi.to_cartesian())
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let wos = partition
-        .patches
-        .iter()
-        .map(|p| p.center().to_cartesian())
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    (wis, wos, partition)
-}
-
-impl<'a> MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
+impl<'a, const I: Isotropy> MicrofacetBrdfFittingProblemProxy<'a, I> {
     pub fn new(
-        measured: &'a MeasuredBsdfData,
+        measured: &'a VgonioBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
-        let (wis, wos, partition) = new_microfacet_brdf_fitting_problem_proxy_common(measured);
-        // Set the initial parameters of the model to trigger the calculation of
-        // the maximum modelled values.
-        let mut problem = Self {
+        Self {
             measured,
             model,
-            n_wavelengths: iors_i.len(),
-            partition,
             iors,
             iors_i,
             iors_t,
-            wis,
-            wos,
-        };
-        let [ax, _] = problem.model.params();
-        problem.set_params(&Vector::<f64, U1, Owned<f64, U1, U1>>::new(ax));
-        problem
+            wis: measured.params.incoming_cartesian(),
+            wos: measured.params.outgoing_cartesian(),
+        }
     }
-}
 
-impl<'a> MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }> {
-    pub fn new(
-        measured: &'a MeasuredBsdfData,
-        model: Box<dyn Bxdf<Params = [f64; 2]>>,
-        iors: &'a RefractiveIndexRegistry,
-        iors_i: &'a [Ior],
-        iors_t: &'a [Ior],
-    ) -> Self {
-        let (wis, wos, partition) = new_microfacet_brdf_fitting_problem_proxy_common(measured);
-        let mut problem = Self {
-            measured,
-            model,
-            n_wavelengths: iors_i.len(),
-            partition,
-            iors,
-            iors_i,
-            iors_t,
-            wis,
-            wos,
-        };
-        let [ax, ay] = problem.model.params();
-        problem.set_params(&Vector::<f64, U2, Owned<f64, U2, U1>>::new(ax, ay));
-        problem
-    }
-}
-
-fn eval_residuals<const I: Isotropy>(problem: &MicrofacetBrdfFittingProblemProxy<I>) -> Box<[f64]> {
-    // The number of residuals is the number of patches times the number of
-    // snapshots.
-    let n_patches = problem.partition.n_patches();
-    let residuals_count = problem.measured.snapshots.len() * n_patches * problem.n_wavelengths;
-    let mut rs = Box::new_uninit_slice(residuals_count); // Row-major [snapshot, patch, wavelength]
-    let n_wavelengths = problem.n_wavelengths;
-    problem
-        .measured
-        .snapshots
-        .iter()
-        .enumerate()
-        .for_each(|(i, snapshot)| {
+    /// Evaluates the residuals of the fitting problem.
+    pub fn eval_residuals(&self) -> Box<[f64]> {
+        // The number of residuals is n_wi * n_wo * n_spectrum.
+        let n_wo = self.wos.len();
+        let n_wi = self.wis.len();
+        let n_spectrum = self.measured.spectrum.len();
+        // Row-major [snapshot, patch, wavelength]
+        let mut rs = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
+        for (i, snapshot) in self.measured.snapshots().enumerate() {
             let wi = snapshot.wi.to_cartesian();
-            problem
-                .partition
-                .patches
+            self.wos
                 .iter()
+                .zip(snapshot.samples.chunks(n_spectrum))
                 .enumerate()
-                .for_each(|(j, patch)| {
-                    let wo = patch.center().to_cartesian();
+                .for_each(|(j, (wo, samples))| {
                     let modelled_values = Scattering::eval_reflectance_spectrum(
-                        problem.model.as_ref(),
+                        self.model.as_ref(),
                         &wi,
                         &wo,
-                        &problem.iors_i,
-                        &problem.iors_t,
+                        self.iors_i,
+                        self.iors_t,
                     );
-                    let measured_values =
-                        &snapshot.samples.as_slice()[j * n_wavelengths..(j + 1) * n_wavelengths];
-                    for k in 0..n_wavelengths {
-                        let measured = measured_values[k] as f64;
-                        let modelled = modelled_values[k];
-                        rs[i * n_patches * n_wavelengths + j * n_wavelengths + k]
-                            .write(modelled - measured);
-                    }
+                    samples
+                        .iter()
+                        .zip(modelled_values.iter())
+                        .enumerate()
+                        .for_each(|(k, (measured, modelled))| {
+                            rs[i * n_wo * n_spectrum + j * n_spectrum + k]
+                                .write(modelled - *measured as f64);
+                        });
                 });
-        });
-    unsafe { rs.assume_init() }
+        }
+        unsafe { rs.assume_init() }
+    }
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
@@ -346,34 +287,32 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
     }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
-            self,
-        )))
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+            &self.eval_residuals(),
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
+        let n_spectrum = self.measured.spectrum.len();
+        let n_wi = self.wis.len();
+        let n_wo = self.wos.len();
         let derivative_per_wavelength = self
             .iors_i
             .iter()
             .zip(self.iors_t.iter())
-            .map(|(ior_i, ior_t)| self.model.pds_iso(&self.wis, &self.wos, ior_i, ior_t))
+            .map(|(ior_i, ior_t)| {
+                self.model
+                    .pds_iso(self.wis.as_ref(), self.wos.as_ref(), ior_i, ior_t)
+            })
             .collect::<Vec<_>>();
         // Re-arrange the shape of the derivatives to match the residuals:
         // [snapshot, patch, wavelength]
-        let mut jacobian =
-            vec![
-                0.0;
-                self.measured.snapshots.len() * self.partition.n_patches() * self.n_wavelengths
-            ]
-            .into_boxed_slice();
-        for (i, snapshot) in self.measured.snapshots.iter().enumerate() {
-            for (j, patch) in self.partition.patches.iter().enumerate() {
-                for k in 0..self.n_wavelengths {
-                    let offset = i * self.partition.n_patches() * self.n_wavelengths
-                        + j * self.n_wavelengths
-                        + k;
-                    jacobian[offset] =
-                        derivative_per_wavelength[k][i * self.partition.n_patches() + j];
+        let mut jacobian = vec![0.0; n_wi * n_wo * n_spectrum].into_boxed_slice();
+        for i in 0..n_wi {
+            for j in 0..n_wo {
+                for k in 0..n_spectrum {
+                    let offset = i * n_wo * n_spectrum + j * n_spectrum + k;
+                    jacobian[offset] = derivative_per_wavelength[k][i * n_wo + j];
                 }
             }
         }
@@ -397,9 +336,9 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     }
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&eval_residuals(
-            self,
-        )))
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+            &self.eval_residuals(),
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
@@ -407,27 +346,24 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
             .iors_i
             .iter()
             .zip(self.iors_t.iter())
-            .map(|(ior_i, ior_t)| self.model.pds(&self.wis, &self.wos, ior_i, ior_t))
+            .map(|(ior_i, ior_t)| {
+                self.model
+                    .pds(self.wis.as_ref(), self.wos.as_ref(), ior_i, ior_t)
+            })
             .collect::<Vec<_>>();
+        let n_wi = self.wis.len();
+        let n_wo = self.wos.len();
+        let n_spectrum = self.measured.spectrum.len();
         // Re-arrange the shape of the derivatives to match the residuals:
         // [snapshot, patch, wavelength, alpha]
         //  n_snapshot, n_patch, n_wavelength, 2
-        let mut jacobian =
-            vec![
-                0.0;
-                self.measured.snapshots.len() * self.partition.n_patches() * self.n_wavelengths * 2
-            ]
-            .into_boxed_slice();
-        for (i, snapshot) in self.measured.snapshots.iter().enumerate() {
-            for (j, patch) in self.partition.patches.iter().enumerate() {
-                for k in 0..self.n_wavelengths {
-                    let offset = i * self.partition.n_patches() * self.n_wavelengths * 2
-                        + j * self.n_wavelengths * 2
-                        + k * 2;
-                    jacobian[offset] =
-                        derivative_per_wavelength[k][i * self.partition.n_patches() * 2 + j * 2];
-                    jacobian[offset + 1] = derivative_per_wavelength[k]
-                        [i * self.partition.n_patches() * 2 + j * 2 + 1];
+        let mut jacobian = vec![0.0; n_wi * n_wo * n_spectrum * 2].into_boxed_slice();
+        for i in 0..n_wi {
+            for j in 0..n_wo {
+                for k in 0..n_spectrum {
+                    let offset = i * n_wo * n_spectrum * 2 + j * n_spectrum * 2 + k * 2;
+                    jacobian[offset] = derivative_per_wavelength[k][i * n_wo * 2 + j * 2];
+                    jacobian[offset + 1] = derivative_per_wavelength[k][i * n_wo * 2 + j * 2 + 1];
                 }
             }
         }
