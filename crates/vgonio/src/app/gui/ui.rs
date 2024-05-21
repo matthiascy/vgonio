@@ -38,7 +38,6 @@ use base::{
     MeasurementKind,
 };
 use bxdf::brdf::BxdfFamily;
-use egui::NumExt;
 use gfxkit::context::GpuContext;
 use std::{
     path::PathBuf,
@@ -95,7 +94,6 @@ impl VgonioGui {
     ) -> Self {
         log::info!("Initializing UI ...");
         let properties = Arc::new(RwLock::new(PropertyData::new()));
-
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -360,161 +358,152 @@ impl VgonioGui {
 
     fn main_menu(&mut self, ui: &mut egui::Ui, kind: ThemeKind) {
         ui.set_height(28.0);
-        let icon_image = match kind {
-            ThemeKind::Dark => icons::get_icon_image("vgonio_menu_dark").unwrap(),
-            ThemeKind::Light => icons::get_icon_image("vgonio_menu_light").unwrap(),
+        let icon = match kind {
+            ThemeKind::Dark => icons::VGONIO_MENU_DARK,
+            ThemeKind::Light => icons::VGONIO_MENU_LIGHT,
         };
-        let desired_icon_height = (ui.max_rect().height() - 4.0).at_most(28.0);
-        let image_size = icon_image.size_vec2() * (desired_icon_height / icon_image.size_vec2().y);
-        let texture_id = icon_image.texture_id(ui.ctx());
 
-        ui.menu_image_button(
-            egui::load::SizedTexture {
-                id: texture_id,
-                size: image_size,
-            },
-            |ui| {
-                if ui.button("About").clicked() {
+        ui.menu_image_button(icon.as_image(), |ui| {
+            if ui.button("About").clicked() {
+                self.event_loop.send_event(VgonioEvent::Notify {
+                    kind: NotifyKind::Info,
+                    text: "TODO: about".to_string(),
+                    time: 0.0,
+                });
+            }
+
+            ui.menu_button("New", |ui| {
+                if ui.button("Measurement").clicked() {
+                    self.measurement.open();
+                }
+                if ui.button("Micro-surface").clicked() {
                     self.event_loop.send_event(VgonioEvent::Notify {
                         kind: NotifyKind::Info,
-                        text: "TODO: about".to_string(),
-                        time: 0.0,
+                        text: "TODO: new height field".to_string(),
+                        time: 3.0,
                     });
                 }
-
-                ui.menu_button("New", |ui| {
-                    if ui.button("Measurement").clicked() {
-                        self.measurement.open();
-                    }
-                    if ui.button("Micro-surface").clicked() {
+            });
+            if ui.button("Open...").clicked() {
+                use rfd::AsyncFileDialog;
+                let dir = self
+                    .config
+                    .user_data_dir()
+                    .unwrap_or_else(|| self.config.sys_data_dir());
+                let task = AsyncFileDialog::new().set_directory(dir).pick_files();
+                let event_loop = self.event_loop.clone();
+                std::thread::spawn(move || {
+                    pollster::block_on(async {
+                        let file_handles = task.await;
+                        if let Some(hds) = file_handles {
+                            event_loop.send_event(VgonioEvent::OpenFiles(hds));
+                        }
+                    })
+                });
+            }
+            ui.menu_button("Recent...", |ui| {
+                for i in 0..10 {
+                    if ui.button(format!("item {i}")).clicked() {
                         self.event_loop.send_event(VgonioEvent::Notify {
                             kind: NotifyKind::Info,
-                            text: "TODO: new height field".to_string(),
+                            text: format!("TODO: open recent item {i}"),
                             time: 3.0,
                         });
                     }
-                });
-                if ui.button("Open...").clicked() {
-                    use rfd::AsyncFileDialog;
-                    let dir = self
-                        .config
-                        .user_data_dir()
-                        .unwrap_or_else(|| self.config.sys_data_dir());
-                    let task = AsyncFileDialog::new().set_directory(dir).pick_files();
-                    let event_loop = self.event_loop.clone();
-                    std::thread::spawn(move || {
-                        pollster::block_on(async {
-                            let file_handles = task.await;
-                            if let Some(hds) = file_handles {
-                                event_loop.send_event(VgonioEvent::OpenFiles(hds));
-                            }
-                        })
+                }
+            });
+
+            ui.add_space(6.0);
+
+            {
+                if ui.button("Save...").clicked() {
+                    self.event_loop.send_event(VgonioEvent::Notify {
+                        kind: NotifyKind::Info,
+                        text: "TODO: save".into(),
+                        time: 3.0,
                     });
                 }
-                ui.menu_button("Recent...", |ui| {
-                    for i in 0..10 {
-                        if ui.button(format!("item {i}")).clicked() {
-                            self.event_loop.send_event(VgonioEvent::Notify {
-                                kind: NotifyKind::Info,
-                                text: format!("TODO: open recent item {i}"),
-                                time: 3.0,
-                            });
-                        }
-                    }
-                });
+            }
 
-                ui.add_space(6.0);
-
+            ui.menu_button("Edit", |ui| {
                 {
-                    if ui.button("Save...").clicked() {
+                    if ui.button("     Undo").clicked() {
                         self.event_loop.send_event(VgonioEvent::Notify {
                             kind: NotifyKind::Info,
-                            text: "TODO: save".into(),
+                            text: "TODO: undo".into(),
+                            time: 3.0,
+                        });
+                    }
+                    if ui.button("     Redo").clicked() {
+                        self.event_loop.send_event(VgonioEvent::Notify {
+                            kind: NotifyKind::Info,
+                            text: "TODO: redo".into(),
                             time: 3.0,
                         });
                     }
                 }
 
-                ui.menu_button("Edit", |ui| {
-                    {
-                        if ui.button("     Undo").clicked() {
-                            self.event_loop.send_event(VgonioEvent::Notify {
-                                kind: NotifyKind::Info,
-                                text: "TODO: undo".into(),
-                                time: 3.0,
-                            });
-                        }
-                        if ui.button("     Redo").clicked() {
-                            self.event_loop.send_event(VgonioEvent::Notify {
-                                kind: NotifyKind::Info,
-                                text: "TODO: redo".into(),
-                                time: 3.0,
-                            });
-                        }
-                    }
+                ui.separator();
 
-                    ui.separator();
-
-                    if ui.button("     Reset windows").clicked() {
-                        ui.ctx().memory_mut(|mem| mem.reset_areas());
-                        ui.close_menu();
-                    }
-
-                    // TODO: per surface viewer instance
-                    // {
-                    //     ui.horizontal_wrapped(|ui| {
-                    //         ui.label("     Visual grid");
-                    //         ui.add_space(5.0);
-                    //         ui.add(ToggleSwitch::new(visual_grid_visible));
-                    //     });
-                    // }
-
-                    ui.separator();
-
-                    if ui.button("\u{2699} Preferences").clicked() {
-                        self.event_loop.send_event(VgonioEvent::Notify {
-                            kind: NotifyKind::Info,
-                            text: "TODO: open preferences window".into(),
-                            time: 3.0,
-                        });
-                    }
-                });
-                ui.menu_button("Tools", |ui| {
-                    if ui.button("\u{1F4D8} Console").clicked() {
-                        println!("TODO: open console window");
-                    }
-                    if ui.button("Scratch").clicked() {
-                        self.tools.toggle::<Scratch>();
-                    }
-                    if ui.button("\u{1F41B} Debugging").clicked() {
-                        self.tools.toggle::<DebuggingInspector>();
-                    }
-                    if ui.button("\u{1F3B2} Sampling").clicked() {
-                        self.tools.toggle::<SamplingInspector>();
-                    }
-                });
-                ui.menu_button("Theme", |ui| {
-                    if ui.button("☀ Light").clicked() {
-                        self.event_loop
-                            .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Light));
-                    }
-                    if ui.button("🌙 Dark").clicked() {
-                        self.event_loop
-                            .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Dark));
-                    }
-                });
-
-                ui.add_space(6.0);
-                ui.hyperlink_to("Help", "https://github.com/matthiascy/vgonio");
-                ui.add_space(6.0);
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    if ui.button("Quit").clicked() {
-                        self.event_loop.send_event(VgonioEvent::Quit);
-                    }
+                if ui.button("     Reset windows").clicked() {
+                    ui.ctx().memory_mut(|mem| mem.reset_areas());
+                    ui.close_menu();
                 }
-            },
-        );
+
+                // TODO: per surface viewer instance
+                // {
+                //     ui.horizontal_wrapped(|ui| {
+                //         ui.label("     Visual grid");
+                //         ui.add_space(5.0);
+                //         ui.add(ToggleSwitch::new(visual_grid_visible));
+                //     });
+                // }
+
+                ui.separator();
+
+                if ui.button("\u{2699} Preferences").clicked() {
+                    self.event_loop.send_event(VgonioEvent::Notify {
+                        kind: NotifyKind::Info,
+                        text: "TODO: open preferences window".into(),
+                        time: 3.0,
+                    });
+                }
+            });
+            ui.menu_button("Tools", |ui| {
+                if ui.button("\u{1F4D8} Console").clicked() {
+                    println!("TODO: open console window");
+                }
+                if ui.button("Scratch").clicked() {
+                    self.tools.toggle::<Scratch>();
+                }
+                if ui.button("\u{1F41B} Debugging").clicked() {
+                    self.tools.toggle::<DebuggingInspector>();
+                }
+                if ui.button("\u{1F3B2} Sampling").clicked() {
+                    self.tools.toggle::<SamplingInspector>();
+                }
+            });
+            ui.menu_button("Theme", |ui| {
+                if ui.button("☀ Light").clicked() {
+                    self.event_loop
+                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Light));
+                }
+                if ui.button("🌙 Dark").clicked() {
+                    self.event_loop
+                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Dark));
+                }
+            });
+
+            ui.add_space(6.0);
+            ui.hyperlink_to("Help", "https://github.com/matthiascy/vgonio");
+            ui.add_space(6.0);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if ui.button("Quit").clicked() {
+                    self.event_loop.send_event(VgonioEvent::Quit);
+                }
+            }
+        });
     }
 
     fn open_files(
@@ -581,32 +570,4 @@ impl VgonioGui {
         }
         (surfaces, measurements)
     }
-}
-
-fn icon_toggle_button(
-    ui: &mut egui::Ui,
-    icon_name: &'static str,
-    selected: &mut bool,
-) -> egui::Response {
-    let size_points = egui::Vec2::splat(16.0);
-    let image = icons::get_icon_image(icon_name).unwrap();
-    // let image = self.icon_image(icon);
-    let tex_id = image.texture_id(ui.ctx());
-    let tint = if *selected {
-        ui.visuals().widgets.inactive.fg_stroke.color
-    } else {
-        egui::Color32::from_gray(100)
-    };
-    let mut response = ui.add(
-        egui::ImageButton::new(egui::load::SizedTexture {
-            id: tex_id,
-            size: size_points,
-        })
-        .tint(tint),
-    );
-    if response.clicked() {
-        *selected = !*selected;
-        response.mark_changed()
-    }
-    response
 }

@@ -29,7 +29,7 @@ csv = "1"
 dirs = "5.0"
 egui = { version = "~0.25", features = ["bytemuck"] }
 egui_dock = { version = "~0.10" }
-egui_extras = "~0.25"
+egui_extras = { version = "~0.25", features = ["all_loaders"] }
 egui-winit = { version = "~0.25" }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
 egui_plot = "~0.25"
